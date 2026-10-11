@@ -11,7 +11,7 @@ what it would do (`drive_pass` over `drive_snapshot`) and falls back per column.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Literal
@@ -34,6 +34,7 @@ from fr.triage.batch_drive import (
     IdleSession,
     LivePr,
     Pass,
+    Snapshot,
     closeout_event,
     closeout_item_id,
     default_selection,
@@ -295,27 +296,39 @@ def pill_of(batch: Batch, facts: Facts) -> str | None:
 # -------------------------------------------------------------------- hints
 
 
-def _default_plan(facts: Facts, judgements: Judgements) -> Pass:
-    """The pass the drive would make on these facts, selecting what it selects by
-    default, at its default in-flight cap (R6)."""
-    snapshot = drive_snapshot(facts, judgements)
-    return drive_pass(replace(snapshot, selected=default_selection(judgements.batches)))
+def _default_plan(
+    facts: Facts, judgements: Judgements, ci_none: Collection[str] = ()
+) -> tuple[Snapshot, Pass]:
+    """The snapshot and the pass the drive would make on these facts, selecting what it
+    selects by default, at its default in-flight cap (R6): built once per board."""
+    snapshot = drive_snapshot(facts, judgements, ci_none=ci_none)
+    chosen = replace(snapshot, selected=default_selection(judgements.batches))
+    return chosen, drive_pass(chosen)
 
 
-def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
-    """The first action the driver would take per batch on these facts (R6)."""
+def _first_actions(plan: Pass) -> dict[str, Action]:
     first: dict[str, Action] = {}
-    for action in _default_plan(facts, judgements).actions:
+    for action in plan.actions:
         first.setdefault(action.batch, action)
     return first
 
 
-def awaiting_approval(facts: Facts, judgements: Judgements) -> frozenset[str]:
+def _awaiting(snapshot: Snapshot, plan: Pass) -> frozenset[str]:
+    held = (b for t in plan.trains for b in t.awaiting)
+    return frozenset(b for b in held if (pr := snapshot.live.get(b)) and pr.checks == "green")
+
+
+def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
+    """The first action the driver would take per batch on these facts (R6)."""
+    return _first_actions(_default_plan(facts, judgements)[1])
+
+
+def awaiting_approval(
+    facts: Facts, judgements: Judgements, ci_none: Collection[str] = ()
+) -> frozenset[str]:
     """The green train members the driver holds for the operator's `approved-fr` label
     (`Train.awaiting`, merge-train-safety R5); a pending one still reads `CI pending`."""
-    snapshot = drive_snapshot(facts, judgements)
-    held = (b for t in _default_plan(facts, judgements).trains for b in t.awaiting)
-    return frozenset(b for b in held if (pr := snapshot.live.get(b)) and pr.checks == "green")
+    return _awaiting(*_default_plan(facts, judgements, ci_none))
 
 
 def action_phrase(action: Action) -> str:
@@ -541,6 +554,7 @@ def build_board(
     me: str | None = None,
     now: datetime | None = None,
     notes: Mapping[str, str] | None = None,
+    ci_none: Collection[str] = (),
 ) -> Board:
     """One card per batch in seven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
@@ -555,8 +569,8 @@ def build_board(
         raise ValueError("build_board needs `now` (the clock is passed in) when given `me`")
     expiries = _own_expiries(facts, me, now) if me and now else {}
     batches = judgements.batches
-    actions = first_actions(facts, judgements)
-    awaiting = awaiting_approval(facts, judgements)
+    snapshot, plan = _default_plan(facts, judgements, ci_none)  # one plan per board (p1-r8)
+    actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
     selected = default_selection(batches)
     live = live_stops(batches, facts, stops or {})
     cards = [

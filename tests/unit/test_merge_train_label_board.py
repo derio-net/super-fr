@@ -21,6 +21,7 @@ from fr.triage.views import NEED_LABELS, needs_you
 from typer.testing import CliRunner
 
 from tests.unit.triage_board_fixtures import (
+    REPO,
     URL,
     batch,
     dispatch,
@@ -224,3 +225,50 @@ def test_the_adopt_message_says_never_to_add_the_label() -> None:
 
     b, _, _ = _brief_inputs()
     assert NO_APPROVAL_LINE in adopt_message(b, "item", "old", "new", None, None)
+
+
+# ------------------------------------------------------------------ review fixes
+
+
+def test_a_ci_none_repo_asks_for_the_label_with_no_check_at_all() -> None:
+    """p1-r2: a `ci none` repo's PR has no checks; the driver holds it for the label,
+    so the board must ask for it (and show the card awaiting approval)."""
+    f, jd = _one(labels=[], checks={"pass": 0, "fail": 0, "pending": 0})
+    assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]  # CI repo: pending
+    (need,) = [n for n in needs_you(f, jd, ci_none={REPO}) if n.kind == "approve-pr"]
+    assert need.ref == "x"
+    board = build_board(f, jd, {}, ci_none={REPO})
+    (card,) = [c for col in board.columns for c in col.cards if c.batch.id == "x"]
+    assert card.hint == HINT_AWAITING_APPROVAL
+
+
+def test_the_page_threads_ci_none_to_needs_you() -> None:
+    from fr.triage.render import render
+
+    f, jd = _one(labels=[], checks={"pass": 0, "fail": 0, "pending": 0})
+    assert 'data-need="approve-pr"' not in render(f, jd)
+    assert 'data-need="approve-pr"' in render(f, jd, ci_none={REPO})
+
+
+def test_a_board_render_builds_one_snapshot_and_one_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p1-r8: the board's actions and its awaiting-approval cards share one plan."""
+    from fr.triage import kanban
+
+    counts = {"snapshot": 0, "pass": 0}
+    real_snap, real_pass = kanban.drive_snapshot, kanban.drive_pass
+
+    def snap(*a: Any, **kw: Any) -> Any:
+        counts["snapshot"] += 1
+        return real_snap(*a, **kw)
+
+    def one_pass(*a: Any, **kw: Any) -> Any:
+        counts["pass"] += 1
+        return real_pass(*a, **kw)
+
+    monkeypatch.setattr(kanban, "drive_snapshot", snap)
+    monkeypatch.setattr(kanban, "drive_pass", one_pass)
+    f, jd = _one(labels=[])
+    build_board(f, jd, {})
+    assert counts == {"snapshot": 1, "pass": 1}

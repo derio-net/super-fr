@@ -16,7 +16,7 @@ from __future__ import annotations
 import importlib.util
 import time
 import webbrowser
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -53,6 +53,7 @@ from fr.triage.batch_drive import (
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
+from fr.triage.gitseam import Checkout
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
@@ -329,6 +330,22 @@ def read_sessions(
     return SessionReads(statuses, notes, said)
 
 
+def local_ci_none(facts: Facts) -> frozenset[str]:
+    """The scope's repos known to declare `ci none` (R4), from the clone this command
+    runs in when its origin is one of them: what the driver judges checks by, so the
+    board asks for the approval label where the driver holds a PR (merge-train-safety
+    p1-r2). Best effort: no clone, another repo or an unreadable one is none known."""
+    from fr.commands.triage_batch_cmd import ci_none_at  # it imports this module
+
+    try:
+        checkout = Checkout.at(None)
+        origin = (checkout.origin_repo() or "").lower()
+        repo = next((r for r in facts.repos if r.lower() == origin), None)
+        return frozenset({repo}) if repo and ci_none_at(checkout) else frozenset()
+    except Exception:  # noqa: BLE001 — the board is a view; it never fails on this
+        return frozenset()
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -337,6 +354,7 @@ def write_board(
     refresh: int = DEFAULT_REFRESH,
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
     loader: Callable[[str], Runner] | None = None,
+    ci_none: Collection[str] | None = None,
 ) -> tuple[Path, int]:
     """Render `board.html` into the state directory *target* from the facts and judgements
     on disk now, with live session statuses. Returns the path written and its card count."""
@@ -353,6 +371,7 @@ def write_board(
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,
+        ci_none=local_ci_none(facts) if ci_none is None else ci_none,
     )  # fmt: skip
     page = render_board(
         board,

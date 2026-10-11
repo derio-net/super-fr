@@ -83,18 +83,25 @@ def collected(facts: Facts) -> datetime:
 
 
 def drive_snapshot(
-    facts: Facts, judgements: Judgements, *, max_inflight: int = DEFAULT_MAX_INFLIGHT
+    facts: Facts,
+    judgements: Judgements,
+    *,
+    max_inflight: int = DEFAULT_MAX_INFLIGHT,
+    ci_none: Collection[str] = (),
 ) -> Snapshot:
     """The snapshot the driver would decide from, built from the facts alone: each
     open batch PR as the facts show it (no forge read), every stage derived, the
-    release commit unknown (so a close-out falls back to the ten-minute rule)."""
+    release commit unknown (so a close-out falls back to the ten-minute rule). A PR of
+    a repo in *ci_none* (its default branch declares `ci none`, known only from a
+    clone) is green on its checks as the driver judges it (R4, p1-r2)."""
     batches = judgements.batches
     repos = {b.id: r for b in batches if (r := batch_repo(b, facts)) is not None}
     stages = {b.id: derive_batch_stage(b, facts) for b in batches}
     queue = tuple(pr_open_queue(batches, facts, judgements.issues))
     live: dict[str, LivePr] = {}
     for entry in queue:
-        verdict, failing = checks_verdict([], entry.pr.checks or {}, ci_none=False)
+        none = repos.get(entry.batch.id) in ci_none
+        verdict, failing = checks_verdict([], entry.pr.checks or {}, ci_none=none)
         live[entry.batch.id] = LivePr(
             number=entry.pr.number,
             state=entry.pr.state,
@@ -166,12 +173,16 @@ NEED_LABELS = {
 
 
 def needs_you(
-    facts: Facts, judgements: Judgements, session_notes: Mapping[str, str] | None = None
+    facts: Facts,
+    judgements: Judgements,
+    session_notes: Mapping[str, str] | None = None,
+    *,
+    ci_none: Collection[str] = (),
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
     (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is."""
-    snap = drive_snapshot(facts, judgements)
+    snap = drive_snapshot(facts, judgements, ci_none=ci_none)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
     foreign = {
@@ -186,7 +197,8 @@ def needs_you(
         pr = entry.pr
         if pr.state != "OPEN" or (pr.repo, pr.number) in foreign:
             continue  # a foreign PR is never one to approve (gh#936)
-        verdict, _ = checks_verdict([], pr.checks or {}, ci_none=False)
+        live = snap.live.get(entry.batch.id)  # its checks as the driver judges them (R4)
+        verdict = live.checks if live is not None else "pending"
         approval = snap.approvals.get(entry.batch.id)
         if verdict != "green" or (approval is not None and is_approved(approval)):
             continue

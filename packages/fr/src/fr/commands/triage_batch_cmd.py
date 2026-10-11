@@ -3736,6 +3736,8 @@ class _Driver:
                 # The cloud driver reads its own runners only, its mailbox already open
                 # (p4-o2); the host's board loads as it always did (R10).
                 loader=self.runner if self.adapter.kind == "cloud" else None,
+                # the repos this pass judged `ci none`, as the walk did (p1-r2)
+                ci_none=frozenset(r for r, none in self._ci.items() if none),
             )
         except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
             cause = triage_kanban_cmd.one_line(exc)

@@ -4221,3 +4221,35 @@ def test_the_pass_that_voids_an_approval_leaves_facts_and_board_without_the_labe
     assert [r.text for r in rows if r.kind == "approve-pr"] == [
         "PR #101 changed since you approved it at sha-101: re-label to merge"
     ]
+
+
+def test_the_drivers_board_asks_for_the_label_in_a_ci_none_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p1-r2: the driver holds a `ci none` repo's unlabelled PR, so its board says so."""
+    _pr_open(world, tmp_path, labels=[])
+    world.checks[101] = []
+    world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
+    monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "awaiting approval b1 (#101)" in out
+    assert "awaiting approval" in _page(tmp_path)
+
+
+def test_a_local_clone_tells_the_board_its_repo_is_ci_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import triage_kanban_cmd
+
+    class Clone:
+        def origin_repo(self) -> str:
+            return REPO.upper()
+
+    monkeypatch.setattr(triage_kanban_cmd.Checkout, "at", classmethod(lambda cls, p: Clone()))
+    monkeypatch.setattr(triage_batch_cmd, "ci_none_at", lambda checkout: True)
+    facts = Facts(scope="s", kind="repo", collected_at="2026-10-11T00:00:00Z", repos=[REPO],
+                  issues=[])  # fmt: skip
+    assert triage_kanban_cmd.local_ci_none(facts) == frozenset({REPO})
+    monkeypatch.setattr(triage_batch_cmd, "ci_none_at", lambda checkout: False)
+    assert triage_kanban_cmd.local_ci_none(facts) == frozenset()
