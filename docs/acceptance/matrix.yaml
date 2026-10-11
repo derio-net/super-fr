@@ -4520,10 +4520,17 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R2
     levels: {}
     status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): verified
-      live 2026-09-29 (super-fr-3 take 12, OpenCode, fr-goal-light@1, a self-hosted
-      GitLab without CI); no walk recorded on the row, so undated.'
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): verified
+      live 2026-09-29 (super-fr-3 take 12) for this harness and model only (#822).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: gpt-6-sol
+      outcome: pass
+      at: '2026-09-29T00:00:00Z'
+      evidence: 'super-fr-3 take 12 (feature-C brief, OpenCode 1.18.33, fr 5.0.0, fr-goal-light@1,
+        self-hosted GitLab without CI): brief and answer verbatim in the spec journal'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
