@@ -7608,9 +7608,11 @@ rows:
       text
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_the_held_message_pins_every_line
+    status: ci
+    notes: held message pinned by unit tests; scenario on candidate
     verify: candidate
     scenario: tests/scenarios/triage-adopt-hold.sh
   - id: triage-adopt-default-branch
