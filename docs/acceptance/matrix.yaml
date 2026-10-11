@@ -689,15 +689,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_fr_debugging_journal.py
-    status: unwired
-    notes: 'SKILL.md wiring (debug-scope add/render, hypothesis/ruled-out trail) content-pinned
-      per-PR; the live debugging walk that records to a debug journal is demonstrated-not-
-      automated (backfill owed). First live walk recorded at
-      journals/debug/2026-09-08-session-unbind-hook-cancelled.md — repro, three ruled-out
-      entries, root-cause and finding all written via `fr journal add --scope debug` as the
-      investigation proceeded, PR body derived from `fr journal render --scope debug`. Kept
-      at skipped rather than flipped to ci because one demonstration is not automation, and
-      the backfill owed here is a harness that runs the walk.'
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): a live
+      debugging walk recorded to journals/debug/2026-09-08-session-unbind-hook-cancelled.md;
+      SKILL.md wiring content-pinned per-PR.'
   - id: fr-journal-scope-keyed
     capability: fr-goal subagent execution
     acceptance: 'The fr journal primitive is scope-keyed (spec|plan|debug) and pipeline-agnostic:
