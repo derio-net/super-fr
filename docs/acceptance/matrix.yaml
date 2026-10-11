@@ -2044,14 +2044,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test__urls.py
-    status: unwired
-    notes: 'Unit half in CI asserts the REQUEST (every contents read pins ref=HEAD,
-      captured via a recording double rather than an arg-discarding mock). Live half
-      hand-run 2026-09-19 against a self-hosted GitLab whose default branch is ''master'',
-      which is why ref=HEAD rather than a branch name: file_exists True for a present
-      file and False for an absent one, list_dir real entries, read_file real text —
-      all four broken before this PR. ''skipped'' because CI cannot reach a private
-      instance.'
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): live
+      half hand-run 2026-09-19 against a self-hosted GitLab (host redacted, default
+      branch master); the request shape is unit-pinned in CI.'
   - id: gitlab-selfhosted-host-targeting
     capability: Multi-backend git hosting
     acceptance: 'An operator whose GitLab is self-hosted reaches it by declaring ''backend:
