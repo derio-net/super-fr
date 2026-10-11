@@ -32,7 +32,15 @@ steps:
           reviewer: a9039d7c9752d597d
           findings: sr1-matrix-hop-live-parser,sr1-migration-report-companions,sr1-effective-strategy-inputs,sr1-owed-resolution-fold,sr1-journal-resolve-syntax,sr1-forge-parity,sr1-shallow-clone-staleness,sr1-read-only-exemption,sr1-two-debt-definitions,sr1-owed-double-count,sr1-sweep-bypasses-hold,sr1-facts-schema-number,sr1-refresh-ci-gitlab,sr1-test-plan-coverage,sr1-test-plan-dispatch-path,sr1-body-size-escaping,sr1-gh-actions-pr-permission,sr1-skipped-surfaces-missed,sr1-record-kind-impact,sr1-consumer-rollout-claim,sr1-outcome-decision-kind
   plan:
-    state: pending
+    state: running
+    at: '2026-10-11T17:35:54+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-10-11T17:35:54+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: b07de151-7e3f-41a2-8b47-0d0eb080c573
   plan-review:
     state: pending
   implement:
