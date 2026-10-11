@@ -267,3 +267,114 @@ def test_no_matrix_migration_reads_with_the_live_parser() -> None:
 
     assert "parse_matrix(" not in inspect.getsource(strategies).replace("parse_matrix_v", "")
     assert "parse_matrix(" not in inspect.getsource(verify).replace("parse_matrix_v", "")
+    # The 4 -> 5 hop reads the OLD body with the frozen reader (p1-r5).
+    import fr.artifacts.matrix_status_split as split
+
+    assert "parse_matrix_v4(text)" in inspect.getsource(split.split_skipped)
+
+
+# --- review p1-r3: the header's status comment ----------------------------------
+
+_OLD_STATUS_COMMENT = """\
+#   status:     ci | scheduled | skipped | not-implemented | failing
+#     ci               automated on every PR — cannot drift silently
+#     scheduled        automated on cron/path triggers
+#     skipped          verification exists but does not run in CI (proven
+#                      live once / manual walk) → CI warning, backfill owed
+#     not-implemented  no test or surface exists yet → CI warning
+#     failing          known red → `fr acceptance check` exits 2, CI FAILS
+"""
+
+
+def test_the_old_scaffold_status_comment_is_replaced_by_the_current_one(tmp_path: Path) -> None:
+    from fr.artifacts.matrix_status_split import current_status_comment
+
+    head = "# Row schema:\n" + _OLD_STATUS_COMMENT + "#   notes:      evidence detail\n"
+    path = _matrix(tmp_path, head + _V4)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.ok, report.failed
+    text = path.read_text()
+    assert "skipped          verification exists" not in text
+    assert current_status_comment() in text
+    assert text.startswith("# Row schema:\n" + current_status_comment() + "#   notes:")
+
+
+def test_a_customised_status_comment_is_left_alone(tmp_path: Path) -> None:
+    custom = "#   status: our own words, skipped included\n"
+    path = _matrix(tmp_path, custom + _V4)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.ok, report.failed
+    assert path.read_text().startswith(custom)
+
+
+def test_the_current_status_comment_is_the_scaffolds() -> None:
+    from fr.acceptance.scaffold import MATRIX_TEMPLATE
+    from fr.artifacts.matrix_status_split import current_status_comment
+
+    block = current_status_comment()
+    assert block.startswith("#   status:") and "unwired" in block and "skipped" not in block
+    assert block in MATRIX_TEMPLATE
+
+
+# --- review p1-r5 ----------------------------------------------------------------
+
+
+def test_a_report_render_failure_leaves_matrix_and_reports_byte_identical(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.acceptance.report as report_mod
+    from fr.acceptance.report import REPORT_SET
+
+    def _boom(*_a: object, **_k: object) -> dict[str, str]:
+        raise AcceptanceError("identity does not resolve")
+
+    monkeypatch.setattr(report_mod, "render_committed_set", _boom)
+    path = _matrix(tmp_path)
+    for rel in REPORT_SET:
+        (tmp_path / rel).write_text("stale\n")
+    before = {p: p.read_bytes() for p in [path, *(tmp_path / rel for rel in REPORT_SET)]}
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert [f.path for f in report.failed] == [path]
+    assert {p: p.read_bytes() for p in before} == before
+
+
+def test_the_crash_window_still_regenerates_the_reports(tmp_path: Path) -> None:
+    from fr.acceptance.report import REPORT_SET, render_committed_set
+
+    _git_repo(tmp_path)
+    body = _HEAD + _ROWS["ci-row"] + _ROWS["plain-row"].replace("skipped", "unwired")
+    path = _matrix(tmp_path, body)
+    for rel in REPORT_SET:
+        (tmp_path / rel).write_text("stale\n")
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.ok, report.failed
+    assert path.read_text() == body.replace("schema_version: 4\n", "schema_version: 5\n")
+    want = render_committed_set(load_matrix(path), tmp_path)
+    for rel in REPORT_SET:
+        assert (tmp_path / rel).read_text() == want[rel]
+
+
+def test_a_skipped_row_whose_only_walk_failed_is_not_walked(tmp_path: Path) -> None:
+    failed = _WALK.replace("outcome: pass", "outcome: fail")
+    body = (
+        _HEAD
+        + _ROWS["owed-row"] + failed
+        + _ROWS["plain-row"] + failed
+    )  # fmt: skip
+    path = _matrix(tmp_path, body)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.ok, report.failed
+    assert {r.id: r.status for r in load_matrix(path).rows} == {
+        "owed-row": "walk-owed",
+        "plain-row": "unwired",
+    }

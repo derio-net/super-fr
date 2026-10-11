@@ -52,8 +52,41 @@ __all__ = [
 ]
 
 _ITEM = re.compile(r"^(?P<ind>[ \t]*)-[ \t]+(?P<key>[\w-]+)[ \t]*:")
-_ROWS_KEY = re.compile(r"^rows[ \t]*:")
+_ROWS_KEY = re.compile(r"^rows[ \t]*:", re.MULTILINE)
 _SKIPPED_TAIL = re.compile(r"""^(?P<q>['"]?)skipped(?P=q)(?P<tail>[ \t]*(?:#.*)?)$""")
+
+
+# The status comment `fr acceptance init` wrote into a matrix's header before
+# the split, verbatim. The 4 -> 5 rewrite swaps it for the current scaffold's
+# when it matches EXACTLY; a header anyone edited is theirs and left alone.
+_V4_STATUS_COMMENT = """\
+#   status:     ci | scheduled | skipped | not-implemented | failing
+#     ci               automated on every PR — cannot drift silently
+#     scheduled        automated on cron/path triggers
+#     skipped          verification exists but does not run in CI (proven
+#                      live once / manual walk) → CI warning, backfill owed
+#     not-implemented  no test or surface exists yet → CI warning
+#     failing          known red → `fr acceptance check` exits 2, CI FAILS
+"""
+
+
+def current_status_comment() -> str:
+    """The status comment of the current matrix scaffold (`MATRIX_TEMPLATE`):
+    its lines from `#   status:` up to `#   notes:`."""
+    from fr.acceptance.scaffold import MATRIX_TEMPLATE
+
+    start = MATRIX_TEMPLATE.index("#   status:")
+    return MATRIX_TEMPLATE[start : MATRIX_TEMPLATE.index("#   notes:", start)]
+
+
+def replace_status_comment(text: str) -> str:
+    """`text` with its header's v4 scaffold status comment replaced by the
+    current one, when the header carries it exactly once; else `text`."""
+    rows_at = _ROWS_KEY.search(text)
+    head = text[: rows_at.start()] if rows_at else text
+    if head.count(_V4_STATUS_COMMENT) != 1:
+        return text
+    return text.replace(_V4_STATUS_COMMENT, current_status_comment(), 1)
 
 
 def _root(path: Path) -> Path:
@@ -191,6 +224,7 @@ def split_skipped(path: Path) -> list[Path]:
                 "safely — rewrite them by hand, then re-run `fr migrate artifacts --yes`. "
                 "Left on version 4, byte-identical."
             )
+    new_text = replace_status_comment(new_text)
     # Everything is rendered before a byte moves: a render that fails leaves
     # the matrix untouched, and the hop retries next run.
     reports: dict[Path, str] = {}
