@@ -90,6 +90,7 @@ _DEAD: frozenset[DependencyState] = frozenset({"unsatisfiable", "unknown"})
 _ACTION_PHRASES: Mapping[str, str] = {
     "dispatch": "dispatch next",
     "merge": "merge ready",
+    "enqueue": "enqueue PR",  # `action_phrase` adds the number (merge-train-safety R13)
     "warn": "CI failing",
     "closeout": "close-out due",
     "archive": "archive PR ready to merge",
@@ -123,6 +124,8 @@ HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
 # A green train member without a valid `approved-fr` label (merge-train-safety R5).
 HINT_AWAITING_APPROVAL = "awaiting approval"
+# A member the base's merge queue already holds (merge-train-safety R13).
+HINT_IN_MERGE_QUEUE = "in merge queue"
 
 
 def _idle_hint(idle: IdleSession, collected_at: str) -> str:
@@ -314,6 +317,10 @@ def _first_actions(plan: Pass) -> dict[str, Action]:
     return first
 
 
+def _in_merge_queue(plan: Pass) -> frozenset[str]:
+    return frozenset(b for t in plan.trains for b in t.in_merge_queue)
+
+
 def _awaiting(snapshot: Snapshot, plan: Pass) -> frozenset[str]:
     held = (b for t in plan.trains for b in t.awaiting)
     return frozenset(b for b in held if (pr := snapshot.live.get(b)) and pr.checks == "green")
@@ -338,6 +345,10 @@ def action_phrase(action: Action) -> str:
         return f"blocked: {action.detail}"
     if action.kind == "held" and action.detail == AWAITING_LIVE_HOLD:
         return "held: its members await a live walk"
+    if action.kind == "held" and "requires a merge queue" in action.detail:
+        return f"held: {action.detail}"
+    if action.kind == "enqueue":
+        return f"enqueue PR #{action.pr}"
     return _ACTION_PHRASES[action.kind]
 
 
@@ -455,6 +466,7 @@ def _card(
     now: datetime | None = None,
     notes: Mapping[str, str] | None = None,
     awaiting: frozenset[str] = frozenset(),
+    queued: frozenset[str] = frozenset(),
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -485,6 +497,8 @@ def _card(
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
         hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
+    elif batch.id in queued:
+        hint = HINT_IN_MERGE_QUEUE
     elif batch.id in awaiting:
         hint = HINT_AWAITING_APPROVAL
     else:
@@ -590,6 +604,7 @@ def build_board(
     batches = judgements.batches
     snapshot, plan = _default_plan(facts, judgements, ci_none)  # one plan per board (p1-r8)
     actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
+    queued = _in_merge_queue(plan)
     selected = default_selection(batches)
     live = live_stops(batches, facts, stops or {})
     cards = [
@@ -605,6 +620,7 @@ def build_board(
             now=now,
             notes=notes,
             awaiting=awaiting,
+            queued=queued,
         )
         for b in batches
     ]

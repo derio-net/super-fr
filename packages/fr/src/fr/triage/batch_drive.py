@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from fr.ghclient import QueueState
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
@@ -38,6 +39,7 @@ from fr.triage.model import (
     CloseoutEvent,
     ConflictEvent,
     DispatchEvent,
+    EnqueueEvent,
     Export,
     RedHandbackEvent,
     UpdateEvent,
@@ -92,6 +94,7 @@ ActionKind = Literal[
     "export-merge",
     "export-reconcile",
     "export-closed",
+    "enqueue",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -221,6 +224,16 @@ class Snapshot:
     # live labels in the driver, from facts on the board and `drive --plan`. A batch
     # with no verdict here is never approved.
     approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
+    # Merge queues (merge-train-safety §D "Queue mode", R13), from the driver's reads: the
+    # repos whose base requires one (their train picks no head), those of them with a
+    # `version:` block, whether `forge.api` is `rest` (which cannot enqueue), each queued
+    # batch's `QueueState`, and each such repo's base sha now. The board and `drive --plan`
+    # read no forge, so they leave all of these empty and show the ordinary train.
+    queue_repos: frozenset[str] = frozenset()
+    queue_versioned: frozenset[str] = frozenset()
+    queue_rest: bool = False
+    queue_states: Mapping[str, QueueState] = field(default_factory=dict)
+    bases: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -242,6 +255,7 @@ class Action:
     key: str = ""  # claim, refresh, release: the issue key
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
+    ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
 
 
 @dataclass(frozen=True)
@@ -305,6 +319,11 @@ class Train:
     # Members with no valid `approved-fr` approval: held, never the head, never a stop
     # (merge-train-safety §A "The walk").
     awaiting: tuple[str, ...] = ()
+    # Queue mode (§D): the members enqueued this pass and those already in the queue. A
+    # queue-mode train has no head and no candidates.
+    enqueue: tuple[str, ...] = ()
+    in_merge_queue: tuple[str, ...] = ()
+    queue_mode: bool = False
 
 
 @dataclass(frozen=True)
@@ -945,7 +964,112 @@ def _dispatch_key(batch: Batch) -> tuple[int, int, int, int, str]:
     return (wave is None, wave or 0, order is None, order or 0, batch.id)
 
 
+def _queue_hold(repo: str, snap: Snapshot) -> str | None:
+    """Why a merge-queue repo is held, or None (§D "Holds")."""
+    if repo in snap.queue_versioned:
+        return f"{repo} requires a merge queue, and fr does not reserve versions through one"
+    if snap.queue_rest:
+        return f"{repo} requires a merge queue, and forge.api rest cannot enqueue"
+    return None
+
+
+def _last_enqueue(batch: Batch, pr: int) -> EnqueueEvent | None:
+    for event in reversed(batch.events):
+        if isinstance(event, EnqueueEvent) and event.pr == pr:
+            return event
+    return None
+
+
+def _walk_queue(
+    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
+) -> tuple[Train | None, list[Action]]:
+    """§D "Queue mode": the walk of a repo whose base requires a merge queue. It picks no
+    head: every approved, green member not already queued is enqueued, a queued one is in
+    the merge queue, an ejected one (its last event an `enqueue` at the current head, open,
+    out of the queue with auto-merge cleared) is enqueued again when the base moved, a need
+    when it did not, and red when its checks failed. `--max-inflight` is untouched: a queued
+    batch is still `pr-open`. `_walk_train` branches here at its entry, so the merge
+    train's loop is untouched."""
+    actions: list[Action] = []
+    enqueue: list[str] = []
+    queued: list[str] = []
+    in_queue: list[str] = []
+    stepped: list[str] = []
+    awaiting: list[str] = []
+    numbers: dict[str, int] = {}
+    hold = _queue_hold(repo, snap)
+    members: list[QueueEntry] = []
+    for entry in entries:
+        pr = snap.live.get(entry.batch.id)
+        verdict = snap.approvals.get(entry.batch.id)
+        approved = verdict is not None and is_approved(verdict)
+        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
+            continue  # not a member
+        members.append(entry)
+        numbers[entry.batch.id] = pr.number
+    if not members:
+        return None, actions
+    if hold is not None:
+        actions.append(Action("held", members[0].batch.id, hold))
+        train = Train(repo, None, (), tuple(e.batch.id for e in members), (), numbers,
+                      queue_mode=True)  # fmt: skip
+        return train, actions
+    for entry in members:
+        bid = entry.batch.id
+        pr = snap.live[bid]
+        verdict = snap.approvals.get(bid)
+        approved = verdict is not None and is_approved(verdict)
+        state = snap.queue_states.get(bid)
+        event = _last_enqueue(entry.batch, pr.number)
+        mine = event is not None and event.head == pr.head
+        if mine and state is not None and (state.in_queue or state.auto_merge):
+            in_queue.append(bid)  # in the queue, or waiting to enter it: never ejected
+            continue
+        if pr.checks == "failing":
+            stepped.append(bid)
+            actions.append(
+                Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
+                       f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
+                       checks=pr.failing)
+            )  # fmt: skip
+            continue
+        if not approved:
+            awaiting.append(bid)
+            continue
+        if mine and state is None:
+            in_queue.append(bid)  # the state was not read: nothing to decide from
+            continue
+        if pr.head != entry.pr.head_oid or pr.checks == "pending":
+            queued.append(bid)
+            continue
+        if mine and event is not None and snap.bases.get(repo, event.base) == event.base:
+            key = f"queue-ejected\0{bid}\0{pr.head}"
+            if key not in snap.warned:
+                actions.append(
+                    Action("warn", bid, f"PR #{pr.number} left the merge queue unmerged",
+                           pr=pr.number, head=key, ejected=True)
+                )  # fmt: skip
+            continue
+        why = "the base moved since it was enqueued" if mine else f"at {pr.head[:12]}"
+        enqueue.append(bid)
+        actions.append(
+            Action("enqueue", bid, f"PR #{pr.number} {why}", pr=pr.number, head=pr.head,
+                   train=repo)
+        )  # fmt: skip
+    train = Train(repo, None, (), tuple(queued), tuple(stepped), numbers, tuple(awaiting),
+                  tuple(enqueue), tuple(in_queue), True)  # fmt: skip
+    return train, actions
+
+
 def _walk_train(
+    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
+) -> tuple[Train | None, list[Action]]:
+    if repo in snap.queue_repos:
+        return _walk_queue(repo, entries, snap)
+    return _walk_merge_train(repo, entries, snap)
+
+
+def _walk_merge_train(
     repo: str, entries: Sequence[QueueEntry], snap: Snapshot
 ) -> tuple[Train | None, list[Action]]:
     """§A: walk one repo's *entries* (already in train order). A green member becomes
@@ -1300,6 +1424,19 @@ def train_line(train: Train) -> str:
     def ref(bid: str) -> str:
         return f"{bid} (#{train.numbers[bid]})" if bid in train.numbers else bid
 
+    if train.queue_mode:
+        parts = ["merge queue"]
+        if train.enqueue:
+            parts.append("enqueue " + ", ".join(ref(b) for b in train.enqueue))
+        if train.in_merge_queue:
+            parts.append("in merge queue " + ", ".join(ref(b) for b in train.in_merge_queue))
+        if train.queued:
+            parts.append("queued " + ", ".join(ref(b) for b in train.queued))
+        if train.stepped:
+            parts.append("stepped over " + ", ".join(ref(b) for b in train.stepped))
+        if train.awaiting:
+            parts.append("awaiting approval " + ", ".join(ref(b) for b in train.awaiting))
+        return f"train {train.repo}: " + " · ".join(parts)
     head = train.head
     parts = []
     if head is None:

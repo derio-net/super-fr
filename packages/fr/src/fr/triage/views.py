@@ -41,6 +41,7 @@ from fr.triage.batch_drive import (
     IN_FLIGHT,
     LANDED,
     LivePr,
+    Pass,
     Snapshot,
     checks_verdict,
     closeout_event,
@@ -172,6 +173,18 @@ NEED_LABELS = {
 }
 
 
+def queue_needs(plan: Pass, snap: Snapshot) -> list[Need]:
+    """A queued PR that left the merge queue unmerged with the base unmoved, and is green:
+    nothing the driver can do (merge-train-safety §D "Ejection"). Only a driver pass, which
+    reads the queue, plans one; the facts-only board never does."""
+    urls = {e.batch.id: e.pr.url for e in snap.queue}
+    return [
+        Need("queue-ejected", a.batch, a.detail, urls.get(a.batch))
+        for a in plan.actions
+        if a.kind == "warn" and a.ejected
+    ]
+
+
 def needs_you(
     facts: Facts,
     judgements: Judgements,
@@ -214,8 +227,9 @@ def needs_you(
         )
         out.append(Need("approve-pr", entry.batch.id, text, pr.url))
 
+    out.extend(queue_needs(plan, snap))
     for action in plan.actions:
-        if action.kind == "warn":
+        if action.kind == "warn" and not action.ejected:
             failing_pr = batch_pr(by_id[action.batch], facts)
             url = failing_pr.url if failing_pr else None
             # R11: a red hand-back delivered at this head means its session has it in hand,
