@@ -52,5 +52,44 @@ journal:
       measured 19.9 s against its `< 5.0` bound, alone and in a targeted run. This
       phase does not touch the record commit path. If the full suite reds on it,
       it is load, not a regression.
+  - kind: finding
+    id: p1-ci-scenario-matrix-version
+    phase: 1
+    state: fixed
+    review_scope: in
+    title: spec-verification-section.sh hardcoded matrix schema 4
+    body: |
+      PR #1139 CI (run 38169463074): the scenario asserted the migrated matrix reached
+      schema 4; the chain now ends at 5. It and shipped-verification-strategies.sh now
+      write and expect schema 5. Fixed; tests/integration/test_scenarios.py 30 passed.
+  - kind: finding
+    id: p1-ci-scenario-record-version
+    phase: 1
+    state: fixed
+    review_scope: in
+    title: cloud-triage-ci-evidence.sh wrote a v8 step record
+    body: |
+      The live StepRecord reads only version 9, so the scenario's record was refused
+      (exit 2). It now derives the stamp from the candidate's RECORD_SCHEMA_VERSION,
+      so the next bump cannot break it. Fixed; scenario tests 30 passed.
+  - kind: finding
+    id: p1-ci-skill-duty-needle
+    phase: 1
+    state: fixed
+    review_scope: in
+    title: test_skill_validation needle 'choose skipped' no longer in fr-acceptance
+    body: |
+      The duty now reads "choose unwired"; the needle was updated to it. Fixed;
+      tests/unit/test_skill_validation.py passes.
+  - kind: finding
+    id: p1-ci-triage-render-fixture
+    phase: 1
+    state: fixed
+    review_scope: in
+    title: test_triage_render_command fixture matrix used status skipped
+    body: |
+      A matrix saying `skipped` no longer loads, so the stored acceptance was None.
+      The fixture and assertion now use `unwired`. Fixed;
+      tests/unit/test_triage_render_command.py passes.
 resolves: []
 evidence: {tests: ci}
