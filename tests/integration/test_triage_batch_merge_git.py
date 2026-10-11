@@ -37,6 +37,7 @@ import pytest
 import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
+from fr.ghclient import BaseRules
 from fr.triage.gitseam import Checkout
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig
 from typer.testing import CliRunner
@@ -121,6 +122,9 @@ class GitForge:
 
     def label_exists(self, repo: str, name: str) -> bool:
         return True  # the approval label exists already (merge-train-safety R4)
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        return BaseRules()  # no merge queue, no strict checks (merge-train-safety §D)
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return [{"name": "test", "bucket": "pass", "state": "SUCCESS"}]
