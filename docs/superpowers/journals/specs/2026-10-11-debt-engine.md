@@ -471,3 +471,8 @@ Its own ask: C of #1121.
 ### tier-2026-10-11-debt-engine-p1 · decision · hard: matrix 4→5 and record 8→9 migrations with frozen legacy readers change a gate every caller relies on
 
 Removing a status value strands older matrices unless every hop reads through a frozen MatrixV4.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-11-debt-engine-p3 created=2026-10-11T17:40:57+00:00 -->
+### tier-2026-10-11-debt-engine-p3 · decision · hard: journal kind 1→2, a new fold, and an archive hold on every archive path
+
+Changes fr journal check's fold and every archive mode's gate.
