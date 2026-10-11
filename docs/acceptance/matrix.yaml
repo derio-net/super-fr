@@ -768,10 +768,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_hermes_dispatch.py
       - super-fr:tests/unit/test_models_hermes_first_run.py
-    status: unwired
-    notes: Wiring unit-tested (fr-goal names delegate_task; no guessed hermes model
-      bindings ship, so fr-goal asks the operator per tier on first run). End-to-end
-      run is post-merge manual Test Plan item 6 (toy feature in real Hermes).
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): wiring
+      is unit-tested; the end-to-end run is post-merge Test Plan item 6 (a toy feature
+      in real Hermes), a walk still owed, not a CI wiring gap.'
   - id: acceptance-report-tracked
     capability: Acceptance report
     acceptance: The acceptance HTML report is a tracked, version-controlled artifact
