@@ -62,7 +62,8 @@ commit set, and a commit is never refused because of one.
 
 R2. `fr acceptance check` and `fr acceptance report --check` skip the
 report-sync comparison for CI-built reports; drift in a tracked report is still
-an error.
+an error. `report --check --out <path>` names one file explicitly and is still
+compared, CI-built or not.
 
 R3. `fr acceptance report --deterministic` still writes every report in
 `REPORT_SET`, ignored or not, so CI can build the set with the same command.
@@ -82,16 +83,23 @@ executable).
 R6. A malformed `strategy:` line's error shows the accepted form:
 `strategy: <name>` alone, with reasons on the per-row lines.
 
-R7. A claim on an open attempt by the agent that already holds it never
-overwrites a recorded `harness`, `model` or `agent_type`: an empty field is
-filled, an identical value is a no-op, and a different value is kept as
-recorded with a warning on stderr, exit 0. A re-claim that changes nothing
-writes nothing and makes no commit. A different agent stays refused (exit 2).
+R7. Once an open attempt is claimed (it carries an `agent`), a later claim by
+that same agent — through `fr run claim`, `--open-unit`, or `fr run resolve`'s
+`--agent`/`--harness`/`--model` — never overwrites its recorded `harness`,
+`model` or `agent_type`: an empty field is filled, an identical value (or, for
+`model`, one in the same `fr.models.model_family`) is a no-op, and a different
+value is kept as recorded with a warning on stderr, exit 0. A re-claim that
+changes nothing writes nothing and makes no commit. A different agent stays
+refused (exit 2). The FIRST claim (no `agent` yet) still sets these fields as
+today, replacing what `advance` pre-filled.
 
 R8. The claim path is covered by tests for an interruption after the claim and
-before the resolve, followed by a re-claim: identical re-claim, re-claim with a
-different model, re-claim by a different agent, and `advance` refusing to
-re-brief the held unit.
+before the resolve, followed by a re-claim: identical re-claim (no commit),
+same-family model, different-family model (warning, value kept), the
+OpenCode sequence (plugin `--open-unit` claim, then the orchestrator's claim
+with the tier-bound `--model`), `resolve --model` without `--agent` on a
+claimed attempt, a first claim overriding `advance`'s pre-filled harness/model,
+a different agent (refused), and `advance` refusing to re-brief the held unit.
 
 ## Design
 
@@ -119,7 +127,8 @@ Callers:
   comparison both iterate tracked reports only. When every report is CI-built
   the gate is skipped.
 - **`fr acceptance report --check`**: compares tracked reports only and names
-  the CI-built ones it skipped in its success line.
+  the CI-built ones it skipped in its success line; an explicit `--out` is
+  compared regardless (R2).
 - **archive retarget** (`archive_cmd.py:470`): writes and `git add`s matrix +
   tracked reports only.
 - **`fr acceptance init`** (`scaffold.py:548`): creates tracked reports only;
@@ -130,51 +139,93 @@ Callers:
 
 ### B. Verification strategies the repo cannot run (R4–R6)
 
-One predicate in `fr/verification/effective.py`:
+**One install rule.** `walk.py`'s `_contract` (`walk.py:354-370`) already
+decides whether an install program can run: an `install[0]` that is a bare
+command or an absolute path is accepted; a repo-relative one must be a file
+and executable. That check moves into one function in
+`fr/verification/effective.py`:
 
 ```python
-def runnable(strategy: str | None, repo_root: Path | None) -> bool:
-    """False iff the strategy's manifest has an `install` whose program is a
-    repo-relative path that is missing or not executable under repo_root."""
+def install_problem(manifest: StrategyManifest, repo_root: Path) -> str | None:
+    """Why the repo cannot run the manifest's install program, or None."""
 ```
 
-`None`, `none`, a strategy with no `install`, and a program that is not a
-repo-relative path (an absolute path or a bare command) are runnable — fr only
-judges what it can see in the repo. A strategy that does not resolve raises
-`StrategyError`, as `is_post_merge` does.
+A manifest with no `install` returns `None` — nothing to install is not a
+reason a strategy cannot be owed (e.g. `live`). `_contract` keeps its own
+walk-specific refusal ("has no install — there is nothing to walk") and calls
+`install_problem` for the program check, so self-review, the brainstorm
+resolve and `fr verification walk` share one rule and one message.
 
-- **R4:** the shape default is filtered once, where it is bound:
-  `fr.verification.rows.shape_default` (`rows.py:78`) and
-  `_verification_issues`' `workflow_for_plan(plan).verification`
-  (`plan_ops.py:1679`) pass the default through `runnable` and use `None` when
-  it fails. `walk_owed` and `effective_strategy` then need no change: both read
-  `SpecVerification.shape_default`.
-- **R5:** `_verification_issues` adds an error per explicitly named strategy
-  (section `strategy:`, a row's per-row line, a row's `verify:`) that is not
-  `runnable`, once per strategy. The `brainstorm` resolve, after applying a
-  record that emits a spec, runs the same check and prints each issue as a
-  `warning:` line — a warning, not a refusal, because self-review (a `cli`
-  gate) refuses it before any implementation starts.
-- **R6:** `parse_section`'s error for a line starting `strategy:` that does not
-  match becomes: `line N: malformed \`strategy:\` line: '<raw>' — it holds only
-  the name (\`strategy: <name>\`); put reasons on the per-row lines
-  (\`- <row-id>: <strategy|none> — <reason>\`)`.
+**R4 — one filter for the shape default.**
+
+```python
+def effective_shape_default(name: str | None, repo_root: Path | None) -> str | None:
+```
+
+returns `name`, unless it resolves and `install_problem` reports a problem —
+then `None`. A default that does not resolve (`StrategyError`) is returned
+UNFILTERED, so the existing gates keep refusing it by name (the deliver gate,
+`run_cmd.py:2574`) and no new exception reaches callers that catch only
+`WorkflowError`/`OSError`/`SectionError` (`rows.py:84-87`,
+`record/pr_body.py:473-477, 537-541`). All three places that bind a shape
+default call it: `fr.verification.rows.shape_default` (`rows.py:78`),
+`_verification_issues` (`plan_ops.py:1679`) and `fr/run/visual.py:344`.
+`walk_owed`, `effective_strategy` and the PR-body renderers read
+`SpecVerification.shape_default` and need no change.
+
+**R5 — a plan-free check.**
+
+```python
+def unrunnable_strategies(
+    repo_root: Path, section: Section, rows: Sequence[Row]
+) -> list[str]:
+```
+
+in `fr/verification/rows.py` returns one message per distinct strategy named
+explicitly — the section's `strategy:`, a per-row line, or a `verify:` of a
+row in `rows` — that resolves and has an `install_problem`. Each message names
+the strategy, the problem and both fixes (`strategy: none` or a per-row `none`
+line with a reason; or add the executable). It never consults the shape
+default (R4 handles that) and needs no plan. Callers:
+
+- `_verification_issues` passes the rows citing the spec and turns each
+  message into a self-review **error**.
+- the `brainstorm` resolve, after applying a record whose `emitted` names a
+  spec, reads that spec's section and the matrix rows citing it (the record's
+  `acceptance:` rows are in the matrix by then) and prints each message as a
+  `warning:` line. A missing or malformed section, or an unreadable matrix,
+  prints nothing there — self-review reports those.
+
+**R6.** `parse_section`'s error for a line starting `strategy:` that does not
+match becomes: `line N: malformed \`strategy:\` line: '<raw>' — it holds only
+the name (\`strategy: <name>\`); put reasons on the per-row lines
+(\`- <row-id>: <strategy|none> — <reason>\`)`.
 
 ### C. First claim wins (R7–R8)
 
-`_claimed_identity` changes its merge rule: for each of `harness` and `model`,
-a recorded value is kept; only an empty one takes the re-claim's value. A
-differing value prints `warning: <key>: already claimed by <agent> with
-<field>=<old>; keeping it (re-claim said <new>). A model change mid-attempt is
-\`fr run claim ... --abandoned\` then a fresh dispatch.` on stderr.
-`_claim_identity` applies the same rule to `agent_type`: the manifest id
-recorded by `advance` is refined to a tier variant on the FIRST claim (the
-attempt has no `agent` yet); once claimed, a different `agent_type` is kept as
-recorded, with the same warning. When the merged attempt equals the open one,
-`_claim_identity` returns without `_save_run_state` and prints
-`<key>: already claimed by <agent> (no change)`, so no commit is made.
-`resolve`'s late-identity path shares `_claimed_identity` and inherits the rule;
-the transcript-observed model (`_observed_model`) is unchanged.
+One merge function in `run_cmd.py` decides what a claim does to an open
+attempt; `_claimed_identity` (`run_cmd.py:3985`), `_claim_identity`
+(`run_cmd.py:6814`, for `agent_type`) and `_close_on_resolve`'s no-agent branch
+(`run_cmd.py:4049-4057`) all go through it:
+
+- attempt not yet claimed (`agent is None`): fields are set from the claim,
+  exactly as today — this is how a claim refines what `advance` pre-filled
+  (`harness` from `detect_harness`, `model` for orchestrator-run work,
+  `agent_type` as the manifest id).
+- attempt claimed: for `harness`, `model` and `agent_type`, an empty field
+  takes the claim's value; a value equal to the recorded one, or (for `model`)
+  in the same `model_family`, is kept silently; any other value is kept as
+  recorded, with `warning: <key>: <agent> is recorded with <field>=<old>;
+  keeping it (this claim said <new>). The first claim's identity stands;
+  resolve records the model the transcript observed. If the executor was
+  really replaced, close it with \`fr run claim ... --abandoned\` and
+  re-dispatch.`
+
+When the merged attempt equals the open one, `_claim_identity` returns without
+`_save_run_state` and prints `<key>: already claimed by <agent> (no change)`,
+so no commit is made. The transcript-observed model (`_observed_model`,
+`run_cmd.py:4080`) still replaces `model` at resolve — observation, not a
+claim, and unchanged by this spec.
 
 No run-cursor schema change: the attempt's fields and vocabulary are untouched.
 
@@ -185,6 +236,31 @@ strategy: none
 - acceptance-ci-built-reports: none — internal commit/check paths; CI runs the targeted unit and integration tests.
 - verification-unrunnable-strategy: none — parser and self-review logic; CI runs the targeted unit tests.
 - run-claim-first-wins: none — cursor write rules; CI runs the targeted unit tests.
+
+## Tests
+
+One test module per member, all targeted, all in CI:
+
+- **R1–R3** (`acceptance-ci-built-reports`): an integration test on a git repo
+  whose `.gitignore` ignores the report set — record apply with `acceptance:`
+  rows commits (cursor, matrix, journal) with no report path; `fr acceptance
+  add` / `set-status` commit; archive retarget stages without the reports; the
+  matrix-anchor repair's companions exclude them; `fr acceptance init` skips
+  them. Unit tests: `ci_built_reports` (ignored, tracked-but-ignored, no repo);
+  `fr acceptance check` and `report --check` pass with ignored reports absent
+  or stale and still fail on a stale TRACKED report; `report --check --out
+  <ignored>` still compares; `report --deterministic` writes all three.
+- **R4–R6** (`verification-unrunnable-strategy`): `install_problem` cases
+  (missing, not executable, bare command, absolute, no install);
+  `effective_shape_default` filters an unrunnable `candidate` and returns an
+  unresolvable name unchanged; `walk_owed` owes nothing for an all-`none`
+  per-row section in a repo without `.fr/candidate-install`, and still owes
+  `candidate` in one with it; `visual.py`'s binding agrees; self-review errors
+  on an explicit unrunnable strategy (section, per-row, `verify:`); the
+  brainstorm resolve prints the warning and still resolves; `_contract`'s
+  message is unchanged; the R6 message.
+- **R7–R8** (`run-claim-first-wins`): the R8 sequences, each asserting the
+  cursor's attempt fields and the commit count.
 
 ## Decisions
 
