@@ -22,3 +22,9 @@ Shared theme only: cloud code paths assume host-like preconditions (current fr, 
 ### fa423899838d · decision · Operator: fix all ~14 defects in this one PR
 
 Asked at the multi-cause stop (2026-10-11). Answer: fix everything here, one failing test per defect, all three members close. Order: E,F (runner/mailbox) → H,I (gitseam/close-out) → G (pass exit) → L (restore line) → K (re-pin noise) → J (merge_method doctor) → D (isolation default in cloud) → M (verify-merge/pickup over forge.api) → A,B,C (worker brief).
+
+<!-- fr:journal kind=hypothesis scope=debug id=926aa6ecdc62 created=2026-10-11T20:50:07+00:00 -->
+### 926aa6ecdc62 · hypothesis · #1100 comment (verify-merge/pickup 403): not GraphQL routing; the cloud proxy origin URL, if it is http://…@127.0.0.1:<port>/git/<owner>/<repo>
+
+Ruled out: routing. Both verify-merge (isolation/local.py _pr_from) and pickup (run/closeout.py pr_body) go through hostclient.client_for -> client_for_backend, which picks RealGhRestClient under forge.api: rest, identically at v5.18.1 and HEAD.
+Candidate: _hosts.origin_slug keeps the WHOLE remote path (git/<owner>/<repo> for a proxy URL) and host_for returns the proxy host (127.0.0.1, not SaaS) so GH_HOST=127.0.0.1; triage avoids both via gitseam.repo_of_url (last two segments) + client_for_url(github URL). Unverified: no artifact records the cloud origin URL shape. Asking the operator before fixing.
