@@ -466,3 +466,8 @@ Its own ask: B of #1121.
 ### phase-split-2026-10-11-debt-engine-p5 · decision · ask: triage debt/owed sets and Debt panel (R14–R16)
 
 Its own ask: C of #1121.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-11-debt-engine-p1 created=2026-10-11T17:40:36+00:00 -->
+### tier-2026-10-11-debt-engine-p1 · decision · hard: matrix 4→5 and record 8→9 migrations with frozen legacy readers change a gate every caller relies on
+
+Removing a status value strands older matrices unless every hop reads through a frozen MatrixV4.
