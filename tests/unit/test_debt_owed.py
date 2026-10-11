@@ -103,6 +103,15 @@ def _calls(gh: FakeGhClient, name: str) -> list[dict]:
 # --- R24: discharge -------------------------------------------------------
 
 
+def _owned_issue(gh: FakeGhClient, *, labels: set[str] | None = None, body: str | None = None):  # noqa: ANN202
+    gh.add_issue(
+        OWN,
+        12,
+        labels={"fr:owed"} if labels is None else labels,
+        body=f"Owed: walk it\n\n<!-- fr-owed:{KEY} -->" if body is None else body,
+    )
+
+
 @pytest.mark.parametrize("archived", [False, True], ids=["live", "archived"])
 def test_resolve_discharges_an_owed_entry_and_closes_its_issue(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, archived: bool
@@ -111,7 +120,7 @@ def test_resolve_discharges_an_owed_entry_and_closes_its_issue(
     owed = _owed()
     path = _journal(root, [owed, _filed(owed, f"{OWN}#12")], archived=archived)
     gh = FakeGhClient()
-    gh.add_issue(OWN, 12)
+    _owned_issue(gh)
     res = _resolve(monkeypatch, root, gh)
     assert res.exit_code == 0, res.output
     assert open_owed_ids(parse_journal(path.read_text())) == []
@@ -135,7 +144,9 @@ def test_an_unreachable_forge_prints_the_close_command(
         def comment_issue(self, repo: str, number: int, body: str) -> None:
             raise FakeGhError("network down")
 
-    res = _resolve(monkeypatch, root, Down())
+    down = Down()
+    _owned_issue(down)
+    res = _resolve(monkeypatch, root, down)
     assert res.exit_code == 0, res.output
     assert open_owed_ids(parse_journal(path.read_text())) == [], "the discharge is recorded"
     assert "close it yourself" in res.output
@@ -256,3 +267,64 @@ def test_journal_owed_reads_an_unparseable_journal_as_nothing(tmp_path: Path) ->
     items, discharged, unreadable = journal_owed(tmp_path)
     assert items == [] and discharged == set()
     assert unreadable == ["docs/superpowers/journals/specs/bad.md"]
+
+
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "mallory/elsewhere#12",
+        "https://github.com/mallory/elsewhere/issues/12",
+        "https://evil.example/acme/widgets/issues/12",
+    ],
+    ids=["other-repo", "other-repo-url", "other-host-url"],
+)
+def test_a_foreign_filed_as_is_never_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ref: str
+) -> None:
+    root = _repo(tmp_path)
+    owed = _owed()
+    path = _journal(root, [owed, _filed(owed, ref)])
+    gh = FakeGhClient()
+    gh.add_issue("mallory/elsewhere", 12, labels={"fr:owed"}, body=f"<!-- fr-owed:{KEY} -->")
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert open_owed_ids(parse_journal(path.read_text())) == [], "the discharge is recorded"
+    assert _calls(gh, "comment_issue") == [] and _calls(gh, "edit_issue_state") == []
+    assert "not closing" in res.output and "not this repo" in res.output
+
+
+@pytest.mark.parametrize(
+    ("labels", "body"),
+    [
+        ({"fr:owed"}, "no marker here"),
+        ({"fr:owed"}, "<!-- fr-owed:spec:other#step1 -->"),
+        (set(), None),
+    ],
+    ids=["no-marker", "other-key", "no-label"],
+)
+def test_a_same_repo_issue_without_the_entry_marker_or_label_is_not_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: set[str], body: str | None
+) -> None:
+    root = _repo(tmp_path)
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    gh = FakeGhClient()
+    _owned_issue(gh, labels=labels, body=body)
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "comment_issue") == [] and _calls(gh, "edit_issue_state") == []
+    assert "not closing" in res.output
+    assert gh.issues[(OWN, 12)].state == "OPEN"
+
+
+def test_a_short_ref_resolves_against_this_repo_and_closes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo(tmp_path)
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, "#12")])
+    gh = FakeGhClient()
+    _owned_issue(gh)
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert gh.issues[(OWN, 12)].state == "CLOSED"

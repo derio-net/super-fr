@@ -196,6 +196,7 @@ def test_an_open_issue_with_the_owed_marker_is_reused(
                 "url": f"https://github.com/{OWN}/issues/7",
                 "body": f"x\n{marker}",
                 "author": {"login": "me"},
+                "labels": [{"name": "fr:owed"}],
             }
         ]
     )
@@ -204,6 +205,27 @@ def test_an_open_issue_with_the_owed_marker_is_reused(
     assert _created(gh) == []
     entries = parse_journal(archived_journal_path(repo, "spec", SPEC_SLUG).read_text())
     assert owed_filed_as(entries) == {"test-plan-step-2": f"{OWN}#7"}
+
+
+@pytest.mark.parametrize(
+    "issue",
+    [
+        {"author": {"login": "me"}, "labels": []},  # no fr:owed label
+        {"author": {"login": "mallory"}, "labels": [{"name": "fr:owed"}]},  # not ours
+    ],
+    ids=["unlabelled", "other-author"],
+)
+def test_an_issue_that_is_not_an_owned_owed_issue_is_never_reused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, issue: dict
+) -> None:
+    repo = _plan_repo(tmp_path, outcomes=[_outcome(1), _outcome(2, "owed")])
+    marker = f"<!-- fr-owed:spec:{SPEC_SLUG}#step2 -->"
+    gh = ListingGh([{"number": 7, "body": f"x\n{marker}", **issue}])
+    result = _archive(monkeypatch, repo, gh)
+    assert result.exit_code == 0, result.output
+    assert len(_created(gh)) == 1, "a fresh issue is filed instead"
+    entries = parse_journal(archived_journal_path(repo, "spec", SPEC_SLUG).read_text())
+    assert owed_filed_as(entries) == {"test-plan-step-2": f"{OWN}#1"}
 
 
 def test_an_already_filed_owed_entry_is_not_filed_again(

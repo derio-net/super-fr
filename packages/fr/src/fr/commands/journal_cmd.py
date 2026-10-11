@@ -35,6 +35,7 @@ from fr.journal.model import (
     open_finding_ids,
     open_owed_ids,
     owed_filed_as,
+    owed_key,
     parse_journal,
     resolution_record_id,
     resolve_journal_read_path,
@@ -487,7 +488,7 @@ def resolve(
     if target.kind == "owed":
         filed = owed_filed_as(entries).get(entry_id)
         if filed is not None:
-            _close_owed_issue(root, filed, note)
+            _close_owed_issue(root, filed, note, owed_key(target))
 
 
 def _make_gh_client() -> GhClient:
@@ -497,40 +498,77 @@ def _make_gh_client() -> GhClient:
     return client_for(Path.cwd())
 
 
-_SAFE_REPO = re.compile(r"^[\w.][\w.-]*/[\w.-]+$")
-_URL_ISSUE = re.compile(r"/([\w.][\w.-]*/[\w.-]+)/(?:-/)?(?:issues|work_items)/(\d+)/?$")
+_SAFE_REPO = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+$")
+_SHORT_REF = re.compile(r"^#([0-9]+)$")
+_LONG_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
+_URL_PATH = re.compile(
+    r"^/([A-Za-z0-9_.][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+)/(?:-/)?issues/([0-9]+)/?$"
+)
 
 
-def _issue_target(root: Path, ref: str) -> tuple[str, int] | None:
-    """`(owner/repo, number)` for a `filed_as` reference, or `None` when it
-    cannot be read safely — the repo reaches the forge CLI's argv, so it must
-    be a plain `owner/repo` path (no leading `-`)."""
-    repo: str | None
-    if ref.startswith("#") and ref[1:].isdigit():
-        from fr.commands.archive_cmd import _repo_slug
+def _own_issue(root: Path, ref: str) -> tuple[str, int] | str:
+    """`(owner/repo, number)` when `filed_as` names an issue in THIS repo's own
+    tracker — the identity `fr archive` filed it under (`_repo_slug`: the
+    matrix's keys, else the origin remote) — else the reason it does not.
 
-        repo, number = _repo_slug(root), int(ref[1:])
-    elif (m := re.match(r"^([\w.-]+/[\w.-]+)#(\d+)$", ref)) is not None:
+    `filed_as` comes from a committed journal, so it is untrusted: a ref
+    naming another owner/repo, or a URL on another host or repo, is never
+    acted on. The repo reaches the forge CLI's argv, so it must be a plain
+    `owner/repo` path with no leading `-`; the number is ASCII digits."""
+    from urllib.parse import urlparse
+
+    from fr import _hosts
+    from fr.commands.archive_cmd import _repo_slug
+
+    try:
+        own = _repo_slug(root)
+    except Exception as e:  # noqa: BLE001 — no identity, no action
+        return f"this repo's identity is unknown ({type(e).__name__}: {e})"
+    if not _SAFE_REPO.match(own):
+        return f"this repo's identity {own!r} is not owner/repo"
+    if (m := _SHORT_REF.match(ref)) is not None:
+        repo, number = own, int(m.group(1))
+    elif (m := _LONG_REF.match(ref)) is not None:
         repo, number = m.group(1), int(m.group(2))
-    elif (u := _URL_ISSUE.search(ref)) is not None:
-        repo, number = u.group(1), int(u.group(2))
+    elif ref.startswith(("http://", "https://")):
+        url = urlparse(ref)
+        origin = _hosts.origin_hostname(root)
+        host = (url.hostname or "").lower()
+        if not origin or host != origin.lower():
+            return f"{ref} is on {host or 'no host'}, not this repo's forge ({origin or 'unknown'})"
+        if (m := _URL_PATH.match(url.path)) is None:
+            return f"{ref} is not an issue URL"
+        repo, number = m.group(1), int(m.group(2))
     else:
-        return None
-    return (repo, number) if _SAFE_REPO.match(repo) else None
+        return f"{ref!r} is not an issue reference"
+    if repo.lower() != own.lower():
+        return f"{ref} names {repo}, not this repo ({own})"
+    return own, number
 
 
-def _close_owed_issue(root: Path, ref: str, note: str) -> None:
+def _label_names(labels: object) -> set[str]:
+    names: set[str] = set()
+    for lab in labels if isinstance(labels, list) else []:
+        names.add(str(lab.get("name", "")) if isinstance(lab, dict) else str(lab))
+    return names
+
+
+def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
     """R24: close a discharged owed action's issue through the forge, the
-    note as its comment — or print the command when the forge cannot be
-    reached or the repo declares `tracking: none`. The discharge itself is
+    note as its comment — only when it is THIS repo's issue, labelled
+    `fr:owed` and carrying the entry's own `<!-- fr-owed:<key> -->` marker.
+    Otherwise, or when the forge cannot be reached or the repo declares
+    `tracking: none`, print the command for the operator. The discharge is
     already recorded; this never changes the exit code."""
+    from fr.archive_followups import owed_marker
     from fr.hostclient import issue_command
+    from fr.labels import FR_OWED
     from fr.services import ServicesError, TrackerRequiredError, require_tracker
 
-    target = _issue_target(root, ref)
+    target = _own_issue(root, ref)
     comment = f"Discharged: {note}"
     command = f"close {ref} with the note as its comment"
-    if target is not None:
+    if isinstance(target, tuple):
         try:
             command = issue_command(
                 root, "issue-close", ref=f"{target[0]}#{target[1]}", comment=comment
@@ -542,12 +580,30 @@ def _close_owed_issue(root: Path, ref: str, note: str) -> None:
     except (TrackerRequiredError, ServicesError):
         typer.echo(f"no tracker configured — close it yourself: {command}")
         return
-    if target is None:
-        typer.echo(f"cannot read {ref!r} as an issue — close it yourself: {command}")
+    if isinstance(target, str):
+        typer.echo(f"warning: not closing {ref} — {target}; close it yourself if it is yours")
         return
     repo, number = target
     try:
         gh = _make_gh_client()
+        issue = gh.view_issue(repo, number)
+    except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
+        typer.echo(f"could not read {ref} ({type(e).__name__}: {e}) — close it yourself: {command}")
+        return
+    body_lines = {line.strip() for line in str(issue.get("body") or "").splitlines()}
+    if key is None or owed_marker(key) not in body_lines:
+        typer.echo(
+            f"warning: not closing {ref} — it does not carry this entry's marker "
+            f"{owed_marker(key or '<key>')}; close it yourself if it is yours: {command}"
+        )
+        return
+    if FR_OWED.name not in _label_names(issue.get("labels")):
+        typer.echo(
+            f"warning: not closing {ref} — it is not labelled {FR_OWED.name}; close it "
+            f"yourself if it is yours: {command}"
+        )
+        return
+    try:
         gh.comment_issue(repo, number, comment)
         gh.edit_issue_state(repo, number, state="CLOSED")
     except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run

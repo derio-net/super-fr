@@ -374,11 +374,16 @@ _OWED_MARKER_LINE = re.compile(r"^<!-- fr-owed:(\S+) -->$")
 
 
 def _existing_owed(gh: GhClient, repo: str) -> dict[str, str]:
-    """`owed key -> ref` of the open issues THIS account filed whose last line
-    is an owed marker — the same trust rule as `_existing_markers`."""
+    """`owed key -> owner/repo#n` of the open issues in THIS repo (`repo`, the
+    identity archive files under) that this account filed, that carry the
+    `fr:owed` label and whose last line is an owed marker — the trust rule of
+    `_existing_markers`, plus the label. A reused ref is later CLOSED by
+    `fr journal resolve`, so nothing anyone else wrote is ever reused."""
+    from fr.labels import FR_OWED
+
     try:
         me = gh.viewer_login()
-        issues = gh.list_issues(repo, "open", 200, fields="number,url,body,author")
+        issues = gh.list_issues(repo, "open", 200, fields="number,url,body,author,labels")
     except Exception:  # noqa: BLE001 — dedup is best-effort, as for open ends
         return {}
     if not me:
@@ -388,11 +393,18 @@ def _existing_owed(gh: GhClient, repo: str) -> dict[str, str]:
         author = issue.get("author")
         login = author.get("login") if isinstance(author, dict) else author
         body = str(issue.get("body") or "").rstrip()
-        if login != me or not body:
+        number = issue.get("number")
+        labels = {
+            str(lab.get("name", "")) if isinstance(lab, dict) else str(lab)
+            for lab in (issue.get("labels") or [])
+        }
+        if login != me or not body or not isinstance(number, int) or isinstance(number, bool):
+            continue
+        if FR_OWED.name not in labels:
             continue
         m = _OWED_MARKER_LINE.match(body.splitlines()[-1].strip())
-        ref = _issue_ref(repo, issue.get("number"), issue.get("url")) if m else None
-        if m and ref:
+        ref = f"{repo}#{number}"
+        if m and TRACKED_BY_RE.match(ref):
             found.setdefault(m.group(1), ref)
     return found
 
