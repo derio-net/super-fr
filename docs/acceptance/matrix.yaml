@@ -618,10 +618,10 @@ rows:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_phase_executor_agent.py
       - super-fr:tests/unit/test_install_allowlists_phase_executor.py
-    status: unwired
-    notes: Skill wiring + agent def + allowlist helper unit-pinned per-PR; the live
-      per-phase dispatch was demonstrated by this feature's own fr-goal run, not yet a
-      CI integration test (backfill owed).
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      live per-phase dispatch was demonstrated by the feature''s own fr-goal run; wiring
+      unit-pinned. A CI integration test stays a backfill wish.'
   - id: fr-goal-journal-handoff-complete
     capability: fr-goal subagent execution
     acceptance: A fresh subagent given only fr journal render + spec + its phase yaml
