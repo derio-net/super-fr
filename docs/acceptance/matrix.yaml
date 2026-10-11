@@ -8268,7 +8268,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R24
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at planning; phase 3 writes it.
+    scenario: tests/scenarios/closeout-owed.sh
   - id: matrix-status-split
     capability: acceptance
     acceptance: '`skipped` is replaced by unwired / walk-owed / walked / manual; the
