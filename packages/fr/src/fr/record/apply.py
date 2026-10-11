@@ -777,7 +777,7 @@ def _acceptance_writes(
         ):
             raise RecordRefusedError(
                 f"acceptance {item.id}: status `ci` needs a CI run as its evidence, but "
-                f"{no_ci}. Record it as `skipped` (verified, not in CI) instead."
+                f"{no_ci}. Record it as `unwired` (a test exists, not in CI) instead."
             )
         if creates and existing is not None:
             if existing == row:

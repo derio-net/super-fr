@@ -1,8 +1,10 @@
-"""The step record's shapes BEFORE version 8 — frozen.
+"""The step record's shapes BEFORE version 9 — frozen.
 
-`RecordV6` reads versions 1 to 6; `RecordV7` (at the bottom) reads version 7,
-frozen when 7 -> 8 widened `AcceptanceItem.verify` (spec
-`2026-10-06-verification-strategies-design.md` §B).
+`RecordV6` reads versions 1 to 6; `RecordV7` reads version 7, frozen when
+7 -> 8 widened `AcceptanceItem.verify` (spec
+`2026-10-06-verification-strategies-design.md` §B); `RecordV8` (at the bottom)
+reads version 8, frozen when 8 -> 9 refused the status `skipped` (spec
+`2026-10-11-debt-engine-design.md` §D).
 
 Record versions 1 through 6 only ever ADDED an optional, defaulted field, so
 one closed-world model reads all six. The 6 -> 7 migration (spec
@@ -355,3 +357,112 @@ def record_v7_from_data(data: dict[str, Any]) -> RecordV7:
         return RecordV7.model_validate(data)
     except ValidationError as e:
         raise RecordV7Error(str(e)) from e
+
+
+# --- version 8 ----------------------------------------------------------------
+#
+# The 8 -> 9 migration (spec `2026-10-11-debt-engine-design.md` §D, R27) refuses
+# the acceptance status `skipped`, which the matrix split into `unwired` /
+# `walk-owed` / `walked` / `manual`, so the live model no longer reads a v8
+# record carrying it. `RecordV8` is version 8 exactly, frozen the same way and
+# pinned by `FROZEN_V8_CLASS_SHA256`
+# (`tests/unit/test_migration_record_status_split.py`). Its acceptance entry and
+# walk are frozen here with their vocabularies inlined; the journal entry and
+# resolution reuse the v7 classes, already frozen, whose `JournalKindV6` is the
+# kind vocabulary version 8 had. A v8 entry's `status` was free text (the engine
+# checked it against the matrix vocabulary at apply), so it stays `StrictStr`.
+
+
+class RecordV8Error(Exception):
+    """A file that does not read as a record of version 8."""
+
+
+class WalkV8(_StrictV6):
+    strategy: StrictStr
+    harness: StrictStr
+    model: StrictStr
+    outcome: Literal["pass", "fail"]
+    at: StrictStr
+    evidence: StrictStr
+
+
+class AcceptanceItemV8(_StrictV6):
+    id: StrictStr
+    capability: StrictStr | None = None
+    acceptance: StrictStr | None = None
+    origin: tuple[StrictStr, ...] = ()
+    levels: dict[str, tuple[StrictStr, ...]] = {}
+    status: StrictStr
+    notes: StrictStr | None = None
+    verify: StrictStr | None = None
+    visual: VisualV6 | None = None
+    scenario: StrictStr | None = None
+    issues: tuple[StrictStr, ...] = ()
+    harnesses: tuple[StrictStr, ...] = ()
+    walk: WalkV8 | None = None
+
+
+class RecordV8(_StrictV6):
+    schema_version: Literal[8] = 8
+    run: StrictStr | None = None
+    step: StrictStr | None = None
+    item: StrictStr | None = None
+    outcome: OutcomeV6 | None = None
+    shape: StrictStr | None = None
+    no_questions: bool = False
+    reason: StrictStr | None = None
+    questions: QuestionRoundsV6 | None = None
+    ticks: tuple[StrictStr | TickItemV6, ...] = ()
+    complete: CompleteItemV6 | None = None
+    refactor: dict[StrictStr, StrictStr] = {}
+    journal: tuple[JournalItemV7, ...] = ()
+    resolves: tuple[ResolutionV7, ...] = ()
+    acceptance: tuple[AcceptanceItemV8, ...] = ()
+    visual: tuple[VisualEvidenceV6, ...] = ()
+    emitted: dict[StrictStr, StrictStr] = {}
+    evidence: dict[StrictStr, StrictStr] = {}
+
+    @model_validator(mode="after")
+    def _ids_are_shaped(self) -> RecordV8:
+        if self.questions is not None and self.no_questions:
+            raise ValueError("questions and no_questions are mutually exclusive")
+        for tick in self.ticks:
+            if isinstance(tick, str) and not TICK_ID_RE_V6.match(tick):
+                raise ValueError(f"tick id must look like P<n>.T<m>.S<k>, got {tick!r}")
+        for task in self.refactor:
+            if not TASK_ID_RE_V6.match(task):
+                raise ValueError(f"refactor key must be a task id P<n>.T<m>, got {task!r}")
+            if not self.refactor[task].strip():
+                raise ValueError(f"refactor reason for {task} is empty")
+        return self
+
+
+FROZEN_V8_CLASS_SHA256: dict[str, str] = {
+    "WalkV8": "577489558b77a3eea73fe1b82a8aebe360b769d235a0aa95a91ae9ed4301c621",
+    "AcceptanceItemV8": "49ba70a00b389a40ccc0b51dace630bb7afbf1fc4948ff6fd20101e83a7b3690",
+    "RecordV8": "69370954464889a00da458688a18d948554ab76d7aa9e13bd232fffc7bcb3f86",
+}
+"""As `FROZEN_CLASS_SHA256`, for the classes version 8 froze."""
+
+
+def parse_record_v8(text: str) -> RecordV8:
+    """Parse + validate `text` as a record of version 8, or raise
+    `RecordV8Error` naming why — never a raw YAML or pydantic error."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise RecordV8Error(f"not valid YAML: {e}") from e
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise RecordV8Error(f"top level must be a mapping, got {type(data).__name__}")
+    return record_v8_from_data(data)
+
+
+def record_v8_from_data(data: dict[str, Any]) -> RecordV8:
+    """Validate an already-loaded mapping as a record of version 8, or raise
+    `RecordV8Error`."""
+    try:
+        return RecordV8.model_validate(data)
+    except ValidationError as e:
+        raise RecordV8Error(str(e)) from e

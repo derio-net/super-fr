@@ -370,6 +370,21 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
             for ref in refd
             if ref.split("#", 1)[0] == repo
         )
+    # The explicit move once a row is walked (spec 2026-10-11-debt-engine §D).
+    walked = [
+        row
+        for row in matrix.rows
+        if holds(row)
+        and any((normalize_issue_ref(i, identity) or i.lower()) in refd for i in row.issues)
+    ]
+    if walked:
+        lines.append("  after each row's walk, record it (the row moves to `walked`):")
+        lines.extend(
+            f"    fr acceptance set-status --id {row.id} --status walked --walk <log> "
+            f"--harness <harness> --model <model> --strategy {row.verify} "
+            '--notes "<what the walk proved>"'
+            for row in walked
+        )
     return lines
 
 

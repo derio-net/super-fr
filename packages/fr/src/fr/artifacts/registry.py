@@ -477,7 +477,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # (spec `2026-10-06-verification-strategies-design` §B), migration
             # `fr.artifacts.matrix_strategies`, every hop reading through the
             # frozen `fr.acceptance.legacy.MatrixV3`.
-            current_version=4,
+            # 4 -> 5: the status `skipped` splits into `unwired`/`walk-owed`/
+            # `walked`/`manual` (spec `2026-10-11-debt-engine-design` §D),
+            # migration `fr.artifacts.matrix_status_split`, every hop reading
+            # through the frozen `fr.acceptance.legacy.MatrixV4`.
+            current_version=5,
             locator="docs/acceptance/matrix.yaml",
             stamp="`schema_version` in `matrix.yaml`",
             read_stamp=_read_yaml_stamp,
@@ -533,8 +537,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `issues`/`harnesses`/`walk` (spec
             # `2026-10-06-verification-strategies-design` §B), migration
             # `fr.artifacts.record_strategies`, read through the frozen
-            # `fr.record.legacy.RecordV7`.
-            current_version=8,
+            # `fr.record.legacy.RecordV7`; 8 -> 9 because the acceptance status
+            # `skipped` split (spec `2026-10-11-debt-engine-design` §D, R27),
+            # migration `fr.artifacts.record_status_split`, read through the
+            # frozen `fr.record.legacy.RecordV8`.
+            current_version=9,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

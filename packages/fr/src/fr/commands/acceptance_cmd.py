@@ -234,7 +234,7 @@ def status_cmd(
         False, "--brief", help="Counts + the 3 oldest open rows (session-start injection)."
     ),
 ) -> None:
-    """Terminal nag: counts by status + open skipped/not-implemented rows.
+    """Terminal nag: counts by status + the open acceptance debt rows.
 
     Read-only and exit-0 always — allowlist-safe like `fr status`.
     """
@@ -276,7 +276,10 @@ def summary_cmd() -> None:
         "|---|---:|",
         f"| ci | {counts.get('ci', 0)} |",
         f"| scheduled | {counts.get('scheduled', 0)} |",
-        f"| skipped | {counts.get('skipped', 0)} |",
+        f"| unwired | {counts.get('unwired', 0)} |",
+        f"| walk-owed | {counts.get('walk-owed', 0)} |",
+        f"| walked | {counts.get('walked', 0)} |",
+        f"| manual | {counts.get('manual', 0)} |",
         f"| not-implemented | {counts.get('not-implemented', 0)} |",
         f"| failing | {counts.get('failing', 0)} |",
         "",
@@ -448,7 +451,9 @@ def _apply_rows(
 def set_status_cmd(
     row_id: str = typer.Option(..., "--id", help="Existing row id (never created here)."),
     status: str = typer.Option(
-        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+        ...,
+        "--status",
+        help="ci | scheduled | unwired | walk-owed | walked | manual | not-implemented | failing.",
     ),
     notes: str = typer.Option(
         ...,
@@ -625,7 +630,9 @@ def add_cmd(
         [], "--level", help="'<level>=<repo>:<path>[#test_name]' test ref (repeatable)."
     ),
     status: str = typer.Option(
-        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+        ...,
+        "--status",
+        help="ci | scheduled | unwired | walk-owed | walked | manual | not-implemented | failing.",
     ),
     notes: str = typer.Option("", "--notes", help="Evidence detail / backfill owed."),
     verify: str | None = typer.Option(
@@ -833,10 +840,12 @@ BACKFILL_PROTOCOL = """\
 1. Inventory: the uncited Test Plan specs and unlinked plans above, plus any
    design/study docs with acceptance-like tables, and the test tree(s).
 2. DRAFT rows — one row per business acceptance, not per test — with real
-   refs and HONEST statuses: per-PR-automated evidence ⇒ `ci`; anything
-   proven only by hand or once-live ⇒ `skipped`; absent ⇒ `not-implemented`.
-   The drift channel is precisely the hand-tracked claims — when in doubt
-   between `ci` and `skipped`, choose skipped.
+   refs and HONEST statuses: per-PR-automated evidence ⇒ `ci`; a test that
+   exists but does not run in CI ⇒ `unwired`; proven live by a recorded walk
+   ⇒ `walked`; a live walk still owed ⇒ `walk-owed`; a process that is never
+   automatable ⇒ `manual`; absent ⇒ `not-implemented`. The drift channel is
+   precisely the hand-tracked claims — when in doubt between `ci` and
+   `unwired`, choose unwired.
 3. Add rows via `fr acceptance add` (never hand-edit YAML shapes), run
    `fr acceptance check`, fix, and open a review PR — the operator audits
    statuses; do not inflate coverage.

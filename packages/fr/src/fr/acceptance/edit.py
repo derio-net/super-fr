@@ -275,8 +275,8 @@ def drop_levels(
 def describe_move(old: Row, new: Row) -> str:
     """What a set-status rewrite of `old` into `new` changed, in one phrase.
 
-    A moved status reads as the transition (`skipped → ci`). An unchanged one
-    names what did change instead (gh#769): `skipped → skipped` in the log
+    A moved status reads as the transition (`unwired → ci`). An unchanged one
+    names what did change instead (gh#769): `unwired → unwired` in the log
     reads as a status move that never happened, the silent-looking change the
     acceptance-matrix rule exists to keep out.
     """

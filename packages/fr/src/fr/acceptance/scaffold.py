@@ -32,12 +32,15 @@ MATRIX_TEMPLATE = """\
 #               (a .py fragment names a test, pytest-style: #TestX::test_y —
 #               never a #L<n> line, which rots as code moves; gh#531)
 #               ([] = level does not verify this row)
-#   status:     ci | scheduled | skipped | not-implemented | failing
+#   status:     ci | scheduled | unwired | walk-owed | walked | manual
+#               | not-implemented | failing
 #     ci               automated on every PR — cannot drift silently
 #     scheduled        automated on cron/path triggers
-#     skipped          verification exists but does not run in CI (proven
-#                      live once / manual walk) → CI warning, backfill owed
-#     not-implemented  no test or surface exists yet → CI warning
+#     unwired          a test exists but does not run in CI → debt, CI warning
+#     walk-owed        a live or post-merge walk is owed → debt, CI warning
+#     walked           proven live, dated by its latest passing walk
+#     manual           a process that is never automatable
+#     not-implemented  no test or surface exists yet → debt, CI warning
 #     failing          known red → `fr acceptance check` exits 2, CI FAILS
 #   notes:      evidence detail, drift context
 #
@@ -65,7 +68,7 @@ the following updates the matrix in the SAME PR:**
 - adds or changes a spec `## Test Plan` (new spec ⇒ new rows; the CI
   staleness guard fails a spec with a Test Plan that no row cites)
 - adds tests that verify an existing row (add the ref to `levels`, move
-  `status` up: `not-implemented` → `skipped` → `ci`/`scheduled`)
+  `status` up: `not-implemented` → `unwired` → `ci`/`scheduled`)
 - ships a surface or capability a `not-implemented` row waits on
 - changes CI workflows that run matrix-referenced checks
 - discovers a red acceptance: set `status: failing` — the
@@ -73,9 +76,10 @@ the following updates the matrix in the SAME PR:**
   re-classified with reasoning in `notes`
 
 Statuses move **explicitly, never silently**: `ci` | `scheduled` (automated
-— the safe end) · `skipped` (verification exists, not in CI — warning,
-backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
-(fails CI).
+— the safe end) · `walked` (proven live, dated by its walk) · `manual` (a
+process that is never automatable) · `unwired` (a test exists, not in CI —
+debt) · `walk-owed` (a live or post-merge walk is owed — debt) ·
+`not-implemented` (nothing exists — debt) · `failing` (fails CI).
 
 ## How
 
@@ -107,8 +111,8 @@ name: acceptance-report
 
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warning annotations; the
-#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (branch, PR, main).
 # - The built report (GitHub-linked at this ref) is uploaded as an artifact.
 @@DEBT_COMMENT@@# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
@@ -180,8 +184,8 @@ name: acceptance-report
 
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warning annotations; the
-#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (branch, PR, main) —
 #   Gitea Actions supports GITHUB_STEP_SUMMARY (aliased GITEA_STEP_SUMMARY,
 #   confirmed against Gitea's own Actions-variables docs).
@@ -247,8 +251,8 @@ jobs:
 WORKFLOW_TEMPLATE_GITLAB = """\
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this pipeline (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warnings; the backfill
-#   rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as
+#   warnings; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - The built report is kept as a pipeline artifact.
 @@DEBT_COMMENT@@# - No step-summary equivalent — GitLab CI has none (see module comment).
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
