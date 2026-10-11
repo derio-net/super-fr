@@ -439,28 +439,10 @@ rows:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test__urls.py
-    status: unwired
-    notes: 'LIVE-VERIFIED 2026-09-19 against a self-hosted GitLab (gh-486): fr apply
-      rendered, observed, diffed and applied two phases as GitLab Issues with correctly-shaped
-      labels (#-prefixed 6-hex, applied once), re-ran clean, and propagated a state
-      change then re-converged. Transcript in the PR. The row was previously ''ci''
-      for a capability broken FOUR independent ways, none findable by unit test: the
-      missing mandatory ref parameter; the Issue web_url being /-/work_items/N, which
-      fr stored and then refused to parse (crashing observe on every re-apply, on gitlab.com
-      too); ensure_labels aborting the whole apply on a 409 for a label that already
-      existed, a tolerance its own docstring had claimed since 2026-07-09; and the body
-      diff never converging because GitLab strips the rendered trailing newline. ''skipped'',
-      NOT ''ci'': CI cannot reach a private instance, so the live half is hand-run per-PR.
-      The unit half now asserts the REQUEST and the real captured error vocabulary,
-      so the arg-blind ''lambda args:'' mocks that hid all of this are gone. LIVE 2026-09-24
-      (multi-backend P9.T1.S1), a self-hosted GitLab (host/user/project redacted; private
-      scratch project, deleted after): every RealGlabClient operation fr apply/observe
-      uses passed when driven directly (ensure_labels create+converge, colour round-trip,
-      create_issue returning /-/work_items/N, view, label add/remove, comment, list_linked_prs
-      via related_merge_requests, pr_status_by_url, file_exists/list_dir/read_file,
-      close). related_merge_requests is eventually consistent (empty right after the
-      MR, populated seconds later). NOT walked: an end-to-end `fr apply` on a GitLab-backed
-      plan, so the status stays skipped.'
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): LIVE-VERIFIED
+      2026-09-19 against a self-hosted GitLab (host redacted): render, observe, diff
+      and apply converged; unit refs in CI.'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
