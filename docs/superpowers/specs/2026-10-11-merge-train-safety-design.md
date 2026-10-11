@@ -389,7 +389,11 @@ EnqueueEvent      {kind: enqueue, at, pr, head, base}
 **How an update is recorded.** `MergeContext` (`batch_merge.py:109-124`)
 gains `on_update: Callable[[int, str, str, str], None] | None`, called as
 `(pr, head_before, head_after, base)`. `_update` (`:498-536`) calls it after
-a successful push.
+`commit_all` and BEFORE the push (phase 1 review p1-r6). A crash or a
+concurrent writer between the push and the record would otherwise leave an
+fr-made head with no event, and the next settle would void a valid approval.
+An event for a head whose push then failed is harmless, because an unpushed sha
+never becomes the PR's head.
 - `base` is `rev_parse(ctx.main)` in the scratch checkout at update time.
   `CheckoutSeam` (`:86-96`) gains `rev_parse`, backed by
   `gitseam.Checkout.rev_parse` (`gitseam.py:448`).
