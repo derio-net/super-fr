@@ -26,3 +26,8 @@ ensure-phase-executor-allowlist.sh was written when only the plugin-qualified id
 ### b61fd4ac175a · root-cause · #1087: preflight is first-miss, OS-blind
 
 R19 (cloud-triage) already made a Claude-Code home without installed_plugins.json/settings.json exit non-zero. What remains: install.sh's `for cmd in jq uv rsync git` and bootstrap.sh's `for cmd in git uv jq` (no rsync) exit on the first missing command with no install command. Fix: collect every missing prerequisite and print the install command for the detected OS / package manager.
+
+<!-- fr:journal kind=finding scope=debug id=f3c800abbac1 created=2026-10-11T23:11:29+00:00 state=fixed -->
+### f3c800abbac1 · finding [fixed] · #1124 fixed: WorktreeCreate lock now precedes the agent-* branch
+
+fr-worktree-create.sh takes its mkdir lock (keyed repo+name) before `case agent-*) mimic_default`, so the second registered copy waits and then returns the existing path. Pinned by tests/unit/test_hooks_worktree.py#test_two_concurrent_agent_worktree_creations_both_succeed (slow git worktree add shim; red before: 'already exists'). Both registrations are kept: dropping settings.json's would re-break `claude --worktree` on the CC versions that skip the plugin hook, and this cannot be verified for every version. WorktreeRemove's agent-* path stays unlocked: a losing copy's `git worktree remove` failure already falls back to rm -rf and exits 0, so it never fails the event.
