@@ -50,19 +50,24 @@ from fr.triage.stage import Stage, derive_stage
 # the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
 # the stamp moves for the same reason. 8 adds per-config `merge_method` (2026-10-07-cloud-triage
 # §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects; the
-# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 3 to 7
-# still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[8] = 8
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
-# The version this fr WRITES: every engine write stamps 8 (the `claim_taken` event, gh#1120;
+# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 9 adds per-PR
+# `labels` (2026-10-11-merge-train-safety §A): `to_json` dumps it, `null` included, which a
+# closed-world schema-8 reader rejects; a schema-8 file reads `labels` as None, which never
+# approves. 3 to 8 still load, and the first collect upgrades them. Independent of
+# JUDGEMENTS_SCHEMA.
+FACTS_SCHEMA: Literal[9] = 9
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9)
+# The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
+# `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
+# `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
 # `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[8] = 8
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
+JUDGEMENTS_SCHEMA: Literal[9] = 9
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -294,6 +299,9 @@ class PullRequest(_Strict):
     mergeable: str | None = None
     merge_state: str | None = None
     review: str | None = None
+    # Open PRs only, like `checks`: the PR's label names, `None` when never read, which
+    # never approves (2026-10-11-merge-train-safety §A). Facts schema 9.
+    labels: list[str] | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""
@@ -525,7 +533,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8] = Field(8, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9] = Field(9, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -764,6 +772,58 @@ class ReplacementEvent(_Strict):
     reconciled: bool = False
 
 
+class UpdateEvent(_Strict):
+    """fr pushed an update to this batch's PR #*pr*: from *head_before* to *head_after*,
+    with the base at *base* as fetched at the time (2026-10-11-merge-train-safety §B,
+    R8). Approval and red recovery read these. Needs judgements schema 9. Written by
+    the engine only."""
+
+    kind: Literal["update"]
+    at: AwareDatetime
+    pr: int
+    head_before: str = Field(min_length=1)
+    head_after: str = Field(min_length=1)
+    base: str = Field(min_length=1)
+
+
+class ApprovalEvent(_Strict):
+    """fr recorded the operator's `approved-fr` label on PR #*pr* at *head*; *voided_at*
+    is the head that voided it, None while it is live (§A, R2). Needs judgements schema
+    9. Written by the engine only."""
+
+    kind: Literal["approval"]
+    at: AwareDatetime
+    pr: int
+    head: str = Field(min_length=1)
+    voided_at: str | None = None
+
+
+RedDelivery = Literal["session", "none"]
+
+
+class RedHandbackEvent(_Strict):
+    """The driver handed red PR #*pr* at *head* back to its session, naming the failing
+    *checks* (§C, R10). Needs judgements schema 9. Written by the engine only."""
+
+    kind: Literal["red_handback"]
+    at: AwareDatetime
+    pr: int
+    head: str = Field(min_length=1)
+    checks: list[str] = []
+    delivered: RedDelivery
+
+
+class EnqueueEvent(_Strict):
+    """The driver put PR #*pr* at *head* into the base's merge queue with the base at
+    *base* (§D, R13). Needs judgements schema 9. Written by the engine only."""
+
+    kind: Literal["enqueue"]
+    at: AwareDatetime
+    pr: int
+    head: str = Field(min_length=1)
+    base: str = Field(min_length=1)
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -772,6 +832,19 @@ SCHEMA_6_EVENTS = frozenset({"claims_released"})
 """The event kinds only a schema 6 `judgements.yaml` may carry (triage-claims §3.H)."""
 SCHEMA_8_EVENTS = frozenset({"claim_taken"})
 """The event kinds only a schema 8 `judgements.yaml` may carry (gh#1120)."""
+SCHEMA_9_EVENTS = frozenset({"update", "approval", "red_handback", "enqueue"})
+"""The event kinds only a schema 9 `judgements.yaml` may carry (merge-train-safety §B)."""
+
+# Every schema-gated event kind, with the judgements schema it first appears in: the one
+# table `Judgements` refuses a too-low stamp from.
+_EVENT_SCHEMAS: tuple[tuple[int, frozenset[str]], ...] = (
+    (3, SCHEMA_3_EVENTS),
+    (5, SCHEMA_5_EVENTS),
+    (6, SCHEMA_6_EVENTS),
+    (7, frozenset({"replacement"})),
+    (8, SCHEMA_8_EVENTS),
+    (9, SCHEMA_9_EVENTS),
+)
 
 
 BatchEvent = Annotated[
@@ -782,7 +855,11 @@ BatchEvent = Annotated[
     | ConflictEvent
     | ClaimsReleasedEvent
     | ReplacementEvent
-    | ClaimTakenEvent,
+    | ClaimTakenEvent
+    | UpdateEvent
+    | ApprovalEvent
+    | RedHandbackEvent
+    | EnqueueEvent,
     Field(discriminator="kind"),
 ]
 
@@ -890,7 +967,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -984,43 +1061,18 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
             )
-        late = sorted({e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_3_EVENTS})
-        if self.schema_ < 3 and late:
-            raise ValueError(
-                f"`{'`, `'.join(late)}` events need schema 3, but this file is stamped "
-                f"schema {self.schema_}"
-            )
         if self.exports and self.schema_ < 4:
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
-        later = sorted(
-            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_5_EVENTS}
-        )
-        if self.schema_ < 5 and later:
-            raise ValueError(
-                f"`{'`, `'.join(later)}` events need schema 5, but this file is stamped "
-                f"schema {self.schema_}"
-            )
-        latest = sorted(
-            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_6_EVENTS}
-        )
-        if self.schema_ < 6 and latest:
-            raise ValueError(
-                f"`{'`, `'.join(latest)}` events need schema 6, but this file is stamped "
-                f"schema {self.schema_}"
-            )
-        if self.schema_ < 7 and any(
-            isinstance(e, ReplacementEvent) for b in self.batches for e in b.events
-        ):
-            raise ValueError("replacement events need schema 7")
-        if self.schema_ < 8 and any(
-            e.kind in SCHEMA_8_EVENTS for b in self.batches for e in b.events
-        ):
-            raise ValueError(
-                "`claim_taken` events need schema 8, but this file is stamped "
-                f"schema {self.schema_}"
-            )
+        carried = {e.kind for b in self.batches for e in b.events}
+        for needs, kinds in _EVENT_SCHEMAS:
+            late = sorted(carried & kinds)
+            if self.schema_ < needs and late:
+                raise ValueError(
+                    f"`{'`, `'.join(late)}` events need schema {needs}, but this file is "
+                    f"stamped schema {self.schema_}"
+                )
         return self
 
 

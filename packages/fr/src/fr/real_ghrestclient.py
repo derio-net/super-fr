@@ -653,7 +653,7 @@ class RealGhRestClient:
 
     def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
         """`fr.gh.OPEN_PR_LIST_FIELDS`: the list fields plus files, checks,
-        merge state and review decision, read per open PR (as GraphQL's are)."""
+        merge state, review decision and labels, read per open PR (as GraphQL's are)."""
         out = []
         for p in self._paged(f"repos/{repo}/pulls?state=open", limit=limit):
             pull = self._pull(repo, p["number"])
@@ -666,6 +666,7 @@ class RealGhRestClient:
                 mergeable=mergeable,
                 mergeStateStatus=merge_state,
                 reviewDecision=_review_decision(reviews),
+                labels=[{"name": lb.get("name") or ""} for lb in pull.get("labels") or []],
             )
             out.append(record)
         return out

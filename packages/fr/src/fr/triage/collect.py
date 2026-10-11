@@ -231,6 +231,8 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             mergeable=(r["mergeable"] or "UNKNOWN") if "mergeable" in r else None,
             merge_state=((r["mergeStateStatus"] or "UNKNOWN") if "mergeStateStatus" in r else None),
             review=r.get("reviewDecision") or None,
+            # Only an open-PR record carries labels; None is "never read" (merge-train §A).
+            labels=[lb["name"] for lb in r["labels"] or []] if "labels" in r else None,
             author=_login(r),
             cross_repo=r.get("isCrossRepository"),
         )
