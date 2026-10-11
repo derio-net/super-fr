@@ -4060,11 +4060,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
-    status: unwired
-    notes: 'Both harnesses walked live: Claude Code (PR #609) and OpenCode in devcontainer
-      mode (PR #679, usage/2026-09-26-fix-659-isolation-gc-fetch.yaml, 7/7 steps). Stays
-      skipped until #637 (Claude Code omits subagent cost) is fixed; OpenCode needs
-      an explicit session binding until #636.'
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both
+      harnesses were walked live (PR #609, PR #679), but the row stays owed until #637
+      (Claude Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit
+      binding until #636.'
   - id: light-path-shape
     capability: fr-goal-cost
     acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light`
