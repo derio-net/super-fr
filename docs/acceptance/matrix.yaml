@@ -2120,10 +2120,10 @@ rows:
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test_glab.py
       - super-fr:tests/unit/test_pr_observe.py
-    status: walked
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): all
-      three clauses verified live from a checkout against a self-hosted GitLab (host
-      redacted); unit refs in CI.'
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
+      against a self-hosted GitLab (host redacted) but give no date to record a walk
+      with; unit refs in CI. Re-walk and record it with set-status --walk.'
   - id: forge-errors-are-not-absence
     capability: Multi-backend git hosting
     acceptance: A malformed or unauthorized GitLab request surfaces as an error rather
