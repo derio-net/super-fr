@@ -468,3 +468,74 @@ def render_status_md(status: SpecStatus) -> str:
         for w in status.warnings:
             lines.append(f"- {w}")
     return "\n".join(lines)
+
+
+# --- Test Plan steps (spec 2026-10-11-debt-engine §E, R17) -----------------
+
+TEST_PLAN_HEADING = "## Test Plan"
+_SECTION_RE = re.compile(r"^## Test Plan\s*$", re.MULTILINE)
+_NEXT_SECTION_RE = re.compile(r"^#{1,2} ", re.MULTILINE)
+_ITEM_RE = re.compile(r"^(?:\d+[.)]|[-*])\s+(.*)$")
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+
+
+@dataclass(frozen=True)
+class Step:
+    """One Test Plan step: its position (1-based) and its text, one line."""
+
+    n: int
+    text: str
+
+
+def test_plan_section(text: str) -> str | None:
+    """The body of a spec's `## Test Plan` section, or `None` when it has none."""
+    m = _SECTION_RE.search(text)
+    if m is None:
+        return None
+    rest = text[m.end() :]
+    end = _NEXT_SECTION_RE.search(rest)
+    return rest[: end.start()] if end else rest
+
+
+def test_plan_steps(text: str) -> list[Step]:
+    """Every top-level list item under `## Test Plan` is a step, numbered by
+    position, its continuation lines joined (R17). A section with no list item
+    is ONE step: its prose. No section, no steps.
+
+    A continuation is an indented line, or an unindented line directly under
+    the item (a lazy continuation); an unindented line after a blank line is
+    section prose and ends the item. Nothing inside a code fence starts one.
+    """
+    section = test_plan_section(text)
+    if section is None:
+        return []
+    items: list[list[str]] = []
+    prose: list[str] = []
+    current: list[str] | None = None
+    blank = False
+    fenced = False
+    for line in section.splitlines():
+        if _FENCE_RE.match(line):
+            fenced = not fenced
+        stripped = line.strip()
+        if not stripped:
+            blank = True
+            continue
+        indented = line[:1] in (" ", "\t")
+        m = None if (fenced or indented) else _ITEM_RE.match(line)
+        if m is not None:
+            current = [m.group(1)]
+            items.append(current)
+        elif current is not None and (indented or not blank):
+            current.append(stripped)
+        else:
+            current = None
+            prose.append(stripped)
+        blank = False
+    if not items:
+        return [Step(1, " ".join(" ".join(prose).split()))]
+    return [Step(i, " ".join(" ".join(parts).split())) for i, parts in enumerate(items, 1)]
+
+
+test_plan_steps.__test__ = False  # type: ignore[attr-defined]  # not a pytest test
+test_plan_section.__test__ = False  # type: ignore[attr-defined]

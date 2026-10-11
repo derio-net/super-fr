@@ -120,6 +120,12 @@ FR_AWAITING_LIVE = LabelDef(
     "Merged; a post-merge acceptance row still awaits its live walk",
 )
 
+# An operator action that is owed (spec 2026-10-11-debt-engine R16, R21): a Test
+# Plan step recorded `owed`, or a manual phase holding a plan. Filed by `fr
+# archive`, closed by `fr journal resolve --state fixed`. Not a queue marker:
+# triage keeps it out of the ranked backlog, nothing dispatches on it.
+FR_OWED = LabelDef("fr:owed", "C5DEF5", "An operator action is owed (fr archive filed it)")
+
 RUNNER_LABEL_COLOR = "1D76DB"
 
 

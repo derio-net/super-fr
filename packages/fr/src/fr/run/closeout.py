@@ -173,6 +173,9 @@ class RunExtras:
     has_test_plan: bool
     out_of_scope: list[tuple[str, str]]
     awaiting_live: list[str] = field(default_factory=list)
+    test_plan_steps: list[tuple[int, str]] = field(default_factory=list)
+    """`(n, text)` of each spec Test Plan step with no recorded outcome yet —
+    `fr archive` holds the plan until each has one (spec 2026-10-11 R19)."""
 
 
 def _housekeeping_branch(branch: str, run_extras: RunExtras | None) -> str:
@@ -245,6 +248,16 @@ def branch_closeout_brief(
 
     if run_extras is not None and run_extras.spec_path and run_extras.has_test_plan:
         lines.append(f"  run the spec's Test Plan: {run_extras.spec_path}")
+        if run_extras.test_plan_steps:
+            from fr.archive import outcome_command
+
+            lines.append(
+                "  record each step's outcome — `fr archive` holds the plan until every "
+                "step has one:"
+            )
+            for n, text in run_extras.test_plan_steps:
+                lines.append(f"    step {n}: {text}")
+                lines.append(f"      {outcome_command(f'--run {run_extras.run_id}', n)}")
 
     if run_extras is not None:
         lines.extend(run_extras.awaiting_live)
@@ -437,12 +450,17 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
     plan_path = _emitted(state, "plan")
 
     has_test_plan = False
+    missing: list[tuple[int, str]] = []
     if spec_path:
         spec_file = repo_root / spec_path
         try:
             has_test_plan = TEST_PLAN_MARKER in spec_file.read_text()
         except OSError:
             has_test_plan = False
+        if has_test_plan:
+            from fr.archive import missing_outcomes
+
+            missing = [(s.n, s.text) for s in missing_outcomes(repo_root, spec_file)]
 
     out_of_scope: list[tuple[str, str]] = []
     if spec_path:
@@ -460,5 +478,6 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         has_test_plan=has_test_plan,
         out_of_scope=out_of_scope,
         awaiting_live=awaiting_live_lines(repo_root, state, pr),
+        test_plan_steps=missing,
     )
     return branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)
