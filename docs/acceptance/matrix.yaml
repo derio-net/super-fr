@@ -8223,9 +8223,24 @@ rows:
       the label, and the driver''s own update-from-base keeps it.'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; the phase that builds it writes the file.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_approval.py#test_a_chain_of_fr_updates_from_the_approved_head_stays_approved
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_walk
+      - super-fr:tests/unit/test_merge_train_gate.py#test_settle_voids_a_head_the_chain_does_not_reach_and_removes_the_label
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_green_draft_is_readied_then_merged
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval
+      - super-fr:tests/unit/test_merge_train_commands.py#test_a_default_merge_holds_an_unlabelled_batch_and_merges_the_rest
+      - super-fr:tests/unit/test_merge_train_commands.py#test_naming_an_unapproved_batch_exits_2_naming_the_label
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_after_labelling_voids_the_approval
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: the label gate on every fr merge path. Unit: the pure verdict (test_merge_train_approval),
+      settle/walk/merge gate/update events (test_merge_train_gate), batch merge held/refused/settled
+      under --yes (test_merge_train_commands), the driver''s settle, ready-and-merge,
+      void and update (test_triage_batch_drive_cmd). Scenario: tests/scenarios/merge-train-label-gate.sh
+      drives five passes against a fake REST forge and a real bare remote.'
     verify: candidate
     scenario: tests/scenarios/merge-train-label-gate.sh
   - id: approval-label-created
