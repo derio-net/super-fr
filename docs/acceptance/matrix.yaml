@@ -6795,9 +6795,14 @@ rows:
       by routine commits.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; the phase that builds it writes the file.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge_ready.py#test_strict_checks_update_a_pr_behind_only_by_a_release_commit
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_red_recovery
+    status: ci
+    notes: 'Phase 2: strict_checks drops the routine-commit exemption; base_rules read
+      per pass; scenario phase C.'
     verify: candidate
     scenario: tests/scenarios/merge-train-red-recovery.sh
   - id: triage-scope-groups
