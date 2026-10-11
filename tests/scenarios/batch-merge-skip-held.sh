@@ -65,7 +65,7 @@ batches:
       - {kind: dispatch, at: 2026-10-07T05:00:00Z, runner: herdr, handle: h2, branch: feat/batch-b2}
 EOF2
 python3 - "$FAKE_FORGE" "$bare" "$config" <<'EOF2'
-import json, sys
+import json, sys  # noqa
 json.dump({"bare": sys.argv[2], "config": sys.argv[3], "label_defined": True,
            "pr": {"branch": "feat/batch-b1", "draft": False, "labels": ["approved-fr"],
                   "merged": False},
@@ -77,11 +77,12 @@ run_fr out triage collect --repo "$repo" --dir "$state"; require_exit 0 "$out"
 cat > "$world/facts.py" <<'EOF2'
 import json
 import sys
+from pathlib import Path
 
 from fr.triage.model import Issue, IssueClaim, PullRequest, load_facts
 
 path, hold_b1 = sys.argv[1], sys.argv[2] == "yes"
-facts = load_facts(path)
+facts = load_facts(Path(path))
 repo = "derio-net/super-fr"
 claim = IssueClaim(signer="s-aaaaaaaa", batch="their-batch", claimed="2026-10-11T00:00:00Z",
                    heartbeat="2026-10-11T00:00:00Z", expires="2099-01-01T00:00:00Z",

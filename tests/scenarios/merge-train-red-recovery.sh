@@ -82,6 +82,7 @@ batches:
     title: archive-followups
     ids: ["super-fr#1074"]
     wave: 1
+    launch: {runner: herdr, harness: claude, model: claude-opus-5-5}
     events:
       - {kind: dispatch, at: 2026-10-07T05:00:00Z, runner: herdr, handle: h, branch: feat/batch-archive-followups}
       - {kind: approval, at: 2026-10-07T05:10:00Z, pr: 1080, head: $h0}
@@ -103,7 +104,8 @@ w = json.load(open(sys.argv[1])); exec(sys.argv[2]); json.dump(w, open(sys.argv[
 EOF2
 }
 drive() { run_fr out triage batch drive --once --yes --keep-sessions --repo "$repo" --dir "$state" \
-  --checkout "$repo=$PWD"; require_exit 0 "$out"; }
+  --checkout "$repo=$PWD"
+  [ "$RC" -eq 0 ] || [ "$RC" -eq 3 ] || fail "drive exited $RC (3 is a pass waiting on checks): $out"; }
 board() {  # the board over the facts the last pass collected
   run_fr page triage render --repo "$repo" --dir "$state"; require_exit 0 "$page"
   cat "$state/triage.html"

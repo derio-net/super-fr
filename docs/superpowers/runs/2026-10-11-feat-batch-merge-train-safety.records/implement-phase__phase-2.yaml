@@ -1,0 +1,18 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-merge-train-safety
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2, P2.T5.S1, P2.T5.S2]
+refactor:
+  P2.T1: "red_decision and red_brief are new pure functions beside conflict_decision and conflict_brief; nothing duplicated."
+  P2.T3: "base_rules is one method per backend beside required_check_names; the strict change is one condition in _land."
+  P2.T4: "_skip_held is a small helper beside _refuse_held, whose with-ids path is unchanged."
+  P2.T5: "Two scenario scripts, a fake herdr and two keys on the existing fake gh; no production code."
+journal:
+  - {kind: decision, id: p2-warn-every-pass, title: "The walk warns on every pass for a failing PR; the dedup is the recorded events", body: "The walk no longer dedups a failing PR's warn by head in Snapshot.warned. Each red warn carries red=True and checks; _Driver._recover decides from red_decision whether the pass has anything to say, and the pass prints nothing for a skip. _Driver.warned stays: _report_once and the close reports still read it.", phase: 2}
+  - {kind: decision, id: p2-red-session-status-lazy, title: "The session is read only when rules 1-3 leave the decision to it", body: "_recover asks red_decision with status idle first; only a handback result reads the runner's status and decides again. A runner that cannot be messaged reads as absent, so its red PR is a needs-you. A wait prints its line once per (batch, head, status) from self.reported, since it records nothing.", phase: 2}
+  - {kind: discovery, id: p2-positive-rule-shapes-not-captured, title: "Positive merge_queue/strict rule shapes are not captures", body: "The repo's own ruleset has neither rule, so the positive base_rules cases in tests/unit/test_merge_train_base_rules.py and the scenario's strict rule are built from the captured rule record's key shape plus the documented parameters, stated in the fake's docstring. The 404 of branches/main/protection and the negative rules are live captures.", phase: 2}
+  - {kind: discovery, id: p2-scenario-drive-exit-3, title: "A pass waiting on checks exits 3", body: "The red-recovery scenario accepts drive exit 0 or 3, since a pass whose only PR is pending exits 3 by design.", phase: 2}
+resolves: []
+evidence: {tests: ci}
