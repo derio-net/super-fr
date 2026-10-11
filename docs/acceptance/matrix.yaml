@@ -409,16 +409,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
-    status: unwired
-    notes: Unit test guards the install.sh wiring (CI) — tests/unit/test_install_copies_opencode_commands.py
-      passes (2026-07-08). Live-verified twice — pre-merge (2026-07-08, scratch HOME,
-      VK_INSTALL_SKIP_PREFLIGHT=1) and re-confirmed post-merge as Test Plan step 3
-      (2026-07-08, fresh clone of merged main, real preflight passing — no skip
-      needed) — both times full scripts/install.sh delivered all 9 commands
-      byte-identical to .opencode/commands/, and --uninstall removed them cleanly
-      with no collateral damage. Not automated in CI (requires real filesystem/HOME
-      side effects) — backfill owed if that becomes scriptable, same pattern as the
-      sibling opencode-skills-installer row.
+    status: walked
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): live-verified
+      pre- and post-merge 2026-07-08 (install.sh delivered all commands); install.sh
+      wiring guarded in CI.'
   - id: cncd-runner-ingest-dispatch
     capability: CNCD runner
     acceptance: An operator can dispatch an eligible tracked plan phase to cncd via
