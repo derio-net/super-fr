@@ -3,7 +3,7 @@ run: 2026-10-11-feat-batch-run-pipeline
 workflow: fr-goal@1
 branch: feat/batch-run-pipeline
 started: '2026-10-11T21:58:11+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md
   spec-review:
-    state: running
-    at: '2026-10-11T22:04:23+00:00'
+    state: done
+    at: '2026-10-11T22:11:42+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-10-11T22:04:23+00:00'
+          agent: ace6b9c7ffc816391
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: opus
           session: d3a3e30a-6d89-48d8-a54b-7fdb0b4e4e99
+          returned: '2026-10-11T22:11:42+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: ace6b9c7ffc816391
+          findings: sr-r1,sr-r2,sr-r3,sr-r4,sr-r5,sr-r6,sr-r7,sr-r8,sr-r9
   plan:
     state: pending
   plan-review:
