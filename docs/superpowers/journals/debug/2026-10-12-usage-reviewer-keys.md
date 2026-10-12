@@ -14,3 +14,8 @@ Before #1041 (91742128~1, usage/file.py:230) units_by_agent read attempt agents 
 ### pin · finding [fixed] · Reviewer brief re-keying pinned on both session_entry paths
 
 tests/unit/test_usage_split.py::test_a_reviewer_brief_is_keyed_by_its_unit_not_the_agent_id[index|rekey]. Mutation check: replacing agents.setdefault(reviewer, unit_key) in unit_index with a no-op turns both red with briefs {'rv1': 100} (the gh#1060 symptom); restored, green. No source change: the behaviour shipped in #1041 (91742128). Usage + run-cost tests: 220 passed, 10 skipped.
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-10-12T00:05:20+00:00 -->
+### review · review · Review of PR #1150: no findings
+
+Self-review of a one-test, no-source diff: the fixture's rv1 is reachable only via evidence.reviewer (the review attempt has no agent), both session_entry paths are covered, and the mutation check proves the test bites. CI runs the full suite. No findings raised.
