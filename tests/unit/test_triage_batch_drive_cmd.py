@@ -244,6 +244,7 @@ class DriveCheckout:
         self.commands: list[list[str]] = []
         self.command_fails: str | None = None
         self.forwarded = 0
+        self.switched: list[bool] = []  # each fast-forward's `switch`
         self.files: dict[tuple[str, str], str] = {}
         self.release_probes: list[str] = []
         self.added: dict[str, tuple[str, ...]] = {}  # merge commit -> paths it added
@@ -286,8 +287,9 @@ class DriveCheckout:
     def remove_worktree(self, where: Path) -> None:
         pass
 
-    def fast_forward(self) -> None:
+    def fast_forward(self, *, switch: bool = False) -> None:
         self.forwarded += 1
+        self.switched.append(switch)
 
     def released_after(self, merge_commit: str) -> bool:
         self.release_probes.append(merge_commit)
@@ -3443,6 +3445,23 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
     assert load_judgements(tmp_path / "judgements.yaml").schema_ == 8
+
+
+@pytest.mark.parametrize("status", ["idle", "absent", "working"])
+def test_a_conflict_the_pass_handles_is_no_failed_write(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge, status: str,
+) -> None:  # fmt: skip
+    """gh#1099: a conflict handed back (or waiting on a busy session) is the train doing
+    what it should; `--once` exits 1 only for a write that failed."""
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = status
+    train.script[101] = _conflict_error()
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code != 1, out
+    assert _lines(out, "merge")[0].startswith("merge b1: stopped: PR #101")
 
 
 @pytest.mark.parametrize("status", ["absent", "done"])

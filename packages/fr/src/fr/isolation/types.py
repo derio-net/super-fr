@@ -130,6 +130,14 @@ def repo_cache_name(repo_root: Path) -> str:
     return common.parent.name if common.name == ".git" else Path(repo_root).name
 
 
+def default_worktree_path(repo_root: Path, branch: str) -> Path:
+    """Where `up` puts *branch*'s worktree when no `--path` is given."""
+    return (
+        _home() / ".cache" / "fr" / "worktrees" / repo_cache_name(repo_root)
+        / branch.replace("/", "__")
+    )  # fmt: skip
+
+
 def state_dir(repo_root: Path) -> Path:
     return _git_common_dir(repo_root) / "fr" / "isolation"
 

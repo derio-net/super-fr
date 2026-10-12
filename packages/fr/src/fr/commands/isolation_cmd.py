@@ -15,6 +15,7 @@ from typing import Any, Protocol, cast
 
 import typer
 
+from fr import cloud
 from fr.isolation import sessions as _sessions
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
@@ -64,7 +65,8 @@ def _target(repo: Path) -> Target:
        recognize-and-adopt, not a second isolation attempt;
     2. else `FR_ISOLATION_TARGET` (selects the mode at creation, never a
        per-call flag — spec §B): unset/"devcontainer" → the local
-       worktree+devcontainer target (unchanged default); "worktree" →
+       worktree+devcontainer target (unchanged default — but unset in a Claude
+       Code cloud session, which has no docker, is "worktree", gh#1098); "worktree" →
        HostWorktreeTarget (fr worktree, host env, no docker); anything else
        fails closed so a broken docker can't be silently routed around."""
     root = repo.resolve()
@@ -72,6 +74,8 @@ def _target(repo: Path) -> Target:
     if external is not None:
         return external
     mode = os.environ.get("FR_ISOLATION_TARGET")
+    if mode in (None, "") and cloud.detect():
+        mode = "worktree"
     if mode in (None, "", "devcontainer"):
         return LocalWorktreeDevcontainerTarget(root, runner=_runner, gc_spawner=_gc_spawner)
     if mode == "worktree":

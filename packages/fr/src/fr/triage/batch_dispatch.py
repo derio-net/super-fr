@@ -55,29 +55,52 @@ def worker_remedy() -> str | None:
     return cloud.remedy_block([cloud.AGENTS_ITEM]) if cloud.detect() else None
 
 
-def _cloud_preflight(branch: str, remedy: str | None, *, repo: str) -> list[str]:
-    """The worker's first step (R19, §H): fr present, both agents dispatchable, isolation
-    entered through the CLI. A missing agent ends the turn BLOCKED, never re-homed.
-    A missing fr is installed by the cloud setup script itself, embedded whole (p7-r6):
-    one install recipe, idempotent over an existing clone, never a second one-liner."""
+def _cloud_preflight(
+    branch: str, remedy: str | None, *, repo: str, skill: str = "fr-goal"
+) -> list[str]:
+    """The worker's first step (R19, §H): a current fr, the batch's skill, both agents
+    dispatchable, isolation entered through the CLI. A missing agent or skill ends the
+    turn BLOCKED, never re-homed. fr is installed, or updated when `fr cloud doctor` finds
+    it older than the latest release (a pre-warmed spare's, gh#1098), by the cloud setup
+    script itself, embedded whole (p7-r6): one install recipe, idempotent over an existing
+    clone, never a second one-liner."""
     from fr import cloud
 
+    installed = (
+        f"~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/skills/"
+        f"{skill}/SKILL.md"
+    )
     lines = [
         "",
         "## Before anything else (this is a cloud session)",
         "1. Run `fr --version`. If that fails, run `~/.local/bin/fr --version`: if that "
         'works, fr is installed but off PATH, so run `export PATH="$HOME/.local/bin:$PATH"` '
-        "and go on. Install super-fr only if both fail: save this script (the cloud "
-        "environment's setup script, `fr cloud setup-script`) to a file, run it with "
-        '`bash`, then run `export PATH="$HOME/.local/bin:$PATH"`.',
+        "and go on. Then run `fr cloud doctor` and read its `fr` line: this session may be "
+        "a pre-warmed spare whose fr is older than the latest release. When fr is missing, "
+        "or that line FAILs, save this script (the cloud environment's setup script, "
+        "`fr cloud setup-script`) to a file, run it with `bash` (it installs super-fr, or "
+        'updates the clone it finds and reinstalls), then run `export PATH="$HOME/.local/'
+        'bin:$PATH"` and `fr cloud doctor` again. If its `fr` line still FAILs, do nothing '
+        "else and end your turn BLOCKED with needs_action: fr could not be updated to the "
+        "latest release, and the doctor's `fr` line.",
         "",
         "```bash",
         *cloud.setup_script(repo).rstrip("\n").splitlines(),
         "```",
         "",
-        "2. Confirm that `fr-spec-reviewer` and `fr-phase-executor` are agent types you "
-        "can dispatch (the repo's `.claude/agents/`). If either is not dispatchable, the "
-        "repo lacks a current `agents` artifact: do nothing else, and end your turn "
+        f"2. This batch runs through `/{skill}`, and only through it. If the skill is not "
+        f"loaded in this session, read its installed copy, `{installed}` (the setup script "
+        "puts it there), and follow it exactly. Never do the work without it: a change "
+        "committed directly ships a PR with no run, a success that is false and that the "
+        "close-out cannot archive. If you can run it neither way, do nothing else and end "
+        "your turn BLOCKED with this needs_action:",
+        f"   needs_action: the `{skill}` skill is not available in this session (not "
+        f"loaded, and not at {installed}); rerun the setup script or fix the environment, "
+        "then dispatch this batch again.",
+        "3. Confirm that `fr-spec-reviewer` and `fr-phase-executor` are agent types your "
+        "harness lists as dispatchable in this session. A file under `.claude/agents/` is "
+        "not proof: agent types load when a session starts. If either is not dispatchable, "
+        "the repo lacks a current `agents` artifact: do nothing else, and end your turn "
         "BLOCKED with this needs_action:",
         "   needs_action: this repo's `agents` artifact (.claude/agents/fr-spec-reviewer.md, "
         ".claude/agents/fr-phase-executor.md) is missing or stale. Run `fr init agents` "
@@ -89,7 +112,10 @@ def _cloud_preflight(branch: str, remedy: str | None, *, repo: str) -> list[str]
     lines += [
         "   Do not ask to be re-homed: a new session from the same commit would start the "
         "same way.",
-        f"3. Enter isolation with `fr isolation up --branch {branch}` before any edit; "
+        "4. Say in your first reply which of these held, and whether the super-fr hooks "
+        "are live in this session (its SessionStart hook prints the acceptance-debt line "
+        "when it ran).",
+        f"5. Enter isolation with `fr isolation up --branch {branch}` before any edit; "
         "never edit outside it.",
     ]
     return lines
@@ -121,7 +147,9 @@ def render_brief(
     titles = {i.key: i.title for i in facts.issues}
     lines = [f"{slash} {batch.title}"]
     if runner in CLOUD_PREFLIGHT_RUNNERS:
-        lines += _cloud_preflight(batch_branch(batch), remedy, repo=repo)
+        lines += _cloud_preflight(
+            batch_branch(batch), remedy, repo=repo, skill=slash.removeprefix("/")
+        )
     lines += [
         "",
         f"Batch `{batch.id}` of {repo}: {len(batch.ids)} issues, delivered as ONE pull request.",

@@ -12,7 +12,7 @@ import os
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 FORGE_PARITY_ISSUE = "gh#611"
 """Where the missing non-GitHub implementations are tracked (spec
@@ -217,6 +217,11 @@ class GhClient(Protocol):
         records with `fr.gh.PR_LIST_FIELDS` plus `headRefOid` and `files`."""
         ...
 
+    def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
+        """Whether *repo*'s `#number` is an issue or a PR (`adopt --list` classifies the
+        refs in a session label); None when the forge says neither."""
+        ...
+
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         """`{state, draft, head_oid, head_ref, base_ref, mergeable, merge_state, merge_commit,
         title, body}` of one PR, read fresh. `state` is OPEN | CLOSED | MERGED; `merge_commit` is
@@ -403,6 +408,9 @@ class UnsupportedBatchOps:
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         raise self._unsupported("list_prs_by_head")
+
+    def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
+        raise self._unsupported("ref_kind")
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("pr_view")

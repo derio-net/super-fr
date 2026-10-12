@@ -110,6 +110,44 @@ def test_session_notes_return_only_blocked_sessions_needs_action(tmp_path: Path)
     }
 
 
+def test_a_session_that_failed_to_start_is_blocked_with_its_init_error(tmp_path: Path) -> None:
+    """gh#1099: a session whose start failed keeps reading `working` (its status bucket),
+    and only `last_init_error` shows it. Recorded as `init_error`, it is blocked, and
+    the error is its note, so the batch stops reading as "close-out started"."""
+    item = run_item(run_id="closeout-b1")
+    runner = _cloud(
+        tmp_path,
+        {"sessions": [{"id": "s1", "tag": item.id, "state": "working",
+                       "init_error": "ref_not_found: the requested branch was not found"}]},
+    )  # fmt: skip
+    assert runner.session_statuses([item]) == {item.id: "blocked"}
+    (note,) = runner.session_notes([item]).values()
+    assert "failed to start" in note and "ref_not_found" in note
+
+
+def test_a_status_result_carrying_an_init_error_blocks_the_recorded_session(
+    tmp_path: Path,
+) -> None:
+    item = run_item(run_id="closeout-b1")
+    _session(tmp_path, item.id)
+    runner = _cloud(tmp_path)
+    runner.record_results(
+        [{"id": f"{item.id}:status:1", "state": "working", "init_error": "ref_not_found"}]
+    )
+
+    later = _cloud(tmp_path)
+
+    assert later.session_statuses([item]) == {item.id: "blocked"}
+    assert "ref_not_found" in later.session_notes([item])[item.id]
+
+
+def test_the_status_request_asks_the_agent_for_the_init_error() -> None:
+    from fr_claude_cloud.mailbox import REQUEST_TABLE
+
+    assert "last_init_error" in REQUEST_TABLE["status"].execute
+    assert "init_error" in REQUEST_TABLE["status"].record
+
+
 def test_herdr_is_no_session_notes_runner() -> None:
     from fr_herdr.runner import HerdrRunner
 

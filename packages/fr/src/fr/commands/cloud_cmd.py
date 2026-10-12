@@ -22,7 +22,8 @@ cloud_app = typer.Typer(
 @cloud_app.command("doctor")
 def doctor() -> None:
     """Every cloud prerequisite (forge.api, the plugin, the repo's agents artifact, a
-    current fr, rsync) and its state; exits 1 when any fails."""
+    current fr, rsync, a merge method the driver may use) and its state; exits 1 when
+    any fails."""
     checks = cloud.check(repo_root=cloud.repo_root_of())
     for c in checks:
         mark = "ok  " if c.ok else "FAIL"
@@ -33,9 +34,12 @@ def doctor() -> None:
     if not failed:
         typer.echo("every cloud prerequisite holds")
         return
-    if cloud.detect():
+    # The setup script fixes the environment; a merge method is the repo's own config,
+    # whose fix the check already printed.
+    environment = [c.item for c in failed if c.name != "merge_method"]
+    if cloud.detect() and environment:
         typer.echo("")
-        typer.echo(cloud.remedy_block([c.item for c in failed]))
+        typer.echo(cloud.remedy_block(environment))
     raise typer.Exit(1)
 
 
