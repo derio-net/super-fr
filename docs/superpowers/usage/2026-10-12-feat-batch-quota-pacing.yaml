@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-10-12-feat-batch-quota-pacing
+captures:
+- host: h-cb066bd5
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-12T06:11:18+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 3d79063e-54ff-4f34-aff6-f6a5159f2fca
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 78
+        cache_write: 285836
+        cache_read: 5640506
+        output: 36602
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 13
+      other:
+        usd: null
+        turns: 12
+      paperwork:
+        usd: null
+        turns: 14
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 4
+        cache_write: 84177
+        cache_read: 126470
+        output: 855
+      brainstorm:
+        usd: null
+        turns: 37
+        input: 74
+        cache_write: 201659
+        cache_read: 5514036
+        output: 35747
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 4
+          cache_write: 84177
+          cache_read: 126470
+          output: 855
+        brainstorm:
+          usd: null
+          turns: 37
+          input: 74
+          cache_write: 201659
+          cache_read: 5514036
+          output: 35747

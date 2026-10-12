@@ -6801,6 +6801,73 @@ rows:
     notes: 'Unit tests: the free-plan 403 means no rulesets; other 403s and host refusals
       still raise'
     verify: none
+  - id: quota-reset-wait
+    capability: triage-batch-drive
+    acceptance: After a rate-limit response, a looping drive reads /rate_limit once
+      and makes no forge call on the exhausted budget until the announced reset; a pass
+      that starts with nothing left does not run; a secondary limit backs off doubling
+      to 15 minutes; an unreadable /rate_limit fails open.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: quota-floor-essential-pass
+    capability: triage-batch-drive
+    acceptance: Below the host's budget floor (default 20%, quota_floor in forge.yaml
+      or --quota-floor), a drive pass collects only live-batch repos, dispatches nothing
+      (held, quota below floor), still merges and closes out, keeps the last board,
+      and waits four intervals.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: quota-quiet-pass
+    capability: triage-batch-drive
+    acceptance: A drive pass with no forge changes costs only conditional REST probes
+      answered 304 (no GraphQL point) and skips collect, plan and board; a pass with
+      changes collects only the changed repos and carries the rest; a full pass runs
+      at least every 15 minutes; ETags are stored only with the facts they describe.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: visibility-conditional-read
+    capability: triage-batch-drive
+    acceptance: The state repo's visibility is still read live before every push, but
+      through a conditional REST request whose 304 answer costs no budget.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: quota-board-footer
+    capability: triage-batch-drive
+    acceptance: The drive logs the remaining quota, reset time and action whenever it
+      throttles itself, and board.html's footer shows the last budget read and when
+      facts were last collected.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: quota-shared-token-live
+    capability: triage-batch-drive
+    acceptance: Several org drivers running overnight on one token no longer exhaust
+      the shared GraphQL budget.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
