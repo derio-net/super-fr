@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fr.labels import FR_IN_PROGRESS
 from fr.triage import claim_writes as cw
 from fr.triage.claims import Marker, parse_marker, render_marker
 
@@ -376,3 +377,7 @@ def test_release_any_retires_a_fresh_claim_and_says_the_operator_did(gh: FakeGhC
     cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, of=OTHER, allow="any")
     assert _markers(gh)[0].released == NOW
     assert "retired by the operator" in gh.issue_comments[(REPO, 1)][0]["body"]
+
+
+def test_the_label_a_release_will_remove_is_pinned() -> None:
+    assert FR_IN_PROGRESS.name == "fr:in-progress"
