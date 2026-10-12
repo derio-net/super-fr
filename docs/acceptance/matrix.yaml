@@ -7471,8 +7471,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R8
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at plan time; written by the phase that implements the row.
     verify: candidate
+    scenario: tests/scenarios/triage-cancelled-terminal.sh
   - id: triage-nav-present-pages
     capability: triage-batches
     acceptance: Every triage page, the batch board included, navigates only to the pages
