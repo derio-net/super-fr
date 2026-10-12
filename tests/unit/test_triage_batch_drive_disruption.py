@@ -537,7 +537,7 @@ def test_the_drive_collects_its_config_leniently_and_says_what_it_ignored(
     _naps_until(monkeypatch, 3)
     result = _drive_named(tmp_path, "--yes")
     assert isinstance(result.exception, _StopError), result.output
-    assert all(kw.get("lenient") is True for kw in seen) and len(seen) == 3
+    assert all("lenient" not in kw for kw in seen) and len(seen) == 3
     assert result.output.count("future_block") == 1  # warned once, not every pass
 
 

@@ -511,7 +511,6 @@ def collect_facts_counted(
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
     carried: Iterable[Issue] = (),
-    lenient: bool = False,
 ) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
@@ -525,8 +524,8 @@ def collect_facts_counted(
     `.fr/triage.yaml` is invalid — is recorded under `skipped` and the rest
     still collect; in repo scope the one repo failing is the error, and
     in org scope so is collecting no repo at all (review r-p2-empty).
-    *lenient* reads each config as the wave driver must (gh#998): an unknown
-    top-level key is dropped and named in the stats' `ignored`, never refused.
+    Every config is read leniently (R4): an unknown top-level key is dropped and
+    named in the stats' `ignored`, never refused; an invalid value still fails.
     Each *judged* key no longer open costs one `view_issue`, so the extra
     calls are bounded by the judgements, never by the backlog. The batch
     extras are bounded the same way (spec 2026-09-25-triage-batches §3.F): one
@@ -558,7 +557,7 @@ def collect_facts_counted(
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
-            repo_config, dropped = _read_config(forge, repo, lenient=lenient)
+            repo_config, dropped = _read_config(forge, repo, lenient=True)
             trusted = claim_trusted(repo_config or TriageConfig(), viewer)
             for raw in issues:
                 at, found = _comment_facts(forge, repo, raw, trusted)

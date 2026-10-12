@@ -831,7 +831,7 @@ def test_a_closed_hit_with_a_claim_is_release_pending_when_own_and_held_when_for
 
 def test_collect_stats_ignored_keys_land_in_facts_config_ignored() -> None:
     forge = _closed_forge(file_bodies={(REPO, ".fr/triage.yaml", "HEAD"): "nonsense_key: 1\n"})
-    facts, _ = collect_facts_counted(forge, SUPER_FR, now=NOW, lenient=True)
+    facts, _ = collect_facts_counted(forge, SUPER_FR, now=NOW)
     assert facts.config_ignored == {REPO: ["nonsense_key"]}
 
 

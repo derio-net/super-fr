@@ -426,7 +426,6 @@ def collect_into(
     *,
     pr_limit: int = PR_LIMIT,
     carry: bool = False,
-    lenient: bool = False,
     settle: bool = False,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
@@ -435,9 +434,9 @@ def collect_into(
     driver pass reads the forge exactly as `fr triage collect` does. With
     *carry* (the driver's passes) a judged issue the previous facts.json for
     this scope holds closed is carried over instead of viewed again (gh#911);
-    `fr triage collect` never carries. *lenient* (the driver's passes too) drops an
-    unknown top-level `.fr/triage.yaml` key instead of refusing it (gh#998); `fr
-    triage collect` stays strict. *settle* (an explicit `fr triage collect` only, never
+    `fr triage collect` never carries. Every config read drops an unknown
+    top-level `.fr/triage.yaml` key instead of refusing it (R4). *settle* (an explicit
+    `fr triage collect` only, never
     the drive or watch loop, p3-r7) decides an undecided state repo; without it an
     undecided scope warns once and keeps its state local. Returns the stats of
     single-issue reads. Raises `TriageError` on a refusal; writes nothing then.
@@ -470,7 +469,6 @@ def collect_into(
         known_batch_prs=previous.batch_prs if previous else [],
         pr_limit=pr_limit,
         carried=[i for i in previous.issues if i.state == "closed"] if previous and carry else (),
-        lenient=lenient,
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
@@ -611,6 +609,15 @@ def check_command(
     if as_json:
         print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
         return
+    console.print(f"[bold]skipped repos[/bold] ({len(result.skipped)}) — not collected")
+    for repo, why in result.skipped:
+        console.print(f"  {escape(repo)}  {escape(why)}", soft_wrap=True)
+    console.print(
+        f"[bold]config ignored[/bold] ({len(result.config_ignored)}) — written for a newer fr: "
+        "upgrade fr to read these keys"
+    )
+    for repo, keys in result.config_ignored:
+        console.print(f"  {escape(repo)}  {escape(', '.join(keys))}", soft_wrap=True)
     console.print(
         f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
         "labelled fr:in-progress; stale ones: `fr triage clean-labels`"

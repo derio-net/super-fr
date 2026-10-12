@@ -32,11 +32,13 @@ from fr.triage.components import (
     CHROME_CSS,
     GRID_CSS,
     GUTTER_CSS,
+    SKEW_CSS,
     TABS_CSS,
     TABS_SCRIPT,
     TOKENS_CSS,
     collapsed,
     page_header,
+    skew_banner,
     tabs,
 )
 from fr.triage.fragments import Entry, Resolved, splice
@@ -216,6 +218,7 @@ footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
     + TABS_CSS
     + CHROME_CSS
     + GUTTER_CSS
+    + SKEW_CSS
     + """
 @media (max-width: 480px) {
   .title { flex-basis: 100%; }
@@ -667,7 +670,6 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
         (noun(len(facts.collected), "repo"), len(facts.collected)),
     ]
     notes = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
-    notes += [f"Skipped {esc(s.repo)}: {esc(s.reason)}" for s in facts.skipped]
     notes += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
     notes += [
         f"Orphaned judgement {esc(k)}: it names no repo this collect read"
@@ -1148,7 +1150,7 @@ def render(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements, result)}\n{page_header('board')}\n"
+        f"{_masthead(facts, judgements, result)}\n{page_header('board')}\n{skew_banner(facts)}\n"
         + "\n".join(sections)
         + "\n<footer>Rendered by <code>fr triage render</code> from facts.json and "
         "judgements.yaml. Stages are derived from the forge; re-run "

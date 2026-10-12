@@ -960,7 +960,6 @@ def _reservation(
     batch: Batch,
     owner_repo: str,
     *,
-    lenient: bool = False,
     read_errors: bool = False,
 ) -> str | None:
     """Fetch, hold the config-freshness rule, and reserve a version (§3.D, §3.I).
@@ -970,7 +969,7 @@ def _reservation(
     loop skips the pass; `batch dispatch` keeps its exit code."""
     config = facts.config_for(owner_repo)
     try:
-        default = _fresh_config(checkout, facts, owner_repo, lenient=lenient)
+        default = _fresh_config(checkout, facts, owner_repo)
     except TriageError as exc:
         if read_errors:
             raise ForgeReadError(str(exc), code=2) from exc
@@ -988,18 +987,15 @@ def _reservation(
         _fail(str(exc))
 
 
-def _fresh_config(
-    checkout: Checkout, facts: Facts, owner_repo: str, *, lenient: bool = False
-) -> str:
+def _fresh_config(checkout: Checkout, facts: Facts, owner_repo: str) -> str:
     """Fetch, then hold the §3.I rule: the collected `.fr/triage.yaml` must be the
-    one on `origin/<default>` now. Returns that ref. *lenient*: the wave driver's
-    read, which ignores a top-level key this `fr` does not know (gh#998)."""
+    one on `origin/<default>` now. Returns that ref. The read ignores a top-level
+    key this `fr` does not know (R4)."""
     checkout.fetch()
     default = f"origin/{checkout.default_branch()}"
     check_config_fresh(
         facts.config.get(owner_repo),
         checkout.show(default, TRIAGE_CONFIG_PATH),
-        lenient=lenient,
     )
     return default
 
@@ -1562,7 +1558,6 @@ def dispatch_batch(
     reserved_version: str | None = None,
     yes: bool = False,
     group: str | None = None,
-    lenient_config: bool = False,
     read_errors: bool = False,
     driver: Driver = HOST,
     load: Callable[[str], Runner] | None = None,
@@ -1574,8 +1569,7 @@ def dispatch_batch(
     `typer.Exit` with the verb's own exit code, exactly as at the command line; a
     runner that fails to dispatch raises `RunnerDispatchError`, which each caller
     handles its own way (gh#931).
-    *lenient_config* is the driver's `.fr/triage.yaml` read (gh#998); *read_errors*
-    its failed-fetch boundary, a `ForgeReadError` (gh#1025).
+    *read_errors* is the driver's failed-fetch boundary, a `ForgeReadError` (gh#1025).
     *driver* names the runner (cloud-triage R10): the host keeps `--to`, else the batch's.
     *load* is the driver's own runner cache, so a mailbox runner it opened takes the
     dispatch (cloud-triage §F); `load_runner` otherwise.
@@ -1629,7 +1623,6 @@ def dispatch_batch(
         judgements,
         batch,
         owner_repo,
-        lenient=lenient_config,
         read_errors=read_errors,
     )
     try:
@@ -2387,7 +2380,7 @@ def recollect(scope: Scope, target: Path) -> Mapping[str, tuple[str, ...]]:
     or any other refusal (a config broken on the default branch, a judgements file
     mid-edit), raises `ForgeReadError`: the loop waits for it to be fixed."""
     try:
-        _, _, stats = collect_into(scope, target, carry=True, lenient=True)
+        _, _, stats = collect_into(scope, target, carry=True)
     except TriageError as exc:  # ForgeError included
         raise ForgeReadError(str(exc), code=2) from exc
     _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
@@ -2835,7 +2828,7 @@ class _Driver:
         if repo not in self._merge:
             client, checkout = self.client(facts, repo), self.checkout(repo)
             try:
-                _fresh_config(checkout, facts, repo, lenient=True)
+                _fresh_config(checkout, facts, repo)
             except TriageError as exc:  # a fetch, or main's config moved under the pass
                 raise ForgeReadError(str(exc), code=2) from exc
             try:
@@ -3778,7 +3771,6 @@ class _Driver:
                     checkout_path=self.path_of(repo),
                     yes=True,
                     group=self.group_of(batch),
-                    lenient_config=True,
                     read_errors=True,
                     driver=self.adapter,
                     load=self.runner,
@@ -4193,7 +4185,7 @@ class _Driver:
         checkout = self.checkout(repo)
         try:
             checkout.fast_forward()
-            _fresh_config(checkout, facts, repo, lenient=True)
+            _fresh_config(checkout, facts, repo)
         except TriageError as exc:
             return f"close-out held: {exc}", False
         command = facts.config_for(repo).post_merge

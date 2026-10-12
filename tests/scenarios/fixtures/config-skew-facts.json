@@ -1,0 +1,31 @@
+{
+  "schema": 9,
+  "scope": "example-org--widgets",
+  "kind": "repo",
+  "collected_at": "2026-10-12T00:00:00Z",
+  "repos": [
+    "example-org/widgets",
+    "example-org/gadgets"
+  ],
+  "issues": [],
+  "prs": [],
+  "skipped": [
+    {
+      "repo": "example-org/gadgets",
+      "reason": "not valid triage config"
+    }
+  ],
+  "unviewed": [],
+  "warnings": [],
+  "batch_prs": [],
+  "judged_prs": [],
+  "config": {},
+  "viewer": "operator",
+  "visibility": {},
+  "stale_in_progress": [],
+  "config_ignored": {
+    "example-org/widgets": [
+      "future_key"
+    ]
+  }
+}

@@ -59,6 +59,7 @@ from typing import Any, Literal
 from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
 from fr.triage.batch import closeout_state, derive_batch_stage, is_open
 from fr.triage.claims import expired, from_issue_claim, holder, owed_claims
+from fr.triage.components import skew_entries
 from fr.triage.dedupe import CandidateGroup, candidates
 from fr.triage.model import (
     Batch,
@@ -191,6 +192,8 @@ class CheckResult:
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
     closed_in_progress: list[StaleInProgress] = field(default_factory=list)
+    skipped: list[tuple[str, str]] = field(default_factory=list)
+    config_ignored: list[tuple[str, list[str]]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -206,6 +209,8 @@ class CheckResult:
             }
 
         return {
+            "skipped": [{"repo": r, "reason": why} for r, why in self.skipped],
+            "config_ignored": {r: list(keys) for r, keys in self.config_ignored},
             "unranked": [row(i) for i in self.unranked],
             "unranked_prs": [pr_row(pr) for pr in self.unranked_prs],
             "settled": [row(i) for i in self.settled],
@@ -481,7 +486,10 @@ def classify(
             orphaned.append(key)
         else:
             unreachable.append(Unreachable(key=key, reason=reason))
+    ignored_keys, skipped_repos = skew_entries(facts)
     return CheckResult(
+        skipped=skipped_repos,
+        config_ignored=ignored_keys,
         unranked=unranked,
         unranked_prs=unranked_prs,
         settled=settled,

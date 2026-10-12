@@ -18,7 +18,10 @@ from __future__ import annotations
 import html
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
+
+if TYPE_CHECKING:
+    from fr.triage.model import Facts
 
 LIGHT = {
     "ground": "#F4F5F2", "surface": "#FFFFFF", "ink": "#1B2021", "muted": "#5E6A66",
@@ -274,6 +277,42 @@ def page_header(current: str) -> str:
     return (
         f'<nav class="pages" aria-label="Triage pages">{links}</nav>'
         f'<p class="goal">{_esc(goal)}</p>'
+    )
+
+
+def skew_entries(
+    facts: Facts,
+) -> tuple[list[tuple[str, list[str]]], list[tuple[str, str]]]:
+    """The (repo, ignored keys) and (repo, skip reason) lists the skew banner and `check`
+    both report, sorted by repo (R5)."""
+    ignored = [(repo, list(keys)) for repo, keys in sorted(facts.config_ignored.items()) if keys]
+    skipped = [(s.repo, s.reason) for s in sorted(facts.skipped, key=lambda s: s.repo)]
+    return ignored, skipped
+
+
+SKEW_CSS = (
+    ".skew { margin: 12px 0; padding: 10px 14px; border: 1px solid var(--line);"
+    " border-left: 4px solid var(--sev-1); border-radius: 6px; font-size: .9rem; }"
+    " .skew ul { margin: 6px 0 0; padding-left: 18px; }"
+    " .skew li { overflow-wrap: anywhere; }"
+)
+
+
+def skew_banner(facts: Facts) -> str:
+    """The version-skew banner (R5): "" when nothing was skipped or ignored, else a
+    `role="alert"` block naming each repo's ignored `.fr/triage.yaml` keys and each
+    skipped repo with its reason. Everything is escaped."""
+    ignored, skipped = skew_entries(facts)
+    if not ignored and not skipped:
+        return ""
+    items = [
+        f"<li><b>{_esc(repo)}</b>: ignored {_esc(', '.join(keys))} — written for a newer fr:"
+        " upgrade fr to read them</li>"
+        for repo, keys in ignored
+    ] + [f"<li><b>{_esc(repo)}</b>: skipped — {_esc(reason)}</li>" for repo, reason in skipped]
+    return (
+        '<div class="skew" role="alert"><strong>This board is not the whole truth.</strong>'
+        f"<ul>{''.join(items)}</ul></div>"
     )
 
 

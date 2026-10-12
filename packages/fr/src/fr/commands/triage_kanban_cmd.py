@@ -51,6 +51,7 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.check import clean_label_targets
+from fr.triage.components import skew_banner
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
@@ -374,6 +375,7 @@ def write_board(
         rendered_at=rendered_at,
         refresh=refresh,
         notes=notes,
+        banner=skew_banner(facts),
     )
     out = target / BOARD_FILE
     write_text_atomic(out, page)

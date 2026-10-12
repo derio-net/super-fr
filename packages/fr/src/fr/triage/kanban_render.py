@@ -16,7 +16,7 @@ import shlex
 from collections.abc import Sequence
 from datetime import datetime
 
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS, stamp_text, when
+from fr.triage.components import GUTTER_CSS, SKEW_CSS, TOKENS_CSS, stamp_text, when
 from fr.triage.kanban import Board, BoardStatus, Card, ColumnView, HeldIssue, Member, PrView
 from fr.triage.render import FONTS, _safe_url, esc, noun
 
@@ -84,6 +84,7 @@ code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--gr
 @media (max-width: 720px) { .board { grid-template-columns: minmax(0, 1fr); } }
 """
     + GUTTER_CSS
+    + SKEW_CSS
 )
 
 # One constant script: copy buttons, the reload timer, and the expanded cards and scroll
@@ -357,6 +358,7 @@ def render_board(
     rendered_at: datetime,
     refresh: int,
     notes: Sequence[str],
+    banner: str = "",
 ) -> str:
     """The board page: same inputs, same bytes. *scope_args* are the `--repo`/`--org`
     (and `--dir`, when given) words the copied commands carry; *refresh* is the reload
@@ -383,7 +385,7 @@ def render_board(
         f'<body data-refresh="{max(0, int(refresh))}">\n<main>\n'
         f"<header><h1>Batch board</h1>"
         f'<p class="meta">{esc(board.scope)} · rendered {_when(rendered_at)} · '
-        f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
+        f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n{banner}\n"
         f"{_held(board.held)}\n"
         f"{body}\n"
         '<footer class="meta">Rendered by <code>fr triage board</code> from facts.json and '
