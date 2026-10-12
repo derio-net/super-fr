@@ -8213,9 +8213,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R5
     - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_run_start_warns_and_still_starts
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_run_advance_exits_2_with_the_message
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_record_resolve_applies_then_reports_the_refused_advance
+    status: ci
+    notes: ModelsError reported per command; start warns, others exit 2.
     verify: none
   - id: triage-skill-board-columns
     capability: triage board
