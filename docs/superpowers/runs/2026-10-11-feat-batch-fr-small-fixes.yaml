@@ -3,7 +3,7 @@ run: 2026-10-11-feat-batch-fr-small-fixes
 workflow: fr-goal-light@1
 branch: feat/batch-fr-small-fixes
 started: '2026-10-11T21:54:31+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -48,7 +48,11 @@ steps:
           reviewer: aa4590aed88338638
           findings: spr-r1,spr-r2,spr-r3,spr-r4
   plan-review:
-    state: pending
+    state: done
+    at: '2026-10-12T15:17:05+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
