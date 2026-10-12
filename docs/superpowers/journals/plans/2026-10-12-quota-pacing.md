@@ -139,3 +139,93 @@ probe.py was written pure around PacingState with PassPlan as its one output; no
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 the carry is three small helpers beside collect_facts_counted (_carry_set, _kept_links, _carried_judgement); the full path is untouched
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-10-12T08:13:59+00:00 phase=2 -->
+### p2-review · review · code review of phase 2 (06eb3626..5d297a01) (phase 2)
+
+Independent reviewer raised 8 findings, all in scope: p2-r1..p2-r8. Confirmed sound: probe-before-collect ordering, failed-repo ETag drop, visibility never carried, cross-repo links both ways, only=None unchanged, quota-held dispatch counted pending. All fixed in 630f6a92 plus follow-up ffd287ae, each with a test.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-ci-conftest created=2026-10-12T08:13:59+00:00 phase=2 -->
+### p2-ci-conftest · discovery · CI caught a conftest import the targeted runs could not (phase 2)
+
+The phase-2 head failed two suite-isolation tests: tests/conftest.py imported tests.unit.triage_fixtures, and those tests run the conftest in a subprocess from a temp dir. Fixed in 5d297a01 by inlining the stub.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · after_collect stored judgements_digest before the pass planned; a pass failing after collect made the next one quiet (phase 2)
+
+after_collect stored judgements_digest before the pass planned; a pass failing after collect made the next one quiet
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · rate-limited Unviewed keys were carried and their repo's ETags kept (phase 2)
+
+rate-limited Unviewed keys were carried and their repo's ETags kept
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · after an essential (dispatch-held) pass an above-floor pass could be quiet (phase 2)
+
+after an essential (dispatch-held) pass an above-floor pass could be quiet
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · an essential --yes pass printed 'nothing done; re-run with --yes to act' (phase 2)
+
+an essential --yes pass printed 'nothing done; re-run with --yes to act'
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · no previous facts below the floor carried every repo while collect read all (phase 2)
+
+no previous facts below the floor carried every repo while collect read all
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · carried repos were unread for _claim_plan, so a carried batch could dispatch without owed claims (phase 2)
+
+carried repos were unread for _claim_plan, so a carried batch could dispatch without owed claims
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · quiet pass built Summary(**pacing.json summary) unchecked (phase 2)
+
+quiet pass built Summary(**pacing.json summary) unchecked
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-10-12T08:13:59+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · forced-full-below-floor test inspected private _pass_plan (phase 2)
+
+forced-full-below-floor test inspected private _pass_plan
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: after_collect stored judgements_digest before the pass planned; a pass failing after collect made the next one quiet (phase 2)
+
+after_collect clears summary and digest; record_summary writes them once the pass planned (630f6a92). Follow-up ffd287ae: a pass after one that never planned carries nothing, so its owed merges are not deferred. Tests test_a_pass_that_fails_after_writing_its_facts_is_never_followed_by_a_quiet_one (now asserts the owed merge), test_a_written_facts_json_is_no_planned_pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: rate-limited Unviewed keys were carried and their repo's ETags kept (phase 2)
+
+Unviewed never carried; a repo with a rate-limited unviewed key counts as failed and drops its ETags. Tests test_a_carried_repo_s_unviewed_key_is_viewed_again, test_a_rate_limited_unviewed_key_fails_its_repo.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: after an essential (dispatch-held) pass an above-floor pass could be quiet (phase 2)
+
+PacingState.held_for_quota; pass_kind is never quiet above the floor while set. Tests test_dispatch_resumes_once_the_budget_is_back_above_the_floor (recent full_at), test_pass_kinds, test_held_for_quota_round_trips_and_a_bad_value_is_false.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: an essential --yes pass printed 'nothing done; re-run with --yes to act' (phase 2)
+
+Board skip no longer falls into the plan-mode branch; test (d) asserts the line is absent.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: no previous facts below the floor carried every repo while collect read all (phase 2)
+
+collect reports the set it actually carried (CollectStats.carried_repos), used for both snapshot and ETag promotion; no previous facts plans only=None. Test test_a_paced_drive_with_no_previous_facts_below_the_floor_reads_and_merges.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: carried repos were unread for _claim_plan, so a carried batch could dispatch without owed claims (phase 2)
+
+_claim_plan's unread set is collect-skipped repos only. Test test_a_carried_repo_s_batch_claims_its_members_before_it_dispatches.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: quiet pass built Summary(**pacing.json summary) unchecked (phase 2)
+
+pacing_state drops a summary whose keys do not match Summary's fields. Test test_a_summary_with_a_key_the_summary_does_not_have_is_no_summary.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-10-12T08:13:59+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: forced-full-below-floor test inspected private _pass_plan (phase 2)
+
+Driven through Rig with a two-repo scope; asserts collects, OTHER's unconditional probe and no live read for OTHER.
