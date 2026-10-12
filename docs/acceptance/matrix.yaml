@@ -6031,9 +6031,9 @@ rows:
       without them and fr acceptance check / report --check report no drift for them,
       while report --deterministic still writes them.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_check_reports_no_drift_for_absent_or_stale_ignored_reports
@@ -7071,8 +7071,8 @@ rows:
       a different agent is refused; a held unit is not re-briefed after an interrupted
       orchestrator restarts.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_run_claim_first_wins.py#test_an_identical_reclaim_is_a_no_change_with_no_commit
@@ -8278,9 +8278,9 @@ rows:
       strategy is reported by plan self-review (error) and the brainstorm resolve (warning)
       before deliver; a malformed strategy: line names the accepted form.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-12-run-pipeline-failures-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_verification_unrunnable.py#test_the_shape_default_is_dropped_without_the_install_program
