@@ -14,11 +14,68 @@ from pathlib import Path
 import pytest
 from fr.run.model import load_run_state
 
-from tests.unit.test_run_cli import _invoke_as_harness
-from tests.unit.test_run_holder_identity import _attempt, _started
+from tests.unit.test_run_cli import (
+    _attempts_by_unit,
+    _brief_of,
+    _invoke_as_harness,
+    _repo,
+    _started_grouped_with_plan,
+    _write_shape,
+)
 
-_STEP = "phase/1/implement-phase"
+_STEP = "implement-phase"
 _X = "claude-opus-4-7"
+_TIER_AGENT = "fr-phase-executor-standard"
+
+# The grouped implement-phase path fr-goal really uses: `for_each: phase`,
+# `implement-phase` a member of the `implement` group, claimed with
+# `--step implement-phase --item phase/1`.
+_SHAPE = """
+workflow: grouped
+schema: 1
+unit: run
+steps:
+  - id: plan
+    kind: agent
+    emits: [plan]
+  - id: implement
+    kind: agent
+    needs: [plan]
+    for_each: phase
+    tier: from_phase
+    emits: [journal:plan]
+    steps:
+      - id: implement-phase
+        kind: agent
+        agent: super-fr:fr-phase-executor
+        needs: [plan]
+        tier: from_phase
+        emits: [journal:plan]
+      - id: peer-review
+        kind: agent
+        skill: superpowers:requesting-code-review
+        needs: [journal:plan]
+        emits: [journal:plan]
+  - id: deliver
+    kind: cli
+    run: "true"
+    needs: [journal:plan]
+"""
+
+
+def _started(tmp_path: Path) -> tuple[Path, Path]:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    return repo, shipped
+
+
+def _attempt(repo: Path):
+    found = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
+    assert found is not None
+    (attempts,) = found.values()
+    return attempts[-1]
 
 
 def _commits(repo: Path) -> int:
@@ -36,7 +93,8 @@ def _cursor_bytes(repo: Path) -> bytes:
 
 
 def _claim(repo: Path, shipped: Path, *extra: str, agent: str = "ses_a"):
-    argv = ["run", "claim", "r1", "--step", _STEP, "--agent", agent, "--harness", "claude-code"]
+    argv = ["run", "claim", "r1", "--step", _STEP, "--item", "phase/1"]
+    argv += ["--agent", agent, "--harness", "claude-code"]
     return _invoke_as_harness(repo, shipped, [*argv, *extra], {"FR_HARNESS": "claude-code"})
 
 
@@ -46,12 +104,13 @@ def _advanced(tmp_path: Path) -> tuple[Path, Path]:
         repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "claude-code"}
     )
     assert advanced.exit_code == 0, advanced.output
+    assert _brief_of(advanced.output)["step"] == "implement-phase"
     return repo, shipped
 
 
-def _claimed(tmp_path: Path) -> tuple[Path, Path]:
+def _claimed(tmp_path: Path, *extra: str) -> tuple[Path, Path]:
     repo, shipped = _advanced(tmp_path)
-    first = _claim(repo, shipped, "--model", _X)
+    first = _claim(repo, shipped, *(extra or ("--model", _X)))
     assert first.exit_code == 0, first.output
     return repo, shipped
 
@@ -97,43 +156,27 @@ def test_a_reclaim_in_another_family_keeps_the_model_and_warns(tmp_path: Path) -
 
 def test_the_opencode_sequence_keeps_the_plugin_claims_model_and_tier(tmp_path: Path) -> None:
     repo, shipped = _started(tmp_path)
-    _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "opencode"})
+    advanced = _invoke_as_harness(
+        repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "opencode"}
+    )
+    assert advanced.exit_code == 0, advanced.output
     plugin = _invoke_as_harness(
         repo,
         shipped,
-        [
-            "run",
-            "claim",
-            "--open-unit",
-            "--agent",
-            "ses_a",
-            "--harness",
-            "opencode",
-            "--model",
-            "provider/model-one",
-            "--agent-type",
-            "fr-phase-executor-standard",
-        ],
+        ["run", "claim", "--open-unit", "--agent", "ses_a", "--harness", "opencode"]
+        + ["--model", "provider/model-one", "--agent-type", _TIER_AGENT],
         {},
     )
     assert plugin.exit_code == 0, plugin.output
+    before, commits = _cursor_bytes(repo), _commits(repo)
 
+    # What fr-goal prescribes on OpenCode: claim again with the tier agent's name.
     orchestrator = _invoke_as_harness(
         repo,
         shipped,
-        [
-            "run",
-            "claim",
-            "r1",
-            "--step",
-            _STEP,
-            "--agent",
-            "ses_a",
-            "--harness",
-            "opencode",
-            "--model",
-            "other/different-two",
-        ],
+        ["run", "claim", "r1", "--step", _STEP, "--item", "phase/1", "--agent", "ses_a"]
+        + ["--harness", "opencode", "--model", "other/different-two"]
+        + ["--agent-type", _TIER_AGENT],
         {},
     )
 
@@ -141,7 +184,62 @@ def test_the_opencode_sequence_keeps_the_plugin_claims_model_and_tier(tmp_path: 
     assert "warning: " in orchestrator.output
     attempt = _attempt(repo)
     assert attempt.model == "provider/model-one"
-    assert attempt.agent_type == "fr-phase-executor-standard"
+    assert attempt.agent_type == _TIER_AGENT
+    assert _cursor_bytes(repo) == before
+    assert _commits(repo) == commits
+    resumed = _invoke_as_harness(
+        repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "opencode"}
+    )
+    assert resumed.exit_code == 2, resumed.output
+
+
+def test_a_reclaim_fills_an_empty_field_and_commits_it(tmp_path: Path) -> None:
+    repo, shipped = _claimed(tmp_path, "--agent-type", _TIER_AGENT)
+    assert _attempt(repo).model != _X
+    commits = _commits(repo)
+
+    result = _claim(repo, shipped, "--model", _X)
+
+    assert result.exit_code == 0, result.output
+    assert "warning" not in result.output
+    assert _attempt(repo).model == _X
+    assert _commits(repo) == commits + 1
+
+
+def test_a_reclaim_by_the_manifest_id_keeps_the_recorded_tier_variant(tmp_path: Path) -> None:
+    repo, shipped = _claimed(tmp_path, "--model", _X, "--agent-type", _TIER_AGENT)
+    commits = _commits(repo)
+
+    result = _claim(repo, shipped, "--agent-type", "super-fr:fr-phase-executor")
+
+    assert result.exit_code == 0, result.output
+    assert _attempt(repo).agent_type == _TIER_AGENT
+    assert _commits(repo) == commits
+
+
+def test_a_reclaim_as_another_tier_keeps_the_agent_type_and_warns(tmp_path: Path) -> None:
+    repo, shipped = _claimed(tmp_path, "--model", _X, "--agent-type", _TIER_AGENT)
+    before, commits = _cursor_bytes(repo), _commits(repo)
+
+    result = _claim(repo, shipped, "--agent-type", "fr-phase-executor-hard")
+
+    assert result.exit_code == 0, result.output
+    assert "warning: " in result.output
+    assert f"agent_type={_TIER_AGENT}" in result.output
+    assert _attempt(repo).agent_type == _TIER_AGENT
+    assert _cursor_bytes(repo) == before
+    assert _commits(repo) == commits
+
+
+def test_a_reclaim_as_a_different_agent_type_is_refused(tmp_path: Path) -> None:
+    repo, shipped = _claimed(tmp_path, "--model", _X, "--agent-type", _TIER_AGENT)
+    commits = _commits(repo)
+
+    result = _claim(repo, shipped, "--agent-type", "something-else")
+
+    assert result.exit_code == 2, result.output
+    assert _attempt(repo).agent_type == _TIER_AGENT
+    assert _commits(repo) == commits
 
 
 def test_a_resolve_model_without_agent_keeps_the_claimed_model(
@@ -153,7 +251,8 @@ def test_a_resolve_model_without_agent_keeps_the_claimed_model(
     result = _invoke_as_harness(
         repo,
         shipped,
-        ["run", "resolve", "r1", "--step", _STEP, "--state", "done", "--model", "claude-haiku-4-5"],
+        ["run", "resolve", "r1", "--step", _STEP, "--item", "phase/1", "--state", "done"]
+        + ["--model", "claude-haiku-4-5"],
         {"FR_HARNESS": "claude-code"},
     )
 
@@ -196,13 +295,14 @@ def test_advance_after_an_interruption_names_the_holder_and_does_not_rebrief(
         repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "claude-code"}
     )
 
+    assert result.exit_code == 2, result.output
     assert "ses_a" in result.output
+    assert '"step"' not in result.output  # no dispatch brief was printed
     assert len(_attempts(repo)) == 1
 
 
 def _attempts(repo: Path):
-    from tests.unit.test_run_cli import _attempts_by_unit
-
-    found = _attempts_by_unit(load_run_state(repo, "r1").steps[_STEP])
+    found = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
     assert found is not None
-    return found["step/" + _STEP]
+    (attempts,) = found.values()
+    return attempts

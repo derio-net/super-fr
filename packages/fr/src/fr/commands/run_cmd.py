@@ -4048,7 +4048,9 @@ def _claimed_identity(
     Shared by `fr run claim` (the eager report) and `fr run resolve`'s late
     fallback (decision d2), so a *second* agent id can never be attached to a
     dispatch by taking the other route. Re-reporting the SAME id is
-    idempotent and may refresh `harness`/`model`; a DIFFERENT one is refused
+    idempotent: it fills empty `harness`/`model`/`agent_type` fields only and
+    otherwise keeps the first claim's values, warning on a different one
+    (`_merge_claim`); a DIFFERENT id is refused
     naming both, because two ids on one hold is the two-writers hazard this
     whole feature exists to make visible."""
     if open_record.agent is not None and open_record.agent != agent:
@@ -6911,20 +6913,30 @@ def _claim_identity(
     """Fill `key`'s open dispatch record with the orchestrator's reported
     `agent`/`harness`/`model` (spec §3, §4.C).
 
-    Idempotent for the SAME `agent` id (re-claiming just refreshes
-    `harness`/`model` when given again); refuses a DIFFERENT one while the
+    Idempotent for the SAME `agent` id (a re-claim fills empty fields only and
+    otherwise keeps the first claim's values, warning on a different one —
+    `_merge_claim`); refuses a DIFFERENT one while the
     first is still open, naming both — the two-writers hazard this whole
     feature exists to make visible.
 
     `agent_type` is the agent that actually RAN (gh#537): on OpenCode the tier
     rides in the agent's name (`fr-phase-executor-<tier>`), so the manifest id
-    `advance` recorded never says which tier did the work. It replaces the
-    recorded one only when it is that agent or one of its tier variants
-    (`_ran_as`); anything else is a different agent, and is refused.
+    `advance` recorded never says which tier did the work. An unclaimed
+    attempt takes it when it is that agent or one of its tier variants
+    (`_ran_as`); a claimed one keeps its first value (warning on a different
+    tier, `_merge_claim`). A different agent entirely is refused.
     """
     record = state.steps[owner_id]
     open_record = _open_dispatch_record(record, key)
-    if agent_type is not None and not _ran_as(open_record.agent_type, agent_type):
+    dispatched = open_record.agent_type
+    if dispatched is not None and open_record.agent is not None:
+        # A claimed attempt's agent_type may already be a tier variant: judge
+        # the new one against the agent that was dispatched, not that variant.
+        for tier in PHASE_TIERS:
+            if dispatched.endswith(f"-{tier}"):
+                dispatched = dispatched[: -len(tier) - 1]
+                break
+    if agent_type is not None and not _ran_as(dispatched, agent_type):
         err_console.print(
             f"[red]{key}: was dispatched to {open_record.agent_type or 'the orchestrator'}, "
             f"not {agent_type!r} — --agent-type names the agent that ran this unit, which "
@@ -6951,7 +6963,11 @@ def _ran_as(dispatched: str | None, ran: str) -> bool:
     if dispatched is None:
         return False
     bare = dispatched.split(":", 1)[-1]
-    return ran in (dispatched, bare) or ran in {f"{bare}-{tier}" for tier in PHASE_TIERS}
+    ran_bare = ran.split(":", 1)[-1]
+    return ran in (dispatched, bare) or ran_bare in {
+        bare,
+        *(f"{bare}-{tier}" for tier in PHASE_TIERS),
+    }
 
 
 def _claim_open_unit(
