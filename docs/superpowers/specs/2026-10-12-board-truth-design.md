@@ -276,3 +276,9 @@ None post-merge. Every row is proven before merge by CI or the candidate walk.
   skew cause, and other skip causes are now loud instead.
 - Running the one-off cleanup of the 197 labels in this PR. The operator runs
   `fr triage clean-labels --yes` after release.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-12-board-truth | `derio-net/super-fr` | `2026-10-12-board-truth` | — |

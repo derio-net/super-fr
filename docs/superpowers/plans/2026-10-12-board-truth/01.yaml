@@ -1,0 +1,150 @@
+schema_version: 2
+phase:
+  number: 1
+  title: fr:in-progress follows the claim release; closed-but-in-progress set and
+    clean-labels (R1-R3)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-in-progress-release
+  - triage-closed-in-progress-set
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/claim_writes.py
+  - packages/fr/src/fr/triage/claim_sync.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/kanban*.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/gh.py
+  - tests/unit/test_triage_claim*.py
+  - tests/unit/test_triage_collect*.py
+  - tests/unit/test_triage_check.py
+  - tests/unit/test_triage_clean_labels.py
+  - tests/unit/test_real_ghrestclient.py
+  - tests/unit/test_gh*.py
+  - tests/scenarios/triage-closed-in-progress.sh
+  - tests/scenarios/fixtures/closed-in-progress-facts.json
+  - docs/acceptance/*
+  - .changes/feat-batch-board-truth.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: 'Skeleton smoke: change fragment and a trivial pinned test, CI green on the
+    draft PR'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `.changes/feat-batch-board-truth.yaml` with `bump: minor` and summary
+      "triage: fr:in-progress comes off with the claim release, closed-but-in-progress set and `fr triage clean-labels`, lenient config reads with a skew banner, close-out card front, page nav lists only present pages".
+      Add one trivial test in tests/unit/test_triage_claim_writes.py asserting `FR_IN_PROGRESS.name == "fr:in-progress"` (pins the label the release will remove).
+      Run `uv run pytest tests/unit/test_triage_claim_writes.py -q --no-cov`; commit; push.
+- number: 2
+  title: '§A (R1): release(unlabel=) and claim_sync passes it'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED in tests/unit/test_triage_claim_writes.py (reuse its fake client): (a) release(..., unlabel=True) with only this scope's claim gives one edit_issue_labels removing BOTH fr:claimed and fr:in-progress; (b) unlabel=True with another scope's un-released claim also standing removes neither label; (c) unlabel=False (default) removes only fr:claimed, as today; (d) race: the post-write re-read finds a foreign claim, so BOTH removed labels are re-added.
+      In the claim_sync tests: execute() passes unlabel=True on every release op. In the triage_claim_cmd tests: `claim release` and `scope retire` leave fr:in-progress. Run the files: red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: claim_writes.release gains keyword `unlabel: bool = False`; `_remove_label` takes the label set to remove and restores that whole set when its re-read finds a foreign claim (claim_writes.py:67-73). claim_sync.execute (claim_sync.py:191-199) passes unlabel=True. Re-run: green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep one label-set constant for the release removal; update the release docstring to state R1 (which callers unlabel and why).
+- number: 3
+  title: '§B (R2): labels filter through the forge chain; facts schema 9 with stale_in_progress
+    and config_ignored'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests for an optional `labels` argument on fr.gh.list_issues (`--label` in the gh argv, `closedAt` requested via ORIGINS_ISSUE_LIST_FIELDS), the REST client (`labels=fr:in-progress`, URL-encoded, in the issues route), ClientForge pass-through; glab/tea stubs still raise UnsupportedForgeOperation. Facts round-trip: schema 9 writes `stale_in_progress` and `config_ignored`; a schema 8 facts.json still reads with both empty; FACTS_READS covers 3-9.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: thread `labels: Sequence[str] | None = None` through Forge.list_issues (collect.py:68-75), ClientForge, the GhClient protocol (ghclient.py:315-319) and its adapters, gh.py list_issues, real_ghrestclient.py:606-614, and the test fakes. model.py: FACTS_SCHEMA = 9, FACTS_READS 3-9, a `StaleInProgress` model {key, title, url, closed_at, state: Literal["stale", "release-pending", "held"]}, Facts fields `stale_in_progress: list[StaleInProgress] = []` and `config_ignored: dict[str, list[str]] = {}`. Re-run: green.
+  - id: P1.T3.S3
+    text: |-
+      RED then GREEN in tests/unit/test_triage_collect.py: collect makes one closed + fr:in-progress list per collected repo OUTSIDE the per-repo skip try, so its failure is a warning and an empty set, never a skip; hitting issue_limit adds a Truncation warning; a hit also carrying fr:claimed has its comments read with read_claims: an own un-released claim is release-pending, a foreign one held, none stale. Collect also copies CollectStats.ignored into Facts.config_ignored (consumed in phase 2; pin it here).
+- number: 4
+  title: '§B (R2, R3): check set, page surfaces, and `fr triage clean-labels`'
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED then GREEN: CheckResult (check.py) gains `closed_in_progress` (JSON key with each entry's state) and a text section listing stale entries, then release-pending and held apart. render.py adds a collapsed section on triage.html listing the set; the board (kanban_render) shows a note with the count and the `fr triage clean-labels` command when the stale count is above zero.
+  - id: P1.T4.S2
+    text: |-
+      RED in a new tests/unit/test_triage_clean_labels.py (fake GhClient, CliRunner): without --yes it prints one line per stale target and "nothing written" and makes no write; with --yes it re-reads each target (view_issue), skips one now open or now carrying fr:claimed with a reason, removes fr:in-progress from the rest via edit_issue_labels, and prints one outcome line each; release-pending and held entries are never targets; a per-issue failure is reported, the rest continue, and the exit is non-zero; glab/tea give the UnsupportedForgeOperation message.
+  - id: P1.T4.S3
+    text: |-
+      GREEN: add `clean-labels` to the triage app in commands/triage_cmd.py (scope options as the other triage verbs, plus `--yes`), writing only through GhClient. Re-run: green.
+  - id: P1.T4.S4
+    text: |-
+      REFACTOR: share the target-selection predicate between check and clean-labels (one function in check.py).
+- number: 5
+  title: Scenario and matrix
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Add tests/scenarios/triage-closed-in-progress.sh in the style of awaiting-live-triage.sh: fixture facts (schema 9, produced by the model's own serializer) with one stale, one release-pending and one held entry; `fr triage check --json` lists all three with their states; `fr triage clean-labels` (no --yes) names only the stale one and prints "nothing written". Run it through tests/integration/test_scenarios.py with a -k filter (targeted).
+      Then `fr acceptance set-status --id triage-closed-in-progress-set --status ci --scenario tests/scenarios/triage-closed-in-progress.sh --level unit=super-fr:tests/unit/test_triage_clean_labels.py#<a test name> --notes "..."` and `--id triage-in-progress-release --status ci --level unit=super-fr:tests/unit/test_triage_claim_writes.py#<test name> --notes "..."`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

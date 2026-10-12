@@ -1,0 +1,84 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Lenient config reads and the skew banner (R4, R5)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-config-skew-visible
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_*.py
+  - tests/scenarios/triage-config-skew.sh
+  - tests/scenarios/fixtures/config-skew-facts.json
+  - docs/acceptance/*
+  estimate_lines: 350
+tasks:
+- number: 1
+  title: '§C (R4): every triage config read is lenient'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: collect_facts_counted / collect_into with a repo whose .fr/triage.yaml carries an unknown top-level key (`future_key: 1`) and NO lenient argument: the repo is collected (not skipped) and Facts.config_ignored names the key; an invalid value (stale_dispatch_days: -1) still skips in org scope and fails in repo scope; `batch dispatch`'s _fresh_config accepts an unknown key.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: remove the `lenient` parameter from collect_facts_counted and collect_into (always lenient); drop the keyword at the driver call site (triage_batch_cmd.py ~2390); _fresh_config and batch_dispatch's read default to lenient. Fix every caller and test that passed lenient. Re-run the triage collect and dispatch tests: green.
+- number: 2
+  title: '§C (R5): skew banner on triage.html and board.html; check names skipped
+    and ignored'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: components.skew_banner(facts) returns "" with no skips or ignored keys; otherwise a role="alert" block naming each repo's ignored keys ("written for a newer fr: upgrade fr to read them") and each skipped repo with its reason, all escaped. triage.html and board.html render it directly under the nav; render.py's skipped-repo note line (render.py:662) is gone. check JSON gains `skipped` [{repo, reason}] and `config_ignored` {repo: [keys]}, and the text report prints both first.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement skew_banner in components.py (reuse the existing tokens, a --sev-1 left border), call it from render.py and kanban_render.py, extend CheckResult. Re-run: green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: one helper builds the (repo, keys) and (repo, reason) lists for both the banner and check.
+- number: 3
+  title: Scenario and matrix
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Add tests/scenarios/triage-config-skew.sh: fixture facts with config_ignored {example-org/widgets: [future_key]} and one skipped repo; `fr triage render` writes triage.html containing role="alert", the key and the skipped repo; `fr triage check --json` carries both keys. Run it targeted. Then `fr acceptance set-status --id triage-config-skew-visible --status ci --scenario tests/scenarios/triage-config-skew.sh --level unit=super-fr:tests/unit/<file>#<test> --notes "..."`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
