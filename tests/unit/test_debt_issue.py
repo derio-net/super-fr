@@ -246,3 +246,22 @@ def test_a_forge_error_carrying_a_credential_url_is_redacted_on_the_terminal(
     gh.create_issue = boom  # type: ignore[method-assign]
     r = runner.invoke(app, ["debt", "issue", "--yes"])
     assert r.exit_code == 1 and "SECRET" not in r.output and "***@" in r.output
+
+
+def test_a_403_on_the_viewer_lookup_in_actions_means_the_workflow_bot(
+    env: tuple[Gh, dict], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh, _ = env
+    gh.add_issue(SLUG, 363, body=LEGACY)
+    gh.issue_authors[(SLUG, 363)] = "github-actions[bot]"
+
+    def forbidden() -> str:
+        raise RuntimeError("HTTP 403: Resource not accessible by integration (user)")
+
+    gh.authenticated_login = forbidden  # type: ignore[method-assign]
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    r = runner.invoke(app, ["debt", "issue", "--yes"])
+    assert r.exit_code == 0 and "cannot tell who the viewer is" not in r.output
+    assert _mutations(gh) == ["edit_issue"]
+    monkeypatch.delenv("GITHUB_ACTIONS")
+    assert "cannot tell who the viewer is" in runner.invoke(app, ["debt", "issue"]).output

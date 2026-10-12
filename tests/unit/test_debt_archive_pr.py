@@ -138,7 +138,12 @@ def test_a_fork_pr_on_the_same_head_name_is_not_reused(world: dict) -> None:
 
 
 def test_a_pr_permission_refusal_warns_with_both_remedies_and_exits_zero(world: dict) -> None:
-    world["gh"].fail_on_mutation = 0
+    def refuse(*a: object, **k: object) -> None:
+        raise FakeGhError(
+            "HTTP 403: GitHub Actions is not permitted to create or approve pull requests"
+        )
+
+    world["gh"].create_pr = refuse
     r = runner.invoke(app, ["debt", "archive-pr", "--yes"])
     assert r.exit_code == 0, r.output
     assert "::warning::" in r.output and "Allow GitHub Actions" in r.output

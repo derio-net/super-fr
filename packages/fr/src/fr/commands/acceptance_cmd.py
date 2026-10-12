@@ -888,7 +888,8 @@ def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
     if out.status == "paste":
         typer.echo(
             f"{out.path} is shared by every job in the repo, so fr will not rewrite it. "
-            "Replace the `acceptance-report:` job with these jobs (keep `acceptance` in `stages:`):\n"
+            "Replace the `acceptance-report:` job with these jobs "
+            "(keep `acceptance` in `stages:`):\n"
         )
         typer.echo(out.text)
         raise typer.Exit(1)

@@ -203,7 +203,8 @@ LEGACY_MARKER = "<!-- fr-acceptance-digest -->"
 
 
 BOT_LOGINS = frozenset({"github-actions[bot]", "github-actions", "app/github-actions"})
-_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+# Control characters plus the bidi and format marks that reorder or hide text.
+_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def _clean(value: object, limit: int = 120) -> str:
@@ -226,7 +227,16 @@ def _trusted(client: GhClient, found: list[dict[str, Any]]) -> list[dict[str, An
     try:
         allowed.add(client.authenticated_login().lower())
     except Exception as e:  # any failure: trust the bot accounts only
-        _warn(f"cannot tell who the viewer is ({_clean(type(e).__name__)}); trusting bots only")
+        import os
+
+        # In Actions, the workflow's GITHUB_TOKEN may not read `/user` (403): the
+        # viewer is then the workflow bot, which BOT_LOGINS already trusts.
+        text = str(e).lower()
+        if not (
+            os.environ.get("GITHUB_ACTIONS") == "true"
+            and ("403" in text or "resource not accessible" in text)
+        ):
+            _warn(f"cannot tell who the viewer is ({_clean(type(e).__name__)}); trusting bots only")
     out = []
     for i in found:
         if not _marked(i):
@@ -259,6 +269,7 @@ def _number(issue: dict[str, Any]) -> int:
     return int(n)
 
 
+PUSH_REMEDY = "The token cannot push; set FR_DEBT_TOKEN to a token with contents:write."
 REFUSAL_REMEDIES = (
     "enable Settings > Actions > General > 'Allow GitHub Actions to create and approve "
     "pull requests', or set the FR_DEBT_TOKEN secret to a token that may open pull requests"
@@ -284,7 +295,9 @@ def _held(root: Path, name: str) -> list[str]:
     rel = Path("docs/superpowers/plans") / name
     try:
         return outcome_hold(root, parse(root / rel), rel)
-    except PlanSchemaError:
+    except (PlanSchemaError, OSError, ValueError, KeyError, TypeError):
+        # A plan fr cannot read has no hold to report here; `fr archive` itself
+        # then refuses it and the sweep lists it as not archived.
         return []
 
 
@@ -362,20 +375,24 @@ def archive_pr_cmd(
         typer.echo("(preview; re-run with --yes to push the branch and open the draft PR)")
         return
 
-    if _git(root, "status", "--porcelain", "--untracked-files=no"):
+    if _git(root, "status", "--porcelain", "--untracked-files=no") or _git(
+        root, "status", "--porcelain", "--untracked-files=all", "--", "docs"
+    ):
         typer.echo("error: the checkout has uncommitted changes; refusing to sweep", err=True)
         raise typer.Exit(1)
     ev = merge_evidence(root, fetch=False)
     if ev.ref is None or not sw.SAFE_REF.match(ev.ref.ref):
-        typer.echo(f"error: the default branch is unknown ({ev.ref_error})", err=True)
+        typer.echo(f"error: the default branch is unknown ({_clean(ev.ref_error, 300)})", err=True)
         raise typer.Exit(1)
     start = _git(root, "rev-parse", "--verify", "--end-of-options", f"{ev.ref.ref}^{{commit}}")
     came_from = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
     if came_from == "HEAD":
         came_from = _git(root, "rev-parse", "HEAD")
     base = ev.ref.ref.split("/", 1)[-1]
+    entered = False
     try:
         _git(root, "switch", "-C", sw.BRANCH, start)
+        entered = True
         env = dict(os.environ)
         landed: list[Any] = []
         for plan, _ in [(p, None) for p in result.archived]:
@@ -395,7 +412,7 @@ def archive_pr_cmd(
         try:
             _push(root)
         except RuntimeError as e:
-            _warn(f"could not push {sw.BRANCH}: {_clean(e, 300)}. Remedies: {REFUSAL_REMEDIES}")
+            _warn(f"could not push {sw.BRANCH}: {_clean(e, 300)}. {PUSH_REMEDY}")
             return
         _open_or_refresh(root, client, slug, base, result, report.stale_days, bool(token))
     except RuntimeError as e:
@@ -406,13 +423,40 @@ def archive_pr_cmd(
             f"this forge cannot do `{e.op}`; the branch {sw.BRANCH} is pushed, open the PR by hand"
         )
     except FORGE_ERRORS as e:
-        _warn(
-            f"the forge refused to open the archive PR: {_clean(' '.join(str(e).split()), 300)}. "
-            f"Remedies: {REFUSAL_REMEDIES}. The branch {sw.BRANCH} is pushed."
-        )
+        detail = _clean(" ".join(str(e).split()), 300)
+        if _is_pr_permission_refusal(str(e)):
+            _warn(
+                f"the forge refused to open the archive PR: {detail}. "
+                f"Remedies: {REFUSAL_REMEDIES}. The branch {sw.BRANCH} is pushed."
+            )
+        else:
+            _warn(
+                f"the forge failed to open the archive PR (forge error): {detail}. "
+                f"The branch {sw.BRANCH} is pushed."
+            )
     finally:
-        detached = re.fullmatch(r"[0-9a-f]{40}", came_from) is not None
-        _git(root, "switch", *(["--detach"] if detached else []), came_from, check=False)
+        if entered:
+            _leave(root, came_from)
+
+
+def _is_pr_permission_refusal(message: str) -> bool:
+    """GitHub's refusal when Actions may not create PRs (403 / "not permitted to
+    create or approve pull requests"): the only error the remedies fit."""
+    m = message.lower()
+    return "not permitted to create" in m or "403" in m
+
+
+def _leave(root: Path, came_from: str) -> None:
+    """Back to where the run started, discarding what a failed sweep left staged
+    or untracked under docs/ (the tree was verified clean on entry), and saying so
+    when the switch back fails."""
+    detached = re.fullmatch(r"[0-9a-f]{40}", came_from) is not None
+    _git(root, "reset", "-q", "--hard", check=False)
+    _git(root, "clean", "-fdq", "--", "docs", check=False)
+    try:
+        _git(root, "switch", *(["--detach"] if detached else []), came_from)
+    except RuntimeError as e:
+        _warn(f"could not switch back to {_clean(came_from)}: {_clean(e, 200)}")
 
 
 def _commit(root: Path) -> None:

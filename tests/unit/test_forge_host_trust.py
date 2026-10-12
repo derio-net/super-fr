@@ -485,7 +485,7 @@ def test_a_dotted_group_glab_does_not_know_is_still_a_group(recorder: _Recorder)
         ["mr", "view", "1", "--repo", "p"],
         ["mr", "view", "1", "--hostname", "evil.invalid"],
         ["api", "/projects/x"],
-        ["api", "user"],
+        ["api", "user/keys"],  # only the bare `user` endpoint is written (who we are)
     ],
 )
 def test_an_argv_fr_does_not_write_is_refused(recorder: _Recorder, args: list[str]) -> None:

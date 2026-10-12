@@ -30,6 +30,11 @@ class Sweep:
     failed: list[tuple[ArchivablePlan, str]] = field(default_factory=list)
 
 
+def _fence_safe(line: str) -> str:
+    """A reason line cannot close the code fence it is published in."""
+    return line.replace("`", "'")
+
+
 def select(report: DebtReport) -> list[ArchivablePlan]:
     """Archivable plans merged for MORE than `stale_days`. The floor is
     deliberate: the batch driver starts a close-out at merge, and sweeping a
@@ -66,7 +71,13 @@ def pr_body(sweep: Sweep, *, stale_days: int, own_token: bool) -> str:
     if sweep.held:
         lines += ["", f"## {HELD_REASON}", ""]
         for p, why in sweep.held:
-            lines += [f"- `{p.name}`", "", "  ```", *[f"  {redact(ln)}" for ln in why], "  ```"]
+            lines += [
+                f"- `{p.name}`",
+                "",
+                "  ```",
+                *[f"  {_fence_safe(redact(ln))}" for ln in why],
+                "  ```",
+            ]
     if sweep.failed:
         lines += ["", "## Not archived", ""]
         # Fixed text: the detail (stderr) stays in the job log, never in a body.
