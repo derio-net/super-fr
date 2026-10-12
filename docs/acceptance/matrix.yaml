@@ -7413,9 +7413,14 @@ rows:
       member another scope holds keeps it.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_release_with_unlabel_removes_both_labels_in_one_edit
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_unlabel_removes_neither_label_while_another_scopes_claim_stands
+    status: ci
+    notes: claim_writes.release(unlabel=True), passed by claim sync's releases, takes
+      fr:in-progress off with fr:claimed when no other scope holds the issue; claim
+      release and scope retire leave it.
     verify: none
   - id: triage-closed-in-progress-set
     capability: triage-batches
