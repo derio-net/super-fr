@@ -8345,9 +8345,12 @@ rows:
       complete and unarchived beyond the stale threshold, never ready, never merged.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_archive_pr_real.py#test_the_real_fr_archive_moves_the_plan_and_the_sweep_opens_a_draft_pr
+    status: walk-owed
+    notes: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
+      scheduled run on main is the post-merge Test Plan step 2.'
     verify: live
   - id: debt-owed-discharge
     capability: debt
