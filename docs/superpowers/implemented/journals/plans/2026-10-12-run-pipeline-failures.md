@@ -244,3 +244,18 @@ ce3b74b0: fr acceptance set-status added 8 name-anchored refs covering every R8 
 ### p3-r6-resolved · finding [out-of-scope] · resolves p3-r6: model_family does not strip provider prefixes, so provider/id vs a bare id warns as a different family (phase 3)
 
 model_family predates this change and is shared with resolve's observed-model warning and fr run cost; the new keep path only surfaces it, and still keeps the value with exit 0. Normalising provider prefixes is its own change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-10-12T06:48:38+00:00 state=open resolves=p1-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1154 -->
+### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1154] · resolves p1-r6: pre-existing _committable runs its own git check-ignore instead of a shared helper
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1154.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved-2 created=2026-10-12T06:48:39+00:00 state=open resolves=p2-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1155 -->
+### p2-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1155] · resolves p2-r6: explicit row verify: on a spec with no ## Verification section is never flagged though walk_owed still owes it
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1155.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved-2 created=2026-10-12T06:48:39+00:00 state=open resolves=p3-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1156 -->
+### p3-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1156] · resolves p3-r6: model_family does not strip provider prefixes, so provider/id vs a bare id warns as a different family
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1156.
