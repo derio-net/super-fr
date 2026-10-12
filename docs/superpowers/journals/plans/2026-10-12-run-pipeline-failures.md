@@ -179,3 +179,68 @@ run_cmd._merge_claim is shared by claim, --open-unit and resolve's no-agent bran
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 _claimed_identity and _claim_identity's duplicated field handling collapsed into _merge_claim; nothing further to clean
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-12T00:38:19+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · _claim_identity's _ran_as check runs against the already-claimed tier-variant agent_type, so a re-claim with the manifest id or another tier exits 2 (phase 3)
+
+R7 wants keep (+warn) and exit 0; only a different --agent is refused.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-12T00:38:19+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · tests miss the empty-field-fill and agent_type-warn branches; OpenCode sequence omits --agent-type and never asserts no write/commit (phase 3)
+
+A regression rewriting agent_type on re-claim, or committing a warned no-op, would pass.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-12T00:38:19+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · stale docstrings in _claimed_identity and _claim_identity say a re-claim refreshes/replaces fields (phase 3)
+
+Describes the behaviour #1110 removed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-12T00:38:19+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · tests use the flat collision fixture instead of the grouped implement-phase --item path; advance-interruption test asserts neither exit 2 nor no brief (phase 3)
+
+The path fr-goal really uses was not exercised.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-12T00:38:19+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · acceptance row run-claim-first-wins claims behaviour its refs do not cite (phase 3)
+
+Advance-interruption, resolve-without-agent, same-family and first-claim tests uncited.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-12T00:38:19+00:00 phase=3 state=open review_scope=out -->
+### p3-r6 · finding [open] (reviewer: out of scope) · model_family does not strip provider prefixes, so provider/id vs a bare id warns as a different family (phase 3)
+
+Pre-existing helper (fr/models.py:137); the value is still kept and exit stays 0.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-12T00:38:19+00:00 phase=3 -->
+### p3-review-1 · review · phase 3 independent review: 6 findings (5 in, 1 out) (phase 3)
+
+Read-only reviewer over diff 6f16cd9e..HEAD against spec §C / R7-R8: one _merge_claim holds the rule, no bypassing writer of harness/model/agent_type; first claim refines advance's prefill; claimed-attempt merge, exact §C warning, no-change and warned-only paths write and commit nothing; _observed_model and the cursor schema untouched; claim.ts compatible. Findings p3-r1..r5 (in) fixed in c4c98cd9 + matrix ce3b74b0; p3-r6 (out).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-12T00:38:19+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: _claim_identity's _ran_as check runs against the already-claimed tier-variant agent_type, so a re-claim with the manifest id or another tier exits 2 (phase 3)
+
+c4c98cd9: --agent-type validated against the dispatched base agent (tier suffix stripped on a claimed attempt); same agent any spelling/tier → exit 0, recorded tier kept, warning when different; other agent type still exit 2. Tests test_a_reclaim_by_the_manifest_id_keeps_the_recorded_tier_variant, test_a_reclaim_as_another_tier_keeps_the_agent_type_and_warns (red before), test_a_reclaim_as_a_different_agent_type_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-12T00:38:19+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: tests miss the empty-field-fill and agent_type-warn branches; OpenCode sequence omits --agent-type and never asserts no write/commit (phase 3)
+
+c4c98cd9: test_a_reclaim_fills_an_empty_field_and_commits_it; agent_type keep+warn test asserts unchanged bytes and commit count; OpenCode sequence passes --agent-type and asserts warning, unchanged cursor/commits, advance exit 2.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-12T00:38:19+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: stale docstrings in _claimed_identity and _claim_identity say a re-claim refreshes/replaces fields (phase 3)
+
+c4c98cd9: docstrings now say a re-claim fills empty fields only and otherwise keeps the first claim, warning on a different value (via _merge_claim).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-12T00:38:19+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: tests use the flat collision fixture instead of the grouped implement-phase --item path; advance-interruption test asserts neither exit 2 nor no brief (phase 3)
+
+c4c98cd9: tests on a grouped implement/implement-phase shape with --item phase/1; interruption test asserts exit 2 and no brief JSON.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-12T00:38:19+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: acceptance row run-claim-first-wins claims behaviour its refs do not cite (phase 3)
+
+ce3b74b0: fr acceptance set-status added 8 name-anchored refs covering every R8 sequence.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-12T00:38:19+00:00 phase=3 state=open resolves=p3-r6 out_of_scope=true -->
+### p3-r6-resolved · finding [out-of-scope] · resolves p3-r6: model_family does not strip provider prefixes, so provider/id vs a bare id warns as a different family (phase 3)
+
+model_family predates this change and is shared with resolve's observed-model warning and fr run cost; the new keep path only surfaces it, and still keeps the value with exit 0. Normalising provider prefixes is its own change.
