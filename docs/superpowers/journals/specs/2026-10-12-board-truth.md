@@ -273,3 +273,8 @@ Phase 2: R4-R5 (schema skew). Phase 3: R6-R8 (card front and cancelled pins). Ph
 ### phase-split-2026-10-12-board-truth-p3 · decision · ask: phase 3 serves its own requirement group
 
 Phase 2: R4-R5 (schema skew). Phase 3: R6-R8 (card front and cancelled pins). Phase 4: R9-R12 (nav registry). Each is an independently reviewable ask of the batch.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-12-board-truth-p4 created=2026-10-12T06:14:47+00:00 -->
+### phase-split-2026-10-12-board-truth-p4 · decision · ask: phase 4 serves its own requirement group
+
+Phase 2: R4-R5 (schema skew). Phase 3: R6-R8 (card front and cancelled pins). Phase 4: R9-R12 (nav registry). Each is an independently reviewable ask of the batch.
