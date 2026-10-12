@@ -7467,7 +7467,7 @@ rows:
       on a member no other scope holds, fr:in-progress comes off that member too; a
       member another scope holds keeps it.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claim_writes.py#test_release_with_unlabel_removes_both_labels_in_one_edit
@@ -7483,8 +7483,8 @@ rows:
       held ones apart, and fr triage clean-labels --yes removes the label from the rest
       (dry-run without --yes).
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_triage_clean_labels.py#test_with_yes_it_rereads_each_target_and_removes_the_label_from_the_rest
@@ -7501,8 +7501,8 @@ rows:
       collected; the ignored keys and any skipped repo appear as a prominent banner
       on the backlog and batch pages and in fr triage check.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_triage_config_skew.py#test_the_banner_names_ignored_keys_and_skipped_repos_escaped
@@ -7520,8 +7520,8 @@ rows:
     acceptance: While a batch's close-out session is live, its card front shows the
       close-out's status and jumps to it; the batch session's jump is in the card body.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban_render.py#test_a_live_closeout_takes_the_card_front_and_the_body_jumps_to_the_batch
@@ -7544,7 +7544,7 @@ rows:
       as cancelled, owes no claim or release, and never renders as Running, including
       right after a fresh collect and render.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_a_cancelled_released_batch_never_renders_as_running
@@ -7562,10 +7562,10 @@ rows:
       the scope has (Backlog, Batches, Origins, Architecture, History), and rendering
       any page brings every existing page's nav up to date.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_triage_nav_pages.py#test_rendering_the_board_updates_the_other_pages_navs
