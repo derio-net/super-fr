@@ -7,6 +7,7 @@ after this one goes red here until the skill follows."""
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -64,9 +65,17 @@ def test_the_skill_states_no_column_count() -> None:
 
 
 def test_the_board_command_docstring_states_no_column_count() -> None:
-    from fr.commands.triage_kanban_cmd import board_command
-
-    doc = board_command.__doc__ or ""
+    # Read from the source, not by import: importing triage_kanban_cmd alone
+    # trips a circular import that only test-suite import order hides.
+    src = (
+        ROOT / "packages" / "fr" / "src" / "fr" / "commands" / "triage_kanban_cmd.py"
+    ).read_text()
+    fn = next(
+        n
+        for n in ast.walk(ast.parse(src))
+        if isinstance(n, ast.FunctionDef) and n.name == "board_command"
+    )
+    doc = ast.get_docstring(fn) or ""
     assert COUNT_PHRASE.search(doc) is None
     assert COLUMN_LIST.search(doc) is None
     assert not [t for t in COLUMN_TITLES.values() if t in doc and t != "Done"], (
