@@ -352,7 +352,7 @@ class _Watch:
         self.tmp_path, self.stop = tmp_path, stop
         self.on_sleep: Any = None
         monkeypatch.setattr(
-            triage_kanban_cmd, "recollect", lambda s, t: self.calls.append("collect")
+            triage_kanban_cmd, "recollect", lambda s, t, **kw: self.calls.append("collect")
         )
         real = triage_kanban_cmd.write_board
 
@@ -436,7 +436,7 @@ def test_a_collect_that_fails_warns_once_and_the_loop_goes_on(
     _setup(tmp_path)
     w = _Watch(tmp_path, monkeypatch, stop=3)
 
-    def _boom(scope: Any, target: Path) -> None:
+    def _boom(scope: Any, target: Path, **_: Any) -> None:
         raise ForgeError("forge said no")
 
     monkeypatch.setattr(triage_kanban_cmd, "recollect", _boom)
@@ -474,7 +474,7 @@ def test_any_collect_failure_warns_once_and_the_loop_goes_on(
     _setup(tmp_path)
     w = _Watch(tmp_path, monkeypatch, stop=3)
 
-    def _boom(scope: Any, target: Path) -> None:
+    def _boom(scope: Any, target: Path, **_: Any) -> None:
         raise OSError("disk\nfull")
 
     monkeypatch.setattr(triage_kanban_cmd, "recollect", _boom)

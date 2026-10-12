@@ -146,6 +146,9 @@ def _no_live_rate_limit_read(monkeypatch: pytest.MonkeyPatch) -> None:
             return True, None
 
     monkeypatch.setattr("fr.commands.triage_batch_cmd._probe_forge", lambda: _Unknown())
+    # The board's watch paces itself on the same seams (spec 2026-10-12-quota-pacing R17).
+    monkeypatch.setattr("fr.commands.triage_kanban_cmd._pace_forge", lambda: _Ample())
+    monkeypatch.setattr("fr.commands.triage_kanban_cmd._probe_forge", lambda: _Unknown())
 
 
 @pytest.fixture(autouse=True)

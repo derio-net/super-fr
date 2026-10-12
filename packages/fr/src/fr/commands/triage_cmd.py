@@ -27,12 +27,13 @@ from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr import forgeapi
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
@@ -52,6 +53,9 @@ from fr.triage.model import (
     load_scope_facts,
     state_dir,
 )
+from fr.triage.pacing import Pacer
+from fr.triage.probe import PassPlan, Prober, judgements_digest
+from fr.triage.quota import is_rate_limited
 from fr.triage.render import GENERATED, plural, render
 from fr.triage.scope_config import load_durable, mirror_state_repo, scope_id, write_durable
 from fr.triage.snapshot import (
@@ -549,6 +553,68 @@ def _settle_state_repo(target_dir: Path, facts: Facts) -> None:
         return
     write_durable(target_dir, durable.model_copy(update={"state_repo": chosen}))
     mirror_state_repo(target_dir, chosen)
+
+
+def make_pacer(
+    target: Path,
+    *,
+    quota_floor: float | None,
+    interval_s: float,
+    forge: Callable[[], Any],
+    now: Callable[[], datetime],
+) -> Pacer:
+    """The pacing every loop shares (spec 2026-10-12-quota-pacing): the floor from
+    `--quota-floor` or the host file, the adapter `forge.api` names, `pacing.json` in *target*.
+    A floor or `forge.api` fr cannot use is refused (exit 2), naming where it came from (R6)."""
+    try:
+        floor, api = forgeapi.quota_floor(quota_floor), forgeapi.resolve()
+    except forgeapi.ForgeApiError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+
+    def warn(message: str) -> None:
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+
+    return Pacer(
+        target, floor=floor, interval_s=interval_s, api=api, forge=forge, now=now, warn=warn
+    )
+
+
+def plan_paced_pass(
+    pacer: Pacer, scope: Scope, target: Path, forge: Prober, *, essential: bool, board: bool = False
+) -> PassPlan:
+    """Probe, then decide the pass (spec 2026-10-12-quota-pacing R7-R11): the drive's pass
+    and the board's watch plan through this one function, over the facts and judgements
+    on disk."""
+    previous = _previous_facts(target / "facts.json", scope)
+    path = target / "judgements.yaml"
+    try:
+        judgements = load_judgements(path) if path.exists() else None
+    except TriageError:
+        judgements = None  # the collect refuses it, naming the file
+    if previous is not None:
+        repos = list(previous.repos)
+    elif scope.kind == "repo":
+        repos = [scope.target]
+    else:
+        repos = list(scope.repos)
+    return pacer.plan(
+        forge,
+        repos=repos,
+        facts=previous,
+        judgements=judgements,
+        digest=judgements_digest(path),
+        essential=essential,
+        board=board,
+    )
+
+
+def rate_limit_reason(facts: Facts) -> str | None:
+    """A rate limit that did not raise: a repo skipped, a judged key unviewed (R2)."""
+    for reason in [s.reason for s in facts.skipped] + [u.reason for u in facts.unviewed]:
+        if is_rate_limited(reason):
+            return reason
+    return None
 
 
 def _previous_facts(path: Path, scope: Scope) -> Facts | None:

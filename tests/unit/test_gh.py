@@ -646,7 +646,9 @@ class TestRunGhTimeout:
 
 # ---------------------------------------------------- conditional visibility (quota-pacing R12)
 
-_VIS_200 = 'HTTP/2.0 200 OK\nContent-Type: application/json\nEtag: W/"v1"\n\n{"visibility": "private"}'
+_VIS_200 = (
+    'HTTP/2.0 200 OK\nContent-Type: application/json\nEtag: W/"v1"\n\n{"visibility": "private"}'
+)
 _VIS_304 = 'HTTP/2.0 304 Not Modified\nEtag: W/"v1"\n'
 
 
@@ -666,9 +668,7 @@ class TestConditionalVisibility:
     def test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer(self):
         from fr import gh
 
-        run, seen = self._runner(
-            [_VIS_200, GhError("gh: HTTP 304", stdout=_VIS_304, returncode=1)]
-        )
+        run, seen = self._runner([_VIS_200, GhError("gh: HTTP 304", stdout=_VIS_304, returncode=1)])
         assert gh.repo_visibility(run, None, "o/r") == "private"
         assert gh.repo_visibility(run, None, "o/r") == "private"
         assert seen[0] == ["api", "-i", "repos/o/r"]

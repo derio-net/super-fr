@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, NoReturn, get_args
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn, get_args
 
 import typer
 from rich.markup import escape
@@ -30,6 +30,7 @@ from fr.artifacts.atomic import write_text_atomic
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    QuotaFloorOpt,
     RepoOpt,
     WorkspaceOpt,
     _load_state,
@@ -39,6 +40,10 @@ from fr.commands.triage_cmd import (
     console,
     drive_lock_dir,
     err_console,
+    make_forge,
+    make_pacer,
+    plan_paced_pass,
+    rate_limit_reason,
     resolve_state_dir,
     triage_app,
 )
@@ -384,14 +389,45 @@ def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None
         )
 
 
-def recollect(scope: Scope, target: Path) -> None:
-    """Collect facts.json as `fr triage collect` does (no carry-over); tests replace this."""
-    collect_into(scope, target)
+def recollect(
+    scope: Scope,
+    target: Path,
+    *,
+    only: frozenset[str] | None = None,
+    after_write: Callable[[Facts, frozenset[str]], None] | None = None,
+) -> None:
+    """Collect facts.json as `fr triage collect` does (no carry-over); tests replace this.
+    *only* and *after_write* are a paced pass's (spec 2026-10-12-quota-pacing R10, R11, R17).
+    A rate limit that did not raise (a repo skipped, a key unviewed) raises here, so the
+    watch backs off instead of rendering a half-read board."""
+    facts, _, _ = collect_into(scope, target, only=only, after_write=after_write)
+    if (reason := rate_limit_reason(facts)) is not None:
+        raise RuntimeError(reason)
 
 
 def _sleep(seconds: float) -> None:
     """The watch loop's wait between iterations; tests replace it."""
     time.sleep(seconds)
+
+
+def _now() -> datetime:
+    """The watch's clock for pacing; tests replace it."""
+    return datetime.now(UTC)
+
+
+def _pace_forge() -> Any:
+    """The forge `/rate_limit` is read through (free); tests replace it."""
+    return make_forge()
+
+
+def _probe_forge() -> Any:
+    """The forge the watch's probes go through; tests replace it."""
+    return make_forge()
+
+
+def _until(until: datetime | None, floor: float) -> float:
+    """Seconds from now to *until*, at least *floor* (a wait never spins)."""
+    return floor if until is None else max(floor, (until - _now()).total_seconds())
 
 
 def _watch(
@@ -403,15 +439,25 @@ def _watch(
     open_: bool,
     publish_: bool = False,
     lock_dir: Path | None = None,
+    quota_floor: float | None = None,
 ) -> None:
     """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
     drive keeps the board fresh itself, so an iteration that finds its lock held skips.
-    The lock is read from *lock_dir* (`triage_cmd.drive_lock_dir`, p3-r3), else *target*."""
+    The lock is read from *lock_dir* (`triage_cmd.drive_lock_dir`, p3-r3), else *target*.
+
+    The drive's pacing, shared through `pacing.json` (spec 2026-10-12-quota-pacing R17): an
+    exhausted budget waits for its reset, below the floor the loop waits four intervals,
+    probes decide whether anything is collected at all, and the board is rendered only
+    after a collect. The watch holds no lease and dispatches nothing, so nothing is held."""
     lock_at = lock_dir if lock_dir is not None else target
     if (holder := live_driver(lock_at)) is not None:
         _fail(f"a drive ({holder}) holds {lock_at / 'drive.lock'}; it keeps the board fresh")
     skipping, failures, opened = False, set[str](), False
     publish_failures: set[str] = set()
+    pacer = make_pacer(
+        target, quota_floor=quota_floor, interval_s=interval, forge=lambda: _pace_forge(),
+        now=lambda: _now(),
+    )  # fmt: skip
 
     def recovered(what: str) -> None:
         failures.difference_update({f for f in failures if f.startswith(f"{what}\0")})
@@ -440,14 +486,42 @@ def _watch(
                 _sleep(interval)
                 continue
             skipping = False
+            pace = pacer.before_pass()
+            if pace.kind == "wait":
+                console.print(pacer.line(pace), markup=False, soft_wrap=True)
+                _sleep(_until(pace.until, interval))
+                continue
+            if pace.essential:  # below the floor: only what changed, four intervals apart
+                console.print(pacer.line(pace), markup=False, soft_wrap=True)
+                pacer.stretch(pace.until)
+            quiet = False
             # Nothing but an interrupt ends the watch (R12): a degraded forge, a missing
             # facts.json or a failed write is one warning per cause, then the next interval.
             try:
-                recollect(scope, target)
+                plan = plan_paced_pass(
+                    pacer, scope, target, _probe_forge(), essential=pace.essential, board=True
+                )
+                quiet = not plan.collects
+                if plan.collects:
+
+                    def stored(facts: Facts, carried: frozenset[str], plan: Any = plan) -> None:
+                        pacer.after_collect(plan, facts, carried)
+
+                    recollect(scope, target, only=plan.only, after_write=stored)
+                    pacer.record_digest(plan.digest)
             except Exception as exc:  # noqa: BLE001
+                if pacer.limited(str(exc)):  # a limit waits for its reset, never retries
+                    pace = pacer.rate_limited()
+                    console.print(pacer.line(pace), markup=False, soft_wrap=True)
+                    _sleep(_until(pace.until, interval))
+                    continue
                 warn_once("collect", exc)
             else:
                 recovered("collect")
+                pacer.clean()
+            if quiet and (target / BOARD_FILE).exists():
+                _sleep(_until(pace.until, interval) if pace.essential else interval)
+                continue  # nothing was read: the board on disk is still the facts' (R17)
             try:
                 with err_console.capture() as said:
                     out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
@@ -466,7 +540,7 @@ def _watch(
                 if open_ and not opened:
                     webbrowser.open(out.resolve().as_uri())
                     opened = True
-            _sleep(interval)
+            _sleep(_until(pace.until, interval) if pace.essential else interval)
     except KeyboardInterrupt:
         console.print("stopped", markup=False)
 
@@ -498,6 +572,7 @@ def board_command(
             help="After each render, run the scope's `publish` command from scope.yaml.",
         ),
     ] = False,
+    quota_floor: QuotaFloorOpt = None,
 ) -> None:
     """Write board.html: one card per batch in six lifecycle columns, with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
@@ -514,6 +589,7 @@ def board_command(
             open_,
             publish_,
             lock_dir=drive_lock_dir(scope, dir_override),
+            quota_floor=quota_floor,
         )
         return
     out, cards = write_board(scope, target, scope_args=args, refresh=refresh)

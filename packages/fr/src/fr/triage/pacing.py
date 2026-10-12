@@ -111,15 +111,21 @@ class Pacer:
         judgements: Judgements | None,
         digest: str,
         essential: bool,
+        board: bool = False,
     ) -> probe.PassPlan:
         """Probe every repo (before any collect, R8) and decide the pass (R7, R9-R11).
-        No previous facts is always a full pass: there is nothing to carry."""
+        No previous facts is always a full pass: there is nothing to carry.
+
+        *board* (the kanban watch, R17) plans against the judgements digest alone: it has
+        no drive summary to stand for a quiet pass, and records none, so a drive that
+        follows still plans (`record_digest`)."""
         now = self._now()
+        state = replace(self.state, summary=self.state.summary or {}) if board else self.state
         full = facts is None or probe.full_due(self.state, now)
         probes = probe.probe_set(repos, facts, judgements)
-        changed, pending = probe.run_probes(forge, probes, self.state, full=full)
+        changed, pending = probe.run_probes(forge, probes, state, full=full)
         plan = probe.plan_pass(
-            self.state if facts is not None else replace(self.state, full_at=None),
+            state if facts is not None else replace(state, full_at=None),
             now,
             repos=repos,
             changed=changed,
@@ -160,6 +166,11 @@ class Pacer:
                 self.state, summary=dict(summary), judgements_digest=digest, held_for_quota=held
             )
         )
+
+    def record_digest(self, digest: str) -> None:
+        """The board watch's collect (R17): the judgements it collected on, and no summary, so
+        the next watch pass can be quiet and a drive's next pass cannot."""
+        self._save(replace(self.state, judgements_digest=digest))
 
     def stretch(self, until: datetime | None) -> None:
         """R7: below the floor the next pass waits until *until* (four intervals)."""

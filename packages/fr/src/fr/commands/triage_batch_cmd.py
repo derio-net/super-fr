@@ -57,9 +57,9 @@ import yaml
 from pydantic import ValidationError
 from rich.markup import escape
 
-from fr import __version__, forgeapi
+from fr import __version__
 from fr.acceptance.ci import CI_CONFIG_PATHS
-from fr.commands import triage_kanban_cmd
+from fr.commands import triage_cmd, triage_kanban_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -67,7 +67,6 @@ from fr.commands.triage_cmd import (
     RepoOpt,
     WorkspaceOpt,
     _load_state,
-    _previous_facts,
     _scope,
     _sync_with_ref,
     batch_app,
@@ -76,7 +75,9 @@ from fr.commands.triage_cmd import (
     drive_lock_dir,
     err_console,
     fetch_now,
+    plan_paced_pass,
     push_now,
+    rate_limit_reason,
     resolve_state_dir,
 )
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
@@ -220,8 +221,8 @@ from fr.triage.model import (
 from fr.triage.operation_lock import replacement_scope_lock
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
-from fr.triage.probe import PassPlan, judgements_digest
-from fr.triage.quota import Pace, is_rate_limited
+from fr.triage.probe import PassPlan
+from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -2412,10 +2413,8 @@ def recollect(
         raise ForgeReadError(str(exc), code=2) from exc
     # A rate limit that did not raise: a repo skipped, a judged key unviewed. The pass ends
     # here, before it plans on facts the exhausted budget left half-read (R2).
-    reasons = [s.reason for s in facts.skipped] + [u.reason for u in facts.unviewed]
-    for reason in reasons:
-        if is_rate_limited(reason):
-            raise ForgeReadError(reason, code=2)
+    if (reason := rate_limit_reason(facts)) is not None:
+        raise ForgeReadError(reason, code=2)
     _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
     return stats.ignored
 
@@ -2472,22 +2471,12 @@ def make_pacer(
     """The pacing both adapters share (spec 2026-10-12-quota-pacing): the floor from
     `--quota-floor` or the host file, the adapter `forge.api` names, `pacing.json` in *target*.
     A floor or `forge.api` fr cannot use is refused here, naming where it came from (R6)."""
-    try:
-        floor, api = forgeapi.quota_floor(quota_floor), forgeapi.resolve()
-    except forgeapi.ForgeApiError as exc:
-        _fail(str(exc))
-
-    def warn(message: str) -> None:
-        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
-
-    return Pacer(
+    return triage_cmd.make_pacer(
         target,
-        floor=floor,
+        quota_floor=quota_floor,
         interval_s=interval_s,
-        api=api,
         forge=_pace_forge,
         now=now or (lambda: _now()),
-        warn=warn,
     )
 
 
@@ -3808,25 +3797,8 @@ class _Driver:
         unpaced (`--once`, plan mode) or when the pace is not a pass to run."""
         if self.pacer is None or self.pace is None or self.pace.kind == "wait":
             return None
-        previous = _previous_facts(self.target / "facts.json", self.scope)
-        path = self.target / "judgements.yaml"
-        try:
-            judgements = load_judgements(path) if path.exists() else None
-        except TriageError:
-            judgements = None  # the collect refuses it, naming the file
-        if previous is not None:
-            repos = list(previous.repos)
-        elif self.scope.kind == "repo":
-            repos = [self.scope.target]
-        else:
-            repos = list(self.scope.repos)
-        return self.pacer.plan(
-            _probe_forge(),
-            repos=repos,
-            facts=previous,
-            judgements=judgements,
-            digest=judgements_digest(path),
-            essential=self.pace.essential,
+        return plan_paced_pass(
+            self.pacer, self.scope, self.target, _probe_forge(), essential=self.pace.essential
         )
 
     def _quiet_pass(self, paced: PassPlan) -> tuple[bool, Summary, list[str]]:
