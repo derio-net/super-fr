@@ -169,3 +169,13 @@ fa06614d: walk names the filtered default's install problem and suggests per-row
 ### p2-r8-resolved · finding [fixed] · resolves p2-r8: fr-brainstorming SKILL.md still says strategy defaults to the shape's without the R4 drop / R5 error (phase 2)
 
 fa06614d: SKILL.md line 79 amended in place (still 119 lines); sync-opencode.py and sync-hermes.py mirrors regenerated; mirror/validation guards green.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-merge-claim created=2026-10-12T00:20:17+00:00 phase=3 -->
+### p3-merge-claim · discovery · one _merge_claim decides every claim (phase 3)
+
+run_cmd._merge_claim is shared by claim, --open-unit and resolve's no-agent branch; fr-opencode-plugin claim.ts needed no change.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-12T00:20:17+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+_claimed_identity and _claim_identity's duplicated field handling collapsed into _merge_claim; nothing further to clean
