@@ -508,19 +508,15 @@ def claim_trusted(config: TriageConfig, viewer: str | None) -> frozenset[str]:
     return frozenset(login.lower() for login in logins)
 
 
-def parse_triage_config(
-    data: object, *, lenient: bool = False
-) -> tuple[TriageConfig, tuple[str, ...]]:
+def parse_triage_config(data: object) -> tuple[TriageConfig, tuple[str, ...]]:
     """`.fr/triage.yaml`'s parsed body as config, and the top-level keys it ignored.
 
-    Strict by default: an unknown key is refused, so a typo fails where a person
-    runs `fr triage collect` by hand. *lenient* is the wave driver's (gh#998): it
-    reads the file from the default branch every pass, and its own merges land a
-    key the running `fr` predates before the release that knows it can. It drops
-    unknown TOP-LEVEL keys and names them; a known key with a bad value, or an
-    unknown key nested in a known block, is still refused.
+    Every triage read is lenient (R4, gh#998): a merge can land a key the running `fr`
+    predates before the release that knows it. Unknown TOP-LEVEL keys are dropped and
+    named (collect records them, the skew banner and `check` show them); a known key
+    with a bad value, or an unknown key nested in a known block, is still refused.
     """
-    if not lenient or not isinstance(data, dict):
+    if not isinstance(data, dict):
         return TriageConfig.model_validate(data), ()
     known = {f.alias or name for name, f in TriageConfig.model_fields.items()}
     ignored = tuple(sorted(str(k) for k in data if k not in known))

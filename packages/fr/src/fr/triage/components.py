@@ -280,16 +280,6 @@ def page_header(current: str) -> str:
     )
 
 
-def skew_entries(
-    facts: Facts,
-) -> tuple[list[tuple[str, list[str]]], list[tuple[str, str]]]:
-    """The (repo, ignored keys) and (repo, skip reason) lists the skew banner and `check`
-    both report, sorted by repo (R5)."""
-    ignored = [(repo, list(keys)) for repo, keys in sorted(facts.config_ignored.items()) if keys]
-    skipped = [(s.repo, s.reason) for s in sorted(facts.skipped, key=lambda s: s.repo)]
-    return ignored, skipped
-
-
 SKEW_CSS = (
     ".skew { margin: 12px 0; padding: 10px 14px; border: 1px solid var(--line);"
     " border-left: 4px solid var(--sev-1); border-radius: 6px; font-size: .9rem; }"
@@ -302,6 +292,8 @@ def skew_banner(facts: Facts) -> str:
     """The version-skew banner (R5): "" when nothing was skipped or ignored, else a
     `role="alert"` block naming each repo's ignored `.fr/triage.yaml` keys and each
     skipped repo with its reason. Everything is escaped."""
+    from fr.triage.check import skew_entries
+
     ignored, skipped = skew_entries(facts)
     if not ignored and not skipped:
         return ""

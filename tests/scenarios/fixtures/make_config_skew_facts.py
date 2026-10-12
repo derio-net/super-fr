@@ -2,7 +2,7 @@
 
     uv run python tests/scenarios/fixtures/make_config_skew_facts.py
 
-writes config-skew-facts.json beside this file: one repo whose `.fr/triage.yaml`
+writes config-skew-facts.json beside this file: an org scope with one repo whose `.fr/triage.yaml`
 carried a key this `fr` ignored, and one repo that was skipped. Nothing here reaches a
 forge.
 """
@@ -19,8 +19,8 @@ REPO = "example-org/widgets"
 
 def facts() -> Facts:
     return Facts(
-        scope="example-org--widgets",
-        kind="repo",
+        scope="example-org",
+        kind="org",
         collected_at="2026-10-12T00:00:00Z",
         repos=[REPO, "example-org/gadgets"],
         issues=[],

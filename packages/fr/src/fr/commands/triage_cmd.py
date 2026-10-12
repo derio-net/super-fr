@@ -382,6 +382,13 @@ def _report(facts: Facts) -> None:
         err_console.print(
             f"[yellow]skipped[/yellow] {escape(s.repo)}: {escape(s.reason)}", soft_wrap=True
         )
+    for repo, keys in sorted(facts.config_ignored.items()):
+        err_console.print(
+            f"[yellow]ignored[/yellow] {escape(repo)}: .fr/triage.yaml keys "
+            f"{escape(', '.join(keys))} "
+            "(written for a newer fr, or a typo)",
+            soft_wrap=True,
+        )
     for u in facts.unviewed:
         err_console.print(
             f"[yellow]unviewed[/yellow] {escape(u.key)}: {escape(u.reason)} "

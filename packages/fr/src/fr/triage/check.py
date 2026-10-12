@@ -59,7 +59,6 @@ from typing import Any, Literal
 from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
 from fr.triage.batch import closeout_state, derive_batch_stage, is_open
 from fr.triage.claims import expired, from_issue_claim, holder, owed_claims
-from fr.triage.components import skew_entries
 from fr.triage.dedupe import CandidateGroup, candidates
 from fr.triage.model import (
     Batch,
@@ -283,6 +282,16 @@ class CheckResult:
             ],
             "claims_owed": [{"key": o.key, "batch": o.batch} for o in self.claims.claims_owed],
         }
+
+
+def skew_entries(
+    facts: Facts,
+) -> tuple[list[tuple[str, list[str]]], list[tuple[str, str]]]:
+    """The (repo, ignored keys) and (repo, skip reason) lists the skew banner and `check`
+    both report, sorted by repo (R5)."""
+    ignored = [(repo, sorted(keys)) for repo, keys in sorted(facts.config_ignored.items()) if keys]
+    skipped = [(s.repo, s.reason) for s in sorted(facts.skipped, key=lambda s: s.repo)]
+    return ignored, skipped
 
 
 def _unreachable_reason(key: str, facts: Facts) -> str | None:

@@ -993,10 +993,16 @@ def _fresh_config(checkout: Checkout, facts: Facts, owner_repo: str) -> str:
     key this `fr` does not know (R4)."""
     checkout.fetch()
     default = f"origin/{checkout.default_branch()}"
-    check_config_fresh(
+    ignored = check_config_fresh(
         facts.config.get(owner_repo),
         checkout.show(default, TRIAGE_CONFIG_PATH),
     )
+    if ignored:
+        err_console.print(
+            f"[yellow]warning:[/yellow] {escape(owner_repo)}: ignoring {TRIAGE_CONFIG_PATH} "
+            f"keys this fr does not know: {escape(', '.join(ignored))} (written for a newer fr)",
+            soft_wrap=True,
+        )
     return default
 
 

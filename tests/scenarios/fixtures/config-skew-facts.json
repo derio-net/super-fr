@@ -1,7 +1,7 @@
 {
   "schema": 9,
-  "scope": "example-org--widgets",
-  "kind": "repo",
+  "scope": "example-org",
+  "kind": "org",
   "collected_at": "2026-10-12T00:00:00Z",
   "repos": [
     "example-org/widgets",

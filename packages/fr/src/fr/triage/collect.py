@@ -557,7 +557,7 @@ def collect_facts_counted(
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
-            repo_config, dropped = _read_config(forge, repo, lenient=True)
+            repo_config, dropped = read_config_lenient(forge, repo)
             trusted = claim_trusted(repo_config or TriageConfig(), viewer)
             for raw in issues:
                 at, found = _comment_facts(forge, repo, raw, trusted)
@@ -718,26 +718,14 @@ def join_open(
     return out
 
 
-def read_config(forge: Forge, repo: str) -> TriageConfig | None:
-    """*repo*'s `.fr/triage.yaml` at its default branch; None when it has none.
-
-    Absent (404) is the common case and means the defaults. Any other forge
-    failure propagates like the list calls' do; a file that is not valid config
-    is refused naming the repo and the file, never half-read — which fails a
-    repo-scope collect and skips just that repo in org scope (review r2p-f4).
-    """
-    return _read_config(forge, repo, lenient=False)[0]
-
-
 def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, tuple[str, ...]]:
-    """`read_config` as the wave driver reads it (gh#998): an unknown top-level key
-    is dropped and named, never refused (`parse_triage_config`)."""
-    return _read_config(forge, repo, lenient=True)
+    """*repo*'s `.fr/triage.yaml` at its default branch, and the top-level keys it ignored.
 
-
-def _read_config(
-    forge: Forge, repo: str, *, lenient: bool
-) -> tuple[TriageConfig | None, tuple[str, ...]]:
+    None when it has no file (404): the defaults. An unknown top-level key is dropped
+    and named, never refused (R4); a known key with a bad value, or a file that is not
+    valid config, is refused naming the repo and file, which fails a repo-scope collect
+    and skips just that repo in org scope (review r2p-f4). Any other forge failure
+    propagates like the list calls' do."""
     try:
         body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=DEFAULT_BRANCH_REF)
     except ForgeError as exc:
@@ -745,7 +733,7 @@ def _read_config(
             return None, ()
         raise
     try:
-        return parse_triage_config(yaml.safe_load(body) or {}, lenient=lenient)
+        return parse_triage_config(yaml.safe_load(body) or {})
     except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
 
