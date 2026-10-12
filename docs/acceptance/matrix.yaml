@@ -6898,9 +6898,15 @@ rows:
       else 0.20, and a value fr cannot use is refused naming its source.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forgeapi.py#test_floor_flag_beats_the_host_file
+      - super-fr:tests/unit/test_forgeapi.py#test_floor_in_the_file_must_be_a_fraction
+      - super-fr:tests/unit/test_forgeapi.py#test_floor_flag_must_be_a_fraction
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_an_unusable_quota_floor_is_refused_naming_the_flag
+    status: ci
+    notes: quota_floor resolves flag over host file over 0.20 and refuses an unusable
+      value naming the flag or the file.
     verify: none
   - id: quota-partial-carry
     capability: triage-batch-drive
