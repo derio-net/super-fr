@@ -6846,9 +6846,14 @@ rows:
       at least every 15 minutes; ETags are stored only with the facts they describe.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_a_quiet_pass_reads_nothing_plans_nothing_and_renews_the_lease
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_an_edited_judgements_file_is_never_quiet_and_a_carried_repo_reads_nothing_live
+      - super-fr:tests/unit/test_triage_probe.py#test_pass_kinds
+    status: ci
+    notes: 'Quiet pass built in phase 2: all probes 304 and judgements digest unchanged
+      skip collect, snapshot, plan and board; the lease is still renewed.'
     verify: none
   - id: visibility-conditional-read
     capability: triage-batch-drive
