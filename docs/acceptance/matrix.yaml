@@ -7486,9 +7486,15 @@ rows:
       right after a fresh collect and render.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; written by the phase that implements the row.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_a_cancelled_released_batch_never_renders_as_running
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_cancelled_terminal
+    status: ci
+    notes: 'R8 pinned: dispatch, cancel, claims_released is terminal for wave and wave-less
+      batches (stage, owed sets, board column and hint); scenario triage-cancelled-terminal.sh
+      passes. Was green on first run, so #1111 held.'
     verify: candidate
     scenario: tests/scenarios/triage-cancelled-terminal.sh
   - id: triage-nav-present-pages
