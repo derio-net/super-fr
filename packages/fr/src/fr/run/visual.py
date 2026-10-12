@@ -329,6 +329,7 @@ def _verification(repo_root: Path, spec_rel: str | None, plan: Plan | None) -> S
     workflow. A malformed section or an unresolvable shape degrades to "the
     row's own `verify` only" — self-review refuses the section by name, and
     owing evidence is the fail-closed side here."""
+    from fr.verification.effective import effective_shape_default
     from fr.verification.rows import SpecVerification, spec_section_at
     from fr.verification.spec_section import SectionError
     from fr.workflow.model import WorkflowError
@@ -341,7 +342,9 @@ def _verification(repo_root: Path, spec_rel: str | None, plan: Plan | None) -> S
     shape: str | None = None
     if plan is not None:
         try:
-            shape = workflow_for_plan(plan, repo_root).verification
+            shape = effective_shape_default(
+                workflow_for_plan(plan, repo_root).verification, repo_root
+            )
         except WorkflowError:
             shape = None
     return SpecVerification(repo_root, section, shape)
