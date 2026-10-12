@@ -761,7 +761,7 @@ def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> st
         else ""
     )
     link = (
-        '<p class="tier-desc"><a href="board.html">Open the live board</a> '
+        '<p class="tier-desc"><a href="board.html">Open the Batches page</a> '
         "(<code>fr triage board</code>): the same batches as a Kanban, with session status.</p>"
         if board
         else ""

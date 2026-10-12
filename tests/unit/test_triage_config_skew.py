@@ -133,6 +133,7 @@ def test_the_banner_names_ignored_keys_and_skipped_repos_escaped() -> None:
         skipped=[Skipped(repo="o/<i>r</i>", reason="HTTP 502 <script>")],
     )
     banner = skew_banner(facts)
+    assert "This page is not the whole truth." in banner
     assert 'role="alert"' in banner and "upgrade fr to read them" in banner
     assert "future_key" in banner and "&lt;b&gt;x&lt;/b&gt;" in banner
     assert "o/&lt;i&gt;r&lt;/i&gt;" in banner and "HTTP 502 &lt;script&gt;" in banner

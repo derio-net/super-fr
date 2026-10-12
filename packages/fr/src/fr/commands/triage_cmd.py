@@ -34,6 +34,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
@@ -71,8 +72,16 @@ console = Console()
 err_console = Console(stderr=True)
 
 
+_NAV_WARNED: set[str] = set()
+
+
 def warn_nav(message: str) -> None:
-    """The warning `refresh_navs` gives for a page it could not bring up to date."""
+    """The warning `refresh_navs` gives for a page it could not bring up to date. Said
+    once per message in a process, so a driver loop or `board --watch` does not repeat it
+    every pass (the message names the page's path and the cause)."""
+    if message in _NAV_WARNED:
+        return
+    _NAV_WARNED.add(message)
     err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
 
 
@@ -874,7 +883,7 @@ def render_command(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
         session_notes=noted, present=pages_present(target_dir, "backlog"),
     )  # fmt: skip
-    out.write_text(page, encoding="utf-8")
+    write_text_atomic(out, page)
     refresh_navs(target_dir, "backlog", warn=warn_nav)
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".

@@ -312,7 +312,13 @@ def refresh_navs(state_dir: Path, current: str, warn: Callable[[str], None] | No
     """After *current* is written, bring the nav of every other present page into
     agreement (R11): replace its nav block in place, atomically, skipping a page that is
     already current. A page with no nav block is left byte-identical and named to *warn*.
-    The goal sentence is not touched."""
+    The goal sentence is not touched.
+
+    Every block of a page is replaced, the same as `strip_nav` removes every block. A page
+    is written only if it still holds what was read: the file is read again just before the
+    write and a change in between skips it silently (the other writer's own render
+    refreshes the navs). A page that cannot be read or written is warned about, never
+    raised, so the caller's own work (a snapshot, a publish) still happens."""
     from fr.artifacts.atomic import write_text_atomic
 
     present = pages_present(state_dir, current)
@@ -324,16 +330,23 @@ def refresh_navs(state_dir: Path, current: str, warn: Callable[[str], None] | No
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             if warn:
-                warn(f"{page.file}: nav not refreshed ({exc})")
+                warn(f"{path}: nav not refreshed ({exc})")
             continue
         if NAV_BLOCK.search(text) is None:
             if warn:
-                warn(f"{page.file}: no nav block found; left as it was")
+                warn(f"{path}: no nav block found; left as it was")
             continue
         nav = nav_html(page.key, present)
-        new = NAV_BLOCK.sub(lambda _m: nav, text, count=1)
-        if new != text:
+        new = NAV_BLOCK.sub(lambda _m: nav, text)
+        if new == text:
+            continue
+        try:
+            if path.read_text(encoding="utf-8") != text:
+                continue  # another render wrote it meanwhile; its own refresh covers the nav
             write_text_atomic(path, new)
+        except (OSError, UnicodeDecodeError) as exc:
+            if warn:
+                warn(f"{path}: nav not refreshed ({exc})")
 
 
 SKEW_CSS = (
@@ -359,7 +372,7 @@ def skew_banner(facts: Facts) -> str:
         for repo, keys in ignored
     ] + [f"<li><b>{_esc(repo)}</b>: skipped — {_esc(reason)}</li>" for repo, reason in skipped]
     return (
-        '<div class="skew" role="alert"><strong>This board is not the whole truth.</strong>'
+        '<div class="skew" role="alert"><strong>This page is not the whole truth.</strong>'
         f"<ul>{''.join(items)}</ul></div>"
     )
 

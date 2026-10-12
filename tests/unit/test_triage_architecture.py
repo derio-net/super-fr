@@ -592,3 +592,34 @@ def test_appended_sections_are_reported_on_the_page_by_the_command(
     assert result.exit_code == 0, result.output
     page = (state / "architecture.html").read_text(encoding="utf-8")
     assert 'id="summary"' in page and "does not name" in page
+
+
+def test_architecture_render_refreshes_the_nav_of_a_sibling_page(
+    tmp_path: Path, checkout: Checkout
+) -> None:
+    from fr.triage.components import nav_html
+
+    state = _state(tmp_path)
+    (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
+    (state / "triage.html").write_text(
+        f"<html>{nav_html('backlog', ('backlog',))}</html>\n", encoding="utf-8"
+    )
+    result = _run(state, checkout)
+    assert result.exit_code == 0, result.output
+    assert 'href="architecture.html"' in (state / "triage.html").read_text(encoding="utf-8")
+
+
+def test_architecture_render_writes_its_page_atomically(
+    tmp_path: Path, checkout: Checkout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.commands.triage_architecture_cmd as cmd
+
+    written: list[Path] = []
+    real = cmd.write_text_atomic
+    monkeypatch.setattr(
+        cmd, "write_text_atomic", lambda p, t: (written.append(Path(p)), real(p, t))
+    )
+    state = _state(tmp_path)
+    (state / "subsystems.yaml").write_text(yaml.safe_dump(SUBSYSTEMS), encoding="utf-8")
+    assert _run(state, checkout).exit_code == 0
+    assert state / "architecture.html" in written

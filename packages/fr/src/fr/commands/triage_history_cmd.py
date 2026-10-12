@@ -16,6 +16,7 @@ import typer
 from rich.markup import escape
 
 import fr.commands.triage_cmd as triage_cmd
+from fr.artifacts.atomic import write_text_atomic
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -68,7 +69,8 @@ def render_command(
     for note in notes:
         err_console.print(f"[yellow]warning:[/yellow] {escape(note)}", soft_wrap=True)
     out = target / PAGE_FILE
-    out.write_text(
+    write_text_atomic(
+        out,
         render_history(
             facts,
             judgements,
@@ -77,7 +79,6 @@ def render_command(
             notes=notes,
             present=pages_present(target, "history"),
         ),
-        encoding="utf-8",
     )
     refresh_navs(target, "history", warn=triage_cmd.warn_nav)
     done = finished_waves(judgements.batches, batch_stages(facts, judgements))

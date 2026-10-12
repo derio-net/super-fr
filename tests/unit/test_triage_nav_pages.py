@@ -6,6 +6,7 @@ directory in `tmp_path`; nothing reaches a forge, a runner or a browser.
 
 from __future__ import annotations
 
+import importlib
 import os
 import re
 import sys
@@ -16,7 +17,6 @@ import yaml
 from fr.artifacts import atomic
 from fr.cli import app
 from fr.commands import triage_kanban_cmd
-from fr.triage import components
 from fr.triage.components import (
     NAV_BLOCK,
     PAGES,
@@ -220,7 +220,152 @@ def test_the_publish_command_gets_a_copy_without_the_nav_and_the_local_board_kee
     assert Path(cwd.read_text(encoding="utf-8")).resolve() == tmp_path.resolve()
 
 
-def test_one_pattern_serves_the_refresh_and_the_strip() -> None:
-    nav = nav_html("batches", ALL)
-    assert strip_nav(f"<a>{nav}<b>") == "<a><b>"
-    assert components.NAV_BLOCK is NAV_BLOCK
+def test_a_page_with_two_nav_blocks_is_treated_alike_by_refresh_and_strip(
+    tmp_path: Path,
+) -> None:
+    old = nav_html("history", ("history",))
+    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    (tmp_path / "history.html").write_text(f"<a>{old}<b>{old}<c>\n", encoding="utf-8")
+    refresh_navs(tmp_path, "backlog")
+    new = nav_html("history", ("backlog", "history"))
+    assert (tmp_path / "history.html").read_text(encoding="utf-8") == f"<a>{new}<b>{new}<c>\n"
+    assert strip_nav(f"<a>{old}<b>{old}<c>") == "<a><b><c>"
+
+
+# ------------------------------------------------------------- review p4-r1 .. r4
+
+
+def _spy(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    written: list[Path] = []
+    real = atomic.write_text_atomic
+
+    def spy(path: Path, text: str) -> None:
+        written.append(Path(path))
+        real(path, text)
+
+    monkeypatch.setattr(atomic, "write_text_atomic", spy)
+    for mod in (
+        "triage_cmd",
+        "triage_history_cmd",
+        "triage_origins_cmd",
+        "triage_architecture_cmd",
+    ):
+        module = importlib.import_module(f"fr.commands.{mod}")
+        if hasattr(module, "write_text_atomic"):
+            monkeypatch.setattr(module, "write_text_atomic", spy)
+    return written
+
+
+@pytest.mark.parametrize(
+    ("words", "page"),
+    [(("render",), "triage.html"), (("history", "render"), "history.html")],
+)
+def test_a_render_writes_its_own_page_atomically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, words: tuple[str, ...], page: str
+) -> None:
+    _state_dir(tmp_path)
+    written = _spy(monkeypatch)
+    code, said = _cli(tmp_path, *words)
+    assert code == 0, said
+    assert tmp_path / page in written
+
+
+def test_a_page_changed_between_read_and_write_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(tmp_path, history=nav_html("history", ("history",)))
+    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+    path = tmp_path / "history.html"
+    other = "<html>another render got here first</html>\n"
+    real = Path.read_text
+    reads = {"n": 0}
+
+    def racing(self: Path, *a: object, **k: object) -> str:
+        text = real(self, *a, **k)  # type: ignore[arg-type]
+        if self == path:
+            reads["n"] += 1
+            if reads["n"] == 1:
+                path.write_text(other, encoding="utf-8")  # lands after our first read
+        return text
+
+    monkeypatch.setattr(Path, "read_text", racing)
+    refresh_navs(tmp_path, "backlog")
+    assert path.read_text(encoding="utf-8") == other
+
+
+def test_a_failed_nav_write_warns_naming_the_page_and_never_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(tmp_path, history=nav_html("history", ("history",)))
+    (tmp_path / "triage.html").write_text("x", encoding="utf-8")
+
+    def boom(path: Path, text: str) -> None:
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(atomic, "write_text_atomic", boom)
+    seen: list[str] = []
+    refresh_navs(tmp_path, "backlog", warn=seen.append)
+    assert len(seen) == 1 and "history.html" in seen[0] and "read-only" in seen[0]
+
+
+def test_a_render_still_stores_its_snapshot_when_a_nav_cannot_be_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _state_dir(tmp_path)
+    assert _cli(tmp_path, "history", "render")[0] == 0
+    monkeypatch.setattr(atomic, "write_text_atomic", _fail_for("history.html"))
+    code, said = _cli(tmp_path, "render")
+    assert code == 0 and "history.html" in said
+    assert list((tmp_path / "snapshots").glob("*"))
+
+
+def _fail_for(name: str):  # type: ignore[no-untyped-def]
+    real = atomic.write_text_atomic
+
+    def write(path: Path, text: str) -> None:
+        if Path(path).name == name:
+            raise PermissionError("read-only")
+        real(path, text)
+
+    return write
+
+
+# ------------------------------------------------------------------------ review p4-r3
+
+
+def test_the_no_nav_warning_is_said_once_across_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _state_dir(tmp_path)
+    _use(monkeypatch, _Inspector())
+    (tmp_path / "history.html").write_text("<html>old</html>\n", encoding="utf-8")
+    first = _cli(tmp_path, "board")[1]
+    second = _cli(tmp_path, "board")[1]
+    assert first.count("no nav block") == 1 and second.count("no nav block") == 0
+
+
+# ------------------------------------------------------------------ review p4-r7 / r9
+
+
+def test_the_publish_copy_is_gone_once_the_command_returns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _state_dir(tmp_path)
+    _use(monkeypatch, _Inspector())
+    seen = tmp_path / "seen.txt"
+    code = "import sys; open(sys.argv[1], 'w').write(sys.argv[2])"
+    cfg = {"publish": [sys.executable, "-c", code, str(seen), "{board}"]}
+    (tmp_path / "scope.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    assert _cli(tmp_path, "board", "--publish")[0] == 0
+    copy = Path(seen.read_text(encoding="utf-8"))
+    assert copy.name == "board.html" and copy != tmp_path / "board.html"
+    assert not copy.exists() and not copy.parent.exists()
+
+
+def test_the_backlog_names_the_batches_page_not_the_board() -> None:
+    from fr.triage.render import render
+
+    from tests.unit.triage_board_fixtures import busy
+
+    page = render(*busy(), board=True)
+    assert "Open the Batches page</a>" in page and "live board" not in page
