@@ -7511,9 +7511,16 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R10
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R11
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; written by the phase that implements the row.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_nav_pages.py#test_rendering_the_board_updates_the_other_pages_navs
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_nav_pages
+    status: ci
+    notes: 'R9-R12: tests/unit/test_triage_nav_pages.py covers registry, presence, per-page
+      nav, refresh (atomic, skip-if-current, no-nav warn) and the nav-stripped publish
+      copy; tests/scenarios/triage-nav-pages.sh renders triage, history, board from
+      an org fixture. Visual states checked in a browser in phase 4.'
     verify: candidate
     visual:
       states:
