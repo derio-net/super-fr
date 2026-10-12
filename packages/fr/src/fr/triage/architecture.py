@@ -353,6 +353,7 @@ def render_architecture(
     measured: Mapping[str, Measured],
     resolved: Resolved,
     notes: Sequence[str] = (),
+    present: Sequence[str] = ("architecture",),
 ) -> str:
     """The page: same inputs, same bytes. The generated sections and the authored fragments
     in the order *resolved* (the manifest) gives, a fragment exactly where it is listed."""
@@ -372,5 +373,7 @@ def render_architecture(
         f"<span>collected {esc(facts.collected_at)}</span>"
         "<span>rendered by <code>fr triage architecture render</code></span></div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
-        f"{page_header('architecture')}\n" + "\n".join(body) + "\n</main>\n</body>\n</html>\n"
+        f"{page_header('architecture', present)}\n"
+        + "\n".join(body)
+        + "\n</main>\n</body>\n</html>\n"
     )

@@ -6024,6 +6024,27 @@ rows:
     verify: live
     issues:
     - derio-net/super-fr#924
+  - id: acceptance-ci-built-reports
+    capability: acceptance-matrix
+    acceptance: In a repo that gitignores the generated acceptance reports, fr's commits
+      (record resolve, acceptance add/set-status, archive, init, migrations) succeed
+      without them and fr acceptance check / report --check report no drift for them,
+      while report --deterministic still writes them.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_check_reports_no_drift_for_absent_or_stale_ignored_reports
+      - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_report_deterministic_writes_ignored_reports
+      int:
+      - super-fr:tests/integration/test_acceptance_ci_built_reports.py#test_acceptance_set_status_commits_without_ignored_reports
+      - super-fr:tests/integration/test_acceptance_ci_built_reports.py#test_a_record_with_an_acceptance_row_commits_without_ignored_reports
+    status: ci
+    notes: 'Review p1-r5: anchor R3 (--deterministic writes ignored reports) and the
+      record-apply commit path the issue is about.'
+    verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -6757,6 +6778,56 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: driver-once-dispatch-refused
+    capability: triage-batch-drive
+    acceptance: '`fr triage batch drive --once --yes` whose pass would dispatch refuses
+      (exit 2) before acting and prints the looping command with the caller''s arguments,
+      unless --single-pass is given, which acts and ends with that warning; dry runs
+      and non-dispatching passes are unchanged.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_single_pass.py#test_once_yes_whose_plan_dispatches_refuses_before_acting
+    status: ci
+    notes: 'Unit tests drive batch_drive_command: refusal, --single-pass warning, dry-run
+      and no-dispatch passes unchanged'
+    verify: none
+  - id: driver-unreadable-visibility-retries
+    capability: triage-batch-drive
+    acceptance: A looping driver that cannot read its state repo's visibility skips
+      the pass (nothing pushed), warns once and retries after --interval instead of
+      exiting; --once and the cloud pass still refuse, and a public state repo with
+      a private member is still refused.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_lease_push_cannot_read_the_visibility
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_member_repo_visibility_cannot_be_read
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_judgements_write_cannot_read_the_visibility
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_member_repo_whose_visibility_cannot_be_read_is_unreadable_not_a_leak
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_definite_leak_outranks_an_unreadable_member_repo
+    status: ci
+    notes: 'Unit tests: a looping drive skips and retries, once/cloud/export still refuse,
+      a leak still ends the driver; since gh#1144/gh#1145 also an unreadable member
+      repo (public state repo) and a mid-pass judgements-write check skip the pass,
+      and a certain leak outranks an unreadable repo'
+    verify: none
+  - id: rest-rulesets-free-plan-403
+    capability: triage-batch-drive
+    acceptance: Under the REST forge, a private repo on GitHub's free plan (rulesets
+      endpoint 403 with the plan-upgrade notice) yields its classic-protection required
+      checks and the drive pass proceeds; any other 403 still fails the read.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-driver-resilience-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_real_ghrestclient.py#test_a_free_plan_rulesets_403_means_no_rulesets
+    status: ci
+    notes: 'Unit tests: the free-plan 403 means no rulesets; other 403s and host refusals
+      still raise'
+    verify: none
   - id: triage-scope-groups
     capability: triage-scope
     acceptance: fr triage collects, ranks, renders and drives a comma-separated group
@@ -6829,15 +6900,15 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R7
     levels:
       unit:
-      - super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_four_pages
       - super-fr:tests/unit/test_triage_render.py#test_the_board_carries_its_nav_and_goal
       - super-fr:tests/unit/test_triage_origins.py#test_the_origins_page_carries_its_nav_and_goal
       - super-fr:tests/unit/test_triage_architecture.py#test_the_page_opens_with_its_nav_and_goal
       - super-fr:tests/unit/test_triage_architecture.py#test_the_page_no_longer_shows_what_other_pages_own
       - super-fr:tests/unit/test_triage_history.py#test_the_history_page_opens_with_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_five_pages
     status: ci
-    notes: 'Phase 1: all four pages carry nav and goal; architecture no longer duplicates
-      board/origins sections; visual evidence captured at 1280 and 390, light and dark'
+    notes: 'Ref re-pointed: the registry test was renamed when the nav gained the Batches
+      page (board-truth R9).'
     visual:
       states:
       - board-page
@@ -6999,6 +7070,34 @@ rows:
     status: ci
     notes: gates/status/check answer a drifted cursor with one warning (check now tested,
       review p1-r2); schema mismatch still refuses gates
+  - id: run-claim-first-wins
+    capability: run-cursor
+    acceptance: Re-claiming an open unit by the agent that holds it never rewrites the
+      recorded harness, model or agent type and makes no commit when nothing changes;
+      a different agent is refused; a held unit is not re-briefed after an interrupted
+      orchestrator restarts.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_an_identical_reclaim_is_a_no_change_with_no_commit
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_another_family_keeps_the_model_and_warns
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_the_opencode_sequence_keeps_the_plugin_claims_model_and_tier
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_different_agent_is_still_refused
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_advance_after_an_interruption_names_the_holder_and_does_not_rebrief
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_resolve_model_without_agent_keeps_the_claimed_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_the_same_model_family_keeps_the_recorded_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_first_claim_overrides_what_advance_prefilled
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_fills_an_empty_field_and_commits_it
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_by_the_manifest_id_keeps_the_recorded_tier_variant
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_another_tier_keeps_the_agent_type_and_warns
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_a_different_agent_type_is_refused
+    status: ci
+    notes: 'R7/R8 review fixes: agent_type re-claim validated against the dispatched
+      base agent; fill, keep+warn, same-family, resolve and interruption paths now have
+      refs'
+    verify: none
   - id: adopt-supersede-carries-provenance
     capability: run-adoption
     acceptance: Adopting a plan that already has a run supersedes it on request, and
@@ -7362,6 +7461,131 @@ rows:
     notes: 'super-fr#892: make_client resolves through hostclient.client_for_url, keeping
       a self-hosted host; RealGhClient threads it as GH_HOST only for a host gh is logged
       into (fail closed).'
+  - id: triage-in-progress-release
+    capability: triage-batches
+    acceptance: When a scope releases a finished, cancelled or abandoned batch's claim
+      on a member no other scope holds, fr:in-progress comes off that member too; a
+      member another scope holds keeps it.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_release_with_unlabel_removes_both_labels_in_one_edit
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_unlabel_removes_neither_label_while_another_scopes_claim_stands
+    status: ci
+    notes: claim_writes.release(unlabel=True), passed by claim sync's releases, takes
+      fr:in-progress off with fr:claimed when no other scope holds the issue; claim
+      release and scope retire leave it.
+    verify: none
+  - id: triage-closed-in-progress-set
+    capability: triage-batches
+    acceptance: fr triage check and the board name closed issues still labelled fr:in-progress,
+      held ones apart, and fr triage clean-labels --yes removes the label from the rest
+      (dry-run without --yes).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_with_yes_it_rereads_each_target_and_removes_the_label_from_the_rest
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_check_json_lists_the_whole_set_with_each_entrys_state
+    status: ci
+    notes: check lists the set with each state, the page folds it, the board notes the
+      clean command; clean-labels is a dry run without --yes and re-reads each target
+      with it; the scenario drives the installed fr.
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-in-progress.sh
+  - id: triage-config-skew-visible
+    capability: triage-batches
+    acceptance: A repo whose .fr/triage.yaml carries keys this fr does not know is still
+      collected; the ignored keys and any skipped repo appear as a prominent banner
+      on the backlog and batch pages and in fr triage check.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_config_skew.py#test_the_banner_names_ignored_keys_and_skipped_repos_escaped
+      - super-fr:tests/unit/test_triage_config_skew.py#test_check_names_skipped_and_ignored_in_json_and_first_in_the_text
+      - super-fr:tests/unit/test_triage_config_skew.py#test_an_unknown_key_is_collected_and_named_without_any_lenient_argument
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_config_skew
+    status: ci
+    notes: R4 unit ref and the scenario's integration test added; scenario now also
+      renders board.html and uses org scope
+    verify: candidate
+    scenario: tests/scenarios/triage-config-skew.sh
+  - id: triage-closeout-card-front
+    capability: triage-batches
+    acceptance: While a batch's close-out session is live, its card front shows the
+      close-out's status and jumps to it; the batch session's jump is in the card body.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_live_closeout_takes_the_card_front_and_the_body_jumps_to_the_batch
+    status: ci
+    notes: 'R6/R7: Card.front derived from closeout_status; front pill and Jump speak
+      for the live close-out; body has a Jump and code pair per session. Browser shots
+      taken and opened.'
+    verify: none
+    visual:
+      states:
+      - closeout-live-front
+      - closeout-absent-front
+      - body-both-sessions
+      interactions:
+      - front-jump-closeout
+      - body-jump-batch
+  - id: triage-cancelled-batch-terminal
+    capability: triage-batches
+    acceptance: A dispatched batch that was cancelled and had its claims released reads
+      as cancelled, owes no claim or release, and never renders as Running, including
+      right after a fresh collect and render.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_a_cancelled_released_batch_never_renders_as_running
+      - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_right_after_a_fresh_collect_and_render_it_is_still_cancelled
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_cancelled_terminal
+    status: ci
+    notes: R8 also pinned through a real collect then render (wave and wave-less); scenario
+      states claims-only.
+    verify: candidate
+    scenario: tests/scenarios/triage-cancelled-terminal.sh
+  - id: triage-nav-present-pages
+    capability: triage-batches
+    acceptance: Every triage page, the batch board included, navigates only to the pages
+      the scope has (Backlog, Batches, Origins, Architecture, History), and rendering
+      any page brings every existing page's nav up to date.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_nav_pages.py#test_rendering_the_board_updates_the_other_pages_navs
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_nav_pages
+    status: ci
+    notes: 'R9-R12: tests/unit/test_triage_nav_pages.py covers registry, presence, per-page
+      nav, refresh (atomic, skip-if-current, no-nav warn) and the nav-stripped publish
+      copy; tests/scenarios/triage-nav-pages.sh renders triage, history, board from
+      an org fixture. Visual states checked in a browser in phase 4.'
+    verify: candidate
+    visual:
+      states:
+      - org-scope-nav
+      - repo-scope-five-tabs
+      - current-tab-marked
+      - phone-width-nav
+      interactions:
+      - nav-link-each-tab
+    scenario: tests/scenarios/triage-nav-pages.sh
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
@@ -8178,3 +8402,28 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: verification-unrunnable-strategy
+    capability: verification-strategies
+    acceptance: 'A repo that cannot run a strategy''s install program is never owed
+      that strategy''s walk from the shape default, and an explicitly named unrunnable
+      strategy is reported by plan self-review (error) and the brainstorm resolve (warning)
+      before deliver; a malformed strategy: line names the accepted form.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_shape_default_is_dropped_without_the_install_program
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_walk_owed_owes_nothing_from_the_default_when_every_row_says_none
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_unrunnable_strategies_names_each_explicit_strategy_once
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_self_review_errors_on_an_explicit_unrunnable_strategy
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_brainstorm_resolve_warns_and_still_resolves
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_a_malformed_strategy_line_shows_the_accepted_form
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r5_the_flag_form_resolve_prints_the_same_warning
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r1_a_rows_verify_alone_is_flagged_and_names_the_row_and_the_fix
+      - super-fr:tests/unit/test_verification_walk.py#test_p2_r7_a_default_the_repo_cannot_run_says_so_instead_of_naming_no_strategy
+    status: ci
+    notes: 'review p2: sources named per strategy, flag-form warning, never-raise, walk
+      message'
+    verify: none

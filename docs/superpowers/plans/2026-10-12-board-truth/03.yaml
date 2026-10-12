@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Close-out card front and the cancelled lifecycle pinned (R6-R8)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-closeout-card-front
+  - triage-cancelled-batch-terminal
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/claims.py
+  - tests/unit/test_triage_kanban*.py
+  - tests/unit/triage_kanban_fixtures.py
+  - tests/unit/test_triage_claims.py
+  - tests/unit/test_triage_batch*.py
+  - tests/scenarios/triage-cancelled-terminal.sh
+  - tests/scenarios/fixtures/cancelled-terminal/*
+  - docs/acceptance/*
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: '§D (R6, R7): the front follows a live close-out'
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED in tests/unit/test_triage_kanban_render.py (plus the kanban.py card build): a card with status=running and closeout_status=running has the close-out's status as its summary pill, and its Jump runs `fr triage batch focus <id> --closeout`; the body's Session section has a Jump button (focus without --closeout) beside its code line. With closeout_status in (None, "absent", "unknown") the front pill and Jump are the batch session's, as today. Each session in the body has a Jump and code pair.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: Card gains a derived `front: Literal["batch", "closeout"]` (closeout iff closeout_status is not None, "absent" or "unknown"); _card renders the pill and _jump from that session; _body renders `_jump` next to `_code` for the batch session. Re-run: green.
+  - id: P3.T1.S3
+    text: |-
+      Browser check (the row carries visual): render a board from tests/unit/triage_kanban_fixtures.py states covering closeout-live-front, closeout-absent-front and body-both-sessions into a git-ignored scratch dir, screenshot, open every shot, and fill the step record's visual section (interactions front-jump-closeout and body-jump-batch: confirm each Jump's copied command).
+- number: 2
+  title: '§E (R8): pin dispatch, cancel, claims_released'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Tests (expected green; a red one means #1111 regressed, so fix it in batch.py/claims.py): for a wave batch and a wave-less batch, each with two members and events dispatch, cancel, claims_released: derive_batch_stage == "cancelled"; owed_claims and owed_releases contain none of its members; the board's card for it is not in the Running column, and its hint never says "session running".
+  - id: P3.T2.S2
+    text: |-
+      Add tests/scenarios/triage-cancelled-terminal.sh: fixture facts and judgements.yaml with such a batch; `fr triage board` (render-only, no runner) writes a board.html that does not show it as Running; `fr triage check --json` has no claims-owed or releases-owed entry for its members. Run it targeted. Then set-status both rows to ci (`triage-cancelled-batch-terminal` with --scenario, `triage-closeout-card-front` with --level unit=...#<test>), with notes.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T08:03:16+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-12T08:03:16+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-10-12T08:03:16+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T08:03:16+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T08:03:16+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T08:03:16+00:00'
+    note: null
+    observed_prs: []

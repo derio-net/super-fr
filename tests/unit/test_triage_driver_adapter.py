@@ -144,7 +144,7 @@ def test_a_host_scope_dispatches_through_the_repos_runner(
 ) -> None:
     _proposed(world, tmp_path)
 
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
 
     assert code == 0, out
     assert runners.dispatched() == {"herdr": [f"{REPO}/run/batch-b1"]}

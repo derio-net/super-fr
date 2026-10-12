@@ -14,8 +14,11 @@ for a state repo that is public. Two guards call it:
   and whether or not `facts.json` exists, and an unreadable answer refuses: a repo whose
   visibility changed, or a hand-edited file, is caught before it leaves the workspace.
 
-A key's repo whose visibility cannot be read counts as private: the guard never lets an
-unknown through to a public state repo. A scope with no state repo is never checked: its
+A looping drive skips the pass on an unreadable answer and retries, nothing written.
+
+A key's repo whose visibility cannot be read never reaches a public state repo either:
+it refuses as unreadable (retried by a looping drive, gh#1144), and a key whose repo
+cannot even be named counts as private. A scope with no state repo is never checked: its
 state stays in the workspace.
 """
 
@@ -37,6 +40,13 @@ class PrivacyError(TriageError):
     repo's visibility could not be read."""
 
 
+class VisibilityUnreadable(PrivacyError):  # noqa: N818 - named by the spec
+    """The state repo's visibility, or with a public state repo a key's repo's, could not
+    be read (rate limit, timeout, 5xx, an unsupported backend). Nothing is known to leak,
+    so a looping drive skips the pass and retries (gh#1134, gh#1144); every other caller
+    still refuses."""
+
+
 def refusal(issue: str, repo: str, state_repo: str) -> str:
     """THE refusal line, shared by every call site (P3.T4.S4)."""
     return (
@@ -50,6 +60,14 @@ def unreadable(state_repo: str) -> str:
     return (
         f"cannot read the visibility of the state repo {state_repo} from the forge; refusing "
         "to write state that may hold private issues to it (cloud-triage R8)"
+    )
+
+
+def unreadable_members(repos: list[str], state_repo: str) -> str:
+    return (
+        f"cannot read the visibility of {', '.join(repos)} from the forge, and this scope's "
+        f"state repo {state_repo} is public; refusing to write state that may hold private "
+        "issues to it (cloud-triage R8)"
     )
 
 
@@ -78,14 +96,20 @@ def check_or_refuse(
     keys: Mapping[str, str], state_repo: str, visibility: Mapping[str, str | None]
 ) -> None:
     """Raise `PrivacyError` naming every leaking issue, its repo and the state repo; or
-    when the state repo's visibility is unknown and some key is not public."""
+    `VisibilityUnreadable` when the state repo's visibility is unknown and some key is
+    not public, or when it is public and some key's repo could not be read (gh#1144). A
+    certain leak outranks an unreadable repo; a repo no scope member names is a leak, as
+    it can never be read."""
     if visibility.get(state_repo) is None:
         if any(not is_public(visibility.get(r)) for r in keys.values()):
-            raise PrivacyError(unreadable(state_repo))
+            raise VisibilityUnreadable(unreadable(state_repo))
         return
     found = leaks(keys, state_repo, visibility)
+    certain = [(k, r) for k, r in found if visibility.get(r) is not None or _unnamed(r)]
+    if certain:
+        raise PrivacyError("; ".join(refusal(k, r, state_repo) for k, r in certain))
     if found:
-        raise PrivacyError("; ".join(refusal(k, r, state_repo) for k, r in found))
+        raise VisibilityUnreadable(unreadable_members(sorted({r for _, r in found}), state_repo))
 
 
 def live_visibility(client: Any, repo: str) -> str | None:
@@ -132,9 +156,12 @@ def _fill(
     vis: dict[str, str | None], repos: Iterable[str], client_for: ClientFor
 ) -> dict[str, str | None]:
     for repo in sorted(set(repos) - vis.keys()):
-        unnamed = repo.startswith(f"{UNKNOWN_OWNER}/")
-        vis[repo] = None if unnamed else live_visibility(client_for(repo), repo)
+        vis[repo] = None if _unnamed(repo) else live_visibility(client_for(repo), repo)
     return vis
+
+
+def _unnamed(repo: str) -> bool:
+    return repo.startswith(f"{UNKNOWN_OWNER}/")
 
 
 def guard_write(
@@ -184,7 +211,7 @@ def guard_state(state_dir: Path, *, scope: Scope, state_repo: str, client_for: C
     for this scope) or read live."""
     now = live_visibility(client_for(state_repo), state_repo)
     if now is None:
-        raise PrivacyError(unreadable(state_repo))
+        raise VisibilityUnreadable(unreadable(state_repo))
     if not is_public(now):
         return
     facts_path = state_dir / "facts.json"

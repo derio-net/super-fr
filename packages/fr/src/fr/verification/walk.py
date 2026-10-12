@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from fr.verification.effective import install_problem
 from fr.verification.model import StrategyManifest
 
 if TYPE_CHECKING:
@@ -358,16 +359,9 @@ def _contract(repo_root: Path, manifest: StrategyManifest) -> None:
         raise WalkError(
             f"strategy {manifest.verification!r} has no install — there is nothing to walk"
         )
-    program = manifest.install[0]
-    if "/" not in program or program.startswith("/"):
-        return
-    path = repo_root / program
-    if not path.is_file() or not os.access(path, os.X_OK):
-        raise WalkError(
-            f"strategy {manifest.verification!r} needs the repo's executable `{program}` "
-            f"<prefix> <source> (the candidate-install contract, spec R8), and {path} "
-            + ("is not executable" if path.is_file() else "does not exist")
-        )
+    problem = install_problem(manifest, repo_root)
+    if problem is not None:
+        raise WalkError(problem)
 
 
 def run_walk(

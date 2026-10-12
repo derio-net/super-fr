@@ -20,7 +20,7 @@ from fr.commands import triage_batch_cmd, triage_cmd
 from fr.real_ghrestclient import RealGhRestClient
 from fr.triage.errors import TriageError
 from fr.triage.model import Facts, Issue, Scope, load_judgements
-from fr.triage.privacy import PrivacyError, leak_risk, refusal
+from fr.triage.privacy import PrivacyError, VisibilityUnreadable, leak_risk, refusal
 from fr.triage.scope_config import ScopeDurable, write_durable
 from fr.triage.state_ref import push_state, ref_name
 from typer.testing import CliRunner
@@ -325,6 +325,24 @@ def test_an_unreadable_state_repo_visibility_refuses_the_push(
     assert _ref(origin) == ""
 
 
+def test_an_unreadable_visibility_is_its_own_privacy_error(
+    tmp_path: Path, origin: Path, gh: FakeGhClient
+) -> None:
+    """Unreadable is retryable (gh#1134); a leak is not (R10)."""
+    from fr.triage.privacy import guard_state
+
+    state = _state(_workspace(tmp_path, origin), state_repo="example-org/gone")
+    with pytest.raises(VisibilityUnreadable) as caught:
+        guard_state(state, scope=SCOPE, state_repo="example-org/gone", client_for=lambda r: gh)
+    assert isinstance(caught.value, PrivacyError)
+
+    gh.visibility[REFS] = "public"
+    state = _state(tmp_path / "state2", state_repo=REFS)
+    with pytest.raises(PrivacyError) as leak:
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda r: gh)
+    assert not isinstance(leak.value, VisibilityUnreadable)
+
+
 def test_an_unreadable_judgements_file_refuses_the_push(
     tmp_path: Path, origin: Path, gh: FakeGhClient
 ) -> None:
@@ -368,6 +386,34 @@ def test_state_export_proceeds_with_a_private_state_repo(tmp_path: Path, gh: Fak
 
     assert code == 0, out
     assert (tmp_path / "repo" / SCOPE.name / "judgements.yaml").exists()
+
+
+def test_state_export_with_an_unreadable_state_repo_visibility_exits_2(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    """R9: only a looping drive retries an unreadable visibility; export refuses."""
+    state = _state(tmp_path / "s", state_repo="example-org/gone")
+
+    code, out = _export(state, tmp_path / "repo")
+
+    assert code == 2
+    assert "cannot read the visibility" in out and "example-org/gone" in out
+    assert not (tmp_path / "repo").exists()
+
+
+def test_guard_state_reads_the_visibility_live_on_every_call(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    """R11: no answer is cached between calls."""
+    from fr.triage.privacy import guard_state
+
+    state = _state(tmp_path / "s", state_repo=REFS)
+    for _ in range(2):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda r: gh)
+
+    assert [c for c in gh.calls if c == ("repo_visibility", {"repo": REFS})] == [
+        ("repo_visibility", {"repo": REFS})
+    ] * 2
 
 
 # ------------------------------------------- a key outside the scope (p3-r8)
@@ -424,3 +470,56 @@ def test_a_push_carrying_a_key_outside_the_scope_reads_its_repo(
         )  # fmt: skip
 
     assert _ref(origin) == ""
+
+
+# ------------------------------------------- an unreadable member repo (gh#1144)
+
+
+def test_a_member_repo_whose_visibility_cannot_be_read_is_unreadable_not_a_leak(
+    tmp_path: Path, origin: Path, gh: FakeGhClient
+) -> None:
+    """A public state repo, and a key's repo the forge does not answer for (a rate
+    limit): nothing is known to leak, so the push refuses as retryable, naming the repo
+    it could not read, never as the leak line (gh#1144)."""
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    del gh.visibility[SECRET]
+    state = _state(tmp_path / "s", state_repo=REFS, with_facts=False)
+
+    with pytest.raises(VisibilityUnreadable) as caught:
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+    assert SECRET in str(caught.value) and REFS in str(caught.value)
+    assert "which is not public" not in str(caught.value)
+
+
+def test_a_definite_leak_outranks_an_unreadable_member_repo(gh: FakeGhClient) -> None:
+    """One key's repo is known private, another's cannot be read: the leak is certain,
+    so it is the leak refusal, which a looping driver does not retry (R10)."""
+    from fr.triage.privacy import guard_write
+
+    gh.visibility[REFS] = "public"
+    scope = Scope.group([OPEN_REPO, SECRET, "example-org/flaky"])
+    facts = _facts({OPEN_REPO: "public", SECRET: "private"})
+
+    with pytest.raises(PrivacyError, match="secret#7") as caught:
+        guard_write(
+            ["secret#7", "flaky#2"], scope=scope, facts=facts, state_repo=REFS,
+            client_for=lambda _r: gh,
+        )  # fmt: skip
+
+    assert not isinstance(caught.value, VisibilityUnreadable)
+
+
+def test_guard_write_with_an_unreadable_member_repo_is_unreadable(gh: FakeGhClient) -> None:
+    from fr.triage.privacy import guard_write
+
+    gh.visibility[REFS] = "public"
+    scope = Scope.group([OPEN_REPO, "example-org/flaky"])
+
+    with pytest.raises(VisibilityUnreadable, match="example-org/flaky"):
+        guard_write(
+            ["flaky#2"], scope=scope, facts=_facts(), state_repo=REFS,
+            client_for=lambda _r: gh,
+        )  # fmt: skip

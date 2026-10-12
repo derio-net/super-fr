@@ -6,9 +6,10 @@ Every consumer asks these two functions and none compares strings itself, so
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from fr.verification.model import RESERVED
+from fr.verification.model import RESERVED, StrategyError, StrategyManifest
 from fr.verification.resolve import resolve_strategy
 from fr.verification.spec_section import Section
 
@@ -49,3 +50,40 @@ def is_post_merge(strategy: str | None, repo_root: Path | None) -> bool:
     if strategy is None or strategy == RESERVED:
         return False
     return resolve_strategy(strategy, repo_root).when == "post-merge"
+
+
+def install_problem(manifest: StrategyManifest, repo_root: Path) -> str | None:
+    """Why the repo cannot run the manifest's install program, or `None`.
+
+    The ONE install rule (spec 2026-10-12 §B): no `install` is not a problem
+    (nothing to install is no reason a strategy cannot be owed), and an
+    `install[0]` that is a bare command or an absolute path is accepted; a
+    repo-relative one must be an executable file."""
+    if not manifest.install:
+        return None
+    program = manifest.install[0]
+    if "/" not in program or program.startswith("/"):
+        return None
+    path = repo_root / program
+    if path.is_file() and os.access(path, os.X_OK):
+        return None
+    return (
+        f"strategy {manifest.verification!r} needs the repo's executable `{program}` "
+        f"<prefix> <source> (the candidate-install contract, spec R8), and {path} "
+        + ("is not executable" if path.is_file() else "does not exist")
+    )
+
+
+def effective_shape_default(name: str | None, repo_root: Path | None) -> str | None:
+    """The shape's default strategy `name`, unless the repo cannot run it.
+
+    A default that does not resolve is returned UNFILTERED: the gates that
+    refuse an unknown strategy by name keep doing so, and no `StrategyError`
+    reaches a caller that does not catch one."""
+    if name is None or name == RESERVED or repo_root is None:
+        return name
+    try:
+        manifest = resolve_strategy(name, repo_root)
+    except StrategyError:
+        return name
+    return None if install_problem(manifest, repo_root) is not None else name

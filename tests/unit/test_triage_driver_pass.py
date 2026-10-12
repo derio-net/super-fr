@@ -444,7 +444,18 @@ def test_the_host_loop_takes_and_releases_the_lease_with_a_state_repo(
     take_or_renew(state, other, NOW, scope_id=scope_id(SCOPE))
 
     held = CliRunner().invoke(
-        app, ["triage", "batch", "drive", "--once", "--yes", "--repo", REPO, "--dir", str(state)]
+        app,
+        [
+            "triage",
+            "batch",
+            "drive",
+            "--once",
+            "--yes",
+            "--repo",
+            REPO,
+            "--dir",
+            str(state),
+        ],
     )
     assert held.exit_code == 2, held.output
     assert holder_of(scope_id(SCOPE), other) in " ".join(held.output.split())
@@ -452,7 +463,19 @@ def test_the_host_loop_takes_and_releases_the_lease_with_a_state_repo(
 
     (state / "lease.yaml").unlink()
     done = CliRunner().invoke(
-        app, ["triage", "batch", "drive", "--once", "--yes", "--repo", REPO, "--dir", str(state)]
+        app,
+        [
+            "triage",
+            "batch",
+            "drive",
+            "--once",
+            "--yes",
+            "--single-pass",
+            "--repo",
+            REPO,
+            "--dir",
+            str(state),
+        ],
     )
     assert done.exit_code == 0, done.output
     assert load_lease(state) is None, "released on a clean stop"

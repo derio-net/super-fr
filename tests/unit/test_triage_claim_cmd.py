@@ -182,8 +182,10 @@ def test_claim_sync_yes_writes_claims_refreshes_releases_and_records(
     world: tuple[Path, FakeGhClient], me: str
 ) -> None:
     tmp_path, client = world
+    client.issues[(REPO, 5)].labels.add("fr:in-progress")
     code, out = _run(tmp_path, "claim", "sync", "--yes")
     assert code == 0, out
+    assert "fr:in-progress" not in client.issues[(REPO, 5)].labels  # R1: sync releases unlabel
     (m4,) = _markers(client, 4)
     assert (m4.signer, m4.batch, m4.released) == (me, "mine", None)
     (m3,) = _markers(client, 3)
@@ -232,8 +234,10 @@ def test_claim_release_own_any_time_foreign_only_expired(
     world: tuple[Path, FakeGhClient], me: str
 ) -> None:
     tmp_path, client = world
+    client.issues[(REPO, 3)].labels.add("fr:in-progress")
     code, out = _run(tmp_path, "claim", "release", "super-fr#3", "--yes")
     assert code == 0, out
+    assert "fr:in-progress" in client.issues[(REPO, 3)].labels  # R1: a verb release keeps it
     assert _markers(client, 3)[0].released == NOW
     code, out = _run(tmp_path, "claim", "release", "super-fr#1", "--yes")
     assert code == 2 and "live" in out
@@ -431,6 +435,7 @@ def test_scope_retire_previews_then_releases_every_stale_claim(
     world: tuple[Path, FakeGhClient], me: str
 ) -> None:
     tmp_path, client = world
+    client.issues[(REPO, 7)].labels.add("fr:in-progress")
     code, out = _run(tmp_path, "scope", "retire", DEAD)
     assert code == 0, out
     assert "super-fr#7" in out and "--yes" in out
@@ -440,6 +445,7 @@ def test_scope_retire_previews_then_releases_every_stale_claim(
     (m,) = _markers(client, 7)
     assert (m.released, m.released_by) == (NOW, me)
     assert "fr:claimed" not in client.issues[(REPO, 7)].labels
+    assert "fr:in-progress" in client.issues[(REPO, 7)].labels  # R1: retire keeps it
 
 
 def test_scope_retire_refuses_while_one_claim_is_fresh_and_names_it(

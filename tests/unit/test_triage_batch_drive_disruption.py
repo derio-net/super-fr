@@ -23,7 +23,7 @@ import yaml
 from fr.commands import triage_batch_cmd
 from fr.gh import GhError
 from fr.triage import gitseam
-from fr.triage.collect import read_config, read_config_lenient
+from fr.triage.collect import read_config_lenient
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import GitError
 from fr.triage.model import Skipped, TriageConfig, load_judgements
@@ -221,7 +221,7 @@ def test_once_exits_1_on_a_failed_batch_dispatch_and_the_pass_goes_on(
     batch in the same pass is still dispatched."""
     _proposed(world, tmp_path, 2)
     _failing_first(runner, 1)
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 1, out
     first, second = _lines(out, "dispatch")
     assert first.startswith("dispatch b1: stopped: runner `fake` failed to dispatch")
@@ -511,7 +511,7 @@ def test_a_config_key_this_fr_does_not_know_does_not_stop_a_dispatch(
         checkout, "show",
         lambda ref, file: yaml.safe_dump(FUTURE) if file == ".fr/triage.yaml" else None,
     )  # fmt: skip
-    code, out = _drive(tmp_path, "--once", "--yes")
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0, out
     assert len(runner.dispatched) == 1
 
@@ -537,7 +537,7 @@ def test_the_drive_collects_its_config_leniently_and_says_what_it_ignored(
     _naps_until(monkeypatch, 3)
     result = _drive_named(tmp_path, "--yes")
     assert isinstance(result.exception, _StopError), result.output
-    assert all(kw.get("lenient") is True for kw in seen) and len(seen) == 3
+    assert all("lenient" not in kw for kw in seen) and len(seen) == 3
     assert result.output.count("future_block") == 1  # warned once, not every pass
 
 
@@ -577,12 +577,6 @@ class _Forge:
 
     def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
         return self.body
-
-
-def test_read_config_is_strict_by_default_so_a_typo_run_by_hand_still_fails() -> None:
-    forge = _Forge(yaml.safe_dump({"post_merg": ["x"]}))
-    with pytest.raises(TriageError, match="extra_forbidden|Extra inputs"):
-        read_config(forge, REPO)  # type: ignore[arg-type]
 
 
 def test_read_config_lenient_drops_unknown_top_level_keys_and_names_them() -> None:
