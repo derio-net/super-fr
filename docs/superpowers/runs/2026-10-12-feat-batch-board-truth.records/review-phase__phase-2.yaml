@@ -1,0 +1,97 @@
+schema_version: 8
+run: 2026-10-12-feat-batch-board-truth
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+- kind: finding
+  id: p2-r1
+  phase: 2
+  review_scope: in
+  title: fr triage collect never printed facts.config_ignored
+  body: _report printed skipped/unviewed/warnings only; a hand-run collect dropped typo keys silently.
+- kind: finding
+  id: p2-r2
+  phase: 2
+  review_scope: in
+  title: batch dispatch dropped ignored keys silently
+  body: check_config_fresh discarded the dropped-key tuple.
+- kind: finding
+  id: p2-r3
+  phase: 2
+  review_scope: in
+  title: Strict read_config left in prod; stale docstrings
+  body: Only a test called read_config; read_config_lenient/parse_triage_config docstrings described strict collect.
+- kind: finding
+  id: p2-r4
+  phase: 2
+  review_scope: in
+  title: No test for the board.html skew banner
+  body: write_board wiring and placement untested; scenario checked triage.html only.
+- kind: finding
+  id: p2-r5
+  phase: 2
+  review_scope: in
+  title: Tautological shared-builder test; no ordering test
+  body: classify called skew_entries and was compared with itself.
+- kind: finding
+  id: p2-r6
+  phase: 2
+  review_scope: in
+  title: Leniency of _fresh_config/_reservation/collect_into only signature-tested
+  body: inspect.signature checks, no real calls.
+- kind: finding
+  id: p2-r7
+  phase: 2
+  review_scope: in
+  title: Config-skew fixture was an impossible repo-scope state
+  body: Repo scope with a skipped repo cannot be produced by collect.
+- kind: finding
+  id: p2-r8
+  phase: 2
+  review_scope: in
+  title: Acceptance row lacked R4 unit and integration refs
+  body: Row cited banner/check tests only.
+- kind: finding
+  id: p2-r9
+  phase: 2
+  review_scope: in
+  title: check.py imported skew_entries from the HTML module
+  body: Classification depended on rendering.
+- kind: review
+  id: p2-review-1
+  phase: 2
+  title: Phase 2 code review
+  body: Dispatched read-only reviewer over b7693b86..03ae60d9 raised p2-r1..p2-r9, all in scope; all fixed in 45c47f66 with tests.
+resolves:
+- id: p2-r1
+  state: fixed
+  body: '_report prints ignored <repo>: keys. Test test_fr_triage_collect_names_the_dropped_key.'
+- id: p2-r2
+  state: fixed
+  body: check_config_fresh returns the ignored keys; _fresh_config warns naming repo and keys. Tests test_check_config_fresh_returns_the_origin_ignored_keys, test_fresh_config_accepts_an_unknown_origin_key_and_warns.
+- id: p2-r3
+  state: fixed
+  body: Removed read_config and the lenient parameter; docstrings rewritten.
+- id: p2-r4
+  state: fixed
+  body: Tests test_write_board_passes_the_skew_banner_and_places_it_under_the_header, test_render_board_without_a_banner_has_no_alert; scenario asserts board.html too.
+- id: p2-r5
+  state: fixed
+  body: 'Replaced by test_the_shared_builder_orders_repos_and_keys_in_banner_and_check (red first: keys were unsorted; now sorted).'
+- id: p2-r6
+  state: fixed
+  body: 'Real-call tests: test_collect_into_collects_an_unknown_key_and_names_it, test_fresh_config_accepts_an_unknown_origin_key_and_warns, test_reservation_accepts_an_unknown_origin_key.'
+- id: p2-r7
+  state: fixed
+  body: Fixture regenerated as org scope; scenario uses --org.
+- id: p2-r8
+  state: fixed
+  body: Row now cites the R4 unit test and int=tests/integration/test_scenarios.py#test_triage_config_skew.
+- id: p2-r9
+  state: fixed
+  body: skew_entries moved to triage/check.py; components imports it.
+evidence:
+  review: p2-review-1
+  reviewer: a7cf89f93129774d9
+  model: claude-opus-5-5
