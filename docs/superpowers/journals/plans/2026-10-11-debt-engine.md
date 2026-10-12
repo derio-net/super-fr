@@ -732,3 +732,48 @@ Out of scope (pre-existing in the digest step); the p4-r2 job split incidentally
 ### p4-r12-resolved · finding [out-of-scope] · resolves p4-r12: Gitea/GitLab scaffolds give the debt steps no forge or push credentials (phase 4)
 
 Out of scope: pre-existing in the shell upsert; Gitea archive-pr degrades to a named Unsupported warning, exit 0.
+
+<!-- fr:journal kind=decision scope=plan id=p5-set-apart created=2026-10-12T01:25:50+00:00 phase=5 -->
+### p5-set-apart · decision · one is_set_apart predicate replaces is_awaiting_live in exclusions (phase 5)
+
+is_debt_digest, is_owed and awaiting-live are excluded together wherever is_awaiting_live was (unranked, unplaced, no severity, tiers, parked, features); batch_awaits_live and stale dispatch keep the awaiting-live predicate only.
+
+<!-- fr:journal kind=decision scope=plan id=p5-figures-display-only created=2026-10-12T01:25:50+00:00 phase=5 -->
+### p5-figures-display-only · decision · figures cleaned to ints before display or storage (phase 5)
+
+fr.triage.debt.clean_figures drops every non-int count and non-alphanumeric status key from a forge-supplied figures block; all rendered text goes through esc.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-panel-note created=2026-10-12T01:25:50+00:00 phase=5 -->
+### p5-panel-note · discovery · v1 previous snapshot gives no trend and a note (phase 5)
+
+SnapshotDiff.debt_before is None when the previous snapshot predates schema 2; the panel says so, and separately notes the skipped split when a previous figure carries skipped that the new one lacks.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f1-ci-shown-as-debt created=2026-10-12T01:25:50+00:00 phase=5 state=fixed review_scope=in -->
+### p5-f1-ci-shown-as-debt · finding [fixed] (reviewer: in scope) · the Acceptance debt line listed ci rows as debt (phase 5)
+
+Panel showed every status incl. ci/scheduled. Now only DEBT_STATUSES are on the debt line; walked and manual are on a separate Listed, not debt line; asserted in test_triage_debt_panel.py.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f2-wrong-badge created=2026-10-12T01:25:50+00:00 phase=5 state=fixed review_scope=in -->
+### p5-f2-wrong-badge · finding [fixed] (reviewer: in scope) · both repo badges read 36, matching neither repo (phase 5)
+
+The fixture hardcoded total 36; the badge is each repo's own figures total, and a test builds a real DebtReport and checks the badge equals debt_total() across two repos with different totals.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f3-spoofable-digest created=2026-10-12T01:25:50+00:00 phase=5 state=fixed review_scope=in -->
+### p5-f3-spoofable-digest · finding [fixed] (reviewer: in scope) · anyone could spoof a repo's debt figures by pasting the marker (phase 5)
+
+Facts schema 9 adds Issue.author (collect now asks for it). A digest counts only from the workflow bot (BOT_LOGINS, now shared with fr debt issue), the viewer or a pr_authors login (claim_trusted); the oldest trusted one wins; others are untrusted_digests in check and render as untrusted digest ignored (#n), never their figures and still ordinary issues. Collect keeps a digest's body to 64 KiB (the figures sit at its end, past the 2000 BODY_LIMIT).
+
+<!-- fr:journal kind=finding scope=plan id=p5-f4-unbounded-figures-decode created=2026-10-12T01:25:50+00:00 phase=5 state=fixed review_scope=in -->
+### p5-f4-unbounded-figures-decode · finding [fixed] (reviewer: in scope) · parse_figures decoded unbounded forge text (phase 5)
+
+parse_figures (the shared decoder) now refuses a body past 64 KiB or a base64 payload past 8 KiB before decoding, and a decoded value that is not a flat dict (one level of nested count dicts allowed) of ints and short strings.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-10-12T01:25:50+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+is_set_apart folded the three exclusions into one predicate used by check, render and views; nothing further to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-10-12T01:25:50+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+panel and snapshot code was written once against the shared fr.triage.debt helpers; nothing to clean
