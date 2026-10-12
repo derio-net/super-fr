@@ -7430,9 +7430,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R2
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; written by the phase that implements the row.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_with_yes_it_rereads_each_target_and_removes_the_label_from_the_rest
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_check_json_lists_the_whole_set_with_each_entrys_state
+    status: ci
+    notes: check lists the set with each state, the page folds it, the board notes the
+      clean command; clean-labels is a dry run without --yes and re-reads each target
+      with it; the scenario drives the installed fr.
     verify: candidate
     scenario: tests/scenarios/triage-closed-in-progress.sh
   - id: triage-config-skew-visible
