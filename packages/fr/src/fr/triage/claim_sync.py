@@ -196,6 +196,7 @@ def execute(env: ClaimEnv, ops: Sequence[ClaimOp], now: datetime) -> SyncResult:
                     now=now,
                     trusted=trusted,
                     batch=op.batch,
+                    unlabel=True,
                 )
         except _WRITE_ERRORS as exc:
             result.failed.append((op, str(exc)))

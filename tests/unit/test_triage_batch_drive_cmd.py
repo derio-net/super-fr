@@ -191,6 +191,11 @@ class World:
     def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
         self.calls.append(f"label {number}")
 
+    def view_issue(self, repo: str, number: int) -> dict[str, Any]:
+        # a dispatched member carries both labels; an unlabelling release reads them first
+        state = "OPEN" if self.issues.get(number) == "open" else "CLOSED"
+        return {"state": state, "labels": ["fr:claimed", "fr:in-progress"]}
+
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         # an id and a time, like the gh adapter's, and authored as the facts' viewer: a
         # dispatch claims its members first (triage-claims R3, R17)
