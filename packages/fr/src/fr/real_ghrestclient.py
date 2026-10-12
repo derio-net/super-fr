@@ -25,7 +25,7 @@ import functools
 import json
 import re
 import urllib.parse
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -604,10 +604,16 @@ class RealGhRestClient:
         )
 
     def list_issues(
-        self, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
+        filt = f"&labels={urllib.parse.quote(','.join(labels), safe='')}" if labels else ""
         raw = self._paged(
-            f"repos/{repo}/issues?state={state}",
+            f"repos/{repo}/issues?state={state}{filt}",
             limit=limit,
             keep=lambda i: "pull_request" not in i,
         )

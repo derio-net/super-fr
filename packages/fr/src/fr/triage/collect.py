@@ -13,7 +13,7 @@ implementing the reads, not an edit to the collector (spec
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -32,12 +32,14 @@ from fr.triage.model import (
     BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
     Facts,
+    InProgressState,
     Issue,
     IssueClaim,
     IssueState,
     PullRequest,
     Scope,
     Skipped,
+    StaleInProgress,
     TriageConfig,
     Truncation,
     Unviewed,
@@ -46,6 +48,7 @@ from fr.triage.model import (
     normalize_key,
     parse_triage_config,
 )
+from fr.triage.scope_config import scope_id
 from fr.triage.stage import pr_rank
 
 ISSUE_LIMIT = 1000
@@ -71,7 +74,13 @@ class Forge(Protocol):
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]: ...
 
     def list_issues(
-        self, *, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        *,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]: ...
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
@@ -126,10 +135,16 @@ class ClientForge:
             return self._client.list_repos(owner, limit)
 
     def list_issues(
-        self, *, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        *,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
         with _forge_errors():
-            return self._client.list_issues(repo, state, limit, fields)
+            return self._client.list_issues(repo, state, limit, fields, labels)
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():
@@ -536,6 +551,7 @@ def collect_facts_counted(
     ignored: dict[str, tuple[str, ...]] = {}
     markers: dict[tuple[str, int], str] = {}
     claims: dict[tuple[str, int], list[IssueClaim]] = {}
+    closed_hits: list[StaleInProgress] = []
     for repo in repos:
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
@@ -557,6 +573,7 @@ def collect_facts_counted(
             skipped.append(Skipped(repo=repo, reason=str(exc)))
             continue
         collected.append(repo)
+        closed_hits.extend(_closed_in_progress(forge, repo, scope, trusted, issue_limit, warnings))
         if repo_config is not None:
             config[repo] = repo_config
         if dropped:
@@ -662,6 +679,8 @@ def collect_facts_counted(
         config=config,
         viewer=viewer,
         visibility=_visibility(forge, collected, listed_visibility),
+        stale_in_progress=closed_hits,
+        config_ignored={r: list(keys) for r, keys in ignored.items()},
     )
     return facts, CollectStats(viewed=viewed, carried=carried_n, ignored=ignored)
 
@@ -761,6 +780,64 @@ def _comment_facts(
         )
     claims = [to_issue_claim(c) for c in read.claims]
     return (max(stamps) if stamps else None), claims
+
+
+def _closed_in_progress(
+    forge: Forge,
+    repo: str,
+    scope: Scope,
+    trusted: frozenset[str],
+    limit: int,
+    warnings: list[Truncation],
+) -> list[StaleInProgress]:
+    """Closed issues of *repo* still labelled `fr:in-progress` (board-truth §B, R2).
+
+    Outside the per-repo skip: a failure here is a warning on stderr and an empty set,
+    never a skipped repo. A hit that also carries `fr:claimed` has its comments read:
+    this scope's own un-released claim makes it `release-pending` (the next `claim sync`
+    takes both labels off), another scope's `held`, none `stale`."""
+    try:
+        raw = forge.list_issues(
+            repo=repo,
+            state="closed",
+            limit=limit,
+            fields=ORIGINS_ISSUE_LIST_FIELDS,
+            labels=[FR_IN_PROGRESS.name],
+        )
+    except (TriageError, *_FAILURES) as exc:
+        print(f"fr triage: {repo}: closed fr:in-progress issues not read: {exc}", file=sys.stderr)
+        return []
+    if len(raw) == limit:
+        warnings.append(Truncation(source="issues", target=repo, limit=limit))
+    me = scope_id(scope)
+    out: list[StaleInProgress] = []
+    for i in raw:
+        state: InProgressState = "stale"
+        names = {label["name"] for label in i.get("labels") or []}
+        if FR_CLAIMED.name in names:
+            try:
+                comments = forge.list_issue_comments(repo=repo, number=i["number"])
+            except (TriageError, *_FAILURES) as exc:
+                print(
+                    f"fr triage: {repo}#{i['number']}: claim comments not read: {exc}",
+                    file=sys.stderr,
+                )
+                comments = []
+            signers = [c.signer for c in read_claims(comments, trusted).claims]
+            if any(s != me for s in signers):
+                state = "held"
+            elif signers:
+                state = "release-pending"
+        out.append(
+            StaleInProgress(
+                key=issue_key(repo, i["number"]),
+                title=i["title"],
+                url=i["url"],
+                closed_at=i.get("closedAt"),
+                state=state,
+            )
+        )
+    return out
 
 
 def _created_since(pr: PullRequest, at: datetime) -> bool:

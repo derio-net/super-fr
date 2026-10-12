@@ -52,8 +52,8 @@ from fr.triage.stage import Stage, derive_stage
 # §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects; the
 # same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 3 to 7
 # still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[8] = 8
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
+FACTS_SCHEMA: Literal[9] = 9
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9)
 # The version this fr WRITES: every engine write stamps 8 (the `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
@@ -517,6 +517,21 @@ def parse_triage_config(
     return TriageConfig.model_validate(kept), ignored
 
 
+InProgressState = Literal["stale", "release-pending", "held"]
+
+
+class StaleInProgress(_Strict):
+    """A CLOSED issue still labelled `fr:in-progress` (board-truth §B, R2). `stale` is
+    safe to clean; `release-pending` carries this scope's own un-released claim (the
+    next `claim sync` releases both labels); `held` carries another scope's."""
+
+    key: str
+    title: str
+    url: str
+    closed_at: str | None = None
+    state: InProgressState
+
+
 class Facts(_Strict):
     """What `collect` read from the forge for one scope.
 
@@ -525,7 +540,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8] = Field(8, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9] = Field(9, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -550,6 +565,11 @@ class Facts(_Strict):
     # visibility the forge answered (cloud-triage §B, §C): the state-repo decision and
     # the privacy guard read it; a repo missing here is read live by the guard.
     visibility: dict[str, str] = {}
+    # Closed issues still labelled `fr:in-progress` (board-truth §B, R2), schema 9.
+    stale_in_progress: list[StaleInProgress] = []
+    # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (R4,
+    # schema 9; the skew banner reads it).
+    config_ignored: dict[str, list[str]] = {}
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:
