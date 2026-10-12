@@ -263,3 +263,8 @@ R12 states the 120-line cap and both mirror syncs.
 ### spec-r18-resolved · finding [out-of-scope] · resolves spec-r18: Background line references drifted by a few lines
 
 Cosmetic line-number drift in Background; the code cited is right. The rewritten Background already uses the corrected numbers, but the finding asks for no design change.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-12-board-truth-p2 created=2026-10-12T06:14:37+00:00 -->
+### phase-split-2026-10-12-board-truth-p2 · decision · ask: phase 2 serves its own requirement group
+
+Phase 2: R4-R5 (schema skew). Phase 3: R6-R8 (card front and cancelled pins). Phase 4: R9-R12 (nav registry). Each is an independently reviewable ask of the batch.
