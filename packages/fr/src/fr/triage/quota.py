@@ -7,6 +7,8 @@ caller (`read_budget`, over the `Forge` seam), and the state is a loaded
 
 from __future__ import annotations
 
+import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
@@ -93,12 +95,21 @@ def budget_from_rate_limit(raw: dict[str, Any], api: str) -> Budget:
     return min(found, key=lambda b: b.fraction)
 
 
+def budget_or_why(
+    forge: Callable[[], RateLimitSource], api: str
+) -> tuple[Budget | None, str | None]:
+    """The paced budget, else why it could not be read (R5: the caller fails open and
+    reports the cause once). *forge* is a factory, so a forge that cannot even be built
+    fails open too."""
+    try:
+        return budget_from_rate_limit(forge().rate_limit(), api), None
+    except Exception as exc:  # noqa: BLE001 — any failure to read a free route fails open
+        return None, str(exc) or type(exc).__name__
+
+
 def read_budget(forge: RateLimitSource, api: str) -> Budget | None:
     """The paced budget, or None when `/rate_limit` cannot be read (R5: fail open)."""
-    try:
-        return budget_from_rate_limit(forge.rate_limit(), api)
-    except Exception:  # noqa: BLE001 — any failure to read a free route fails open
-        return None
+    return budget_or_why(lambda: forge, api)[0]
 
 
 def is_rate_limited(text: str) -> bool:
@@ -119,14 +130,19 @@ def decide(
     *,
     interval: float = 120,
 ) -> Pace:
-    """R3/R5/R7: a recorded wait still ahead, else the budget against the floor."""
+    """R3/R5/R7: a recorded wait still ahead, else the budget against the floor (and,
+    below it, the stretched next pass)."""
     if state.wait_until is not None and state.wait_until > now:
         return Pace("wait", state.wait_until, "recorded wait")
     if budget is None:
         return Pace("run")
     if budget.remaining <= 0:
-        return _wait(budget, "exhausted")
+        if budget.reset + RESET_MARGIN > now:
+            return _wait(budget, "exhausted")
+        return Pace("run")  # a reading from before its own reset: stale, not a reason to wait
     if budget.fraction < floor:
+        if state.next_pass_at is not None and state.next_pass_at > now:  # R7's stretch
+            return Pace("wait", state.next_pass_at, "below floor")
         return Pace("essential", now + timedelta(seconds=ESSENTIAL_STRETCH * interval), "floor")
     return Pace("run")
 
@@ -134,8 +150,9 @@ def decide(
 def after_rate_limit(
     budget: Budget | None, now: datetime, state: PacingState, interval: float
 ) -> tuple[Pace, PacingState]:
-    """R2/R4: the wait after a rate-limit response, and the state recording it."""
-    if budget is not None and budget.remaining <= 0:
+    """R2/R4: the wait after a rate-limit response, and the state recording it. An
+    exhausted reading whose reset is already past is stale: it backs off as a secondary limit."""
+    if budget is not None and budget.remaining <= 0 and budget.reset + RESET_MARGIN > now:
         pace = _wait(budget, "exhausted")
         return pace, replace(state, wait_until=pace.until)
     delay = min(interval * 2**state.backoff, BACKOFF_CAP_SECONDS)
@@ -149,7 +166,7 @@ def clean_pass(state: PacingState) -> PacingState:
 
 
 def _minutes(delta: timedelta) -> str:
-    return f"{max(1, round(delta.total_seconds() / 60))}m"
+    return f"{max(1, math.ceil(delta.total_seconds() / 60))}m"
 
 
 def quota_line(budget: Budget | None, floor: float, verdict: Pace, now: datetime) -> str:

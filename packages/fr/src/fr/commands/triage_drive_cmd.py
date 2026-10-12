@@ -31,6 +31,7 @@ import fr.commands.triage_cmd as triage_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    QuotaFloorOpt,
     RepoOpt,
     WorkspaceOpt,
     console,
@@ -49,6 +50,7 @@ from fr.triage.lease import (
     lease_duration,
     load_lease,
 )
+from fr.triage.quota import is_rate_limited
 from fr.triage.scope_config import host_id, scope_id
 
 lease_app = typer.Typer(
@@ -445,6 +447,7 @@ def drive_pass_command(
         int,
         typer.Option("--max-inflight", min=1, help="Batches dispatched and unmerged at once."),
     ] = 3,
+    quota_floor: QuotaFloorOpt = None,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
@@ -459,8 +462,12 @@ def drive_pass_command(
     A session whose --generation is older than the lease's (another session replaced it
     by a self-re-home) drives nothing and exits 0 (p6-r4).
 
-    Exit codes: 0 acted, everything is done, or superseded; 3 nothing to do but wait, or a
-    wake that only renewed the lease; 2 a refusal (another driver's lease included); 1 a
+    A wake that finds the paced rate budget exhausted, or a recorded wait still ahead, makes no
+    forge call but `/rate_limit`: it renews the lease if that would lapse before the next wake
+    and exits 3 with the quota line (quota-pacing R16).
+
+    Exit codes: 0 acted, everything is done, or superseded; 3 nothing to do but wait, a wake
+    that only renewed the lease, or a rate limit; 2 a refusal (another driver's lease included); 1 a
     forge write failed."""
     from fr.commands import triage_batch_cmd as batch
     from fr.commands.triage_kanban_cmd import scope_args, try_load
@@ -483,6 +490,20 @@ def drive_pass_command(
         current = load_lease(target)
     except TriageError as exc:
         _fail(str(exc))
+    pacer = batch.make_pacer(target, quota_floor=quota_floor, interval_s=interval * 60, now=_now)
+    pace = pacer.before_pass()
+    if pace.kind == "wait":  # R16: no pass, no forge call but /rate_limit; keep the lease alive
+        if current is not None and current.holder == holder_of(sid, identity):
+            if current.expires < now + timedelta(minutes=interval):
+                try:
+                    acquire(target, identity, now, scope_id=sid, duration=duration,
+                            generation=generation,
+                            push=lambda: triage_cmd.push_now(scope, target))  # fmt: skip
+                except TriageError as exc:
+                    _fail(str(exc))
+        _write_outbox(outbox, [])
+        console.print(pacer.line(pace), markup=False, soft_wrap=True)
+        raise typer.Exit(code=3)
     recent = (
         current is not None
         and current.holder == holder_of(sid, identity)
@@ -544,7 +565,13 @@ def drive_pass_command(
             if newer is None and stop is None and not reexec:
                 acted, summary, _ = batch.one_pass(driver, lease_taken=True)
     except batch.ForgeReadError as exc:
-        _fail(str(exc), code=exc.code)
+        if not is_rate_limited(str(exc)):
+            _fail(str(exc), code=exc.code)
+        # a rate limit ends the pass, not the session: record the wait, exit 3 (R2, R16)
+        _write_outbox(outbox, driver.outbox())
+        console.print(pacer.line(pacer.rate_limited()), markup=False, soft_wrap=True)
+        raise typer.Exit(code=3) from exc
+    pacer.clean()
     if newer is not None:
         _stop_superseded(outbox, newer, generation, "it drove nothing")
     if reexec:  # outside drive.lock: the new process takes it again under this pid

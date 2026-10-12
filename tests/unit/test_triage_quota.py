@@ -106,6 +106,13 @@ def test_exhaustion_after_a_rate_limit_waits_for_the_reset() -> None:
     assert state.backoff == 0
 
 
+def test_a_stale_exhausted_reading_backs_off_instead_of_spinning() -> None:
+    stale = quota.Budget("graphql", 0, 5000, NOW - timedelta(minutes=1))
+    pace, state = quota.after_rate_limit(stale, NOW, PacingState(), 120)
+    assert pace.until == NOW + timedelta(seconds=120) and state.backoff == 1
+    assert quota.decide(stale, 0.2, NOW, PacingState()).kind == "run"
+
+
 def test_secondary_limit_backs_off_exponentially_to_a_cap() -> None:
     state = PacingState()
     waits = []
@@ -159,3 +166,19 @@ def test_read_budget_is_none_when_rate_limit_raises() -> None:
             raise ForgeError("HTTP 500")
 
     assert quota.read_budget(Broken(), "graphql") is None
+
+
+def test_below_the_floor_the_stretched_next_pass_holds() -> None:
+    later = NOW + timedelta(minutes=3)
+    state = PacingState(next_pass_at=later)
+    pace = quota.decide(_budget(812), 0.2, NOW, state)
+    assert pace.kind == "wait" and pace.until == later
+    assert quota.decide(_budget(4000), 0.2, NOW, state).kind == "run"  # recovered: no stretch
+
+
+def test_budget_or_why_names_the_cause() -> None:
+    def broken() -> object:
+        raise RuntimeError("gh is not logged in")
+
+    budget, why = quota.budget_or_why(broken, "graphql")  # type: ignore[arg-type]
+    assert budget is None and why == "gh is not logged in"

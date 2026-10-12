@@ -57,12 +57,13 @@ import yaml
 from pydantic import ValidationError
 from rich.markup import escape
 
-from fr import __version__
+from fr import __version__, forgeapi
 from fr.acceptance.ci import CI_CONFIG_PATHS
 from fr.commands import triage_kanban_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    QuotaFloorOpt,
     RepoOpt,
     WorkspaceOpt,
     _load_state,
@@ -216,7 +217,9 @@ from fr.triage.model import (
     load_scope_facts,
 )
 from fr.triage.operation_lock import replacement_scope_lock
+from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
+from fr.triage.quota import Pace, is_rate_limited
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -2387,9 +2390,15 @@ def recollect(scope: Scope, target: Path) -> Mapping[str, tuple[str, ...]]:
     or any other refusal (a config broken on the default branch, a judgements file
     mid-edit), raises `ForgeReadError`: the loop waits for it to be fixed."""
     try:
-        _, _, stats = collect_into(scope, target, carry=True, lenient=True)
+        facts, _, stats = collect_into(scope, target, carry=True, lenient=True)
     except TriageError as exc:  # ForgeError included
         raise ForgeReadError(str(exc), code=2) from exc
+    # A rate limit that did not raise: a repo skipped, a judged key unviewed. The pass ends
+    # here, before it plans on facts the exhausted budget left half-read (R2).
+    reasons = [s.reason for s in facts.skipped] + [u.reason for u in facts.unviewed]
+    for reason in reasons:
+        if is_rate_limited(reason):
+            raise ForgeReadError(reason, code=2)
     _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
     return stats.ignored
 
@@ -2419,6 +2428,75 @@ def _now() -> datetime:
 def _sleep(seconds: float) -> None:
     """The loop's wait between passes; tests replace it."""
     time.sleep(seconds)
+
+
+def _pace_forge() -> Any:
+    """The forge `/rate_limit` is read through (free, REST under either API); tests replace it."""
+    from fr.commands import triage_cmd
+
+    return triage_cmd.make_forge()
+
+
+def make_pacer(
+    target: Path,
+    *,
+    quota_floor: float | None,
+    interval_s: float,
+    now: Callable[[], datetime] | None = None,
+) -> Pacer:
+    """The pacing both adapters share (spec 2026-10-12-quota-pacing): the floor from
+    `--quota-floor` or the host file, the adapter `forge.api` names, `pacing.json` in *target*.
+    A floor or `forge.api` fr cannot use is refused here, naming where it came from (R6)."""
+    try:
+        floor, api = forgeapi.quota_floor(quota_floor), forgeapi.resolve()
+    except forgeapi.ForgeApiError as exc:
+        _fail(str(exc))
+
+    def warn(message: str) -> None:
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+
+    return Pacer(
+        target,
+        floor=floor,
+        interval_s=interval_s,
+        api=api,
+        forge=_pace_forge,
+        now=now or (lambda: _now()),
+        warn=warn,
+    )
+
+
+def _report_read_failure(driver: _Driver, message: str, action: str) -> None:
+    """A forge read failure, reported once per cause until a pass reads cleanly (gh#910)."""
+    if message not in driver.read_failures:
+        driver.read_failures.add(message)
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}; {action}", soft_wrap=True)
+
+
+# A wait that outlives the lease renews it this long before it would lapse (R16).
+LEASE_MARGIN = timedelta(minutes=5)
+RENEW_RETRY_S = 60
+
+
+def wait_out(driver: _Driver, pace: Pace) -> None:
+    """Sleep until *pace* is over without ever letting the drive's lease lapse (R16): a
+    wait that reaches the lease's expiry minus five minutes wakes, renews the lease (the
+    state push and its visibility read, the one call a wait makes), and sleeps again."""
+    assert pace.until is not None
+    left = max(0.0, (pace.until - _now()).total_seconds())
+    while left > 0:
+        held = load_lease(driver.target) if driver.leased else None
+        room = (held.expires - LEASE_MARGIN - _now()).total_seconds() if held else None
+        if room is not None and room <= 0:
+            try:
+                driver.take_lease()
+                continue
+            except ForgeReadError as exc:  # unreadable visibility: try again a minute on
+                _report_read_failure(driver, str(exc), f"renewal retried every {RENEW_RETRY_S}s")
+                room = RENEW_RETRY_S
+        chunk = left if room is None else min(left, room)
+        _sleep(chunk)
+        left -= chunk
 
 
 def _installed_version() -> str | None:
@@ -4665,29 +4743,44 @@ def _sigterm_interrupts() -> Iterator[None]:
         signal.signal(signal.SIGTERM, previous)
 
 
-def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
+def _host_loop(
+    driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None = None
+) -> str | None:
     """`fr triage batch drive`'s loop around `one_pass` (the host adapter, R10). The newer
-    fr a `post_merge` installed, when the loop stopped to restart on it; else None."""
+    fr a `post_merge` installed, when the loop stopped to restart on it; else None.
+    With a *pacer*, a looping drive reads the budget before each pass, waits out an
+    exhausted one, and backs off a rate limit instead of retrying it (R2-R4)."""
+    paced = pacer if pacer is not None and driver.yes and not once else None
     while True:
+        if paced is not None:
+            pace = paced.before_pass()
+            # `essential` (below the floor) is the essential-only pass: not built yet.
+            if pace.kind == "wait":
+                _say(paced.line(pace))
+                wait_out(driver, pace)
+                continue
         try:
             acted, summary, blocked = one_pass(driver)
         except ForgeReadError as exc:
             if once or not driver.yes:
                 _fail(str(exc), code=exc.code)
+            if paced is not None and is_rate_limited(str(exc)):
+                pace = paced.rate_limited()
+                _say(paced.line(pace))
+                if driver.restart_to is not None:
+                    return driver.restart_to
+                wait_out(driver, pace)
+                continue
             # Like a refused merge (rg-4), a degraded forge ends neither the run nor
             # the loop: reported once per cause, then read again (gh#910).
-            if str(exc) not in driver.read_failures:
-                driver.read_failures.add(str(exc))
-                err_console.print(
-                    f"[yellow]warning:[/yellow] {escape(str(exc))}; pass skipped, "
-                    f"retrying every {interval}s",
-                    soft_wrap=True,
-                )
+            _report_read_failure(driver, str(exc), f"pass skipped, retrying every {interval}s")
             if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
                 return driver.restart_to  # post_merge installed a newer fr (gh#998)
             _sleep(interval)
             continue
         driver.read_failures.clear()
+        if paced is not None:
+            paced.clean()
         if not driver.yes:
             return None  # the plan of one pass, in loop mode too
         if once:
@@ -4741,6 +4834,7 @@ def batch_drive_command(
     yes: Annotated[
         bool, typer.Option("--yes", help="Act; without it, print one pass's plan and exit.")
     ] = False,
+    quota_floor: QuotaFloorOpt = None,
     single_pass: Annotated[
         bool,
         typer.Option(
@@ -4766,6 +4860,7 @@ def batch_drive_command(
         _fail("--single-pass only applies to --once: a looping driver is not a single pass")
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
+    pacer = make_pacer(target, quota_floor=quota_floor, interval_s=interval)  # refuses a bad floor
     guard: SinglePass | None = None
     if once and yes:
         command = loop_command(
@@ -4799,7 +4894,7 @@ def batch_drive_command(
     with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
         try:
             with _sigterm_interrupts():
-                restart = _host_loop(driver, once=once, interval=interval)
+                restart = _host_loop(driver, once=once, interval=interval, pacer=pacer)
         except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
             driver.release_lease()
             raise

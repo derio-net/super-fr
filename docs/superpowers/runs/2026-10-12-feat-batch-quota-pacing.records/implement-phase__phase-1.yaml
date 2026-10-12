@@ -1,0 +1,28 @@
+schema_version: 8
+run: 2026-10-12-feat-batch-quota-pacing
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1]
+refactor:
+  P1.T3: "the floor reader shared the host file's mapping loader with api: in the same change (one reader of forge.yaml); nothing else to clean"
+  P1.T4: "the seam is one method on each adapter plus one pass-through; nothing to extract"
+journal:
+  - kind: decision
+    id: p1-pacing-loop-only
+    title: Pacing applies to a looping drive and the cloud pass, not --once or plan mode
+    body: "`--once` and a plan-only run keep today's behaviour (a rate limit exits with the read error's code); a loop waits, and the cloud pass exits 3. `essential` (below the floor) is decided by `quota.decide` but the loops ignore it until phase 2 builds the essential-only pass, so the quota line never claims a pass that does not exist."
+    phase: 1
+  - kind: discovery
+    id: p1-stale-exhausted-reading
+    title: An exhausted /rate_limit reading whose reset has passed must not be waited on
+    body: "A wait whose end is already past sleeps 0 s, and the loop would re-read and re-run forever, spending the budget it was meant to spare (found by a test whose clock was the real one). `decide` runs the pass, and `after_rate_limit` backs off as a secondary limit, when the reading's reset plus 30 s is not ahead of now."
+    phase: 1
+  - kind: discovery
+    id: p1-collect-fakes-returned-none
+    title: Three existing tests faked collect_into with None for the facts
+    body: "recollect now reads facts.skipped and facts.unviewed (R2), so the fakes in test_triage_batch_drive_cmd and test_triage_batch_drive_disruption return the world's facts, as the real function does."
+    phase: 1
+resolves: []
+evidence:
+  tests: ci

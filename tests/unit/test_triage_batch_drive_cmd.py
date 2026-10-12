@@ -1924,7 +1924,7 @@ def _flaky_collect(
         if len(calls) <= failures:
             raise ForgeError(message)
         (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
-        return None, target / "facts.json", CollectStats()
+        return world.facts(), target / "facts.json", CollectStats()
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", REAL_RECOLLECT)
     monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)

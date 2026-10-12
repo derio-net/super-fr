@@ -114,6 +114,14 @@ DirOpt = Annotated[
         help="State directory, outright (default: <workspace>/.fr/triage-state/<scope>/).",
     ),
 ]
+QuotaFloorOpt = Annotated[
+    float | None,
+    typer.Option(
+        "--quota-floor",
+        help="Budget fraction (0-1) below which the drive paces itself; default: "
+        "`quota_floor:` in ~/.config/fr/forge.yaml, else 0.20.",
+    ),
+]
 WorkspaceOpt = Annotated[
     Path | None,
     typer.Option(
