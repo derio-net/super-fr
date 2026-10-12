@@ -55,14 +55,14 @@ journal:
 - kind: finding
   id: p4-r9
   phase: 4
-  review_scope: in
+  review_scope: out
   title: Skew banner said 'This board is not the whole truth.' on Backlog and Batches
-  body: 'Reviewer tagged out (phase 3), reclassified in: the banner was added by this PR (phase 2), so its wording is this change''s.'
+  body: Skew banner wording 'This board is not the whole truth.' on Backlog/Batches pages; the reviewer attributes it to an earlier phase.
 - kind: review
   id: p4-review-1
   phase: 4
   title: Phase 4 code review
-  body: 'Dispatched read-only reviewer over e0bcdfbb..cfd50dc9, which rendered org and single-repo state dirs itself and screenshotted them (true 390px via iframe for phone width), raised p4-r1..p4-r9. r1-r7 and r9 (reclassified in: banner added by this PR) fixed in aa5cdccd; r8 out of scope (screenshot artifact). nav-link-each-tab verified from markup: every relative href on all 8 pages resolves to an existing file, one aria-current per page, re-rendering the board left sibling mtimes unchanged.'
+  body: 'Dispatched read-only reviewer over e0bcdfbb..cfd50dc9, which rendered org and single-repo state dirs itself and screenshotted them (true 390px via iframe for phone width), raised p4-r1..p4-r9. r1-r7 fixed in aa5cdccd; r8 out of scope (screenshot artifact); r9 out of scope per the reviewer, wording changed anyway in aa5cdccd. nav-link-each-tab verified from markup: every relative href on all 8 pages resolves to an existing file, one aria-current per page, re-rendering the board left sibling mtimes unchanged.'
 resolves:
 - id: p4-r1
   state: fixed
@@ -89,8 +89,8 @@ resolves:
   state: out-of-scope
   body: 'Not a defect: verified no horizontal scroll at a true 390px; pre-existing board CSS collapses to one column at <=720px.'
 - id: p4-r9
-  state: fixed
-  body: Banner reads 'This page is not the whole truth.'; asserted in test_triage_config_skew.py::test_the_banner_names_ignored_keys_and_skipped_repos_escaped.
+  state: out-of-scope
+  body: 'Tagged out by the reviewer (outside R12''s list). Note for the operator: the banner was added by this same PR (phase 2), and its wording was nonetheless changed in aa5cdccd to ''This page is not the whole truth.''; marking it fixed is the operator''s call.'
 evidence:
   review: p4-review-1
   reviewer: a472e933dbe3f8208
