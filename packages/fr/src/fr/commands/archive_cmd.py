@@ -453,7 +453,7 @@ def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
 
     from fr.acceptance.check import resolve_identity
     from fr.acceptance.model import parse_matrix
-    from fr.acceptance.report import render_committed_set
+    from fr.acceptance.report import render_committed_set, tracked_reports
     from fr.acceptance.retarget import retarget_text
     from fr.artifacts.atomic import write_text_atomic
     from fr.commands.acceptance_cmd import MATRIX_REL
@@ -467,7 +467,9 @@ def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         new_text, changes = retarget_text(text, own, log.moves)
         if not changes:
             return
-        renders = render_committed_set(parse_matrix(new_text), repo_root)
+        renders = render_committed_set(
+            parse_matrix(new_text), repo_root, only=tracked_reports(repo_root)
+        )
     except Exception as e:  # noqa: BLE001 — a refusal is a warning, never a failure
         err_console.print(f"[yellow]warning:[/yellow] matrix retarget skipped — {escape(str(e))}")
         return

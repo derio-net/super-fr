@@ -6024,6 +6024,27 @@ rows:
     verify: live
     issues:
     - derio-net/super-fr#924
+  - id: acceptance-ci-built-reports
+    capability: acceptance-matrix
+    acceptance: In a repo that gitignores the generated acceptance reports, fr's commits
+      (record resolve, acceptance add/set-status, archive, init, migrations) succeed
+      without them and fr acceptance check / report --check report no drift for them,
+      while report --deterministic still writes them.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_check_reports_no_drift_for_absent_or_stale_ignored_reports
+      - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_report_deterministic_writes_ignored_reports
+      int:
+      - super-fr:tests/integration/test_acceptance_ci_built_reports.py#test_acceptance_set_status_commits_without_ignored_reports
+      - super-fr:tests/integration/test_acceptance_ci_built_reports.py#test_a_record_with_an_acceptance_row_commits_without_ignored_reports
+    status: ci
+    notes: 'Review p1-r5: anchor R3 (--deterministic writes ignored reports) and the
+      record-apply commit path the issue is about.'
+    verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -7049,6 +7070,34 @@ rows:
     status: ci
     notes: gates/status/check answer a drifted cursor with one warning (check now tested,
       review p1-r2); schema mismatch still refuses gates
+  - id: run-claim-first-wins
+    capability: run-cursor
+    acceptance: Re-claiming an open unit by the agent that holds it never rewrites the
+      recorded harness, model or agent type and makes no commit when nothing changes;
+      a different agent is refused; a held unit is not re-briefed after an interrupted
+      orchestrator restarts.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_an_identical_reclaim_is_a_no_change_with_no_commit
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_another_family_keeps_the_model_and_warns
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_the_opencode_sequence_keeps_the_plugin_claims_model_and_tier
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_different_agent_is_still_refused
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_advance_after_an_interruption_names_the_holder_and_does_not_rebrief
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_resolve_model_without_agent_keeps_the_claimed_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_the_same_model_family_keeps_the_recorded_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_first_claim_overrides_what_advance_prefilled
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_fills_an_empty_field_and_commits_it
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_by_the_manifest_id_keeps_the_recorded_tier_variant
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_another_tier_keeps_the_agent_type_and_warns
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_a_different_agent_type_is_refused
+    status: ci
+    notes: 'R7/R8 review fixes: agent_type re-claim validated against the dispatched
+      base agent; fill, keep+warn, same-family, resolve and interruption paths now have
+      refs'
+    verify: none
   - id: adopt-supersede-carries-provenance
     capability: run-adoption
     acceptance: Adopting a plan that already has a run supersedes it on request, and
@@ -8228,3 +8277,28 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: verification-unrunnable-strategy
+    capability: verification-strategies
+    acceptance: 'A repo that cannot run a strategy''s install program is never owed
+      that strategy''s walk from the shape default, and an explicitly named unrunnable
+      strategy is reported by plan self-review (error) and the brainstorm resolve (warning)
+      before deliver; a malformed strategy: line names the accepted form.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_shape_default_is_dropped_without_the_install_program
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_walk_owed_owes_nothing_from_the_default_when_every_row_says_none
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_unrunnable_strategies_names_each_explicit_strategy_once
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_self_review_errors_on_an_explicit_unrunnable_strategy
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_brainstorm_resolve_warns_and_still_resolves
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_a_malformed_strategy_line_shows_the_accepted_form
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r5_the_flag_form_resolve_prints_the_same_warning
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r1_a_rows_verify_alone_is_flagged_and_names_the_row_and_the_fix
+      - super-fr:tests/unit/test_verification_walk.py#test_p2_r7_a_default_the_repo_cannot_run_says_so_instead_of_naming_no_strategy
+    status: ci
+    notes: 'review p2: sources named per strategy, flag-form warning, never-raise, walk
+      message'
+    verify: none
