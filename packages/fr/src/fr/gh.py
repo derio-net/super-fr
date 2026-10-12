@@ -731,3 +731,37 @@ def with_retry(
             if attempt >= max_attempts or not is_transient(exc):
                 raise
             time.sleep(backoff_seconds[attempt - 1])
+
+
+_STATUS_LINE = re.compile(r"^HTTP/\S+\s+(\d{3})")
+_ETAG_HEADER = re.compile(r"^etag:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def _status_of(text: str) -> int | None:
+    match = _STATUS_LINE.match(text.lstrip())
+    return int(match.group(1)) if match else None
+
+
+def probe(run: Callable[[list[str]], str], path: str, etag: str | None) -> tuple[bool, str | None]:
+    """One conditional REST read (spec 2026-10-12-quota-pacing §B, R8), shared by both
+    GitHub adapters: `gh api -i [-H 'If-None-Match: <etag>'] <path>` through *run*.
+
+    `(False, etag)` when the forge answered 304 Not Modified, which costs no budget (gh
+    exits 1 with the status line first, captured live 2026-10-12); `(True, new etag)` on
+    a 200; `(True, None)` on anything else, a failure included: a failed probe is a
+    change, so the repo is read, never trusted unchanged."""
+    argv = ["api", "-i", *(["-H", f"If-None-Match: {etag}"] if etag else []), path]
+    try:
+        out = run(argv)
+    except GhError as exc:
+        for text in (exc.stdout, exc.stderr):
+            if _status_of(text or "") == 304:
+                return False, etag
+        return True, None
+    except FileNotFoundError:
+        return True, None
+    if _status_of(out) != 200:
+        return True, None
+    head = out.split("\n\n", 1)[0].split("\r\n\r\n", 1)[0]
+    found = _ETAG_HEADER.search(head)
+    return True, found.group(1) if found else None

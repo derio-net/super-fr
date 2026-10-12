@@ -119,6 +119,13 @@ class FakeForge:
         # `gh api rate_limit` dict, or an exception it raises (spec 2026-10-12-quota-pacing).
         self.rate_limit_calls = 0
         self.rate_limit_answer: dict[str, Any] | Exception = ample_rate_limit()
+        # The scripted probe table (spec 2026-10-12-quota-pacing R8): path -> the ETag the
+        # forge holds now. A probe sent with it answers 304; any other a 200 with it; a
+        # path not in the table, or in `probe_failures`, answers changed with no ETag.
+        # Counted apart from `calls`: a probe is not a collect read.
+        self.probe_etags: dict[str, str] = {}
+        self.probe_failures: set[str] = set()
+        self.probe_calls: list[tuple[str, str | None]] = []
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_repos", {"owner": owner, "limit": limit}))
@@ -170,6 +177,13 @@ class FakeForge:
         if isinstance(self.rate_limit_answer, Exception):
             raise self.rate_limit_answer
         return self.rate_limit_answer
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        self.probe_calls.append((path, etag))
+        current = self.probe_etags.get(path)
+        if path in self.probe_failures or current is None:
+            return True, None
+        return (False, etag) if etag == current else (True, current)
 
     def repo_visibility(self, *, repo: str) -> str | None:
         self.visibility_calls.append(repo)

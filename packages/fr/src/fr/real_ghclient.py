@@ -585,6 +585,11 @@ class RealGhClient:
         return cast("dict[str, Any]", json.loads(_gh._run_gh(["api", "rate_limit"])))
 
     @_hosted
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        """A conditional REST read: unchanged on a 304 (spec 2026-10-12-quota-pacing R8)."""
+        return _gh.probe(_gh._run_gh, path, etag)
+
+    @_hosted
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         return cast("dict[str, Any]", _gh.view_issue(repo, number))
 

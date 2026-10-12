@@ -856,3 +856,24 @@ def test_rate_limit_is_one_free_rest_route() -> None:
     got = RealGhRestClient(run=run).rate_limit()
     assert argvs == [["api", "rate_limit"]]
     assert got == json.loads(captured)
+
+
+def test_probe_is_a_conditional_rest_route() -> None:
+    argvs: list[list[str]] = []
+
+    def run(argv: list[str]) -> str:
+        argvs.append(argv)
+        raise GhError("x", stdout='HTTP/2.0 304 Not Modified\nEtag: W/"e"\n', returncode=1)
+
+    assert RealGhRestClient(run=run).probe("repos/o/r/issues", 'W/"e"') == (False, 'W/"e"')
+    assert argvs == [["api", "-i", "-H", 'If-None-Match: W/"e"', "repos/o/r/issues"]]
+
+
+def test_probe_200_and_failure() -> None:
+    ok = 'HTTP/2.0 200 OK\nEtag: W/"n"\n\n[]'
+    assert RealGhRestClient(run=lambda argv: ok).probe("p", None) == (True, 'W/"n"')
+
+    def boom(argv: list[str]) -> str:
+        raise GhError("HTTP 403: rate limit", stderr="HTTP 403", returncode=1)
+
+    assert RealGhRestClient(run=boom).probe("p", 'W/"e"') == (True, None)

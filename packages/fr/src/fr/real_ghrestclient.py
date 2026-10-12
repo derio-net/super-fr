@@ -914,6 +914,10 @@ class RealGhRestClient:
     def rate_limit(self) -> dict[str, Any]:
         return cast("dict[str, Any]", self._api("rate_limit"))
 
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        """A conditional REST read: unchanged on a 304 (spec 2026-10-12-quota-pacing R8)."""
+        return _gh.probe(self._gh, path, etag)
+
     def file_exists(self, repo: str, path: str) -> bool:
         try:
             self._api(f"repos/{repo}/contents/{path}")

@@ -123,6 +123,11 @@ def _no_live_rate_limit_read(monkeypatch: pytest.MonkeyPatch) -> None:
     imports the module itself): a test that never imported the drive before would
     otherwise make a real `gh api rate_limit`. Tests of pacing install their own forge
     on `_pace_forge`."""
+    # `fr.cli` first: `triage_batch_cmd` imported on its own is a circular import
+    # (`triage_kanban_cmd` <-> `triage_claim_cmd`), so a test file that never imported
+    # the CLI would error in this fixture before its first test ran.
+    import fr.cli  # noqa: F401
+
     from tests.unit.triage_fixtures import ample_rate_limit
 
     class _Ample:

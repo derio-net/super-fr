@@ -89,6 +89,8 @@ class Forge(Protocol):
 
     def rate_limit(self) -> dict[str, Any]: ...
 
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]: ...
+
     def repo_visibility(self, *, repo: str) -> str | None: ...
 
 
@@ -168,6 +170,10 @@ class ClientForge:
     def rate_limit(self) -> dict[str, Any]:
         with _forge_errors():
             return self._client.rate_limit()
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        with _forge_errors():
+            return self._client.probe(path, etag)
 
     def repo_visibility(self, *, repo: str) -> str | None:
         with _forge_errors():

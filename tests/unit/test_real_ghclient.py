@@ -330,3 +330,48 @@ class TestRateLimit:
         monkeypatch.setattr(_gh, "_run_gh", run)
         assert RealGhClient().rate_limit() == json.loads(captured)
         assert seen == [["api", "rate_limit"]]
+
+
+# `gh api -i` answering a conditional request with 304: gh exits 1 and prints the status
+# line first (captured live 2026-10-12, spec 2026-10-12-quota-pacing Background).
+_NOT_MODIFIED = 'HTTP/2.0 304 Not Modified\nEtag: W/"abc"\nX-Github-Request-Id: X\n'
+_OK = 'HTTP/2.0 200 OK\nContent-Type: application/json\nETag: W/"abc"\n\n[{"number": 1}]'
+
+
+class TestProbe:
+    def _run(self, monkeypatch, answer):
+        seen: list[list[str]] = []
+
+        def run(args: list[str]) -> str:
+            seen.append(args)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        monkeypatch.setattr(_gh, "_run_gh", run)
+        return seen
+
+    def test_a_304_is_unchanged_and_keeps_the_sent_etag(self, monkeypatch):
+        seen = self._run(
+            monkeypatch, _gh.GhError("gh: HTTP 304", stdout=_NOT_MODIFIED, returncode=1)
+        )
+        assert RealGhClient().probe("repos/o/r/issues", 'W/"abc"') == (False, 'W/"abc"')
+        assert seen == [["api", "-i", "-H", 'If-None-Match: W/"abc"', "repos/o/r/issues"]]
+
+    def test_a_304_on_stderr_is_unchanged_too(self, monkeypatch):
+        self._run(monkeypatch, _gh.GhError("x", stderr=_NOT_MODIFIED, returncode=1))
+        assert RealGhClient().probe("p", 'W/"abc"') == (False, 'W/"abc"')
+
+    def test_a_200_is_changed_with_its_new_etag(self, monkeypatch):
+        seen = self._run(monkeypatch, _OK)
+        assert RealGhClient().probe("p", 'W/"old"') == (True, 'W/"abc"')
+        assert seen[0][-1] == "p"
+
+    def test_no_etag_sends_no_if_none_match(self, monkeypatch):
+        seen = self._run(monkeypatch, _OK)
+        assert RealGhClient().probe("p", None) == (True, 'W/"abc"')
+        assert seen == [["api", "-i", "p"]]
+
+    def test_any_other_error_is_changed_with_no_etag(self, monkeypatch):
+        self._run(monkeypatch, _gh.GhError("HTTP 500", stdout="HTTP/2.0 500 Oops\n", returncode=1))
+        assert RealGhClient().probe("p", 'W/"abc"') == (True, None)

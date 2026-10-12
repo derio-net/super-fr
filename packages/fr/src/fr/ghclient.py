@@ -342,6 +342,12 @@ class GhClient(Protocol):
         (spec 2026-10-12-quota-pacing R1)."""
         ...
 
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        """A conditional REST read of *path* sent with *etag*: `(changed, etag)`, where a
+        304 is `(False, etag)`, a 200 `(True, its ETag)` and anything else, a failure
+        included, `(True, None)` (spec 2026-10-12-quota-pacing R8). Never raises."""
+        ...
+
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         """The RAW issue record (on GitHub, `gh issue view --json
         ISSUE_VIEW_FIELDS`: title, url, label objects…) — distinct from the
@@ -474,6 +480,9 @@ class UnsupportedBatchOps:
 
     def rate_limit(self) -> dict[str, Any]:
         raise self._unsupported("rate_limit")
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        raise self._unsupported("probe")
 
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("view_issue_record")
