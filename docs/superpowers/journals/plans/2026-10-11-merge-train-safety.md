@@ -444,3 +444,33 @@ Specific assertions; the ejected test asserts the Need; the fake refuses drafts.
 ### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: a repo without origin/HEAD and an approved green PR aborts every pass at merge_ctx (phase 3)
 
 merge_ctx's _fresh_config default-branch lookup raising ForgeReadError on a clone with no origin/HEAD predates phase 3 (origin/main behaves the same); phase 3 only stopped its own queue read from triggering it earlier.
+
+<!-- fr:journal kind=decision scope=plan id=p4-action-pin created=2026-10-12T00:15:50+00:00 phase=4 -->
+### p4-action-pin · decision · create-github-app-token pinned to v1.12.0's commit sha (phase 4)
+
+The newest v1.x tag is v1.12.0, resolved with REST (git/ref/tags) to a commit sha d72941d7...; the workflow carries the tag name in a trailing comment like its other pinned actions.
+
+<!-- fr:journal kind=decision scope=plan id=p4-explainers-not-affected created=2026-10-12T00:15:50+00:00 phase=4 -->
+### p4-explainers-not-affected · decision · No explainer update owed: 01-fr-goal.md does not describe release identity or main protection (phase 4)
+
+docs/explainers/01-fr-goal.md says the agent never self-merges and describes post-merge verification, but nothing about who pushes the release commit, CI on it, or main's ruleset. The change is invisible to a reader of the published page, so under explainers-currency no .md or .html regeneration is owed.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-script-not-run-live created=2026-10-12T00:15:50+00:00 phase=4 -->
+### p4-script-not-run-live · discovery · The protection script was exercised only against a stub gh (phase 4)
+
+Per the spec, applying it to the live repo is a post-merge step; the tests stub gh on PATH and the live ruleset JSON shape (name,target,enforcement,conditions,rules,bypass_actors as the PUT body, installations .app_id/.app_slug, actions runs .triggering_actor.login) is taken from the documented REST shapes, not captured.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-12T00:15:50+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+a conditional step and two token expressions in one workflow plus a message string; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-10-12T00:15:50+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+one new script and its test; no existing code touched
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-10-12T00:15:50+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+docs, AGENTS.md prose and a matrix status; no code
