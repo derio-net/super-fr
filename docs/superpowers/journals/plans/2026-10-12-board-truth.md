@@ -299,3 +299,98 @@ components.py gained the registry, pages_present and page_header in one place; e
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 Skill text, mirrors, scenario and matrix row are new content with no prior duplication to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · Own-page writes of triage/history/origins/architecture were non-atomic (phase 4)
+
+A concurrent refresh_navs could read a partial page and write it back truncated.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · refresh_navs read-modify-write could overwrite a freshly rendered sibling (phase 4)
+
+Lost-update window, undocumented.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · No-nav warnings repeated every driver/watch pass (phase 4)
+
+Not deduplicated like board/publish failures.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · refresh_navs let write OSErrors escape (phase 4)
+
+Aborted triage render before the snapshot store; driver misreported it.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · Publish {board} became a temp path without documentation (phase 4)
+
+SKILL.md described {board} as the rendered board.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · Leftover board naming in user-facing text (phase 4)
+
+render.py 'Open the live board'; SKILL.md 'the board shows them'.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · Test gaps: NAV_BLOCK identity tautology, two-nav case, origins/architecture CLI refresh, publish cleanup (phase 4)
+
+See review.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=out -->
+### p4-r8 · finding [open] (reviewer: out of scope) · Phone-width 'cards past the right edge' is a headless-Chrome artifact (phase 4)
+
+--window-size=390 lays out at a 500px minimum; at a true 390px scrollWidth==innerWidth.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-10-12T08:36:34+00:00 phase=4 state=open review_scope=out -->
+### p4-r9 · finding [open] (reviewer: out of scope) · Skew banner said 'This board is not the whole truth.' on Backlog and Batches (phase 4)
+
+Skew banner wording 'This board is not the whole truth.' on Backlog/Batches pages; the reviewer attributes it to an earlier phase.
+
+<!-- fr:journal kind=review scope=plan id=p4-review-1 created=2026-10-12T08:36:34+00:00 phase=4 -->
+### p4-review-1 · review · Phase 4 code review (phase 4)
+
+Dispatched read-only reviewer over e0bcdfbb..cfd50dc9, which rendered org and single-repo state dirs itself and screenshotted them (true 390px via iframe for phone width), raised p4-r1..p4-r9. r1-r7 fixed in aa5cdccd; r8 out of scope (screenshot artifact); r9 out of scope per the reviewer, wording changed anyway in aa5cdccd. nav-link-each-tab verified from markup: every relative href on all 8 pages resolves to an existing file, one aria-current per page, re-rendering the board left sibling mtimes unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: Own-page writes of triage/history/origins/architecture were non-atomic (phase 4)
+
+All four use write_text_atomic. Tests test_a_render_writes_its_own_page_atomically, test_origins_render_writes_its_page_atomically, test_architecture_render_writes_its_page_atomically.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: refresh_navs read-modify-write could overwrite a freshly rendered sibling (phase 4)
+
+Re-read just before writing; skip when changed; docstring documents it. Test test_a_page_changed_between_read_and_write_is_not_overwritten.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: No-nav warnings repeated every driver/watch pass (phase 4)
+
+warn_nav says each (page, cause) once per process. Test test_the_no_nav_warning_is_said_once_across_passes.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: refresh_navs let write OSErrors escape (phase 4)
+
+Per-page OSError/UnicodeDecodeError caught and warned. Tests test_a_failed_nav_write_warns_naming_the_page_and_never_raises, test_a_render_still_stores_its_snapshot_when_a_nav_cannot_be_written.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: Publish {board} became a temp path without documentation (phase 4)
+
+SKILL.md documents the nav-less temp copy that exists only while the command runs; cwd still the state dir. Test test_the_publish_copy_is_gone_once_the_command_returns pins the lifetime.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: Leftover board naming in user-facing text (phase 4)
+
+'Open the Batches page' and 'the Backlog page shows them'. Test test_the_backlog_names_the_batches_page_not_the_board.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: Test gaps: NAV_BLOCK identity tautology, two-nav case, origins/architecture CLI refresh, publish cleanup (phase 4)
+
+test_a_page_with_two_nav_blocks_is_treated_alike_by_refresh_and_strip (replace-all and strip-all), test_origins_render_refreshes_the_nav_of_a_sibling_page, test_architecture_render_refreshes_the_nav_of_a_sibling_page, test_the_publish_copy_is_gone_once_the_command_returns.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=open resolves=p4-r8 out_of_scope=true -->
+### p4-r8-resolved · finding [out-of-scope] · resolves p4-r8: Phone-width 'cards past the right edge' is a headless-Chrome artifact (phase 4)
+
+Not a defect: verified no horizontal scroll at a true 390px; pre-existing board CSS collapses to one column at <=720px.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-10-12T08:36:34+00:00 phase=4 state=open resolves=p4-r9 out_of_scope=true -->
+### p4-r9-resolved · finding [out-of-scope] · resolves p4-r9: Skew banner said 'This board is not the whole truth.' on Backlog and Batches (phase 4)
+
+Tagged out by the reviewer (outside R12's list). Note for the operator: the banner was added by this same PR (phase 2), and its wording was nonetheless changed in aa5cdccd to 'This page is not the whole truth.'; marking it fixed is the operator's call.
