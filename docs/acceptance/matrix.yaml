@@ -6861,9 +6861,13 @@ rows:
       through a conditional REST request whose 304 answer costs no budget.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gh.py#TestConditionalVisibility::test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer
+    status: ci
+    notes: 'Built in phase 3: fr.gh.repo_visibility, a conditional REST read with a
+      module-level (host, repo) ETag map shared by both adapters; a 304 returns the
+      cached answer, an error raises.'
     verify: none
   - id: quota-board-footer
     capability: triage-batch-drive
