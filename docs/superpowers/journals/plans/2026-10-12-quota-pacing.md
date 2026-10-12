@@ -259,3 +259,63 @@ the refactor was the work itself: make_pacer, plan_paced_pass and rate_limit_rea
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 a single optional render argument and one footer clause; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-10-12T08:56:54+00:00 phase=3 -->
+### p3-review · review · code review of phase 3 (ffd287ae..080abd7f) (phase 3)
+
+Independent reviewer found no correctness or privacy defect in R12, R17 or R14 (R12 traced fail-closed on every path). Raised 5 findings: p3-r1..p3-r4 in (tests, docstring, footer UTC), fixed in c235ea3f; p3-r5 out of scope.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-ci-scenarios created=2026-10-12T08:56:54+00:00 phase=3 -->
+### p3-ci-scenarios · discovery · CI caught three scenario fakes missing the visibility read's -i (phase 3)
+
+The cloud-triage scenario fakes matched `gh api repos/...` exactly; the R12 read sends `-i`. The privacy guard correctly refused (fail closed). Fixed in 080abd7f by letting the fakes accept -i.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-12T08:56:54+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · no test for the quiet-pass-with-no-board.html render-once behaviour (phase 3)
+
+no test for the quiet-pass-with-no-board.html render-once behaviour
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-12T08:56:54+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · repo_visibility fail-closed branches and an end-to-end live_visibility None case were untested (phase 3)
+
+repo_visibility fail-closed branches and an end-to-end live_visibility None case were untested
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-12T08:56:54+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · recollect docstring said 'no carry-over' though only= carries (phase 3)
+
+recollect docstring said 'no carry-over' though only= carries
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-12T08:56:54+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · footer printed reset %H:%MZ without normalising to UTC (phase 3)
+
+footer printed reset %H:%MZ without normalising to UTC
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-12T08:56:54+00:00 phase=3 state=open review_scope=out -->
+### p3-r5 · finding [open] (reviewer: out of scope) · drive lock is checked only at the start of each watch iteration (phase 3)
+
+drive lock is checked only at the start of each watch iteration
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-12T08:56:54+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: no test for the quiet-pass-with-no-board.html render-once behaviour (phase 3)
+
+Test test_a_quiet_pass_with_no_board_yet_renders_it_once (c235ea3f).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-12T08:56:54+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: repo_visibility fail-closed branches and an end-to-end live_visibility None case were untested (phase 3)
+
+TestConditionalVisibility gained every fail-closed case (non-304 error keeps entry, exit-0 304 raises, unusable 200 raises, no-ETag 200 drops the entry, status-less body caches nothing, other repo same host); test_a_5xx_after_a_cached_200_makes_the_visibility_unreadable. All passed against the existing code: it already failed closed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-12T08:56:54+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: recollect docstring said 'no carry-over' though only= carries (phase 3)
+
+Docstring reworded (c235ea3f).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-12T08:56:54+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: footer printed reset %H:%MZ without normalising to UTC (phase 3)
+
+budget_from_json normalises naive to UTC and aware to astimezone(UTC). Tests test_the_footer_names_the_reset_in_utc_whatever_offset_the_record_carried, test_the_footer_escapes_the_resource_name.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-12T08:56:54+00:00 phase=3 state=open resolves=p3-r5 out_of_scope=true -->
+### p3-r5-resolved · finding [out-of-scope] · resolves p3-r5: drive lock is checked only at the start of each watch iteration (phase 3)
+
+Existing lock design (triage_kanban_cmd _watch predates this change); pacing.json writes are atomic and advisory, so an interleave is bounded. Not caused by this change.
