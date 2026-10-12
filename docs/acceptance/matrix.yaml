@@ -8422,6 +8422,9 @@ rows:
       or raises the unsupported error by name.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R26
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_adapter_debt_ops.py#test_gh_edit_issue_builds_title_and_body_flags
+    status: ci
+    notes: 'Shipped in #1139: every client''s debt ops unit-tested in CI against recorded-command
+      doubles (glab/tea not live-captured; a live walk of those forges is owed).'
