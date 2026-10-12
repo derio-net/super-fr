@@ -446,6 +446,9 @@ class CollectStats:
     carried: int = 0
     # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (gh#998)
     ignored: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # The repos a partial collect carried, not read (spec 2026-10-12-quota-pacing R10):
+    # the one answer the drive's snapshot and ETag promotion both use (p2-r5).
+    carried_repos: frozenset[str] = frozenset()
 
 
 def collect_facts(
@@ -661,9 +664,6 @@ def collect_facts_counted(
                 out.append(known.model_copy(update={"prs": linked(repo, number)}))
                 carried_n += 1
                 continue
-            if isinstance(known, Unviewed):
-                unviewed.append(known)
-                continue
         if (listed := listed_prs.get(issue_key(repo, number))) is not None:
             judged_prs.append(listed)
             continue
@@ -728,7 +728,9 @@ def collect_facts_counted(
         # one live, so a carried "public" could outlive the repo going private (R10).
         visibility=_visibility(forge, collected, listed_visibility),
     )
-    return facts, CollectStats(viewed=viewed, carried=carried_n, ignored=ignored)
+    return facts, CollectStats(
+        viewed=viewed, carried=carried_n, ignored=ignored, carried_repos=keep
+    )
 
 
 def _carry_set(only: Iterable[str] | None, previous: Facts | None) -> frozenset[str]:
@@ -754,9 +756,11 @@ def _kept_links(previous: Facts | None, carry: frozenset[str]) -> dict[IssueRef,
     return kept
 
 
-def _carried_judgement(previous: Facts, key: str) -> Issue | PullRequest | Unviewed | None:
-    """What *previous* knew of a judged key of a carried repo: a PR, the issue, the
-    reason it could not be viewed; None when it never saw the key, which is viewed."""
+def _carried_judgement(previous: Facts, key: str) -> Issue | PullRequest | None:
+    """What *previous* knew of a judged key of a carried repo: a PR or the issue; None
+    when it never saw the key, which is viewed. A key *previous* could not view is never
+    carried (p2-r2): its reason may be a rate limit, and carrying that would end every
+    partial pass on it until the next full one."""
     for pr in [
         *previous.judged_prs,
         *previous.prs,
@@ -768,7 +772,7 @@ def _carried_judgement(previous: Facts, key: str) -> Issue | PullRequest | Unvie
     for issue in previous.issues:
         if issue.key == key:
             return issue
-    return next((u for u in previous.unviewed if u.key == key), None)
+    return None
 
 
 def linked_prs_all(issues: Iterable[Issue]) -> list[PullRequest]:

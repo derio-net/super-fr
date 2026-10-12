@@ -118,7 +118,7 @@ class Pacer:
         full = facts is None or probe.full_due(self.state, now)
         probes = probe.probe_set(repos, facts, judgements)
         changed, pending = probe.run_probes(forge, probes, self.state, full=full)
-        return probe.plan_pass(
+        plan = probe.plan_pass(
             self.state if facts is not None else replace(self.state, full_at=None),
             now,
             repos=repos,
@@ -130,23 +130,46 @@ class Pacer:
             probes=sum(len(p) for p in probes.values()),
             full=full,
         )
+        if facts is None:  # nothing to carry from: the collect reads every repo (p2-r5)
+            plan = replace(plan, only=None, carried=frozenset())
+        return plan
 
-    def after_collect(self, plan: probe.PassPlan, facts: Facts) -> None:
+    def after_collect(self, plan: probe.PassPlan, facts: Facts, carried: frozenset[str]) -> None:
         """Once `facts.json` is written (R11): store the pending ETags of the repos read
-        successfully, drop a failed repo's, record the judgements this pass planned on,
-        and, when every repo was read, the full pass."""
-        failed = {s.repo for s in facts.skipped}
-        read = set(facts.repos) - set(plan.carried) - failed
+        successfully, drop a failed repo's, and, when every repo was read, record the full
+        pass. *carried* is the set the collect itself carried (p2-r5). A repo is failed
+        when collect skipped it or left one of its keys unviewed on a rate limit (p2-r2).
+
+        The last planned pass's summary and digest are dropped here (p2-r1): the facts
+        moved on, and this pass may still fail before it plans, so nothing may be quiet on
+        their strength; `record_summary` writes both once the pass has planned."""
+        failed = {s.repo for s in facts.skipped} | _rate_limited_repos(facts)
+        read = set(facts.repos) - set(carried) - failed
         state = probe.promote(self.state, plan.pending, read_ok=read, failed=failed)
-        state = replace(state, judgements_digest=plan.digest)
+        state = replace(state, summary=None, judgements_digest=None)
         if plan.only is None:
             state = replace(state, full_at=self._now())
         self._save(state)
 
-    def record_summary(self, summary: dict[str, int]) -> None:
-        """The planned pass's summary, which a quiet pass reports as its own (R9)."""
-        self._save(replace(self.state, summary=dict(summary)))
+    def record_summary(self, summary: dict[str, int], *, digest: str, held: bool) -> None:
+        """The planned pass's summary, which a quiet pass reports as its own (R9), the
+        judgements it planned on, and whether it held its dispatches for the quota: a pass
+        back above the floor after a held one is never quiet (p2-r3)."""
+        self._save(
+            replace(
+                self.state, summary=dict(summary), judgements_digest=digest, held_for_quota=held
+            )
+        )
 
     def stretch(self, until: datetime | None) -> None:
         """R7: below the floor the next pass waits until *until* (four intervals)."""
         self._save(replace(self.state, next_pass_at=until))
+
+
+def _rate_limited_repos(facts: Facts) -> set[str]:
+    """The repos of the judged keys the collect left unviewed on a rate limit (p2-r2). A
+    key is `<repo-name>#<n>`; a group never holds two repos of one name."""
+    names = {
+        u.key.split("#", 1)[0].lower() for u in facts.unviewed if quota.is_rate_limited(u.reason)
+    }
+    return {r for r in facts.repos if r.split("/", 1)[-1].lower() in names}

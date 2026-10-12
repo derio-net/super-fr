@@ -436,7 +436,7 @@ def collect_into(
     lenient: bool = False,
     settle: bool = False,
     only: Iterable[str] | None = None,
-    after_write: Callable[[Facts], None] | None = None,
+    after_write: Callable[[Facts, frozenset[str]], None] | None = None,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
@@ -453,8 +453,9 @@ def collect_into(
 
     *only* (a paced drive pass, spec 2026-10-12-quota-pacing R10) reads just those repos
     and carries the rest from the previous facts.json. *after_write* runs once facts.json
-    is written, never before: the drive stores the probes' ETags there, so they always
-    describe facts already on disk (R11).
+    is written, never before, with the repos this collect actually carried: the drive
+    stores the probes' ETags there, so they always describe facts already on disk (R11),
+    and takes that one carried set for its snapshot too (p2-r5).
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
@@ -494,7 +495,7 @@ def collect_into(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     if after_write is not None:
-        after_write(facts)
+        after_write(facts, stats.carried_repos)
     if settle:
         _settle_state_repo(target_dir, facts)
     elif load_durable(target_dir).state_repo is None:

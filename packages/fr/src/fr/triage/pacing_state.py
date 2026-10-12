@@ -10,16 +10,24 @@ never a crash: pacing is an optimisation, and the pass it guards must still run.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import MISSING, asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.triage.batch_drive import Summary
 
 PACING_FILE = "pacing.json"
 
 _TIMES = ("full_at", "wait_until", "next_pass_at")
+
+# A quiet pass builds the drive's `Summary` from the recorded one (R9), so a record is
+# usable only when it has exactly that shape (p2-r7).
+_SUMMARY_FIELDS = frozenset(f.name for f in fields(Summary))
+_SUMMARY_REQUIRED = frozenset(
+    f.name for f in fields(Summary) if f.default is MISSING and f.default_factory is MISSING
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +43,9 @@ class PacingState:
     # The last planned pass's summary counts: a quiet pass (R9) changes nothing, so it
     # reports, and ends or keeps the drive on, exactly what that pass did.
     summary: dict[str, int] | None = None
+    # The last planned pass held its dispatches below the floor (R7): the first pass back
+    # above it is never quiet, or the held dispatches would wait for the next full pass.
+    held_for_quota: bool = False
 
 
 def _stamp(value: datetime | None) -> str | None:
@@ -67,8 +78,9 @@ def _from_json(data: object) -> PacingState:
     if summary is not None and not (
         isinstance(summary, dict)
         and all(isinstance(v, int) and not isinstance(v, bool) for v in summary.values())
+        and _SUMMARY_REQUIRED <= summary.keys() <= _SUMMARY_FIELDS
     ):
-        summary = None  # an unusable record is no record: the next pass plans
+        summary = None  # an unusable record is no record: the next pass plans (p2-r7)
     return PacingState(
         etags={r: dict(v) for r, v in etags.items()},
         full_at=_parsed(data.get("full_at")),
@@ -78,6 +90,7 @@ def _from_json(data: object) -> PacingState:
         judgements_digest=digest if isinstance(digest, str) else None,
         budget=budget if isinstance(budget, dict) else None,
         summary=dict(summary) if summary is not None else None,
+        held_for_quota=data.get("held_for_quota") is True,
     )
 
 

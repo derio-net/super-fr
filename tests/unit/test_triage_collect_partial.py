@@ -139,8 +139,9 @@ def test_collect_into_carries_and_calls_back_after_facts_json(tmp_path, monkeypa
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
     seen: list[object] = []
 
-    def after(facts):  # type: ignore[no-untyped-def]
+    def after(facts, carried):  # type: ignore[no-untyped-def]
         seen.append(load_facts(tmp_path / "facts.json") == facts)
+        assert carried == {B}, "the repos the collect actually carried (p2-r5)"
 
     facts, _, _ = triage_cmd.collect_into(
         ORG, tmp_path, carry=True, lenient=True, only={A}, after_write=after
@@ -159,3 +160,40 @@ def test_a_carried_repo_s_visibility_is_left_out_for_the_guard_to_read_live() ->
     facts = _collect(forge, only={A}, previous=previous)
     assert B not in facts.visibility
     assert forge.visibility_calls == [A]
+
+
+def test_the_stats_name_the_repos_actually_carried() -> None:
+    """p2-r5: the drive takes the carried set from the collect, never re-derives it."""
+    previous = _collect(_forge())
+    stats = collect_facts_counted(
+        _forge(), ORG, now=NOW, judged=["beta#99"], only={A}, previous=previous
+    )[1]
+    assert stats.carried_repos == {B}
+    failing = _forge()
+    failing.failing = {B: "HTTP 502"}
+    skipped = _collect(failing)
+    stats = collect_facts_counted(
+        _forge(), ORG, now=NOW, judged=["beta#99"], only={A}, previous=skipped
+    )[1]
+    assert stats.carried_repos == frozenset(), "a repo skipped last time is read"
+    full = collect_facts_counted(_forge(), ORG, now=NOW, judged=["beta#99"])[1]
+    assert full.carried_repos == frozenset()
+
+
+def test_a_carried_repo_s_unviewed_key_is_viewed_again() -> None:
+    """p2-r2: an `Unviewed` (a rate limit, say) is never carried: carrying it would
+    re-raise the same rate limit every partial pass until the next full one."""
+    from fr.triage.model import Unviewed
+
+    previous = _collect(_forge())
+    previous = previous.model_copy(
+        update={
+            "issues": [i for i in previous.issues if i.key != "beta#99"],
+            "unviewed": [Unviewed(key="beta#99", reason="API rate limit exceeded")],
+        }
+    )
+    forge = _forge()
+    facts = _collect(forge, only={A}, previous=previous)
+    assert [kw["number"] for kw in forge.called("view_issue")] == [99]
+    assert facts.unviewed == []
+    assert next(i for i in facts.issues if i.key == "beta#99").state == "closed"

@@ -22,7 +22,6 @@ from fr.triage import pacing_state
 from fr.triage.model import FACTS_SCHEMA, Scope
 from fr.triage.pacing_state import PacingState
 from fr.triage.probe import QUOTA_HOLD, checks_probes, issues_probe, judgements_digest
-from fr.triage.quota import Pace
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
@@ -69,6 +68,9 @@ class Rig:
         self.stop_after = 1
         self.clock = [NOW]
         self.forge = FakeForge(issues={}, prs={})
+        self.scope_args = ["--repo", REPO]
+        self.reshape: Any = lambda facts: facts
+        self.fail_after_write: list[str] = []  # each collect pops one: raised after the write
         monkeypatch.setattr(triage_batch_cmd, "_pace_forge", lambda: meter)
         monkeypatch.setattr(triage_batch_cmd, "_probe_forge", lambda: self.forge)
         monkeypatch.setattr(triage_batch_cmd, "_now", lambda: self.clock[0])
@@ -84,11 +86,15 @@ class Rig:
         monkeypatch.setattr(triage_batch_cmd._Driver, "take_lease", take)
 
     def recollect(self, scope: Any, target: Path, **kw: Any) -> dict[str, Any]:
-        self.collects.append(kw.get("only"))
-        facts = self.world.facts()
+        only = kw.get("only")
+        self.collects.append(only)
+        facts = self.reshape(self.world.facts())
         (target / "facts.json").write_text(json.dumps(facts.to_json()), "utf-8")
         if kw.get("after_write") is not None:
-            kw["after_write"](facts)
+            carried = frozenset(r for r in facts.repos if only is not None and r not in only)
+            kw["after_write"](facts, carried)
+        if self.fail_after_write:
+            raise triage_batch_cmd.ForgeReadError(self.fail_after_write.pop(0), code=2)
         return {}
 
     def board(self) -> None:
@@ -102,7 +108,7 @@ class Rig:
 
     def drive(self, state: Path) -> tuple[int, str]:
         result = CliRunner().invoke(
-            app, ["triage", "batch", "drive", "--yes", "--repo", REPO, "--dir", str(state)]
+            app, ["triage", "batch", "drive", "--yes", *self.scope_args, "--dir", str(state)]
         )
         return result.exit_code, result.output
 
@@ -206,52 +212,64 @@ def test_below_the_floor_nothing_is_dispatched_and_the_drive_keeps_going(
     assert code != 3, "a below-floor pass never ends the drive as stalled"
     assert rig.naps == [4 * 120]
     assert rig.boards == 0
+    assert "re-run with --yes" not in out, "an essential pass with --yes acted (p2-r4)"
     assert pacing_state.load(tmp_path)[0].next_pass_at == NOW + timedelta(seconds=480)
 
 
 def test_dispatch_resumes_once_the_budget_is_back_above_the_floor(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: Any, monkeypatch: Any
 ) -> None:
+    """p2-r3: a recent full pass on record and nothing changed since the held pass: the
+    pass back above the floor is still planned (never quiet), so the held dispatch goes."""
     _proposed(world, tmp_path)
     rig = Rig(monkeypatch, world, Meter(LOW, rate_limit_answer()))
     rig.stop_after = 2
+    rig.forge.probe_etags = {issues_probe(REPO): "E-0"}
+    pacing_state.save(
+        tmp_path,
+        PacingState(
+            etags={REPO: {issues_probe(REPO): "E-0"}},
+            full_at=NOW - timedelta(minutes=1),
+            judgements_digest="the judgements of another pass",  # the held pass plans
+            summary=SUMMARY,
+        ),
+    )
 
-    rig.drive(tmp_path)
+    code, out = rig.drive(tmp_path)
 
+    assert f"held b2: {QUOTA_HOLD}" in out, out
+    assert "quiet:" not in out, out
     assert len(runner.dispatched) == 1 and "b2" in runner.dispatched[0].id
     assert rig.naps[0] == 480
+    assert pacing_state.load(tmp_path)[0].held_for_quota is False
 
 
 def test_below_the_floor_a_forced_full_pass_reads_only_the_live_batch_repos(
-    tmp_path: Path, world: World, monkeypatch: Any
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: Any, monkeypatch: Any
 ) -> None:
     """R7, R11: no full pass for 15 minutes, but below the floor only the repos with a live
     batch are read; the rest are carried and their probes still go unconditionally."""
     _pr_open(world, tmp_path)
     group = Scope.group([REPO, OTHER])
-    facts = world.facts().model_copy(
-        update={
-            "schema_": FACTS_SCHEMA,
-            "scope": group.name,
-            "kind": "group",
-            "repos": [OTHER, REPO],
-        }
-    )
-    (tmp_path / "facts.json").write_text(json.dumps(facts.to_json()), "utf-8")
-    forge = FakeForge(issues={}, prs={})
-    monkeypatch.setattr(triage_batch_cmd, "_probe_forge", lambda: forge)
-    driver = triage_batch_cmd._Driver(
-        group, tmp_path, named=None, checkouts={}, max_inflight=3, yes=True
-    )
-    driver.pacer = triage_batch_cmd.make_pacer(tmp_path, quota_floor=None, interval_s=120)
-    driver.pace = Pace("essential", NOW + timedelta(minutes=8), "floor")
 
-    plan = driver._pass_plan()
+    def grouped(facts: Any) -> Any:
+        return facts.model_copy(
+            update={"schema_": FACTS_SCHEMA, "scope": group.name, "kind": "group",
+                    "repos": [OTHER, REPO]}
+        )  # fmt: skip
 
-    assert plan is not None and plan.kind == "essential"
-    assert plan.only == {REPO} and plan.carried == {OTHER}
-    assert plan.dispatch_held == QUOTA_HOLD
-    assert (issues_probe(OTHER), None) in forge.probe_calls, "a full pass's probes"
+    (tmp_path / "facts.json").write_text(json.dumps(grouped(world.facts()).to_json()), "utf-8")
+    rig = Rig(monkeypatch, world, Meter(LOW))
+    rig.scope_args = ["--repo", f"{REPO},{OTHER}", "--checkout", f"{REPO}={checkout.path}",
+                      "--checkout", f"{OTHER}={checkout.path}"]  # fmt: skip
+    rig.reshape = grouped
+
+    code, out = rig.drive(tmp_path)
+
+    assert rig.collects == [frozenset({REPO})], out
+    assert "below floor 20%: essential-only pass" in " ".join(out.split())
+    assert (issues_probe(OTHER), None) in rig.forge.probe_calls, "a full pass's probes"
+    assert not [c for c in world.calls if OTHER in c], "no live read for the carried repo"
 
 
 def test_the_cloud_pass_below_the_floor_is_the_same_essential_only_pass(
@@ -278,3 +296,66 @@ def test_the_cloud_pass_below_the_floor_is_the_same_essential_only_pass(
     assert f"held b1: {QUOTA_HOLD}" in result.output and f"held b2: {QUOTA_HOLD}" in result.output
     assert "essential-only pass, dispatch held" in flat
     assert pacing_state.load(state)[0].next_pass_at is not None
+
+
+def test_a_pass_that_fails_after_writing_its_facts_is_never_followed_by_a_quiet_one(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: Any, monkeypatch: Any
+) -> None:
+    """p2-r1: the collect wrote facts.json (and moved the ETags) and then the pass hit a
+    rate limit before it planned; the next pass sees 304s and the same judgements, but
+    the failed pass's plan is still owed, so it plans rather than going quiet."""
+    _pr_open(world, tmp_path)
+    rig = Rig(monkeypatch, world, Meter())
+    _settled(tmp_path, rig)
+    rig.forge.probe_etags[issues_probe(REPO)] = "E-new"  # pass 1 has something to read
+    rig.fail_after_write = ["API rate limit exceeded for user ID 1"]
+    rig.stop_after = 2
+
+    code, out = rig.drive(tmp_path)
+
+    assert "quiet:" not in out, out
+    assert len(rig.collects) == 2, "the pass after the failed one collects and plans"
+    assert "in flight 1" in out, "and plans: its summary line is its own"
+
+
+def test_a_paced_drive_with_no_previous_facts_below_the_floor_reads_and_merges(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: Any, monkeypatch: Any
+) -> None:
+    """p2-r5: no facts.json to carry from: the essential pass reads every repo, so a
+    ready batch still merges and the repo's ETags are stored."""
+    _pr_open(world, tmp_path)
+    (tmp_path / "facts.json").unlink()
+    rig = Rig(monkeypatch, world, Meter(LOW))
+    rig.forge.probe_etags = {issues_probe(REPO): "E-0"}
+
+    code, out = rig.drive(tmp_path)
+
+    assert rig.collects == [None], out
+    assert world.merged == [(101, "sha-101", "squash")], out
+    assert pacing_state.load(tmp_path)[0].etags[REPO] == {issues_probe(REPO): "E-0"}
+
+
+def test_a_carried_repo_s_batch_claims_its_members_before_it_dispatches(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: Any, monkeypatch: Any
+) -> None:
+    """p2-r6: a carried repo's issues and claim comments are current (its probes said
+    unchanged), so the claims its dispatch owes are planned from the carried facts."""
+    _proposed(world, tmp_path)
+    rig = Rig(monkeypatch, world, Meter())
+    rig.forge.probe_etags = {issues_probe(REPO): "E-0"}
+    pacing_state.save(
+        tmp_path,
+        PacingState(
+            etags={REPO: {issues_probe(REPO): "E-0"}},
+            full_at=NOW - timedelta(minutes=1),
+            judgements_digest="the judgements of another pass",
+            summary=SUMMARY,
+        ),
+    )
+
+    code, out = rig.drive(tmp_path)
+
+    assert rig.collects == [frozenset()], "the repo is carried"
+    assert len(runner.dispatched) == 1, out
+    assert "claim super-fr#2 (b2): posted" in out, out
+    assert out.index("claim super-fr#2") < out.index("dispatch b2")

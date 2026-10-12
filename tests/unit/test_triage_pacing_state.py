@@ -74,3 +74,25 @@ def test_an_unusable_summary_is_no_summary(tmp_path: Path) -> None:
     (tmp_path / pacing_state.PACING_FILE).write_text('{"summary": {"pending": "x"}}')
     state, warning = pacing_state.load(tmp_path)
     assert state.summary is None and warning is None
+
+
+def test_a_summary_with_a_key_the_summary_does_not_have_is_no_summary(tmp_path: Path) -> None:
+    """p2-r7: a quiet pass builds the pass summary from this record, so a key it does not
+    know (or one it requires, missing) drops the record and the next pass plans."""
+    (tmp_path / pacing_state.PACING_FILE).write_text(
+        '{"summary": {"in_flight": 1, "merged": 0, "pending": 0, "closing": 0, "bogus": 1}}',
+        encoding="utf-8",
+    )
+    assert pacing_state.load(tmp_path)[0].summary is None
+    (tmp_path / pacing_state.PACING_FILE).write_text(
+        '{"summary": {"in_flight": 1}}', encoding="utf-8"
+    )
+    assert pacing_state.load(tmp_path)[0].summary is None
+
+
+def test_held_for_quota_round_trips_and_a_bad_value_is_false(tmp_path: Path) -> None:
+    """p2-r3: whether the last planned pass held its dispatches for the quota."""
+    pacing_state.save(tmp_path, PacingState(held_for_quota=True))
+    assert pacing_state.load(tmp_path)[0].held_for_quota is True
+    (tmp_path / pacing_state.PACING_FILE).write_text('{"held_for_quota": "yes"}')
+    assert pacing_state.load(tmp_path)[0].held_for_quota is False

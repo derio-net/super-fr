@@ -6,6 +6,7 @@ Pure over a `FakeForge` probe table: a probe sent with the ETag the forge holds 
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -169,6 +170,11 @@ def test_pass_kinds() -> None:
     # A pass that never recorded its summary cannot be repeated quietly.
     unsummarised = PacingState(full_at=NOW, judgements_digest="d")
     assert pass_kind(unsummarised, NOW, set(), "d", below_floor=False) == "partial"
+    # p2-r3: the last planned pass held its dispatches for the quota; above the floor
+    # again, the held dispatches are owed a planned pass, whatever the probes say.
+    held = replace(fresh, held_for_quota=True)
+    assert pass_kind(held, NOW, set(), "d", below_floor=False) == "partial"
+    assert pass_kind(held, NOW, set(), "d", below_floor=True) == "quiet"
 
 
 def test_plan_pass_narrows_to_changed_and_below_the_floor_to_live_repos() -> None:

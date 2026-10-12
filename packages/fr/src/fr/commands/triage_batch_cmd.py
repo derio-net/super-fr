@@ -2387,7 +2387,7 @@ def recollect(
     target: Path,
     *,
     only: frozenset[str] | None = None,
-    after_write: Callable[[Facts], None] | None = None,
+    after_write: Callable[[Facts, frozenset[str]], None] | None = None,
 ) -> Mapping[str, tuple[str, ...]]:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
     every stage is derived from facts, so each pass starts here (wave-driver §B).
@@ -3095,9 +3095,9 @@ class _Driver:
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
-        claim_plan = self._claim_plan(
-            facts, judgements, repos, {**unread, **dict.fromkeys(carried, "carried")}, now
-        )
+        # A carried repo's issues and claim comments are current (its probes answered
+        # unchanged), so its owed claims are planned like any read repo's (p2-r6).
+        claim_plan = self._claim_plan(facts, judgements, repos, unread, now)
         export_path, export_refused = self._export_config(facts)
         export_path = {r: p for r, p in export_path.items() if r not in carried}
         export_prs, export_orphans = self._export_reads(
@@ -3684,16 +3684,21 @@ class _Driver:
         paced = self._pass_plan()
         if paced is not None and not paced.collects:
             return self._quiet_pass(paced)
+        # The repos the collect actually carried (p2-r5): one value for the ETags it
+        # promotes and the snapshot's live reads, so the two cannot drift.
+        collected_carried: list[frozenset[str]] = []
         if paced is None:
             ignored = recollect(self.scope, self.target) or {}
         else:
             pacer = self.pacer
             assert pacer is not None
+
+            def after_write(facts: Facts, carried: frozenset[str]) -> None:
+                collected_carried.append(carried)
+                pacer.after_collect(paced, facts, carried)
+
             ignored = recollect(
-                self.scope,
-                self.target,
-                only=paced.only,
-                after_write=lambda facts: pacer.after_collect(paced, facts),
+                self.scope, self.target, only=paced.only, after_write=after_write
             ) or {}  # fmt: skip
         for repo, keys in sorted(ignored.items()):
             self._report_once(
@@ -3711,7 +3716,13 @@ class _Driver:
         self._export_failures = 0
         self._held_now, self._claim_done = {}, SyncResult()
         self.failed_write = False
-        carried = paced.carried if paced is not None else frozenset[str]()
+        carried = (
+            collected_carried[-1]
+            if collected_carried
+            else paced.carried
+            if paced is not None
+            else frozenset[str]()
+        )
         snap = self.snapshot(facts, judgements, _now(), carried)
         if paced is not None and paced.dispatch_held is not None:
             snap = replace(snap, dispatch_held=paced.dispatch_held)
@@ -3779,9 +3790,12 @@ class _Driver:
             if self.yes:
                 self._restart_sessions()  # soft: never raises out of here
         if self.pacer is not None and paced is not None:
-            self.pacer.record_summary(asdict(summary))
-        if self.yes and (paced is None or paced.kind != "essential"):
-            self._write_board()  # an essential-only pass keeps the last board (R14)
+            self.pacer.record_summary(
+                asdict(summary), digest=paced.digest, held=paced.dispatch_held is not None
+            )
+        if self.yes:
+            if paced is None or paced.kind != "essential":
+                self._write_board()  # an essential-only pass keeps the last board (R14)
         else:
             _say("nothing done; re-run with --yes to act")
         stuck = [a.batch for a in plan.actions if a.kind == "blocked"]

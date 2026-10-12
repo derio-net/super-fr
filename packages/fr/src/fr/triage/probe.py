@@ -150,9 +150,18 @@ def pass_kind(
 ) -> PassKind:
     """R9: quiet when nothing changed and the judgements are the last planned pass's (and
     that pass's summary is on record, to stand for this one); below the floor every other
-    pass is essential-only (R7); else full when due (R11), partial otherwise (R10)."""
+    pass is essential-only (R7); else full when due (R11), partial otherwise (R10). Above
+    the floor after a pass that held its dispatches for the quota, never quiet: those
+    dispatches are owed a planned pass (p2-r3)."""
     due = full_due(state, now)
-    if not due and not changed and state.summary is not None and digest == state.judgements_digest:
+    owed = state.held_for_quota and not below_floor
+    if (
+        not due
+        and not changed
+        and not owed
+        and state.summary is not None
+        and digest == state.judgements_digest
+    ):
         return "quiet"
     if below_floor:
         return "essential"
