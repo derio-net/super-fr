@@ -3,7 +3,7 @@ run: 2026-10-11-feat-batch-fr-small-fixes
 workflow: fr-goal-light@1
 branch: feat/batch-fr-small-fixes
 started: '2026-10-11T21:54:31+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -91,7 +91,10 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-12T15:52:41+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
 fr_version: 5.20.0
