@@ -307,3 +307,18 @@ def test_the_cache_is_written_atomically_via_replace(
     cache.probe(_Counting(), "opencode", "p/m")
     assert calls and calls[0][1] == str(tmp_path / "probes.json")
     assert [p.name for p in tmp_path.iterdir()] == ["probes.json"]
+
+
+def test_a_providers_own_trailing_parenthesis_survives_the_trim() -> None:
+    """p1-r3: only the wrapper's unbalanced closers are trimmed."""
+    bare = 'error="ProviderModelNotFoundError: Model not found: p/m (preview)"'
+    assert classify("", bare, 1).detail == (
+        "ProviderModelNotFoundError: Model not found: p/m (preview)"
+    )
+    wrapped = (
+        'cause="Cause([Fail(ProviderModelNotFoundError: Model not found: p/m (preview). '
+        'Did you mean: m2?)])"'
+    )
+    assert classify("", wrapped, 1).detail == (
+        "ProviderModelNotFoundError: Model not found: p/m (preview). Did you mean: m2?"
+    )

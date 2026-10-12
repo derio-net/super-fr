@@ -29,6 +29,29 @@ def test_load_models_names_the_file_for_invalid_yaml(tmp_path: Path) -> None:
     assert "not valid YAML" in str(ei.value)
 
 
+@pytest.mark.parametrize(
+    ("text", "problem"),
+    [
+        ("claude-code: [unclosed", "expected ',' or ']'"),
+        ("claude-code:\n\tstandard: x\n", "found character '\\t'"),
+        ('claude-code: "open', "found unexpected end of stream"),
+    ],
+)
+def test_load_models_reports_the_problem_and_its_position(
+    tmp_path: Path, text: str, problem: str
+) -> None:
+    """p1-r1: PyYAML's first line is its context ("while parsing …"), not the
+    problem; the message names the problem and where it is."""
+    p = tmp_path / "models.yaml"
+    p.write_text(text)
+    with pytest.raises(ModelsError) as ei:
+        load_models(p)
+    msg = str(ei.value)
+    assert problem in msg
+    assert "(line " in msg and ", column " in msg
+    assert "while " not in msg
+
+
 def test_load_models_structural_error_still_raises(tmp_path: Path) -> None:
     p = tmp_path / "models.yaml"
     p.write_text("- a\n- b\n")
@@ -89,6 +112,9 @@ def test_run_advance_exits_2_with_the_message(tmp_path: Path, corrupt: Path) -> 
     [
         ["models", "resolve", "--harness", "claude-code", "--tier", "standard"],
         ["models", "check"],
+        ["models", "get"],
+        ["models", "set", "--harness", "claude-code", "--tier", "standard", "--model", "m"],
+        ["models", "apply", "--harness", "opencode"],
     ],
 )
 def test_models_commands_exit_2_with_the_message(
@@ -100,6 +126,31 @@ def test_models_commands_exit_2_with_the_message(
     flat = _squash(out.output)
     assert f"fr: {corrupt}: not valid YAML" in flat
     assert "Traceback" not in flat
+
+
+def test_run_advance_redispatch_exits_2_with_the_message(tmp_path: Path, corrupt: Path) -> None:
+    repo, shipped = _setup(tmp_path)
+    assert _start(repo, shipped, _env(FR_HARNESS=None)).exit_code == 0
+    assert (
+        _invoke_as_harness(repo, shipped, ["run", "advance", RUN], _env(FR_HARNESS=None)).exit_code
+        == 0
+    )
+    out = _invoke_as_harness(repo, shipped, ["run", "advance", RUN, "--redispatch"], _env())
+    assert out.exit_code == 2, out.output
+    flat = _squash(out.output)
+    assert f"fr: {corrupt}: not valid YAML" in flat
+    assert "Traceback" not in flat
+
+
+def test_run_start_on_opencode_warns_once_and_still_starts(tmp_path: Path, corrupt: Path) -> None:
+    """The OpenCode start path also reads the config for binding health."""
+    repo, shipped = _setup(tmp_path)
+    out = _start(repo, shipped, _env(FR_HARNESS="opencode"))
+    assert out.exit_code == 0, out.output
+    flat = _squash(out.output)
+    assert "Traceback" not in flat
+    assert flat.count("warning:") == 1
+    assert str(corrupt) in flat
 
 
 def test_record_resolve_applies_then_reports_the_refused_advance(
@@ -143,3 +194,49 @@ def test_no_harness_reads_no_models_file(tmp_path: Path, corrupt: Path) -> None:
     assert "warning:" not in _squash(out.output)
     adv = _invoke_as_harness(repo, shipped, ["run", "advance", RUN], _env(FR_HARNESS=None))
     assert adv.exit_code == 0, adv.output
+
+
+_CLI_NEXT = (
+    "workflow: chain\nschema: 1\nunit: run\nsteps:\n"
+    "  - id: a\n    kind: agent\n  - id: c\n    kind: cli\n    run: echo hi\n"
+    "  - id: b\n    kind: agent\n"
+)
+
+
+def test_record_resolve_with_a_cli_step_next_reports_the_refused_advance(
+    tmp_path: Path, corrupt: Path
+) -> None:
+    """The advance a record's resolve chains (here into a `kind: cli` step) is
+    refused as one line, after the record is applied."""
+    repo = _repo(tmp_path, branch="feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "chain", _CLI_NEXT)
+    assert _start(repo, shipped, _env(FR_HARNESS=None)).exit_code == 0
+    assert (
+        _invoke_as_harness(repo, shipped, ["run", "advance", RUN], _env(FR_HARNESS=None)).exit_code
+        == 0
+    )
+    path = repo / "docs" / "superpowers" / "runs" / f"{RUN}.records" / "a.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(
+            {"schema_version": RECORD_SCHEMA_VERSION, "run": RUN, "step": "a", "outcome": "done"},
+            sort_keys=False,
+        )
+    )
+    for args in (["add", "-A"], ["commit", "-qm", "record", "--no-verify"]):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    out = _invoke_as_harness(
+        repo, shipped, ["run", "resolve", RUN, "--step", "a", "--record", str(path)], _env()
+    )
+
+    assert out.exit_code == 2, out.output
+    flat = _squash(out.output)
+    assert "Traceback" not in flat
+    assert f"record applied; the advance after it was refused: fr: {corrupt}" in flat
+    from fr.run.model import load_run_state
+
+    state = load_run_state(repo, RUN)
+    assert state.steps["a"].state == "done"
+    assert state.steps["c"].state == "pending"

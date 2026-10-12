@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from fr.triage.kanban import COLUMN_TITLES
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,11 +20,17 @@ BOARD_LINE_MARKER = "`fr triage board` writes `board.html`"
 """Content that identifies the board paragraph; its lead may be renamed."""
 
 COUNT_PHRASE = re.compile(
-    r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+"
-    r"(lifecycle\s+)?columns\b",
+    r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)[\s-]+"
+    r"(\w+\s+)?columns?\b",
     re.IGNORECASE,
 )
-"""A stated column count, in digits or words."""
+"""A stated column count, in digits or words: "seven lifecycle columns",
+"seven board columns", "six-column"."""
+
+COLUMN_LIST = re.compile(r"across its columns \(([^)]*)\)")
+"""The board paragraph's column list. Compared to `COLUMN_TITLES` exactly and
+in order, so a title cannot pass by appearing elsewhere on the line (the line
+also carries the runner and cloud-driver paragraphs) or inside another title."""
 
 
 def _board_lines() -> list[str]:
@@ -36,8 +43,19 @@ def test_the_skill_has_exactly_one_board_paragraph() -> None:
 
 def test_the_skill_names_every_column() -> None:
     (line,) = _board_lines()
-    missing = [t for t in COLUMN_TITLES.values() if t not in line]
-    assert not missing, f"fr-triage SKILL.md board line omits columns: {missing}"
+    lists = COLUMN_LIST.findall(line)
+    assert len(lists) == 1, "the board line must carry one `across its columns (…)` list"
+    named = [t.strip() for t in lists[0].split(",")]
+    assert named == list(COLUMN_TITLES.values()), (
+        f"fr-triage SKILL.md board columns {named} != COLUMN_TITLES {list(COLUMN_TITLES.values())}"
+    )
+
+
+@pytest.mark.parametrize(
+    "phrase", ["six lifecycle columns", "seven board columns", "a six-column board", "9 columns"]
+)
+def test_the_count_pattern_catches_each_phrasing(phrase: str) -> None:
+    assert COUNT_PHRASE.search(phrase) is not None
 
 
 def test_the_skill_states_no_column_count() -> None:
@@ -48,4 +66,9 @@ def test_the_skill_states_no_column_count() -> None:
 def test_the_board_command_docstring_states_no_column_count() -> None:
     from fr.commands.triage_kanban_cmd import board_command
 
-    assert COUNT_PHRASE.search(board_command.__doc__ or "") is None
+    doc = board_command.__doc__ or ""
+    assert COUNT_PHRASE.search(doc) is None
+    assert COLUMN_LIST.search(doc) is None
+    assert not [t for t in COLUMN_TITLES.values() if t in doc and t != "Done"], (
+        "the docstring names column titles; it should point at COLUMN_TITLES instead"
+    )
