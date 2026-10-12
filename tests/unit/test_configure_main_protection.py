@@ -28,10 +28,14 @@ case "$*" in
   "api repos/o/r/rulesets") cat "$d/rulesets.json" ;;
   "api repos/o/r/rulesets/7") cat "$d/ruleset.json" ;;
   "api orgs/o/installations") cat "$d/installations.json" ;;
-  "api repos/o/r/tags?per_page=100") cat "$d/tags.json" ;;
+  "api --paginate repos/o/r/tags?per_page=100") cat "$d/tags.json" ;;
   "api repos/o/r/actions/runs?head_sha=$STUB_SHA&event=push") cat "$d/runs.json" ;;
   "api -X PUT repos/o/r/rulesets/7 --input -")
-    cat > "$d/ruleset.json"; cp "$d/ruleset.json" "$d/put.json" ;;
+    cat > "$d/put.json"
+    jq '. + {id: 7, node_id: "RRS_abc", source_type: "Repository", _links: {}}
+        | (.rules[] | select(.type == "required_status_checks") | .parameters)
+            += {do_not_enforce_on_create: false}' "$d/put.json" \
+      | jq -c 'to_entries | reverse | from_entries' > "$d/ruleset.json" ;;
   "variable list "*)
     jq -r '.[] | select(.name == "FR_AUTOMATION_APP_ID") | .value' "$d/variables.json" ;;
   "variable set "*) echo "$*" >> "$d/var_set.log" ;;
@@ -45,6 +49,12 @@ BASE_RULESET = {
     "target": "branch",
     "enforcement": "active",
     "source": "o/r",
+    "source_type": "Repository",
+    "node_id": "RRS_abc",
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-02-01T00:00:00Z",
+    "current_user_can_bypass": "never",
+    "_links": {"self": {"href": "https://api.example.invalid/x"}},
     "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
     "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}],
     "bypass_actors": [],
@@ -102,8 +112,22 @@ def _run(sandbox: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+READ_ONLY = (
+    "id",
+    "source",
+    "source_type",
+    "node_id",
+    "created_at",
+    "updated_at",
+    "current_user_can_bypass",
+    "_links",
+)
+
+
 def _put(sandbox: Path) -> dict:
-    return json.loads((sandbox / "stub" / "put.json").read_text())
+    body = json.loads((sandbox / "stub" / "put.json").read_text())
+    assert not set(READ_ONLY) & set(body), "a read-only GET field leaked into the PUT body"
+    return body
 
 
 def _calls(sandbox: Path) -> list[str]:
@@ -135,7 +159,7 @@ def test_bypass_merges_the_actor_into_the_existing_rules_and_sets_the_variable(
         {"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
     ]
     assert [x["type"] for x in body["rules"]] == ["deletion", "non_fast_forward"]
-    assert body["name"] == "protect main" and "id" not in body and "source" not in body
+    assert body["name"] == "protect main"
     assert (
         f"variable set FR_AUTOMATION_APP_ID --body {APP_ID} --repo o/r"
         in (sandbox / "stub" / "var_set.log").read_text()
@@ -245,3 +269,67 @@ def test_a_missing_ruleset_or_app_is_refused(sandbox: Path) -> None:
 def test_bad_arguments_exit_two(sandbox: Path) -> None:
     assert _run(sandbox).returncode == 2
     assert _run(sandbox, "--stage", "nope").returncode == 2
+
+
+def test_require_keeps_an_existing_status_check_rule_and_adds_only_ci_ok(sandbox: Path) -> None:
+    rs = json.loads((sandbox / "stub" / "ruleset.json").read_text())
+    rs["bypass_actors"] = [
+        {"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "always"}
+    ]
+    rs["rules"] = [
+        {"type": "deletion"},
+        {
+            "type": "required_status_checks",
+            "parameters": {
+                "strict_required_status_checks_policy": False,
+                "do_not_enforce_on_create": True,
+                "required_status_checks": [{"context": "lint", "integration_id": 15368}],
+            },
+        },
+        {"type": "non_fast_forward"},
+    ]
+    (sandbox / "stub" / "ruleset.json").write_text(json.dumps(rs))
+    r = _run(sandbox, "--stage", "require")
+    assert r.returncode == 0, r.stderr
+    rules = _put(sandbox)["rules"]
+    assert [x["type"] for x in rules] == ["deletion", "required_status_checks", "non_fast_forward"]
+    params = rules[1]["parameters"]
+    assert params["strict_required_status_checks_policy"] is True
+    assert params["do_not_enforce_on_create"] is True
+    assert params["required_status_checks"] == [
+        {"context": "lint", "integration_id": 15368},
+        {"context": "ci-ok"},
+    ]
+
+
+def test_the_newest_tag_is_found_across_every_page(sandbox: Path) -> None:
+    _grant_bypass(sandbox)
+    assert _run(sandbox, "--stage", "require").returncode == 0
+    tag_calls = [c for c in _calls(sandbox) if "repos/o/r/tags" in c]
+    assert tag_calls == ["api --paginate repos/o/r/tags?per_page=100"]  # fetched once
+
+
+def test_an_org_ruleset_of_the_same_name_is_not_ours(sandbox: Path) -> None:
+    (sandbox / "stub" / "rulesets.json").write_text(
+        json.dumps(
+            [
+                {"id": 99, "name": "protect main", "source_type": "Organization"},
+                {"id": 7, "name": "protect main", "source_type": "Repository"},
+            ]
+        )
+    )
+    assert _run(sandbox, "--stage", "bypass").returncode == 0
+    assert any("rulesets/7 " in c and "PUT" in c for c in _calls(sandbox))
+    assert not any("rulesets/99" in c for c in _calls(sandbox))
+
+
+def test_a_flag_missing_its_value_prints_usage_and_exits_two(sandbox: Path) -> None:
+    for args in (["--stage"], ["--stage", "bypass", "--repo"]):
+        r = subprocess.run(
+            ["bash", str(SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": os.environ["PATH"]},
+        )
+        assert r.returncode == 2 and "usage" in r.stderr

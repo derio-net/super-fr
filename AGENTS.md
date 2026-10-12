@@ -509,7 +509,8 @@ name the predicted one: the base version plus this PR's highest fragment bump.
 **Release identity.** `release.yml` pushes as the `derio-fr-automation` GitHub
 App when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
 secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
-step), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
+step, scoped to this repo with contents and issues write only, never persisted by
+checkout and stripped from the staged test run), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
 way: a `GITHUB_TOKEN` push runs no CI on the release commit, an app push does,
 and `release.yml` then runs once more as a no-op. The app is the ruleset's bypass
 actor once `scripts/configure-main-protection.sh --stage bypass` has run; `--stage
@@ -532,8 +533,10 @@ existed). It is why the Release job has its own budget in
 `.github/ci-budget.yaml`. To release a specific
 number, run the workflow by hand (`workflow_dispatch`) with an explicit
 `version`. `main`'s ruleset forbids only force-push and deletion today; **once
-a required-PR or required-checks rule is added (`--stage require`), the app is
-the bypass actor on it**, or every release fails (release.py reports that refusal
+a required-PR or required-checks rule is added (`--stage require`), the app must
+be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting the
+variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
+every release fails (release.py reports that refusal
 by name, never as a lost race).
 
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible

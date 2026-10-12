@@ -84,6 +84,23 @@ def test_app_token_step_is_conditional_and_pinned_to_a_sha() -> None:
     assert step["with"]["private-key"] == "${{ secrets.FR_AUTOMATION_APP_KEY }}"
 
 
+def test_app_token_is_scoped_to_this_repo_with_contents_and_issues_write_only() -> None:
+    w = next(s for s in _steps() if s.get("id") == "app-token")["with"]
+    assert w["permission-contents"] == "write"
+    assert w["permission-issues"] == "write"
+    assert w["owner"] == "${{ github.repository_owner }}"
+    assert w["repositories"] == "${{ github.event.repository.name }}"
+    assert {k for k in w if k.startswith("permission-")} == {
+        "permission-contents",
+        "permission-issues",
+    }
+
+
+def test_checkout_persists_no_credential() -> None:
+    checkout = next(s for s in _steps() if str(s.get("uses", "")).startswith("actions/checkout"))
+    assert checkout["with"]["persist-credentials"] is False
+
+
 def test_checkout_and_release_step_take_the_app_token_or_the_default() -> None:
     expr = "${{ steps.app-token.outputs.token || github.token }}"
     steps = _steps()

@@ -22,8 +22,10 @@ repo="" stage="" dry=0 force=0
 usage() { echo "usage: $0 [--repo OWNER/REPO] --stage bypass|require [--dry-run] [--force]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo) repo="${2:-}"; shift 2 ;;
-    --stage) stage="${2:-}"; shift 2 ;;
+    --repo | --stage)
+      [ $# -ge 2 ] || usage
+      if [ "$1" = "--repo" ]; then repo="$2"; else stage="$2"; fi
+      shift 2 ;;
     --dry-run) dry=1; shift ;;
     --force) force=1; shift ;;
     *) usage ;;
@@ -36,7 +38,8 @@ fi
 org="${repo%%/*}"
 
 rulesets="$(gh api "repos/$repo/rulesets")"
-rs_id="$(jq -r --arg n "$RULESET_NAME" '[.[] | select(.name == $n)][0].id // empty' <<<"$rulesets")"
+rs_id="$(jq -r --arg n "$RULESET_NAME" \
+  '[.[] | select(.name == $n and (.source_type // "Repository") == "Repository")][0].id // empty' <<<"$rulesets")"
 if [ -z "$rs_id" ]; then
   echo "no ruleset named '$RULESET_NAME' in $repo" >&2
   exit 1
@@ -66,8 +69,9 @@ else
     exit 1
   fi
   if [ "$force" -ne 1 ]; then
-    tag="$(gh api "repos/$repo/tags?per_page=100" | jq -r '.[].name | select(test("^v[0-9]"))' | sort -V | tail -1)"
-    sha="$(gh api "repos/$repo/tags?per_page=100" | jq -r --arg t "$tag" '.[] | select(.name == $t) | .commit.sha')"
+    tags="$(gh api --paginate "repos/$repo/tags?per_page=100" | jq -s 'add // []')"
+    tag="$(jq -r '.[].name | select(test("^v[0-9]"))' <<<"$tags" | sort -V | tail -1)"
+    sha="$(jq -r --arg t "$tag" '.[] | select(.name == $t) | .commit.sha' <<<"$tags")"
     if [ -z "$tag" ] || [ -z "$sha" ]; then
       echo "refusing: no v* tag found to prove a release was pushed by the app (--force skips this)" >&2
       exit 1
@@ -83,11 +87,23 @@ else
   fi
   body="$(jq '
     {name, target, enforcement, conditions, rules, bypass_actors}
-    | .rules = ((.rules // []) | map(select(.type != "required_status_checks"))
-        + [{type: "required_status_checks", parameters: {
+    | (.rules // []) as $rules
+    | ([$rules[] | .type] | index("required_status_checks")) as $at
+    | .rules = (if $at == null then
+          $rules + [{type: "required_status_checks", parameters: {
             strict_required_status_checks_policy: true,
             do_not_enforce_on_create: false,
-            required_status_checks: [{context: "ci-ok"}]}}])
+            required_status_checks: [{context: "ci-ok"}]}}]
+        else
+          $rules | to_entries | map(
+            if .key == $at then
+              .value.parameters.strict_required_status_checks_policy = true
+              | .value.parameters.required_status_checks =
+                  ((.value.parameters.required_status_checks // [])
+                   | if any(.[]; .context == "ci-ok") then . else . + [{context: "ci-ok"}] end)
+              | .value
+            else .value end)
+        end)
   ' <<<"$current")"
 fi
 

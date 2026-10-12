@@ -17,6 +17,16 @@ once more on the release commit and finds nothing to do.
 Unset, it falls back to `GITHUB_TOKEN`, which is why a repo that has not
 adopted any of this keeps working.
 
+## Residual risk
+
+The release token is a ruleset bypass actor, so it can push to `main` past the
+rules. It is scoped to this repo with contents and issues write only, minted
+per job and revoked when the job ends, never persisted in the checkout's git
+config, and withheld from the staged test run (`release.py` strips every forge
+token from that subprocess and authenticates only its two `git push` calls).
+Anything else that can run in the release job could still read it, so the job
+runs only trusted code from `main`.
+
 ## Operator steps, in order
 
 1. **Install the app.** In the org, install `derio-fr-automation` on the repo

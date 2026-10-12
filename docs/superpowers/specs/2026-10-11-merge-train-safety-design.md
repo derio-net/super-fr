@@ -566,6 +566,13 @@ mixed-repo refusal. With ids, `_refuse_held` is unchanged.
 ```
 
 - The job's `GH_TOKEN` env takes the same expression.
+- The token is scoped: `owner`/`repositories` name this repo only, and
+  `permission-contents: write` and `permission-issues: write` are the only
+  permissions (push, tag and release; the floor issue).
+- No credential is readable by the staged test run: checkout uses
+  `persist-credentials: false`, `release.py` strips `GH_TOKEN`/`GITHUB_TOKEN`
+  from that subprocess's env, and authenticates only its two `git push` calls
+  (`-c credential.helper=!gh auth git-credential`).
 - `release.py`'s git identity stays `github-actions[bot]`. Who pushed is a
   property of the token, not the commit.
 - The header's "no CI runs on the release commit" becomes one sentence per
@@ -588,7 +595,9 @@ mixed-repo refusal. With ids, `_refuse_held` is unchanged.
 - **`bypass`:** `{actor_type: Integration, actor_id: <app id>, bypass_mode:
   always}` plus `gh variable set FR_AUTOMATION_APP_ID`.
 - **`require`:** a `required_status_checks` rule, `[{context: ci-ok}]`,
-  `strict_required_status_checks_policy: true`. It refuses unless the bypass
+  `strict_required_status_checks_policy: true`; an existing
+  `required_status_checks` rule keeps its other contexts and settings and gains
+  only `ci-ok` and strict. It refuses unless the bypass
   actor is present and the newest `v*` tag's commit has a `push`-event Actions
   run whose `triggering_actor.login` is the app's bot login (`gh api
   "repos/{repo}/actions/runs?head_sha=<sha>&event=push"`). A `GITHUB_TOKEN`

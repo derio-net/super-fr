@@ -49,6 +49,7 @@ staged-tree tests and `gh` are injectable (`Commands`) so tests never run real `
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -130,6 +131,7 @@ def _run_migrate(
         cwd=repo,
         capture_output=True,
         text=True,
+        env=_credential_free_env(),
     )
     if r.returncode == 0:
         return None
@@ -138,6 +140,18 @@ def _run_migrate(
 
 _FR_VERSION_PROBE = "import importlib.metadata as m; print(m.version('fr'))"
 _TAIL_LINES = 30
+
+
+_AUTH_ENV_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+
+
+def _credential_free_env() -> dict[str, str]:
+    """The environment minus every forge credential: the staged test run reads none.
+
+    The release token may be a ruleset bypass actor's, so nothing the suite (or
+    a test it runs) executes may be able to read it (spec 2026-10-11 §F).
+    """
+    return {k: v for k, v in os.environ.items() if k not in _AUTH_ENV_VARS}
 
 
 def _run_staged_tests(
@@ -152,7 +166,10 @@ def _run_staged_tests(
     the kind of literal that goes stale, which is how 5.0.0 broke.
     """
     uv = ["uv", "run", "--locked"]
-    probe = run([*uv, "python", "-c", _FR_VERSION_PROBE], cwd=repo, capture_output=True, text=True)
+    env = _credential_free_env()
+    probe = run(
+        [*uv, "python", "-c", _FR_VERSION_PROBE], cwd=repo, capture_output=True, text=True, env=env
+    )
     installed = probe.stdout.strip()
     if probe.returncode != 0 or installed != new:
         return (
@@ -164,6 +181,7 @@ def _run_staged_tests(
         cwd=repo,
         capture_output=True,
         text=True,
+        env=env,
     )
     if r.returncode == 0:
         return None
@@ -184,8 +202,17 @@ class Commands:
 # -- git ---------------------------------------------------------------------
 
 
-def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    r = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+# Authenticates ONE git command through gh's credential helper, which reads
+# GH_TOKEN from this process's env. Nothing is persisted: checkout runs with
+# persist-credentials: false, so no config file holds the token.
+_PUSH_AUTH = ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
+
+
+def _git(
+    repo: Path, *args: str, check: bool = True, auth: bool = False
+) -> subprocess.CompletedProcess[str]:
+    cmd = ["git", *(_PUSH_AUTH if auth else []), *args]
+    r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
     if check and r.returncode != 0:
         raise ReleaseError(f"git {' '.join(args)} failed: {r.stderr.strip()}")
     return r
@@ -438,7 +465,9 @@ def make_release_commit(repo: Path, plan: Plan, cmds: Commands) -> None:
 
 def push(repo: Path) -> str:
     """Push HEAD to main: 'ok', 'race', or raise on a protection refusal / other error."""
-    r = _git(repo, "push", "--porcelain", REMOTE, f"HEAD:refs/heads/{BRANCH}", check=False)
+    r = _git(
+        repo, "push", "--porcelain", REMOTE, f"HEAD:refs/heads/{BRANCH}", check=False, auth=True
+    )
     if r.returncode == 0:
         return "ok"
     reply = f"{r.stdout}\n{r.stderr}"
@@ -527,7 +556,7 @@ def tag_and_release(repo: Path, version: str, cmds: Commands) -> None:
     """The annotated tag and the GitHub Release, exactly as auto-tag.yml made them."""
     tag = f"v{version}"
     _git(repo, *_bot("tag", "-a", tag, "-m", tag))
-    _git(repo, "push", "--quiet", REMOTE, f"refs/tags/{tag}")
+    _git(repo, "push", "--quiet", REMOTE, f"refs/tags/{tag}", auth=True)
     args = ["release", "create", tag, "--title", tag]
     notes = release_notes(repo, version)
     if notes:
