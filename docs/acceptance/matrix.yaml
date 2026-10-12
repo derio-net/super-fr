@@ -8178,3 +8178,46 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: tracker-done-closes-issue
+    capability: tracker protocol
+    acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
+      without raising.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: models-dead-reason-trimmed
+    capability: model binding health
+    acceptance: A dead binding's reason ends at the provider's message, without the
+      wrapper's closing brackets.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: models-corrupt-config-reported
+    capability: model bindings
+    acceptance: A corrupt models.yaml is reported in one line naming the file; fr run
+      start still starts, every other reader refuses with exit 2, and none prints a
+      traceback.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-skill-board-columns
+    capability: triage board
+    acceptance: The fr-triage skill names every column the board renders, and CI fails
+      when a column is added or renamed without the skill following.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
