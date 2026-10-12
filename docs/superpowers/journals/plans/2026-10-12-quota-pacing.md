@@ -229,3 +229,33 @@ pacing_state drops a summary whose keys do not match Summary's fields. Test test
 ### p2-r8-resolved · finding [fixed] · resolves p2-r8: forced-full-below-floor test inspected private _pass_plan (phase 2)
 
 Driven through Rig with a two-repo scope; asserts collects, OTHER's unconditional probe and no live read for OTHER.
+
+<!-- fr:journal kind=decision scope=plan id=p3-d1 created=2026-10-12T08:51:40+00:00 phase=3 -->
+### p3-d1 · decision · Watch pacing shares the drive's functions via triage_cmd (phase 3)
+
+triage_kanban_cmd may not import triage_batch_cmd, so make_pacer, plan_paced_pass and rate_limit_reason now live in triage_cmd and the drive calls them. The watch plans with board=True (Pacer.plan): it has no drive summary, so a placeholder stands for it in the planning copy only, and record_digest stores the digest without a summary, so a drive that follows still plans rather than standing quiet on the watch's collect.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-x1 created=2026-10-12T08:51:40+00:00 phase=3 -->
+### p3-x1 · discovery · Captured REST fixtures carry no headers (phase 3)
+
+FixtureGh answers bodies captured without -i. fr.gh.repo_visibility therefore accepts a body with no status line (no ETag cached); a real gh api -i answer always has the status line. parse_api in the test support now skips -i.
+
+<!-- fr:journal kind=decision scope=plan id=p3-d2 created=2026-10-12T08:51:40+00:00 phase=3 -->
+### p3-d2 · decision · Visibility ETag map is cleared per test (phase 3)
+
+fr.gh._VISIBILITY is module state (R12); an autouse fixture in tests/conftest.py clears it so one test's cached answer is never another's 304.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-12T08:51:40+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the visibility read became one shared function in fr.gh used by both adapters; nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-12T08:51:40+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+the refactor was the work itself: make_pacer, plan_paced_pass and rate_limit_reason moved into triage_cmd so the drive and the watch share them; nothing further
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-12T08:51:40+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+a single optional render argument and one footer clause; nothing to clean
