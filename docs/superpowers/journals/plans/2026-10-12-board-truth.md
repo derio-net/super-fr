@@ -104,3 +104,98 @@ kanban_render has no page_header nav; render_board takes a banner string rendere
 ### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 the task only deleted the lenient parameter along the call chain; nothing left to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · fr triage collect never printed facts.config_ignored (phase 2)
+
+_report printed skipped/unviewed/warnings only; a hand-run collect dropped typo keys silently.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · batch dispatch dropped ignored keys silently (phase 2)
+
+check_config_fresh discarded the dropped-key tuple.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Strict read_config left in prod; stale docstrings (phase 2)
+
+Only a test called read_config; read_config_lenient/parse_triage_config docstrings described strict collect.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · No test for the board.html skew banner (phase 2)
+
+write_board wiring and placement untested; scenario checked triage.html only.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Tautological shared-builder test; no ordering test (phase 2)
+
+classify called skew_entries and was compared with itself.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · Leniency of _fresh_config/_reservation/collect_into only signature-tested (phase 2)
+
+inspect.signature checks, no real calls.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · Config-skew fixture was an impossible repo-scope state (phase 2)
+
+Repo scope with a skipped repo cannot be produced by collect.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · Acceptance row lacked R4 unit and integration refs (phase 2)
+
+Row cited banner/check tests only.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-10-12T07:43:14+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · check.py imported skew_entries from the HTML module (phase 2)
+
+Classification depended on rendering.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-12T07:43:14+00:00 phase=2 -->
+### p2-review-1 · review · Phase 2 code review (phase 2)
+
+Dispatched read-only reviewer over b7693b86..03ae60d9 raised p2-r1..p2-r9, all in scope; all fixed in 45c47f66 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: fr triage collect never printed facts.config_ignored (phase 2)
+
+_report prints ignored <repo>: keys. Test test_fr_triage_collect_names_the_dropped_key.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: batch dispatch dropped ignored keys silently (phase 2)
+
+check_config_fresh returns the ignored keys; _fresh_config warns naming repo and keys. Tests test_check_config_fresh_returns_the_origin_ignored_keys, test_fresh_config_accepts_an_unknown_origin_key_and_warns.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Strict read_config left in prod; stale docstrings (phase 2)
+
+Removed read_config and the lenient parameter; docstrings rewritten.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: No test for the board.html skew banner (phase 2)
+
+Tests test_write_board_passes_the_skew_banner_and_places_it_under_the_header, test_render_board_without_a_banner_has_no_alert; scenario asserts board.html too.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Tautological shared-builder test; no ordering test (phase 2)
+
+Replaced by test_the_shared_builder_orders_repos_and_keys_in_banner_and_check (red first: keys were unsorted; now sorted).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: Leniency of _fresh_config/_reservation/collect_into only signature-tested (phase 2)
+
+Real-call tests: test_collect_into_collects_an_unknown_key_and_names_it, test_fresh_config_accepts_an_unknown_origin_key_and_warns, test_reservation_accepts_an_unknown_origin_key.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: Config-skew fixture was an impossible repo-scope state (phase 2)
+
+Fixture regenerated as org scope; scenario uses --org.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: Acceptance row lacked R4 unit and integration refs (phase 2)
+
+Row now cites the R4 unit test and int=tests/integration/test_scenarios.py#test_triage_config_skew.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-10-12T07:43:14+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: check.py imported skew_entries from the HTML module (phase 2)
+
+skew_entries moved to triage/check.py; components imports it.
