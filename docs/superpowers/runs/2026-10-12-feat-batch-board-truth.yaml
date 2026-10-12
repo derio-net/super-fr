@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-12-board-truth-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-12T05:58:57+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-12T05:58:57+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: eb97f45e-7baf-433a-bc3e-5fd7ee16e0ad
   plan:
     state: pending
   plan-review:
