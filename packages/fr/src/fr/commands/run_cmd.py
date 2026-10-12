@@ -3983,6 +3983,58 @@ def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> S
     )
 
 
+def _merge_claim(
+    open_record: UnitAttempt,
+    key: str,
+    *,
+    agent: str | None,
+    harness: str | None,
+    model: str | None,
+    agent_type: str | None,
+) -> UnitAttempt:
+    """`open_record` after a claim of `harness`/`model`/`agent_type` (#1110).
+
+    The ONE rule for what a claim does to an open attempt, shared by
+    `fr run claim`, `--open-unit` and `fr run resolve`'s late identity. An
+    UNCLAIMED attempt (no `agent`) takes the claim's values as given — that is
+    how a first claim refines what `advance` pre-filled. A CLAIMED one keeps
+    what its first claim recorded: an empty field is filled, an equal value
+    (or, for `model`, one in the same `model_family`) is a silent no-op, and
+    anything else is kept with a warning, exit 0."""
+    from fr.models import model_family
+
+    claimed_by = agent if agent is not None else open_record.agent
+    if open_record.agent is None:
+        update: dict[str, Any] = {}
+        if agent is not None:
+            update["agent"] = agent
+        for field, value in (("harness", harness), ("model", model), ("agent_type", agent_type)):
+            if value is not None:
+                update[field] = value
+        return open_record.model_copy(update=update)
+    update = {}
+    for field, value in (("harness", harness), ("model", model), ("agent_type", agent_type)):
+        if value is None:
+            continue
+        recorded = getattr(open_record, field)
+        if recorded is None:
+            update[field] = value
+        elif recorded == value or (
+            field == "model" and model_family(recorded) == model_family(value)
+        ):
+            continue
+        else:
+            err_console.print(
+                f"warning: {key}: {claimed_by} is recorded with {field}={recorded}; keeping "
+                f"it (this claim said {value}). The first claim's identity stands; resolve "
+                "records the model the transcript observed. If the executor was really "
+                "replaced, close it with `fr run claim ... --abandoned` and re-dispatch.",
+                markup=False,
+                soft_wrap=True,
+            )
+    return open_record.model_copy(update=update) if update else open_record
+
+
 def _claimed_identity(
     open_record: UnitAttempt,
     key: str,
@@ -3990,13 +4042,16 @@ def _claimed_identity(
     agent: str,
     harness: str | None,
     model: str | None,
+    agent_type: str | None = None,
 ) -> UnitAttempt:
     """`open_record` carrying the orchestrator's reported identity, or refuse.
 
     Shared by `fr run claim` (the eager report) and `fr run resolve`'s late
     fallback (decision d2), so a *second* agent id can never be attached to a
     dispatch by taking the other route. Re-reporting the SAME id is
-    idempotent and may refresh `harness`/`model`; a DIFFERENT one is refused
+    idempotent: it fills empty `harness`/`model`/`agent_type` fields only and
+    otherwise keeps the first claim's values, warning on a different one
+    (`_merge_claim`); a DIFFERENT id is refused
     naming both, because two ids on one hold is the two-writers hazard this
     whole feature exists to make visible."""
     if open_record.agent is not None and open_record.agent != agent:
@@ -4009,12 +4064,8 @@ def _claimed_identity(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    return open_record.model_copy(
-        update={
-            "agent": agent,
-            "harness": harness if harness is not None else open_record.harness,
-            "model": model if model is not None else open_record.model,
-        }
+    return _merge_claim(
+        open_record, key, agent=agent, harness=harness, model=model, agent_type=agent_type
     )
 
 
@@ -4050,11 +4101,8 @@ def _close_on_resolve(
     if agent is not None:
         open_record = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
     elif harness is not None or model is not None:
-        open_record = open_record.model_copy(
-            update={
-                "harness": harness if harness is not None else open_record.harness,
-                "model": model if model is not None else open_record.model,
-            }
+        open_record = _merge_claim(
+            open_record, key, agent=None, harness=harness, model=model, agent_type=None
         )
     open_record = _observed_model(open_record, key)
     record = units.with_last_attempt_replaced(record, key, open_record)
@@ -6036,6 +6084,25 @@ def resolve_cmd(
         harness=harness,
         model=model,
     )
+    if state_value == "done":
+        for pair in emitted:
+            name, _, value = pair.partition("=")
+            if name == "spec" and value:
+                _print_unrunnable_warnings(resolve_repo_root(), _repo_relative(value))
+
+
+def _repo_relative(value: str) -> str:
+    """A `--emitted` path as repo-relative text (best effort, advisory use)."""
+    try:
+        root = resolve_repo_root().resolve()
+        return str(Path(value).resolve().relative_to(root)) if Path(value).is_absolute() else value
+    except (OSError, ValueError):
+        return value
+
+
+def _print_unrunnable_warnings(repo_root: Path, spec_rel: str) -> None:
+    for message in _unrunnable_spec_warnings(repo_root, spec_rel):
+        err_console.print(f"warning: {message}", markup=False, soft_wrap=True)
 
 
 def _questions_from_flags(
@@ -6700,12 +6767,33 @@ def _resolve_with_record(
         raise typer.Exit(2) from e
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
+    if record.outcome == "done" and record.emitted.get("spec"):
+        _print_unrunnable_warnings(repo_root, record.emitted["spec"])
     typer.echo(outcome.line)
     # deliver's closeout handoff is NOT printed here: the body prints it into
     # the held stdout, and `resolve_in_process` replays it among the notices
     # above — printing it again duplicated it on a real terminal.
     if advance and record.outcome == "done":
         _advance_after_record(repo_root, run_id)
+
+
+def _unrunnable_spec_warnings(repo_root: Path, spec_rel: str) -> list[str]:
+    """R5: the explicit strategies of the spec a record just emitted that the
+    repo cannot run. A missing or malformed section, or an unreadable matrix,
+    says nothing here — `fr plan self-review` reports those."""
+    from fr.requirements import load_spec_matrix, rows_citing
+    from fr.verification.rows import spec_section_at, unrunnable_strategies
+
+    try:
+        section = spec_section_at(repo_root, spec_rel)
+        if section is None:
+            return []
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
+        return unrunnable_strategies(repo_root, section, rows_citing(matrix, spec_ref))
+    except Exception:  # noqa: BLE001
+        # Advisory, and it runs after the resolve already committed: nothing
+        # it hits (a non-UTF-8 spec, a malformed matrix, ...) may fail the step.
+        return []
 
 
 def _advance_after_record(repo_root: Path, run_id: str) -> None:
@@ -6842,20 +6930,30 @@ def _claim_identity(
     """Fill `key`'s open dispatch record with the orchestrator's reported
     `agent`/`harness`/`model` (spec §3, §4.C).
 
-    Idempotent for the SAME `agent` id (re-claiming just refreshes
-    `harness`/`model` when given again); refuses a DIFFERENT one while the
+    Idempotent for the SAME `agent` id (a re-claim fills empty fields only and
+    otherwise keeps the first claim's values, warning on a different one —
+    `_merge_claim`); refuses a DIFFERENT one while the
     first is still open, naming both — the two-writers hazard this whole
     feature exists to make visible.
 
     `agent_type` is the agent that actually RAN (gh#537): on OpenCode the tier
     rides in the agent's name (`fr-phase-executor-<tier>`), so the manifest id
-    `advance` recorded never says which tier did the work. It replaces the
-    recorded one only when it is that agent or one of its tier variants
-    (`_ran_as`); anything else is a different agent, and is refused.
+    `advance` recorded never says which tier did the work. An unclaimed
+    attempt takes it when it is that agent or one of its tier variants
+    (`_ran_as`); a claimed one keeps its first value (warning on a different
+    tier, `_merge_claim`). A different agent entirely is refused.
     """
     record = state.steps[owner_id]
     open_record = _open_dispatch_record(record, key)
-    if agent_type is not None and not _ran_as(open_record.agent_type, agent_type):
+    dispatched = open_record.agent_type
+    if dispatched is not None and open_record.agent is not None:
+        # A claimed attempt's agent_type may already be a tier variant: judge
+        # the new one against the agent that was dispatched, not that variant.
+        for tier in PHASE_TIERS:
+            if dispatched.endswith(f"-{tier}"):
+                dispatched = dispatched[: -len(tier) - 1]
+                break
+    if agent_type is not None and not _ran_as(dispatched, agent_type):
         err_console.print(
             f"[red]{key}: was dispatched to {open_record.agent_type or 'the orchestrator'}, "
             f"not {agent_type!r} — --agent-type names the agent that ran this unit, which "
@@ -6863,9 +6961,12 @@ def _claim_identity(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    claimed = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
-    if agent_type is not None:
-        claimed = claimed.model_copy(update={"agent_type": agent_type})
+    claimed = _claimed_identity(
+        open_record, key, agent=agent, harness=harness, model=model, agent_type=agent_type
+    )
+    if claimed == open_record:
+        console.print(f"{key}: already claimed by {agent} (no change)", soft_wrap=True)
+        return
     new_record = units.with_last_attempt_replaced(record, key, claimed)
     _save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(f"{key}: claimed by {agent}", soft_wrap=True)
@@ -6879,7 +6980,11 @@ def _ran_as(dispatched: str | None, ran: str) -> bool:
     if dispatched is None:
         return False
     bare = dispatched.split(":", 1)[-1]
-    return ran in (dispatched, bare) or ran in {f"{bare}-{tier}" for tier in PHASE_TIERS}
+    ran_bare = ran.split(":", 1)[-1]
+    return ran in (dispatched, bare) or ran_bare in {
+        bare,
+        *(f"{bare}-{tier}" for tier in PHASE_TIERS),
+    }
 
 
 def _claim_open_unit(
