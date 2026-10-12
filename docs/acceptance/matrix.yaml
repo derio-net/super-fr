@@ -8300,8 +8300,8 @@ rows:
   - id: models-corrupt-config-reported
     capability: model bindings
     acceptance: A corrupt models.yaml is reported in one line naming the file; fr run
-      start still starts, every other reader refuses with exit 2, and none prints a
-      traceback.
+      start still starts, fr run advance, resolve's chained advance and fr models refuse
+      with exit 2, and none prints a traceback.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R5
