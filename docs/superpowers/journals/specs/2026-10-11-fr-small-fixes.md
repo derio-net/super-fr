@@ -57,3 +57,48 @@ Operator chose: keep the regex, rstrip a trailing run of `)`/`]`/whitespace, so 
 ### d5-light-shape-verification-none · decision · Light path, one agentic phase; verification none, tests: ci
 
 Operator chose fr-goal-light with one agentic phase, `## Verification` = `strategy: none` with a reason per row, and the full suite proven by CI on the PR (`tests: ci`). decider: operator.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r1 created=2026-10-12T15:16:39+00:00 state=open review_scope=in -->
+### spr-r1 · finding [open] (reviewer: in scope) · R6/§C: catching ModelsError at fr run resolve's entry hides that the record was already applied
+
+target: spec. run_cmd.py:6688-6699 applies and commits the record, then _advance_after_record (6702-6735, contract: a failure here must say the record is applied) runs _advance_chain, whose first act (5470) is _orchestrator_model_notice → load_models. A handler at resolve's entry would print only `fr: <path>: …` and invite a re-apply.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r2 created=2026-10-12T15:16:39+00:00 state=open review_scope=in -->
+### spr-r2 · finding [open] (reviewer: in scope) · R6's resolve-chained-advance clause has no test in the plan or the Verification row
+
+target: plan. P1.T3.S3 covered start, advance and fr models only; the Verification row named no resolve.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r3 created=2026-10-12T15:16:39+00:00 state=open review_scope=in -->
+### spr-r3 · finding [open] (reviewer: in scope) · R6 says every reader refuses, but triage batch dispatch/drive read models.yaml and are not covered
+
+target: spec. triage_batch_cmd.py:941-953 _orchestrator calls load_models uncaught; decision d1 named only run start, advance, resolve's chained advance and fr models.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r4 created=2026-10-12T15:16:39+00:00 state=open review_scope=in -->
+### spr-r4 · finding [open] (reviewer: in scope) · R5/R6 stated unconditionally, but no models.yaml is read when no harness is detected
+
+target: spec. run_cmd.py:3609-3610 (_resolved_model returns None before load_models with no harness), 3437-3438, 3454-3458. An executor could read R5 as requiring a new unconditional load.
+
+<!-- fr:journal kind=review scope=spec id=spec-plan-review-1 created=2026-10-12T15:16:39+00:00 -->
+### spec-plan-review-1 · review · spec+plan review: 4 findings (spr-r1, spr-r2, spr-r3, spr-r4 in scope, none out)
+
+Independent fr-spec-reviewer (opus) checked decisions d1–d5 against the spec, every named file/helper/test against the codebase (file:line for each), the plan against R1–R7 (each built by a task, TDD shape, no member issue as tracking_issue, rows linked, commands real) and the spec's internal consistency. Verified the strict fake breaks only test_tracker.py:341, which T1 rewrites.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r1-resolved created=2026-10-12T15:16:39+00:00 state=fixed resolves=spr-r1 -->
+### spr-r1-resolved · finding [fixed] · resolves spr-r1: R6/§C: catching ModelsError at fr run resolve's entry hides that the record was already applied
+
+Spec R6 and §C now catch the error inside _advance_after_record and print `record applied; the advance after it was refused: fr: <path>: …`, exit 2. Plan P1.T3.S4 says the same and forbids a handler at resolve's entry.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r2-resolved created=2026-10-12T15:16:39+00:00 state=fixed resolves=spr-r2 -->
+### spr-r2-resolved · finding [fixed] · resolves spr-r2: R6's resolve-chained-advance clause has no test in the plan or the Verification row
+
+Plan P1.T3.S3 adds (d) resolve --record on a done record: applied, exit 2, no traceback, the 'record applied' line. It also adds (e) no harness → no read. The Verification row now names resolve --record.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r3-resolved created=2026-10-12T15:16:39+00:00 state=fixed resolves=spr-r3 -->
+### spr-r3-resolved · finding [fixed] · resolves spr-r3: R6 says every reader refuses, but triage batch dispatch/drive read models.yaml and are not covered
+
+R6 narrowed to the commands d1 names. Triage batch dispatch/drive is listed under Non-goals for the operator to revisit at PR review, and the plan says to leave it untouched.
+
+<!-- fr:journal kind=finding scope=spec id=spr-r4-resolved created=2026-10-12T15:16:39+00:00 state=fixed resolves=spr-r4 -->
+### spr-r4-resolved · finding [fixed] · resolves spr-r4: R5/R6 stated unconditionally, but no models.yaml is read when no harness is detected
+
+R5/R6 qualified: they apply when a harness is detected and the command reads the config; with no harness nothing is read and behaviour is unchanged. §C says no new load is added; plan test (e) pins it.
