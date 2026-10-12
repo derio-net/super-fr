@@ -11,6 +11,9 @@ caps="$here/../../../fixtures/github_rest"
 repo=repos/derio-net/super-fr
 [ "${1:-}" = api ] || { echo "fake gh: unexpected call: gh $*" >&2; exit 1; }
 shift
+# `-i` (the visibility read asks for headers, quota-pacing R12): the capture has none,
+# which the reader accepts as an answer with no ETag.
+[ "${1:-}" = -i ] && shift
 [ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_GH_LOG"
 case "$*" in
   user) cat "$caps/user.json" ;;

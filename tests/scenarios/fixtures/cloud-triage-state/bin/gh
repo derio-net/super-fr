@@ -5,6 +5,9 @@
 # 2026-10-08, that directory's README). Anything else fails loudly.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 caps="$here/../../../fixtures/github_rest"
+# `-i` (the visibility read asks for headers, quota-pacing R12): the capture has none,
+# which the reader accepts as an answer with no ETag.
+[ "${1:-}" = api ] && [ "${2:-}" = -i ] && set -- api "${@:3}"
 [ "${1:-}" = api ] && [ "$#" -eq 2 ] || { echo "fake gh: unexpected call: gh $*" >&2; exit 1; }
 [ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$2" >> "$FAKE_GH_LOG"
 case "$2" in

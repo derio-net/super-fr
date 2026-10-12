@@ -100,7 +100,9 @@ args = sys.argv[1:]
 if not args or args[0] != "api":
     sys.stderr.write(f"fake gh: unexpected call: gh {' '.join(args)}\n")
     sys.exit(1)
-line = " ".join(args[1:])
+# `-i` (the visibility read asks for headers, quota-pacing R12): the capture has none,
+# which the reader accepts as an answer with no ETag.
+line = " ".join(args[2:] if args[1:2] == ["-i"] else args[1:])
 if os.environ.get("FAKE_GH_LOG"):
     with open(os.environ["FAKE_GH_LOG"], "a") as fh:
         fh.write(line + "\n")
