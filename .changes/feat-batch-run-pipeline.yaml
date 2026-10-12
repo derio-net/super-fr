@@ -1,2 +1,0 @@
-bump: patch
-summary: fr no longer fails commits or the acceptance check on gitignored reports, stops owing a candidate walk a repo cannot run, and keeps the first claim's identity on a re-claim
