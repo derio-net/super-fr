@@ -140,8 +140,9 @@ steps:
         state: running
         attempts:
         - dispatched: '2026-10-12T08:51:47+00:00'
+          agent: a803354967b76445f
           harness: claude-code
-          model: claude-opus-5-5
+          model: claude-sonnet-5-5
           session: 3d79063e-54ff-4f34-aff6-f6a5159f2fca
   journal-check:
     state: pending
