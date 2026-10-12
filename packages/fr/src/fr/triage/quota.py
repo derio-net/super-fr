@@ -20,6 +20,8 @@ from fr.triage.pacing_state import PacingState
 RESET_MARGIN = timedelta(seconds=30)
 # R4's ceiling on the secondary-limit backoff.
 BACKOFF_CAP_SECONDS = 900
+_MAX_BACKOFF = 32
+_MAX_EXPONENT = 10  # 2**10 already exceeds the cap for any sane interval
 # R7: an essential-only pass stretches the next one to this many intervals.
 ESSENTIAL_STRETCH = 4
 
@@ -155,9 +157,10 @@ def after_rate_limit(
     if budget is not None and budget.remaining <= 0 and budget.reset + RESET_MARGIN > now:
         pace = _wait(budget, "exhausted")
         return pace, replace(state, wait_until=pace.until)
-    delay = min(interval * 2**state.backoff, BACKOFF_CAP_SECONDS)
+    delay = min(interval * 2 ** min(max(state.backoff, 0), _MAX_EXPONENT), BACKOFF_CAP_SECONDS)
     pace = Pace("wait", now + timedelta(seconds=delay), "secondary limit")
-    return pace, replace(state, backoff=state.backoff + 1, wait_until=pace.until)
+    backoff = min(max(state.backoff, 0) + 1, _MAX_BACKOFF)  # the count stops growing too
+    return pace, replace(state, backoff=backoff, wait_until=pace.until)
 
 
 def clean_pass(state: PacingState) -> PacingState:

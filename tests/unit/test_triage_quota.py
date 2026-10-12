@@ -182,3 +182,16 @@ def test_budget_or_why_names_the_cause() -> None:
 
     budget, why = quota.budget_or_why(broken, "graphql")  # type: ignore[arg-type]
     assert budget is None and why == "gh is not logged in"
+
+
+def test_a_huge_backoff_neither_overflows_nor_grows_past_the_cap() -> None:
+    """p1-r1: 2**backoff of a float interval overflowed after ~1000 secondary limits."""
+    state = PacingState(backoff=5000)
+    pace, after = quota.after_rate_limit(_budget(900), NOW, state, 120.0)
+    assert pace.until == NOW + timedelta(seconds=quota.BACKOFF_CAP_SECONDS)
+    assert after.backoff == 5000  # at the cap already: it stops counting
+
+
+def test_a_negative_backoff_is_treated_as_zero() -> None:
+    pace, _ = quota.after_rate_limit(_budget(900), NOW, PacingState(backoff=-7), 120)
+    assert pace.until == NOW + timedelta(seconds=120)

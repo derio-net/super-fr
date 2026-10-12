@@ -56,6 +56,8 @@ def _from_json(data: object) -> PacingState:
     backoff = data.get("backoff", 0)
     if not isinstance(backoff, int) or isinstance(backoff, bool):
         raise ValueError("backoff: expected an integer")
+    if backoff < 0:
+        raise ValueError("backoff: expected a non-negative integer")
     digest = data.get("judgements_digest")
     budget = data.get("budget")
     return PacingState(
@@ -76,7 +78,7 @@ def load(state_dir: Path) -> tuple[PacingState, str | None]:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return PacingState(), None
-    except OSError as exc:
+    except (OSError, ValueError) as exc:  # ValueError: not UTF-8
         return PacingState(), f"{path}: unreadable, starting from an empty pacing state ({exc})"
     try:
         return _from_json(json.loads(text)), None

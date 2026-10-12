@@ -51,3 +51,19 @@ def test_save_creates_the_state_dir_and_leaves_no_temp_file(tmp_path: Path) -> N
 
 def test_pacing_json_stays_out_of_the_state_ref() -> None:
     assert "pacing.json" not in state_ref.REF_FILES
+
+
+def test_a_negative_backoff_is_not_usable(tmp_path: Path) -> None:
+    """p1-r1: a persisted negative backoff is refused like any wrong shape."""
+    (tmp_path / pacing_state.PACING_FILE).write_text('{"backoff": -3}', encoding="utf-8")
+    state, warning = pacing_state.load(tmp_path)
+    assert state == PacingState()
+    assert warning is not None
+
+
+def test_a_binary_file_is_an_empty_state_and_a_warning(tmp_path: Path) -> None:
+    """p1-r6: non-UTF-8 bytes (a UnicodeDecodeError, a ValueError) must not crash."""
+    (tmp_path / pacing_state.PACING_FILE).write_bytes(b"\xff\xfe\x00\x80binary")
+    state, warning = pacing_state.load(tmp_path)
+    assert state == PacingState()
+    assert warning is not None
