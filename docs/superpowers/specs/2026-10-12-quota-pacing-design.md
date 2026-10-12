@@ -203,3 +203,4 @@ strategy: none
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-10-12-quota-pacing | `derio-net/super-fr` | `2026-10-12-quota-pacing` | — |
