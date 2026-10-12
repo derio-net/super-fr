@@ -128,11 +128,12 @@ def _no_live_rate_limit_read(monkeypatch: pytest.MonkeyPatch) -> None:
     # the CLI would error in this fixture before its first test ran.
     import fr.cli  # noqa: F401
 
-    from tests.unit.triage_fixtures import ample_rate_limit
-
     class _Ample:
+        # Inlined, not imported from `tests.unit.triage_fixtures`: the suite-isolation tests
+        # run this conftest in a subprocess from a temp dir, where `tests` is no package.
         def rate_limit(self) -> dict:
-            return ample_rate_limit()
+            full = {"limit": 5000, "used": 0, "remaining": 5000, "reset": 4_102_444_800}
+            return {"resources": {"core": dict(full), "graphql": dict(full)}}
 
     monkeypatch.setattr("fr.commands.triage_batch_cmd._pace_forge", lambda: _Ample())
 
