@@ -315,7 +315,8 @@ def test_a_pass_that_fails_after_writing_its_facts_is_never_followed_by_a_quiet_
 
     assert "quiet:" not in out, out
     assert len(rig.collects) == 2, "the pass after the failed one collects and plans"
-    assert "in flight 1" in out, "and plans: its summary line is its own"
+    assert rig.collects[1] is None, "and carries nothing: its merges are not deferred"
+    assert "merge b1: merged PR #101" in out, "and plans the merge the failed pass owed"
 
 
 def test_a_paced_drive_with_no_previous_facts_below_the_floor_reads_and_merges(

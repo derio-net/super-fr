@@ -201,6 +201,10 @@ def plan_pass(
 ) -> PassPlan:
     """The pass's kind and the repos it reads (R7, R9-R11)."""
     every = frozenset(repos)
+    if state.summary is None:
+        # The last pass never planned (it failed after its collect, p2-r1): its ETags may be
+        # promoted, but the actions it owed were never planned, so nothing is carried.
+        changed = set(every)
     due = full_due(state, now) if full is None else full
     kind = pass_kind(state, now, changed, digest, below_floor=below_floor)
     held: str | None = None
