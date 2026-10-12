@@ -219,3 +219,6 @@ Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): add unit 
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-12-quota-pacing-p2 created=2026-10-12T06:21:57+00:00 -->
 ### phase-split-2026-10-12-quota-pacing-p2 · decision · ask: probes, partial collect and the essential-only pass answer #1136 asks 2 and 3 (R7-R11), separately reviewable from the pacing core
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-12-quota-pacing-p3 created=2026-10-12T06:22:03+00:00 -->
+### phase-split-2026-10-12-quota-pacing-p3 · decision · ask: conditional visibility (R12), watch pacing (R17) and the board footer (R14, ask 5) are their own ask
