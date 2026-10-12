@@ -219,3 +219,58 @@ Card.front is one small derived property and the render change reuses _jump/_sta
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 Tests and a scenario only; no production code changed (R8 was already green).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-12T08:08:08+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · No render-level test for closeout_status unknown/absent (phase 3)
+
+Only Card.front was tested via replace().
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-12T08:08:08+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Scenario's 'no release owed' check could never fail (phase 3)
+
+check --json has no releases-owed field.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-12T08:08:08+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · Running-column refuse_grep passed silently if extraction matched nothing (phase 3)
+
+No guard that the section was found.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-12T08:08:08+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · R8 says after a fresh collect and render, but no test ran collect (phase 3)
+
+Scenario and unit tests were render-only.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-12T08:08:08+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · Close-out-fronted pill/Jump carry no cue that they are the close-out's (phase 3)
+
+kanban_render.py:306-314 adds no label.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-12T08:08:08+00:00 phase=3 -->
+### p3-review-1 · review · Phase 3 code review (phase 3)
+
+Dispatched read-only reviewer over 8f97d84c..f4e4f71b, which rendered and screenshotted its own boards, raised p3-r1..p3-r5; r1-r4 fixed in 7ba9875d, r5 refuted by operator decision q7.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-12T08:08:08+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: No render-level test for closeout_status unknown/absent (phase 3)
+
+Added test_an_unknown_closeout_status_leaves_the_front_to_the_batch_session and test_an_absent_closeout_has_a_batch_front_and_no_closeout_jump_or_code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-12T08:08:08+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Scenario's 'no release owed' check could never fail (phase 3)
+
+Scenario asserts only claims_owed:[] and says release-owed is pinned by test_triage_cancelled_terminal.py, whose test asserts owed_releases is empty.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-12T08:08:08+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: Running-column refuse_grep passed silently if extraction matched nothing (phase 3)
+
+expect_grep data-column="running" before the refuse_grep.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-12T08:08:08+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: R8 says after a fresh collect and render, but no test ran collect (phase 3)
+
+Added test_right_after_a_fresh_collect_and_render_it_is_still_cancelled (collect_facts over FakeForge, wave and wave-less); row ref added.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-12T08:08:08+00:00 phase=3 state=refuted resolves=p3-r5 -->
+### p3-r5-resolved · finding [refuted] · resolves p3-r5: Close-out-fronted pill/Jump carry no cue that they are the close-out's (phase 3)
+
+Operator decision q7-closeout-front chose 'Exactly the note' over the offered 'Note + label the pill' option; the unlabelled front is the decided design, not a defect.
