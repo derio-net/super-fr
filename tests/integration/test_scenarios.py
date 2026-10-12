@@ -176,6 +176,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "awaiting-live-triage",
         "triage-closed-in-progress",
         "triage-config-skew",
+        "triage-cancelled-terminal",
         "prerelease-command-shape",
         "triage-claims-held",
         "triage-claims-expired",
