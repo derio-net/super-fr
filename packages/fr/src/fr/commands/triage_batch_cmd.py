@@ -544,11 +544,23 @@ def facts_scope(facts: Facts) -> Scope:
 
 
 def _write(
-    target: Path, batches: list[Batch], facts: Facts, *, read: list[Batch], dry_run: bool = False
+    target: Path,
+    batches: list[Batch],
+    facts: Facts,
+    *,
+    read: list[Batch],
+    dry_run: bool = False,
+    read_errors: bool = False,
 ) -> None:
-    """`_save`, with a refusal as exit 2."""
+    """`_save`, with a refusal as exit 2. With *read_errors* (the driver's writes), an
+    unreadable visibility is a `ForgeReadError`, so a looping drive skips the pass and
+    retries as it does for the lease and the save (gh#1145); a leak still exits 2."""
     try:
         _save(target, batches, facts, read=read, dry_run=dry_run)
+    except VisibilityUnreadable as exc:
+        if read_errors:
+            raise ForgeReadError(str(exc), code=2) from exc
+        _fail(str(exc))
     except TriageError as exc:
         _fail(str(exc))
 
@@ -1695,7 +1707,10 @@ def dispatch_batch(
     def _after(ev: DispatchEvent) -> list[Batch]:
         return _with_event(judgements, batch, ev)
 
-    _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
+    _write(
+        target, _after(event), facts, read=judgements.batches, dry_run=True,
+        read_errors=read_errors,
+    )  # fmt: skip
     if not runner.can_dispatch(item):
         _fail(f"runner `{runner_name}` does not take run-unit work")
     refusal = runner.preflight([item])
@@ -1703,7 +1718,10 @@ def dispatch_batch(
         _fail(f"runner `{runner_name}` refused: {refusal}")
     if item.id in runner.existing_dispatches([item]):
         _fail(f"runner `{runner_name}` already holds {item.id} live; nothing written")
-    _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
+    _write(
+        target, _after(event), facts, read=judgements.batches, dry_run=True,
+        read_errors=read_errors,
+    )  # fmt: skip
     # R3: the claims, R4's re-read included, before the launch, which cannot be undone,
     # and before any other forge write. A member another scope holds refuses the batch.
     posted = _claim_for_dispatch(env, batch)
@@ -4254,14 +4272,14 @@ class _Driver:
             handle = runner.dispatch(item)
         except Exception as exc:  # the runner's own failure: nothing started, so
             # the record is taken back and a later pass starts it
-            _write(self.target, judgements.batches, facts, read=after)
+            _write(self.target, judgements.batches, facts, read=after, read_errors=True)
             return self._dispatch_failed(
                 batch, f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", exc
             ), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             known = started.model_copy(update={"handle": handle})
             final = recorded.model_copy(update={"events": [*recorded.events[:-1], known]})
-            _write(self.target, _replace(after, final), facts, read=after)
+            _write(self.target, _replace(after, final), facts, read=after, read_errors=True)
         pickup = f"--run {run}" if run else f"--branch {branch}"
         return f"started {item.id} (fr pickup {pickup})", True
 
@@ -4282,7 +4300,10 @@ class _Driver:
 
     def _append(self, judgements: Judgements, facts: Facts, batch: Batch, event: Any) -> Batch:
         new = batch.model_copy(update={"events": [*batch.events, event]})
-        _write(self.target, _replace(judgements.batches, new), facts, read=judgements.batches)
+        _write(
+            self.target, _replace(judgements.batches, new), facts, read=judgements.batches,
+            read_errors=True,
+        )  # fmt: skip
         return new
 
     def _archive(

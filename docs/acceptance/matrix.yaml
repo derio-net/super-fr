@@ -6804,9 +6804,15 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_lease_push_cannot_read_the_visibility
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_member_repo_visibility_cannot_be_read
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_judgements_write_cannot_read_the_visibility
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_member_repo_whose_visibility_cannot_be_read_is_unreadable_not_a_leak
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_definite_leak_outranks_an_unreadable_member_repo
     status: ci
     notes: 'Unit tests: a looping drive skips and retries, once/cloud/export still refuse,
-      a leak still ends the driver'
+      a leak still ends the driver; since gh#1144/gh#1145 also an unreadable member
+      repo (public state repo) and a mid-pass judgements-write check skip the pass,
+      and a certain leak outranks an unreadable repo'
     verify: none
   - id: rest-rulesets-free-plan-403
     capability: triage-batch-drive
