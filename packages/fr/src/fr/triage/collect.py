@@ -87,6 +87,8 @@ class Forge(Protocol):
 
     def viewer_login(self) -> str: ...
 
+    def rate_limit(self) -> dict[str, Any]: ...
+
     def repo_visibility(self, *, repo: str) -> str | None: ...
 
 
@@ -162,6 +164,10 @@ class ClientForge:
     def viewer_login(self) -> str:
         with _forge_errors():
             return self._client.viewer_login()
+
+    def rate_limit(self) -> dict[str, Any]:
+        with _forge_errors():
+            return self._client.rate_limit()
 
     def repo_visibility(self, *, repo: str) -> str | None:
         with _forge_errors():

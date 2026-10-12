@@ -336,6 +336,12 @@ class GhClient(Protocol):
         """The login the forge CLI is authenticated as."""
         ...
 
+    def rate_limit(self) -> dict[str, Any]:
+        """The host's rate budgets (`GET /rate_limit`, which costs nothing): the raw
+        `{"resources": {"core": {limit, remaining, reset}, "graphql": …}}` answer
+        (spec 2026-10-12-quota-pacing R1)."""
+        ...
+
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         """The RAW issue record (on GitHub, `gh issue view --json
         ISSUE_VIEW_FIELDS`: title, url, label objects…) — distinct from the
@@ -465,6 +471,9 @@ class UnsupportedBatchOps:
 
     def viewer_login(self) -> str:
         raise self._unsupported("viewer_login")
+
+    def rate_limit(self) -> dict[str, Any]:
+        raise self._unsupported("rate_limit")
 
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("view_issue_record")

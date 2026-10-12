@@ -63,6 +63,27 @@ def _issue(number: int, *, title: str = "t") -> dict[str, Any]:
     return issue
 
 
+def rate_limit_answer(
+    *, graphql: int = 5000, core: int = 5000, reset: int = 4_102_444_800
+) -> dict[str, Any]:
+    """The shape of `gh api rate_limit` (tests/fixtures/rate_limit.json is the capture)."""
+    return {
+        "resources": {
+            "core": {"limit": 5000, "used": 5000 - core, "remaining": core, "reset": reset},
+            "graphql": {
+                "limit": 5000,
+                "used": 5000 - graphql,
+                "remaining": graphql,
+                "reset": reset,
+            },
+        }
+    }
+
+
+def ample_rate_limit() -> dict[str, Any]:
+    return rate_limit_answer()
+
+
 class FakeForge:
     """A Forge serving per-repo canned data and recording every call."""
 
@@ -94,6 +115,10 @@ class FakeForge:
         # Kept apart from `calls`: collect reads every repo's visibility (cloud-triage
         # §B), and the call-sequence assertions predate it.
         self.visibility_calls: list[str] = []
+        # `/rate_limit` is free, so it is counted apart from `calls` too. Settable: the raw
+        # `gh api rate_limit` dict, or an exception it raises (spec 2026-10-12-quota-pacing).
+        self.rate_limit_calls = 0
+        self.rate_limit_answer: dict[str, Any] | Exception = ample_rate_limit()
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_repos", {"owner": owner, "limit": limit}))
@@ -139,6 +164,12 @@ class FakeForge:
     def viewer_login(self) -> str:
         self.calls.append(("viewer_login", {}))
         return self.viewer
+
+    def rate_limit(self) -> dict[str, Any]:
+        self.rate_limit_calls += 1
+        if isinstance(self.rate_limit_answer, Exception):
+            raise self.rate_limit_answer
+        return self.rate_limit_answer
 
     def repo_visibility(self, *, repo: str) -> str | None:
         self.visibility_calls.append(repo)

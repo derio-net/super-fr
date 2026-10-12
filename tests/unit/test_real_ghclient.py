@@ -9,6 +9,7 @@ real subprocesses.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fr import gh as _gh
@@ -315,3 +316,17 @@ class TestAdoptPrOperations:
         assert got["draft"] is True and got["base_ref"] == "main"
         fields = _flag(recorder.calls[0], "--json").split(",")
         assert {"title", "body"} <= set(fields)
+
+
+class TestRateLimit:
+    def test_it_is_gh_api_rate_limit_and_returns_the_parsed_answer(self, monkeypatch):
+        captured = (Path(__file__).parent.parent / "fixtures" / "rate_limit.json").read_text()
+        seen: list[list[str]] = []
+
+        def run(args: list[str]) -> str:
+            seen.append(args)
+            return captured
+
+        monkeypatch.setattr(_gh, "_run_gh", run)
+        assert RealGhClient().rate_limit() == json.loads(captured)
+        assert seen == [["api", "rate_limit"]]

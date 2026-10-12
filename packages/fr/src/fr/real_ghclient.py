@@ -581,6 +581,10 @@ class RealGhClient:
         return _gh.viewer_login()
 
     @_hosted
+    def rate_limit(self) -> dict[str, Any]:
+        return cast("dict[str, Any]", json.loads(_gh._run_gh(["api", "rate_limit"])))
+
+    @_hosted
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         return cast("dict[str, Any]", _gh.view_issue(repo, number))
 

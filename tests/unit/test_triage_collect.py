@@ -413,6 +413,19 @@ def test_client_forge_raises_the_triage_forge_error_not_gh_error(
         assert not isinstance(exc.value, gh.GhError)
 
 
+def test_client_forge_rate_limit_raises_forge_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr import gh
+    from fr.real_ghclient import RealGhClient
+    from fr.triage.collect import ClientForge
+
+    def boom(args: list[str]) -> str:
+        raise gh.GhError("HTTP 500", stderr="HTTP 500", returncode=1)
+
+    monkeypatch.setattr(gh, "_run_gh", boom)
+    with pytest.raises(ForgeError):
+        ClientForge(RealGhClient()).rate_limit()
+
+
 def test_client_forge_with_no_gh_binary_raises_a_one_line_forge_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

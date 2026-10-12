@@ -27,7 +27,7 @@ import re
 import urllib.parse
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fr import _hosts
 from fr import gh as _gh
@@ -910,6 +910,9 @@ class RealGhRestClient:
 
     def viewer_login(self) -> str:
         return str(self._api("user")["login"])
+
+    def rate_limit(self) -> dict[str, Any]:
+        return cast("dict[str, Any]", self._api("rate_limit"))
 
     def file_exists(self, repo: str, path: str) -> bool:
         try:

@@ -133,3 +133,29 @@ def test_the_quota_line_names_resource_remaining_reset_and_action() -> None:
     wait = quota.decide(_budget(0), 0.2, NOW, PacingState())
     line = quota.quota_line(_budget(0), 0.2, wait, NOW)
     assert line.startswith("quota: graphql 0/5000 (0%), resets 16:43Z; exhausted: waiting")
+
+
+def test_read_budget_parses_the_captured_answer() -> None:
+    import json
+    from pathlib import Path
+
+    captured = json.loads(
+        (Path(__file__).parent.parent / "fixtures" / "rate_limit.json").read_text()
+    )
+
+    class Forge:
+        def rate_limit(self) -> dict:
+            return captured
+
+    budget = quota.read_budget(Forge(), "graphql")
+    assert budget is not None and budget.limit == 5000
+
+
+def test_read_budget_is_none_when_rate_limit_raises() -> None:
+    from fr.triage.errors import ForgeError
+
+    class Broken:
+        def rate_limit(self) -> dict:
+            raise ForgeError("HTTP 500")
+
+    assert quota.read_budget(Broken(), "graphql") is None
