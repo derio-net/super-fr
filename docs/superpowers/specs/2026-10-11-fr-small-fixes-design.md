@@ -111,3 +111,4 @@ strategy: none
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-10-11-fr-small-fixes | `derio-net/super-fr` | `2026-10-11-fr-small-fixes` | — |
