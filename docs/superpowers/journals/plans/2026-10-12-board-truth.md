@@ -274,3 +274,28 @@ Added test_right_after_a_fresh_collect_and_render_it_is_still_cancelled (collect
 ### p3-r5-resolved · finding [refuted] · resolves p3-r5: Close-out-fronted pill/Jump carry no cue that they are the close-out's (phase 3)
 
 Operator decision q7-closeout-front chose 'Exactly the note' over the offered 'Note + label the pill' option; the unlabelled front is the decided design, not a defect.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-explainers-unaffected created=2026-10-12T08:26:47+00:00 phase=4 -->
+### p4-explainers-unaffected · discovery · No explainer describes the triage pages or nav (phase 4)
+
+grep of docs/explainers/ (01-fr-goal.md, the hand-authored index.html and fr-isolation.html) finds no mention of triage, the Board tab or the page nav, so nothing needs regenerating.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-phone-board-clipped-in-headless created=2026-10-12T08:26:47+00:00 phase=4 -->
+### p4-phone-board-clipped-in-headless · discovery · Headless Chrome at --window-size=390 clips the Batches columns on the right (phase 4)
+
+The nav wraps cleanly at 390px, but the Kanban card column in phone-width-nav.png runs past the right edge. Headless Chrome enforces a minimum layout width, so this may be a capture artifact; the board's own CSS was not changed in this phase.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-repo-scope-stub-pages created=2026-10-12T08:26:47+00:00 phase=4 -->
+### p4-repo-scope-stub-pages · discovery · repo-scope-five-tabs used stub origins/architecture pages (phase 4)
+
+Origins and Architecture need origins facts and a checkout of subsystem refs, so the visual run seeded two one-line stub pages carrying a nav block, then rendered history, board and triage with the real commands. All five navs agreed afterwards, which also exercised refresh_navs on foreign pages. The org-scope run used only real renders.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-12T08:26:47+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+components.py gained the registry, pages_present and page_header in one place; each renderer only passes the present keys, so there was no duplicated chrome to fold.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-10-12T08:26:47+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+Skill text, mirrors, scenario and matrix row are new content with no prior duplication to clean.
