@@ -1,0 +1,20 @@
+schema_version: 8
+run: 2026-10-12-feat-batch-board-truth
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1151
+evidence:
+  tests: ci
+  walk: /Users/derio/.cache/fr/walks/2026-10-12-feat-batch-board-truth/20261012T083720Z.log
+visual:
+  - row: triage-closeout-card-front
+    shots:
+      - {path: /Users/derio/.cache/fr/worktrees/super-fr/feat__batch-board-truth/.fr/scratch/deliver/cards/live.png, shows: [closeout-live-front, front-jump-closeout, body-both-sessions, body-jump-batch]}
+      - {path: /Users/derio/.cache/fr/worktrees/super-fr/feat__batch-board-truth/.fr/scratch/deliver/cards/absent.png, shows: [closeout-absent-front]}
+  - row: triage-nav-present-pages
+    shots:
+      - {path: /Users/derio/.cache/fr/worktrees/super-fr/feat__batch-board-truth/.fr/scratch/deliver/org-triage.png, shows: [org-scope-nav, current-tab-marked]}
+      - {path: /Users/derio/.cache/fr/worktrees/super-fr/feat__batch-board-truth/.fr/scratch/deliver/repo-board.png, shows: [repo-scope-five-tabs, nav-link-each-tab]}
+      - {path: /Users/derio/.cache/fr/worktrees/super-fr/feat__batch-board-truth/.fr/scratch/deliver/phone-repo-board.png, shows: [phone-width-nav]}
