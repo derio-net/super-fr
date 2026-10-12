@@ -35,8 +35,8 @@ R1. Moving a tracker item to `done` on the GitHub tracker closes its Issue throu
 R2. The test fake's `edit_issue_state` accepts only `OPEN` and `CLOSED`, as the real clients do, and raises `ValueError` on any other state.
 R3. A dead binding's reason, as `fr models check` and the `fr run` notices show it, ends at the provider's own message and does not carry the closing brackets of the wrapper OpenCode prints around it.
 R4. A models config that is not valid YAML is reported as a `ModelsError` that names the file, just like a structurally invalid one.
-R5. `fr run start` with a corrupt models config still starts the run, exits 0 and prints one warning line naming the file and the problem instead of a traceback.
-R6. Every other command that reads the models config (`fr run advance`, `fr run resolve`'s chained advance, `fr models …`) refuses a corrupt config with one `fr: <path>: <problem>` line and exit 2 instead of a traceback; a corrupt config is never read as "no bindings".
+R5. When `fr run start` reads the models config (a harness is detected), a corrupt one still starts the run, exits 0 and prints one warning line naming the file and the problem instead of a traceback.
+R6. When `fr run advance`, `fr run resolve`'s chained advance or a `fr models …` command reads the models config, a corrupt one is refused with one `fr: <path>: <problem>` line and exit 2 instead of a traceback; after `fr run resolve --record` has applied its record, that line says the record was applied and only the advance after it was refused. A corrupt config is never read as "no bindings". Where no harness is detected, nothing reads the config and behaviour is unchanged.
 R7. The fr-triage skill names every board column by its title and states no column count, and the `fr triage board` docstring states neither a count nor the titles. A unit test reads the titles live from `COLUMN_TITLES` and fails when the skill's board paragraph leaves one out or states a column count, so a column added or renamed later breaks CI until the skill catches up.
 
 ## Design
@@ -69,6 +69,14 @@ issue's `…?)]))`) and asserts the reason ends in `?`, and the hint is unchange
   commands, turn a `ModelsError` into `fr: <message>` on stderr and exit 2. Catch
   it once at each command's entry rather than at every `load_models` call, so the
   brief's `unbound_tiers` never reads a broken config as unbound.
+- `fr run resolve --record` is the exception to "at the entry": the record is
+  applied and committed before `_advance_chain` reads the config, and
+  `_advance_after_record`'s contract is that a failure after the apply says so.
+  The `ModelsError` is caught inside `_advance_after_record` and printed as
+  `record applied; the advance after it was refused: fr: <path>: <problem>`, exit 2,
+  like that function's existing refusals, so nobody re-applies the record.
+- No new load is added: with no harness detected, `_resolved_model` and
+  `_binding_health` read nothing today, and that stays true.
 
 ### D. Board columns (R7)
 
@@ -98,7 +106,7 @@ hard-codes either:
 strategy: none
 - tracker-done-closes-issue: none — unit tests in CI exercise the tracker against the strict fake; no installed build is needed to show it.
 - models-dead-reason-trimmed: none — `classify` is pure and the captured OpenCode fixture is its input; CI's unit tests prove it.
-- models-corrupt-config-reported: none — CLI tests drive `fr run start`/`advance`/`fr models` over a corrupt config in CI.
+- models-corrupt-config-reported: none — CLI tests drive `fr run start`/`advance`/`resolve --record`/`fr models` over a corrupt config in CI.
 - triage-skill-board-columns: none — a unit tripwire compares the skill text to `COLUMN_TITLES`.
 
 ## Non-goals
@@ -106,6 +114,7 @@ strategy: none
 - Making the real clients case-insensitive: the protocol's states are `OPEN`/`CLOSED`.
 - Any change to the probe verdict logic: only the displayed reason.
 - Repairing a corrupt models.yaml automatically.
+- `fr triage batch dispatch`/`drive`, which also read models.yaml (`triage_batch_cmd.py` `_orchestrator`): operator decision d1 named run start, advance, resolve's chained advance and `fr models`. Triage is left as it is, and is listed for the operator at PR review.
 
 ## Implementation Plans
 

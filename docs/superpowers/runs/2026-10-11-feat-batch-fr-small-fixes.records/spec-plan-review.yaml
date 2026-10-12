@@ -1,0 +1,37 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-fr-small-fixes
+step: spec-plan-review
+outcome: done
+journal:
+  - kind: finding
+    id: spr-r1
+    review_scope: in
+    title: "R6/§C: catching ModelsError at fr run resolve's entry hides that the record was already applied"
+    body: "target: spec. run_cmd.py:6688-6699 applies and commits the record, then _advance_after_record (6702-6735, contract: a failure here must say the record is applied) runs _advance_chain, whose first act (5470) is _orchestrator_model_notice → load_models. A handler at resolve's entry would print only `fr: <path>: …` and invite a re-apply."
+  - kind: finding
+    id: spr-r2
+    review_scope: in
+    title: "R6's resolve-chained-advance clause has no test in the plan or the Verification row"
+    body: "target: plan. P1.T3.S3 covered start, advance and fr models only; the Verification row named no resolve."
+  - kind: finding
+    id: spr-r3
+    review_scope: in
+    title: "R6 says every reader refuses, but triage batch dispatch/drive read models.yaml and are not covered"
+    body: "target: spec. triage_batch_cmd.py:941-953 _orchestrator calls load_models uncaught; decision d1 named only run start, advance, resolve's chained advance and fr models."
+  - kind: finding
+    id: spr-r4
+    review_scope: in
+    title: "R5/R6 stated unconditionally, but no models.yaml is read when no harness is detected"
+    body: "target: spec. run_cmd.py:3609-3610 (_resolved_model returns None before load_models with no harness), 3437-3438, 3454-3458. An executor could read R5 as requiring a new unconditional load."
+  - kind: review
+    id: spec-plan-review-1
+    title: "spec+plan review: 4 findings (spr-r1, spr-r2, spr-r3, spr-r4 in scope, none out)"
+    body: "Independent fr-spec-reviewer (opus) checked decisions d1–d5 against the spec, every named file/helper/test against the codebase (file:line for each), the plan against R1–R7 (each built by a task, TDD shape, no member issue as tracking_issue, rows linked, commands real) and the spec's internal consistency. Verified the strict fake breaks only test_tracker.py:341, which T1 rewrites."
+resolves:
+  - {id: spr-r1, state: fixed, body: "Spec R6 and §C now catch the error inside _advance_after_record and print `record applied; the advance after it was refused: fr: <path>: …`, exit 2. Plan P1.T3.S4 says the same and forbids a handler at resolve's entry."}
+  - {id: spr-r2, state: fixed, body: "Plan P1.T3.S3 adds (d) resolve --record on a done record: applied, exit 2, no traceback, the 'record applied' line. It also adds (e) no harness → no read. The Verification row now names resolve --record."}
+  - {id: spr-r3, state: fixed, body: "R6 narrowed to the commands d1 names. Triage batch dispatch/drive is listed under Non-goals for the operator to revisit at PR review, and the plan says to leave it untouched."}
+  - {id: spr-r4, state: fixed, body: "R5/R6 qualified: they apply when a harness is detected and the command reads the config; with no harness nothing is read and behaviour is unchanged. §C says no new load is added; plan test (e) pins it."}
+evidence:
+  review: spec-plan-review-1
+  reviewer: aa4590aed88338638

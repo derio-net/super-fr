@@ -108,19 +108,31 @@ tasks:
       models.yaml path and no "Traceback"; (b) `fr run advance <id>` exits 2
       with stderr "fr: <path>: not valid YAML…" and no traceback; (c) `fr models
       resolve --harness claude-code --tier standard` and `fr models check`
-      exit 2 the same way. Run; all fail.
+      exit 2 the same way; (d) `fr run resolve <id> --step <agent step> --record
+      <file>` on a `done` record exits 2, prints no traceback, the record IS
+      applied (cursor/journal moved, commit made) and the output says
+      "record applied; the advance after it was refused: fr: <path>: …";
+      (e) with no harness detected (FR_HARNESS unset, no harness env), `fr run
+      start` prints no models warning and `fr run advance` behaves as today
+      (no new load). Run; (a)–(d) fail.
   - id: P1.T3.S4
     text: |-
       GREEN: in packages/fr/src/fr/commands/run_cmd.py start, wrap the post-save
       _orchestrator_model_notice and _binding_health calls in one
       `try/except ModelsError as exc` that prints
       `warning: {exc} — model bindings ignored for this notice` (yellow, escaped,
-      soft_wrap) and continues. For advance and resolve (its chained advance)
-      and every fr models command, catch ModelsError once at the command
-      entry (one small helper, e.g. a context manager or decorator beside the
-      command group, not per load_models call) and print `fr: {exc}` to stderr,
-      raise typer.Exit(2). A broken config must never be read as unbound:
-      do not catch it inside _unbound_tiers/_resolved_model. Run the CLI tests.
+      soft_wrap) and continues. For advance and every fr models command, catch
+      ModelsError once at the command entry (one small helper, e.g. a context
+      manager or decorator beside the command group, not per load_models call)
+      and print `fr: {exc}` to stderr, raise typer.Exit(2). For `fr run resolve
+      --record`, catch it INSIDE `_advance_after_record` (run_cmd.py ~6702), after
+      the record is applied, and print it like that function's existing
+      refusals: `record applied; the advance after it was refused: fr: {exc}`,
+      exit 2 — never at resolve's entry, which would read as "nothing applied".
+      A broken config must never be read as unbound: do not catch it inside
+      _unbound_tiers/_resolved_model, and add no load where none happens today
+      (no harness → no read). Leave triage batch dispatch/drive untouched (spec
+      Non-goals). Run the CLI tests.
   - id: P1.T3.S5
     text: |-
       REFACTOR: make sure the advance-side and models-side handlers share one
