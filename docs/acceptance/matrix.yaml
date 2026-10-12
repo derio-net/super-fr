@@ -7467,9 +7467,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R6
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_live_closeout_takes_the_card_front_and_the_body_jumps_to_the_batch
+    status: ci
+    notes: 'R6/R7: Card.front derived from closeout_status; front pill and Jump speak
+      for the live close-out; body has a Jump and code pair per session. Browser shots
+      taken and opened.'
     verify: none
     visual:
       states:
