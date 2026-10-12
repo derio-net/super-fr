@@ -394,3 +394,23 @@ Not a defect: verified no horizontal scroll at a true 390px; pre-existing board 
 ### p4-r9-resolved · finding [out-of-scope] · resolves p4-r9: Skew banner said 'This board is not the whole truth.' on Backlog and Batches (phase 4)
 
 Tagged out by the reviewer (outside R12's list). Note for the operator: the banner was added by this same PR (phase 2), and its wording was nonetheless changed in aa5cdccd to 'This page is not the whole truth.'; marking it fixed is the operator's call.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-10-12T22:36:42+00:00 state=open resolves=p1-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1160 -->
+### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1160] · resolves p1-r6: Test gaps: claim_sync unlabel via one release, no untrusted-author closed-hit case, board note only as a function
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1160.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved-2 created=2026-10-12T22:36:42+00:00 state=open resolves=p1-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1161 -->
+### p1-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1161] · resolves p1-r7: release-pending also covers an own claim a still-running batch owes
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1161.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved-2 created=2026-10-12T22:36:43+00:00 state=open resolves=p4-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1162 -->
+### p4-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1162] · resolves p4-r8: Phone-width 'cards past the right edge' is a headless-Chrome artifact
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1162.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved-2 created=2026-10-12T22:36:43+00:00 state=open resolves=p4-r9 tracked_by=https://github.com/derio-net/super-fr/issues/1163 -->
+### p4-r9-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1163] · resolves p4-r9: Skew banner said 'This board is not the whole truth.' on Backlog and Batches
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1163.
