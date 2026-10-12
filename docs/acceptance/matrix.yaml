@@ -7493,12 +7493,12 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_a_cancelled_released_batch_never_renders_as_running
+      - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_right_after_a_fresh_collect_and_render_it_is_still_cancelled
       int:
       - super-fr:tests/integration/test_scenarios.py#test_triage_cancelled_terminal
     status: ci
-    notes: 'R8 pinned: dispatch, cancel, claims_released is terminal for wave and wave-less
-      batches (stage, owed sets, board column and hint); scenario triage-cancelled-terminal.sh
-      passes. Was green on first run, so #1111 held.'
+    notes: R8 also pinned through a real collect then render (wave and wave-less); scenario
+      states claims-only.
     verify: candidate
     scenario: tests/scenarios/triage-cancelled-terminal.sh
   - id: triage-nav-present-pages
