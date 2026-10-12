@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 from fr.triage.batch import BATCH_STAGES, derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.batch import batch_pr as find_batch_pr
 from fr.triage.batch_drive import finished_waves
-from fr.triage.check import CheckResult, classify, is_awaiting_live
+from fr.triage.check import CheckResult, classify, is_set_apart
 from fr.triage.components import (
     CHROME_CSS,
     GRID_CSS,
@@ -39,6 +39,7 @@ from fr.triage.components import (
     page_header,
     tabs,
 )
+from fr.triage.debt import digest_for, issue_figures
 from fr.triage.fragments import Entry, Resolved, splice
 from fr.triage.model import issue_key
 from fr.triage.stage import IN_FLIGHT
@@ -362,7 +363,7 @@ FILTER_BAR = """<div class="bar" role="toolbar" aria-label="Filter and sort">
 
 GENERATED = (
     "since", "needs", "next-up", "waves", "possible-duplicates", "backlog", "features", "parked",
-    "patterns", "prs", "batches",
+    "patterns", "debt", "prs", "batches",
 )  # fmt: skip
 """The board's generated sections, in default order (spec 2026-10-05-triage-pages-goal §C).
 The masthead and nav sit outside the manifest, always first; `FILTER_BAR` belongs to
@@ -932,7 +933,7 @@ def _parked(facts: Facts, judgements: Judgements) -> str:
     parked = [
         i for i in facts.issues
         if i.state == "open"
-        and not is_awaiting_live(i)
+        and not is_set_apart(i)
         and (j := judgements.issues.get(i.key))
         and (j.kind == "parked" or j.duplicate_of)
     ]  # fmt: skip
@@ -991,6 +992,72 @@ def _waves_section(facts: Facts, judgements: Judgements) -> str:
             "page</a>.</p>"
         )
     return f"{head}{body}</section>"
+
+
+def _slug(repo: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in repo.lower())
+
+
+def _moved(name: str, now: int, before: dict[str, int] | None) -> str:
+    """`name now`, or `name was → now` when *before* knows a different figure."""
+    was = None if before is None else before.get(name, 0)
+    return f"{esc(name)} {was} → {now}" if was is not None and was != now else f"{esc(name)} {now}"
+
+
+def _debt_repo(facts: Facts, repo: str, since: SnapshotDiff | None, show_note: list[bool]) -> str:
+    digest = digest_for(facts, repo)
+    if digest is None:
+        return collapsed(f"debt-{_slug(repo)}", repo, None, '<p class="quiet">no report</p>')
+    link = _link(f"#{digest.number}", _safe_url(digest.url))
+    fig = issue_figures(digest)
+    if fig is None:
+        body = f'<p class="quiet">legacy digest — no figures ({link})</p>'
+        return collapsed(f"debt-{_slug(repo)}", repo, None, body)
+    before_all = since.debt_before if since is not None else None
+    before = before_all.get(repo) if before_all else None
+    acc_before = before["acceptance"] if before else None
+    if (
+        before is not None
+        and "skipped" in before["acceptance"]
+        and "skipped" not in fig["acceptance"]
+    ):
+        show_note[0] = True
+    names = sorted(set(fig["acceptance"]) | set(acc_before or {}))
+    acc = ", ".join(_moved(n, fig["acceptance"].get(n, 0), acc_before) for n in names) or "none"
+    plans_before = before["plans"] if before else None
+    plans = ", ".join(_moved(n, c, plans_before) for n, c in fig["plans"].items()) or "none"
+    owed = "not reported" if fig["owed"] is None else str(fig["owed"])
+    if fig["owed"] is not None and before and before.get("owed") not in (None, fig["owed"]):
+        owed = f"{before['owed']} → {fig['owed']}"
+    when_ = f" · as of {esc(fig['generated_at'])}" if fig["generated_at"] else ""
+    body = (
+        '<ul class="debt-figures">'
+        f'<li>Acceptance debt: <span class="debt-acceptance">{acc}</span></li>'
+        f'<li>Plan debt: <span class="debt-plans">{plans}</span></li>'
+        f'<li>Owed: <span class="debt-owed">{esc(owed)}</span></li></ul>'
+        f'<p class="quiet">{link}{when_}</p>'
+    )
+    return collapsed(f"debt-{_slug(repo)}", repo, fig["total"], body)
+
+
+def _debt_panel(facts: Facts, since: SnapshotDiff | None) -> str:
+    """The Debt panel: one collapsed section per collected repo (debt-engine R15)."""
+    if not facts.collected:
+        return ""
+    note = [False]
+    parts = [_debt_repo(facts, repo, since, note) for repo in facts.collected]
+    notes = ""
+    if since is not None and since.debt_before is None:
+        notes = (
+            '<p class="quiet">The previous snapshot predates debt figures (schema 1), so there '
+            "is no trend yet.</p>"
+        )
+    if note[0]:
+        notes += (
+            '<p class="quiet">The status split moved acceptance rows out of <code>skipped</code>: '
+            "the first trend after it shows that one-time move.</p>"
+        )
+    return '<section class="decide" id="debt"><h2>Debt</h2>' + "".join(parts) + notes + "</section>"
 
 
 def _awaiting_live(
@@ -1084,7 +1151,7 @@ def render(
                 if j.tier == tier.n
                 and key in by_key
                 and not j.duplicate_of
-                and not is_awaiting_live(by_key[key])
+                and not is_set_apart(by_key[key])
             ]
             count += len(rows)
             sev = f"sev-{min(pos + 1, SEVERITIES)}"
@@ -1102,6 +1169,7 @@ def render(
         "backlog": backlog,
         "features": lambda: _features_table(judgements, facts),
         "parked": lambda: _parked(facts, judgements),
+        "debt": lambda: _debt_panel(facts, since),
         "patterns": lambda: _patterns(judgements),
         "prs": lambda: _prs_section(facts.prs, judgements, 1, facts.collected_at),
         "batches": lambda: _batches(judgements, facts, board=board),

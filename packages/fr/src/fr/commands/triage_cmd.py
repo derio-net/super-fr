@@ -661,6 +661,18 @@ def check_command(
     for i in result.awaiting_live:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
+        f"[bold]debt digests[/bold] ({len(result.debt_digests)}) — open, carrying the debt "
+        "marker; not ranked or proposed"
+    )
+    for i in result.debt_digests:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
+        f"[bold]owed[/bold] ({len(result.owed)}) — open, fr:owed: an operator action is owed; "
+        "not ranked or proposed"
+    )
+    for i in result.owed:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
         f"[bold]no severity[/bold] ({len(result.no_severity)}) — open, judged, no severity"
     )
     for i in result.no_severity:

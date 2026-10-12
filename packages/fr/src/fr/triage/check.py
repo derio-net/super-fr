@@ -33,6 +33,10 @@ Pure: facts and judgements in, sets out. The command only formats them.
   2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
   so it is in neither unranked, unplaced, no severity nor stale dispatch, and the
   board shows it in a group of its own;
+- **debt digests** and **owed** — open issues carrying the debt marker (current or
+  legacy) as a line of their own, and open `fr:owed` issues (debt-engine R14, R16). Like
+  awaiting live they are never ranked, unranked, unplaced or without severity; each
+  digest's figures are parsed from its body at check time;
 - **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
   proposes as duplicates, with each flagged pair's reasons. A proposal, never a
   verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;
@@ -51,9 +55,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
+from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS, FR_OWED
 from fr.triage.batch import closeout_state, derive_batch_stage, is_open
 from fr.triage.claims import expired, from_issue_claim, holder, owed_claims
+from fr.triage.debt import has_marker, issue_figures
 from fr.triage.dedupe import CandidateGroup, candidates
 from fr.triage.model import (
     Batch,
@@ -181,6 +186,8 @@ class CheckResult:
     # leaves no original on the board for its members (review p3-r2).
     duplicate_chained: list[str] = field(default_factory=list)
     awaiting_live: list[Issue] = field(default_factory=list)
+    debt_digests: list[Issue] = field(default_factory=list)
+    owed: list[Issue] = field(default_factory=list)
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
@@ -210,6 +217,8 @@ class CheckResult:
             "duplicate_unknown": list(self.duplicate_unknown),
             "duplicate_chained": list(self.duplicate_chained),
             "awaiting_live": [row(i) for i in self.awaiting_live],
+            "debt_digests": [{**row(i), "figures": issue_figures(i)} for i in self.debt_digests],
+            "owed": [row(i) for i in self.owed],
             "duplicate_candidates": [
                 {
                     "keys": list(g.keys),
@@ -384,6 +393,23 @@ def is_awaiting_live(issue: Issue) -> bool:
     return issue.state == "open" and FR_AWAITING_LIVE.name in issue.labels
 
 
+def is_debt_digest(issue: Issue) -> bool:
+    """Whether `issue` is an open debt digest: the marker, current or legacy, as a line
+    of its own (debt-engine R14)."""
+    return issue.state == "open" and has_marker(issue.body)
+
+
+def is_owed(issue: Issue) -> bool:
+    """Whether `issue` is open and carries `fr:owed` (debt-engine R16)."""
+    return issue.state == "open" and FR_OWED.name in issue.labels
+
+
+def is_set_apart(issue: Issue) -> bool:
+    """Whether `issue` is in a set of its own that is never ranked or proposed as work:
+    awaiting live, a debt digest or owed."""
+    return is_awaiting_live(issue) or is_debt_digest(issue) or is_owed(issue)
+
+
 def batch_awaits_live(batch: Batch, facts: Facts) -> bool:
     """Whether every open member of *batch* awaits its live walk (at least one is
     open): such a batch is no work, so the driver holds it (spec §F, R18)."""
@@ -406,9 +432,7 @@ def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
         placed.update(feature.ids)
     placed.update(k for k, j in judgements.issues.items() if j.kind == "parked" or j.duplicate_of)
     return [
-        i
-        for i in facts.issues
-        if i.state == "open" and i.key not in placed and not is_awaiting_live(i)
+        i for i in facts.issues if i.state == "open" and i.key not in placed and not is_set_apart(i)
     ]
 
 
@@ -424,9 +448,7 @@ def classify(
     judged = {normalize_key(k) for k in judgements.issues}
     found = {i.key: i for i in facts.issues}
     unranked = [
-        i
-        for i in facts.issues
-        if i.state == "open" and i.key not in judged and not is_awaiting_live(i)
+        i for i in facts.issues if i.state == "open" and i.key not in judged and not is_set_apart(i)
     ]
     unranked_prs = [
         pr for pr in facts.prs if pr.state == "OPEN" and issue_key(pr.repo, pr.number) not in judged
@@ -471,7 +493,7 @@ def classify(
             if i.state == "open"
             and i.key in judged
             and judgements.issues[i.key].severity is None
-            and not is_awaiting_live(i)
+            and not is_set_apart(i)
         ],
         duplicate_unknown=sorted(
             k
@@ -487,6 +509,8 @@ def classify(
         ),
         settled_prs=settled_prs,
         awaiting_live=awaiting_live_issues(facts),
+        debt_digests=[i for i in facts.issues if is_debt_digest(i)],
+        owed=[i for i in facts.issues if is_owed(i)],
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
         claims=(
