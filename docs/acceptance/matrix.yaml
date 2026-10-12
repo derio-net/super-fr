@@ -6942,9 +6942,15 @@ rows:
       never hidden by a later 304.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_probe.py#test_an_interleaved_change_is_never_a_stale_304
+      - super-fr:tests/unit/test_triage_probe.py#test_promote_keeps_read_repos_drops_failed_and_leaves_the_rest
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_collect_into_carries_and_calls_back_after_facts_json
+    status: ci
+    notes: 'ETag consistency built in phase 2: probes precede the collect, pending ETags
+      promoted only for successfully read repos after facts.json is written, a failed
+      repo''s dropped.'
     verify: none
   - id: quota-lease-safe-wait
     capability: triage-batch-drive
