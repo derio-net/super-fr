@@ -208,7 +208,15 @@ on the first weekly run after both are done.
 
 ### C. Triage (R14–R16)
 
-No facts bump is needed, because `Issue.body` is already collected.
+The figures come from `Issue.body`, which is already collected. A digest counts only when a
+trusted login opened it: the workflow's bot, the viewer `collect` ran as, or the repo's
+`pr_authors`. `pr_authors` is the claim-marker trust set, read from the default branch's
+`.fr/triage.yaml`. That is wider than `fr debt issue`'s bot-and-viewer rule, on purpose. A
+marker-bearing issue from anyone else is listed as `untrusted_digests`, with its figures
+never shown. Judging trust needs the author, so the facts schema moves 8 → 9 with
+`Issue.author` and still reads 3–9. A pre-9 facts file has no author, so every digest in it
+reads as untrusted until the next collect. Facts are a cache, not an artifact kind, so the
+move needs no migration.
 
 - **`check`** parses `parse_figures` at check and render time, and gains two sets:
   `debt_digests`, keyed on either marker, and `owed` (open `fr:owed`). Each has one predicate,
