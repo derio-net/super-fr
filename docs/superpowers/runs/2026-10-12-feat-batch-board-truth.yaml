@@ -3,7 +3,7 @@ run: 2026-10-12-feat-batch-board-truth
 workflow: fr-goal@1
 branch: feat/batch-board-truth
 started: '2026-10-11T22:06:22+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -179,7 +179,11 @@ steps:
           visual: triage-nav-present-pages:8:70d0374ac0af
           findings: p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-12T08:36:38+00:00'
+    exit: 0
+    stdout: |
+      4 out-of-scope finding(s): p1-r6, p1-r7, p4-r8, p4-r9
   deliver:
     state: pending
 fr_version: 5.20.0
