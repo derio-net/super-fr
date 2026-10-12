@@ -185,8 +185,10 @@ steps:
     stdout: |
       4 out-of-scope finding(s): p1-r6, p1-r7, p4-r8, p4-r9
   deliver:
-    state: running
-    at: '2026-10-12T08:36:39+00:00'
+    state: done
+    at: '2026-10-12T08:46:35+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1151
     units:
       step/deliver:
         attempts:
@@ -194,4 +196,11 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: eb97f45e-7baf-433a-bc3e-5fd7ee16e0ad
+          returned: '2026-10-12T08:46:29+00:00'
+          outcome: done
+        evidence:
+          tests: ci:1494a27f2104a78586f07de420fabda3d3122f1a+unknown;tree=c16a8dcfbb7b6ba8c672d0ee4ee507804cf860e14450c82b42c8d7e30112a105
+          walk: 20261012T083720Z.log@c68115168d69
+          proportionality: d7266583d0a8f30bce7b3ee87ec6680d24a87eea:8c65a090b7055852fef9341e5b9679f973560221187416e53e0e7f29cb6dddc0
+          visual: triage-closeout-card-front:2:e95effbde173,triage-nav-present-pages:3:555290f68416
 fr_version: 5.20.0
