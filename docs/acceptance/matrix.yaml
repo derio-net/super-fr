@@ -6828,9 +6828,15 @@ rows:
       and waits four intervals.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_below_the_floor_nothing_is_dispatched_and_the_drive_keeps_going
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_below_the_floor_a_forced_full_pass_reads_only_the_live_batch_repos
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_dispatch_hold_turns_every_dispatch_into_a_pending_hold
+    status: ci
+    notes: 'Essential-only pass built in phase 2: below the floor no dispatch, held
+      batches counted pending (never stalled), board kept, next pass 4x interval; a
+      forced full pass reads only live-batch repos.'
     verify: none
   - id: quota-quiet-pass
     capability: triage-batch-drive
