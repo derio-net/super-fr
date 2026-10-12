@@ -425,3 +425,62 @@ def test_main_worktree_is_the_primary_checkout_even_from_a_linked_one(tmp_path: 
     _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
     assert checkout.main_worktree() == checkout.path.resolve()
     assert Checkout(linked).main_worktree() == checkout.path.resolve()
+
+
+def test_dirty_paths_lists_the_main_worktrees_uncommitted_paths(tmp_path: Path) -> None:
+    """Default-branch adopt refuses a dirty base clone and names its paths (R7)."""
+    checkout = _repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
+    assert checkout.dirty_paths() == ()
+    (checkout.path / "a.txt").write_text("changed\n")
+    (checkout.path / "new.txt").write_text("new\n")
+    (linked / "only-linked.txt").write_text("x\n")
+    # read from the linked worktree: still the MAIN worktree's paths
+    assert Checkout(linked).dirty_paths() == ("a.txt", "new.txt")
+
+
+def test_unpushed_lists_local_commits_origin_lacks(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    assert checkout.unpushed("main") == ()
+    (checkout.path / "a.txt").write_text("local\n")
+    _git(checkout.path, "commit", "--quiet", "-am", "local only")
+    sha = _git(checkout.path, "rev-parse", "--short", "HEAD").strip()
+    assert checkout.unpushed("main") == (f"{sha} local only",)
+
+
+def test_ahead_counts_the_commits_ref_has_beyond_base(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "branch", "feat/batch-x", "origin/main")
+    assert checkout.ahead("feat/batch-x", "origin/main") == 0
+    _git(checkout.path, "checkout", "--quiet", "feat/batch-x")
+    (checkout.path / "a.txt").write_text("one\n")
+    _git(checkout.path, "commit", "--quiet", "-am", "one")
+    (checkout.path / "a.txt").write_text("two\n")
+    _git(checkout.path, "commit", "--quiet", "-am", "two")
+    assert checkout.ahead("feat/batch-x", "origin/main") == 2
+
+
+def test_current_branch_reads_the_main_worktree_and_none_when_detached(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
+    assert Checkout(linked).current_branch() == "main"
+    _git(checkout.path, "checkout", "--quiet", "--detach")
+    assert checkout.current_branch() is None
+
+
+def test_current_branch_is_the_branch_name_even_when_a_tag_shares_it(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    _git(checkout.path, "tag", "main")  # `rev-parse --abbrev-ref` would say `heads/main`
+    assert checkout.current_branch() == "main"
+
+
+def test_head_branch_reads_this_worktree_and_none_when_detached(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    linked = tmp_path / "linked"
+    _git(checkout.path, "worktree", "add", "--quiet", "-b", "feat/x", str(linked))
+    assert Checkout(linked).head_branch() == "feat/x"
+    assert checkout.head_branch() == "main"
+    _git(linked, "checkout", "--quiet", "--detach")
+    assert Checkout(linked).head_branch() is None

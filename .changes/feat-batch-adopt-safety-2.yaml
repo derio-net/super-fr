@@ -1,0 +1,2 @@
+bump: minor
+summary: "triage batch adopt: holds the adopted agent by default (--no-hold), adopts sessions on the default branch, and --list shows each session's state, repo, branch, workspace, PR and classified refs"

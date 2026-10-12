@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# A fake `gh` for tests/scenarios/triage-adopt-hold.sh (FR_FORGE_API=rest): the branch has
+# no open PR, so every pulls-by-head read is an empty list. Anything else fails loudly.
+[ "${1:-}" = api ] || { echo "fake gh: unexpected call: gh $*" >&2; exit 1; }
+[ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+case "$*" in
+  *pulls*) echo '[]' ;;
+  *) echo "fake gh: no answer for: $*" >&2; exit 1 ;;
+esac

@@ -1,0 +1,11 @@
+{
+ "number": 1,
+ "state": "open",
+ "title": "one",
+ "body": "",
+ "labels": [],
+ "assignees": [],
+ "user": {
+  "login": "operator"
+ }
+}
