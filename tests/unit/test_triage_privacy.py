@@ -273,7 +273,7 @@ def test_push_reads_the_state_repos_visibility_live_with_get_repos(
     with pytest.raises(PrivacyError):
         _push(state, origin, OPEN_REPO, RealGhRestClient(run=fake))
 
-    assert ["api", f"repos/{OPEN_REPO}"] in fake.calls
+    assert ["api", "-i", f"repos/{OPEN_REPO}"] in fake.calls
     assert _ref(origin) == ""
 
 

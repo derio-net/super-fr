@@ -8,6 +8,7 @@ we leverage gh's existing auth.
 from __future__ import annotations
 
 import contextvars
+import json
 import os
 import re
 import shlex
@@ -765,3 +766,57 @@ def probe(run: Callable[[list[str]], str], path: str, etag: str | None) -> tuple
     head = out.split("\n\n", 1)[0].split("\r\n\r\n", 1)[0]
     found = _ETAG_HEADER.search(head)
     return True, found.group(1) if found else None
+
+
+# OWNER/REPO's last visibility answer and the ETag it came with, per (host, repo): module
+# scope, because `triage_cmd.make_visibility_client` builds a new client for every push, so
+# a per-client cache would never be hit (spec 2026-10-12-quota-pacing R12).
+_VISIBILITY: dict[tuple[str, str], tuple[str, str]] = {}
+
+
+def _visibility_in(body: str) -> str | None:
+    try:
+        raw = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("visibility")
+    if isinstance(value, str) and value:
+        return value.lower()
+    if isinstance(raw.get("private"), bool):
+        return "private" if raw["private"] else "public"
+    return None
+
+
+def repo_visibility(run: Callable[[list[str]], str], host: str | None, repo: str) -> str:
+    """The visibility of *repo*, lowercased, by a conditional REST read (R12), shared by
+    both GitHub adapters. A 304 returns the answer cached for that ETag, still LIVE: the
+    forge was asked and said unchanged, at no budget. Any failure raises, so
+    `live_visibility` answers None and the guard refuses, as before."""
+    key = ((host or "github.com").lower(), repo.lower())
+    cached = _VISIBILITY.get(key)
+    path = f"repos/{repo}"
+    argv = ["api", "-i", *(["-H", f"If-None-Match: {cached[0]}"] if cached else []), path]
+    try:
+        out = run(argv)
+    except GhError as exc:
+        if cached and any(_status_of(t or "") == 304 for t in (exc.stdout, exc.stderr)):
+            return cached[1]
+        raise
+    head, body = "", out  # a runner that dropped the headers still answers the body
+    if (status := _status_of(out)) is not None:
+        if status != 200:
+            raise GhError(f"GET {path}: unexpected answer {out[:60]!r}")
+        head, sep, body = out.partition("\n\n")
+        if not sep:
+            head, _, body = out.partition("\r\n\r\n")
+    value = _visibility_in(body)
+    if value is None:
+        raise GhError(f"GET {path}: no visibility in the answer")
+    found = _ETAG_HEADER.search(head)
+    if found:
+        _VISIBILITY[key] = (found.group(1), value)
+    else:
+        _VISIBILITY.pop(key, None)
+    return value

@@ -859,11 +859,9 @@ class RealGhRestClient:
         return value if isinstance(value, bool) else None
 
     def repo_visibility(self, repo: str) -> str:
-        """`visibility` of `GET repos/{repo}`, else `private` read as public/private."""
-        value = _visibility_of(self._api(f"repos/{repo}"))
-        if value is None:
-            raise GhError(f"GET repos/{repo}: no visibility in the answer")
-        return value
+        """`visibility` of `GET repos/{repo}`, else `private` read as public/private; a
+        conditional read sharing `fr.gh`'s module-level ETag map (quota-pacing R12)."""
+        return _gh.repo_visibility(self._gh, self._host, repo)
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """`allowed` from the repo's `allow_*` flags. Gap: REST has no

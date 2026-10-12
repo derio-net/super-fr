@@ -422,3 +422,14 @@ def complete_live_pr(monkeypatch: pytest.MonkeyPatch) -> None:
 
     body = "\n\n".join(f"{h}\n\nNone." for h in REQUIRED_SECTIONS)
     monkeypatch.setattr(fr.gh, "view_pr_body", lambda ref, *, cwd=None: body)
+
+
+@pytest.fixture(autouse=True)
+def _no_visibility_etags_carried_between_tests() -> Iterator[None]:
+    """`fr.gh`'s visibility ETag map is process-global (quota-pacing R12): one test's
+    cached answer must not turn the next test's first read into a 304."""
+    from fr import gh
+
+    gh._VISIBILITY.clear()
+    yield
+    gh._VISIBILITY.clear()
