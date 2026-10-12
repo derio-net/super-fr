@@ -4428,12 +4428,16 @@ class _Driver:
             f"held: PR #{action.pr} is {attempt.outcome}{held}", False, in_flight, stops
         )
 
-    def _stopped_line(self, batch: Batch, action: Action, exc: MergeStopError | GitError) -> str:
+    def _stopped_line(
+        self, batch: Batch, action: Action, exc: MergeStopError | GitError, *, failed: bool = True
+    ) -> str:
         """A refusal ends neither the loop nor the pass (rg-4): it is reported in full
-        once per batch, head and reason, and `--once` exits 1 on it. Every stop but a
-        moved head (re-judged, not owed) is recorded in `merge-stops.json` at the head
-        it stopped at, so the board shows it as needing you (#1008)."""
-        self.failed_write = True
+        once per batch, head and reason, and `--once` exits 1 on it — unless the pass
+        handles it (a conflict, §G: `failed=False`). Every stop but a moved head
+        (re-judged, not owed) is recorded in `merge-stops.json` at the head it stopped
+        at, so the board shows it as needing you (#1008)."""
+        if failed:
+            self.failed_write = True
         key = f"{batch.id}\0{action.head}\0{exc}"
         if not isinstance(exc, HeadMovedError):
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
@@ -4457,8 +4461,10 @@ class _Driver:
         """A real conflict (spec 2026-10-06-verification-strategies §G, R20-R22): the
         stop line, then what `conflict_decision` says, from the persisted events and
         the conflicts this pass's train met before it. Returns the line and whether
-        it acted (wrote an event or handed back)."""
-        stopped = self._stopped_line(batch, action, exc)
+        it acted (wrote an event or handed back). The conflict itself is no failed
+        write: the hand-back is the train working (gh#1099); a hand-back that fails
+        reports itself."""
+        stopped = self._stopped_line(batch, action, exc, failed=False)
         earlier = self._conflicts.setdefault(action.train, [])
         decision = conflict_decision(batch.events, exc.head, exc.paths, tuple(earlier))
         earlier.append((batch.id, exc.paths))
@@ -4619,8 +4625,9 @@ class _Driver:
             ), False  # cloud-triage §E, p4-r10
         checkout = self.checkout(repo)
         try:
-            checkout.fast_forward()
+            checkout.fast_forward(switch=self.adapter.owns_checkout)
             _fresh_config(checkout, facts, repo)
+            base = checkout.default_branch()
         except TriageError as exc:
             return f"close-out held: {exc}", False
         command = facts.config_for(repo).post_merge
@@ -4664,6 +4671,7 @@ class _Driver:
             run=run,
             checkout=checkout.main_worktree(),
             group=self.group_of(batch),
+            base=base,
         )
         runner = self.runner(str(launch.runner))
         if not runner.can_dispatch(item):
@@ -4956,9 +4964,12 @@ def _closeout_item(
     run: str | None,
     checkout: Path,
     group: str | None = None,
+    base: str | None = None,
 ) -> WorkItem:
     """The close-out work item (§C): unit `run`, `payload.kind: closeout`, model from
-    `resolve_launch`, checkout from the `--checkout` map."""
+    `resolve_launch`, checkout from the `--checkout` map. `base` is the repo's default
+    branch, where a runner that starts a session on a branch starts it: the batch
+    branch was deleted when its PR merged (gh#1099)."""
     from fr_dispatch.work_item import WorkItem
 
     last = last_dispatch(batch)
@@ -4971,6 +4982,8 @@ def _closeout_item(
         "issues": list(batch.ids),
         "checkout": str(checkout),
     }
+    if base:
+        payload["base"] = base
     if group:
         payload["group"] = group
     return WorkItem(

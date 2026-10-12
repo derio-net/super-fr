@@ -94,8 +94,9 @@ REQUEST_TABLE: Mapping[str, Row] = {
         record="{id, session: <new session id>}",
     ),
     "status": Row(
-        execute="get_session(session)",
-        record="{id, state, needs_action}",
+        execute="get_session(session); a session that failed to start still reads "
+        "working, so also read its `last_init_error`",
+        record="{id, state, needs_action, init_error: <last_init_error, when set>}",
     ),
 }
 
@@ -110,6 +111,15 @@ def split_id(rid: str) -> tuple[str, str, str] | None:
     if len(parts) != 3 or not all(parts):
         return None
     return parts[0], parts[1], parts[2]
+
+
+def fold_init_error(state: object, needs: object, init_error: object) -> tuple[object, object]:
+    """A session that failed to start keeps its `working` status bucket, and only its
+    `last_init_error` says so (gh#1099): read as `failed` (blocked), the error its note."""
+    if not init_error:
+        return state, needs
+    note = f"the session failed to start: {init_error}"
+    return "failed", f"{note}; {needs}" if needs else note
 
 
 def map_state(state: object) -> FrStatus:
@@ -135,8 +145,8 @@ class Listed:
 
 def parse_statuses(raw: Any) -> list[Listed]:
     """The agent's statuses file, in any of its three shapes: `{"sessions": [...]}`, a
-    bare list of `{id|session, tag|tags, state, needs_action}`, or a mapping keyed by item
-    id (or session id) whose value is a state or such an object."""
+    bare list of `{id|session, tag|tags, state, needs_action, init_error}`, or a mapping
+    keyed by item id (or session id) whose value is a state or such an object."""
     if raw is None:
         return []
     entries: list[tuple[str | None, Any]] = []
@@ -160,8 +170,9 @@ def parse_statuses(raw: Any) -> list[Listed]:
             tags.insert(0, str(body["tag"]))
         if key and key not in tags:
             tags.insert(0, key)
-        needs = body.get("needs_action")
-        state = body.get("state")
+        state, needs = fold_init_error(
+            body.get("state"), body.get("needs_action"), body.get("init_error")
+        )
         out.append(
             Listed(
                 session=str(session) if session else None,
@@ -404,7 +415,10 @@ class Mailbox:
             recorded = self.session_of(parts[0])
             if recorded is None:
                 return False
-            self._observe(recorded, result.get("state"), result.get("needs_action"))
+            state, needs = fold_init_error(
+                result.get("state"), result.get("needs_action"), result.get("init_error")
+            )
+            self._observe(recorded, state, needs)
             return True
         request = self._request(rid)
         if request is None:
