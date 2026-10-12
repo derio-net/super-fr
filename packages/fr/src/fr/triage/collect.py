@@ -539,7 +539,8 @@ def collect_facts_counted(
     *only* with *previous* is a partial collect (spec 2026-10-12-quota-pacing R10): a
     repo of *previous* outside *only* is not read at all. Its issues, unlinked PRs,
     batch PRs, config and judged keys are carried from *previous*; the repo
-    list and the viewer too. Each issue's PR links are this pass's, plus the previous
+    list and the viewer too; never its visibility, which the privacy guard then reads
+    live. Each issue's PR links are this pass's, plus the previous
     links whose PR lives in a carried repo, so a cross-repo link survives whichever side
     was read. A repo *previous* skipped is read regardless: it has nothing to carry.
     *only* None (or no *previous*) is the full collect, unchanged.
