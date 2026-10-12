@@ -57,8 +57,14 @@ def filter_issues_by_body(
     Raises `ListingCapped` (carrying the matches) when the scan hit *limit*:
     an issue past the cap is unseen, so the caller must not read "none found".
     """
-    hits = [i for i in raw if any(s in (i.get("body") or "") for s in search)]
-    hits.sort(key=lambda i: int(i.get("number") or 0))
+
+    def digits(i: dict[str, Any]) -> bool:
+        n = str(i.get("number", ""))
+        return n.isascii() and n.isdigit()
+
+    # A forge-returned number that is not plain digits is skipped, never `int()`ed.
+    hits = [i for i in raw if digits(i) and any(s in (i.get("body") or "") for s in search)]
+    hits.sort(key=lambda i: int(i["number"]))
     if len(raw) >= limit:
         raise ListingCapped(hits, limit)
     return hits

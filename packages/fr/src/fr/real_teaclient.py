@@ -207,16 +207,27 @@ class RealTeaClient(UnsupportedBatchOps):
     def list_open_issues_with_body(
         self, repo: str, *, search: tuple[str, ...], limit: int
     ) -> list[dict[str, Any]]:
-        out = _tea._run_tea(
-            ["issues", "list", "--repo", repo, "--state", "open", "--limit", str(limit)]
-            + ["--fields", "index,title,body,labels,author", "--output", "json"]
-        )
-        try:
-            got = json.loads(out) if out.strip() else []
-        except json.JSONDecodeError as exc:
-            raise _tea.TeaError(f"unreadable `tea issues list` output: {exc}") from exc
-        if not isinstance(got, list):
-            raise _tea.TeaError("unreadable `tea issues list` output: not a JSON list")
+        # Gitea clamps a page to its own maximum (50 by default), whatever --limit
+        # says, so page until an empty page: a single page would be a silent cap.
+        got: list[Any] = []
+        page = 1
+        while len(got) < limit:
+            out = _tea._run_tea(
+                ["issues", "list", "--repo", repo, "--state", "open"]
+                + ["--limit", str(min(limit, 50)), "--page", str(page)]
+                + ["--fields", "index,title,body,labels,author", "--output", "json"]
+            )
+            try:
+                chunk = json.loads(out) if out.strip() else []
+            except json.JSONDecodeError as exc:
+                raise _tea.TeaError(f"unreadable `tea issues list` output: {exc}") from exc
+            if not isinstance(chunk, list):
+                raise _tea.TeaError("unreadable `tea issues list` output: not a JSON list")
+            if not chunk:
+                break
+            got.extend(chunk)
+            page += 1
+        got = got[:limit] if len(got) > limit else got
         raw: list[dict[str, Any]] = []
         for i in got:
             if not isinstance(i, dict):

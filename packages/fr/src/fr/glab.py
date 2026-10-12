@@ -152,10 +152,14 @@ def check_argv(args: list[str], host: str | None) -> None:
       segment is not a host glab knows: its config's, gitlab.com, the
       threaded host (compared lowercased; glab is case-sensitive, so this
       refuses more, never less);
-    - an `api` endpoint starts with `projects/`."""
-    if args[:1] == ["api"] and not (len(args) > 1 and args[1].startswith("projects/")):
+    - an `api` endpoint starts with `projects/`, or is exactly `user` (who the
+      credentials act as: no host, no redirect)."""
+    if args[:1] == ["api"] and not (
+        len(args) > 1 and (args[1].startswith("projects/") or args[1] == "user")
+    ):
         raise GlabHostRefusedError(
-            f"glab api endpoint {args[1:2]!r} is not a `projects/` path fr writes; "
+            f"glab api endpoint {args[1:2]!r} is not a `projects/` path (or the bare `user` "
+            "endpoint) fr writes; "
             "fr points glab at a host only through GITLAB_HOST"
         )
     known: frozenset[str] | None = None

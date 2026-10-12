@@ -313,7 +313,8 @@ class RealGlabClient(UnsupportedBatchOps):
         while len(raw) < limit:
             per = min(100, limit - len(raw))
             out = self._api(
-                f"projects/{quote(repo, safe='')}/issues?state=opened&per_page={per}&page={page}"
+                f"projects/{quote(repo, safe='')}/issues?state=opened&order_by=created_at&sort=asc"
+                f"&per_page={per}&page={page}"
             )
             try:
                 got = json.loads(out) if out.strip() else []

@@ -72,20 +72,36 @@ def test_gh_close_issue_comments_in_one_close(monkeypatch: pytest.MonkeyPatch) -
     assert rec.calls == [["issue", "close", "7", "--repo", REPO, "--comment", "all clear"]]
 
 
-def test_gh_lists_open_issues_with_body_oldest_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = Recorder({("issue", "list"): json.dumps(ISSUES)})
+def _rest_issues(items: list[dict]) -> str:
+    return json.dumps(
+        [
+            {
+                "number": i["number"],
+                "title": i["title"],
+                "body": i["body"],
+                "labels": [],
+                "user": {"login": "bot"},
+                "state": "open",
+            }
+            for i in items
+        ]
+    )
+
+
+def test_gh_lists_open_issues_oldest_first_through_the_rest_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rec = Recorder({("api",): _rest_issues(ISSUES)})
     monkeypatch.setattr(_gh, "_run_gh", rec)
     got = RealGhClient().list_open_issues_with_body(REPO, search=MARKERS, limit=50)
     assert [i["number"] for i in got] == [3, 9]
-    argv = rec.calls[0]
-    assert argv[:2] == ["issue", "list"]
-    assert argv[argv.index("--state") + 1] == "open"
-    assert argv[argv.index("--limit") + 1] == "50"
-    assert "body" in argv[argv.index("--json") + 1]
+    assert got[0]["author"]["login"] == "bot"
+    route = rec.calls[0][1]
+    assert "state=open" in route and "sort=created" in route and "direction=asc" in route
 
 
 def test_a_capped_listing_is_partial_never_none_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = Recorder({("issue", "list"): json.dumps(ISSUES)})
+    rec = Recorder({("api",): _rest_issues(ISSUES)})
     monkeypatch.setattr(_gh, "_run_gh", rec)
     with pytest.raises(ListingCapped) as info:
         RealGhClient().list_open_issues_with_body(REPO, search=("nope",), limit=3)
@@ -128,20 +144,11 @@ def test_rest_close_issue_comments_then_closes_with_routes_only() -> None:
     assert all(c[0] == "api" and "graphql" not in c for c in rec.calls)
 
 
-def test_rest_lists_open_issues_with_body() -> None:
-    client, rec = _rest(
-        {
-            ("api", f"repos/{REPO}/issues?state=open"): json.dumps(
-                [
-                    {"number": i["number"], "title": i["title"], "body": i["body"], "labels": []}
-                    for i in ISSUES
-                ]
-            )
-        }
-    )
+def test_rest_lists_open_issues_with_body_oldest_first() -> None:
+    client, rec = _rest({("api", f"repos/{REPO}/issues?state=open"): _rest_issues(ISSUES)})
     got = client.list_open_issues_with_body(REPO, search=MARKERS, limit=50)
     assert [i["number"] for i in got] == [3, 9]
-    assert all(c[0] == "api" for c in rec.calls)
+    assert "sort=created&direction=asc" in rec.calls[0][1]
 
 
 def test_rest_create_pr_draft_posts_a_draft_flag() -> None:
@@ -199,6 +206,7 @@ def test_glab_lists_issues_through_the_api_and_maps_fields(
     got = RealGlabClient().list_open_issues_with_body(REPO, search=MARKERS, limit=50)
     assert got[0]["number"] == 3 and got[0]["author"] == {"login": ""}
     assert "state=opened" in rec.calls[0][1] and "derio-net%2Fsuper-fr" in rec.calls[0][1]
+    assert "order_by=created_at&sort=asc" in rec.calls[0][1]
 
 
 def test_glab_create_draft_mr_and_find_by_source_branch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -228,29 +236,37 @@ def test_glab_create_draft_mr_and_find_by_source_branch(monkeypatch: pytest.Monk
 # ------------------------------------------------------------------ tea
 
 
-def test_tea_edit_close_and_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    listing = [
-        {"index": 3, "title": "old", "body": "fr-technical-debt", "labels": "a, b", "author": "bot"}
-    ]
-    rec = Recorder({("issues", "list"): json.dumps(listing)})
-    monkeypatch.setattr(_tea, "_run_tea", rec)
+# Shape mirror of `tea issues list --fields index,title,body,labels,author --output json`
+# (not captured live: no Gitea host here). Values are fictional; the shape is the
+# documented one: `index` for the number, `labels` a comma string, `author` a login.
+TEA_LIST_PAGE_1 = [
+    {"index": 3, "title": "old", "body": "fr-technical-debt", "labels": "a, b", "author": "bot"},
+    {"index": "--web", "title": "x", "body": "fr-technical-debt", "labels": "", "author": "m"},
+]
+
+
+def test_tea_edit_close_and_list_pages_until_an_empty_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pages = {"1": TEA_LIST_PAGE_1, "2": [{"index": 9, "title": "t", "body": "z", "author": "m"}]}
+    calls: list[list[str]] = []
+
+    def run(args: list[str], **_kw: Any) -> str:
+        calls.append(list(args))
+        if args[:2] == ["issues", "list"]:
+            return json.dumps(pages.get(args[args.index("--page") + 1], []))
+        return ""
+
+    monkeypatch.setattr(_tea, "_run_tea", run)
     c = RealTeaClient()
     c.edit_issue(REPO, 7, title="T", body="B")
     c.close_issue(REPO, 7, "done")
-    got = c.list_open_issues_with_body(REPO, search=MARKERS, limit=50)
-    assert rec.calls[0] == [
-        "issues",
-        "edit",
-        "7",
-        "--repo",
-        REPO,
-        "--title",
-        "T",
-        "--description",
-        "B",
-    ]
-    assert rec.calls[1] == ["comments", "add", "7", "done", "--repo", REPO]
-    assert rec.calls[2] == ["issues", "close", "7", "--repo", REPO]
+    got = c.list_open_issues_with_body(REPO, search=MARKERS, limit=200)
+    assert calls[0] == ["issues", "edit", "7", "--repo", REPO, "--title", "T", "--description", "B"]
+    assert calls[1] == ["comments", "add", "7", "done", "--repo", REPO]
+    assert calls[2] == ["issues", "close", "7", "--repo", REPO]
+    pages_asked = [c_[c_.index("--page") + 1] for c_ in calls if c_[:2] == ["issues", "list"]]
+    assert pages_asked == ["1", "2", "3"]
     assert got == [
         {
             "number": 3,
@@ -259,7 +275,17 @@ def test_tea_edit_close_and_list(monkeypatch: pytest.MonkeyPatch) -> None:
             "labels": ["a", "b"],
             "author": {"login": "bot"},
         }
-    ]
+    ]  # the non-digit number was skipped, not int()ed
+
+
+def test_tea_listing_that_reaches_the_cap_is_partial(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        _tea,
+        "_run_tea",
+        lambda args, **_kw: json.dumps([{"index": 1, "title": "t", "body": "z", "author": "m"}]),
+    )
+    with pytest.raises(ListingCapped):
+        RealTeaClient().list_open_issues_with_body(REPO, search=MARKERS, limit=3)
 
 
 @pytest.mark.parametrize("op", ["create_pr", "open_pr_in_repo"])
@@ -314,3 +340,61 @@ def test_glab_and_tea_name_the_account_their_credentials_act_as(
     assert RealGlabClient().authenticated_login() == "bot"
     monkeypatch.setattr(_tea, "_run_tea", Recorder({("api",): json.dumps({"login": "bot"})}))
     assert RealTeaClient().authenticated_login() == "bot"
+
+
+# ---------------------------------------- through the real glab argv gate
+
+
+def _stub_subprocess(
+    monkeypatch: pytest.MonkeyPatch, stdout_for: dict[str, str]
+) -> list[list[str]]:
+    """Stub only `subprocess.run`, so `_run_glab` and `check_argv` run for real."""
+    import subprocess
+
+    seen: list[list[str]] = []
+
+    def run(argv, **_kw):  # type: ignore[no-untyped-def]
+        seen.append(list(argv))
+        out = next((v for k, v in stdout_for.items() if k in " ".join(argv)), "")
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+    monkeypatch.setattr(_glab.subprocess, "run", run)
+    return seen
+
+
+def test_glab_authenticated_login_passes_the_real_argv_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = _stub_subprocess(monkeypatch, {"api user": json.dumps({"username": "bot"})})
+    assert RealGlabClient().authenticated_login() == "bot"
+    assert seen == [["glab", "api", "user"]]
+
+
+def test_the_gate_still_refuses_other_api_endpoints_and_userinfo_lookalikes() -> None:
+    for endpoint in ("users", "user/keys", "https://evil.example/user", "-user"):
+        with pytest.raises(_glab.GlabHostRefusedError):
+            _glab.check_argv(["api", endpoint], None)
+
+
+def test_every_glab_debt_operation_passes_the_real_argv_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url = "https://gl.corp.com/g/p/-/merge_requests/12"
+    seen = _stub_subprocess(
+        monkeypatch,
+        {
+            "mr create": url,
+            "mr list": json.dumps(
+                [{"iid": 12, "web_url": url, "source_project_id": 1, "target_project_id": 1}]
+            ),
+            "projects/": "[]",
+        },
+    )
+    c = RealGlabClient()
+    c.edit_issue("g/p", 7, title="T", body="B")
+    c.close_issue("g/p", 7, "done")
+    c.list_open_issues_with_body("g/p", search=MARKERS, limit=5)
+    c.create_pr("g/p", head="h", base="main", title="t", body="b", draft=True)
+    assert c.open_pr_in_repo("g/p", "h") == {"number": 12, "url": url}
+    c.edit_pr("g/p", 12, body="B")
+    assert len(seen) >= 7  # nothing was refused

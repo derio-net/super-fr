@@ -1017,7 +1017,14 @@ class RealGhRestClient:
     def list_open_issues_with_body(
         self, repo: str, *, search: tuple[str, ...], limit: int
     ) -> list[dict[str, Any]]:
-        raw = self.list_issues(repo, "open", limit, "number,title,body,labels,author")
+        # Oldest first, so the long-lived debt issue is in the first page whatever
+        # the repo's backlog; a capped scan is still reported as partial.
+        pages = self._paged(
+            f"repos/{repo}/issues?state=open&sort=created&direction=asc",
+            limit=limit,
+            keep=lambda i: "pull_request" not in i,
+        )
+        raw = [_project(_issue_record(i), "number,title,body,labels,author") for i in pages]
         return filter_issues_by_body(raw, search, limit)
 
     def close_issue(self, repo: str, number: int, comment: str) -> None:

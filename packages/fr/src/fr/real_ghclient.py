@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, CommandRunner, filter_issues_by_body, run_cli
+from fr.ghclient import MERGE_METHODS, CommandRunner, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -260,9 +260,13 @@ class RealGhClient:
     def list_open_issues_with_body(
         self, repo: str, *, search: tuple[str, ...], limit: int
     ) -> list[dict[str, Any]]:
-        # Client-side: GitHub search does not index HTML-comment markers.
-        raw = self.list_issues(repo, "open", limit, "number,title,body,labels,author")
-        return filter_issues_by_body(raw, search, limit)
+        # REST works on either backend and can list oldest-first (GraphQL's
+        # `gh issue list` is newest-first, so the debt issue would fall past the cap).
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).list_open_issues_with_body(
+            repo, search=search, limit=limit
+        )
 
     @_hosted
     def close_issue(self, repo: str, number: int, comment: str) -> None:
