@@ -7448,9 +7448,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R4
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: Scenario named at plan time; written by the phase that implements the row.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_config_skew.py#test_the_banner_names_ignored_keys_and_skipped_repos_escaped
+      - super-fr:tests/unit/test_triage_config_skew.py#test_check_names_skipped_and_ignored_in_json_and_first_in_the_text
+    status: ci
+    notes: 'Phase 2: lenient config reads everywhere, skew_banner on triage.html and
+      board.html, check skipped/config_ignored; scenario tests/scenarios/triage-config-skew.sh
+      runs in CI via test_scenarios.py'
     verify: candidate
     scenario: tests/scenarios/triage-config-skew.sh
   - id: triage-closeout-card-front
