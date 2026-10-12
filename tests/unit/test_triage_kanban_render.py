@@ -369,3 +369,35 @@ def test_card_front_is_derived_from_the_closeout_status() -> None:
         from dataclasses import replace
 
         assert replace(board.card("c-session"), closeout_status=status).front == "batch"
+
+
+def _closeout_variant(status: str) -> str:
+    f, jd, st, notes = world()
+    st = {**st, "example-org/widgets/run/closeout-c-session": status}
+    page = render_board(
+        build_board(f, jd, st), scope_args=SCOPE, rendered_at=AT, refresh=0, notes=notes
+    )
+    return _card(page, "c-session")
+
+
+def _cmds(fragment: str) -> list[str]:
+    return [html.unescape(c) for c in re.findall(r'data-command="([^"]*)"', fragment)]
+
+
+def test_an_unknown_closeout_status_leaves_the_front_to_the_batch_session() -> None:
+    card = _closeout_variant("unknown")
+    front = _summary(card)
+    assert len(_cmds(front)) == 1 and "--closeout" not in _cmds(front)[0]
+    assert "status-done" in front and "status-unknown" not in front
+    assert [c.endswith("--closeout") for c in _cmds(_body_of(card))] == [False, True]
+
+
+def test_an_absent_closeout_has_a_batch_front_and_no_closeout_jump_or_code() -> None:
+    card = _closeout_variant("absent")
+    front = _summary(card)
+    assert len(_cmds(front)) == 1 and "--closeout" not in _cmds(front)[0]
+    assert "status-done" in front
+    body = _body_of(card)
+    assert [c.endswith("--closeout") for c in _cmds(body)] == [False]
+    section = body.split("<h4>Close-out session</h4>", 1)[1]
+    assert 'class="jump"' not in section and 'class="cmd"' not in section

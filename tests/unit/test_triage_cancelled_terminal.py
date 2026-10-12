@@ -6,6 +6,7 @@ release, and never renders as Running, whether or not it has a wave.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -58,3 +59,35 @@ def test_a_cancelled_released_batch_never_renders_as_running(wave: int | None) -
     assert card.column != "running"
     assert "gone" not in [c.batch.id for c in board.column("running").cards]
     assert "session running" not in card.hint
+
+
+@pytest.mark.parametrize("wave", [None, 1], ids=["wave-less", "wave"])
+def test_right_after_a_fresh_collect_and_render_it_is_still_cancelled(wave: int | None) -> None:
+    """R8's "fresh collect and render": the facts come from collect, not a hand-built Facts."""
+    from fr.triage.collect import collect_facts
+    from fr.triage.kanban_render import render_board
+
+    from tests.unit.triage_fixtures import SUPER_FR, FakeForge, _issue
+
+    repo = "derio-net/super-fr"
+    forge = FakeForge(issues={repo: [_issue(1), _issue(2)]}, prs={repo: []}, closed={})
+    now = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
+    keys = ["super-fr#1", "super-fr#2"]
+    kw: dict[str, Any] = {} if wave is None else {"wave": wave}
+    events = _events()
+    events[2]["keys"] = keys
+    b = {"id": "gone", "title": "batch gone", "ids": keys, "events": events, **kw}
+    jd = judgements({k: j(1, kind="defect") for k in keys}, [b], schema=6)
+
+    f = collect_facts(forge, SUPER_FR, now=now, judged=keys)
+    batch_ = jd.batches[0]
+    stage = derive_batch_stage(batch_, f)
+    assert stage == "cancelled"
+    assert not owed_claims(jd.batches, {"gone": stage}, set())
+    assert not owed_releases(jd.batches, {"gone": stage}, set())
+
+    board = build_board(f, jd, {f"{repo}/run/batch-gone": "working"})
+    card = board.card("gone")
+    assert card.column != "running" and "session running" not in card.hint
+    page = render_board(board, scope_args=["--repo", repo], rendered_at=now, refresh=0, notes=[])
+    assert "stage-cancelled" in page

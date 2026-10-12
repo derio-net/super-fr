@@ -4,6 +4,8 @@
 # and `fr triage check --json` lists no claim or release owed for its members. Facts are
 # fixtures/cancelled-terminal-facts.json (made by make_cancelled_terminal_facts.py); the
 # judgements are written here. Nothing reaches a forge or a runner (render-only board).
+# `check --json` reports owed CLAIMS only (it has no releases-owed field); that no release
+# is owed is pinned by tests/unit/test_triage_cancelled_terminal.py.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 
@@ -46,11 +48,11 @@ for id in with-wave no-wave; do
   refuse_grep 'session running' "$card" "$id is not described as running"
 done
 running="$(printf '%s' "$board" | tr '\n' ' ' | grep -o '<section class="col" data-column="running">.*' | sed 's#</section>.*##')"
+expect_grep 'data-column="running"' "$running" "the Running column was found"
 refuse_grep 'card-with-wave|card-no-wave' "$running" "neither batch sits in the Running column"
 
 run_fr out triage check --repo example-org/widgets --dir "$state" --json
 require_exit 0 "$out"
 json="$(printf '%s' "$out" | tr -d '[:space:]')"
-expect_grep '"claims_owed":\[\]' "$json" "no claim or release is owed for a cancelled, released batch"
-refuse_grep 'release-pending' "$json" "no release is pending for its members"
+expect_grep '"claims_owed":\[\]' "$json" "no claim is owed for a cancelled, released batch"
 echo "ok: triage-cancelled-terminal"
