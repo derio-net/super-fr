@@ -216,3 +216,6 @@ Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): name _wat
 ### sr-13-resolved · finding [fixed] · resolves sr-13: Verification rows miss R4, R5, R6, R10, R11, R15/R16
 
 Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): add unit rows quota-secondary-backoff, quota-floor-config, quota-partial-carry, quota-etag-consistency, quota-lease-safe-wait.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-12-quota-pacing-p2 created=2026-10-12T06:21:57+00:00 -->
+### phase-split-2026-10-12-quota-pacing-p2 · decision · ask: probes, partial collect and the essential-only pass answer #1136 asks 2 and 3 (R7-R11), separately reviewable from the pacing core
