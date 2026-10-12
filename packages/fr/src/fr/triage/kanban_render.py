@@ -15,10 +15,14 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from fr.triage.components import GUTTER_CSS, TOKENS_CSS, stamp_text, when
 from fr.triage.kanban import Board, BoardStatus, Card, ColumnView, HeldIssue, Member, PrView
 from fr.triage.render import FONTS, _safe_url, esc, noun
+
+if TYPE_CHECKING:
+    from fr.triage.quota import Budget
 
 STATUS_LABELS: dict[BoardStatus, str] = {
     "working": "working",
@@ -357,9 +361,12 @@ def render_board(
     rendered_at: datetime,
     refresh: int,
     notes: Sequence[str],
+    budget: Budget | None = None,
 ) -> str:
-    """The board page: same inputs, same bytes. *scope_args* are the `--repo`/`--org`
-    (and `--dir`, when given) words the copied commands carry; *refresh* is the reload
+    """The board page: same inputs, same bytes. *budget* is the drive's last recorded forge
+    budget (quota-pacing R14): the footer says what it was and how old the facts are, so a
+    board that stopped moving is told apart from a quiet one. None: no quota clause.
+    *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied commands carry; *refresh* is the reload
     interval in seconds, 0 for none."""
     if board.batch_count:
         body = (
@@ -374,6 +381,15 @@ def render_board(
         if notes
         else ""
     )
+    quota = (
+        ""
+        if budget is None
+        else (
+            f'<p class="meta quota">forge quota: {esc(budget.resource)} '
+            f"{budget.remaining}/{budget.limit}, resets {budget.reset:%H:%M}Z · "
+            f"facts collected {_stamp(board.collected_at)}</p>\n"
+        )
+    )
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
@@ -386,7 +402,7 @@ def render_board(
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
         f"{_held(board.held)}\n"
         f"{body}\n"
-        '<footer class="meta">Rendered by <code>fr triage board</code> from facts.json and '
-        "judgements.yaml.</footer>\n"
+        f'<footer class="meta">{quota}Rendered by <code>fr triage board</code> from facts.json '
+        "and judgements.yaml.</footer>\n"
         f"</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
     )

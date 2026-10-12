@@ -687,3 +687,22 @@ def test_publish_runs_in_the_state_dir_with_the_operators_environment(
     cwd, probe = out.read_text(encoding="utf-8").split("\n")
     assert Path(cwd).resolve() == state.resolve()
     assert probe == "from-parent"
+
+
+def test_write_board_reads_the_budget_from_pacing_json_for_the_footer(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from fr.triage import pacing_state
+    from fr.triage.pacing_state import PacingState
+    from fr.triage.quota import Budget
+
+    _setup(tmp_path)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert "forge quota" not in path.read_text()  # no pacing.json: as today
+    budget = Budget("graphql", 812, 5000, datetime(2026, 10, 12, 16, 43, tzinfo=UTC))
+    pacing_state.save(tmp_path, PacingState(budget=budget.to_json()))
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert "forge quota: graphql 812/5000, resets 16:43Z · facts collected " in path.read_text()
+    (tmp_path / "pacing.json").write_text("{not json")  # unusable: the board still renders
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert "forge quota" not in path.read_text()

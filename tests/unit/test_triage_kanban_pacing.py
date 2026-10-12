@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import pytest
 import fr.cli  # noqa: F401 - the command modules load in the CLI's order
+import pytest
 from fr.commands import triage_kanban_cmd
 from fr.triage import pacing_state
 from fr.triage.model import load_facts

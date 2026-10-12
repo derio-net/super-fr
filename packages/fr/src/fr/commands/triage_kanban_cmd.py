@@ -47,7 +47,7 @@ from fr.commands.triage_cmd import (
     resolve_state_dir,
     triage_app,
 )
-from fr.triage import gitseam
+from fr.triage import gitseam, pacing_state
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
@@ -62,6 +62,7 @@ from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope
+from fr.triage.quota import budget_from_json
 from fr.triage.render import plural
 from fr.triage.scope_config import load_scope_config, publish_board, scope_id
 
@@ -365,6 +366,7 @@ def write_board(
         rendered_at=rendered_at,
         refresh=refresh,
         notes=notes,
+        budget=budget_from_json(pacing_state.load(target)[0].budget),
     )
     out = target / BOARD_FILE
     write_text_atomic(out, page)
