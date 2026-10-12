@@ -29,3 +29,14 @@ def test_the_committed_config_skew_fixture_matches_its_generator() -> None:
     spec.loader.exec_module(module)
     name = "config-skew-facts.json"
     assert (FIXTURES / name).read_text(encoding="utf-8") == module.render(module.facts())
+
+
+def test_the_committed_cancelled_terminal_fixture_matches_its_generator() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "make_cancelled_terminal_facts", FIXTURES / "make_cancelled_terminal_facts.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    name = "cancelled-terminal-facts.json"
+    assert (FIXTURES / name).read_text(encoding="utf-8") == module.render(module.facts())

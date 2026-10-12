@@ -222,6 +222,10 @@ def test_triage_closed_in_progress(installed: Path, tmp_path: Path) -> None:
     _scenario("triage-closed-in-progress", installed, tmp_path)
 
 
+def test_triage_cancelled_terminal(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-cancelled-terminal", installed, tmp_path)
+
+
 def test_triage_config_skew(installed: Path, tmp_path: Path) -> None:
     _scenario("triage-config-skew", installed, tmp_path)
 

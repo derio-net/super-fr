@@ -273,7 +273,10 @@ def _body(card: Card, scope_args: Sequence[str]) -> str:
     parts.append(_lifecycle(card))
     parts.append(_timeline(card))
     if card.status is not None:
-        session = f"<p>{_status(card.status)}</p>"
+        session = f"<p>{_status(card.status)}"
+        if card.show_jump:
+            session += f" {_jump(bid, scope_args, closeout=False)}"
+        session += "</p>"
         if card.show_jump:
             session += f"<p>{_code(bid, scope_args, closeout=False)}</p>"
         parts.append("<h4>Session</h4>" + session)
@@ -299,13 +302,16 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
         word = "expired" if card.claim_expiry.expired else "expire"
         meta.append(f"claims {word} {_when(card.claim_expiry.at)}")
     pills = ""
-    if card.status is not None:
-        pills += " " + _status(card.status)
+    front_closeout = card.front == "closeout"
+    front_status = card.closeout_status if front_closeout else card.status
+    if front_status is not None:
+        pills += " " + _status(front_status)
     if card.pill:
         pills += f' <span class="pill stage-{esc(card.pill)}">{esc(card.pill)}</span>'
     if card.blocked:
         pills += ' <span class="pill flag">blocked</span>'
-    jump = " " + _jump(bid, scope_args, closeout=False) if card.show_jump else ""
+    show = card.show_closeout_jump if front_closeout else card.show_jump
+    jump = " " + _jump(bid, scope_args, closeout=front_closeout) if show else ""
     summary = (
         f'<summary><span class="mono">{esc(bid)}</span>'
         f'<span class="title">{esc(card.batch.title)}</span>'
