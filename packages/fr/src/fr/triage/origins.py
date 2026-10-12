@@ -779,6 +779,7 @@ def render_origins(
     judgements: Judgements | None = None,
     resolved: Resolved | None = None,
     notes: Sequence[str] = (),
+    present: Sequence[str] = ("origins",),
 ) -> str:
     """The defect-origins page: same inputs, same bytes. The generated sections (R7) and the
     authored fragments in the order *resolved* (the manifest) gives; with none, the default
@@ -807,6 +808,6 @@ def render_origins(
         f"<span>collected {esc(facts.collected_at)}</span>"
         "<span>rendered by <code>fr triage origins render</code></span></div>"
         f'<ul class="notes">{note_items}</ul></header>\n'
-        f"{page_header('origins')}\n" + "\n".join(body) + "\n"
+        f"{page_header('origins', present)}\n" + "\n".join(body) + "\n"
         f"</main>\n<script>{FILTER_SCRIPT}</script>\n</body>\n</html>\n"
     )

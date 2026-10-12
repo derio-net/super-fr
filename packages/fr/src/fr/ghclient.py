@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -313,9 +314,15 @@ class GhClient(Protocol):
         ...
 
     def list_issues(
-        self, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """One bulk issue list; *fields* None means the forge's default set."""
+        """One bulk issue list; *fields* None means the forge's default set, *labels*
+        keeps only issues carrying all of them."""
         ...
 
     def list_prs(self, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
@@ -447,7 +454,12 @@ class UnsupportedBatchOps:
         raise self._unsupported("list_repos")
 
     def list_issues(
-        self, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
         raise self._unsupported("list_issues")
 

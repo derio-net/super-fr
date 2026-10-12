@@ -19,7 +19,7 @@ import json
 import re
 import subprocess
 import urllib.parse
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
@@ -540,15 +540,17 @@ class RealGhClient:
 
     @_hosted
     def list_issues(
-        self, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
-        if fields is None:
-            return cast(
-                "list[dict[str, Any]]", _gh.list_issues(repo=repo, state=state, limit=limit)
-            )
+        extra: dict[str, Any] = {} if fields is None else {"fields": fields}
         return cast(
             "list[dict[str, Any]]",
-            _gh.list_issues(repo=repo, state=state, limit=limit, fields=fields),
+            _gh.list_issues(repo=repo, state=state, limit=limit, labels=labels, **extra),
         )
 
     @_hosted

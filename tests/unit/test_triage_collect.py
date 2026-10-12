@@ -20,6 +20,7 @@ from fr.triage.collect import (
     PR_LIMIT,
     REPO_LIMIT,
     collect_facts,
+    collect_facts_counted,
     invert,
     parse_prs,
 )
@@ -86,7 +87,13 @@ def test_both_limits_are_passed_explicitly() -> None:
 
     assert (ISSUE_LIMIT, PR_LIMIT) == (1000, 200)
     assert forge.called("list_issues") == [
-        {"repo": "derio-net/super-fr", "state": "open", "limit": 1000}
+        {"repo": "derio-net/super-fr", "state": "open", "limit": 1000},
+        {
+            "repo": "derio-net/super-fr",
+            "state": "closed",
+            "limit": 1000,
+            "labels": ["fr:in-progress"],
+        },
     ]
     assert forge.called("list_prs") == [
         {"repo": "derio-net/super-fr", "state": "all", "limit": 200}
@@ -372,7 +379,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 8
+    assert facts.to_json()["schema"] == 9
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -686,9 +693,9 @@ def test_collect_ignores_an_untrusted_authors_marker() -> None:
     assert next(i for i in facts.issues if i.number == 1).claims == []
 
 
-def test_collected_facts_are_schema_8() -> None:
+def test_collected_facts_are_schema_9() -> None:
     facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
-    assert facts.to_json()["schema"] == 8
+    assert facts.to_json()["schema"] == 9
 
 
 def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:
@@ -730,3 +737,158 @@ def test_collect_is_quiet_when_every_marker_counts(capsys: pytest.CaptureFixture
     ok = {"author": "operator", "body": _CLAIM, "created_at": "2026-10-01T00:00:00Z", "id": 3}
     collect_facts(_claim_forge({("derio-net/super-fr", 1): [ok]}), SUPER_FR, now=NOW)
     assert "claim marker" not in capsys.readouterr().err
+
+
+# ------------------------------------------- board-truth §B (R2): closed but in progress
+
+REPO = "derio-net/super-fr"
+
+
+def _closed(number: int, *labels: str) -> dict[str, Any]:
+    issue = _labelled(number, "fr:in-progress", *labels)
+    issue["closedAt"] = "2026-10-01T00:00:00Z"
+    return issue
+
+
+def _marker_comment(signer: str, cid: int, *, released: bool = False) -> dict[str, Any]:
+    from datetime import UTC, datetime
+
+    from fr.triage.claims import Marker, render_marker
+
+    t = datetime(2026, 10, 1, tzinfo=UTC)
+    marker = Marker(
+        signer=signer,
+        batch="b",
+        claimed=t,
+        heartbeat=t,
+        expires=t,
+        released=t if released else None,
+    )
+    return {
+        "author": "operator",
+        "body": render_marker(marker),
+        "created_at": t.isoformat(),
+        "id": cid,
+    }
+
+
+def _closed_forge(**kw: Any) -> FakeForge:
+    return FakeForge(issues={REPO: []}, prs={REPO: []}, viewer="operator", **kw)
+
+
+def test_collect_lists_closed_in_progress_once_per_repo_with_the_label_filter() -> None:
+    forge = _closed_forge(closed_in_progress={REPO: [_closed(4)]})
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    closed = [c for c in forge.called("list_issues") if c["state"] == "closed"]
+    assert closed == [
+        {"repo": REPO, "state": "closed", "limit": ISSUE_LIMIT, "labels": ["fr:in-progress"]}
+    ]
+    (hit,) = facts.stale_in_progress
+    assert (hit.key, hit.state, hit.closed_at) == ("super-fr#4", "stale", "2026-10-01T00:00:00Z")
+
+
+def test_a_failing_closed_listing_is_a_warning_and_an_empty_set_never_a_skip(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    forge = _closed_forge(closed_listing_failing={REPO: "HTTP 502"})
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert facts.stale_in_progress == [] and facts.skipped == [] and facts.repos == [REPO]
+    assert "HTTP 502" in capsys.readouterr().err
+
+
+def test_a_closed_listing_that_hits_the_limit_adds_a_truncation_warning() -> None:
+    forge = _closed_forge(closed_in_progress={REPO: [_closed(4), _closed(5)]})
+    facts = collect_facts(forge, SUPER_FR, now=NOW, issue_limit=2)
+    assert [(w.source, w.target, w.limit) for w in facts.warnings] == [
+        ("closed-in-progress", REPO, 2)
+    ]
+
+
+def test_a_closed_hit_with_a_claim_is_release_pending_when_own_and_held_when_foreign(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr.triage.scope_config import scope_id
+
+    monkeypatch.setenv("FR_HOST_ID", "0123456789abcdef")
+    me = scope_id(SUPER_FR)
+    forge = _closed_forge(
+        closed_in_progress={
+            REPO: [_closed(4, "fr:claimed"), _closed(5, "fr:claimed"), _closed(6, "fr:claimed")]
+        },
+        comments={
+            (REPO, 4): [_marker_comment(me, 1)],
+            (REPO, 5): [_marker_comment("s-22222222", 2)],
+            (REPO, 6): [_marker_comment("s-22222222", 3, released=True)],
+        },
+    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert {h.key: h.state for h in facts.stale_in_progress} == {
+        "super-fr#4": "release-pending",
+        "super-fr#5": "held",
+        "super-fr#6": "stale",
+    }
+
+
+def test_collect_stats_ignored_keys_land_in_facts_config_ignored() -> None:
+    forge = _closed_forge(file_bodies={(REPO, ".fr/triage.yaml", "HEAD"): "nonsense_key: 1\n"})
+    facts, _ = collect_facts_counted(forge, SUPER_FR, now=NOW)
+    assert facts.config_ignored == {REPO: ["nonsense_key"]}
+
+
+def test_a_broken_scope_id_makes_claimed_closed_hits_held_not_a_failed_collect(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.triage import collect as collect_mod
+    from fr.triage.errors import TriageError
+
+    def boom(scope: Any) -> str:
+        raise TriageError("host id unreadable")
+
+    monkeypatch.setattr(collect_mod, "scope_id", boom)
+    forge = _closed_forge(
+        closed_in_progress={REPO: [_closed(4, "fr:claimed"), _closed(5)]},
+        comments={(REPO, 4): [_marker_comment("s-11111111", 1)]},
+    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert {h.key: h.state for h in facts.stale_in_progress} == {
+        "super-fr#4": "held",
+        "super-fr#5": "stale",
+    }
+    assert "host id unreadable" in capsys.readouterr().err
+
+
+def test_scope_id_is_never_computed_when_no_closed_hit_is_claimed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr.triage import collect as collect_mod
+
+    monkeypatch.setattr(
+        collect_mod, "scope_id", lambda s: (_ for _ in ()).throw(AssertionError("minted"))
+    )
+    facts = collect_facts(_closed_forge(closed_in_progress={REPO: [_closed(5)]}), SUPER_FR, now=NOW)
+    assert [h.state for h in facts.stale_in_progress] == ["stale"]
+
+
+def test_a_closed_list_at_its_limit_names_itself_and_leaves_the_carry_active() -> None:
+    from fr.triage.model import Truncation
+
+    open_issue = _issue(1)
+    forge = FakeForge(
+        issues={REPO: [open_issue]},
+        prs={REPO: []},
+        viewer="operator",
+        closed_in_progress={REPO: [_closed(4), _closed(5)]},
+        closed={(REPO, 9): {"state": "CLOSED", "title": "t", "url": "https://x/9", "number": 9}},
+    )
+    from fr.triage.model import Issue
+
+    carried = [
+        Issue(repo=REPO, number=9, title="t", state="closed", url="https://github.com/o/r/issues/9")
+    ]
+    facts, stats = collect_facts_counted(
+        forge, SUPER_FR, now=NOW, issue_limit=2, judged=["super-fr#9"], carried=carried
+    )
+    (w,) = facts.warnings
+    assert isinstance(w, Truncation) and w.source == "closed-in-progress"
+    assert "closed fr:in-progress list" in w.describe(REPO)
+    assert stats.carried == 1 and stats.viewed == 0

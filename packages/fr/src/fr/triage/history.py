@@ -171,6 +171,7 @@ def render_history(
     snapshots: Sequence[tuple[datetime, Snapshot]],
     resolved: Resolved,
     notes: Sequence[str] = (),
+    present: Sequence[str] = ("history",),
 ) -> str:
     """The page: same inputs, same bytes. The timeline, the finished waves and the authored
     fragments in the order *resolved* (the manifest) gives."""
@@ -189,7 +190,7 @@ def render_history(
         f"<span>collected {esc(facts.collected_at)}</span>"
         "<span>rendered by <code>fr triage history render</code></span></div>"
         f'<ul class="notes">{notes_html}</ul></header>\n'
-        f"{page_header('history')}\n"
+        f"{page_header('history', present)}\n"
         + "\n".join(body)
         + f"\n</main>\n<script>{TABS_SCRIPT}</script>\n</body>\n</html>\n"
     )
