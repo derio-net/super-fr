@@ -278,3 +278,8 @@ Phase 2: R4-R5 (schema skew). Phase 3: R6-R8 (card front and cancelled pins). Ph
 ### phase-split-2026-10-12-board-truth-p4 · decision · ask: phase 4 serves its own requirement group
 
 Phase 2: R4-R5 (schema skew). Phase 3: R6-R8 (card front and cancelled pins). Phase 4: R9-R12 (nav registry). Each is an independently reviewable ask of the batch.
+
+<!-- fr:journal kind=finding scope=spec id=spec-r18-resolved-2 created=2026-10-12T22:36:42+00:00 state=open resolves=spec-r18 tracked_by=https://github.com/derio-net/super-fr/issues/1159 -->
+### spec-r18-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1159] · resolves spec-r18: Background line references drifted by a few lines
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1159.

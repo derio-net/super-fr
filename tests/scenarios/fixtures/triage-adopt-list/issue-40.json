@@ -1,0 +1,14 @@
+{
+ "number": 40,
+ "state": "open",
+ "title": "Widgets lifecycle",
+ "body": "",
+ "labels": [],
+ "assignees": [],
+ "user": {
+  "login": "operator"
+ },
+ "pull_request": {
+  "url": "https://api.github.com/repos/example-org/widgets/pulls/40"
+ }
+}

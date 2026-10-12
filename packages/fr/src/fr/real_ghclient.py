@@ -21,7 +21,7 @@ import subprocess
 import urllib.parse
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Concatenate, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, Literal, ParamSpec, TypeVar, cast
 
 from fr import gh as _gh
 from fr.ghclient import MERGE_METHODS, CommandRunner, run_cli
@@ -366,6 +366,13 @@ class RealGhClient:
     @_hosted
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return _gh.list_prs_by_head(repo=repo, branch=branch)
+
+    @_hosted
+    def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
+        payload = json.loads(_gh._run_gh(["api", f"repos/{repo}/issues/{number}"]) or "null")
+        if not isinstance(payload, dict):
+            return None
+        return "pr" if "pull_request" in payload else "issue"
 
     @_hosted
     def pr_body(self, ref: str, *, cwd: Path) -> str:

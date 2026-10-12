@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr triage batch drive: a failed visibility read of a member repo (public state repo) or from a mid-pass judgements write skips the pass and retries, instead of ending the looping driver or being reported as a leak"

@@ -932,7 +932,44 @@ def test_describe_reports_label_workspace_agent_and_status(adoptable: _Herdr) ->
         group="fr-adopt-scratch",
         agent="wT:p1",
         status="blocked",
+        cwd="/tmp/fr-adopt-scratch",
+        session=None,  # a hand-started claude reports no agent_session
+        harness="claude",
     )
+
+
+def test_describe_reports_cwd_session_and_harness_of_the_single_agent(
+    adoptable: _Herdr,
+) -> None:
+    got = HerdrRunner.from_env().describe("w7:t1")
+    assert got is not None
+    assert (got.cwd, got.session, got.harness) == (
+        "/work/frank",
+        "00000000-0000-4000-8000-000000000001",
+        "claude",
+    )
+
+
+def test_a_tab_with_no_single_agent_has_no_cwd_session_or_harness(adoptable: _Herdr) -> None:
+    got = HerdrRunner.from_env().describe("w7:t9")
+    assert got is not None
+    assert (got.cwd, got.session, got.harness) == (None, None, None)
+
+
+@pytest.mark.parametrize(
+    ("agent", "harness"),
+    [("opencode", "opencode"), ("hermes", "hermes"), ("codex", None)],
+)
+def test_the_harness_is_the_agent_mapped_to_one_of_the_three_or_none(
+    adoptable: _Herdr, agent: str, harness: str | None
+) -> None:
+    for a in adoptable.agents["result"]["agents"]:
+        if a["tab_id"] == "w7:t1":
+            a["agent"] = agent
+            a["foreground_cwd"] = "/work/fg"
+    got = HerdrRunner.from_env().describe("w7:t1")
+    assert got is not None and got.harness == harness
+    assert got.cwd == "/work/fg"  # the foreground cwd wins over the pane's cwd
 
 
 def test_describe_an_unknown_tab_is_none(adoptable: _Herdr) -> None:
