@@ -1052,6 +1052,7 @@ def render(
     *,
     board: bool = False,
     session_notes: Mapping[str, str] | None = None,
+    present: Sequence[str] = ("backlog",),
 ) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
 
@@ -1150,7 +1151,8 @@ def render(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements, result)}\n{page_header('board')}\n{skew_banner(facts)}\n"
+        f"{_masthead(facts, judgements, result)}\n{page_header('backlog', present)}\n"
+        f"{skew_banner(facts)}\n"
         + "\n".join(sections)
         + "\n<footer>Rendered by <code>fr triage render</code> from facts.json and "
         "judgements.yaml. Stages are derived from the forge; re-run "

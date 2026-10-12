@@ -582,7 +582,7 @@ def _waved(*waves: tuple[int, list[dict[str, Any]]]) -> tuple[Facts, Judgements]
 def test_the_board_carries_its_nav_and_goal() -> None:
     from tests.unit.triage_board_fixtures import busy
 
-    page = render(*busy())
+    page = render(*busy(), present=("backlog", "batches", "origins", "history"))
     assert re.search(r'<a [^>]*href="triage.html"[^>]*aria-current="page"', page)
     assert 'class="goal">What do I do next?<' in page
     assert (

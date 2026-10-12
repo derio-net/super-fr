@@ -39,6 +39,7 @@ from fr.triage.architecture import (
     measure_subsystems,
     render_architecture,
 )
+from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.gitseam import Checkout, GitError
@@ -119,9 +120,11 @@ def render_command(
             measured=measured,
             resolved=resolved,
             notes=notes,
+            present=pages_present(target, "architecture"),
         ),
         encoding="utf-8",
     )
+    refresh_navs(target, "architecture", warn=triage_cmd.warn_nav)
     console.print(
         f"wrote {out} ({plural(len(subsystems.subsystems), 'subsystem')}, "
         f"{plural(len(resolved.fragments), 'fragment')})",

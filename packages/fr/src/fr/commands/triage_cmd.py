@@ -40,6 +40,7 @@ from fr.hostclient import client_for_backend
 from fr.triage.batch import last_dispatch, lifecycle_events
 from fr.triage.check import ClaimSets, classify, clean_label_targets
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
+from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.model import (
@@ -68,6 +69,12 @@ from fr.triage.state_ref import NEW_REPO, Ask, decide_state_repo
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+def warn_nav(message: str) -> None:
+    """The warning `refresh_navs` gives for a page it could not bring up to date."""
+    err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+
 
 BOARD_DIR = "board"  # `<state>/board/manifest.yaml`: the board's authored fragments
 
@@ -865,9 +872,10 @@ def render_command(
     noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
-        session_notes=noted,
+        session_notes=noted, present=pages_present(target_dir, "backlog"),
     )  # fmt: skip
     out.write_text(page, encoding="utf-8")
+    refresh_navs(target_dir, "backlog", warn=warn_nav)
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".
     if snap != latest_snapshot(target_dir):

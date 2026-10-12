@@ -16,11 +16,14 @@ Untrusted text never reaches `TABS_SCRIPT`, which is a constant.
 from __future__ import annotations
 
 import html
-from collections.abc import Sequence
+import re
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from fr.triage.model import Facts
 
 LIGHT = {
@@ -50,7 +53,8 @@ class Page(NamedTuple):
 
 
 PAGES = (
-    Page("board", "triage.html", "Board", "What do I do next?"),
+    Page("backlog", "triage.html", "Backlog", "What do I do next?"),
+    Page("batches", "board.html", "Batches", "What is running, and what needs me?"),
     Page(
         "origins",
         "origins.html",
@@ -65,7 +69,8 @@ PAGES = (
     ),
     Page("history", "history.html", "History", "How did we get here?"),
 )
-"""The four pages the triage engine writes, in nav order: one goal each (spec §A)."""
+"""The five pages the triage engine writes, in nav order: one goal each (spec §A). This is
+the registry (board-truth R9): a page is shown in a nav only when it is present."""
 
 
 def _vars(tokens: dict[str, str]) -> str:
@@ -265,19 +270,70 @@ def tabs(group: str, label: str, panels: Sequence[tuple[str, str, str]], selecte
     )
 
 
-def page_header(current: str) -> str:
-    """The nav bar linking the four pages, *current* marked `aria-current="page"`, then
-    the goal sentence of *current* (spec §A). Every renderer calls it after its masthead."""
+def pages_present(state_dir: Path, current: str) -> tuple[str, ...]:
+    """The keys of the pages present in *state_dir* (R9): those whose file exists there,
+    plus *current*, the page being rendered. Nothing else decides it, so every page a nav
+    links has a file once the render finishes. Registry order."""
+    return tuple(p.key for p in PAGES if p.key == current or (state_dir / p.file).is_file())
+
+
+NAV_BLOCK = re.compile(r'<nav class="pages"[^\n>]*>[^\n]*?</nav>')
+"""The one-line nav block `page_header` writes: what `refresh_navs` replaces and the
+publish copy strips. fr's own markup, so it never spans a line."""
+
+
+def nav_html(current: str, present: Sequence[str]) -> str:
+    """The `<nav class="pages">` block alone: links to the *present* pages only, *current*
+    marked `aria-current="page"`."""
     here = ' aria-current="page"'
     links = "".join(
         f'<a href="{_esc(p.file)}"{here if p.key == current else ""}>{_esc(p.title)}</a>'
         for p in PAGES
+        if p.key in present
     )
+    return f'<nav class="pages" aria-label="Triage pages">{links}</nav>'
+
+
+def page_header(current: str, present: Sequence[str]) -> str:
+    """The nav bar linking the *present* pages, *current* marked `aria-current="page"`,
+    then the goal sentence of *current* (spec §A). Every renderer calls it after its
+    masthead."""
     goal = next(p.goal for p in PAGES if p.key == current)
-    return (
-        f'<nav class="pages" aria-label="Triage pages">{links}</nav>'
-        f'<p class="goal">{_esc(goal)}</p>'
-    )
+    return f'{nav_html(current, present)}<p class="goal">{_esc(goal)}</p>'
+
+
+def strip_nav(page: str) -> str:
+    """*page* without its nav block: the copy `--publish` hands over, whose siblings are
+    not published (R10)."""
+    return NAV_BLOCK.sub("", page)
+
+
+def refresh_navs(state_dir: Path, current: str, warn: Callable[[str], None] | None = None) -> None:
+    """After *current* is written, bring the nav of every other present page into
+    agreement (R11): replace its nav block in place, atomically, skipping a page that is
+    already current. A page with no nav block is left byte-identical and named to *warn*.
+    The goal sentence is not touched."""
+    from fr.artifacts.atomic import write_text_atomic
+
+    present = pages_present(state_dir, current)
+    for page in PAGES:
+        if page.key == current or page.key not in present:
+            continue
+        path = state_dir / page.file
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            if warn:
+                warn(f"{page.file}: nav not refreshed ({exc})")
+            continue
+        if NAV_BLOCK.search(text) is None:
+            if warn:
+                warn(f"{page.file}: no nav block found; left as it was")
+            continue
+        nav = nav_html(page.key, present)
+        new = NAV_BLOCK.sub(lambda _m: nav, text, count=1)
+        if new != text:
+            write_text_atomic(path, new)
 
 
 SKEW_CSS = (

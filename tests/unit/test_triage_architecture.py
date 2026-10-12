@@ -279,7 +279,7 @@ def test_the_page_no_longer_shows_what_other_pages_own() -> None:
 
 def test_the_page_opens_with_its_nav_and_goal() -> None:
     page = _page()
-    assert 'aria-current="page"' in page and 'href="history.html"' in page
+    assert re.search(r'<a [^>]*href="architecture.html"[^>]*aria-current="page"', page)
     assert re.search(r'class="goal">What is the system, and where does it hurt\?<', page)
     assert page.index("</header>") < page.index('class="pages"') < page.index('id="summary"')
 

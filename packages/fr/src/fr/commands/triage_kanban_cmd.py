@@ -14,6 +14,7 @@ statuses never refuses: whatever goes wrong is `unknown` plus one page note (R7)
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import time
 import webbrowser
 from collections.abc import Callable, Sequence
@@ -41,6 +42,7 @@ from fr.commands.triage_cmd import (
     err_console,
     resolve_state_dir,
     triage_app,
+    warn_nav,
 )
 from fr.triage import gitseam
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
@@ -51,7 +53,7 @@ from fr.triage.batch_drive import (
     wave_group,
 )
 from fr.triage.check import clean_label_targets
-from fr.triage.components import skew_banner
+from fr.triage.components import pages_present, refresh_navs, skew_banner, strip_nav
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
@@ -376,9 +378,11 @@ def write_board(
         refresh=refresh,
         notes=notes,
         banner=skew_banner(facts),
+        present=pages_present(target, "batches"),
     )
     out = target / BOARD_FILE
     write_text_atomic(out, page)
+    refresh_navs(target, "batches", warn=warn_nav)
     return out, len(judgements.batches)
 
 
@@ -387,8 +391,12 @@ def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None
     warning per distinct cause (*failures* remembers them; a success forgets) and never
     changes an exit code, and a broken scope.yaml is the same kind of warning."""
     try:
-        cause = publish_board(scope, load_scope_config(target), board)
-    except TriageError as exc:
+        # The siblings are not published, so the copy handed over carries no nav (R10).
+        with tempfile.TemporaryDirectory(prefix="fr-board-") as tmp:
+            copy = Path(tmp) / board.name
+            copy.write_text(strip_nav(board.read_text(encoding="utf-8")), encoding="utf-8")
+            cause = publish_board(scope, load_scope_config(target), copy, cwd=board.parent)
+    except (TriageError, OSError) as exc:
         cause = one_line(exc)
     if cause is None:
         failures.clear()

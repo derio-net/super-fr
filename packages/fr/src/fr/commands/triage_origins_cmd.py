@@ -28,6 +28,7 @@ from fr.commands.triage_cmd import (
     resolve_state_dir,
     triage_app,
 )
+from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.model import Judgements, Scope, load_judgements
@@ -183,7 +184,12 @@ def render_command(
     for note in notes:
         err_console.print(f"[yellow]warning:[/yellow] {escape(note)}", soft_wrap=True)
     out = target / PAGE_FILE
-    out.write_text(render_origins(facts, origins, judgements, resolved, notes), encoding="utf-8")
+    present = pages_present(target, "origins")
+    out.write_text(
+        render_origins(facts, origins, judgements, resolved, notes, present=present),
+        encoding="utf-8",
+    )
+    refresh_navs(target, "origins", warn=triage_cmd.warn_nav)
     console.print(
         f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
     )
