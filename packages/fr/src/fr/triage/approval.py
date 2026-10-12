@@ -173,9 +173,10 @@ def _dequeue_unapproved(
     from fr.ghclient import UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS
 
+    soft: tuple[type[Exception], ...] = (UnsupportedForgeOperation, *FORGE_ERRORS)
     try:
         client.pr_dequeue(repo, number)
-    except (UnsupportedForgeOperation, *FORGE_ERRORS) as exc:
+    except soft as exc:
         say(f"cannot dequeue PR #{number} though its {APPROVED_FR.name} approval is gone: {exc}")
         return
     writer(
