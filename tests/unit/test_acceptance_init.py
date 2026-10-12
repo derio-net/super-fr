@@ -181,9 +181,10 @@ def test_workflow_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     assert "GITHUB_STEP_SUMMARY" in scripted
     assert "fr acceptance summary" in scripted
     assert "fr acceptance report --link-mode github" in scripted
-    assert "fr acceptance digest" in scripted
-    digest_steps = [s for s in steps if "gh issue" in s.get("run", "")]
-    assert all("schedule" in s.get("if", "") for s in digest_steps)
+    assert "fr debt issue --yes" in scripted and "fr debt archive-pr --yes" in scripted
+    debt_steps = [s for s in steps if "fr debt" in s.get("run", "")]
+    assert debt_steps and all("schedule" in s.get("if", "") for s in debt_steps)
+    assert "debt" in wf["on"]["workflow_dispatch"]["inputs"]
     uploads = [s for s in steps if "upload-artifact" in s.get("uses", "")]
     assert uploads and uploads[0]["with"]["path"] == "docs/acceptance/report.html"
     header = (root / ".github" / "workflows" / "acceptance-report.yml").read_text()
@@ -374,7 +375,7 @@ def test_init_gitlab_backend_writes_gitlab_ci_at_root(
     ci_file = root / ".gitlab-ci.yml"
     assert ci_file.exists()
     text = ci_file.read_text()
-    assert "glab " in text
+    assert "fr debt issue --yes" in text and "fr debt archive-pr --yes" in text
     assert "gh issue" not in text
     assert "GITHUB_STEP_SUMMARY" not in text  # no equivalent — GitLab CI has none
     doc = yaml.safe_load(text)

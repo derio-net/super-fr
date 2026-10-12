@@ -763,18 +763,22 @@ class RealGhRestClient:
         page — no per-PR file list (p2-r7). `RealGhClient` calls this too."""
         owner = repo.split("/", 1)[0]
         head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
-        pulls = self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=30)
-        # A fork can carry the same head name (a same-owner fork of another repo
-        # matches the `owner:branch` filter), so only a PR whose head lives in
-        # THIS repo is reported, and it says so.
-        for pr in pulls:
+        pulls = self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=1)
+        if not pulls:
+            return None
+        return {"number": int(pulls[0]["number"]), "url": str(pulls[0].get("html_url") or "")}
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of the open PR whose head *branch* lives in THIS repo,
+        None when there is none. A fork can carry the same head name (a same-owner
+        fork of another repo matches the `owner:branch` filter), so a PR whose head
+        repo differs is skipped, never reported (`fr debt archive-pr`, R12)."""
+        owner = repo.split("/", 1)[0]
+        head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
+        for pr in self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=30):
             head_repo = str(((pr.get("head") or {}).get("repo") or {}).get("full_name") or "")
             if head_repo.lower() == repo.lower():
-                return {
-                    "number": int(pr["number"]),
-                    "url": str(pr.get("html_url") or ""),
-                    "same_repo": True,
-                }
+                return {"number": int(pr["number"]), "url": str(pr.get("html_url") or "")}
         return None
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
@@ -926,6 +930,9 @@ class RealGhRestClient:
 
     def viewer_login(self) -> str:
         return str(self._api("user")["login"])
+
+    def authenticated_login(self) -> str:
+        return self.viewer_login()
 
     def file_exists(self, repo: str, path: str) -> bool:
         try:

@@ -122,8 +122,10 @@ def host_env(host: str | None) -> dict[str, str] | None:
 # that starts with `-` is refused: see `check_argv`.
 _FLAGS = frozenset(
     {"--repo", "--title", "--description", "--label", "--unlabel", "--message",
-     "--name", "--color", "--output", "--jq", "-F"}
+     "--name", "--color", "--output", "--jq", "-F", "--source-branch", "--target-branch"}
 )  # fmt: skip
+# Boolean flags fr writes (they take no value).
+_BOOL_FLAGS = frozenset({"--draft", "--yes"})
 
 # A GitLab project path: two or more segments, each starting with a letter,
 # digit or `_` (GitLab's own rule) — no spaces, no `:` or `@`, no leading `-`.
@@ -172,6 +174,9 @@ def check_argv(args: list[str], host: str | None) -> None:
                         "trust gate checks it"
                     )
             i += 2
+            continue
+        if arg in _BOOL_FLAGS:
+            i += 1
             continue
         if arg.startswith("-"):
             raise GlabHostRefusedError(
@@ -283,12 +288,6 @@ def edit_issue(*, repo: str, number: int, title: str, body: str, host: str | Non
         ["issue", "update", str(number), "--repo", repo, "--title", title, "--description", body],
         host=host,
     )
-
-
-def comment_close_issue(*, repo: str, number: int, comment: str, host: str | None = None) -> None:
-    """Note on an Issue, then close it."""
-    _run_glab(["issue", "note", str(number), "--repo", repo, "--message", comment], host=host)
-    close_issue(repo=repo, number=number, host=host)
 
 
 def swap_issue_labels(

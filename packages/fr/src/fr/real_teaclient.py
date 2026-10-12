@@ -191,7 +191,7 @@ class RealTeaClient(UnsupportedBatchOps):
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
         _tea.edit_issue_body(repo=repo, number=number, body=body)
 
-    def viewer_login(self) -> str:
+    def authenticated_login(self) -> str:
         out = _tea._run_tea(["api", "user"])
         try:
             return str(json.loads(out)["login"])

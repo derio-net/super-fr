@@ -287,7 +287,7 @@ class RealGlabClient(UnsupportedBatchOps):
         self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
 
     @_hosted
-    def viewer_login(self) -> str:
+    def authenticated_login(self) -> str:
         out = self._api("user")
         try:
             return str(json.loads(out)["username"])
@@ -300,7 +300,8 @@ class RealGlabClient(UnsupportedBatchOps):
 
     @_hosted
     def close_issue(self, repo: str, number: int, comment: str) -> None:
-        _glab.comment_close_issue(repo=repo, number=number, comment=comment, host=self._host)
+        self._glab(["issue", "note", str(number), "--repo", repo, "--message", comment])
+        _glab.close_issue(repo=repo, number=number, host=self._host)
 
     @_hosted
     def list_open_issues_with_body(
@@ -341,7 +342,7 @@ class RealGlabClient(UnsupportedBatchOps):
         self._glab(["mr", "update", str(number), "--repo", repo, "--description", body])
 
     @_hosted
-    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
         out = self._glab(
             ["mr", "list", "--repo", repo, "--source-branch", branch, "--output", "json"]
         )
@@ -349,13 +350,13 @@ class RealGlabClient(UnsupportedBatchOps):
             mrs = json.loads(out) if out.strip() else []
         except json.JSONDecodeError as exc:
             raise _glab.GlabError(f"unreadable `glab mr list` output: {exc}") from exc
-        if not isinstance(mrs, list) or not mrs or not isinstance(mrs[0], dict):
+        if not isinstance(mrs, list):
             return None
-        mr = mrs[0]
-        same = mr.get("source_project_id") is not None and mr.get("source_project_id") == mr.get(
-            "target_project_id"
-        )
-        return {"number": int(mr["iid"]), "url": str(mr.get("web_url") or ""), "same_repo": same}
+        for mr in mrs:
+            src = mr.get("source_project_id") if isinstance(mr, dict) else None
+            if src is not None and src == mr.get("target_project_id"):
+                return {"number": int(mr["iid"]), "url": str(mr.get("web_url") or "")}
+        return None
 
     @_hosted
     def create_pr(

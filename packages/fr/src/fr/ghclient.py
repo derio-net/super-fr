@@ -297,9 +297,8 @@ class GhClient(Protocol):
         ...
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
-        """`{number, url, same_repo}` of the open PR whose head is *branch*, None
-        when there is none; `same_repo` is False for a fork's PR, which a caller
-        must never reuse or edit. Reads no file list (§I step 6, p2-r7)."""
+        """`{number, url}` of the open PR whose head is *branch*, None when there
+        is none. Reads no file list (§I step 6, p2-r7): `pr_view` gives the rest."""
         ...
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
@@ -324,6 +323,16 @@ class GhClient(Protocol):
 
     def close_pr(self, repo: str, number: int) -> None:
         """Close PR *number* unmerged (batch adopt's supersede, §C)."""
+        ...
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of the open PR whose head *branch* is in THIS repo (a
+        fork's PR on the same name is skipped), None when there is none."""
+        ...
+
+    def authenticated_login(self) -> str:
+        """The account the forge credentials act as (`fr debt issue` trusts only
+        issues this account or the workflow bot wrote)."""
         ...
 
     def edit_pr(self, repo: str, number: int, *, body: str) -> None:
@@ -482,6 +491,12 @@ class UnsupportedBatchOps:
 
     def edit_pr(self, repo: str, number: int, *, body: str) -> None:
         raise self._unsupported("edit_pr")
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        raise self._unsupported("open_pr_in_repo")
+
+    def authenticated_login(self) -> str:
+        raise self._unsupported("authenticated_login")
 
     def delete_branch(self, repo: str, branch: str) -> None:
         raise self._unsupported("delete_branch")

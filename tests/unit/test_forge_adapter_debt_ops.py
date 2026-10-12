@@ -153,12 +153,17 @@ def test_rest_create_pr_draft_posts_a_draft_flag() -> None:
     assert "draft=true" in rec.calls[0] and f"repos/{REPO}/pulls" in rec.calls[0]
 
 
-def test_rest_open_pr_for_head_queries_head_filter() -> None:
-    client, rec = _rest(
-        {("api", f"repos/{REPO}/pulls"): json.dumps([{"number": 4, "html_url": "u"}])}
-    )
-    assert client.open_pr_for_head(REPO, "chore/debt-archive-sweep") == {"number": 4, "url": "u"}
+def test_rest_open_pr_in_repo_skips_a_fork_with_the_same_head_name() -> None:
+    pulls = [
+        {"number": 3, "html_url": "fork", "head": {"repo": {"full_name": "derio-net/other"}}},
+        {"number": 4, "html_url": "u", "head": {"repo": {"full_name": REPO}}},
+    ]
+    client, rec = _rest({("api", f"repos/{REPO}/pulls"): json.dumps(pulls)})
+    got = client.open_pr_in_repo(REPO, "chore/debt-archive-sweep")
+    assert got == {"number": 4, "url": "u"}
     assert "head=derio-net:chore/debt-archive-sweep" in rec.calls[0][1]
+    only_fork, _ = _rest({("api", f"repos/{REPO}/pulls"): json.dumps(pulls[:1])})
+    assert only_fork.open_pr_in_repo(REPO, "b") is None
 
 
 # ----------------------------------------------------------------- glab
@@ -192,7 +197,7 @@ def test_glab_lists_issues_through_the_api_and_maps_fields(
     rec = Recorder({("api",): json.dumps(raw)})
     monkeypatch.setattr(_glab, "_run_glab", rec)
     got = RealGlabClient().list_open_issues_with_body(REPO, search=MARKERS, limit=50)
-    assert got == [{"number": 3, "title": "old", "body": "y fr-acceptance-digest", "labels": ["a"]}]
+    assert got[0]["number"] == 3 and got[0]["author"] == {"login": ""}
     assert "state=opened" in rec.calls[0][1] and "derio-net%2Fsuper-fr" in rec.calls[0][1]
 
 
@@ -201,7 +206,12 @@ def test_glab_create_draft_mr_and_find_by_source_branch(monkeypatch: pytest.Monk
     rec = Recorder(
         {
             ("mr", "create"): f"Creating merge request\n{url}\n",
-            ("mr", "list"): json.dumps([{"iid": 12, "web_url": url}]),
+            ("mr", "list"): json.dumps(
+                [
+                    {"iid": 11, "web_url": "fork", "source_project_id": 9, "target_project_id": 1},
+                    {"iid": 12, "web_url": url, "source_project_id": 1, "target_project_id": 1},
+                ]
+            ),
         }
     )
     monkeypatch.setattr(_glab, "_run_glab", rec)
@@ -209,15 +219,19 @@ def test_glab_create_draft_mr_and_find_by_source_branch(monkeypatch: pytest.Monk
     made = c.create_pr(REPO, head="h", base="main", title="t", body="b", draft=True)
     assert made == {"number": 12, "url": url}
     assert "--draft" in rec.calls[0] and "--source-branch" in rec.calls[0]
-    assert c.open_pr_for_head(REPO, "h") == {"number": 12, "url": url}
+    assert c.open_pr_in_repo(REPO, "h") == {"number": 12, "url": url}
     assert rec.calls[1][rec.calls[1].index("--source-branch") + 1] == "h"
+    for argv in rec.calls:  # the real argv gate accepts every flag these commands write
+        _glab.check_argv(argv, None)
 
 
 # ------------------------------------------------------------------ tea
 
 
 def test_tea_edit_close_and_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    listing = [{"index": 3, "title": "old", "body": "fr-technical-debt", "labels": "a, b"}]
+    listing = [
+        {"index": 3, "title": "old", "body": "fr-technical-debt", "labels": "a, b", "author": "bot"}
+    ]
     rec = Recorder({("issues", "list"): json.dumps(listing)})
     monkeypatch.setattr(_tea, "_run_tea", rec)
     c = RealTeaClient()
@@ -237,17 +251,25 @@ def test_tea_edit_close_and_list(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
     assert rec.calls[1] == ["comments", "add", "7", "done", "--repo", REPO]
     assert rec.calls[2] == ["issues", "close", "7", "--repo", REPO]
-    assert got == [{"number": 3, "title": "old", "body": "fr-technical-debt", "labels": ["a", "b"]}]
+    assert got == [
+        {
+            "number": 3,
+            "title": "old",
+            "body": "fr-technical-debt",
+            "labels": ["a", "b"],
+            "author": {"login": "bot"},
+        }
+    ]
 
 
-@pytest.mark.parametrize("op", ["create_pr", "open_pr_for_head"])
+@pytest.mark.parametrize("op", ["create_pr", "open_pr_in_repo"])
 def test_tea_names_the_operation_it_lacks(op: str) -> None:
     args = {
         "create_pr": (
             (REPO,),
             {"head": "h", "base": "m", "title": "t", "body": "b", "draft": True},
         ),
-        "open_pr_for_head": ((REPO, "h"), {}),
+        "open_pr_in_repo": ((REPO, "h"), {}),
     }[op]
     with pytest.raises(UnsupportedForgeOperation) as info:
         getattr(RealTeaClient(), op)(*args[0], **args[1])
@@ -260,7 +282,8 @@ def test_the_protocol_declares_the_debt_operations() -> None:
         "list_open_issues_with_body",
         "close_issue",
         "create_pr",
-        "open_pr_for_head",
+        "open_pr_in_repo",
+        "authenticated_login",
     ):
         assert hasattr(GhClient, op), op
 
@@ -282,3 +305,12 @@ def test_edit_pr_builds_the_command_or_route_on_each_forge(
     with pytest.raises(UnsupportedForgeOperation) as info:
         RealTeaClient().edit_pr(REPO, 4, body="B")
     assert info.value.op == "edit_pr"
+
+
+def test_glab_and_tea_name_the_account_their_credentials_act_as(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_glab, "_run_glab", Recorder({("api",): json.dumps({"username": "bot"})}))
+    assert RealGlabClient().authenticated_login() == "bot"
+    monkeypatch.setattr(_tea, "_run_tea", Recorder({("api",): json.dumps({"login": "bot"})}))
+    assert RealTeaClient().authenticated_login() == "bot"

@@ -21,6 +21,7 @@ from fr.glab import (
     GlabError,
     close_issue,
     create_issue,
+    edit_issue,
     edit_issue_body,
     ensure_label,
     ensure_labels,
@@ -284,6 +285,7 @@ _HOST_FORWARDING_CALLS = {
     "close_issue": lambda h: close_issue(repo="g/p", number=1, host=h),
     "reopen_issue": lambda h: reopen_issue(repo="g/p", number=1, host=h),
     "edit_issue_body": lambda h: edit_issue_body(repo="g/p", number=1, body="b", host=h),
+    "edit_issue": lambda h: edit_issue(repo="g/p", number=1, title="t", body="b", host=h),
     "swap_issue_labels": lambda h: swap_issue_labels(
         repo="g/p", number=1, add=["a"], remove=[], host=h
     ),

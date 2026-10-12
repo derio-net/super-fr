@@ -224,7 +224,7 @@ def _trusted(client: GhClient, found: list[dict[str, Any]]) -> list[dict[str, An
     nothing by itself; any other match is named and left alone."""
     allowed = set(BOT_LOGINS)
     try:
-        allowed.add(client.viewer_login().lower())
+        allowed.add(client.authenticated_login().lower())
     except Exception as e:  # any failure: trust the bot accounts only
         _warn(f"cannot tell who the viewer is ({_clean(type(e).__name__)}); trusting bots only")
     out = []
@@ -444,11 +444,9 @@ def _open_or_refresh(
     from fr.debt import sweep as sw
 
     body = sw.pr_body(result, stale_days=stale_days, own_token=own_token)
-    existing = client.open_pr_for_head(slug, sw.BRANCH)
-    if existing is not None and existing.get("same_repo") is not True:
-        # A fork's PR on the same head name is never pushed to or edited.
-        _warn("an open PR on the sweep branch name is not from this repository; opening our own")
-        existing = None
+    # Only an open PR whose head is in THIS repo is ever refreshed; a fork's PR on
+    # the same head name is never pushed to or edited.
+    existing = client.open_pr_in_repo(slug, sw.BRANCH)
     if existing is None:
         made = client.create_pr(
             slug, head=sw.BRANCH, base=base, title=sw.PR_TITLE, body=body, draft=True

@@ -135,7 +135,6 @@ def test_a_fork_pr_on_the_same_head_name_is_not_reused(world: dict) -> None:
     r = runner.invoke(app, ["debt", "archive-pr", "--yes"])
     assert r.exit_code == 0, r.output
     assert _calls(gh, "edit_pr") == [] and len(_calls(gh, "create_pr")) == 1
-    assert "not from this repository" in r.output
 
 
 def test_a_pr_permission_refusal_warns_with_both_remedies_and_exits_zero(world: dict) -> None:

@@ -208,8 +208,20 @@ class FakeGhClient:
         self.calls.append(("edit_issue_body", {"repo": repo, "number": number, "body": body}))
         self.issues[(repo, number)].body = body
 
-    def viewer_login(self) -> str:
+    def authenticated_login(self) -> str:
         return self.comment_author
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        self.calls.append(("open_pr_in_repo", {"repo": repo, "branch": branch}))
+        for (r, _), p in sorted(self.prs.items()):
+            if (
+                r == repo
+                and p["head_ref"] == branch
+                and p["state"] == "OPEN"
+                and not p.get("cross_repo", False)
+            ):
+                return {"number": p["number"], "url": p["url"]}
+        return None
 
     def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
         self._gate()
@@ -301,11 +313,7 @@ class FakeGhClient:
         self.calls.append(("open_pr_for_head", {"repo": repo, "branch": branch}))
         for (r, _), p in sorted(self.prs.items()):
             if r == repo and p["head_ref"] == branch and p["state"] == "OPEN":
-                return {
-                    "number": p["number"],
-                    "url": p["url"],
-                    "same_repo": not p.get("cross_repo", False),
-                }
+                return {"number": p["number"], "url": p["url"]}
         return None
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:

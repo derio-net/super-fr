@@ -430,6 +430,15 @@ class RealGhClient:
 
         return RealGhRestClient(host=self._host).required_check_names(repo, base)
 
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).open_pr_in_repo(repo, branch)
+
+    @_hosted
+    def authenticated_login(self) -> str:
+        return _gh.viewer_login()
+
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         """Spec §I (p2-r7): one REST page, no file list, on this host."""
         from fr.real_ghrestclient import RealGhRestClient

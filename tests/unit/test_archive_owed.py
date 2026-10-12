@@ -387,7 +387,21 @@ def test_a_matrix_naming_another_repo_files_nothing_anywhere(
     )
     import subprocess
 
-    subprocess.run(["git", "-C", str(repo), "commit", "-qam", "retarget"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "commit",
+            "-qam",
+            "retarget",
+        ],
+        check=True,
+    )
     gh = ListingGh()
     result = _archive(monkeypatch, repo, gh)
     assert result.exit_code == 0, result.output
