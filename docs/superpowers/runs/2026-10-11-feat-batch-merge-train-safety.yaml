@@ -185,5 +185,13 @@ steps:
     stdout: |
       3 out-of-scope finding(s): p1-triage-batch-cmd-import-cycle, p1-r12, p3-r11
   deliver:
-    state: pending
+    state: running
+    at: '2026-10-12T00:26:48+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-12T00:26:48+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 18d22629-51bd-4e47-a633-0a7f83c6a95f
 fr_version: 5.20.0
