@@ -8396,9 +8396,12 @@ rows:
       file.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_refresh_ci.py#test_a_legacy_scaffold_is_rewritten_to_the_current_one
+    status: ci
+    notes: 'Shipped in #1139: regenerated goldens and --refresh-ci rewrite/refusal unit-tested
+      in CI.'
   - id: step-record-status-migration
     capability: acceptance
     acceptance: 'An in-flight step record written before the split still applies after
