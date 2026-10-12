@@ -470,3 +470,28 @@ def test_a_push_carrying_a_key_outside_the_scope_reads_its_repo(
         )  # fmt: skip
 
     assert _ref(origin) == ""
+
+
+def test_a_5xx_after_a_cached_200_makes_the_visibility_unreadable() -> None:
+    """R12 fails closed end to end: the cache never answers for a forge that errored."""
+    from fr import gh
+    from fr.gh import GhError
+    from fr.triage.privacy import live_visibility
+
+    answers: list[object] = [
+        'HTTP/2.0 200 OK\nEtag: W/"v1"\n\n{"visibility": "private"}',
+        GhError("HTTP 503", stdout="HTTP/2.0 503 x\n", returncode=1),
+    ]
+
+    def run(argv: list[str]) -> str:
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return str(answer)
+
+    class Client:
+        def repo_visibility(self, repo: str) -> str:
+            return gh.repo_visibility(run, None, repo)
+
+    assert live_visibility(Client(), "o/r") == "private"
+    assert live_visibility(Client(), "o/r") is None

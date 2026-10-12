@@ -347,6 +347,35 @@ def test_the_footer_names_the_last_budget_and_when_the_facts_were_collected() ->
     assert f"forge quota: graphql 812/5000, resets 16:43Z · facts collected {stamp}" in footer
 
 
+def test_the_footer_names_the_reset_in_utc_whatever_offset_the_record_carried() -> None:
+    from fr.triage.quota import budget_from_json
+
+    board, notes = _board()
+    for reset, shown in (
+        ("2026-10-12T18:43:00+02:00", "16:43Z"),
+        ("2026-10-12T16:43:00", "16:43Z"),
+    ):
+        budget = budget_from_json(
+            {"resource": "graphql", "remaining": 1, "limit": 5, "reset": reset}
+        )
+        page = render_board(
+            board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=notes, budget=budget
+        )
+        assert f"resets {shown}" in page[page.index("<footer") : page.index("</footer>")]
+
+
+def test_the_footer_escapes_the_resource_name() -> None:
+    from fr.triage.quota import Budget
+
+    board, notes = _board()
+    budget = Budget("<b>x&y</b>", 1, 5, datetime(2026, 10, 12, 16, 43, tzinfo=UTC))
+    page = render_board(
+        board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=notes, budget=budget
+    )
+    footer = page[page.index("<footer") : page.index("</footer>")]
+    assert "&lt;b&gt;x&amp;y&lt;/b&gt;" in footer and "<b>x" not in footer
+
+
 def test_no_recorded_budget_renders_the_footer_as_it_always_did() -> None:
     board, notes = _board()
     plain = render_board(board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=notes)

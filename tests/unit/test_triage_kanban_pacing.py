@@ -124,6 +124,18 @@ def test_when_every_probe_is_a_304_nothing_is_collected_or_rendered(
     assert (tmp_path / "board.html").read_text() == "kept"
 
 
+def test_a_quiet_pass_with_no_board_yet_renders_it_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    assert not (tmp_path / "board.html").exists()
+    _quiet_state(tmp_path)
+    w = _Paced(tmp_path, monkeypatch, _Quota(_raw(5000, NOW + timedelta(hours=1))), _Probes(None))
+    code, out = _board(tmp_path, "--watch")
+    assert code == 0, out
+    assert w.calls == ["write"] and w.sleeps == [60]
+
+
 def test_a_changed_repo_is_collected_alone_and_the_board_rendered_after(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

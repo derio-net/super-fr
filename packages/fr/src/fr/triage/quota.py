@@ -52,12 +52,10 @@ def budget_from_json(data: dict[str, Any] | None) -> Budget | None:
     """The inverse of `Budget.to_json`, None for a missing or unusable record."""
     try:
         assert data is not None
-        return Budget(
-            str(data["resource"]),
-            int(data["remaining"]),
-            int(data["limit"]),
-            datetime.fromisoformat(str(data["reset"])),
-        )
+        reset = datetime.fromisoformat(str(data["reset"]))
+        # a hand-edited record may be naive (read as UTC) or carry an offset (converted)
+        reset = reset.replace(tzinfo=UTC) if reset.tzinfo is None else reset.astimezone(UTC)
+        return Budget(str(data["resource"]), int(data["remaining"]), int(data["limit"]), reset)
     except (AssertionError, KeyError, TypeError, ValueError):
         return None
 

@@ -398,7 +398,8 @@ def recollect(
     only: frozenset[str] | None = None,
     after_write: Callable[[Facts, frozenset[str]], None] | None = None,
 ) -> None:
-    """Collect facts.json as `fr triage collect` does (no carry-over); tests replace this.
+    """Collect facts.json as `fr triage collect` does (a full read carries nothing over; with
+    *only*, the repos it names are re-read and the unchanged ones carried); tests replace this.
     *only* and *after_write* are a paced pass's (spec 2026-10-12-quota-pacing R10, R11, R17).
     A rate limit that did not raise (a repo skipped, a key unviewed) raises here, so the
     watch backs off instead of rendering a half-read board."""
