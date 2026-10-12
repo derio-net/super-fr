@@ -7427,8 +7427,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R3
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at plan time; written by the phase that implements the row.
     verify: candidate
+    scenario: tests/scenarios/triage-closed-in-progress.sh
   - id: triage-config-skew-visible
     capability: triage-batches
     acceptance: A repo whose .fr/triage.yaml carries keys this fr does not know is still
