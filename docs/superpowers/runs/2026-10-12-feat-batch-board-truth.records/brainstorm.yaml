@@ -1,0 +1,65 @@
+schema_version: 8
+run: 2026-10-12-feat-batch-board-truth
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: "Batch board-truth dispatch brief (verbatim)"
+    body: |
+      /fr-goal Triage board and labels that tell the truth
+
+      Batch `board-truth` of derio-net/super-fr: 5 issues, delivered as ONE pull request.
+
+      ## super-fr#1085: fr:in-progress is never removed when a batch finishes: 197 closed issues still say an agent is working on them
+      `FR_IN_PROGRESS` is removed only on the cancel path (`triage_batch_cmd.py:755-793`); a merged batch leaves the label on (197 closed issues). Held by scope `s-c8805331` (its driver stopped refreshing 2026-10-09 ~20:05 UTC; operator released these to this scope 2026-10-10).
+
+      ## super-fr#1065: the card front shows the batch session's pill, so an idle close-out card reads the wrong session's status
+      Close-out card shows the batch session's pill. Held by scope `s-c8805331` (its driver stopped refreshing 2026-10-09 ~20:05 UTC; operator released these to this scope 2026-10-10) (batch `cancelled-batch-state`).
+      Note: Also fix the Jump button (operator, 2026-10-11, see the issue comment): the card front builds Jump with closeout=False (`kanban_render.py:307`), so during a close-out it focuses the batch session. While a close-out session is live, the front pill AND Jump follow the close-out (`--closeout`); the batch session's jump moves into the body.
+
+      ## super-fr#1109: Triage collector/schema skew can make an active batch unreachable
+      Collector/config schema skew drops an active batch to unreachable. Held by scope `s-c8805331` (its driver stopped refreshing 2026-10-09 ~20:05 UTC; operator released these to this scope 2026-10-10).
+
+      ## super-fr#1111: Cancelled batches still render as Running and immediately owe released claims
+      **Probably fixed on main** by ce7974a2 (#1115, 2026-10-10): `derive_batch_stage` now folds only dispatch/cancel events (`lifecycle_events`, `batch.py:254-266`), so a trailing `claims_released` audit no longer hides the cancel, and `releasing()` drops cancelled batches from claims owed (`claims.py`). Confirm with one cancel walk, then close.
+      Note: Close after a cancel walk: `gh issue close 1111 --repo derio-net/super-fr --comment "Fixed by #1115: stage derivation folds lifecycle events only."`
+
+      ## super-fr#1122: triage pages: the nav lists pages the scope doesn't have (origins/architecture 404 on org scopes) and omits the batch board
+      Filed from this scope. `page_header()` (`packages/fr/src/fr/triage/components.py:264-277`) renders the fixed four-entry `PAGES` tuple (:50-64), so org scopes link to origins/architecture pages that never exist, and `board.html` is not a tab (only linked at `render.py:754`).
+
+      ## Why these belong together
+      fr:in-progress never removed, wrong card pill, schema skew hides batches, nav lists absent pages; verify #1111 (likely fixed by #1115) and close it. Held members taken over from the inactive scope s-c8805331 at the operator's request, 2026-10-10.
+
+      ## Delivery rules
+      - Work on branch `feat/batch-board-truth`.
+      - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+        Closes derio-net/super-fr#1085
+        Closes derio-net/super-fr#1065
+        Closes derio-net/super-fr#1109
+        Closes derio-net/super-fr#1111
+        Closes derio-net/super-fr#1122
+      - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+
+      Overnight rule (operator via coordinator, 2026-10-12): targeted tests only locally; heavy suites through ~/.cache/fr/coord/testslot.sh; prefer tests: ci; PRs stay drafts, never merged.
+  - {kind: decision, id: q1-unlabel-on-release, title: "fr:in-progress comes off on release", body: "Operator chose: when this scope releases a member of a releasing batch (cancelled/abandoned/archived), also remove fr:in-progress unless another scope's claim stands (R1)."}
+  - {kind: decision, id: q2-stale-labels-verb, title: "Closed-but-in-progress check set plus a --yes cleanup verb", body: "Operator chose a check/board set plus a `fr triage` verb that removes the labels with --yes, over a printed command only or a one-off run (R2, R3)."}
+  - {kind: decision, id: q3-lenient-collect, title: "Every collect reads triage config leniently, skew shown as a banner", body: "Operator chose lenient reads everywhere plus a prominent scope banner for ignored keys and skipped repos; no stale-facts carrying (R4, R5)."}
+  - {kind: decision, id: q4-page-names, title: "Backlog (triage.html) + Batches (board.html)", body: "Operator chose the rename that removes the Board clash (R12)."}
+  - {kind: decision, id: q5-nav-rewrite, title: "Every render rewrites all existing pages' navs", body: "Operator chose a registry deciding presence from the state dir and an in-place nav rewrite of every existing page (R9-R11)."}
+  - {kind: decision, id: q6-1111-tests, title: "#1111 confirmed by regression tests, PR Closes it", body: "Operator chose regression tests (unit + scenario) over a live cancel walk; no forge writes (R8)."}
+  - {kind: decision, id: q7-closeout-front, title: "Close-out card front exactly per the operator's note", body: "Front pill and Jump follow a live close-out; body gets a real Jump for the other session; no extra pill prefix (R6, R7)."}
+  - {kind: decision, id: q8-verification, title: "Verification strategy: candidate", body: "Operator chose candidate walks for the rendering/check rows; label writes and runner statuses are proven by unit tests (spec ## Verification)."}
+resolves: []
+acceptance:
+  - {id: triage-in-progress-release, capability: triage-batches, acceptance: "When a scope releases a finished, cancelled or abandoned batch's claim on a member no other scope holds, fr:in-progress comes off that member too; a member another scope holds keeps it.", origin: ["super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R1"], status: not-implemented, verify: none}
+  - {id: triage-closed-in-progress-set, capability: triage-batches, acceptance: "fr triage check and the board name closed issues still labelled fr:in-progress, held ones apart, and fr triage clean-labels --yes removes the label from the rest (dry-run without --yes).", origin: ["super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R2", "super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R3"], status: not-implemented, verify: candidate}
+  - {id: triage-config-skew-visible, capability: triage-batches, acceptance: "A repo whose .fr/triage.yaml carries keys this fr does not know is still collected; the ignored keys and any skipped repo appear as a prominent banner on the backlog and batch pages and in fr triage check.", origin: ["super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R4", "super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R5"], status: not-implemented, verify: candidate}
+  - {id: triage-closeout-card-front, capability: triage-batches, acceptance: "While a batch's close-out session is live, its card front shows the close-out's status and jumps to it; the batch session's jump is in the card body.", origin: ["super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R6", "super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R7"], status: not-implemented, verify: none, visual: "Card front with a live close-out (pill + Jump follow --closeout), with an absent close-out (front on batch session), body showing both sessions each with a Jump button."}
+  - {id: triage-cancelled-batch-terminal, capability: triage-batches, acceptance: "A dispatched batch that was cancelled and had its claims released reads as cancelled, owes no claim or release, and never renders as Running, including right after a fresh collect and render.", origin: ["super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R8"], status: not-implemented, verify: candidate}
+  - {id: triage-nav-present-pages, capability: triage-batches, acceptance: "Every triage page, the batch board included, navigates only to the pages the scope has (Backlog, Batches, Origins, Architecture, History), and rendering any page brings every existing page's nav up to date.", origin: ["super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R9", "super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R10", "super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R11", "super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R12"], status: not-implemented, verify: candidate, visual: "Org-scope nav (Backlog · Batches · History), single-repo nav with all five tabs, aria-current on the current tab, narrow (phone-width) wrap of the nav."}
+emitted:
+  spec: docs/superpowers/specs/2026-10-12-board-truth-design.md
+evidence: {}
