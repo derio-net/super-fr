@@ -193,3 +193,61 @@ def test_the_oldest_trusted_digest_wins() -> None:
     sect = _panel(page)
     assert "not-implemented 22" in sect and "111" not in sect and "333" not in sect
     assert "untrusted digest ignored (#1)" in sect
+
+
+def _line(sect: str, cls: str) -> str:
+    start = sect.index(f'class="{cls}"')
+    return sect[sect.index(">", start) + 1 : sect.index("</span>", start)]
+
+
+def test_a_digest_without_a_matrix_is_not_a_false_zero() -> None:
+    page = _page([digest(1, figures(acceptance={}, acceptance_available=False))])
+
+    sect = _panel(page)
+    assert "Acceptance: matrix unavailable" in sect
+    assert "Acceptance debt: " not in sect
+
+
+def test_manual_open_is_listed_not_plan_debt_and_the_badge_is_the_visible_sum() -> None:
+    import re
+
+    page = _page(
+        [
+            digest(
+                1,
+                figures(
+                    4,
+                    acceptance={"not-implemented": 4, "walk-owed": 2},
+                    plans={"archivable": 2, "stale": 1, "manual_open": 5},
+                    owed=3,
+                ),
+            )
+        ]
+    )
+
+    sect = _panel(page)
+    assert "manual_open" not in _line(sect, "debt-plans")
+    assert "manual phases open 5 (counted under Owed)" in _line(sect, "debt-listed")
+    visible = sum(
+        int(n)
+        for cls in ("debt-acceptance", "debt-plans", "debt-owed")
+        for n in re.findall(r"(?<!→ )\b(\d+)\b(?!\s*→)", _line(sect, cls))
+    )
+    badge = int(re.search(r'<span class="count">(\d+)</span>', sect).group(1))
+    assert badge == visible == 12
+
+
+def test_schema_8_facts_without_authors_render_a_digest_as_untrusted() -> None:
+    import json
+
+    from fr.triage.model import Facts
+
+    raw = facts([digest(1, figures(999))]).to_json()
+    raw["schema"] = 8
+    for i in raw["issues"]:
+        del i["author"]
+    old = Facts.model_validate(json.loads(json.dumps(raw)))
+
+    sect = _panel(render(old, judgements({})))
+
+    assert "untrusted digest ignored (#1)" in sect and "999" not in sect

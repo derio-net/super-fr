@@ -2,9 +2,11 @@
 
 A debt digest is an open issue carrying the debt marker (`fr-technical-debt`, or the
 legacy `fr-acceptance-digest`) as a line of its own. Its figures are parsed from the
-body the facts already hold, at check and render time, so the facts schema is not
-bumped. Issue bodies come from the forge: the numbers read here are coerced to plain
-ints and used for display only, never for any decision.
+body the facts already hold, at check and render time. Only facts schema 9 adds
+`Issue.author`, which the trust check needs: a digest counts only from a trusted author,
+and facts written before schema 9 carry none, so theirs read as untrusted.
+Issue bodies come from the forge: the numbers read here are coerced to plain ints
+and used for display only, never for any decision.
 """
 
 from __future__ import annotations
@@ -38,6 +40,8 @@ def clean_figures(raw: dict[str, Any] | None) -> dict[str, Any] | None:
     acc = raw.get("acceptance")
     plans = raw.get("plans")
     return {
+        # False: the digest was written without a readable matrix, so "none" would lie.
+        "acceptance_available": raw.get("acceptance_available") is not False,
         "acceptance": {
             k: v
             for k, v in sorted((acc if isinstance(acc, dict) else {}).items())
@@ -63,8 +67,9 @@ def issue_figures(issue: Issue) -> dict[str, Any] | None:
 
 def trusted_authors(facts: Facts, repo: str) -> frozenset[str]:
     """The logins whose debt digest counts on *repo*, lowercased: the workflow's bot, the
-    viewer `collect` ran as and the repo's `pr_authors` (the same trust `fr debt issue`
-    applies, and `fr.triage.model.claim_trusted` gives claim markers)."""
+    viewer `collect` ran as and the repo's `pr_authors` (read from the default branch's
+    `.fr/triage.yaml`): the set claim markers use (`claim_trusted`). That is deliberately
+    wider than `fr debt issue`, which trusts the bot and the viewer only."""
     from fr.triage.model import claim_trusted
 
     return BOT_LOGINS | claim_trusted(facts.config_for(repo), facts.viewer)

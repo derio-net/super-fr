@@ -1041,15 +1041,28 @@ def _debt_repo(facts: Facts, repo: str, since: SnapshotDiff | None, show_note: l
         )
         or "none"
     )
+    # `manual_open` is never counted in the total (its items count under Owed), so it is
+    # listed beside the debt, not in it.
+    manual = fig["plans"].get("manual_open")
+    if manual is not None:
+        sep = "" if listed == "none" else listed + ", "
+        listed = f"{sep}manual phases open {manual} (counted under Owed)"
     plans_before = before["plans"] if before else None
-    plans = ", ".join(_moved(n, c, plans_before) for n, c in fig["plans"].items()) or "none"
+    plans = (
+        ", ".join(_moved(n, c, plans_before) for n, c in fig["plans"].items() if n != "manual_open")
+        or "none"
+    )
+    if fig["acceptance_available"]:
+        acc_li = f'<li>Acceptance debt: <span class="debt-acceptance">{acc}</span></li>'
+    else:
+        acc_li = '<li><span class="debt-acceptance">Acceptance: matrix unavailable</span></li>'
     owed = "not reported" if fig["owed"] is None else str(fig["owed"])
     if fig["owed"] is not None and before and before.get("owed") not in (None, fig["owed"]):
         owed = f"{before['owed']} → {fig['owed']}"
     when_ = f" · as of {esc(fig['generated_at'])}" if fig["generated_at"] else ""
     body = (
         '<ul class="debt-figures">'
-        f'<li>Acceptance debt: <span class="debt-acceptance">{acc}</span></li>'
+        f"{acc_li}"
         f'<li>Listed, not debt: <span class="debt-listed">{esc(listed)}</span></li>'
         f'<li>Plan debt: <span class="debt-plans">{plans}</span></li>'
         f'<li>Owed: <span class="debt-owed">{esc(owed)}</span></li></ul>'
