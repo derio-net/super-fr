@@ -366,8 +366,8 @@ def render_board(
     """The board page: same inputs, same bytes. *budget* is the drive's last recorded forge
     budget (quota-pacing R14): the footer says what it was and how old the facts are, so a
     board that stopped moving is told apart from a quiet one. None: no quota clause.
-    *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied commands carry; *refresh* is the reload
-    interval in seconds, 0 for none."""
+    *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
+    commands carry; *refresh* is the reload interval in seconds, 0 for none."""
     if board.batch_count:
         body = (
             '<div class="board">'
