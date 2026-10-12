@@ -3982,6 +3982,58 @@ def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> S
     )
 
 
+def _merge_claim(
+    open_record: UnitAttempt,
+    key: str,
+    *,
+    agent: str | None,
+    harness: str | None,
+    model: str | None,
+    agent_type: str | None,
+) -> UnitAttempt:
+    """`open_record` after a claim of `harness`/`model`/`agent_type` (#1110).
+
+    The ONE rule for what a claim does to an open attempt, shared by
+    `fr run claim`, `--open-unit` and `fr run resolve`'s late identity. An
+    UNCLAIMED attempt (no `agent`) takes the claim's values as given — that is
+    how a first claim refines what `advance` pre-filled. A CLAIMED one keeps
+    what its first claim recorded: an empty field is filled, an equal value
+    (or, for `model`, one in the same `model_family`) is a silent no-op, and
+    anything else is kept with a warning, exit 0."""
+    from fr.models import model_family
+
+    claimed_by = agent if agent is not None else open_record.agent
+    if open_record.agent is None:
+        update: dict[str, Any] = {}
+        if agent is not None:
+            update["agent"] = agent
+        for field, value in (("harness", harness), ("model", model), ("agent_type", agent_type)):
+            if value is not None:
+                update[field] = value
+        return open_record.model_copy(update=update)
+    update = {}
+    for field, value in (("harness", harness), ("model", model), ("agent_type", agent_type)):
+        if value is None:
+            continue
+        recorded = getattr(open_record, field)
+        if recorded is None:
+            update[field] = value
+        elif recorded == value or (
+            field == "model" and model_family(recorded) == model_family(value)
+        ):
+            continue
+        else:
+            err_console.print(
+                f"warning: {key}: {claimed_by} is recorded with {field}={recorded}; keeping "
+                f"it (this claim said {value}). The first claim's identity stands; resolve "
+                "records the model the transcript observed. If the executor was really "
+                "replaced, close it with `fr run claim ... --abandoned` and re-dispatch.",
+                markup=False,
+                soft_wrap=True,
+            )
+    return open_record.model_copy(update=update) if update else open_record
+
+
 def _claimed_identity(
     open_record: UnitAttempt,
     key: str,
@@ -3989,6 +4041,7 @@ def _claimed_identity(
     agent: str,
     harness: str | None,
     model: str | None,
+    agent_type: str | None = None,
 ) -> UnitAttempt:
     """`open_record` carrying the orchestrator's reported identity, or refuse.
 
@@ -4008,12 +4061,8 @@ def _claimed_identity(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    return open_record.model_copy(
-        update={
-            "agent": agent,
-            "harness": harness if harness is not None else open_record.harness,
-            "model": model if model is not None else open_record.model,
-        }
+    return _merge_claim(
+        open_record, key, agent=agent, harness=harness, model=model, agent_type=agent_type
     )
 
 
@@ -4049,11 +4098,8 @@ def _close_on_resolve(
     if agent is not None:
         open_record = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
     elif harness is not None or model is not None:
-        open_record = open_record.model_copy(
-            update={
-                "harness": harness if harness is not None else open_record.harness,
-                "model": model if model is not None else open_record.model,
-            }
+        open_record = _merge_claim(
+            open_record, key, agent=None, harness=harness, model=model, agent_type=None
         )
     open_record = _observed_model(open_record, key)
     record = units.with_last_attempt_replaced(record, key, open_record)
@@ -6886,9 +6932,12 @@ def _claim_identity(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    claimed = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
-    if agent_type is not None:
-        claimed = claimed.model_copy(update={"agent_type": agent_type})
+    claimed = _claimed_identity(
+        open_record, key, agent=agent, harness=harness, model=model, agent_type=agent_type
+    )
+    if claimed == open_record:
+        console.print(f"{key}: already claimed by {agent} (no change)", soft_wrap=True)
+        return
     new_record = units.with_last_attempt_replaced(record, key, claimed)
     _save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(f"{key}: claimed by {agent}", soft_wrap=True)

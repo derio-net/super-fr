@@ -1,0 +1,12 @@
+schema_version: 8
+run: 2026-10-11-feat-batch-run-pipeline
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T2.S1, P3.T2.S2]
+refactor:
+  P3.T2: "_claimed_identity and _claim_identity's duplicated field handling collapsed into _merge_claim; nothing further to clean"
+journal:
+  - {kind: discovery, id: p3-merge-claim, title: "one _merge_claim decides every claim", body: "run_cmd._merge_claim is shared by claim, --open-unit and resolve's no-agent branch; fr-opencode-plugin claim.ts needed no change."}
+resolves: []
+evidence: {tests: ci}
