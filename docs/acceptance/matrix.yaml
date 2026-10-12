@@ -7666,9 +7666,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R14
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R15
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_debt_panel.py#test_one_collapsed_section_with_status_categories_and_owed
+      - super-fr:tests/unit/test_triage_debt_sets.py#test_either_marker_lands_in_the_debt_set_and_owed_in_its_own
+    status: ci
+    notes: 'Shipped in #1139: sets and panel render unit-tested in CI; the visual states
+      were captured and opened by the executor, the reviewer and at deliver.'
     visual:
       states:
       - panel-with-figures
