@@ -8197,9 +8197,12 @@ rows:
       wrapper's closing brackets.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bindings_probe.py#test_dead_detail_is_trimmed_of_the_wrapper_tail
+      - super-fr:tests/unit/test_bindings_probe.py#test_dead_detail_from_a_cause_wrapper_line_drops_the_brackets
+    status: ci
+    notes: classify trims the wrapper tail.
     verify: none
   - id: models-corrupt-config-reported
     capability: model bindings
