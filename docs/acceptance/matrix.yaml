@@ -6926,9 +6926,14 @@ rows:
       are never reported unread.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_only_the_named_repos_are_read_and_the_rest_carried
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_cross_repo_links_survive_whichever_side_is_read
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_a_carried_repo_s_visibility_is_left_out_for_the_guard_to_read_live
+    status: ci
+    notes: 'Partial collect built in phase 2: only changed repos read, the rest carried
+      (visibility never carried), cross-repo PR links kept both ways.'
     verify: none
   - id: quota-etag-consistency
     capability: triage-batch-drive
