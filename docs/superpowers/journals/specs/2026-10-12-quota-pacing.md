@@ -222,3 +222,6 @@ Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): add unit 
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-12-quota-pacing-p3 created=2026-10-12T06:22:03+00:00 -->
 ### phase-split-2026-10-12-quota-pacing-p3 · decision · ask: conditional visibility (R12), watch pacing (R17) and the board footer (R14, ask 5) are their own ask
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-12-quota-pacing-p2 created=2026-10-12T06:22:09+00:00 -->
+### tier-2026-10-12-quota-pacing-p2 · decision · hard: changes collect_facts_counted, which collect, drive and watch all rely on; the probe-before-collect ETag ordering is the quiet pass's correctness core
