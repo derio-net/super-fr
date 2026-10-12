@@ -81,3 +81,138 @@ Round 2, from the ETag-probe answer and collect's per-repo reads (collect.py:539
 ### gate-question-rounds-brainstorm · decision · Operator gate `brainstorm` took two question rounds
 
 Trigger: design-risk. Round 1 chose an essential-only pass and an ETag probe gate. Checking those answers against the code showed that snapshot() (triage_batch_cmd.py:2876) treats a repo missing from a pass's collect as unread, so its batches sit the pass out. That left two decisions round 1 could not settle: whether to dispatch below the floor, and whether a partial change collects only the changed repos (collect.py:539 reads per repo).
+
+<!-- fr:journal kind=review scope=spec id=sr-review created=2026-10-12T06:19:35+00:00 -->
+### sr-review · review · spec review of 2026-10-12-quota-pacing
+
+13 findings, all in scope: sr-1 to sr-13. All 11 journal decisions honoured. Codebase anchors verified (see finding bodies).
+
+<!-- fr:journal kind=finding scope=spec id=sr-1 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-1 · finding [open] (reviewer: in scope) · Quota-held dispatches counted as Summary.held would end the host drive as stalled
+
+§C counted held-below-floor dispatches as held; Summary.stalled (batch_drive.py:260) reads held and _host_loop exits 3 on it. Fix: count them as pending, test the proposed-only below-floor case.
+
+<!-- fr:journal kind=finding scope=spec id=sr-2 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-2 · finding [open] (reviewer: in scope) · Cloud pass: every drive pass is a first pass; facts.json and probes.json are not on the state ref
+
+REF_FILES (state_ref.py:53) carries neither file. Fix: state they are local-only; a fresh or re-homed cloud session starts full; the full trigger is a missing pacing.json, not the process's first pass.
+
+<!-- fr:journal kind=finding scope=spec id=sr-3 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-3 · finding [open] (reviewer: in scope) · wait_until has no owner or schema
+
+Fix: define pacing.json with wait_until, backoff count and next_pass_at; any loop meeting a rate limit writes it; local state dir only.
+
+<!-- fr:journal kind=finding scope=spec id=sr-4 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-4 · finding [open] (reviewer: in scope) · Lease safety is a timing argument that fails for small --interval; waits never renew
+
+lease = 3*interval+60 (lease.py:105), --interval min 1s. Fix: cap each sleep at lease expiry minus 5 min and renew; the cloud pass renews before exiting 3 if the lease would lapse.
+
+<!-- fr:journal kind=finding scope=spec id=sr-5 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-5 · finding [open] (reviewer: in scope) · 15-minute full pass conflicts with essential-only below the floor
+
+Fix: below the floor a full pass narrows to live-batch repos; align R7 with R10's intersection.
+
+<!-- fr:journal kind=finding scope=spec id=sr-6 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-6 · finding [open] (reviewer: in scope) · Per-repo carry breaks cross-repo PR->issue links
+
+invert runs over collected repos' PRs only (collect.py:586). Fix: keep previous links whose PR is in a carried repo; test a cross-repo closing PR both ways.
+
+<!-- fr:journal kind=finding scope=spec id=sr-7 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-7 · finding [open] (reviewer: in scope) · Quiet-pass gate misses state changes the driver acts on
+
+Fix: a quiet pass also requires judgements.yaml unchanged since the last planned pass; probe close-out and archive PR heads; list the time-due latencies accepted up to 15 minutes.
+
+<!-- fr:journal kind=finding scope=spec id=sr-8 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-8 · finding [open] (reviewer: in scope) · ETag source and probe/collect order unspecified
+
+Fix: probes always precede the repo's collect (unconditional on a full pass); keep only successfully read repos' ETags; test a change interleaved between probe and collect.
+
+<!-- fr:journal kind=finding scope=spec id=sr-9 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-9 · finding [open] (reviewer: in scope) · Rate-limit classification misses GraphQL exhaustion
+
+gh.classify needs 403 (gh.py:672); GraphQL reports 'API rate limit exceeded' with no status. Fix: a text rule over ForgeReadError, Skipped and Unviewed text matching 'rate limit' or RATE_LIMITED.
+
+<!-- fr:journal kind=finding scope=spec id=sr-10 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-10 · finding [open] (reviewer: in scope) · Visibility ETag per client instance never hits
+
+make_visibility_client builds a client per push (triage_cmd.py:326). Fix: module-level ETag map keyed by host and repo.
+
+<!-- fr:journal kind=finding scope=spec id=sr-11 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-11 · finding [open] (reviewer: in scope) · Snapshot live reads for carried repos not accounted; rate-limited collect continues into snapshot
+
+Fix: a rate-limited collect ends the pass before snapshot; snapshot skips per-batch live reads for carried repos and drops their merge, close-out and archive actions.
+
+<!-- fr:journal kind=finding scope=spec id=sr-12 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-12 · finding [open] (reviewer: in scope) · Kanban watch probes, function name and cloud stretch unspecified
+
+Fix: name _watch (triage_kanban_cmd.py:397), share collect_into probes and pacing.json; the cloud honours the stretch via next_pass_at and exit 3.
+
+<!-- fr:journal kind=finding scope=spec id=sr-13 created=2026-10-12T06:19:35+00:00 state=open review_scope=in -->
+### sr-13 · finding [open] (reviewer: in scope) · Verification rows miss R4, R5, R6, R10, R11, R15/R16
+
+Fix: add unit rows quota-secondary-backoff, quota-floor-config, quota-partial-carry, quota-etag-consistency, quota-lease-safe-wait.
+
+<!-- fr:journal kind=finding scope=spec id=sr-1-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-1 -->
+### sr-1-resolved · finding [fixed] · resolves sr-1: Quota-held dispatches counted as Summary.held would end the host drive as stalled
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): count them as pending, test the proposed-only below-floor case.
+
+<!-- fr:journal kind=finding scope=spec id=sr-2-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-2 -->
+### sr-2-resolved · finding [fixed] · resolves sr-2: Cloud pass: every drive pass is a first pass; facts.json and probes.json are not on the state ref
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): state they are local-only; a fresh or re-homed cloud session starts full; the full trigger is a missing pacing.json, not the process's first pass.
+
+<!-- fr:journal kind=finding scope=spec id=sr-3-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-3 -->
+### sr-3-resolved · finding [fixed] · resolves sr-3: wait_until has no owner or schema
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): define pacing.json with wait_until, backoff count and next_pass_at; any loop meeting a rate limit writes it; local state dir only.
+
+<!-- fr:journal kind=finding scope=spec id=sr-4-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-4 -->
+### sr-4-resolved · finding [fixed] · resolves sr-4: Lease safety is a timing argument that fails for small --interval; waits never renew
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): cap each sleep at lease expiry minus 5 min and renew; the cloud pass renews before exiting 3 if the lease would lapse.
+
+<!-- fr:journal kind=finding scope=spec id=sr-5-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-5 -->
+### sr-5-resolved · finding [fixed] · resolves sr-5: 15-minute full pass conflicts with essential-only below the floor
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): below the floor a full pass narrows to live-batch repos; align R7 with R10's intersection.
+
+<!-- fr:journal kind=finding scope=spec id=sr-6-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-6 -->
+### sr-6-resolved · finding [fixed] · resolves sr-6: Per-repo carry breaks cross-repo PR->issue links
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): keep previous links whose PR is in a carried repo; test a cross-repo closing PR both ways.
+
+<!-- fr:journal kind=finding scope=spec id=sr-7-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-7 -->
+### sr-7-resolved · finding [fixed] · resolves sr-7: Quiet-pass gate misses state changes the driver acts on
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): a quiet pass also requires judgements.yaml unchanged since the last planned pass; probe close-out and archive PR heads; list the time-due latencies accepted up to 15 minutes.
+
+<!-- fr:journal kind=finding scope=spec id=sr-8-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-8 -->
+### sr-8-resolved · finding [fixed] · resolves sr-8: ETag source and probe/collect order unspecified
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): probes always precede the repo's collect (unconditional on a full pass); keep only successfully read repos' ETags; test a change interleaved between probe and collect.
+
+<!-- fr:journal kind=finding scope=spec id=sr-9-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-9 -->
+### sr-9-resolved · finding [fixed] · resolves sr-9: Rate-limit classification misses GraphQL exhaustion
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): a text rule over ForgeReadError, Skipped and Unviewed text matching 'rate limit' or RATE_LIMITED.
+
+<!-- fr:journal kind=finding scope=spec id=sr-10-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-10 -->
+### sr-10-resolved · finding [fixed] · resolves sr-10: Visibility ETag per client instance never hits
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): module-level ETag map keyed by host and repo.
+
+<!-- fr:journal kind=finding scope=spec id=sr-11-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-11 -->
+### sr-11-resolved · finding [fixed] · resolves sr-11: Snapshot live reads for carried repos not accounted; rate-limited collect continues into snapshot
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): a rate-limited collect ends the pass before snapshot; snapshot skips per-batch live reads for carried repos and drops their merge, close-out and archive actions.
+
+<!-- fr:journal kind=finding scope=spec id=sr-12-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-12 -->
+### sr-12-resolved · finding [fixed] · resolves sr-12: Kanban watch probes, function name and cloud stretch unspecified
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): name _watch (triage_kanban_cmd.py:397), share collect_into probes and pacing.json; the cloud honours the stretch via next_pass_at and exit 3.
+
+<!-- fr:journal kind=finding scope=spec id=sr-13-resolved created=2026-10-12T06:19:35+00:00 state=fixed resolves=sr-13 -->
+### sr-13-resolved · finding [fixed] · resolves sr-13: Verification rows miss R4, R5, R6, R10, R11, R15/R16
+
+Folded into the spec (commit 'fold spec-review findings sr-1..sr-13'): add unit rows quota-secondary-backoff, quota-floor-config, quota-partial-carry, quota-etag-consistency, quota-lease-safe-wait.
