@@ -57,7 +57,11 @@ def load_models(path: Path) -> ModelsConfig:
     """Parse a ``harness → tier → model`` mapping. A missing file yields ``{}``."""
     if not path.exists():
         return {}
-    raw = yaml.safe_load(path.read_text()) or {}
+    try:
+        raw = yaml.safe_load(path.read_text()) or {}
+    except yaml.YAMLError as exc:
+        first = (str(exc).strip().splitlines() or [""])[0]
+        raise ModelsError(f"{path}: not valid YAML: {first}") from exc
     if not isinstance(raw, dict):
         raise ModelsError(f"{path}: top level must be a harness→tier→model mapping")
     out: ModelsConfig = {}

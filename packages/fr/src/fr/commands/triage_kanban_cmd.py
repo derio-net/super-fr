@@ -499,7 +499,8 @@ def board_command(
         ),
     ] = False,
 ) -> None:
-    """Write board.html: one card per batch in six lifecycle columns, with live session
+    """Write board.html: one card per batch in its lifecycle column
+    (`fr.triage.kanban.COLUMN_TITLES`), with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)

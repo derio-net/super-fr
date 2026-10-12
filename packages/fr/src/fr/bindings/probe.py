@@ -46,6 +46,9 @@ CACHE_TTL_SECONDS = 6 * 3600
 DEAD_PHRASES = ("providermodelnotfounderror", "model is not supported")
 
 _HINT = re.compile(r"Did you mean:\s*([^\s?\"\\]+)")
+# OpenCode wraps the message as `Cause([Fail(<message>)])`; the regex runs on
+# to the end of that wrapper, so trim its closing brackets (not inner parens).
+_WRAPPER_TAIL = ")] \t"
 _NOT_FOUND = re.compile(r"ProviderModelNotFoundError:[^\"\\\n]*")
 
 
@@ -107,7 +110,7 @@ def classify(stdout: str, stderr: str, returncode: int) -> ProbeResult:
             hint = _HINT.search(line)
             return ProbeResult(
                 "dead",
-                (found.group(0) if found else line.strip()),
+                (found.group(0).rstrip(_WRAPPER_TAIL) if found else line.strip()),
                 hint.group(1) if hint else None,
                 0.0,
             )
