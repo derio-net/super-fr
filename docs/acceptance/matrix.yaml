@@ -7035,8 +7035,18 @@ rows:
       - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_another_family_keeps_the_model_and_warns
       - super-fr:tests/unit/test_run_claim_first_wins.py#test_the_opencode_sequence_keeps_the_plugin_claims_model_and_tier
       - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_different_agent_is_still_refused
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_advance_after_an_interruption_names_the_holder_and_does_not_rebrief
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_resolve_model_without_agent_keeps_the_claimed_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_the_same_model_family_keeps_the_recorded_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_first_claim_overrides_what_advance_prefilled
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_fills_an_empty_field_and_commits_it
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_by_the_manifest_id_keeps_the_recorded_tier_variant
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_another_tier_keeps_the_agent_type_and_warns
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_a_different_agent_type_is_refused
     status: ci
-    notes: R7/R8 covered by test_run_claim_first_wins.py; one _merge_claim in run_cmd.py
+    notes: 'R7/R8 review fixes: agent_type re-claim validated against the dispatched
+      base agent; fill, keep+warn, same-family, resolve and interruption paths now have
+      refs'
     verify: none
   - id: adopt-supersede-carries-provenance
     capability: run-adoption
