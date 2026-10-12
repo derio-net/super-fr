@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from fr.ghclient import GhClient
-from fr.labels import FR_CLAIMED
+from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
 from fr.triage.claims import (
     Claim,
     Marker,
@@ -64,13 +64,26 @@ def _add_label(client: GhClient, repo: str, number: int) -> None:
     client.edit_issue_labels(repo, number, add=frozenset({FR_CLAIMED.name}), remove=frozenset())
 
 
-def _remove_label(client: GhClient, repo: str, number: int, trusted: Collection[str]) -> None:
-    """Remove `fr:claimed`, then re-read: a claim that landed after the caller's read
-    gets its label back (p1-r5)."""
-    client.edit_issue_labels(repo, number, add=frozenset(), remove=frozenset({FR_CLAIMED.name}))
+RELEASE_LABELS = frozenset({FR_CLAIMED.name, FR_IN_PROGRESS.name})
+"""What a release that unlabels takes off the issue: the claim label and the run's label."""
+
+
+def _remove_label(
+    client: GhClient,
+    repo: str,
+    number: int,
+    trusted: Collection[str],
+    labels: frozenset[str] = frozenset({FR_CLAIMED.name}),
+) -> None:
+    """Remove *labels*, then re-read: a claim that landed after the caller's read gets
+    the whole removed set back (p1-r5)."""
+    client.edit_issue_labels(repo, number, add=frozenset(), remove=labels)
     _, claims = _read(client, repo, number, trusted)
     if claims:
         _add_label(client, repo, number)
+        extra = labels - {FR_CLAIMED.name}
+        if extra:
+            client.edit_issue_labels(repo, number, add=extra, remove=frozenset())
 
 
 def _drop_orphan_label(client: GhClient, repo: str, number: int, trusted: Collection[str]) -> None:
@@ -201,10 +214,13 @@ def release(
     of: str | None = None,
     batch: str | None = None,
     allow: Allow = "expired",
+    unlabel: bool = False,
 ) -> Outcome:
     """Edit the claim of *of* (default: this scope) to its released form; remove
     `fr:claimed` once no un-released claim, live or expired, remains (R10). Open or
-    closed alike. Another scope's claim is released only once expired (R9), and its
+    closed alike. With *unlabel* (R1; `claim sync`'s releases, where the batch's run is
+    over) `fr:in-progress` comes off in the same edit; `claim release` and `scope retire`
+    leave it, as they say nothing about a run. Another scope's claim is released only once expired (R9), and its
     released form names this scope as `released_by`. With *batch*, the release is that
     batch's: a marker naming any other batch serves it and is left standing (p1-r3)."""
     signer = of or me
@@ -219,7 +235,13 @@ def release(
     by = me if signer != me else None
     client.edit_issue_comment(repo, target.comment_id, _released(target.marker, now, by=by))
     if not [c for c in claims if c.signer != signer]:
-        _remove_label(client, repo, number, trusted)
+        _remove_label(
+            client,
+            repo,
+            number,
+            trusted,
+            RELEASE_LABELS if unlabel else frozenset({FR_CLAIMED.name}),
+        )
     return Done("released", target.comment_id)
 
 
