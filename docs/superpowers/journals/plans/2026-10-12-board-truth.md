@@ -89,3 +89,18 @@ Additional test cases for paths already covered; not a defect this change introd
 ### p1-r7-resolved · finding [out-of-scope] · resolves p1-r7: release-pending also covers an own claim a still-running batch owes (phase 1)
 
 The state follows the spec's own definition (operator-approved three states); refining the release-pending wording is a separate change.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-drive-cmd-preexisting-failures created=2026-10-12T07:19:20+00:00 phase=2 -->
+### p2-drive-cmd-preexisting-failures · discovery · three test_triage_batch_drive_cmd claim-release tests fail on a clean HEAD (phase 2)
+
+test_a_cancelled_batchs_claims_are_released_and_recorded_once and two siblings (failed record of released claims; merged then archived batch) exit 1 on an unmodified checkout too, so they are not caused by phase 2. Also: test_triage_batch_drive_disruption.py alone hits a pre-existing triage_kanban_cmd import cycle; it collects when run beside another triage test.
+
+<!-- fr:journal kind=decision scope=plan id=p2-board-banner-placement created=2026-10-12T07:19:20+00:00 phase=2 -->
+### p2-board-banner-placement · decision · board.html has no nav, so the skew banner sits directly under its header (phase 2)
+
+kanban_render has no page_header nav; render_board takes a banner string rendered after the header block. triage.html renders it directly after page_header.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-12T07:19:20+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the task only deleted the lenient parameter along the call chain; nothing left to clean
