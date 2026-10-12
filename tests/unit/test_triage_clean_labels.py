@@ -10,7 +10,8 @@ import pytest
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.gh import GhError
-from fr.ghclient import UnsupportedForgeOperation
+from fr.real_glabclient import RealGlabClient
+from fr.real_teaclient import RealTeaClient
 from fr.triage.check import classify, clean_label_targets
 from fr.triage.model import Facts
 from typer.testing import CliRunner
@@ -171,14 +172,22 @@ def test_a_per_issue_failure_is_reported_the_rest_continue_and_the_exit_is_nonze
     assert "fr:in-progress" not in client.issues[(REPO, 6)].labels
 
 
-def test_glab_and_tea_give_the_unsupported_message(
-    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("client_cls", [RealGlabClient, RealTeaClient], ids=["glab", "tea"])
+def test_glab_and_tea_are_refused_before_any_read_or_write(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch, client_cls: Any
 ) -> None:
-    tmp_path, client = world
-
-    def refuse(repo: str, number: int) -> dict[str, Any]:
-        raise UnsupportedForgeOperation("view_issue", "gitlab")
-
-    monkeypatch.setattr(client, "view_issue", refuse)
+    tmp_path, fake = world
+    real = client_cls()  # constructed, never called: any forge call would fail loudly
+    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: real)
     code, out = _run(tmp_path, "--yes")
-    assert code == 2 and "gitlab" in out
+    assert code == 2 and real.backend in out and "clean-labels" in out
+    assert fake.calls == []
+
+
+def test_the_closed_in_progress_section_comes_first_in_the_text_report(tmp_path: Path) -> None:
+    f = _facts(_entry(1, "stale"))
+    (tmp_path / "facts.json").write_text(json.dumps(f.to_json()), "utf-8")
+    out = (
+        CliRunner().invoke(app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path)]).output
+    )
+    assert out.index("closed in progress") < out.index("unranked")

@@ -76,14 +76,17 @@ def _remove_label(
     labels: frozenset[str] = frozenset({FR_CLAIMED.name}),
 ) -> None:
     """Remove *labels*, then re-read: a claim that landed after the caller's read gets
-    the whole removed set back (p1-r5)."""
+    back every label that was on the issue before the removal, in one edit (p1-r5,
+    p1-r1: a label that was never there is not invented)."""
+    present = labels
+    if labels - {FR_CLAIMED.name}:
+        present = labels & set(client.view_issue(repo, number).get("labels") or [])
     client.edit_issue_labels(repo, number, add=frozenset(), remove=labels)
     _, claims = _read(client, repo, number, trusted)
     if claims:
-        _add_label(client, repo, number)
-        extra = labels - {FR_CLAIMED.name}
-        if extra:
-            client.edit_issue_labels(repo, number, add=extra, remove=frozenset())
+        restore = frozenset(present | {FR_CLAIMED.name})
+        client.ensure_labels(repo, [FR_CLAIMED])
+        client.edit_issue_labels(repo, number, add=restore, remove=frozenset())
 
 
 def _drop_orphan_label(client: GhClient, repo: str, number: int, trusted: Collection[str]) -> None:

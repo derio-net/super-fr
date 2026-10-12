@@ -809,8 +809,9 @@ def _closed_in_progress(
         print(f"fr triage: {repo}: closed fr:in-progress issues not read: {exc}", file=sys.stderr)
         return []
     if len(raw) == limit:
-        warnings.append(Truncation(source="issues", target=repo, limit=limit))
-    me = scope_id(scope)
+        warnings.append(Truncation(source="closed-in-progress", target=repo, limit=limit))
+    me: str | None = None
+    me_failed = False
     out: list[StaleInProgress] = []
     for i in raw:
         state: InProgressState = "stale"
@@ -825,7 +826,19 @@ def _closed_in_progress(
                 )
                 comments = []
             signers = [c.signer for c in read_claims(comments, trusted).claims]
-            if any(s != me for s in signers):
+            if signers and me is None and not me_failed:
+                try:
+                    me = scope_id(scope)
+                except TriageError as exc:
+                    me_failed = True
+                    print(
+                        f"fr triage: {repo}: this scope's id is unreadable ({exc}); closed "
+                        "in-progress issues with a claim are shown as held",
+                        file=sys.stderr,
+                    )
+            if signers and me is None:
+                state = "held"  # conservative: never a clean-labels target
+            elif any(s != me for s in signers):
                 state = "held"
             elif signers:
                 state = "release-pending"

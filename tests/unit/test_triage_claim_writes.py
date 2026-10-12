@@ -434,3 +434,24 @@ def test_a_racing_claim_gets_both_removed_labels_back(
     gh.repo_labels.setdefault(REPO, set()).update({"fr:claimed", "fr:in-progress"})
     cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, unlabel=True)
     assert {"fr:claimed", "fr:in-progress"} <= gh.issues[(REPO, 1)].labels
+
+
+def test_a_race_restores_only_labels_that_were_present_in_one_edit(
+    gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _claim(gh)  # fr:claimed, no fr:in-progress
+    edit = gh.edit_issue_labels
+
+    def racing(repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]) -> None:
+        edit(repo, number, add=add, remove=remove)
+        if remove:
+            _foreign(gh, at=NOW + timedelta(minutes=1), expires=NOW + DAY, cid=2000)
+            gh.issues[(REPO, 1)].labels.discard("fr:claimed")
+
+    monkeypatch.setattr(gh, "edit_issue_labels", racing)
+    gh.repo_labels.setdefault(REPO, set()).update({"fr:claimed", "fr:in-progress"})
+    gh.calls.clear()
+    cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED, unlabel=True)
+    adds = [c["add"] for n, c in gh.calls if n == "edit_issue_labels" and c["add"]]
+    assert adds == [frozenset({"fr:claimed"})]
+    assert "fr:in-progress" not in gh.issues[(REPO, 1)].labels

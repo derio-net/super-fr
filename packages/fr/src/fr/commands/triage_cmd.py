@@ -611,6 +611,13 @@ def check_command(
     if as_json:
         print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
         return
+    console.print(
+        f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
+        "labelled fr:in-progress; stale ones: `fr triage clean-labels`"
+    )
+    for state in ("stale", "release-pending", "held"):
+        for e in (e for e in result.closed_in_progress if e.state == state):
+            console.print(f"  {escape(e.key)}  {state}  {escape(e.title)}", soft_wrap=True)
     console.print(f"[bold]unranked[/bold] ({len(result.unranked)}) — open, no judgement")
     for i in result.unranked:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
@@ -649,13 +656,6 @@ def check_command(
             f"  {escape(st.key)}  {st.days}d since {escape(st.marker_at)}  {escape(st.title)}",
             soft_wrap=True,
         )
-    console.print(
-        f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
-        "labelled fr:in-progress; stale ones: `fr triage clean-labels`"
-    )
-    for state in ("stale", "release-pending", "held"):
-        for e in (e for e in result.closed_in_progress if e.state == state):
-            console.print(f"  {escape(e.key)}  {state}  {escape(e.title)}", soft_wrap=True)
     console.print(
         f"[bold]unplaced[/bold] ({len(result.unplaced)}) — open, in no open batch, "
         "feature group or parked"
@@ -723,7 +723,7 @@ def clean_labels_command(
     --yes. A per-issue failure is reported and the rest continue; the exit is then 1."""
     from fr.commands import triage_batch_cmd
     from fr.commands.triage_kanban_cmd import _fail
-    from fr.ghclient import UnsupportedForgeOperation
+    from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS
     from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
 
@@ -749,6 +749,8 @@ def clean_labels_command(
         number = int(t.key.rpartition("#")[2])
         try:
             client = triage_batch_cmd.make_client(f"https://{parts.hostname}/{owner_repo}")
+            if isinstance(client, UnsupportedBatchOps):  # glab/tea: GitHub-only (§3.J)
+                raise UnsupportedForgeOperation("clean-labels", client.backend)
             now = client.view_issue(owner_repo, number)
             if str(now.get("state", "")).upper() == "OPEN":
                 console.print(f"skipped {t.key}: open again", markup=False)

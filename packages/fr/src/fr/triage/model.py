@@ -69,7 +69,7 @@ SCOPE_NAME_LIMIT = 80
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
 PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
-TruncatedList = Literal["repos", "issues", "prs"]
+TruncatedList = Literal["repos", "issues", "prs", "closed-in-progress"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 Kind = Literal["defect", "feature", "parked"]
@@ -376,6 +376,12 @@ class Truncation(_Strict):
         the issue and repo lists have none, and the sentence says so rather than
         inventing one.
         """
+        if self.source == "closed-in-progress":
+            return (
+                f"the closed fr:in-progress list for {target} returned exactly its limit "
+                f"({self.limit}), so the closed-but-in-progress set may be incomplete; "
+                "no flag raises this limit"
+            )
         remedy = "raise it with --pr-limit" if self.source == "prs" else "no flag raises this limit"
         return (
             f"the {_LIST_WORDS[self.source]} for {target} returned exactly its limit "
@@ -383,7 +389,12 @@ class Truncation(_Strict):
         )
 
 
-_LIST_WORDS: dict[str, str] = {"prs": "PR list", "issues": "issue list", "repos": "repo list"}
+_LIST_WORDS: dict[str, str] = {
+    "prs": "PR list",
+    "issues": "issue list",
+    "repos": "repo list",
+    "closed-in-progress": "closed fr:in-progress list",
+}
 
 
 class Launch(_Strict):
