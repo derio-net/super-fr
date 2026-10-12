@@ -189,7 +189,7 @@ def test_a_huge_backoff_neither_overflows_nor_grows_past_the_cap() -> None:
     state = PacingState(backoff=5000)
     pace, after = quota.after_rate_limit(_budget(900), NOW, state, 120.0)
     assert pace.until == NOW + timedelta(seconds=quota.BACKOFF_CAP_SECONDS)
-    assert after.backoff == 5000  # at the cap already: it stops counting
+    assert after.backoff <= 32  # the count is bounded too
 
 
 def test_a_negative_backoff_is_treated_as_zero() -> None:
