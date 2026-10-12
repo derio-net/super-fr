@@ -63,7 +63,7 @@ def test_only_the_named_repos_are_read_and_the_rest_carried() -> None:
     assert facts.repos == previous.repos
     assert [i for i in facts.issues if i.repo == B] == [i for i in previous.issues if i.repo == B]
     assert facts.config == previous.config and B in facts.config
-    assert facts.visibility == previous.visibility
+    assert facts.visibility == {A: "public"}  # B's is never carried
     assert [p for p in facts.prs if p.repo == B] == [p for p in previous.prs if p.repo == B]
     assert facts.batch_prs == previous.batch_prs
     assert facts.skipped == []
@@ -148,3 +148,14 @@ def test_collect_into_carries_and_calls_back_after_facts_json(tmp_path, monkeypa
     assert seen == [True]
     assert {kw["repo"] for kw in forge.called("list_issues")} == {A}
     assert _prs(facts, "alpha#7") == [(B, 800)]
+
+
+def test_a_carried_repo_s_visibility_is_left_out_for_the_guard_to_read_live() -> None:
+    """A stale carried "public" would pass the leak check for a repo made private since
+    (orchestrator correction to R10): a carried repo has no visibility in the facts."""
+    previous = _collect(_forge())
+    previous = previous.model_copy(update={"visibility": {A: "public", B: "public"}})
+    forge = _forge()
+    facts = _collect(forge, only={A}, previous=previous)
+    assert B not in facts.visibility
+    assert forge.visibility_calls == [A]
