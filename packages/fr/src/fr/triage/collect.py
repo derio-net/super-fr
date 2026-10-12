@@ -508,6 +508,8 @@ def collect_facts_counted(
     repo_limit: int = REPO_LIMIT,
     carried: Iterable[Issue] = (),
     lenient: bool = False,
+    only: Iterable[str] | None = None,
+    previous: Facts | None = None,
 ) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
@@ -533,9 +535,25 @@ def collect_facts_counted(
     a merged or closed PR of that dispatch in *known_batch_prs* (the previous
     facts' `batch_prs`) is carried over instead of looked up again (review
     r2p-f3), so a finished batch costs nothing on later collects.
+
+    *only* with *previous* is a partial collect (spec 2026-10-12-quota-pacing R10): a
+    repo of *previous* outside *only* is not read at all. Its issues, unlinked PRs,
+    batch PRs, config, visibility and judged keys are carried from *previous*; the repo
+    list and the viewer too. Each issue's PR links are this pass's, plus the previous
+    links whose PR lives in a carried repo, so a cross-repo link survives whichever side
+    was read. A repo *previous* skipped is read regardless: it has nothing to carry.
+    *only* None (or no *previous*) is the full collect, unchanged.
     """
-    repos, warnings, listed_visibility = _listed_repos(forge, scope, repo_limit=repo_limit)
-    viewer = forge.viewer_login() or None
+    keep = _carry_set(only, previous)
+    if keep and previous is not None:
+        repos = list(previous.repos)
+        warnings = [w for w in previous.warnings if w.source == "repos" or w.target in keep]
+        listed_visibility: dict[str, str] = {}
+        viewer = previous.viewer or forge.viewer_login() or None
+    else:
+        keep = frozenset()
+        repos, warnings, listed_visibility = _listed_repos(forge, scope, repo_limit=repo_limit)
+        viewer = forge.viewer_login() or None
     skipped: list[Skipped] = []
     collected: list[str] = []
     raw_issues: list[tuple[str, dict[str, Any]]] = []
@@ -549,6 +567,8 @@ def collect_facts_counted(
     markers: dict[tuple[str, int], str] = {}
     claims: dict[tuple[str, int], list[IssueClaim]] = {}
     for repo in repos:
+        if repo in keep:
+            continue
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
@@ -586,7 +606,7 @@ def collect_facts_counted(
             (_anchor_pr(forge, pr, raw), refs)
             for (pr, refs), raw in zip(parsed_open, current, strict=True)
         )
-    if not collected:
+    if not collected and not keep:
         # Nothing to show is an error, never an empty board: an empty facts.json
         # would render as a clean backlog (spec §3.C, review r-p2-empty). Repo
         # scope already raised above; this is org scope.
@@ -597,10 +617,16 @@ def collect_facts_counted(
         raise ForgeError(f"{scope.owner} has no non-archived repos to triage")
     parsed_prs = join_open(parsed_prs, [pr for pr, _ in open_prs])
     links = invert(parsed_prs, scope)
+    kept = _kept_links(previous, keep)
 
     def linked(repo: str, number: int) -> list[PullRequest]:
         owner, name = repo.split("/", 1)
-        return links.get(_ref(owner, name, number), [])
+        ref = _ref(owner, name, number)
+        fresh = links.get(ref, [])
+        if ref not in kept:
+            return fresh
+        both = {(p.repo, p.number): p for p in [*fresh, *kept[ref]]}
+        return sorted(both.values(), key=lambda p: (pr_rank(p), -p.number))
 
     out = [
         _issue(repo, i, linked(repo, i["number"]), state="open").model_copy(
@@ -611,13 +637,32 @@ def collect_facts_counted(
         )
         for repo, i in raw_issues
     ]
+    prior = previous if keep else None
+    if prior is not None:
+        out.extend(
+            i.model_copy(update={"prs": linked(i.repo, i.number)})
+            for i in prior.issues
+            if i.repo in keep and i.state == "open"
+        )
     open_keys = {i.key for i in out}
     carry = {(i.repo.lower(), i.number): i for i in carried if i.state == "closed"}
     truncated = {w.target for w in warnings if w.source == "issues"}
     viewed = carried_n = 0
     unviewed: list[Unviewed] = []
     judged_prs: list[PullRequest] = []
-    for repo, number in _judged_elsewhere(judged, open_keys, collected):
+    for repo, number in _judged_elsewhere(judged, open_keys, [*collected, *sorted(keep)]):
+        if prior is not None and repo in keep:
+            known = _carried_judgement(prior, issue_key(repo, number))
+            if isinstance(known, PullRequest):
+                judged_prs.append(known)
+                continue
+            if isinstance(known, Issue):
+                out.append(known.model_copy(update={"prs": linked(repo, number)}))
+                carried_n += 1
+                continue
+            if isinstance(known, Unviewed):
+                unviewed.append(known)
+                continue
         if (listed := listed_prs.get(issue_key(repo, number))) is not None:
             judged_prs.append(listed)
             continue
@@ -649,6 +694,9 @@ def collect_facts_counted(
         for p, refs in open_prs
         if not any(_in_scope(ref, scope) for ref in refs) and (p.repo, p.number) not in linked_prs
     ]
+    if prior is not None:
+        unlinked += [p for p in prior.prs if p.repo in keep]
+        config.update({r: c for r, c in prior.config.items() if r in keep})
     batch_prs = _batch_prs(
         forge,
         batch_branches,
@@ -656,6 +704,8 @@ def collect_facts_counted(
         seen=[*linked_prs_all(out), *unlinked],
         known=list(known_batch_prs),
     )
+    if prior is not None:
+        batch_prs += [p for p in prior.batch_prs if p.repo in keep]
     in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
     judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
     facts = Facts(
@@ -673,9 +723,52 @@ def collect_facts_counted(
         judged_prs=judged_prs,
         config=config,
         viewer=viewer,
-        visibility=_visibility(forge, collected, listed_visibility),
+        visibility={
+            **({r: v for r, v in prior.visibility.items() if r in keep} if prior else {}),
+            **_visibility(forge, collected, listed_visibility),
+        },
     )
     return facts, CollectStats(viewed=viewed, carried=carried_n, ignored=ignored)
+
+
+def _carry_set(only: Iterable[str] | None, previous: Facts | None) -> frozenset[str]:
+    """The repos a partial collect carries (R10): *previous*'s, outside *only*, that
+    *previous* read. Empty for a full collect."""
+    if only is None or previous is None:
+        return frozenset()
+    named, skipped = set(only), {s.repo for s in previous.skipped}
+    return frozenset(r for r in previous.repos if r not in named and r not in skipped)
+
+
+def _kept_links(previous: Facts | None, carry: frozenset[str]) -> dict[IssueRef, list[PullRequest]]:
+    """Each previous issue's links whose PR lives in a carried repo: no read this pass
+    can recompute them, so they are kept (R10)."""
+    if previous is None or not carry:
+        return {}
+    kept: dict[IssueRef, list[PullRequest]] = {}
+    for issue in previous.issues:
+        prs = [p for p in issue.prs if p.repo in carry]
+        if prs:
+            owner, name = issue.repo.split("/", 1)
+            kept[_ref(owner, name, issue.number)] = prs
+    return kept
+
+
+def _carried_judgement(previous: Facts, key: str) -> Issue | PullRequest | Unviewed | None:
+    """What *previous* knew of a judged key of a carried repo: a PR, the issue, the
+    reason it could not be viewed; None when it never saw the key, which is viewed."""
+    for pr in [
+        *previous.judged_prs,
+        *previous.prs,
+        *previous.batch_prs,
+        *linked_prs_all(previous.issues),
+    ]:
+        if issue_key(pr.repo, pr.number) == key:
+            return pr
+    for issue in previous.issues:
+        if issue.key == key:
+            return issue
+    return next((u for u in previous.unviewed if u.key == key), None)
 
 
 def linked_prs_all(issues: Iterable[Issue]) -> list[PullRequest]:

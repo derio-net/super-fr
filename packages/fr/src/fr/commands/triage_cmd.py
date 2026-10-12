@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
@@ -435,6 +435,8 @@ def collect_into(
     carry: bool = False,
     lenient: bool = False,
     settle: bool = False,
+    only: Iterable[str] | None = None,
+    after_write: Callable[[Facts], None] | None = None,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
@@ -448,6 +450,11 @@ def collect_into(
     the drive or watch loop, p3-r7) decides an undecided state repo; without it an
     undecided scope warns once and keeps its state local. Returns the stats of
     single-issue reads. Raises `TriageError` on a refusal; writes nothing then.
+
+    *only* (a paced drive pass, spec 2026-10-12-quota-pacing R10) reads just those repos
+    and carries the rest from the previous facts.json. *after_write* runs once facts.json
+    is written, never before: the drive stores the probes' ETags there, so they always
+    describe facts already on disk (R11).
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
@@ -478,12 +485,16 @@ def collect_into(
         pr_limit=pr_limit,
         carried=[i for i in previous.issues if i.state == "closed"] if previous and carry else (),
         lenient=lenient,
+        only=only,  # None: the full collect, *previous* unused
+        previous=previous,
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if after_write is not None:
+        after_write(facts)
     if settle:
         _settle_state_repo(target_dir, facts)
     elif load_durable(target_dir).state_repo is None:
