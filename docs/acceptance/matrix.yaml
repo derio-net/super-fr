@@ -6876,9 +6876,13 @@ rows:
       facts were last collected.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_footer_names_the_last_budget_and_when_the_facts_were_collected
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_write_board_reads_the_budget_from_pacing_json_for_the_footer
+    status: ci
+    notes: Drive logging landed in phase 1; the board footer (last budget and facts
+      collected_at, read from pacing.json by write_board) in phase 3.
     verify: none
   - id: quota-shared-token-live
     capability: triage-batch-drive
