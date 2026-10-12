@@ -22,4 +22,4 @@ visual:
     script: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/b07de151-7e3f-41a2-8b47-0d0eb080c573/scratchpad/p5-visual/capture.py
     shots:
       - {path: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/b07de151-7e3f-41a2-8b47-0d0eb080c573/scratchpad/p5-visual/debt-collapsed.png, shows: [panel-with-figures, repo-without-report, legacy-digest-without-figures]}
-      - {path: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/b07de151-7e3f-41a2-8b47-0d0eb080c573/scratchpad/p5-visual/debt-expanded.png, shows: [panel-with-figures, trend-vs-previous, repo-without-report, legacy-digest-without-figures, untrusted-digest-ignored, expand-repo-section]}
+      - {path: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/b07de151-7e3f-41a2-8b47-0d0eb080c573/scratchpad/p5-visual/debt-expanded.png, shows: [panel-with-figures, trend-vs-previous, repo-without-report, legacy-digest-without-figures, expand-repo-section]}
