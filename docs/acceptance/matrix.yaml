@@ -6809,9 +6809,16 @@ rows:
       to 15 minutes; an unreadable /rate_limit fails open.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_a_rate_limited_pass_waits_for_the_reset_and_spends_nothing_until_then
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_an_exhausted_budget_at_pass_start_runs_no_pass_at_all
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_a_rate_limited_skip_in_the_collect_ends_the_pass_before_the_snapshot
+      - super-fr:tests/unit/test_triage_quota.py#test_exhausted_budget_waits_for_the_reset_plus_thirty_seconds
+    status: ci
+    notes: 'Phase 1: the host loop waits to reset+30s with no forge call, a collect
+      that skips on a rate limit ends the pass before the snapshot, and an exhausted
+      budget at pass start runs no pass.'
     verify: none
   - id: quota-floor-essential-pass
     capability: triage-batch-drive
