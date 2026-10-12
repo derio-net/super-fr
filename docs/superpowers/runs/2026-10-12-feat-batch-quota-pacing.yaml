@@ -3,7 +3,7 @@ run: 2026-10-12-feat-batch-quota-pacing
 workflow: fr-goal@1
 branch: feat/batch-quota-pacing
 started: '2026-10-11T22:06:07+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -152,7 +152,11 @@ steps:
           visual: none
           findings: p3-r1,p3-r2,p3-r3,p3-r4,p3-r5
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-12T08:56:57+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): p1-r4, p3-r5
   deliver:
     state: pending
 fr_version: 5.20.0
