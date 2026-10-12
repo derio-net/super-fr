@@ -607,3 +607,128 @@ selection and body rendering live in debt/sweep.py, git steps in small helpers; 
 ### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
 
 scaffold templates share one render_workflow; goldens regenerated, nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p4-review-r1 created=2026-10-12T00:39:40+00:00 phase=4 -->
+### p4-review-r1 · review · phase 4 code review (weekly issue, archive PR, adapters, scaffolds): 12 findings (phase 4)
+
+Independent reviewer (separate context, read-only) over c080d4e8..b3817943: R26 adapters on four clients, fr debt issue, archive-pr, scaffolds and --refresh-ci, the three automated security notices on debt_cmd.py (selection trust, authorization, data exposure, glab gate), and test quality. 206 targeted tests passed. Receiving: p4-r2 confirmed by reading the workflow's workflow-level permissions and checkout token; p4-r1 confirmed (real_glabclient `api user` vs check_argv). Fixes in fa5bb076, be42cb30, e9098934 (729 targeted tests; CI is the full-suite evidence). Owed: a live walk of the glab/tea paths (recorded doubles and a shape-mirror fixture only).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · glab authenticated_login hit check_argv's projects/-only api gate: GitLab trusted no issue and duplicated it weekly (phase 4)
+
+glab authenticated_login hit check_argv's projects/-only api gate: GitLab trusted no issue and duplicated it weekly
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · workflow-level write permissions and the FR_DEBT_TOKEN checkout applied to every PR/push run (PAT persisted while branch code ran) (phase 4)
+
+workflow-level write permissions and the FR_DEBT_TOKEN checkout applied to every PR/push run (PAT persisted while branch code ran)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · issue listing newest-first and capped at 200: the oldest debt issue fell past the cap (phase 4)
+
+issue listing newest-first and capped at 200: the oldest debt issue fell past the cap
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · tea listing was one page clamped to 50: a silent cap (phase 4)
+
+tea listing was one page clamped to 50: a silent cap
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · archive-pr failure paths left staged moves carried back by the finally switch; untracked docs swept in (phase 4)
+
+archive-pr failure paths left staged moves carried back by the finally switch; untracked docs swept in
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · push refusal and all forge errors were given GitHub PR-permission remedies (phase 4)
+
+push refusal and all forge errors were given GitHub PR-permission remedies
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · GITHUB_TOKEN cannot call /user: a warning every scheduled run (phase 4)
+
+GITHUB_TOKEN cannot call /user: a warning every scheduled run
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · ev.ref_error echoed unredacted; non-numeric forge numbers crashed filter_issues_by_body (phase 4)
+
+ev.ref_error echoed unredacted; non-numeric forge numbers crashed filter_issues_by_body
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · riskiest paths only exercised against doubles that bypassed the gates (phase 4)
+
+riskiest paths only exercised against doubles that bypassed the gates
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=in -->
+### p4-r10 · finding [open] (reviewer: in scope) · _held tracebacks on a missing plan; ``` broke the PR fence; _clean missed bidi/format characters (phase 4)
+
+_held tracebacks on a missing plan; ``` broke the PR fence; _clean missed bidi/format characters
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=out -->
+### p4-r11 · finding [open] (reviewer: out of scope) · debt steps lacked if: always(), so failing-row weeks never updated the issue (phase 4)
+
+debt steps lacked if: always(), so failing-row weeks never updated the issue
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12 created=2026-10-12T00:39:40+00:00 phase=4 state=open review_scope=out -->
+### p4-r12 · finding [open] (reviewer: out of scope) · Gitea/GitLab scaffolds give the debt steps no forge or push credentials (phase 4)
+
+Gitea/GitLab scaffolds give the debt steps no forge or push credentials
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: glab authenticated_login hit check_argv's projects/-only api gate: GitLab trusted no issue and duplicated it weekly (phase 4)
+
+be42cb30: check_argv allows exactly `api user`; real-_run_glab test; lookalikes still refused.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: workflow-level write permissions and the FR_DEBT_TOKEN checkout applied to every PR/push run (PAT persisted while branch code ran) (phase 4)
+
+fa5bb076: separate debt job (schedule or inputs.debt) holds write perms and the token; matrix job contents:read with persist-credentials false; templates and goldens split.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: issue listing newest-first and capped at 200: the oldest debt issue fell past the cap (phase 4)
+
+be42cb30: oldest-first listing (REST sort=created&direction=asc; glab order_by=created_at&sort=asc).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: tea listing was one page clamped to 50: a silent cap (phase 4)
+
+be42cb30: pages until an empty page; ListingCapped at the cap; paging test with a shape-mirror fixture.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: archive-pr failure paths left staged moves carried back by the finally switch; untracked docs swept in (phase 4)
+
+e9098934: entry check includes untracked docs; reset --hard + clean -fdq -- docs before switching back; failed switch-back warned.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: push refusal and all forge errors were given GitHub PR-permission remedies (phase 4)
+
+e9098934: push-specific remedy; settings remedy only for a recognised 403/not-permitted error; generic category otherwise.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: GITHUB_TOKEN cannot call /user: a warning every scheduled run (phase 4)
+
+e9098934: under GITHUB_ACTIONS a 403 viewer lookup is the workflow bot, no warning.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: ev.ref_error echoed unredacted; non-numeric forge numbers crashed filter_issues_by_body (phase 4)
+
+be42cb30/e9098934: ref_error cleaned; non-digit numbers skipped.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: riskiest paths only exercised against doubles that bypassed the gates (phase 4)
+
+e9098934: real `fr archive` subprocess integration tests; glab ops through the real argv gate; tea paging fixture (shape mirror, noted).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=fixed resolves=p4-r10 -->
+### p4-r10-resolved · finding [fixed] · resolves p4-r10: _held tracebacks on a missing plan; ``` broke the PR fence; _clean missed bidi/format characters (phase 4)
+
+e9098934: _held tolerant; backticks escaped; bidi/format characters in _CONTROL.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=open resolves=p4-r11 out_of_scope=true -->
+### p4-r11-resolved · finding [out-of-scope] · resolves p4-r11: debt steps lacked if: always(), so failing-row weeks never updated the issue (phase 4)
+
+Out of scope (pre-existing in the digest step); the p4-r2 job split incidentally removes the dependency.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12-resolved created=2026-10-12T00:39:40+00:00 phase=4 state=open resolves=p4-r12 out_of_scope=true -->
+### p4-r12-resolved · finding [out-of-scope] · resolves p4-r12: Gitea/GitLab scaffolds give the debt steps no forge or push credentials (phase 4)
+
+Out of scope: pre-existing in the shell upsert; Gitea archive-pr degrades to a named Unsupported warning, exit 0.
