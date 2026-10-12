@@ -28,6 +28,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
@@ -37,7 +38,7 @@ from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
 from fr.triage.batch import last_dispatch, lifecycle_events
-from fr.triage.check import ClaimSets, classify
+from fr.triage.check import ClaimSets, classify, clean_label_targets
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
@@ -649,6 +650,13 @@ def check_command(
             soft_wrap=True,
         )
     console.print(
+        f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
+        "labelled fr:in-progress; stale ones: `fr triage clean-labels`"
+    )
+    for state in ("stale", "release-pending", "held"):
+        for e in (e for e in result.closed_in_progress if e.state == state):
+            console.print(f"  {escape(e.key)}  {state}  {escape(e.title)}", soft_wrap=True)
+    console.print(
         f"[bold]unplaced[/bold] ({len(result.unplaced)}) — open, in no open batch, "
         "feature group or parked"
     )
@@ -695,6 +703,69 @@ def check_command(
         console.print(f"  {escape(d.key)} → {escape(d.original)} ({d.state})", soft_wrap=True)
         console.print(f"    {escape(d.command or d.reason)}", soft_wrap=True)
     print_claim_sets(result.claims)
+
+
+@triage_app.command("clean-labels")
+def clean_labels_command(
+    yes: bool = typer.Option(
+        False, "--yes", help="Write; without it, print what would be removed."
+    ),
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Remove `fr:in-progress` from closed issues that still carry it (board-truth R3).
+
+    Targets are the facts' `stale` closed-but-in-progress entries (`check` lists them);
+    release-pending and held ones are never touched. With --yes each target is re-read
+    first and skipped if it is open again or now carries `fr:claimed`. Dry-run without
+    --yes. A per-issue failure is reported and the rest continue; the exit is then 1."""
+    from fr.commands import triage_batch_cmd
+    from fr.commands.triage_kanban_cmd import _fail
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.hostclient import FORGE_ERRORS
+    from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
+
+    scope = _scope(repo, org)
+    _, facts, _ = _load_state(scope, dir_override, workspace)
+    targets = clean_label_targets(facts)
+    if not targets:
+        console.print("nothing to clean", markup=False)
+        return
+    if not yes:
+        for t in targets:
+            console.print(
+                f"would remove {FR_IN_PROGRESS.name} from {t.key}  {t.title}",
+                markup=False,
+                soft_wrap=True,
+            )
+        console.print("nothing written; re-run with --yes to write", markup=False)
+        return
+    failed = 0
+    for t in targets:
+        parts = urlparse(t.url)
+        owner_repo = "/".join(parts.path.strip("/").split("/")[:2])
+        number = int(t.key.rpartition("#")[2])
+        try:
+            client = triage_batch_cmd.make_client(f"https://{parts.hostname}/{owner_repo}")
+            now = client.view_issue(owner_repo, number)
+            if str(now.get("state", "")).upper() == "OPEN":
+                console.print(f"skipped {t.key}: open again", markup=False)
+            elif FR_CLAIMED.name in (now.get("labels") or []):
+                console.print(f"skipped {t.key}: now carries {FR_CLAIMED.name}", markup=False)
+            else:
+                client.edit_issue_labels(
+                    owner_repo, number, add=frozenset(), remove=frozenset({FR_IN_PROGRESS.name})
+                )
+                console.print(f"removed {FR_IN_PROGRESS.name} from {t.key}", markup=False)
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            failed += 1
+            console.print(f"failed {t.key}: {exc}", markup=False, soft_wrap=True)
+    if failed:
+        raise typer.Exit(1)
 
 
 def print_claim_sets(sets: ClaimSets) -> None:

@@ -50,6 +50,7 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     wave_group,
 )
+from fr.triage.check import clean_label_targets
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
@@ -329,6 +330,17 @@ def read_sessions(
     return SessionReads(statuses, notes, said)
 
 
+def in_progress_note(facts: Facts, scope_args: Sequence[str]) -> str | None:
+    """The board's note on closed issues still labelled `fr:in-progress` (board-truth R2):
+    the count of stale ones and the command that cleans them, None when there are none."""
+    n = len(clean_label_targets(facts))
+    if not n:
+        return None
+    args = " ".join(scope_args)
+    cmd = f"fr triage clean-labels {args}".rstrip()
+    return f"{n} closed issue{'s' if n != 1 else ''} still labelled fr:in-progress: run `{cmd}`"
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -350,6 +362,8 @@ def write_board(
     except TriageError as exc:  # the board is a view: say what it cannot show, never refuse
         me = None
         notes.append(f"claims are not shown: {one_line(exc)}")
+    if (labels_note := in_progress_note(facts, scope_args)) is not None:
+        notes.append(labels_note)
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,

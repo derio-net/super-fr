@@ -107,6 +107,7 @@ GH_MISSING = (
 
 # A forge CLI's own error, and an operation the backend does not implement.
 _FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
+_READ_FAILURES: tuple[type[Exception], ...] = (TriageError, *_FAILURES)
 
 
 @contextmanager
@@ -804,7 +805,7 @@ def _closed_in_progress(
             fields=ORIGINS_ISSUE_LIST_FIELDS,
             labels=[FR_IN_PROGRESS.name],
         )
-    except (TriageError, *_FAILURES) as exc:
+    except _READ_FAILURES as exc:
         print(f"fr triage: {repo}: closed fr:in-progress issues not read: {exc}", file=sys.stderr)
         return []
     if len(raw) == limit:
@@ -817,7 +818,7 @@ def _closed_in_progress(
         if FR_CLAIMED.name in names:
             try:
                 comments = forge.list_issue_comments(repo=repo, number=i["number"])
-            except (TriageError, *_FAILURES) as exc:
+            except _READ_FAILURES as exc:
                 print(
                     f"fr triage: {repo}#{i['number']}: claim comments not read: {exc}",
                     file=sys.stderr,

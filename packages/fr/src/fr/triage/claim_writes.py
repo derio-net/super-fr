@@ -218,11 +218,12 @@ def release(
 ) -> Outcome:
     """Edit the claim of *of* (default: this scope) to its released form; remove
     `fr:claimed` once no un-released claim, live or expired, remains (R10). Open or
-    closed alike. With *unlabel* (R1; `claim sync`'s releases, where the batch's run is
-    over) `fr:in-progress` comes off in the same edit; `claim release` and `scope retire`
-    leave it, as they say nothing about a run. Another scope's claim is released only once expired (R9), and its
-    released form names this scope as `released_by`. With *batch*, the release is that
-    batch's: a marker naming any other batch serves it and is left standing (p1-r3)."""
+    closed alike. With *unlabel* (R1: `claim sync`'s releases, where the batch's run is
+    over) `fr:in-progress` comes off in the same edit; `claim release` and
+    `scope retire` leave it, as they say nothing about a run. Another scope's claim is
+    released only once expired (R9), and its released form names this scope as
+    `released_by`. With *batch*, the release is that batch's: a marker naming any other
+    batch serves it and is left standing (p1-r3)."""
     signer = of or me
     _, claims = _read(client, repo, number, trusted)
     target = _own(claims, signer)
