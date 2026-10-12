@@ -777,3 +777,53 @@ is_set_apart folded the three exclusions into one predicate used by check, rende
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 panel and snapshot code was written once against the shared fr.triage.debt helpers; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p5-review-r1 created=2026-10-12T01:38:30+00:00 phase=5 -->
+### p5-review-r1 · review · phase 5 code review (triage debt/owed sets, Debt panel, snapshot v2, facts 9): 4 findings (phase 5)
+
+Independent reviewer (separate context, read-only) over 71d3ab6a, d394a9b6: R14-R16, the three automated security notices on triage/debt.py, the facts 8→9 bump and its readers, and test quality. 22 targeted tests passed. It drove the UI itself (a copy of the capture script run by absolute path into its own directory) and opened both fresh screenshots, covering every declared state and the expand interaction at both limits. Security: (a) spoofed figures and (b) unbounded decode verified fixed; (c) the 'authentication bypass' via pr_authors refuted: pr_authors is read from the default branch's .fr/triage.yaml (collect.py:63,735), the same claim-marker trust set (model.py:495-502), a missing author fails closed, and facts.json is a local cache that never rides the state ref. Fixes in eb680131 and 3087f287 (210 targeted tests).
+
+<!-- fr:journal kind=discovery scope=plan id=p5-security-pr-authors-refuted created=2026-10-12T01:38:30+00:00 phase=5 -->
+### p5-security-pr-authors-refuted · discovery · automated 'authentication-bypass' notice on triage/debt.py refuted: pr_authors is operator-curated default-branch config (phase 5)
+
+See p5-review-r1. Residual, accepted: trust is on who opened the digest, not who last edited its body, so a collaborator with write/triage access can edit a trusted digest's body. That is write-level trust, the same as fr debt issue.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-10-12T01:38:30+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · spec §C, plan P5.T1.S1 and the debt.py docstring said no facts bump, but facts moved 8→9 with Issue.author (phase 5)
+
+spec §C, plan P5.T1.S1 and the debt.py docstring said no facts bump, but facts moved 8→9 with Issue.author
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-10-12T01:38:30+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · the debt.py docstring claimed parity with fr debt issue's trust, but triage also trusts pr_authors (phase 5)
+
+the debt.py docstring claimed parity with fr debt issue's trust, but triage also trusts pr_authors
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-10-12T01:38:30+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · clean_figures dropped acceptance_available, so a no-matrix digest rendered a false zero (phase 5)
+
+clean_figures dropped acceptance_available, so a no-matrix digest rendered a false zero
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-10-12T01:38:30+00:00 phase=5 state=open review_scope=in -->
+### p5-r4 · finding [open] (reviewer: in scope) · manual_open was shown under Plan debt but not counted in the badge (phase 5)
+
+manual_open was shown under Plan debt but not counted in the badge
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-10-12T01:38:30+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: spec §C, plan P5.T1.S1 and the debt.py docstring said no facts bump, but facts moved 8→9 with Issue.author (phase 5)
+
+eb680131 amends spec §C (the contract) with the bump and the trust rule; 3087f287 fixes the docstring.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-10-12T01:38:30+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: the debt.py docstring claimed parity with fr debt issue's trust, but triage also trusts pr_authors (phase 5)
+
+Kept deliberately (the claim-marker trust set, read from the default branch); spec §C (eb680131) and the docstring (3087f287) now say so.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-10-12T01:38:30+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: clean_figures dropped acceptance_available, so a no-matrix digest rendered a false zero (phase 5)
+
+3087f287: carried through; renders 'Acceptance: matrix unavailable'; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-10-12T01:38:30+00:00 phase=5 state=fixed resolves=p5-r4 -->
+### p5-r4-resolved · finding [fixed] · resolves p5-r4: manual_open was shown under Plan debt but not counted in the badge (phase 5)
+
+3087f287: moved to the Listed, not debt line ('counted under Owed'); test asserts badge = sum of visible debt lines.
