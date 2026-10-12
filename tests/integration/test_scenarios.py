@@ -174,6 +174,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "spec-verification-section",
         "walk-recording-prints-close",
         "awaiting-live-triage",
+        "triage-closed-in-progress",
         "prerelease-command-shape",
         "triage-claims-held",
         "triage-claims-expired",
@@ -214,6 +215,10 @@ def test_walk_recording_prints_close(installed: Path, tmp_path: Path) -> None:
 
 def test_awaiting_live_triage(installed: Path, tmp_path: Path) -> None:
     _scenario("awaiting-live-triage", installed, tmp_path)
+
+
+def test_triage_closed_in_progress(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-closed-in-progress", installed, tmp_path)
 
 
 def test_prerelease_command_shape(installed: Path, tmp_path: Path) -> None:
