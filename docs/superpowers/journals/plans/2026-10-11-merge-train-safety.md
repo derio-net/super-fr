@@ -474,3 +474,98 @@ one new script and its test; no existing code touched
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 docs, AGENTS.md prose and a matrix status; no code
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · app token inherits every installation permission (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · bypass-capable token readable by the staged test suite (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · runbook under-states app permissions and states no residual risk (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · --stage require replaces an existing required_status_checks rule (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · newest-tag lookup reads one page of 100 (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · stub GET lacks read-only fields and echoes the PUT (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · ruleset lookup includes org rulesets (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · flag without value exits 1 silently (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-10-12T00:26:44+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · AGENTS.md states the bypass as fact, omits the variable requirement (phase 4)
+
+Raised by the phase 4 reviewer (p4-r1/p4-r2 also flagged by automated security reviews).
+
+<!-- fr:journal kind=review scope=plan id=p4-review-1 created=2026-10-12T00:26:44+00:00 phase=4 -->
+### p4-review-1 · review · phase 4 review: 9 findings, all in scope (phase 4)
+
+Independent reviewer raised p4-r1..p4-r9 (two high: token permissions and token exposure to the staged tests). All fixed; the implementer wrote the new tests after the code (not seen red against the old code) — the orchestrator re-ran the three release/protection test files in full: 102 passed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: app token inherits every installation permission (phase 4)
+
+Token scoped explicitly (owner, repositories) with permission-contents and permission-issues write only. Test: test_release_workflow.py#test_app_token_is_scoped_to_this_repo_with_contents_and_issues_write_only
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: bypass-capable token readable by the staged test suite (phase 4)
+
+persist-credentials false; forge tokens stripped from the staged-test and migrate subprocess env; the two pushes authenticate per command via gh's credential helper. Test: test_release_script.py#test_the_staged_test_subprocess_env_carries_no_forge_token
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: runbook under-states app permissions and states no residual risk (phase 4)
+
+Contents+issues write named; Residual risk paragraph added. Test: docs only
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: --stage require replaces an existing required_status_checks rule (phase 4)
+
+Existing rule kept in place; ci-ok added only if missing, strict set. Test: test_configure_main_protection.py#test_require_keeps_an_existing_status_check_rule_and_adds_only_ci_ok
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: newest-tag lookup reads one page of 100 (phase 4)
+
+Paginated single fetch, version-sorted over all tags. Test: test_configure_main_protection.py#test_the_newest_tag_is_found_across_every_page
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: stub GET lacks read-only fields and echoes the PUT (phase 4)
+
+Full GET-shaped fixture, read-only keys asserted absent, normalised stored ruleset. Test: test_configure_main_protection.py#test_require_rerun_is_a_no_op
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: ruleset lookup includes org rulesets (phase 4)
+
+Filtered to source_type Repository. Test: test_configure_main_protection.py#test_an_org_ruleset_of_the_same_name_is_not_ours
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: flag without value exits 1 silently (phase 4)
+
+Usage and exit 2. Test: test_configure_main_protection.py#test_a_flag_missing_its_value_prints_usage_and_exits_two
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-10-12T00:26:44+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: AGENTS.md states the bypass as fact, omits the variable requirement (phase 4)
+
+Reworded as a requirement, incl. keeping FR_AUTOMATION_APP_ID set. Test: docs only
