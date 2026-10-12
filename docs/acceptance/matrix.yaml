@@ -8184,9 +8184,12 @@ rows:
       without raising.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracker.py#test_github_tracker_transition_to_done_closes_the_issue
+      - super-fr:tests/unit/test_tracker.py#test_fake_gh_client_refuses_an_unknown_issue_state
+    status: ci
+    notes: GithubTracker passes CLOSED; the fake refuses any other state.
     verify: none
   - id: models-dead-reason-trimmed
     capability: model binding health
