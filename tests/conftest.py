@@ -136,6 +136,16 @@ def _no_live_rate_limit_read(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("fr.commands.triage_batch_cmd._pace_forge", lambda: _Ample())
 
+    class _Unknown:
+        """Every probe a change with no ETag: a paced pass then reads every repo, as an
+        unpaced one does, and no probe reaches a real `gh` (spec 2026-10-12-quota-pacing R8).
+        Tests of probes install their own forge on `_probe_forge`."""
+
+        def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+            return True, None
+
+    monkeypatch.setattr("fr.commands.triage_batch_cmd._probe_forge", lambda: _Unknown())
+
 
 @pytest.fixture(autouse=True)
 def _no_cloud_remedy_carried_between_tests() -> Iterator[None]:

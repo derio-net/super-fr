@@ -276,7 +276,7 @@ def _drive(tmp_path: Path, *args: str) -> tuple[int, str]:
 
 @pytest.fixture
 def _no_forge(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(triage_batch_cmd, "recollect", lambda scope, target: None)
+    monkeypatch.setattr(triage_batch_cmd, "recollect", lambda scope, target, **_: None)
 
 
 def _clones(tmp_path: Path, *repos: str) -> list[str]:

@@ -347,7 +347,7 @@ def world_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
     w = World()
     passes: list[int] = []
 
-    def _recollect(scope: Any, target: Path) -> None:
+    def _recollect(scope: Any, target: Path, **_: Any) -> None:
         passes.append(1)
         (target / "facts.json").write_text(json.dumps(w.facts().to_json()), "utf-8")
 
@@ -1773,7 +1773,7 @@ def test_a_driver_does_not_remove_a_lock_it_no_longer_owns(
     rival = json.dumps({"pid": 4242, "started": "rival"})
     real = triage_batch_cmd.recollect
 
-    def _recollect(scope: Any, target: Path) -> None:
+    def _recollect(scope: Any, target: Path, **_: Any) -> None:
         lock.write_text(rival)
         real(scope, target)
 
@@ -1794,7 +1794,7 @@ def test_the_lock_is_written_whole_before_it_is_visible(
     seen: list[str] = []
     real = triage_batch_cmd.recollect
 
-    def _recollect(scope: Any, target: Path) -> None:
+    def _recollect(scope: Any, target: Path, **_: Any) -> None:
         seen.append(lock.read_text())
         real(scope, target)
 

@@ -12,7 +12,8 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from fr.triage import pacing_state, quota
+from fr.triage import pacing_state, probe, quota
+from fr.triage.model import Facts, Judgements
 from fr.triage.pacing_state import PacingState
 from fr.triage.quota import Budget, Pace, RateLimitSource
 
@@ -98,3 +99,54 @@ class Pacer:
 
     def line(self, pace: Pace) -> str:
         return quota.quota_line(self.budget, self.floor, pace, self._now())
+
+    # ------------------------------------------------ probes and pass kinds (§B, §C)
+
+    def plan(
+        self,
+        forge: probe.Prober,
+        *,
+        repos: list[str],
+        facts: Facts | None,
+        judgements: Judgements | None,
+        digest: str,
+        essential: bool,
+    ) -> probe.PassPlan:
+        """Probe every repo (before any collect, R8) and decide the pass (R7, R9-R11).
+        No previous facts is always a full pass: there is nothing to carry."""
+        now = self._now()
+        full = facts is None or probe.full_due(self.state, now)
+        probes = probe.probe_set(repos, facts, judgements)
+        changed, pending = probe.run_probes(forge, probes, self.state, full=full)
+        return probe.plan_pass(
+            self.state if facts is not None else replace(self.state, full_at=None),
+            now,
+            repos=repos,
+            changed=changed,
+            digest=digest,
+            below_floor=essential,
+            live=probe.live_repos(facts, judgements),
+            pending=pending,
+            probes=sum(len(p) for p in probes.values()),
+            full=full,
+        )
+
+    def after_collect(self, plan: probe.PassPlan, facts: Facts) -> None:
+        """Once `facts.json` is written (R11): store the pending ETags of the repos read
+        successfully, drop a failed repo's, record the judgements this pass planned on,
+        and, when every repo was read, the full pass."""
+        failed = {s.repo for s in facts.skipped}
+        read = set(facts.repos) - set(plan.carried) - failed
+        state = probe.promote(self.state, plan.pending, read_ok=read, failed=failed)
+        state = replace(state, judgements_digest=plan.digest)
+        if plan.only is None:
+            state = replace(state, full_at=self._now())
+        self._save(state)
+
+    def record_summary(self, summary: dict[str, int]) -> None:
+        """The planned pass's summary, which a quiet pass reports as its own (R9)."""
+        self._save(replace(self.state, summary=dict(summary)))
+
+    def stretch(self, until: datetime | None) -> None:
+        """R7: below the floor the next pass waits until *until* (four intervals)."""
+        self._save(replace(self.state, next_pass_at=until))

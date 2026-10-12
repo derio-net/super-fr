@@ -542,6 +542,12 @@ def drive_pass_command(
         statuses=_read_json(statuses, "statuses"),
         lease=batch.LeaseTerms(identity, duration, generation),
     )
+    # The same paced pass as the host loop (spec 2026-10-12-quota-pacing §E): probes,
+    # quiet and partial passes, and below the floor the essential-only one.
+    driver.pacer, driver.pace = pacer, pace
+    if pace.essential:
+        console.print(pacer.line(pace), markup=False, soft_wrap=True)
+        pacer.stretch(pace.until)
     # The cloud runner is opened before the pass, so a request still pending from an
     # earlier pass is re-emitted even when this pass asks nothing new of it (§F).
     # A pass that could write no session request refuses before it acts (p4-r6).

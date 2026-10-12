@@ -1874,3 +1874,18 @@ def test_a_batch_the_driver_refuses_is_a_hold_that_takes_no_in_flight_slot() -> 
     assert _kinds(got.actions) == [("held", "a"), ("dispatch", "b")]
     assert "herdr" in got.actions[0].detail
     assert got.summary.pending == 1 and got.summary.in_flight == 1
+
+
+def test_a_dispatch_hold_turns_every_dispatch_into_a_pending_hold() -> None:
+    """Spec 2026-10-12-quota-pacing §C: below the floor nothing is dispatched; each batch is
+    held and counted pending, never `held`, so the drive is not stalled."""
+    batches = [_batch("a", 1), _batch("b", 2)]
+    got = drive_pass(
+        _snap(batches, {"a": "proposed", "b": "proposed"}, dispatch_held="quota below floor")
+    )
+    assert [(a.kind, a.batch, a.detail) for a in got.actions] == [
+        ("held", "a", "quota below floor"),
+        ("held", "b", "quota below floor"),
+    ]
+    assert got.summary.pending == 2 and got.summary.held == 0
+    assert not got.summary.stalled and not got.summary.idle
