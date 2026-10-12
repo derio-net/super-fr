@@ -7486,7 +7486,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-12-board-truth-design.md#R12
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: Scenario named at plan time; written by the phase that implements the row.
     verify: candidate
     visual:
       states:
@@ -7496,6 +7496,7 @@ rows:
       - phone-width-nav
       interactions:
       - nav-link-each-tab
+    scenario: tests/scenarios/triage-nav-pages.sh
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
