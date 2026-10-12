@@ -32,11 +32,13 @@ from fr.triage.components import (
     CHROME_CSS,
     GRID_CSS,
     GUTTER_CSS,
+    SKEW_CSS,
     TABS_CSS,
     TABS_SCRIPT,
     TOKENS_CSS,
     collapsed,
     page_header,
+    skew_banner,
     tabs,
 )
 from fr.triage.fragments import Entry, Resolved, splice
@@ -60,7 +62,15 @@ from fr.triage.views import (
 if TYPE_CHECKING:
     from fr.triage.batch import MergeStep
     from fr.triage.dedupe import CandidateGroup
-    from fr.triage.model import Batch, Facts, Issue, Judgement, Judgements, PullRequest
+    from fr.triage.model import (
+        Batch,
+        Facts,
+        Issue,
+        Judgement,
+        Judgements,
+        PullRequest,
+        StaleInProgress,
+    )
     from fr.triage.snapshot import SnapshotDiff
 
 _CODE = re.compile(r"`([^`\n]+)`")
@@ -208,6 +218,7 @@ footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
     + TABS_CSS
     + CHROME_CSS
     + GUTTER_CSS
+    + SKEW_CSS
     + """
 @media (max-width: 480px) {
   .title { flex-basis: 100%; }
@@ -659,7 +670,6 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
         (noun(len(facts.collected), "repo"), len(facts.collected)),
     ]
     notes = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
-    notes += [f"Skipped {esc(s.repo)}: {esc(s.reason)}" for s in facts.skipped]
     notes += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
     notes += [
         f"Orphaned judgement {esc(k)}: it names no repo this collect read"
@@ -751,7 +761,7 @@ def _batches(judgements: Judgements, facts: Facts, *, board: bool = False) -> st
         else ""
     )
     link = (
-        '<p class="tier-desc"><a href="board.html">Open the live board</a> '
+        '<p class="tier-desc"><a href="board.html">Open the Batches page</a> '
         "(<code>fr triage board</code>): the same batches as a Kanban, with session status.</p>"
         if board
         else ""
@@ -1012,6 +1022,28 @@ def _awaiting_live(
     return collapsed("awaiting-live", "Awaiting live", len(issues), inner)
 
 
+def _closed_in_progress(entries: Sequence[StaleInProgress]) -> str:
+    """Closed issues still labelled `fr:in-progress`, a collapsed group of their own
+    (board-truth R2): absent when there are none."""
+    if not entries:
+        return ""
+    items = "".join(
+        f'<li>{_link(e.title, e.url)} <span class="mono">{esc(e.key)}</span> · '
+        f"<strong>{esc(e.state)}</strong>"
+        + (f" · closed {esc(e.closed_at)}" if e.closed_at else "")
+        + "</li>"
+        for e in entries
+    )
+    inner = (
+        '<p class="tier-desc">Closed, but the <code>fr:in-progress</code> label is still on. '
+        "<strong>stale</strong> ones are cleaned by <code>fr triage clean-labels</code>; "
+        "<strong>release-pending</strong> ones by the next <code>fr triage claim sync "
+        "--yes</code>; <strong>held</strong> ones belong to another scope.</p>"
+        f"<ul>{items}</ul>"
+    )
+    return collapsed("closed-in-progress", "Closed but in progress", len(entries), inner)
+
+
 def render(
     facts: Facts,
     judgements: Judgements,
@@ -1020,6 +1052,7 @@ def render(
     *,
     board: bool = False,
     session_notes: Mapping[str, str] | None = None,
+    present: Sequence[str] = ("backlog",),
 ) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
 
@@ -1091,7 +1124,11 @@ def render(
             title = f"Tier {tier.n} · {tier.title}"
             folds.append(_section(str(tier.n), sev, title, inline(tier.description), rows))
         tiers = collapsed("backlog-by-tier", "Backlog by tier", count, FILTER_BAR + "".join(folds))
-        return tiers + _awaiting_live(result.awaiting_live, row, judgements)
+        return (
+            tiers
+            + _awaiting_live(result.awaiting_live, row, judgements)
+            + _closed_in_progress(result.closed_in_progress)
+        )
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
@@ -1114,7 +1151,8 @@ def render(
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements, result)}\n{page_header('board')}\n"
+        f"{_masthead(facts, judgements, result)}\n{page_header('backlog', present)}\n"
+        f"{skew_banner(facts)}\n"
         + "\n".join(sections)
         + "\n<footer>Rendered by <code>fr triage render</code> from facts.json and "
         "judgements.yaml. Stages are derived from the forge; re-run "
