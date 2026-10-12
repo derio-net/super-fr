@@ -24,3 +24,8 @@ dac3f687: pipeline.py filters pins to open issues, names the dropped ones under 
 ### 14133a5cd277 · review · Self-review of the fix diff: no findings
 
 Reviewed by the debugging session itself, not an independent reviewer (docs-tree scripts + one test file). Checked: defect count and placed set are computed after filtering; an all-empty pin column still renders 'no open pins'; the 'other' sentence no longer claims unpinned issues act on no step, since new issues are unpinned until re-judged; committed fragments were deliberately not regenerated (the state export flow owns them). No change fragment: docs/ and tests/ only.
+
+<!-- fr:journal kind=finding scope=debug id=ci-py311-fstring created=2026-10-12T14:33:13+00:00 state=fixed -->
+### ci-py311-fstring · finding [fixed] · CI py3.11: pipeline.py used 3.12-only f-string backslashes
+
+test (py3.11, 4) failed: SyntaxError at pipeline.py:120 (`stroke-dasharray=\"4 3\"` inside an f-string expression, pre-existing, so the script never ran on 3.11) plus the same shape in the new dropped-pins line. Hoisted both out of the f-strings. Verified: parses on 3.11; the 3.11 run's pipeline.html is byte-identical to the 3.14 one; tests green.
