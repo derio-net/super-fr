@@ -20,6 +20,7 @@ def test_state_round_trips(tmp_path: Path) -> None:
         next_pass_at=AT,
         judgements_digest="d1",
         budget={"resource": "graphql", "remaining": 5, "limit": 5000, "reset": AT.isoformat()},
+        summary={"in_flight": 1, "merged": 2, "pending": 0, "closing": 0},
     )
     pacing_state.save(tmp_path, state)
     loaded, warning = pacing_state.load(tmp_path)
@@ -67,3 +68,9 @@ def test_a_binary_file_is_an_empty_state_and_a_warning(tmp_path: Path) -> None:
     state, warning = pacing_state.load(tmp_path)
     assert state == PacingState()
     assert warning is not None
+
+
+def test_an_unusable_summary_is_no_summary(tmp_path: Path) -> None:
+    (tmp_path / pacing_state.PACING_FILE).write_text('{"summary": {"pending": "x"}}')
+    state, warning = pacing_state.load(tmp_path)
+    assert state.summary is None and warning is None

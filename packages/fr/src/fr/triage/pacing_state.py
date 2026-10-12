@@ -32,6 +32,9 @@ class PacingState:
     next_pass_at: datetime | None = None  # R7: the essential-only stretch
     judgements_digest: str | None = None  # R9: of the last planned pass's judgements.yaml
     budget: dict[str, Any] | None = None  # the last budget read (R14's footer)
+    # The last planned pass's summary counts: a quiet pass (R9) changes nothing, so it
+    # reports, and ends or keeps the drive on, exactly what that pass did.
+    summary: dict[str, int] | None = None
 
 
 def _stamp(value: datetime | None) -> str | None:
@@ -60,6 +63,12 @@ def _from_json(data: object) -> PacingState:
         raise ValueError("backoff: expected a non-negative integer")
     digest = data.get("judgements_digest")
     budget = data.get("budget")
+    summary = data.get("summary")
+    if summary is not None and not (
+        isinstance(summary, dict)
+        and all(isinstance(v, int) and not isinstance(v, bool) for v in summary.values())
+    ):
+        summary = None  # an unusable record is no record: the next pass plans
     return PacingState(
         etags={r: dict(v) for r, v in etags.items()},
         full_at=_parsed(data.get("full_at")),
@@ -68,6 +77,7 @@ def _from_json(data: object) -> PacingState:
         next_pass_at=_parsed(data.get("next_pass_at")),
         judgements_digest=digest if isinstance(digest, str) else None,
         budget=budget if isinstance(budget, dict) else None,
+        summary=dict(summary) if summary is not None else None,
     )
 
 
