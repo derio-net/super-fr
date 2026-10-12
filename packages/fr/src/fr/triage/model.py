@@ -52,8 +52,11 @@ from fr.triage.stage import Stage, derive_stage
 # §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects; the
 # same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 3 to 7
 # still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[8] = 8
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
+# 9 adds per-issue `author` (debt-engine R14: only the workflow bot's or a trusted login's
+# debt digest counts): `to_json` dumps it, `null` included, which a closed-world schema-8
+# reader rejects, so the stamp moves for the same reason.
+FACTS_SCHEMA: Literal[9] = 9
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9)
 # The version this fr WRITES: every engine write stamps 8 (the `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
@@ -332,6 +335,8 @@ class Issue(_Strict):
     # The claims on the issue (facts schema 7): read only for issues labelled fr:claimed or
     # fr:in-progress, from the same comment read as `dispatch_marker_at`.
     claims: list[IssueClaim] = []
+    # The login that opened the issue (facts schema 9); None when never read.
+    author: str | None = None
 
     @property
     def key(self) -> str:
@@ -525,7 +530,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8] = Field(8, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9] = Field(9, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str

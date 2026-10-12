@@ -17,6 +17,8 @@ from fr.acceptance.model import DEBT_STATUSES
 from fr.debt.model import AcceptanceDebt, DebtReport, SourceStatus
 
 MARKER = "<!-- fr-technical-debt -->"
+BOT_LOGINS = frozenset({"github-actions[bot]", "github-actions", "app/github-actions"})
+"""The workflow's own bot: the one author besides the viewer whose digest is trusted."""
 FIGURES_PREFIX = "<!-- fr-debt-figures:"
 ROW_LIMIT = 50
 BODY_LIMIT = 60000
@@ -79,18 +81,51 @@ def figures(report: DebtReport) -> dict[str, Any]:
     }
 
 
+BODY_READ_LIMIT = 64 * 1024
+"""A body longer than this is never searched for figures: the renderer's own bodies stop at
+`BODY_LIMIT`, so anything larger was not written by it."""
+PAYLOAD_LIMIT = 8 * 1024
+"""The base64 payload of a figures block, before it is decoded."""
+_SHORT = 200
+
+
+def _scalar(v: Any) -> bool:
+    return v is None or isinstance(v, (bool, int)) or (isinstance(v, str) and len(v) <= _SHORT)
+
+
+def _flat(data: dict[str, Any]) -> bool:
+    """Whether *data* is a flat dict of ints and short strings, or one level of such
+    dicts (the `acceptance` and `plans` counts): nothing deeper, no lists."""
+    for k, v in data.items():
+        if not isinstance(k, str) or len(k) > _SHORT:
+            return False
+        if isinstance(v, dict):
+            if not all(
+                isinstance(k2, str) and len(k2) <= _SHORT and _scalar(v2) for k2, v2 in v.items()
+            ):
+                return False
+        elif not _scalar(v):
+            return False
+    return True
+
+
 def parse_figures(body: str) -> dict[str, Any] | None:
-    """The figures embedded in an issue body, or None (absent or unreadable)."""
+    """The figures embedded in an issue body, or None (absent, unreadable or out of
+    bounds). The input is bounded BEFORE it is decoded, because a body is forge text."""
+    if not body or len(body) > BODY_READ_LIMIT:
+        return None
     # The LAST block: the renderer appends it after every free-text section.
-    found = _FIGURES_RE.findall(body or "")
+    found = _FIGURES_RE.findall(body)
     if not found:
         return None
     m_group = found[-1]
+    if len(m_group) > PAYLOAD_LIMIT:
+        return None
     try:
         data = json.loads(base64.b64decode(m_group, validate=True))
     except (binascii.Error, ValueError):
         return None
-    return data if isinstance(data, dict) else None
+    return data if isinstance(data, dict) and _flat(data) else None
 
 
 def _encode(report: DebtReport) -> str:

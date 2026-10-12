@@ -1,5 +1,5 @@
 {
-  "schema": 8,
+  "schema": 9,
   "scope": "example-org--widgets",
   "kind": "repo",
   "collected_at": "2026-10-06T00:00:00Z",
@@ -32,7 +32,8 @@
           "comment_id": 101,
           "created_at": "2026-09-01T00:00:00Z"
         }
-      ]
+      ],
+      "author": null
     },
     {
       "repo": "example-org/widgets",
@@ -47,7 +48,8 @@
       "body": "",
       "prs": [],
       "dispatch_marker_at": null,
-      "claims": []
+      "claims": [],
+      "author": null
     }
   ],
   "prs": [],

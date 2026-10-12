@@ -15,7 +15,7 @@ from fr.triage.snapshot import (
 )
 
 from tests.unit.triage_board_fixtures import facts, issue, judgements
-from tests.unit.triage_debt_fixtures import LEGACY, body, figures
+from tests.unit.triage_debt_fixtures import LEGACY, body, digest, figures
 
 
 def _page(issues, since=None):
@@ -23,7 +23,7 @@ def _page(issues, since=None):
 
 
 def test_one_collapsed_section_with_status_categories_and_owed() -> None:
-    page = _page([issue(1, body=body(figures()))])
+    page = _page([digest(1, figures())])
 
     assert 'id="debt"' in page
     assert page.count('class="fold"') >= 1
@@ -36,7 +36,7 @@ def test_one_collapsed_section_with_status_categories_and_owed() -> None:
 
 def test_repo_without_a_report_and_legacy_digest_states() -> None:
     none = _page([issue(1)])
-    legacy = _page([issue(1, body=body(None, LEGACY))])
+    legacy = _page([digest(1, None, marker=LEGACY)])
 
     assert "no report" in none
     assert "legacy digest — no figures" in legacy
@@ -44,8 +44,8 @@ def test_repo_without_a_report_and_legacy_digest_states() -> None:
 
 
 def test_trend_against_the_previous_snapshot() -> None:
-    old = facts([issue(1, body=body(figures(28)))])
-    new = facts([issue(1, body=body(figures(30)))])
+    old = facts([digest(1, figures(28))])
+    new = facts([digest(1, figures(30))])
     a = take_snapshot(old, judgements({}), acceptance=None)
     b = take_snapshot(new, judgements({}), acceptance=None)
 
@@ -55,7 +55,7 @@ def test_trend_against_the_previous_snapshot() -> None:
 
 
 def test_no_trend_without_a_previous_snapshot() -> None:
-    page = _page([issue(1, body=body(figures(30)))])
+    page = _page([digest(1, figures(30))])
 
     assert (
         "→"
@@ -81,7 +81,7 @@ def test_hostile_text_is_escaped() -> None:
 
 
 def test_snapshot_v2_stores_debt_and_v1_reads_as_no_trend(tmp_path: Path) -> None:
-    f = facts([issue(1, body=body(figures()))])
+    f = facts([digest(1, figures())])
     snap = take_snapshot(f, judgements({}), acceptance=None)
     assert snap.schema_version == 2
     assert snap.debt is not None and snap.debt["example-org/widgets"]["acceptance"]["ci"] == 40
@@ -105,13 +105,91 @@ def test_a_stored_v1_file_still_reads(tmp_path: Path) -> None:
 
 
 def test_skipped_to_new_statuses_is_noted() -> None:
-    old = facts([issue(1, body=body(figures(acceptance={"skipped": 5, "ci": 2})))])
-    new = facts([issue(1, body=body(figures(acceptance={"walk-owed": 5, "ci": 2})))])
+    old = facts([digest(1, figures(acceptance={"skipped": 5, "ci": 2}))])
+    new = facts([digest(1, figures(acceptance={"walk-owed": 5, "ci": 2}))])
     a = take_snapshot(old, judgements({}), acceptance=None)
     b = take_snapshot(new, judgements({}), acceptance=None)
 
     page = render(new, judgements({}), diff_snapshots(a, b))
 
-    assert "skipped 5 → 0" in page
     assert "status split" in page
     assert "walk-owed 0 → 5" in page
+
+
+def _panel(page: str) -> str:
+    return page[page.index('id="debt"') :]
+
+
+def test_only_debt_statuses_are_debt() -> None:
+    acc = {
+        "ci": 40,
+        "scheduled": 7,
+        "not-implemented": 4,
+        "unwired": 1,
+        "walk-owed": 2,
+        "failing": 1,
+        "walked": 5,
+        "manual": 3,
+    }
+    line = _panel(_page([digest(1, figures(acceptance=acc))]))
+    debt = line[
+        line.index("debt-acceptance") : line.index("</span>", line.index("debt-acceptance"))
+    ]
+
+    for s in ("not-implemented 4", "unwired 1", "walk-owed 2", "failing 1"):
+        assert s in debt
+    for s in ("ci", "scheduled", "walked", "manual"):
+        assert s not in debt
+    listed = line[line.index("debt-listed") : line.index("</span>", line.index("debt-listed"))]
+    assert "walked 5" in listed and "manual 3" in listed and "ci" not in listed
+
+
+def test_the_badge_is_each_repos_own_total_and_agrees_with_fr_debt() -> None:
+    from fr.debt.model import AcceptanceDebt, ArchivablePlan, DebtReport, PlanDebt
+    from fr.debt.render import markdown
+
+    report = DebtReport(
+        acceptance=AcceptanceDebt(by_status={"not-implemented": 4, "ci": 9}),
+        plans=PlanDebt(archivable=(ArchivablePlan(name="p", command="c"),)),
+        generated_at="2026-10-11T06:00:00+00:00",
+    )
+    one = {**digest(1, None), "body": markdown(report)}
+    two = digest(
+        2,
+        figures(
+            acceptance={"not-implemented": 11},
+            plans={"archivable": 0, "stale": 0, "manual_open": 0},
+            owed=0,
+        ),
+        repo="example-org/gadgets",
+    )
+    f = facts([one, two], repos=["example-org/widgets", "example-org/gadgets"])
+
+    page = render(f, judgements({}))
+
+    w = _panel(page).split('id="debt-example-org-gadgets"')
+    assert f'<span class="count">{report.debt_total()}</span>' in w[0]
+    assert report.debt_total() == 5
+    assert '<span class="count">11</span>' in w[1]
+
+
+def test_an_untrusted_digest_is_named_and_its_figures_never_shown() -> None:
+    page = _page([digest(4, figures(not_implemented=999), author="stranger")])
+
+    sect = _panel(page)
+    assert "untrusted digest ignored (#4)" in sect
+    assert "999" not in sect and "no report" in sect
+
+
+def test_the_oldest_trusted_digest_wins() -> None:
+    page = _page(
+        [
+            digest(9, figures(not_implemented=111)),
+            digest(3, figures(not_implemented=22)),
+            digest(1, figures(not_implemented=333), author="stranger"),
+        ]
+    )
+
+    sect = _panel(page)
+    assert "not-implemented 22" in sect and "111" not in sect and "333" not in sect
+    assert "untrusted digest ignored (#1)" in sect

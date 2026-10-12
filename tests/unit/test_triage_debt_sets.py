@@ -12,19 +12,19 @@ from fr.triage.model import Issue
 from typer.testing import CliRunner
 
 from tests.unit.triage_board_fixtures import REPO, facts, issue, j, judgements
-from tests.unit.triage_debt_fixtures import LEGACY, body, figures
+from tests.unit.triage_debt_fixtures import LEGACY, body, digest, figures
 
 
 def _state():
     f = facts(
         [
-            issue(1, body=body(figures())),  # current marker
-            issue(2, body=body(None, LEGACY)),  # legacy digest, no figures
+            digest(1, figures()),  # current marker
+            digest(2, None, marker=LEGACY),  # legacy digest, no figures
             issue(3, labels=["fr:owed"]),  # owed
             issue(4, body="see <!-- fr-technical-debt --> inline, not its own line"),
-            issue(5, body=body(figures()), state="closed"),
+            digest(5, figures(), state="closed"),
             issue(6),  # ordinary
-            issue(7, body=body(figures())),  # judged
+            digest(7, figures()),  # judged
         ]
     )
     return f, judgements({"widgets#7": j(), "widgets#3": j()})
@@ -50,20 +50,14 @@ def test_neither_is_unranked_unplaced_or_unseverity() -> None:
 
 
 def test_the_marker_counts_only_as_its_own_line() -> None:
-    inline = Issue(
-        repo=REPO, number=9, title="t", state="open", url="u", body="x <!-- fr-technical-debt --> y"
-    )
-    crlf = Issue(
-        repo=REPO,
-        number=9,
-        title="t",
-        state="open",
-        url="u",
-        body="a\r\n<!-- fr-technical-debt -->\r\nb",
-    )
+    f = facts([])
+    kw = {"repo": REPO, "number": 9, "title": "t", "state": "open", "url": "u"}
+    kw["author"] = "github-actions[bot]"
+    inline = Issue(**kw, body="x <!-- fr-technical-debt --> y")
+    crlf = Issue(**kw, body="a\r\n<!-- fr-technical-debt -->\r\nb")
 
-    assert not is_debt_digest(inline)
-    assert is_debt_digest(crlf)
+    assert not is_debt_digest(inline, f)
+    assert is_debt_digest(crlf, f)
     assert not is_owed(inline)
 
 
@@ -79,9 +73,7 @@ def test_check_json_carries_figures_or_none() -> None:
 
 
 def test_hostile_figures_are_shown_as_numbers_only() -> None:
-    f = facts(
-        [issue(1, body=body(figures(acceptance={"<b>x</b>": "<script>", "ci": 2}, owed="<i>")))]
-    )
+    f = facts([digest(1, figures(acceptance={"<b>x</b>": "<script>", "ci": 2}, owed="<i>"))])
 
     row = classify(f, judgements({})).to_json()["debt_digests"][0]
 
@@ -99,3 +91,52 @@ def test_the_text_report_names_both_sets(tmp_path: Path) -> None:
 
     assert out.exit_code == 0, out.output
     assert "debt digests" in out.output and "owed" in out.output
+
+
+def test_a_marker_by_anyone_else_is_ignored_and_listed_apart() -> None:
+    f = facts(
+        [
+            digest(1, figures(), author="stranger"),
+            digest(2, figures(), author="app/github-actions"),
+            digest(3, figures(), author="Operator"),  # the viewer, case-insensitive
+            digest(4, figures(), author=None),  # facts from before authors were read
+        ]
+    )
+
+    r = classify(f, judgements({}))
+
+    assert [i.key for i in r.debt_digests] == ["widgets#2", "widgets#3"]
+    assert [i.key for i in r.untrusted_digests] == ["widgets#1", "widgets#4"]
+    # an untrusted marker stays an ordinary issue: it is not hidden from ranking
+    assert [i.key for i in r.unranked] == ["widgets#1", "widgets#4"]
+    assert [u["key"] for u in r.to_json()["untrusted_digests"]] == ["widgets#1", "widgets#4"]
+
+
+def test_the_repos_own_trusted_logins_count() -> None:
+    f = facts(
+        [digest(1, figures(), author="maintainer")],
+        config={"example-org/widgets": {"pr_authors": ["Maintainer"]}},
+    )
+
+    assert [i.key for i in classify(f, judgements({})).debt_digests] == ["widgets#1"]
+
+
+def test_collect_keeps_the_author_and_a_digests_whole_body() -> None:
+    from fr.triage.collect import ISSUE_FIELDS, _issue
+
+    assert "author" in ISSUE_FIELDS.split(",")
+    long = body(figures()).replace("some table", "row\n" * 3000)
+    raw = {
+        "number": 1,
+        "title": "t",
+        "url": "u",
+        "body": long,
+        "author": {"login": "github-actions[bot]"},
+    }
+
+    kept = _issue("example-org/widgets", raw, [], state="open")
+    plain = _issue("example-org/widgets", {**raw, "body": "x" * 5000}, [], state="open")
+
+    assert kept.author == "github-actions[bot]"
+    assert kept.body == long  # the figures sit at the end, past BODY_LIMIT
+    assert len(plain.body) == 2000

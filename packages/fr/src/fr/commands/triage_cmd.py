@@ -667,6 +667,12 @@ def check_command(
     for i in result.debt_digests:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
+        f"[bold]untrusted digests[/bold] ({len(result.untrusted_digests)}) — open, carrying the "
+        "debt marker, by no trusted author: ignored, never read for figures"
+    )
+    for i in result.untrusted_digests:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(
         f"[bold]owed[/bold] ({len(result.owed)}) — open, fr:owed: an operator action is owed; "
         "not ranked or proposed"
     )

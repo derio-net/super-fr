@@ -51,6 +51,8 @@ from fr.triage.stage import pr_rank
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
 REPO_LIMIT = 200
+# `author` is who opened an issue: a debt digest counts only from a trusted one (facts 9).
+ISSUE_FIELDS = "number,title,labels,createdAt,updatedAt,url,body,author"
 ORIGINS_ISSUE_LIST_FIELDS = (
     real_ghclient.ORIGINS_ISSUE_LIST_FIELDS
 )  # origins' own, wider issue fields
@@ -129,7 +131,7 @@ class ClientForge:
         self, *, repo: str, state: str, limit: int, fields: str | None = None
     ) -> list[dict[str, Any]]:
         with _forge_errors():
-            return self._client.list_issues(repo, state, limit, fields)
+            return self._client.list_issues(repo, state, limit, fields or ISSUE_FIELDS)
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():
@@ -382,6 +384,15 @@ def invert(
     return links
 
 
+def _body(body: str) -> str:
+    """The body kept in facts: `BODY_LIMIT` characters, except a debt digest's, whose
+    embedded figures sit at its end and so must survive (to `BODY_READ_LIMIT`)."""
+    from fr.debt.render import BODY_READ_LIMIT
+    from fr.triage.debt import has_marker
+
+    return body[:BODY_READ_LIMIT] if has_marker(body) else body[:BODY_LIMIT]
+
+
 def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: IssueState) -> Issue:
     return Issue(
         repo=repo,
@@ -393,8 +404,9 @@ def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: Iss
         created_at=raw.get("createdAt"),
         updated_at=raw.get("updatedAt"),
         closed_at=raw.get("closedAt"),
-        body=(raw.get("body") or "")[:BODY_LIMIT],
+        body=_body(raw.get("body") or ""),
         prs=prs,
+        author=_login(raw),
     )
 
 

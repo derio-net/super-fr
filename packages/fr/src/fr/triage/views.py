@@ -362,7 +362,7 @@ def next_up(
         open_ids = [
             i.key
             for i in facts.issues
-            if i.state == "open" and i.key in feature.ids and not is_set_apart(i)
+            if i.state == "open" and i.key in feature.ids and not is_set_apart(i, facts)
         ]
         if not open_ids:
             continue

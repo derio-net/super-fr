@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from fr.debt.render import MARKER, parse_figures
+from fr.debt.render import BOT_LOGINS, MARKER, parse_figures
 
 if TYPE_CHECKING:
     from fr.triage.model import Facts, Issue
@@ -61,12 +61,45 @@ def issue_figures(issue: Issue) -> dict[str, Any] | None:
     return clean_figures(parse_figures(issue.body))
 
 
-def digest_for(facts: Facts, repo: str) -> Issue | None:
-    """The newest open debt digest of *repo* (highest number), or None."""
-    from fr.triage.check import is_debt_digest
+def trusted_authors(facts: Facts, repo: str) -> frozenset[str]:
+    """The logins whose debt digest counts on *repo*, lowercased: the workflow's bot, the
+    viewer `collect` ran as and the repo's `pr_authors` (the same trust `fr debt issue`
+    applies, and `fr.triage.model.claim_trusted` gives claim markers)."""
+    from fr.triage.model import claim_trusted
 
-    mine = [i for i in facts.issues if i.repo == repo and is_debt_digest(i)]
-    return max(mine, key=lambda i: i.number) if mine else None
+    return BOT_LOGINS | claim_trusted(facts.config_for(repo), facts.viewer)
+
+
+def is_marked(issue: Issue) -> bool:
+    return issue.state == "open" and has_marker(issue.body)
+
+
+def is_trusted_digest(issue: Issue, facts: Facts) -> bool:
+    """An open, marked issue whose author is trusted. A marker anyone can paste selects
+    nothing by itself; an author fr never read is not trusted."""
+    return (
+        is_marked(issue)
+        and issue.author is not None
+        and issue.author.lower() in trusted_authors(facts, issue.repo)
+    )
+
+
+def digest_for(facts: Facts, repo: str) -> Issue | None:
+    """The oldest trusted open debt digest of *repo* (lowest number), or None."""
+    mine = [i for i in facts.issues if i.repo == repo and is_trusted_digest(i, facts)]
+    return min(mine, key=lambda i: i.number) if mine else None
+
+
+def untrusted_for(facts: Facts, repo: str) -> list[Issue]:
+    """The marked issues of *repo* by no trusted author, by number."""
+    return sorted(
+        (
+            i
+            for i in facts.issues
+            if i.repo == repo and is_marked(i) and not is_trusted_digest(i, facts)
+        ),
+        key=lambda i: i.number,
+    )
 
 
 def figures_by_repo(facts: Facts) -> dict[str, dict[str, Any]]:
