@@ -99,3 +99,43 @@ load catches (OSError, ValueError) on the read. Test test_a_binary_file_is_an_em
 ### p1-r7-resolved · finding [fixed] · resolves p1-r7: loop tests stubbed one_pass/take_lease and the conftest stub was conditional (phase 1)
 
 Conftest stub unconditional; real _Driver/one_pass/_host_loop integration cases (rate limit raised from take_lease and from save_pass) assert one reset+30s wait with no forge call in between; real _pace_forge wiring reaches ClientForge.rate_limit. Tests in test_triage_quota_loop.py.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-visibility-never-carried created=2026-10-12T07:56:06+00:00 phase=2 -->
+### p2-visibility-never-carried · discovery · A partial collect must not carry a repo's visibility (orchestrator correction to R10) (phase 2)
+
+The privacy guard (fr/triage/privacy.py) trusts facts.visibility and reads a missing repo live. A carried, stale "public" would let a repo made private since the last full pass pass the leak check for up to 15 minutes. Carried repos are left out of facts.visibility; read repos get it exactly as before. Test test_a_carried_repo_s_visibility_is_left_out_for_the_guard_to_read_live.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-conftest-circular-import created=2026-10-12T07:56:06+00:00 phase=2 -->
+### p2-conftest-circular-import · discovery · Phase 1's autouse rate-limit stub errored any test file that never imported the CLI (phase 2)
+
+tests/conftest.py's stub imports fr.commands.triage_batch_cmd directly, which on its own is a circular import (triage_kanban_cmd <-> triage_claim_cmd); test_real_ghclient.py alone errored on every test. The fixture now imports fr.cli first. Masked in the full suite.
+
+<!-- fr:journal kind=decision scope=plan id=p2-probes-in-run-pass created=2026-10-12T07:56:06+00:00 phase=2 -->
+### p2-probes-in-run-pass · decision · Probes run in the drive's run_pass; collect_into owns the facts-then-pacing order (phase 2)
+
+The pass kind must be known before any collect (a quiet pass collects nothing), so the probes run in _Driver._pass_plan through a _probe_forge seam. collect_into takes only= and an after_write callback invoked once facts.json is written, in which the Pacer promotes pending ETags; the ordering guarantee lives in collect_into. Unpaced (--once, plan mode, fr triage collect) passes no new arguments at all.
+
+<!-- fr:journal kind=decision scope=plan id=p2-quiet-needs-recorded-summary created=2026-10-12T07:56:06+00:00 phase=2 -->
+### p2-quiet-needs-recorded-summary · decision · pacing.json records the last planned pass's summary, and a quiet pass reports it (phase 2)
+
+A quiet pass plans nothing, yet the loop and the cloud exit code read a Summary. The planned pass stores its summary counts in pacing.json (new optional `summary`); a quiet pass is possible only when one is on record, so a cloud wake (one process each) can be quiet too. Below the floor a pass with nothing changed is quiet rather than essential. A full pass narrowed by the floor does not move full_at, so the next pass above the floor is a real full one.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-carried-landed-batches-unverified created=2026-10-12T07:56:06+00:00 phase=2 -->
+### p2-carried-landed-batches-unverified · discovery · A carried repo's landed batches are marked unverified, so no close-out is planned (phase 2)
+
+The snapshot skips every live read for a carried repo (queue, merge commit, hand close-out, archive PRs, claim and export reads); its landed batches without a close-out event go to `unverified`, which drive_pass already treats as closing with no action. run_pass additionally drops merge/update/closeout/archive/adopt actions for carried repos.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-12T07:56:06+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+one shared parser (fr.gh.probe) serves both adapters from the start; nothing duplicated to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-12T07:56:06+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+probe.py was written pure around PacingState with PassPlan as its one output; nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-12T07:56:06+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+the carry is three small helpers beside collect_facts_counted (_carry_set, _kept_links, _carried_judgement); the full path is untouched
