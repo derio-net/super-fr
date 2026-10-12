@@ -3,11 +3,14 @@ run: 2026-10-12-feat-batch-board-truth
 workflow: fr-goal@1
 branch: feat/batch-board-truth
 started: '2026-10-11T22:06:22+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-11T22:06:43+00:00'
+    state: done
+    at: '2026-10-12T05:58:55+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-12-board-truth-design.md
   spec-review:
     state: pending
   plan:
