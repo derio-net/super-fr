@@ -199,3 +199,23 @@ Row now cites the R4 unit test and int=tests/integration/test_scenarios.py#test_
 ### p2-r9-resolved · finding [fixed] · resolves p2-r9: check.py imported skew_entries from the HTML module (phase 2)
 
 skew_entries moved to triage/check.py; components imports it.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-r8-already-green created=2026-10-12T08:03:16+00:00 phase=3 -->
+### p3-r8-already-green · discovery · R8 dispatch/cancel/claims_released pin was green on first run (phase 3)
+
+For wave and wave-less two-member batches, stage is cancelled, owed_claims/owed_releases are empty, the card is not Running and the hint never says session running, even with a runner still reporting the session working. No fix in batch.py/claims.py was needed.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-front-order-in-card created=2026-10-12T08:03:16+00:00 phase=3 -->
+### p3-front-order-in-card · discovery · A closeout-front card now carries --closeout in its summary (phase 3)
+
+test_every_r4_section_is_on_a_full_card compared first-occurrence indexes over the whole card; it now checks the order within the Timeline section. Existing jump-count tests moved from 1/2 to 2/3 jumps (front plus body pair).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-12T08:03:16+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+Card.front is one small derived property and the render change reuses _jump/_status; nothing to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-12T08:03:16+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+Tests and a scenario only; no production code changed (R8 was already green).

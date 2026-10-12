@@ -119,7 +119,7 @@ steps:
           visual: none
           findings: p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6,p2-r7,p2-r8,p2-r9
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-12T07:43:16+00:00'
           agent: a7bd75cadd138e673
@@ -129,6 +129,11 @@ steps:
           tier: standard
           bound: sonnet
           session: eb97f45e-7baf-433a-bc3e-5fd7ee16e0ad
+          returned: '2026-10-12T08:03:22+00:00'
+          outcome: done
+        evidence:
+          tests: ci:f4e4f71b153ef94d4c31654962ee341d46f1e11b+45b43272e9c9c2f4dbcb7c29e8f1932174b78f9d;tree=00e816f3ba1673104316574eb96987284b7946d2d3e2a61f9197acfee38580f6
+          visual: triage-closeout-card-front:3:c30c89748d7b
   journal-check:
     state: pending
   deliver:
