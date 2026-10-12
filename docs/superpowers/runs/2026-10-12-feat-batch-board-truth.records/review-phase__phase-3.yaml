@@ -1,0 +1,73 @@
+schema_version: 8
+run: 2026-10-12-feat-batch-board-truth
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: finding
+  id: p3-r1
+  phase: 3
+  review_scope: in
+  title: No render-level test for closeout_status unknown/absent
+  body: Only Card.front was tested via replace().
+- kind: finding
+  id: p3-r2
+  phase: 3
+  review_scope: in
+  title: Scenario's 'no release owed' check could never fail
+  body: check --json has no releases-owed field.
+- kind: finding
+  id: p3-r3
+  phase: 3
+  review_scope: in
+  title: Running-column refuse_grep passed silently if extraction matched nothing
+  body: No guard that the section was found.
+- kind: finding
+  id: p3-r4
+  phase: 3
+  review_scope: in
+  title: R8 says after a fresh collect and render, but no test ran collect
+  body: Scenario and unit tests were render-only.
+- kind: finding
+  id: p3-r5
+  phase: 3
+  review_scope: in
+  title: Close-out-fronted pill/Jump carry no cue that they are the close-out's
+  body: kanban_render.py:306-314 adds no label.
+- kind: review
+  id: p3-review-1
+  phase: 3
+  title: Phase 3 code review
+  body: Dispatched read-only reviewer over 8f97d84c..f4e4f71b, which rendered and screenshotted its own boards, raised p3-r1..p3-r5; r1-r4 fixed in 7ba9875d, r5 refuted by operator decision q7.
+resolves:
+- id: p3-r1
+  state: fixed
+  body: Added test_an_unknown_closeout_status_leaves_the_front_to_the_batch_session and test_an_absent_closeout_has_a_batch_front_and_no_closeout_jump_or_code.
+- id: p3-r2
+  state: fixed
+  body: Scenario asserts only claims_owed:[] and says release-owed is pinned by test_triage_cancelled_terminal.py, whose test asserts owed_releases is empty.
+- id: p3-r3
+  state: fixed
+  body: expect_grep data-column="running" before the refuse_grep.
+- id: p3-r4
+  state: fixed
+  body: Added test_right_after_a_fresh_collect_and_render_it_is_still_cancelled (collect_facts over FakeForge, wave and wave-less); row ref added.
+- id: p3-r5
+  state: refuted
+  body: Operator decision q7-closeout-front chose 'Exactly the note' over the offered 'Note + label the pill' option; the unlabelled front is the decided design, not a defect.
+evidence:
+  review: p3-review-1
+  reviewer: ada61560c99b45949
+  model: claude-opus-5-5
+visual:
+- row: triage-closeout-card-front
+  shots:
+  - path: /Users/derio/.cache/fr/worktrees/super-fr/feat__batch-board-truth/.fr/scratch/review-p3/b2-live.png
+    shows:
+    - closeout-live-front
+    - front-jump-closeout
+    - body-both-sessions
+    - body-jump-batch
+  - path: /Users/derio/.cache/fr/worktrees/super-fr/feat__batch-board-truth/.fr/scratch/review-p3/b2-absent.png
+    shows:
+    - closeout-absent-front
