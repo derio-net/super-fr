@@ -20,7 +20,6 @@ RESET_MARGIN = timedelta(seconds=30)
 BACKOFF_CAP_SECONDS = 900
 # R7: an essential-only pass stretches the next one to this many intervals.
 ESSENTIAL_STRETCH = 4
-DEFAULT_FLOOR = 0.20
 
 _RESOURCES = {"graphql": ("graphql", "core"), "rest": ("core",)}
 

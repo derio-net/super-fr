@@ -92,3 +92,41 @@ def test_write_default_never_overwrites_an_existing_file(_home: Path) -> None:
 def test_write_default_refuses_an_invalid_value() -> None:
     with pytest.raises(ForgeApiError):
         forgeapi.write_default("soap")  # type: ignore[arg-type]
+
+
+# ---- quota_floor (spec 2026-10-12-quota-pacing R6) ----
+
+
+def test_floor_defaults_to_twenty_percent() -> None:
+    assert forgeapi.quota_floor(None) == 0.20
+
+
+def test_floor_flag_beats_the_host_file(_home: Path) -> None:
+    _write(_home, "quota_floor: 0.5\n")
+    assert forgeapi.quota_floor(0.1) == 0.1
+    assert forgeapi.quota_floor(None) == 0.5
+
+
+@pytest.mark.parametrize("bad", ["0", "1", "-0.1", "'x'", "true", "[0.2]"])
+def test_floor_in_the_file_must_be_a_fraction(_home: Path, bad: str) -> None:
+    path = _write(_home, f"quota_floor: {bad}\n")
+    with pytest.raises(ForgeApiError, match="quota_floor") as exc:
+        forgeapi.quota_floor(None)
+    assert str(path) in str(exc.value)
+
+
+@pytest.mark.parametrize("bad", [0, 1, -0.1, 7, float("nan")])
+def test_floor_flag_must_be_a_fraction(bad: float) -> None:
+    with pytest.raises(ForgeApiError, match="--quota-floor"):
+        forgeapi.quota_floor(bad)
+
+
+def test_a_file_with_only_api_keeps_the_default_floor_and_api(_home: Path) -> None:
+    _write(_home, "api: rest\n")
+    assert forgeapi.quota_floor(None) == 0.20
+    assert forgeapi.resolve() == "rest"
+
+
+def test_a_file_with_only_the_floor_leaves_api_unset(_home: Path) -> None:
+    _write(_home, "quota_floor: 0.3\n")
+    assert forgeapi.resolve() == "graphql"

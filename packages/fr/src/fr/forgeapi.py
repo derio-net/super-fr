@@ -9,7 +9,8 @@ The setting is resolved with no argument, no scope and no forge client, so the
 run-path callers, which have none of those, resolve it exactly as triage does:
 `FR_FORGE_API`, else `api:` in the host file `~/.config/fr/forge.yaml` (beside
 `host-id`, the same `$HOME` rule as `fr.triage.scope_config.host_id_path`), else
-`graphql`. A repo-level key is deliberately not offered. No process is spawned.
+`graphql`. `quota_floor:` (spec 2026-10-12-quota-pacing R6) is read from the same
+file by `quota_floor`. A repo-level key is deliberately not offered. No process is spawned.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ ForgeApi = Literal["rest", "graphql"]
 ENV = "FR_FORGE_API"
 DEFAULT: ForgeApi = "graphql"
 _VALUES = frozenset(get_args(ForgeApi))
+DEFAULT_FLOOR = 0.20
 
 
 class ForgeApiError(Exception):
@@ -41,13 +43,15 @@ def _checked(value: object, source: str) -> ForgeApi:
     return cast("ForgeApi", value)
 
 
-def _from_file(path: Path) -> ForgeApi | None:
+def _host_mapping(path: Path, wanted: str) -> dict[str, object] | None:
+    """The host file's mapping, None when the file is absent or empty. *wanted*
+    names the setting being read, for the refusal — the file has one reader."""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise ForgeApiError(f"{path}: cannot read forge.api ({exc})") from exc
+        raise ForgeApiError(f"{path}: cannot read {wanted} ({exc})") from exc
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
@@ -56,7 +60,12 @@ def _from_file(path: Path) -> ForgeApi | None:
         return None
     if not isinstance(data, dict):
         raise ForgeApiError(f"{path}: expected a mapping with an `api:` key")
-    if "api" not in data:
+    return data
+
+
+def _from_file(path: Path) -> ForgeApi | None:
+    data = _host_mapping(path, "forge.api")
+    if data is None or "api" not in data:
         return None
     return _checked(data["api"], str(path))
 
@@ -68,6 +77,31 @@ def resolve() -> ForgeApi:
     if env is not None and env.strip():
         return _checked(env.strip(), ENV)
     return _from_file(config_path()) or DEFAULT
+
+
+def _checked_floor(value: object, source: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0 < value < 1  # also refuses NaN
+    ):
+        raise ForgeApiError(
+            f"{source}: quota_floor must be a fraction between 0 and 1, got {value!r}"
+        )
+    return float(value)
+
+
+def quota_floor(flag: float | None) -> float:
+    """The budget floor (spec 2026-10-12-quota-pacing R6): `--quota-floor`, else
+    `quota_floor:` in the host file beside `api:`, else 0.20. Raises
+    `ForgeApiError`, naming the flag or the file, on a value it cannot use."""
+    if flag is not None:
+        return _checked_floor(flag, "--quota-floor")
+    path = config_path()
+    data = _host_mapping(path, "quota_floor")
+    if data is None or "quota_floor" not in data:
+        return DEFAULT_FLOOR
+    return _checked_floor(data["quota_floor"], str(path))
 
 
 def write_default(value: ForgeApi) -> bool:
