@@ -6937,9 +6937,16 @@ rows:
       it would lapse.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_a_wait_longer_than_the_lease_renews_it_and_sleeps_again
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_the_cloud_pass_exits_3_on_an_exhausted_budget_and_takes_no_lease
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_the_cloud_pass_renews_a_lease_that_would_lapse_before_its_next_wake
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_the_cloud_pass_honours_a_recorded_wait
+    status: ci
+    notes: 'Phase 1: a reset wait longer than the lease renews it and sleeps again;
+      the cloud pass exits 3 on an exhausted budget or a recorded wait and renews a
+      lease that would lapse. The essential-pass stretch reuses this wait in phase 2.'
     verify: none
   - id: triage-scope-groups
     capability: triage-scope
