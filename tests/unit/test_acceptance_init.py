@@ -181,9 +181,21 @@ def test_workflow_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     assert "GITHUB_STEP_SUMMARY" in scripted
     assert "fr acceptance summary" in scripted
     assert "fr acceptance report --link-mode github" in scripted
-    assert "fr debt issue --yes" in scripted and "fr debt archive-pr --yes" in scripted
-    debt_steps = [s for s in steps if "fr debt" in s.get("run", "")]
-    assert debt_steps and all("schedule" in s.get("if", "") for s in debt_steps)
+    assert "fr debt" not in scripted  # the matrix job, which runs PR code, holds no debt step
+    assert wf["permissions"] == {"contents": "read"}
+    assert steps[0]["with"]["persist-credentials"] is False
+    debt = wf["jobs"]["debt"]
+    assert "schedule" in debt["if"] and "inputs.debt" in debt["if"]
+    assert "needs" not in debt  # a failing matrix never skips the debt run
+    assert debt["permissions"] == {
+        "contents": "write",
+        "issues": "write",
+        "pull-requests": "write",
+    }
+    debt_run = "\n".join(s.get("run", "") for s in debt["steps"])
+    assert "fr debt issue --yes" in debt_run and "fr debt archive-pr --yes" in debt_run
+    assert debt["steps"][0]["with"]["fetch-depth"] == 0
+    assert "FR_DEBT_TOKEN" in debt["steps"][0]["with"]["token"]
     assert "debt" in wf["on"]["workflow_dispatch"]["inputs"]
     uploads = [s for s in steps if "upload-artifact" in s.get("uses", "")]
     assert uploads and uploads[0]["with"]["path"] == "docs/acceptance/report.html"

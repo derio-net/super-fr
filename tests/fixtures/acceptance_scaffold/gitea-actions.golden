@@ -44,8 +44,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - name: Install fr
         run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
@@ -64,11 +62,21 @@ jobs:
           name: acceptance-report
           path: docs/acceptance/report.html
           retention-days: 90
+
+  debt:
+    if: gitea.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
       - name: Technical debt issue (weekly)
-        if: gitea.event_name == 'schedule' || inputs.debt
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
-        if: gitea.event_name == 'schedule' || inputs.debt
         env:
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
         run: fr debt archive-pr --yes

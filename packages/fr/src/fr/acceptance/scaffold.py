@@ -138,6 +138,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v5
       - name: Install fr
         run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
@@ -280,11 +282,11 @@ acceptance-report:
   script:
     - fr acceptance check
     - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
-@@DEBT_STEP@@  artifacts:
+  artifacts:
     paths:
       - docs/acceptance/report.html
     expire_in: 90 days
-"""
+@@DEBT_STEP@@"""
 
 
 # The weekly technical-debt steps, split out of each template so they are
@@ -304,34 +306,74 @@ DEBT_COMMENT = {
     "#   refreshes a draft PR archiving long-merged plans.\n",
 }
 DEBT_STEP_GITHUB = """\
+
+  # The debt job holds the write permissions and the dedicated token; the matrix
+  # job above (which runs this repo's code on every PR) holds neither. It does not
+  # `needs:` the matrix, so a week with failing rows still updates the issue.
+  debt:
+    if: github.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
       - name: Technical debt issue (weekly)
-        if: github.event_name == 'schedule' || inputs.debt
         env:
           GH_TOKEN: ${{ github.token }}
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
-        if: github.event_name == 'schedule' || inputs.debt
         env:
           GH_TOKEN: ${{ github.token }}
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
         run: fr debt archive-pr --yes
 """
 DEBT_STEP_GITEA = """\
+
+  debt:
+    if: gitea.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
       - name: Technical debt issue (weekly)
-        if: gitea.event_name == 'schedule' || inputs.debt
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
-        if: gitea.event_name == 'schedule' || inputs.debt
         env:
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
         run: fr debt archive-pr --yes
 """
 DEBT_STEP_GITLAB = """\
-    - |
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$DEBT" = "true" ]; then
-        fr debt issue --yes
-        fr debt archive-pr --yes
-      fi
+
+# Its own job, so a failing `fr acceptance check` above never skips the debt run.
+technical-debt:
+  stage: acceptance
+  image: python:3.12
+  variables:
+    GIT_DEPTH: "0"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+  script:
+    - fr debt issue --yes
+    - fr debt archive-pr --yes
 """
 DEBT_STEP = {
     "github-actions": DEBT_STEP_GITHUB,
@@ -345,41 +387,23 @@ WORKFLOW_TEMPLATES = {
 }
 
 
-DEBT_PERMS = "  issues: write\n  pull-requests: write\n"
 _DISPATCH = "  workflow_dispatch:\n"
 _DISPATCH_DEBT = (
     "  workflow_dispatch:\n    inputs:\n      debt:\n"
     "        description: Run the technical-debt steps now\n"
     "        type: boolean\n        default: false\n"
 )
-_CHECKOUT_DEBT = {
-    "github-actions": "        with:\n          fetch-depth: 0\n"
-    "          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}\n",
-    "gitea-actions": "        with:\n          fetch-depth: 0\n",
-}
 
 
 def render_workflow(ci_type: str, *, debt: bool) -> str:
-    """The scaffolded pipeline for `ci_type`, with or without the debt steps
-    (and what only they need: `issues`/`pull-requests`/`contents: write`, full
-    history, and the `debt` dispatch input)."""
+    """The scaffolded pipeline for `ci_type`, with or without the debt job (and
+    the `debt` dispatch input only it reads). The write permissions and the
+    dedicated token live on the debt job alone."""
     text = WORKFLOW_TEMPLATES[ci_type]
-    if debt:
-        if ci_type == "gitlab-ci":
-            text = text.replace(
-                "  image: python:3.12\n", '  image: python:3.12\n  variables:\n    GIT_DEPTH: "0"\n'
-            )
-        else:
-            text = text.replace(_DISPATCH, _DISPATCH_DEBT)
-            text = text.replace("  contents: read\n", "  contents: write\n")
-            text = re.sub(
-                r"(      - uses: actions/checkout@[^\n]*\n)",
-                lambda m: m.group(1) + _CHECKOUT_DEBT[ci_type],
-                text,
-                count=1,
-            )
+    if debt and ci_type != "gitlab-ci":
+        text = text.replace(_DISPATCH, _DISPATCH_DEBT)
     return (
-        text.replace("@@DEBT_PERMS@@", DEBT_PERMS if debt else "")
+        text.replace("@@DEBT_PERMS@@", "")
         .replace("@@DEBT_COMMENT@@", DEBT_COMMENT[ci_type] if debt else "")
         .replace("@@DEBT_STEP@@", DEBT_STEP[ci_type] if debt else "")
     )

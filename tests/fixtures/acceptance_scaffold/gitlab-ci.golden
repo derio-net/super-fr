@@ -18,8 +18,6 @@ stages:
 acceptance-report:
   stage: acceptance
   image: python:3.12
-  variables:
-    GIT_DEPTH: "0"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "push"
@@ -32,12 +30,24 @@ acceptance-report:
   script:
     - fr acceptance check
     - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
-    - |
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "$DEBT" = "true" ]; then
-        fr debt issue --yes
-        fr debt archive-pr --yes
-      fi
   artifacts:
     paths:
       - docs/acceptance/report.html
     expire_in: 90 days
+
+# Its own job, so a failing `fr acceptance check` above never skips the debt run.
+technical-debt:
+  stage: acceptance
+  image: python:3.12
+  variables:
+    GIT_DEPTH: "0"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+  script:
+    - fr debt issue --yes
+    - fr debt archive-pr --yes

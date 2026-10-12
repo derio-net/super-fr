@@ -29,9 +29,7 @@ on:
         default: false
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   matrix:
@@ -40,8 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
+          persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install fr (from this checkout — super-fr self-hosts)
         # Deviation from the scaffolded template on purpose: installing from
@@ -63,13 +60,31 @@ jobs:
           name: acceptance-report
           path: docs/acceptance/report.html
           retention-days: 90
+
+  # The debt job holds the write permissions and the dedicated token; the matrix
+  # job above (which runs a PR's code) holds neither. No `needs:` on matrix: a
+  # week with failing rows still updates the issue.
+  debt:
+    if: github.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install fr (from this checkout — super-fr self-hosts)
+        run: uv tool install ./packages/fr
       - name: Technical debt issue (weekly)
-        if: github.event_name == 'schedule' || inputs.debt
         env:
           GH_TOKEN: ${{ github.token }}
         run: fr debt issue --yes
       - name: Archive sweep PR (weekly)
-        if: github.event_name == 'schedule' || inputs.debt
         env:
           GH_TOKEN: ${{ github.token }}
           FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
