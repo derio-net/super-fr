@@ -1,0 +1,21 @@
+schema_version: 9
+run: 2026-10-11-feat-batch-debt-engine
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T1.S2, P5.T2.S1, P5.T2.S2]
+refactor:
+  P5.T1: "is_set_apart folded the three exclusions into one predicate used by check, render and views; nothing further to clean"
+  P5.T2: "panel and snapshot code was written once against the shared fr.triage.debt helpers; nothing to clean"
+journal:
+  - {kind: decision, id: p5-set-apart, title: "one is_set_apart predicate replaces is_awaiting_live in exclusions", body: "is_debt_digest, is_owed and awaiting-live are excluded together wherever is_awaiting_live was (unranked, unplaced, no severity, tiers, parked, features); batch_awaits_live and stale dispatch keep the awaiting-live predicate only.", phase: 5}
+  - {kind: decision, id: p5-figures-display-only, title: "figures cleaned to ints before display or storage", body: "fr.triage.debt.clean_figures drops every non-int count and non-alphanumeric status key from a forge-supplied figures block; all rendered text goes through esc.", phase: 5}
+  - {kind: discovery, id: p5-panel-note, title: "v1 previous snapshot gives no trend and a note", body: "SnapshotDiff.debt_before is None when the previous snapshot predates schema 2; the panel says so, and separately notes the skipped split when a previous figure carries skipped that the new one lacks.", phase: 5}
+resolves: []
+evidence: {tests: ci}
+visual:
+  - row: triage-debt-panel
+    script: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/b07de151-7e3f-41a2-8b47-0d0eb080c573/scratchpad/p5-visual/capture.py
+    shots:
+      - {path: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/b07de151-7e3f-41a2-8b47-0d0eb080c573/scratchpad/p5-visual/debt-collapsed.png, shows: [panel-with-figures, repo-without-report, legacy-digest-without-figures]}
+      - {path: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/b07de151-7e3f-41a2-8b47-0d0eb080c573/scratchpad/p5-visual/debt-expanded.png, shows: [panel-with-figures, trend-vs-previous, repo-without-report, legacy-digest-without-figures, expand-repo-section]}
