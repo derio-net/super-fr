@@ -60,6 +60,10 @@ cat > phases.yaml <<'YAML'
       steps:
         - {id: P1.T1.S1, text: s}
 YAML
+# `strategy: candidate` is runnable only with the repo's install program (R5).
+mkdir -p .fr
+printf '#!/bin/sh\nexit 0\n' > .fr/candidate-install
+chmod +x .fr/candidate-install
 git add -A >/dev/null 2>&1
 git commit -qm "fixture" >/dev/null 2>&1 || true
 
@@ -108,4 +112,11 @@ refuse_grep '^\[error\]' "$out" "a reasoned section with a scenario passes self-
 write_spec "- row-live live no dash"
 run_fr out plan self-review "$PLAN";          require_exit 1 "$out"
 expect_grep 'malformed' "$out" "a malformed section is refused"
+
+# Without the install program, an explicit `strategy: candidate` is refused (R5).
+write_spec "- row-live: live — needs the released build"
+rm .fr/candidate-install
+run_fr out plan self-review "$PLAN";          require_exit 1 "$out"
+expect_grep 'candidate-install' "$out" "an unrunnable strategy is refused naming the program"
+expect_grep 'strategy: none' "$out" "the refusal names the fix"
 echo "ok: spec-verification-section"

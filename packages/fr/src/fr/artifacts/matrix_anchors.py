@@ -88,10 +88,10 @@ def conversions(path: Path) -> dict[str, str]:
 
 
 def _report_paths(path: Path) -> list[Path]:
-    from fr.acceptance.report import REPORT_SET
+    from fr.acceptance.report import tracked_reports
 
     root = _root(path)
-    return [root / rel for rel in REPORT_SET]
+    return [root / rel for rel in tracked_reports(root)]
 
 
 def _applies(path: Path) -> bool:
@@ -113,8 +113,14 @@ def _fn(path: Path) -> Iterable[Path]:
     # Everything is rendered before a byte moves: a render that fails leaves
     # the matrix untouched, so the repair still applies and retries next run.
     reports: dict[Path, str] = {}
-    if any(p.exists() for p in _report_paths(path)):
-        reports = {root / rel: html for rel, html in render_committed_set(matrix, root).items()}
+    targets = _report_paths(path)
+    if any(p.exists() for p in targets):
+        reports = {
+            root / rel: html
+            for rel, html in render_committed_set(
+                matrix, root, only=[p.relative_to(root).as_posix() for p in targets]
+            ).items()
+        }
     write_text_atomic(path, text)
     wrote: list[Path] = []
     for target, rendered in reports.items():

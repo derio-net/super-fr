@@ -234,9 +234,7 @@ def dispatched_already(comments: Iterable[dict[str, object]], item_id: str) -> b
     return latest_marker(comments, item_id) == "dispatch"
 
 
-def check_config_fresh(
-    collected: TriageConfig | None, on_origin: str | None, *, lenient: bool = False
-) -> None:
+def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) -> tuple[str, ...]:
     """Refuse a collected `.fr/triage.yaml` that is not the one on
     `origin/<default>` now (§3.I).
 
@@ -245,14 +243,15 @@ def check_config_fresh(
     set by whoever commits (a rebase, a skewed clock, a cherry-pick) and say
     nothing about which content was read; the content itself does. *collected*
     is None when collect found no file, *on_origin* when there is none now.
-    *lenient* is the wave driver's (gh#998): a top-level key this `fr` does not
-    know is dropped from both sides of the comparison, as its collect dropped it.
+    A top-level key this `fr` does not know is dropped from both sides of the
+    comparison, as collect dropped it (R4); the keys it dropped on the origin side are
+    returned so the caller can say so.
     """
     try:
-        current = (
-            parse_triage_config(yaml.safe_load(on_origin) or {}, lenient=lenient)[0]
+        current, ignored = (
+            parse_triage_config(yaml.safe_load(on_origin) or {})
             if on_origin is not None
-            else None
+            else (None, ())
         )
     except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(
@@ -267,6 +266,7 @@ def check_config_fresh(
             f"the collected {TRIAGE_CONFIG_PATH} is not the one on the default branch now; "
             "re-collect with `fr triage collect` first"
         )
+    return ignored
 
 
 def live_reservations(batches: Sequence[Batch], facts: Facts, repo: str, *, skip: str) -> list[str]:
