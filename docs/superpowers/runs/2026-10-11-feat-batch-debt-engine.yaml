@@ -3,7 +3,7 @@ run: 2026-10-11-feat-batch-debt-engine
 workflow: fr-goal@1
 branch: feat/batch-debt-engine
 started: '2026-10-11T16:29:42+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -214,7 +214,11 @@ steps:
           visual: triage-debt-panel:2:9424664037cf
           findings: p5-f1-ci-shown-as-debt,p5-f2-wrong-badge,p5-f3-spoofable-digest,p5-f4-unbounded-figures-decode,p5-r1,p5-r2,p5-r3,p5-r4
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-12T01:38:34+00:00'
+    exit: 0
+    stdout: |
+      6 out-of-scope finding(s): p1-r6, p1-r7, p3-r10, p3-r11, p4-r11, p4-r12
   deliver:
     state: pending
 fr_version: 5.20.0
