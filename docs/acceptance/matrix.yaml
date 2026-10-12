@@ -8332,9 +8332,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R9
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R10
     - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_issue.py#test_creates_the_titled_issue
+    status: walk-owed
+    notes: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
+      on main is the post-merge Test Plan step 1.'
     verify: live
   - id: debt-archive-pr-weekly
     capability: debt
