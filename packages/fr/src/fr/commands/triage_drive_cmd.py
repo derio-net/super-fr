@@ -494,13 +494,17 @@ def drive_pass_command(
     pace = pacer.before_pass()
     if pace.kind == "wait":  # R16: no pass, no forge call but /rate_limit; keep the lease alive
         if current is not None and current.holder == holder_of(sid, identity):
-            if current.expires < now + timedelta(minutes=interval):
+            if current.expires - batch.LEASE_MARGIN < now + timedelta(minutes=interval):
                 try:
                     acquire(target, identity, now, scope_id=sid, duration=duration,
                             generation=generation,
                             push=lambda: triage_cmd.push_now(scope, target))  # fmt: skip
-                except TriageError as exc:
-                    _fail(str(exc))
+                except TriageError as exc:  # the same limit may block the renewal's read (p1-r3)
+                    err_console.print(
+                        f"[yellow]warning:[/yellow] cannot renew the lease while waiting: "
+                        f"{escape(str(exc))}",
+                        soft_wrap=True,
+                    )
         _write_outbox(outbox, [])
         console.print(pacer.line(pace), markup=False, soft_wrap=True)
         raise typer.Exit(code=3)

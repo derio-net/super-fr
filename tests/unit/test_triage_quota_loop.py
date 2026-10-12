@@ -417,6 +417,88 @@ def test_the_cloud_pass_renews_a_lease_that_would_lapse_before_its_next_wake(
     assert world.passes == []  # type: ignore[attr-defined]
 
 
+def _lapsing_lease(state: Path, expires_in: timedelta) -> None:
+    take_or_renew(
+        state, driver_identity("cloud", HOST_ID), NOW, scope_id=scope_id(SCOPE),
+        duration=expires_in,
+    )  # fmt: skip
+
+
+def test_the_cloud_pass_renews_a_lease_expiring_just_inside_the_margin(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p1-r5: R16's five-minute margin counts: a lease expiring one second after the
+    next wake (now + interval) would lapse inside the margin, so it is renewed."""
+    state = _leased_cloud_state(tmp_path, world)
+    _lapsing_lease(state, timedelta(minutes=5, seconds=1))
+    monkeypatch.setattr(triage_batch_cmd, "_pace_forge", lambda: Meter(_exhausted(30)))
+
+    result = _pass(state, tmp_path / "outbox.json", "--interval", "5")
+
+    assert result.exit_code == 3, result.output
+    held = load_lease(state)
+    assert held is not None and held.expires > NOW + timedelta(minutes=5, seconds=1)
+
+
+def test_the_cloud_pass_leaves_a_lease_with_room_to_spare_alone(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _leased_cloud_state(tmp_path, world)
+    _lapsing_lease(state, timedelta(minutes=10, seconds=1))
+    before = load_lease(state)
+    monkeypatch.setattr(triage_batch_cmd, "_pace_forge", lambda: Meter(_exhausted(30)))
+
+    result = _pass(state, tmp_path / "outbox.json", "--interval", "5")
+
+    assert result.exit_code == 3, result.output
+    assert load_lease(state) == before
+
+
+def test_a_failed_renewal_while_waiting_warns_and_still_exits_3(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p1-r3: the renewal's visibility read can hit the very rate limit that put the
+    drive to wait; that is a warning, not an exit 2, and the quota line is still printed."""
+    from fr.triage.privacy import VisibilityUnreadable
+
+    state = _leased_cloud_state(tmp_path, world)
+    _lapsing_lease(state, timedelta(minutes=2))
+
+    def unreadable(repo: str) -> str:
+        raise VisibilityUnreadable(f"cannot read the visibility of {repo}: API rate limit exceeded")
+
+    monkeypatch.setattr(visibility, "repo_visibility", unreadable)
+    monkeypatch.setattr(triage_batch_cmd, "_pace_forge", lambda: Meter(_exhausted(30)))
+
+    result = _pass(state, tmp_path / "outbox.json", "--interval", "5")
+
+    out = " ".join(result.output.split())
+    assert result.exit_code == 3, result.output
+    assert "cannot renew the lease" in out
+    assert "quota: graphql 0/5000" in out
+
+
 def test_the_cloud_pass_honours_a_recorded_wait(
     tmp_path: Path,
     world: World,
