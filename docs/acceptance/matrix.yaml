@@ -7452,10 +7452,12 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_config_skew.py#test_the_banner_names_ignored_keys_and_skipped_repos_escaped
       - super-fr:tests/unit/test_triage_config_skew.py#test_check_names_skipped_and_ignored_in_json_and_first_in_the_text
+      - super-fr:tests/unit/test_triage_config_skew.py#test_an_unknown_key_is_collected_and_named_without_any_lenient_argument
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_config_skew
     status: ci
-    notes: 'Phase 2: lenient config reads everywhere, skew_banner on triage.html and
-      board.html, check skipped/config_ignored; scenario tests/scenarios/triage-config-skew.sh
-      runs in CI via test_scenarios.py'
+    notes: R4 unit ref and the scenario's integration test added; scenario now also
+      renders board.html and uses org scope
     verify: candidate
     scenario: tests/scenarios/triage-config-skew.sh
   - id: triage-closeout-card-front
