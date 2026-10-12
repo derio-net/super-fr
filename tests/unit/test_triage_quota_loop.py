@@ -197,7 +197,11 @@ def test_an_unreadable_visibility_on_an_exhausted_budget_is_a_rate_limit(
     free /rate_limit does, so the drive waits for the reset instead of the interval."""
     calls = _script(monkeypatch, now, UNREADABLE, True)
 
-    _loop(tmp_path, Meter(rate_limit_answer(), _exhausted(20), _exhausted(20), rate_limit_answer()), monkeypatch)
+    _loop(
+        tmp_path,
+        Meter(rate_limit_answer(), _exhausted(20), _exhausted(20), rate_limit_answer()),
+        monkeypatch,
+    )
 
     assert sleeps == [20 * 60 + 30]
     assert calls == [NOW, NOW + timedelta(seconds=20 * 60 + 30)]
@@ -239,7 +243,11 @@ def test_a_failed_write_on_an_exhausted_budget_is_not_a_clean_pass(
 
     monkeypatch.setattr(triage_batch_cmd, "_sleep", nap)
 
-    _loop(tmp_path, Meter(rate_limit_answer(), _exhausted(20), _exhausted(20), rate_limit_answer()), monkeypatch)
+    _loop(
+        tmp_path,
+        Meter(rate_limit_answer(), _exhausted(20), _exhausted(20), rate_limit_answer()),
+        monkeypatch,
+    )
 
     assert sleeps == [20 * 60 + 30]
     assert seen[0].wait_until == NOW + timedelta(seconds=20 * 60 + 30), "recorded, not wiped"
@@ -608,3 +616,136 @@ def test_an_unusable_quota_floor_is_refused_naming_the_flag(
          "--dir", str(tmp_path)],
     )  # fmt: skip
     assert result.exit_code == 2 and "--quota-floor" in " ".join(result.output.split())
+
+
+# ------------------------------------------------ the real driver, a FakeForge's /rate_limit
+
+REAL_PACE_FORGE = triage_batch_cmd._pace_forge  # before any fixture replaces it
+
+
+def test_the_real_pace_forge_reaches_the_forges_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p1-r7: `_pace_forge` -> `make_forge` -> `ClientForge.rate_limit` -> the client."""
+    from fr.commands import triage_cmd
+    from fr.triage.collect import ClientForge
+
+    class Client:
+        reads = 0
+
+        def rate_limit(self) -> dict[str, Any]:
+            Client.reads += 1
+            return rate_limit_answer()
+
+    monkeypatch.setattr(triage_cmd, "client_for_backend", lambda backend: Client())
+
+    forge = REAL_PACE_FORGE()
+
+    assert isinstance(forge, ClientForge)
+    assert forge.rate_limit() == rate_limit_answer() and Client.reads == 1
+
+
+def test_a_pacer_built_on_the_real_wiring_counts_its_reads_on_the_forge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import triage_cmd
+
+    from tests.unit.triage_fixtures import FakeForge
+
+    forge = FakeForge(issues={}, prs={})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    monkeypatch.setattr(triage_batch_cmd, "_pace_forge", REAL_PACE_FORGE)
+
+    pacer = triage_batch_cmd.make_pacer(tmp_path, quota_floor=None, interval_s=120)
+    pace = pacer.before_pass()
+
+    assert pace.kind == "run" and forge.rate_limit_calls == 1
+    assert forge.calls == [], "the read is counted apart from every other forge call"
+
+
+@pytest.mark.parametrize("where", ["take_lease", "save_pass"])
+def test_a_rate_limit_mid_pass_in_the_real_driver_holds_every_forge_call_until_the_reset(
+    where: str,
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """p1-r2/p1-r7: the real `_Driver` and `one_pass`. The lease's visibility read (or the
+    state push after the pass) meets the GraphQL limit, whose error names no limit text the
+    host loop knows; the FakeForge's free /rate_limit does, so nothing touches the forge or
+    the state ref until the reset plus thirty seconds."""
+    from fr.triage.privacy import VisibilityUnreadable
+
+    from tests.unit.triage_fixtures import FakeForge
+
+    state = _leased_cloud_state(tmp_path, world)
+    reset = NOW + timedelta(minutes=20)
+    forge = FakeForge(issues={}, prs={})
+    monkeypatch.setattr(triage_batch_cmd, "_pace_forge", lambda: forge)
+    limited = [False]
+    at_limit: list[int] = []
+    waits: list[tuple[datetime, float]] = []
+    held: list[int] = []  # world.calls when the first wait began
+
+    def hit_the_limit() -> None:
+        forge.rate_limit_answer = _exhausted(20)
+        limited[0] = True
+        at_limit.append(len(world.calls))
+        raise VisibilityUnreadable("cannot read the visibility of the state repo o/s: HTTP 403")
+
+    reads_before_reset: list[str] = []
+    if where == "take_lease":
+
+        def repo_visibility(repo: str) -> str:
+            if clock[0] < reset + timedelta(seconds=30):
+                reads_before_reset.append(repo)
+                hit_the_limit()
+            return "private"
+
+        monkeypatch.setattr(visibility, "repo_visibility", repo_visibility)
+    else:
+        real_push = triage_batch_cmd.push_now
+        pushes: list[datetime] = []
+
+        def push_now(scope: Any, target: Path) -> Any:
+            pushes.append(clock[0])
+            if len(pushes) == 2:  # the first is the lease's; the second is save_pass's
+                hit_the_limit()
+            return real_push(scope, target)
+
+        monkeypatch.setattr(triage_batch_cmd, "push_now", push_now)
+
+    def nap(seconds: float) -> None:
+        if clock[0] >= reset + timedelta(seconds=30):
+            raise KeyboardInterrupt  # the second pass ran; stop the loop
+        waits.append((clock[0], seconds))
+        held.append(len(world.calls))
+        clock[0] += timedelta(seconds=seconds)
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", nap)
+    driver = triage_batch_cmd.build_driver(
+        SCOPE, state, batch_ids=None, checkout=None, max_inflight=3, yes=True,
+        lease=triage_batch_cmd.LeaseTerms(driver_identity("host", HOST_ID), timedelta(hours=1)),
+    )  # fmt: skip
+    pacer = triage_batch_cmd.make_pacer(state, quota_floor=None, interval_s=120)
+
+    with pytest.raises(KeyboardInterrupt):
+        triage_batch_cmd._host_loop(driver, once=False, interval=120, pacer=pacer)
+
+    assert limited[0]
+    assert waits and waits[0][1] == 20 * 60 + 30, "one wait to the reset plus 30 s, not 120 s"
+    if where == "take_lease":
+        assert len(reads_before_reset) == 1, "no visibility read while the limit holds"
+        assert at_limit == [0], "the limit hit before the pass touched the forge"
+    else:
+        assert len(pushes) >= 2 and all(
+            t <= NOW or t >= reset + timedelta(seconds=30) for t in pushes[2:]
+        ), "no push between the failed one and the reset"
+    assert held[0] == at_limit[0], "no forge call between the limit and the wait"
+    assert len(world.calls) > at_limit[0], "the pass ran once the reset had passed"
+    assert forge.rate_limit_calls >= 2

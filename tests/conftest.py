@@ -119,20 +119,17 @@ def _no_live_rate_limit_read(monkeypatch: pytest.MonkeyPatch) -> None:
     """Answer the drive's `/rate_limit` read with an ample budget (spec 2026-10-12-quota-pacing).
 
     The read is free on GitHub but is still a `gh` call: no drive test may make one, or
-    its result would depend on the operator's token. Tests of pacing install their own
-    forge on `_pace_forge`. Patched only once the module is loaded, so a test that never
-    touches the drive does not pay for importing it."""
-    import sys
+    its result would depend on the operator's token. The patch is unconditional (it
+    imports the module itself): a test that never imported the drive before would
+    otherwise make a real `gh api rate_limit`. Tests of pacing install their own forge
+    on `_pace_forge`."""
+    from tests.unit.triage_fixtures import ample_rate_limit
 
-    module = sys.modules.get("fr.commands.triage_batch_cmd")
-    if module is not None:
-        from tests.unit.triage_fixtures import ample_rate_limit
+    class _Ample:
+        def rate_limit(self) -> dict:
+            return ample_rate_limit()
 
-        class _Ample:
-            def rate_limit(self) -> dict:
-                return ample_rate_limit()
-
-        monkeypatch.setattr(module, "_pace_forge", lambda: _Ample())
+    monkeypatch.setattr("fr.commands.triage_batch_cmd._pace_forge", lambda: _Ample())
 
 
 @pytest.fixture(autouse=True)
