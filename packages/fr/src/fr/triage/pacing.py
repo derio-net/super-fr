@@ -77,6 +77,19 @@ class Pacer:
         self._save(state)
         return pace
 
+    def limited(self, text: str = "") -> bool:
+        """Did a pass meet a rate limit? Its text may say so; when it does not (a visibility
+        read or a write whose error names no limit), the free `/rate_limit` still can: a
+        budget at zero before its reset is the limit, whatever the failure said."""
+        if quota.is_rate_limited(text):
+            return True
+        budget = self.read()
+        return (
+            budget is not None
+            and budget.remaining <= 0
+            and budget.reset + quota.RESET_MARGIN > self._now()
+        )
+
     def clean(self) -> None:
         """A pass that met no rate limit ends the backoff and the recorded wait."""
         clean = quota.clean_pass(self.state)

@@ -4764,7 +4764,7 @@ def _host_loop(
         except ForgeReadError as exc:
             if once or not driver.yes:
                 _fail(str(exc), code=exc.code)
-            if paced is not None and is_rate_limited(str(exc)):
+            if paced is not None and paced.limited(str(exc)):
                 pace = paced.rate_limited()
                 _say(paced.line(pace))
                 if driver.restart_to is not None:
@@ -4779,6 +4779,14 @@ def _host_loop(
             _sleep(interval)
             continue
         driver.read_failures.clear()
+        if paced is not None and driver.failed_write and paced.limited():
+            # a failed write with the budget gone is the limit, not a clean pass (p1-r2)
+            pace = paced.rate_limited()
+            _say(paced.line(pace))
+            if driver.restart_to is not None:
+                return driver.restart_to
+            wait_out(driver, pace)
+            continue
         if paced is not None:
             paced.clean()
         if not driver.yes:

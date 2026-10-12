@@ -107,6 +107,7 @@ def sleeps(monkeypatch: pytest.MonkeyPatch, now: list[datetime]) -> list[float]:
 class StubDriver:
     yes = True
     restart_to = None
+    failed_write = False
 
     def __init__(self, target: Path) -> None:
         self.target = target
@@ -180,6 +181,86 @@ def test_a_rate_limited_pass_waits_for_the_reset_and_spends_nothing_until_then(
     assert "quota: graphql 0/5000 (0%), resets 12:" in out and "waiting 21m" in out
     wait = pacing_state.load(tmp_path)[0]
     assert wait.wait_until is None, "a clean pass after the wait ends it"
+
+
+UNREADABLE = "cannot read the visibility of the state repo o/s from the forge"
+
+
+def test_an_unreadable_visibility_on_an_exhausted_budget_is_a_rate_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    now: list[datetime],
+    sleeps: list[float],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """p1-r2: the lease's visibility read hit the limit but its text names no limit; the
+    free /rate_limit does, so the drive waits for the reset instead of the interval."""
+    calls = _script(monkeypatch, now, UNREADABLE, True)
+
+    _loop(tmp_path, Meter(rate_limit_answer(), _exhausted(20), _exhausted(20), rate_limit_answer()), monkeypatch)
+
+    assert sleeps == [20 * 60 + 30]
+    assert calls == [NOW, NOW + timedelta(seconds=20 * 60 + 30)]
+    assert "waiting 21m" in " ".join(capsys.readouterr().out.split())
+
+
+def test_an_unreadable_visibility_on_an_ample_budget_keeps_the_interval_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, now: list[datetime], sleeps: list[float]
+) -> None:
+    _script(monkeypatch, now, UNREADABLE, True)
+
+    _loop(tmp_path, Meter(), monkeypatch)
+
+    assert sleeps == [120]
+    assert pacing_state.load(tmp_path)[0].backoff == 0, "not a rate limit: no backoff"
+
+
+def test_a_failed_write_on_an_exhausted_budget_is_not_a_clean_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, now: list[datetime], sleeps: list[float]
+) -> None:
+    """p1-r2: a save_pass that failed with the budget gone waits for the reset, records it,
+    and does not wipe the wait the way a clean pass does."""
+    calls: list[datetime] = []
+    outcomes = [False, True]
+
+    def one_pass(driver: Any) -> Any:
+        calls.append(now[0])
+        done = outcomes.pop(0)
+        driver.failed_write = not done
+        return False, _summary(done=done), []
+
+    monkeypatch.setattr(triage_batch_cmd, "one_pass", one_pass)
+    seen: list[PacingState] = []
+
+    def nap(seconds: float) -> None:
+        seen.append(pacing_state.load(tmp_path)[0])
+        sleeps.append(seconds)
+        now[0] += timedelta(seconds=seconds)
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", nap)
+
+    _loop(tmp_path, Meter(rate_limit_answer(), _exhausted(20), _exhausted(20), rate_limit_answer()), monkeypatch)
+
+    assert sleeps == [20 * 60 + 30]
+    assert seen[0].wait_until == NOW + timedelta(seconds=20 * 60 + 30), "recorded, not wiped"
+    assert calls == [NOW, NOW + timedelta(seconds=20 * 60 + 30)]
+
+
+def test_a_failed_write_on_an_ample_budget_is_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, now: list[datetime], sleeps: list[float]
+) -> None:
+    outcomes = [False, True]
+
+    def one_pass(driver: Any) -> Any:
+        done = outcomes.pop(0)
+        driver.failed_write = not done
+        return False, _summary(done=done), []
+
+    monkeypatch.setattr(triage_batch_cmd, "one_pass", one_pass)
+
+    _loop(tmp_path, Meter(), monkeypatch)
+
+    assert sleeps == [120]
 
 
 def test_an_exhausted_budget_at_pass_start_runs_no_pass_at_all(
