@@ -547,3 +547,63 @@ Out of scope: R22's design (owed entries are written when archive holds a plan);
 ### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: _existing_owed's 200-issue listing cap can miss an existing marker and file a duplicate (phase 3)
 
 Out of scope: the same cap already bounds the existing open-ends dedup (archive_followups); not introduced here.
+
+<!-- fr:journal kind=decision scope=plan id=p4-adapter-surface created=2026-10-12T00:23:24+00:00 phase=4 -->
+### p4-adapter-surface · decision · glab implements issue ops, create_pr, open_pr_for_head, edit_pr, viewer_login; tea only the issue ops and viewer_login (phase 4)
+
+R26 says an operation the forge has is implemented, else named unsupported. tea's draft PR support is unverified, so create_pr, open_pr_for_head and edit_pr stay UnsupportedForgeOperation on tea (archive-pr then warns and exits 0). Added beyond the spec list: edit_pr (needed to refresh the one draft PR), viewer_login on glab/tea (author trust), ListingCapped (no silent caps). The glab and tea commands are recorded-command doubles, not live captures; a live walk is owed.
+
+<!-- fr:journal kind=decision scope=plan id=p4-trust-model created=2026-10-12T00:23:24+00:00 phase=4 -->
+### p4-trust-model · decision · debt issue edits only issues authored by the viewer or the workflow bot; archive-pr reuses only an open same-repo PR (phase 4)
+
+A body marker alone selects nothing. Marker must be its own line, author in {viewer, github-actions[bot], github-actions, app/github-actions}; others are named in a ::warning:: and left alone. open_pr_for_head now returns same_repo (REST checks head.repo.full_name; glab compares source/target project ids); a fork PR on the same head name is never reused or edited. Identity comes from archive_followups.owed_identity (allow_nested for GitLab subgroups).
+
+<!-- fr:journal kind=decision scope=plan id=p4-no-published-detail created=2026-10-12T00:23:24+00:00 phase=4 -->
+### p4-no-published-detail · decision · bodies carry fixed source categories only; all echoed forge text is redacted and control-stripped (phase 4)
+
+render.source_category maps each source to a fixed category (forge error, matrix unreadable, fetch failed, offline, tracking none, partial: listing cap reached); detailed reasons stay in the terminal. render.redact strips URL credentials, ghp_/gho_/github_pat_/glpat- tokens and home paths; debt_cmd._clean also removes control characters. A failed `fr archive` is published as fixed text, its stderr only in the job log.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-refresh-ci-rewrites-whole-file created=2026-10-12T00:23:24+00:00 phase=4 -->
+### p4-refresh-ci-rewrites-whole-file · discovery · --refresh-ci replaces an fr-scaffolded file wholesale (phase 4)
+
+Local edits to a recognised GitHub/Gitea file are overwritten (the command says to review the diff). This repo's own workflow, which installs fr from the checkout and pins actions by sha, was therefore edited by hand rather than refreshed.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-push-refusal-warns created=2026-10-12T00:23:24+00:00 phase=4 -->
+### p4-push-refusal-warns · discovery · a refused push of the sweep branch is a warning, exit 0, like a refused PR (phase 4)
+
+The weekly job must not go red for a token that may not push; both remedies are named in the ::warning::.
+
+<!-- fr:journal kind=finding scope=plan id=p4-ci1-shared-names created=2026-10-12T00:23:24+00:00 phase=4 state=fixed review_scope=in -->
+### p4-ci1-shared-names · finding [fixed] (reviewer: in scope) · viewer_login, open_pr_for_head and the glab flag gate changed meaning for existing callers (phase 4)
+
+Implementing viewer_login on glab/tea broke triage's unsupported contract, and extending open_pr_for_head's dict broke the CI-evidence readers. Fixed with separate methods (authenticated_login, open_pr_in_repo) and the old ones restored; glab's check_argv now allows --source-branch/--target-branch and the boolean --draft/--yes, which its value-only allow-list would have refused live.
+
+<!-- fr:journal kind=finding scope=plan id=p4-ci2-coverage-tables created=2026-10-12T00:23:24+00:00 phase=4 state=fixed review_scope=in -->
+### p4-ci2-coverage-tables · finding [fixed] (reviewer: in scope) · new public glab helper and client methods were missing from the host-trust coverage tables (phase 4)
+
+edit_issue added to test_glab's table and the new RealGlabClient methods to test_forge_host_trust's call list; the two-call close stays in the client so the one-host-per-helper table holds.
+
+<!-- fr:journal kind=finding scope=plan id=p4-ci3-stale-tests created=2026-10-12T00:23:24+00:00 phase=4 state=fixed review_scope=in -->
+### p4-ci3-stale-tests · finding [fixed] (reviewer: in scope) · own tests and the scaffold tests still asserted the old shapes (phase 4)
+
+debt-ops tests updated for author fields and open_pr_in_repo (and now run glab's argv through check_argv); test_acceptance_init asserts the fr debt steps; test_archive_owed sets a git identity via -c because CI has none.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-12T00:23:24+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+adapter methods are thin one-call wrappers over each forge's existing helpers; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-10-12T00:23:24+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+debt_cmd gained helpers (_trusted, _clean, _number) as written; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-10-12T00:23:24+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+selection and body rendering live in debt/sweep.py, git steps in small helpers; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t4 created=2026-10-12T00:23:24+00:00 phase=4 -->
+### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
+
+scaffold templates share one render_workflow; goldens regenerated, nothing to clean
