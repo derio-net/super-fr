@@ -113,11 +113,12 @@ out.append(f'<path d="M{sx+bw} {y0+46} L{sx+bw} {yb+26} L1076 {ys-6}" stroke="va
 out.append(f'<text x="18" y="{ys+8}" font-size="11" fill="var(--muted)" font-family="var(--mono)" letter-spacing=".06em">'
            'ONE SESSION, OPENED · fr-goal@1 workflow steps · each agent step hands one record to fr run resolve --record</text>')
 py = ys + 18
+DASH = ' stroke-dasharray="4 3"'  # outside the f-string: a backslash in its expression needs Python 3.12
 for i, (name, pins) in enumerate(PIPE):
     x = 10 + i * 134; cx = x + 62
     dashed = name in ("plan-review", "journal-check")
     out.append(f'<rect x="{x}" y="{py}" width="124" height="40" rx="5" fill="{"none" if dashed else "var(--box)"}" stroke="currentColor"'
-               f'{" stroke-dasharray=\"4 3\"" if dashed else ""}/>')
+               f'{DASH if dashed else ""}/>')
     out.append(f'<text x="{cx}" y="{py+25}" font-size="12.5" text-anchor="middle" fill="currentColor">{esc(name)}</text>')
     if i:
         out.append(f'<path d="M{x-9} {py+20} L{x-2} {py+20}" stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#now-a)"/>')
@@ -181,8 +182,9 @@ TOK = ("--new:var(--accent);--new-soft:color-mix(in srgb,var(--accent) 14%,trans
        "--bg:var(--ground);--faint:var(--sev-4);--accent-soft:color-mix(in srgb,var(--accent) 12%,transparent);"
        "--c-open:var(--sev-1);--c-closed:var(--sev-3)")
 other_html = ", ".join(f'<a class="gh" href="{GH}{n}" title="{esc(open_issues[n])}">#{n}</a>' for n in other)
+dropped_links = ", ".join(f'<a class="gh" href="{GH}{n}">#{n}</a>' for n in dropped)
 dropped_html = (f'<p style="font-size:13px;color:var(--muted)">{len(dropped)} pins were dropped because their issue '
-                f'is no longer open: {", ".join(f"<a class=\"gh\" href=\"{GH}{n}\">#{n}</a>" for n in dropped)}.</p>\n'
+                f'is no longer open: {dropped_links}.</p>\n'
                 if dropped else "")
 frag = f'''<div style="{TOK}">
 <h2>The pipeline and its driver, with open issues on the steps they break</h2>
