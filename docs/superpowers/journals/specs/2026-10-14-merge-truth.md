@@ -233,3 +233,8 @@ R8/§D: plan_pass gains closing from pacing.py and adds it to only on partial an
 ### sr-14-resolved · finding [fixed] · resolves sr-14: R15's trigger and the post-merge Test Plan check a narrower set than R1/R2 settle
 
 R15: the note fires on stale or release-pending entries and names claim sync or the drive pass, with clean-labels as the stale-only manual route. The Test Plan adds the fr:claimed check.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-merge-truth-p2 created=2026-10-13T23:05:43+00:00 -->
+### phase-split-2026-10-14-merge-truth-p2 · decision · ask: archive PRs (#1172, #1190.2) are an independently reviewable ask, R7-R12
+
+Phase 2 serves its own ask.
