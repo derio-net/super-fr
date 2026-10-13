@@ -1,0 +1,14 @@
+schema_version: 9
+run: 2026-10-13-feat-batch-exit-gates
+step: plan
+outcome: done
+journal:
+  - kind: decision
+    id: plan-shape
+    global: true
+    title: "Eight agentic phases, one per ask, serial; no [manual] phase"
+    body: "The live verification (labels, routing, collected close-out, release) is post-merge Test Plan rows, not a phase. Skill and doc prose rides the phase that changes the behaviour it describes."
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-10-14-exit-gates
+evidence: {}
