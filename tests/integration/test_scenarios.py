@@ -201,6 +201,10 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "cloud-triage-version-drift",
         "cloud-triage-repo-agents",
         "cloud-triage-cloud-remedy",
+        "merge-train-label-gate",
+        "merge-train-red-recovery",
+        "merge-train-queue",
+        "batch-merge-skip-held",
     }
     assert on_disk == here
 
@@ -307,6 +311,22 @@ def test_cloud_triage_repo_agents(installed: Path, tmp_path: Path) -> None:
 
 def test_cloud_triage_cloud_remedy(installed: Path, tmp_path: Path) -> None:
     _scenario("cloud-triage-cloud-remedy", installed, tmp_path)
+
+
+def test_merge_train_label_gate(installed: Path, tmp_path: Path) -> None:
+    _scenario("merge-train-label-gate", installed, tmp_path)
+
+
+def test_merge_train_red_recovery(installed: Path, tmp_path: Path) -> None:
+    _scenario("merge-train-red-recovery", installed, tmp_path)
+
+
+def test_merge_train_queue(installed: Path, tmp_path: Path) -> None:
+    _scenario("merge-train-queue", installed, tmp_path)
+
+
+def test_batch_merge_skip_held(installed: Path, tmp_path: Path) -> None:
+    _scenario("batch-merge-skip-held", installed, tmp_path)
 
 
 def test_triage_adopt_hold(installed: Path, tmp_path: Path) -> None:

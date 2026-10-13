@@ -213,8 +213,8 @@ trusted login opened it: the workflow's bot, the viewer `collect` ran as, or the
 `pr_authors`. `pr_authors` is the claim-marker trust set, read from the default branch's
 `.fr/triage.yaml`. That is wider than `fr debt issue`'s bot-and-viewer rule, on purpose. A
 marker-bearing issue from anyone else is listed as `untrusted_digests`, with its figures
-never shown. Judging trust needs the author, so the facts schema moves 9 → 10 (9 was #1151's `closed-in-progress`) with
-`Issue.author` and still reads 3–10. A pre-10 facts file has no author, so every digest in it
+never shown. Judging trust needs the author, so the facts schema moves 10 → 11 (9 and 10 were #1151 and #1138) with
+`Issue.author` and still reads 3–11. A pre-11 facts file has no author, so every digest in it
 reads as untrusted until the next collect. Facts are a cache, not an artifact kind, so the
 move needs no migration.
 

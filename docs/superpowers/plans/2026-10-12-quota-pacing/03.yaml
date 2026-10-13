@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Conditional visibility, kanban watch pacing and the board footer
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - visibility-conditional-read
+  - quota-board-footer
+  tier: standard
+  files:
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/triage/privacy.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - tests/unit/test_real_ghclient.py
+  - tests/unit/test_real_ghrestclient.py
+  - tests/unit/test_triage_privacy.py
+  - tests/unit/test_triage_kanban_cmd.py
+  - tests/unit/test_triage_kanban_render.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: §D conditional visibility with a module-level ETag map (R12)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: RealGhClient.repo_visibility and RealGhRestClient.repo_visibility run `gh api -i repos/{r}` (not `gh repo view`);
+      two fresh client instances in one process: the second call sends `If-None-Match` with the first answer's ETag and a
+      304 returns the first visibility ("private"); a 200 updates it; an error still raises (so live_visibility answers None
+      and guard_state refuses as today); the map is keyed by (host, repo).
+  - id: P3.T1.S2
+    text: |-
+      GREEN — implement the shared module-level map and request; test_triage_privacy.py and test_triage_drive_visibility_retry.py stay green.
+- number: 2
+  title: §E kanban watch pacing (R17)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED tests/unit/test_triage_kanban_cmd.py: `_watch` (triage_kanban_cmd.py:397) with fake clock/sleep: an exhausted
+      budget sleeps until reset+30s with no collect; below floor sleeps 4×interval; all probes 304 → no collect and no
+      render; a changed repo → partial collect then render; `--quota-floor` accepted.
+  - id: P3.T2.S2
+    text: |-
+      GREEN — route the watch's recollect (triage_kanban_cmd.py:387) through collect_into's probe/carry path and the quota decide. Green.
+- number: 3
+  title: §F board footer (R14)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED tests/unit/test_triage_kanban_render.py: given budget (graphql 812/5000, reset 16:43Z) and collected_at, the
+      footer reads "forge quota: graphql 812/5000, resets 16:43Z · facts collected <time>"; no budget → no quota clause
+      (renders as today); write_board reads both from pacing.json and facts.json.
+  - id: P3.T3.S2
+    text: |-
+      GREEN — pass them into kanban_render from write_board (render reads no clock). Green.
+- number: 4
+  title: Operator docs and acceptance rows
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      If plugins/super-fr/skills/fr-triage/SKILL.md describes the drive loop's rate-limit retry, update that line to the
+      reset wait / quota_floor behaviour (keep within the fr-* 120-line cap), then run BOTH `scripts/sync-opencode.py` and
+      `scripts/sync-hermes.py` and commit the mirrors. Move visibility-conditional-read and quota-board-footer to `ci` with
+      `uv run fr acceptance set-status`; `uv run fr acceptance check` passes.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T08:51:40+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-12T08:51:40+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T08:51:40+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T08:51:40+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-12T08:51:40+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-10-12T08:51:40+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-10-12T08:51:40+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T08:51:40+00:00'
+    note: null
+    observed_prs: []

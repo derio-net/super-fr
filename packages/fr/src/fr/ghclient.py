@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import subprocess
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -19,6 +20,28 @@ FORGE_PARITY_ISSUE = "gh#611"
 2026-09-25-triage-batches §3.J, decision d6)."""
 
 MERGE_METHODS = frozenset({"merge", "squash", "rebase"})
+
+
+@dataclass(frozen=True)
+class BaseRules:
+    """What a base branch's rules require of a merge (2026-10-11-merge-train-safety §D,
+    R12): *merge_queue* when a merge queue is required, *strict_checks* when a
+    required status check must pass on a head that is up to date with the base."""
+
+    merge_queue: bool = False
+    strict_checks: bool = False
+
+
+@dataclass(frozen=True)
+class QueueState:
+    """Where a PR stands with the base's merge queue (merge-train-safety §D, R13):
+    *in_queue* None when the backend cannot say (REST), *auto_merge* whether auto-merge
+    is set (from enqueue until GitHub merges the PR or clears it on ejection)."""
+
+    in_queue: bool | None = None
+    auto_merge: bool = False
+    # False once the PR is merged or closed: such a PR never left a queue unmerged.
+    open: bool = True
 
 
 class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec (§3.J) fixes
@@ -274,8 +297,20 @@ class GhClient(Protocol):
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         """`{state, draft, head_oid, head_ref, base_ref, mergeable, merge_state, merge_commit,
-        title, body}` of one PR, read fresh. `state` is OPEN | CLOSED | MERGED; `merge_commit` is
-        the commit the merge made on the base ("" while unmerged)."""
+        title, body, labels}` of one PR, read fresh. `state` is OPEN | CLOSED | MERGED;
+        `merge_commit` is the commit the merge made on the base ("" while unmerged); `labels`
+        the label names (the merge paths read `approved-fr` here, live — 2026-10-11-merge-
+        train-safety §A)."""
+        ...
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        """Mark draft PR *number* ready for review: the approval gate's one write before
+        it lands an approved green draft (merge-train-safety §A "Merging", R3)."""
+        ...
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        """Whether *repo* defines label *name* (merge-train-safety §A "Label creation",
+        R4). A missing label is False; any other failure raises."""
         ...
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
@@ -308,6 +343,12 @@ class GhClient(Protocol):
         required. Spec 2026-10-07-cloud-triage §I, gate checks (p2-r1)."""
         ...
 
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        """The rules on *branch* (merge-train-safety §D, R12): a `merge_queue` rule, and a
+        strict required-status-checks rule (rulesets, and classic protection's `strict`).
+        A forge without the concepts has neither."""
+        ...
+
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         """`{number, url}` of the open PR whose head is *branch*, None when there
         is none. Reads no file list (§I step 6, p2-r7): `pr_view` gives the rest."""
@@ -317,6 +358,20 @@ class GhClient(Protocol):
         """Merge the PR only if its head is still *head_sha*; *method* is one of
         `MERGE_METHODS`. Never bypasses branch protection: a refusal raises
         with the forge's own message."""
+        ...
+
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        """Put the PR into the base's merge queue (auto-merge) only if its head is still
+        *head_sha* (merge-train-safety §D, R13). A backend that cannot raises."""
+        ...
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        """The PR's `QueueState` (§D): `in_queue` None where the backend cannot say."""
+        ...
+
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        """Take the PR out of the merge queue / clear its auto-merge (§D, R13: an approval
+        removed after the enqueue is honoured). A backend that cannot raises."""
         ...
 
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
@@ -413,6 +468,18 @@ class GhClient(Protocol):
         """The login the forge CLI is authenticated as."""
         ...
 
+    def rate_limit(self) -> dict[str, Any]:
+        """The host's rate budgets (`GET /rate_limit`, which costs nothing): the raw
+        `{"resources": {"core": {limit, remaining, reset}, "graphql": …}}` answer
+        (spec 2026-10-12-quota-pacing R1)."""
+        ...
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        """A conditional REST read of *path* sent with *etag*: `(changed, etag)`, where a
+        304 is `(False, etag)`, a 200 `(True, its ETag)` and anything else, a failure
+        included, `(True, None)` (spec 2026-10-12-quota-pacing R8). Never raises."""
+        ...
+
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         """The RAW issue record (on GitHub, `gh issue view --json
         ISSUE_VIEW_FIELDS`: title, url, label objects…) — distinct from the
@@ -481,6 +548,12 @@ class UnsupportedBatchOps:
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("pr_view")
 
+    def pr_ready(self, repo: str, number: int) -> None:
+        raise self._unsupported("pr_ready")
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        raise self._unsupported("label_exists")
+
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("pr_required_checks")
 
@@ -492,6 +565,18 @@ class UnsupportedBatchOps:
 
     def required_check_names(self, repo: str, base: str) -> list[str]:
         raise self._unsupported("required_check_names")
+
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        raise self._unsupported("pr_enqueue")
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        return QueueState(None, False)  # no queue concept: not an error (§D)
+
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        raise self._unsupported("pr_dequeue")
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        return BaseRules()  # a forge without the concepts has neither: not an error (R12)
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         raise self._unsupported("open_pr_for_head")
@@ -560,6 +645,12 @@ class UnsupportedBatchOps:
 
     def viewer_login(self) -> str:
         raise self._unsupported("viewer_login")
+
+    def rate_limit(self) -> dict[str, Any]:
+        raise self._unsupported("rate_limit")
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        raise self._unsupported("probe")
 
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:
         raise self._unsupported("view_issue_record")

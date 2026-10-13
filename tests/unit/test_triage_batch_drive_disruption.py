@@ -530,7 +530,7 @@ def test_the_drive_collects_its_config_leniently_and_says_what_it_ignored(
         import json
 
         (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
-        return None, target / "facts.json", CollectStats(ignored={REPO: ("future_block",)})
+        return world.facts(), target / "facts.json", CollectStats(ignored={REPO: ("future_block",)})
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", _REAL_RECOLLECT)
     monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)
@@ -561,7 +561,7 @@ def test_a_config_that_is_invalid_otherwise_skips_the_pass_not_the_loop(
         import json
 
         (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
-        return None, target / "facts.json", CollectStats()
+        return world.facts(), target / "facts.json", CollectStats()
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", _REAL_RECOLLECT)
     monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)

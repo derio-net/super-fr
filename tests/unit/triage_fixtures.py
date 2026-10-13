@@ -63,6 +63,27 @@ def _issue(number: int, *, title: str = "t") -> dict[str, Any]:
     return issue
 
 
+def rate_limit_answer(
+    *, graphql: int = 5000, core: int = 5000, reset: int = 4_102_444_800
+) -> dict[str, Any]:
+    """The shape of `gh api rate_limit` (tests/fixtures/rate_limit.json is the capture)."""
+    return {
+        "resources": {
+            "core": {"limit": 5000, "used": 5000 - core, "remaining": core, "reset": reset},
+            "graphql": {
+                "limit": 5000,
+                "used": 5000 - graphql,
+                "remaining": graphql,
+                "reset": reset,
+            },
+        }
+    }
+
+
+def ample_rate_limit() -> dict[str, Any]:
+    return rate_limit_answer()
+
+
 class FakeForge:
     """A Forge serving per-repo canned data and recording every call."""
 
@@ -98,6 +119,17 @@ class FakeForge:
         # Kept apart from `calls`: collect reads every repo's visibility (cloud-triage
         # §B), and the call-sequence assertions predate it.
         self.visibility_calls: list[str] = []
+        # `/rate_limit` is free, so it is counted apart from `calls` too. Settable: the raw
+        # `gh api rate_limit` dict, or an exception it raises (spec 2026-10-12-quota-pacing).
+        self.rate_limit_calls = 0
+        self.rate_limit_answer: dict[str, Any] | Exception = ample_rate_limit()
+        # The scripted probe table (spec 2026-10-12-quota-pacing R8): path -> the ETag the
+        # forge holds now. A probe sent with it answers 304; any other a 200 with it; a
+        # path not in the table, or in `probe_failures`, answers changed with no ETag.
+        # Counted apart from `calls`: a probe is not a collect read.
+        self.probe_etags: dict[str, str] = {}
+        self.probe_failures: set[str] = set()
+        self.probe_calls: list[tuple[str, str | None]] = []
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         self.calls.append(("list_repos", {"owner": owner, "limit": limit}))
@@ -158,6 +190,19 @@ class FakeForge:
     def viewer_login(self) -> str:
         self.calls.append(("viewer_login", {}))
         return self.viewer
+
+    def rate_limit(self) -> dict[str, Any]:
+        self.rate_limit_calls += 1
+        if isinstance(self.rate_limit_answer, Exception):
+            raise self.rate_limit_answer
+        return self.rate_limit_answer
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        self.probe_calls.append((path, etag))
+        current = self.probe_etags.get(path)
+        if path in self.probe_failures or current is None:
+            return True, None
+        return (False, etag) if etag == current else (True, current)
 
     def repo_visibility(self, *, repo: str) -> str | None:
         self.visibility_calls.append(repo)

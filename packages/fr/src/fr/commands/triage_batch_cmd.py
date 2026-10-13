@@ -47,7 +47,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
@@ -60,10 +60,12 @@ from rich.markup import escape
 
 from fr import __version__
 from fr.acceptance.ci import CI_CONFIG_PATHS
-from fr.commands import triage_kanban_cmd
+from fr.artifacts.atomic import write_text_atomic
+from fr.commands import triage_cmd, triage_kanban_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    QuotaFloorOpt,
     RepoOpt,
     WorkspaceOpt,
     _load_state,
@@ -75,12 +77,14 @@ from fr.commands.triage_cmd import (
     drive_lock_dir,
     err_console,
     fetch_now,
+    plan_paced_pass,
     push_now,
+    rate_limit_reason,
     resolve_state_dir,
 )
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
-from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
+from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, QueueState, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.isolation.adopt import (
     bind_session,
@@ -91,12 +95,23 @@ from fr.isolation.adopt import (
     workspace_path,
 )
 from fr.isolation.rename import IsolationError, rename_branch
-from fr.labels import FR_IN_PROGRESS
+from fr.labels import APPROVED_FR, FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
+from fr.triage.approval import (
+    ApprovalVerdict,
+    EventWriter,
+    approval_verdict,
+    ensure_approval_label,
+    facts_without_label,
+    is_approved,
+    reaches,
+    settle_approvals,
+)
 from fr.triage.batch import (
     CLOSED_OUT,
+    QueueEntry,
     allowed_authors,
     batch_branch,
     batch_item_id,
@@ -128,12 +143,14 @@ from fr.triage.batch_dispatch import (
     CLOUD_PREFLIGHT_RUNNERS,
     DISPATCHABLE,
     LIVE_STAGES,
+    NO_APPROVAL_LINE,
     TRIAGE_CONFIG_PATH,
     check_config_fresh,
     conflict_brief,
     dispatch_comment,
     dispatched_already,
     live_reservations,
+    red_brief,
     render_brief,
     worker_remedy,
 )
@@ -170,6 +187,8 @@ from fr.triage.batch_drive import (
     idle_session,
     is_archived,
     is_finished,
+    last_enqueue,
+    red_decision,
     settle,
     summary_line,
     train_line,
@@ -182,11 +201,13 @@ from fr.triage.batch_merge import (
     MergeConflictError,
     MergeContext,
     MergeStopError,
+    _approved_and_ready,
     choose_method,
     describe,
     merge_ready,
     plan_queue,
     run_queue,
+    update_failing,
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
@@ -209,25 +230,33 @@ from fr.triage.gitseam import Checkout, GitError
 from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
+    ApprovalEvent,
     Batch,
+    BatchEvent,
     CancelEvent,
     ClaimsReleasedEvent,
     CloseoutEvent,
     ConflictEvent,
     DispatchEvent,
+    EnqueueEvent,
     Export,
     Facts,
     Judgements,
     Launch,
     PostMergeEvent,
     PullRequest,
+    RedHandbackEvent,
     ReplacementEvent,
     Scope,
+    UpdateEvent,
     load_judgements,
     load_scope_facts,
 )
 from fr.triage.operation_lock import replacement_scope_lock
+from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
+from fr.triage.probe import PassPlan
+from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -292,6 +321,21 @@ def _refuse_held(env: ClaimEnv, keys: Iterable[str], what: str) -> None:
             f"{what}: another triage scope holds "
             + "; ".join(held_line(k, h, now) for k, h in found)
         )
+
+
+def _skip_held(env: ClaimEnv, queue: Sequence[QueueEntry]) -> list[QueueEntry]:
+    """R7 for `batch merge` with no ids: print `skipped <batch>: held by <scope>` for each
+    batch another scope holds a member of, and return the rest."""
+    held = held_map(env.facts, env.me)
+    kept: list[QueueEntry] = []
+    for e in queue:
+        found = held_members(e.batch.ids, held)
+        if not found:
+            kept.append(e)
+            continue
+        scopes = ", ".join(dict.fromkeys(h.signer for _, h in found))
+        console.print(f"skipped {e.batch.id}: held by {scopes}", markup=False, soft_wrap=True)
+    return kept
 
 
 def _admit_held(env: ClaimEnv, keys: Iterable[str], what: str) -> list[tuple[str, Claim]]:
@@ -427,6 +471,44 @@ def load_runner(name: str) -> Runner:
     """Build runner *name* through the soft point in `triage_kanban_cmd` (§3.C step 1),
     with this module's install hint. Tests replace this."""
     return kanban_load_runner(name, DISPATCH_INSTALL_HINT)
+
+
+def event_writer(target: Path, facts: Facts, *, read_errors: bool = False) -> EventWriter:
+    """Append one event to a batch through the one judgements writer (`_write`),
+    re-reading the file each time, so a write never races an earlier one of the same
+    command (merge-train-safety §A, §B). An event older than the batch's last is
+    stamped at that time: a skewed clock never breaks the time-order rule. The driver
+    passes *read_errors*, so an unreadable visibility skips its pass (gh#1145)."""
+
+    def write(batch_id: str, event: BatchEvent) -> None:
+        judgements = load_judgements(target / "judgements.yaml")
+        batch = _find(judgements.batches, batch_id)
+        if batch.events and event.at < batch.events[-1].at:
+            event = event.model_copy(update={"at": batch.events[-1].at})
+        new = batch.model_copy(update={"events": [*batch.events, event]})
+        _write(
+            target, _replace(judgements.batches, new), facts, read=judgements.batches,
+            read_errors=read_errors,
+        )  # fmt: skip
+
+    return write
+
+
+def update_recorder(
+    writer: EventWriter, batch_of: Callable[[int], str | None]
+) -> Callable[[int, str, str, str], None]:
+    """`MergeContext.on_update` for a writer: an `update` event on the PR's batch (R8)."""
+
+    def record(pr: int, before: str, after: str, base: str) -> None:
+        batch_id = batch_of(pr)
+        if batch_id is not None:
+            event = UpdateEvent(
+                kind="update", at=datetime.now(UTC), pr=pr, head_before=before,
+                head_after=after, base=base,
+            )  # fmt: skip
+            writer(batch_id, event)
+
+    return record
 
 
 def _now_after(batch: Batch) -> datetime:
@@ -1590,8 +1672,11 @@ def dispatch_batch(
     read_errors: bool = False,
     driver: Driver = HOST,
     load: Callable[[str], Runner] | None = None,
+    label_seen: set[str] | None = None,
 ) -> None:
     """The body of `batch dispatch`, callable: one batch, one runner, one dispatch.
+    *label_seen* is the caller's set of repos whose approval label was checked already
+    (a driver pass's, so R4's at-most-once-per-pass holds); None is this call alone.
 
     `batch dispatch` and the wave driver share it, so a driver dispatch runs the same
     preflight, version reservation, brief, event write and forge labels. A refusal is
@@ -1733,6 +1818,10 @@ def dispatch_batch(
         target, _after(event), facts, read=judgements.batches, dry_run=True,
         read_errors=read_errors,
     )  # fmt: skip
+    # The label the operator approves the batch's PR with (merge-train-safety R4).
+    ensure_approval_label(
+        client, owner_repo, _say, seen=label_seen if label_seen is not None else set()
+    )
     # R3: the claims, R4's re-read included, before the launch, which cannot be undone,
     # and before any other forge write. A member another scope holds refuses the batch.
     posted = _claim_for_dispatch(env, batch)
@@ -1825,6 +1914,7 @@ def adopt_message(
         lines.append(f"The PR is now {pr}; the earlier one was closed as superseded.")
     if reserved:
         lines.append(f"Reserved version for this batch: {reserved}.")
+    lines.append(NO_APPROVAL_LINE)
     if hold:
         lines.extend(HOLD_LINES)
     return "\n".join(lines)
@@ -2645,8 +2735,14 @@ def batch_merge_command(
         console.print("no pr-open batches to merge", markup=False)
         return
     env = claim_env(target, facts)
-    for e in queue:  # R6: a batch another scope holds a member of is never merged here
-        _refuse_held(env, e.batch.ids, f"batch {e.batch.id!r} cannot be merged")
+    if batch_ids:
+        for e in queue:  # R6: a batch another scope holds a member of is never merged here
+            _refuse_held(env, e.batch.ids, f"batch {e.batch.id!r} cannot be merged")
+    else:  # R7: with no ids, a held batch is skipped, named, and the rest merge
+        queue = _skip_held(env, queue)
+        if not queue:
+            console.print("nothing to merge", markup=False)
+            return
     repos = {batch_repo(e.batch, facts) for e in queue}
     if len(repos) != 1 or None in repos:
         _fail(
@@ -2680,6 +2776,45 @@ def batch_merge_command(
         say=lambda line: console.print(line, markup=False, soft_wrap=True),
         ci_none=ci_none,
     )
+    try:  # R14: once per command, read before anything merges
+        ctx.rules = client.base_rules(owner_repo, checkout.default_branch())
+    except FORGE_ERRORS as exc:
+        _fail(f"a forge read failed: {exc}", code=1)
+    writer = event_writer(target, facts)
+
+    def record(batch_id: str, event: BatchEvent) -> None:
+        writer(batch_id, event)
+        ctx.recorded.setdefault(batch_id, []).append(event)
+
+    by_pr = {e.pr.number: e.batch.id for e in queue}
+    ctx.on_update = update_recorder(writer, by_pr.get)
+    try:
+        if yes:  # the label the operator approves with (merge-train-safety R4)
+            ensure_approval_label(client, owner_repo, ctx.say, seen=set())
+        # The approval gate (merge-train-safety §A, R1-R2): settle under --yes, say what
+        # would be settled otherwise, then hold every batch without a valid approval.
+        verdicts = settle_approvals(
+            client, record, owner_repo, [(e.batch, e.pr.number) for e in queue], ctx.say,
+            now=_now(), dry_run=not yes,
+        )  # fmt: skip
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    # A PR no longer open has no verdict: the plan reports it (already merged, or refused).
+    unapproved = [
+        e for e in queue if e.batch.id in verdicts and not is_approved(verdicts[e.batch.id])
+    ]
+    if unapproved and batch_ids:
+        names = ", ".join(f"{e.batch.id} (PR #{e.pr.number})" for e in unapproved)
+        _fail(
+            f"not approved: {names}: fr merges a batch PR only with the operator's "
+            f"`{APPROVED_FR.name}` label on it"
+        )
+    for e in unapproved:
+        ctx.say(f"held {e.batch.id}: PR #{e.pr.number} awaits the {APPROVED_FR.name} label")
+    queue = [e for e in queue if e not in unapproved]
+    if not queue:
+        ctx.say("nothing to merge")
+        return
     try:
         slots, merged = plan_queue(ctx, queue)
         for step in merged:
@@ -2805,7 +2940,13 @@ class ForgeReadError(Exception):
         self.code = code
 
 
-def recollect(scope: Scope, target: Path) -> Mapping[str, tuple[str, ...]]:
+def recollect(
+    scope: Scope,
+    target: Path,
+    *,
+    only: frozenset[str] | None = None,
+    after_write: Callable[[Facts, frozenset[str]], None] | None = None,
+) -> Mapping[str, tuple[str, ...]]:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
     every stage is derived from facts, so each pass starts here (wave-driver §B).
     Unlike `fr triage collect` it carries known-closed facts over from the
@@ -2813,11 +2954,24 @@ def recollect(scope: Scope, target: Path) -> Mapping[str, tuple[str, ...]]:
     and says what the pass cost. Config is read leniently (gh#998): returns the
     top-level `.fr/triage.yaml` keys dropped, per repo. A forge that fails to answer,
     or any other refusal (a config broken on the default branch, a judgements file
-    mid-edit), raises `ForgeReadError`: the loop waits for it to be fixed."""
+    mid-edit), raises `ForgeReadError`: the loop waits for it to be fixed.
+
+    A paced pass (spec 2026-10-12-quota-pacing R10, R11) reads *only* those repos,
+    carrying the rest, and stores its probes' ETags in *after_write*, once facts.json is
+    written. Without either, the collect is exactly the unpaced one."""
+    paced: dict[str, Any] = (
+        {"only": only, "after_write": after_write}
+        if only is not None or after_write is not None
+        else {}
+    )
     try:
-        _, _, stats = collect_into(scope, target, carry=True)
+        facts, _, stats = collect_into(scope, target, carry=True, **paced)
     except TriageError as exc:  # ForgeError included
         raise ForgeReadError(str(exc), code=2) from exc
+    # A rate limit that did not raise: a repo skipped, a judged key unviewed. The pass ends
+    # here, before it plans on facts the exhausted budget left half-read (R2).
+    if (reason := rate_limit_reason(facts)) is not None:
+        raise ForgeReadError(reason, code=2)
     _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
     return stats.ignored
 
@@ -2847,6 +3001,73 @@ def _now() -> datetime:
 def _sleep(seconds: float) -> None:
     """The loop's wait between passes; tests replace it."""
     time.sleep(seconds)
+
+
+def _probe_forge() -> Any:
+    """The forge the pass's probes go through (spec 2026-10-12-quota-pacing R8): the
+    collect's own. Tests replace it."""
+    from fr.commands import triage_cmd
+
+    return triage_cmd.make_forge()
+
+
+def _pace_forge() -> Any:
+    """The forge `/rate_limit` is read through (free, REST under either API); tests replace it."""
+    from fr.commands import triage_cmd
+
+    return triage_cmd.make_forge()
+
+
+def make_pacer(
+    target: Path,
+    *,
+    quota_floor: float | None,
+    interval_s: float,
+    now: Callable[[], datetime] | None = None,
+) -> Pacer:
+    """The pacing both adapters share (spec 2026-10-12-quota-pacing): the floor from
+    `--quota-floor` or the host file, the adapter `forge.api` names, `pacing.json` in *target*.
+    A floor or `forge.api` fr cannot use is refused here, naming where it came from (R6)."""
+    return triage_cmd.make_pacer(
+        target,
+        quota_floor=quota_floor,
+        interval_s=interval_s,
+        forge=_pace_forge,
+        now=now or (lambda: _now()),
+    )
+
+
+def _report_read_failure(driver: _Driver, message: str, action: str) -> None:
+    """A forge read failure, reported once per cause until a pass reads cleanly (gh#910)."""
+    if message not in driver.read_failures:
+        driver.read_failures.add(message)
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}; {action}", soft_wrap=True)
+
+
+# A wait that outlives the lease renews it this long before it would lapse (R16).
+LEASE_MARGIN = timedelta(minutes=5)
+RENEW_RETRY_S = 60
+
+
+def wait_out(driver: _Driver, pace: Pace) -> None:
+    """Sleep until *pace* is over without ever letting the drive's lease lapse (R16): a
+    wait that reaches the lease's expiry minus five minutes wakes, renews the lease (the
+    state push and its visibility read, the one call a wait makes), and sleeps again."""
+    assert pace.until is not None
+    left = max(0.0, (pace.until - _now()).total_seconds())
+    while left > 0:
+        held = load_lease(driver.target) if driver.leased else None
+        room = (held.expires - LEASE_MARGIN - _now()).total_seconds() if held else None
+        if room is not None and room <= 0:
+            try:
+                driver.take_lease()
+                continue
+            except ForgeReadError as exc:  # unreadable visibility: try again a minute on
+                _report_read_failure(driver, str(exc), f"renewal retried every {RENEW_RETRY_S}s")
+                room = RENEW_RETRY_S
+        chunk = left if room is None else min(left, room)
+        _sleep(chunk)
+        left -= chunk
 
 
 def _installed_version() -> str | None:
@@ -3038,7 +3259,8 @@ class _MergeOutcome(NamedTuple):
 def _stops_train(outcome: MergeAttempt | MergeStopError | GitError) -> bool:
     """Whether a merge's outcome stops its repo's train (spec §B): the head did not
     merge and is waiting on something (its new CI, its checks, a moved head); a
-    refusal, a failed git write, a failing or draft PR, a PR no longer open or one
+    refusal, a failed git write, a failing or draft PR, one the approval gate holds
+    (`unapproved`, `unready`: merge-train-safety §A), a PR no longer open or one
     already merged is stepped over or gone, and the train goes on."""
     if isinstance(outcome, (MergeStopError, GitError)):
         return isinstance(outcome, HeadMovedError)
@@ -3095,6 +3317,7 @@ class _Driver:
         self.failed_write = False  # a forge write or a dispatch failed this pass (--once exits 1)
         self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
         self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
+        self._rules: dict[str, BaseRules] = {}  # per pass: repo -> its base branch's rules
         self._unlanded: set[str] = set()  # per pass: planned merges that did not land
         self._held = 0  # per pass: planned dispatches that did not start
         self._stopped: dict[str, str] = {}  # per pass: repo -> batch that stopped its train
@@ -3134,6 +3357,11 @@ class _Driver:
         # The latest fr release, read by the cloud driver's pass before it runs; None
         # (the host loop, or a release that could not be read) checks no drift (R17).
         self.fr_release: str | None = None
+        # Quota pacing (spec 2026-10-12-quota-pacing): set by a looping drive or the cloud
+        # pass, never `--once` or plan mode. With a pacer the pass probes first and may be
+        # quiet, partial or essential-only; `pace` is this pass's verdict.
+        self.pacer: Pacer | None = None
+        self.pace: Pace | None = None
 
     # -------------------------------------------------------------- reaching out
 
@@ -3289,13 +3517,121 @@ class _Driver:
             )
         # Read each pass, as the pass's own verdict is: the context outlives a pass.
         self._merge[repo].ci_none = self._ci_none(repo)
+        self._merge[repo].rules = self._base_rules(facts, repo)
         return self._merge[repo]
+
+    def _base_rules(self, facts: Facts, repo: str) -> BaseRules:
+        """*repo*'s base branch's rules, once per repo per pass (merge-train-safety §D, R12)."""
+        if repo not in self._rules:
+            try:
+                self._rules[repo] = self.client(facts, repo).base_rules(
+                    repo, self._reader(repo).default_branch()
+                )
+            except FORGE_ERRORS as exc:
+                raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        return self._rules[repo]
+
+    def _queue_reads(
+        self,
+        facts: Facts,
+        queue: Sequence[QueueEntry],
+        repos: Mapping[str, str],
+        live: Mapping[str, LivePr],
+        approvals: Mapping[str, ApprovalVerdict],
+    ) -> dict[str, Any]:
+        """The Snapshot's merge-queue fields (§D "Queue mode", R13): the repos whose base
+        requires a queue, those held (a `version:` block, `forge.api rest`), the queue state
+        of each batch the driver enqueued before, and the base now. Reads only what a decision
+        needs: no state for a batch never enqueued, no base without one, and no rules for a
+        repo with no PR that could merge or be enqueued (open, not failing, approved; or
+        enqueued before). A candidate repo whose clone cannot name its default branch (no
+        `origin/HEAD`) is HELD, with a warning said once: whether it has a queue is unknown,
+        and merging as if it had none could bypass one."""
+        from fr import forgeapi
+
+        try:
+            rest = forgeapi.resolve() == "rest"
+        except forgeapi.ForgeApiError as exc:
+            _fail(str(exc))
+        by_repo: dict[str, list[QueueEntry]] = {}
+        for e in queue:
+            pr = live.get(e.batch.id)
+            enqueued = any(isinstance(x, EnqueueEvent) for x in e.batch.events)
+            verdict = approvals.get(e.batch.id)
+            candidate = pr is not None and pr.checks != "failing" and (
+                verdict is not None and is_approved(verdict)
+            )  # fmt: skip
+            if pr is not None and pr.state == "OPEN" and (candidate or enqueued):
+                by_repo.setdefault(repos[e.batch.id], []).append(e)
+        queued: set[str] = set()
+        unknown: set[str] = set()
+        versioned: set[str] = set()
+        states: dict[str, QueueState] = {}
+        bases: dict[str, str] = {}
+        for repo, entries in sorted(by_repo.items()):
+            try:
+                self._reader(repo).default_branch()
+            except (GitError, TriageError) as exc:
+                unknown.add(repo)
+                queued.add(repo)
+                self._report_once(
+                    f"queue-unknown\0{repo}",
+                    f"cannot tell {repo}'s default branch ({exc}): queue mode unknown, "
+                    "its batches are held",
+                )
+                continue
+            if not self._base_rules(facts, repo).merge_queue:
+                continue
+            queued.add(repo)
+            if facts.config_for(repo).version is not None:
+                versioned.add(repo)
+                continue
+            if rest:
+                continue
+            client = self.client(facts, repo)
+            seen = {
+                e.batch.id: client.pr_queue_state(repo, e.pr.number)
+                for e in entries
+                if any(isinstance(x, EnqueueEvent) and x.pr == e.pr.number for x in e.batch.events)
+            }
+            if not seen:
+                continue
+            try:
+                bases[repo] = self._base_now(repo)
+            except (GitError, TriageError):  # unknown base: decide nothing this pass
+                continue
+            states.update(seen)
+        return {
+            "queue_repos": frozenset(queued),
+            "queue_versioned": frozenset(versioned),
+            "queue_rest": rest,
+            "queue_unknown": frozenset(unknown),
+            "queue_states": states,
+            "bases": bases,
+        }
+
+    def _base_now(self, repo: str) -> str:
+        """The base branch's sha as fetched now (the `UpdateEvent.base` the red path reads)."""
+        checkout = self._reader(repo)
+        checkout.fetch()
+        return checkout.rev_parse(f"origin/{checkout.default_branch()}")
 
     # ------------------------------------------------------------------ snapshot
 
-    def snapshot(self, facts: Facts, judgements: Judgements, now: datetime) -> Snapshot:
+    def snapshot(
+        self,
+        facts: Facts,
+        judgements: Judgements,
+        now: datetime,
+        carried: frozenset[str] = frozenset(),
+    ) -> Snapshot:
         """Every batch of the file, with the selection marked: the in-flight cap and
-        the dependencies read them all, the actions only the selection (rg-3)."""
+        the dependencies read them all, the actions only the selection (rg-3).
+
+        A *carried* repo (a paced pass did not read it, spec 2026-10-12-quota-pacing R10)
+        is not unread: its batches count and dispatch as usual. But no live read is made
+        for them (PR view, required checks, merge commit, hand close-out, archive PRs,
+        claim and export reads), so none is merged, closed out or archived this pass."""
         repos = {b.id: r for b in judgements.batches if (r := batch_repo(b, facts)) is not None}
         # A repo collect skipped (org or group scope: its lists or config failed) still
         # resolves its batches, but with no PRs, so a pr-open or merged one would read
@@ -3314,9 +3650,10 @@ class _Driver:
         queue = tuple(
             e
             for e in pr_open_queue(judgements.batches, facts, judgements.issues)
-            if e.batch.id in ids
+            if e.batch.id in ids and repos.get(e.batch.id) not in carried
         )
         live: dict[str, LivePr] = {}
+        approvals: dict[str, ApprovalVerdict] = {}
         merged_at: dict[str, datetime] = {}
         released: set[str] = set()
         archived: set[str] = set()
@@ -3335,6 +3672,10 @@ class _Driver:
                     e.pr.checks or {},
                     ci_none=self._ci_none(repo),
                 )
+                approvals[e.batch.id] = approval_verdict(
+                    e.batch.events, e.pr.number, str(view.get("head_oid") or ""),
+                    view.get("labels"),
+                )  # fmt: skip
                 live[e.batch.id] = LivePr(
                     number=e.pr.number,
                     state=str(view.get("state")),
@@ -3351,6 +3692,10 @@ class _Driver:
                 if stages[b.id] not in ("merged", "partial") or b.id not in repos:
                     continue
                 if repos[b.id] in unread:
+                    continue
+                if repos[b.id] in carried:  # nothing read: unknown, so nothing planned
+                    if closeout_event(b) is None:
+                        unverified.add(b.id)
                     continue
                 mine = b.id in ids
                 event = closeout_event(b)
@@ -3395,13 +3740,17 @@ class _Driver:
                 )
                 if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
                     stale.append(b)
+            queue_reads = self._queue_reads(facts, queue, repos, live, approvals)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
+        # A carried repo's issues and claim comments are current (its probes answered
+        # unchanged), so its owed claims are planned like any read repo's (p2-r6).
         claim_plan = self._claim_plan(facts, judgements, repos, unread, now)
         export_path, export_refused = self._export_config(facts)
+        export_path = {r: p for r, p in export_path.items() if r not in carried}
         export_prs, export_orphans = self._export_reads(
             facts, judgements, repos, done_waves, export_path
         )
@@ -3424,6 +3773,7 @@ class _Driver:
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
         idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
         return Snapshot(
+            approvals=approvals,
             batches=tuple(judgements.batches),
             stages=stages,
             queue=queue,
@@ -3459,6 +3809,7 @@ class _Driver:
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
             refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
+            **queue_reads,
             **claim_plan,
         )
 
@@ -3975,10 +4326,73 @@ class _Driver:
         self._observed_last = True
         return True
 
+    def _settle_approvals(
+        self, facts: Facts, judgements: Judgements, carried: frozenset[str] = frozenset()
+    ) -> tuple[bool, set[tuple[str, int]]]:
+        """Record or void each selected open batch PR's approval before the walk
+        (merge-train-safety §A "Recording and voiding", R2); whether it wrote any, and
+        the `(repo, PR)` whose label it removed.
+        Read-only passes never settle: the walk then reads a first label as approved."""
+        repos = {b.id: r for b in judgements.batches if (r := batch_repo(b, facts)) is not None}
+        chosen = {b.id for b in _chosen(judgements.batches, self.named)}
+        # A carried repo (quota-pacing R10) was not read this pass: its labels are read
+        # live when its probes next change or at the full pass, never on carried facts.
+        unread = {s.repo for s in facts.skipped} | carried
+        by_repo: dict[str, list[tuple[Batch, int]]] = {}
+        for e in pr_open_queue(judgements.batches, facts, judgements.issues):
+            repo = repos.get(e.batch.id)
+            if e.batch.id in chosen and repo is not None and repo not in unread:
+                by_repo.setdefault(repo, []).append((e.batch, e.pr.number))
+        wrote = False
+        voided: set[tuple[str, int]] = set()
+        writer = event_writer(self.target, facts, read_errors=True)
+        repo_of = {b.id: r for b, r in ((b, repos.get(b.id)) for b in judgements.batches) if r}
+
+        def record(batch_id: str, event: BatchEvent) -> None:
+            nonlocal wrote
+            writer(batch_id, event)
+            wrote = True
+            if isinstance(event, ApprovalEvent) and event.voided_at is not None:
+                voided.add((repo_of[batch_id], event.pr))
+
+        try:
+            for repo, open_prs in sorted(by_repo.items()):
+                client = self.client(facts, repo)
+                ensure_approval_label(client, repo, _say, seen=self._label_seen)
+                settle_approvals(client, record, repo, open_prs, _say, now=_now())
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        return wrote, voided
+
     def run_pass(self) -> tuple[bool, Summary, list[str]]:
         """One pass: re-collect, decide, act (with --yes) or print the plan.
-        Returns whether it acted, the settled summary, and the blocked batch ids."""
-        ignored = recollect(self.scope, self.target) or {}
+        Returns whether it acted, the settled summary, and the blocked batch ids.
+
+        Paced (a pacer set, spec 2026-10-12-quota-pacing §B, §C), it probes first: a quiet
+        pass ends there; a partial one collects only the changed repos and reads nothing
+        live for the carried ones; an essential-only one dispatches nothing and leaves
+        the board as it was."""
+        paced = self._pass_plan()
+        if paced is not None and not paced.collects:
+            return self._quiet_pass(paced)
+        # The repos the collect actually carried (p2-r5): one value for the ETags it
+        # promotes and the snapshot's live reads, so the two cannot drift.
+        collected_carried: list[frozenset[str]] = []
+        if paced is None:
+            ignored = recollect(self.scope, self.target) or {}
+        else:
+            pacer = self.pacer
+            assert pacer is not None
+
+            def after_write(facts: Facts, carried: frozenset[str]) -> None:
+                collected_carried.append(carried)
+                pacer.after_collect(paced, facts, carried)
+
+            ignored = recollect(
+                self.scope, self.target, only=paced.only, after_write=after_write
+            ) or {}  # fmt: skip
         for repo, keys in sorted(ignored.items()):
             self._report_once(
                 f"ignored\0{repo}\0{','.join(keys)}",
@@ -3987,7 +4401,28 @@ class _Driver:
                 "ignored until an fr that knows them runs",
             )
         _, facts, judgements = _load_state(self.scope, self.target, None)
+        carried = (
+            collected_carried[-1]
+            if collected_carried
+            else paced.carried
+            if paced is not None
+            else frozenset[str]()
+        )
+        self._label_seen: set[str] = set()  # one approval-label check per repo per pass (R4)
+        if self.yes:
+            wrote, voided = self._settle_approvals(facts, judgements, carried)
+            if voided:  # what the forge says now: this pass's views never show them approved
+                facts = facts_without_label(facts, voided, APPROVED_FR.name)
+                write_text_atomic(
+                    self.target / "facts.json",
+                    json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n",
+                )
+            if wrote:
+                _, facts, judgements = _load_state(self.scope, self.target, None)
+        for ctx in self._merge.values():
+            ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
+        self._rules = {}
         self._clone_unread = {}
         self._restart = {}
         self._stopped, self._queued, self._conflicts = {}, 0, {}
@@ -3995,7 +4430,9 @@ class _Driver:
         self._export_failures = 0
         self._held_now, self._claim_done = {}, SyncResult()
         self.failed_write = False
-        snap = self.snapshot(facts, judgements, _now())
+        snap = self.snapshot(facts, judgements, _now(), carried)
+        if paced is not None and paced.dispatch_held is not None:
+            snap = replace(snap, dispatch_held=paced.dispatch_held)
         for repo, why in sorted(self._unread.items()):
             mine = sorted(b for b, r in self._left_out.items() if r == repo)
             self._report_once(
@@ -4012,6 +4449,11 @@ class _Driver:
                 + (f", so no close-out is planned for {', '.join(mine)}" if mine else ""),
             )  # fmt: skip
         plan = drive_pass(snap)
+        if carried:  # nothing was read live for them: no merge, close-out or archive (R10)
+            plan = replace(plan, actions=tuple(
+                a for a in plan.actions
+                if not (a.kind in _LIVE_READ_ACTIONS and snap.repos.get(a.batch) in carried)
+            ))  # fmt: skip
         if self.single_pass is not None:
             self.planned_dispatch = any(a.kind == "dispatch" for a in plan.actions)
             if self.planned_dispatch and not self.single_pass.allowed:
@@ -4033,8 +4475,13 @@ class _Driver:
                 acted = acted or did
                 if self._export_refusals > refused:  # refused before any write: a warning
                     action = replace(action, kind="warn")
-                if outcome or action.kind not in ("close", "claim", "refresh", "release"):
-                    # a close reported already stays quiet, as does a claim write that wrote nothing
+                if (
+                    outcome
+                    or action.kind not in ("close", "claim", "refresh", "release")
+                    and not (action.kind == "warn" and action.red)
+                ):
+                    # a close reported already stays quiet, as does a claim write that wrote
+                    # nothing, and a red PR the recovery has nothing new to say about
                     _say(action_line(action, outcome))
             if self.yes:
                 self._record_released(facts)
@@ -4054,14 +4501,36 @@ class _Driver:
         finally:
             if self.yes:
                 self._restart_sessions()  # soft: never raises out of here
+        if self.pacer is not None and paced is not None:
+            self.pacer.record_summary(
+                asdict(summary), digest=paced.digest, held=paced.dispatch_held is not None
+            )
         if self.yes:
-            self._write_board()
+            if paced is None or paced.kind != "essential":
+                self._write_board()  # an essential-only pass keeps the last board (R14)
         else:
             _say("nothing done; re-run with --yes to act")
         stuck = [a.batch for a in plan.actions if a.kind == "blocked"]
         stuck += [f"export wave {a.wave} {a.batch}" for a in plan.actions
                   if a.wave is not None and a.kind == "warn"]  # fmt: skip
         return acted, summary, stuck
+
+    def _pass_plan(self) -> PassPlan | None:
+        """Probe, then decide the pass (spec 2026-10-12-quota-pacing R7-R11); None when
+        unpaced (`--once`, plan mode) or when the pace is not a pass to run."""
+        if self.pacer is None or self.pace is None or self.pace.kind == "wait":
+            return None
+        return plan_paced_pass(
+            self.pacer, self.scope, self.target, _probe_forge(), essential=self.pace.essential
+        )
+
+    def _quiet_pass(self, paced: PassPlan) -> tuple[bool, Summary, list[str]]:
+        """R9: nothing changed since the last planned pass, so nothing is collected,
+        read, planned or rendered; that pass's summary stands for this one."""
+        self.failed_write = False
+        _say(f"quiet: {plural(paced.probes, 'probe')} unchanged")
+        assert self.pacer is not None and self.pacer.state.summary is not None
+        return False, Summary(**self.pacer.state.summary), []
 
     def _restart_sessions(self) -> None:
         """Restart idle sessions once per recorded runner, after every close-out this pass
@@ -4109,6 +4578,8 @@ class _Driver:
                 # The cloud driver reads its own runners only, its mailbox already open
                 # (p4-o2); the host's board loads as it always did (R10).
                 loader=self.runner if self.adapter.kind == "cloud" else None,
+                # the repos this pass judged `ci none`, as the walk did (p1-r2)
+                ci_none=frozenset(r for r, none in self._ci.items() if none),
             )
         except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
             cause = triage_kanban_cmd.one_line(exc)
@@ -4131,6 +4602,14 @@ class _Driver:
             line = self._export_act(action, facts)
             did = (self._export_refusals, self._export_failures) == (refusals, failures)
             return line, did, in_flight  # a refusal or a failed write did nothing
+        if action.kind == "warn" and action.red:  # a failing batch PR: recover it (§C)
+            if action.batch in self._held_now:
+                return "", False, in_flight  # another scope holds it (R6)
+            line, did = self._recover(action, facts)
+            return line, did, in_flight
+        if action.kind == "warn" and action.ejected:
+            line, did = self._record_ejected(action, facts)
+            return line, did, in_flight
         if action.kind in ("warn", "foreign"):
             if action.head:  # an export's warn names no head: it is said every pass
                 self.warned.add(action.head)
@@ -4165,6 +4644,9 @@ class _Driver:
             if merged.stops:
                 self._stopped[action.train] = batch.id
             return merged.line, merged.acted, merged.in_flight
+        if action.kind == "enqueue":
+            line, did = self._enqueue(action, facts, judgements, batch, repo)
+            return line, did, in_flight
         if action.kind == "closeout":
             outcome, did = self._close_out(action, facts, judgements, batch, repo)
             return outcome, did, in_flight
@@ -4209,6 +4691,7 @@ class _Driver:
                     read_errors=True,
                     driver=self.adapter,
                     load=self.runner,
+                    label_seen=self._label_seen,
                 )
         except RunnerDispatchError as exc:
             return self._dispatch_failed(batch, str(exc), exc.__cause__), False, in_flight
@@ -4385,6 +4868,20 @@ class _Driver:
                     f"PR #{action.pr} is already merged", False, in_flight - 1, False
                 )
             if slots[0].head != action.head:  # pinned to the head whose checks were judged
+                # A move fr made (its own update) is judged again next pass and stops the
+                # train; any other push voids the approval, so the PR is stepped over
+                # like every unapproved one (merge-train-safety §A, p1-r10).
+                events = [*batch.events, *ctx.recorded.get(batch.id, [])]
+                ours = reaches(events, slots[0].step.pr.number, action.head, slots[0].head)
+                if not ours:
+                    return _MergeOutcome(
+                        f"held: PR #{action.pr} head moved from {action.head[:12]} to "
+                        f"{slots[0].head[:12]} by a push fr did not make; its "
+                        f"{APPROVED_FR.name} approval is void",
+                        False,
+                        in_flight,
+                        False,
+                    )
                 return _MergeOutcome(
                     f"held: PR #{action.pr} head moved from {action.head[:12]} to "
                     f"{slots[0].head[:12]} since its checks were judged; it is judged "
@@ -4393,6 +4890,10 @@ class _Driver:
                     in_flight,
                     True,
                 )
+            writer = event_writer(self.target, facts, read_errors=True)
+            ctx.on_update = update_recorder(
+                writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
+            )
             attempt = merge_ready(ctx, slots[0], None)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -4423,10 +4924,88 @@ class _Driver:
                 in_flight,
                 stops,
             )
+        if attempt.outcome in ("unapproved", "unready"):
+            why = attempt.reason or f"awaits the {APPROVED_FR.name} label"
+            return _MergeOutcome(f"held: PR #{action.pr} {why}", False, in_flight, stops)
         held = f": {', '.join(attempt.checks)}" if attempt.checks else ""
         return _MergeOutcome(
             f"held: PR #{action.pr} is {attempt.outcome}{held}", False, in_flight, stops
         )
+
+    def _enqueue(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """§D: put the PR in the base's merge queue through the merge path's own gate (the
+        live label, a draft marked ready, the head re-checked), pinned to the head whose
+        checks were judged; then record an `enqueue` event with the base as fetched BEFORE
+        the write (a base that moves meanwhile reads as moved, so an ejection re-enqueues,
+        never strands). A refusal is a held line and a `refused` event: the walk retries once
+        more at the same head, then asks the operator (`enqueue-refused`)."""
+        assert action.pr is not None
+        ctx = self.merge_ctx(facts, repo)
+        entries = [
+            e
+            for e in pr_open_queue(judgements.batches, facts, judgements.issues)
+            if e.batch.id == batch.id
+        ]
+        n, head = action.pr, action.head
+        moved = f"held: PR #{n} head moved from {head[:12]} since its checks were judged"
+        try:
+            slots, _ = plan_queue(ctx, entries)
+            if not slots:
+                return f"PR #{n} is already merged", False
+            if slots[0].head != head:
+                return f"{moved}; it is judged again next pass", False
+            view = ctx.client.pr_view(repo, n)
+            held = _approved_and_ready(ctx, slots[0], view, wait=False)
+            if held is not None:
+                if held.outcome in ("unapproved", "unready"):
+                    return (
+                        f"held: PR #{n} {held.reason or f'awaits the {APPROVED_FR.name} label'}",
+                        False,
+                    )
+                names = f": {', '.join(held.checks)}" if held.checks else ""
+                return f"held: PR #{n} is {held.outcome}{names}", False
+            if str(view.get("head_oid") or "") != head:
+                return f"{moved}; it is judged again next pass", False
+            base = self._base_now(repo)
+            try:
+                ctx.client.pr_enqueue(repo, n, head_sha=head, method=ctx.method)
+            except FORGE_ERRORS as exc:
+                self.failed_write = True
+                self._append(
+                    judgements, facts, batch,
+                    EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=n, head=head,
+                                 base=base, outcome="refused", detail=str(exc).strip()[:300]),
+                )  # fmt: skip
+                return f"held: PR #{n} enqueue refused: {exc}", False
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except (GitError, TriageError) as exc:
+            why = f"the base could not be read ({exc}): retried next pass"
+            return self._said_once(batch, action, "enqueue-base", why), False
+        except FORGE_ERRORS as exc:  # a re-read of the PR or its checks
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        self._append(
+            judgements, facts, batch,
+            EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=n, head=head, base=base),
+        )  # fmt: skip
+        return f"enqueued PR #{n} at {head[:12]}", True
+
+    def _record_ejected(self, action: Action, facts: Facts) -> tuple[str, bool]:
+        """A queued PR that left the queue unmerged with the base unmoved: recorded once
+        per (PR, head) as an `ejected` event, which is the `queue-ejected` need (§D)."""
+        judgements = load_judgements(self.target / "judgements.yaml")
+        batch = _find(judgements.batches, action.batch)
+        last = last_enqueue(batch, action.pr or 0)
+        if last is None or last.outcome != "enqueued" or last.head != action.head:
+            return "", False
+        self._append(
+            judgements, facts, batch,
+            EnqueueEvent(kind="enqueue", at=_now_after(batch), pr=last.pr, head=last.head,
+                         base=last.base, outcome="ejected"),
+        )  # fmt: skip
+        return f"{action.detail}; it needs you", True
 
     def _stopped_line(
         self, batch: Batch, action: Action, exc: MergeStopError | GitError, *, failed: bool = True
@@ -4484,6 +5063,164 @@ class _Driver:
             )
         return self._hand_back(exc, stopped, action, facts, judgements, batch, repo)
 
+    # ------------------------------------------------- red recovery (merge-train-safety §C)
+
+    def _recover(self, action: Action, facts: Facts) -> tuple[str, bool]:
+        """A failing batch PR the walk stepped over: what `red_decision` says, from the
+        persisted events, the base as fetched now and the session's live status (R9-R11).
+        Returns the line to print ("" when this pass has nothing new to say) and whether
+        it acted (wrote an event, updated the PR, or messaged the session)."""
+        from fr_dispatch.protocols import SessionInspector, SessionMessenger
+
+        judgements = load_judgements(self.target / "judgements.yaml")
+        batch = _find(judgements.batches, action.batch)
+        repo = batch_repo(batch, facts)
+        if repo is None or action.pr is None:
+            return action.detail, False
+        if any(
+            isinstance(e, RedHandbackEvent) and (e.pr, e.head) == (action.pr, action.head)
+            for e in batch.events
+        ):
+            return "", False  # rule 1, decided with no I/O: a hand-back covers this head
+        ctx = self.merge_ctx(facts, repo)
+        events = [*batch.events, *ctx.recorded.get(batch.id, [])]
+        try:
+            ctx.checkout.fetch()
+            base_now = ctx.checkout.rev_parse(ctx.main)
+        except (GitError, TriageError) as exc:
+            return self._said_once(
+                batch, action, "base", f"the base could not be read ({exc}): retried next pass"
+            ), False
+        checks = action.checks
+        # Rules 1-3 never read the session: ask it only when they leave the decision to it.
+        decision = red_decision(
+            events, action.pr, action.head, checks, base_now, "idle", queue=ctx.rules.merge_queue
+        )
+        runner: Any = None
+        status = "idle"
+        if decision == "handback":
+            name, target, _ = self._hand_back_target(facts, batch, repo)
+            if not self.adapter.carries(name):  # another driver's session
+                return self._said_once(
+                    batch, action, "carries",
+                    f"its session runs on {name}, which this driver lacks: left to that "
+                    "runner's driver",
+                ), False  # fmt: skip
+            runner = self.runner(name)
+            if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
+                try:
+                    status = runner.session_statuses([target]).get(target.id, "unknown")
+                except Exception as exc_:  # noqa: BLE001 - retried next pass
+                    return self._said_once(
+                        batch, action, "status", f"its session could not be read: {exc_}"
+                    ), False
+            else:
+                status = "absent"  # this runner cannot be messaged: no session can take it
+            decision = red_decision(
+                events, action.pr, action.head, checks, base_now, status,
+                queue=ctx.rules.merge_queue,
+            )  # fmt: skip
+        if decision == "skip":
+            return "", False
+        if decision == "reupdate":
+            return self._reupdate(action, facts, judgements, batch, repo, ctx)
+        if decision == "needs_you":
+            event = self._red_event(action, batch, "none")
+            self._append(judgements, facts, batch, event)
+            return f"{action.detail}; no session can take it: it needs you", True
+        if decision == "wait":
+            line = self._said_once(
+                batch, action, f"wait\0{status}",
+                f"its session is {status}: nothing sent, retried next pass",
+            )  # fmt: skip
+            return line, False
+        return self._red_hand_back(action, facts, judgements, batch, repo, name, target, runner)
+
+    def _said_once(self, batch: Batch, action: Action, cause: str, why: str) -> str:
+        """The red warn line with *why*, the first time this (batch, head, cause) is seen,
+        else "": a pass that decides nothing new says nothing (§C)."""
+        key = f"red\0{batch.id}\0{action.head}\0{cause}\0{why}"
+        if key in self.reported:
+            return ""
+        self.reported.add(key)
+        return f"{action.detail}; {why}"
+
+    @staticmethod
+    def _red_event(action: Action, batch: Batch, delivered: str) -> RedHandbackEvent:
+        assert action.pr is not None
+        return RedHandbackEvent(
+            kind="red_handback", at=_now_after(batch), pr=action.pr, head=action.head,
+            checks=list(action.checks), delivered=delivered,  # type: ignore[arg-type]
+        )  # fmt: skip
+
+    def _red_hand_back(
+        self,
+        action: Action,
+        facts: Facts,
+        judgements: Judgements,
+        batch: Batch,
+        repo: str,
+        name: str,
+        target: Any,
+        runner: Any,
+    ) -> tuple[str, bool]:
+        pr = batch_pr(batch, facts)
+        brief = red_brief(
+            batch, pr_url=pr.url if pr else f"PR #{action.pr}", head=action.head,
+            checks=action.checks,
+        )  # fmt: skip
+        try:
+            runner.message(target, brief)
+        except Exception as exc_:  # noqa: BLE001 - retried next pass, never the drive's end
+            failed = f"hand-back to {target.id} failed, retried next pass: {exc_}"
+            return self._said_once(batch, action, "send", failed), False
+        self._append(judgements, facts, batch, self._red_event(action, batch, "session"))
+        if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
+            return f"{action.detail}; handed-back (pending) to its session {target.id}", True
+        return f"{action.detail}; handed back to its session {target.id}", True
+
+    def _reupdate(
+        self,
+        action: Action,
+        facts: Facts,
+        judgements: Judgements,
+        batch: Batch,
+        repo: str,
+        ctx: MergeContext,
+    ) -> tuple[str, bool]:
+        """R9: the driver's own update went red and the base moved since: update it again
+        through the merge machinery with the green-checks precondition waived. The new
+        `update` event is what stops a second update from the same head."""
+        entries = [
+            e
+            for e in pr_open_queue(judgements.batches, facts, judgements.issues)
+            if e.batch.id == batch.id
+        ]
+        try:
+            slots, _ = plan_queue(ctx, entries)
+            if not slots or slots[0].head != action.head:
+                return "", False  # merged, or the head moved: judged again next pass
+            writer = event_writer(self.target, facts, read_errors=True)
+            ctx.on_update = update_recorder(
+                writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
+            )
+            attempt = update_failing(ctx, slots[0])
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except MergeConflictError as exc:
+            return self._conflict(exc, action, facts, judgements, batch, repo)
+        except (MergeStopError, GitError) as exc:
+            return self._stopped_line(batch, action, exc), False
+        except TriageError as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
+        return (
+            f"{action.detail}; the base moved: updated PR #{action.pr} to "
+            f"{attempt.head[:12]}, its checks run again",
+            True,
+        )
+
     @staticmethod
     def _conflict_event(
         exc: MergeConflictError, batch: Batch, delivered: str, handle: str | None = None
@@ -4492,6 +5229,25 @@ class _Driver:
             kind="conflict", at=_now_after(batch), head=exc.head, paths=list(exc.paths),
             delivered=delivered, handle=handle,  # type: ignore[arg-type]
         )  # fmt: skip
+
+    def _hand_back_target(self, facts: Facts, batch: Batch, repo: str) -> tuple[str, Any, Launch]:
+        """Where a hand-back goes (conflict or red): the runner's name, the work item of
+        the latest fresh conflict session since the dispatch, else the batch's own session,
+        and the launch the batch would start a fresh one with."""
+        from fr_dispatch.work_item import WorkItem
+
+        last = last_dispatch(batch)
+        launch = self._launch(facts, batch, repo)
+        name = str(last.runner if last else launch.runner)
+        since = fresh_conflicts(batch, since_dispatch=True)
+        target = WorkItem(
+            id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False))
+            if since
+            else batch_item_id(repo, batch.id),
+            unit="run", workflow=batch_workflow(batch), repo=repo, parent=None, inputs=(),
+            payload={"group": self.group_of(batch)}, tracking=None,
+        )  # fmt: skip
+        return name, target, launch
 
     def _hand_back(
         self,
@@ -4506,11 +5262,9 @@ class _Driver:
         """Deliver the brief: to the target's idle session, else nothing while it is
         working or blocked, else to a fresh conflict session (R20, R23)."""
         from fr_dispatch.protocols import SessionInspector, SessionMessenger
-        from fr_dispatch.work_item import WorkItem
 
         last = last_dispatch(batch)
-        launch = self._launch(facts, batch, repo)
-        name = str(last.runner if last else launch.runner)
+        name, target, launch = self._hand_back_target(facts, batch, repo)
         branch = last.branch if last else batch_branch(batch)
         brief = conflict_brief(
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
@@ -4523,14 +5277,6 @@ class _Driver:
                 False,
             )
         runner = self.runner(name)
-        since = fresh_conflicts(batch, since_dispatch=True)
-        target = WorkItem(
-            id=conflict_item_id(repo, batch.id, fresh_conflicts(batch, since_dispatch=False))
-            if since
-            else batch_item_id(repo, batch.id),
-            unit="run", workflow=batch_workflow(batch), repo=repo, parent=None, inputs=(),
-            payload={"group": self.group_of(batch)}, tracking=None,
-        )  # fmt: skip
         if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
             try:
                 status = runner.session_statuses([target]).get(target.id, "unknown")
@@ -4914,6 +5660,11 @@ class _Driver:
         return f"merged export PR #{action.pr} at {action.head[:12]}"
 
 
+# The actions a pass plans only from what it read live this pass (R10): a carried repo's
+# batches get none of them.
+_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt"})
+
+
 def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:
     """What the export left out because the target repo ignores it (p4-r9), the first
     few named: the warn's words, or (*short*) the export line's."""
@@ -5108,29 +5859,57 @@ def _sigterm_interrupts() -> Iterator[None]:
         signal.signal(signal.SIGTERM, previous)
 
 
-def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
+def _host_loop(
+    driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None = None
+) -> str | None:
     """`fr triage batch drive`'s loop around `one_pass` (the host adapter, R10). The newer
-    fr a `post_merge` installed, when the loop stopped to restart on it; else None."""
+    fr a `post_merge` installed, when the loop stopped to restart on it; else None.
+    With a *pacer*, a looping drive reads the budget before each pass, waits out an
+    exhausted one, and backs off a rate limit instead of retrying it (R2-R4)."""
+    paced = pacer if pacer is not None and driver.yes and not once else None
+    driver.pacer = paced
+    pace: Pace | None = None
     while True:
+        if paced is not None:
+            pace = paced.before_pass()
+            if pace.kind == "wait":
+                _say(paced.line(pace))
+                wait_out(driver, pace)
+                continue
+            driver.pace = pace
+            if pace.essential:  # below the floor: the essential-only pass (R7, R13)
+                _say(paced.line(pace))
+                paced.stretch(pace.until)
         try:
             acted, summary, blocked = one_pass(driver)
         except ForgeReadError as exc:
             if once or not driver.yes:
                 _fail(str(exc), code=exc.code)
+            if paced is not None and paced.limited(str(exc)):
+                pace = paced.rate_limited()
+                _say(paced.line(pace))
+                if driver.restart_to is not None:
+                    return driver.restart_to
+                wait_out(driver, pace)
+                continue
             # Like a refused merge (rg-4), a degraded forge ends neither the run nor
             # the loop: reported once per cause, then read again (gh#910).
-            if str(exc) not in driver.read_failures:
-                driver.read_failures.add(str(exc))
-                err_console.print(
-                    f"[yellow]warning:[/yellow] {escape(str(exc))}; pass skipped, "
-                    f"retrying every {interval}s",
-                    soft_wrap=True,
-                )
+            _report_read_failure(driver, str(exc), f"pass skipped, retrying every {interval}s")
             if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
                 return driver.restart_to  # post_merge installed a newer fr (gh#998)
             _sleep(interval)
             continue
         driver.read_failures.clear()
+        if paced is not None and driver.failed_write and paced.limited():
+            # a failed write with the budget gone is the limit, not a clean pass (p1-r2)
+            pace = paced.rate_limited()
+            _say(paced.line(pace))
+            if driver.restart_to is not None:
+                return driver.restart_to
+            wait_out(driver, pace)
+            continue
+        if paced is not None:
+            paced.clean()
         if not driver.yes:
             return None  # the plan of one pass, in loop mode too
         if once:
@@ -5148,6 +5927,9 @@ def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
         if summary.stalled:
             _say(_stalled_line(blocked, driver.held_by))
             raise typer.Exit(code=3)
+        if pace is not None and pace.essential and pace.until is not None:
+            wait_out(driver, Pace("wait", pace.until, "below floor"))  # 4x, lease-safe (R16)
+            continue
         _sleep(interval)
 
 
@@ -5184,6 +5966,7 @@ def batch_drive_command(
     yes: Annotated[
         bool, typer.Option("--yes", help="Act; without it, print one pass's plan and exit.")
     ] = False,
+    quota_floor: QuotaFloorOpt = None,
     single_pass: Annotated[
         bool,
         typer.Option(
@@ -5209,6 +5992,7 @@ def batch_drive_command(
         _fail("--single-pass only applies to --once: a looping driver is not a single pass")
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
+    pacer = make_pacer(target, quota_floor=quota_floor, interval_s=interval)  # refuses a bad floor
     guard: SinglePass | None = None
     if once and yes:
         command = loop_command(
@@ -5242,7 +6026,7 @@ def batch_drive_command(
     with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
         try:
             with _sigterm_interrupts():
-                restart = _host_loop(driver, once=once, interval=interval)
+                restart = _host_loop(driver, once=once, interval=interval, pacer=pacer)
         except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
             driver.release_lease()
             raise

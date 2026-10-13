@@ -359,6 +359,8 @@ def test_a_protection_refusal_fails_at_once_naming_the_bypass_actor(
     assert len(world.bump_calls) == 1  # never retried as a lost race
     err = capsys.readouterr().err
     assert "bypass actor" in err
+    assert "derio-fr-automation" in err
+    assert "FR_AUTOMATION_APP_ID" in err
     assert "protection" in err
     assert "lost the push race" not in err
 
@@ -588,9 +590,11 @@ class _FakeRun:
     def __init__(self, installed: str, rc: int = 0, tail: str = "3516 passed") -> None:
         self.installed, self.rc, self.tail = installed, rc, tail
         self.calls: list[list[str]] = []
+        self.envs: list[object] = []
 
-    def __call__(self, cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+    def __call__(self, cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(cmd))
+        self.envs.append(kw.get("env"))
         if "pytest" in cmd:
             return subprocess.CompletedProcess(cmd, self.rc, f"...\n{self.tail}\n", "")
         return subprocess.CompletedProcess(cmd, 0, f"{self.installed}\n", "")
@@ -1009,3 +1013,41 @@ def test_a_change_hidden_behind_a_unicode_line_separator_refuses(
 
     assert release.main([], repo=world.clone, commands=_migrating(world, rewrite)) != 0
     assert RUN_CURSOR in capsys.readouterr().err
+
+
+# -- no credential is readable by the staged tests (spec 2026-10-11 §F) ----------
+
+
+def test_the_staged_test_subprocess_env_carries_no_forge_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for var in ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"):
+        monkeypatch.setenv(var, "secret")
+    monkeypatch.setenv("KEEP_ME", "1")
+    run = _FakeRun("5.0.0")
+
+    assert release._run_staged_tests(tmp_path, "5.0.0", run=run) is None
+
+    assert len(run.envs) == 2  # the probe and the suite
+    for env in run.envs:
+        assert isinstance(env, dict)
+        assert not {"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN"} & set(env)
+        assert env["KEEP_ME"] == "1"
+
+
+def test_pushes_authenticate_only_their_own_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    def fake(cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(release.subprocess, "run", fake)
+    release.push(tmp_path)
+    release._git(tmp_path, "status")
+
+    auth = ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
+    assert seen[0][1:5] == auth and "push" in seen[0]
+    assert "credential.helper=!gh auth git-credential" not in seen[1]

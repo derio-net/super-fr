@@ -1,0 +1,2 @@
+bump: minor
+summary: "drive: pace forge reads against the shared GraphQL quota — wait for the reset, a budget floor (quota_floor / --quota-floor) with essential-only passes, and ETag-probed quiet passes"

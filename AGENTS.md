@@ -522,6 +522,17 @@ read-only and fine to run anywhere. A hand-written `fr_version` floor
 (`>=X.Y.Z,<X.Y.Z` under `packages/*/src`) naming an unreleased version must
 name the predicted one: the base version plus this PR's highest fragment bump.
 
+**Release identity.** `release.yml` pushes as the `derio-fr-automation` GitHub
+App when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
+secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
+step, scoped to this repo with contents and issues write only, never persisted by
+checkout and stripped from the staged test run), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
+way: a `GITHUB_TOKEN` push runs no CI on the release commit, an app push does,
+and `release.yml` then runs once more as a no-op. The app is the ruleset's bypass
+actor once `scripts/configure-main-protection.sh --stage bypass` has run; `--stage
+require` then adds the required `ci-ok` check and refuses until a release was
+pushed by the app. Order and consumer adoption: `docs/merge-protection.md`.
+
 On every push to `main`, `.github/workflows/release.yml` runs
 `scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`
 and then `fr migrate artifacts --yes` at the new number (at a major that widens
@@ -530,16 +541,18 @@ know; gh#861, and that moves the stamp of a live artifact a PR merged with after
 another PR bumped its kind — the #1058 release), `git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
 whole suite on that staged tree with `fr` installed at the new number**, and only
 then pushes it to `main` (the only commits that land there without a PR), tags
-it and publishes a GitHub Release whose notes are the fragment summaries. No CI
-runs on the release commit itself (it is pushed with the `GITHUB_TOKEN`), so that
-pre-push run is the only test the new number gets: a red suite pushes, tags and
+it and publishes a GitHub Release whose notes are the fragment summaries. In the
+`GITHUB_TOKEN` fallback no CI runs on the release commit, so that pre-push run is
+the only test the new number gets (an app push does run CI): a red suite pushes, tags and
 publishes nothing (gh#854 — 5.0.0 shipped refusing its own plans before it
 existed). It is why the Release job has its own budget in
 `.github/ci-budget.yaml`. To release a specific
 number, run the workflow by hand (`workflow_dispatch`) with an explicit
-`version`. `main`'s ruleset forbids only force-push and deletion today; **if a
-required-PR or required-checks rule is ever added, the release bot needs a
-bypass actor on it**, or every release fails (release.py reports that refusal
+`version`. `main`'s ruleset forbids only force-push and deletion today; **once
+a required-PR or required-checks rule is added (`--stage require`), the app must
+be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting the
+variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
+every release fails (release.py reports that refusal
 by name, never as a lost race).
 
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible

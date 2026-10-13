@@ -379,7 +379,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 10
+    assert facts.to_json()["schema"] == 11
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -418,6 +418,19 @@ def test_client_forge_raises_the_triage_forge_error_not_gh_error(
         with pytest.raises(ForgeError, match="HTTP 404") as exc:
             call(ClientForge(RealGhClient()))
         assert not isinstance(exc.value, gh.GhError)
+
+
+def test_client_forge_rate_limit_raises_forge_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr import gh
+    from fr.real_ghclient import RealGhClient
+    from fr.triage.collect import ClientForge
+
+    def boom(args: list[str]) -> str:
+        raise gh.GhError("HTTP 500", stderr="HTTP 500", returncode=1)
+
+    monkeypatch.setattr(gh, "_run_gh", boom)
+    with pytest.raises(ForgeError):
+        ClientForge(RealGhClient()).rate_limit()
 
 
 def test_client_forge_with_no_gh_binary_raises_a_one_line_forge_error(
@@ -695,7 +708,7 @@ def test_collect_ignores_an_untrusted_authors_marker() -> None:
 
 def test_collected_facts_are_schema_9() -> None:
     facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
-    assert facts.to_json()["schema"] == 10
+    assert facts.to_json()["schema"] == 11
 
 
 def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:

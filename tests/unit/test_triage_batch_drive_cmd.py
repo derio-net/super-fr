@@ -22,6 +22,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd, triage_kanban_cmd
 from fr.gh import GhError
+from fr.ghclient import BaseRules, QueueState
 from fr.triage import drive_lock
 from fr.triage.batch_merge import HeadMovedError, MergeAttempt, MergeStopError
 from fr.triage.claims import claims_from_comments, to_issue_claim
@@ -63,6 +64,8 @@ class World:
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.config: dict[str, Any] | None = None
         self.titles: dict[int, str] = {}
+        self.labels_defined: set[str] = {"approved-fr"}
+        self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -77,6 +80,8 @@ class World:
             "merged_at": None,
             "author": "operator",
             "cross_repo": False,
+            # The operator's approval (merge-train-safety §A): on unless a test says not.
+            "labels": ["approved-fr"],
             **kw,
         }
 
@@ -128,6 +133,7 @@ class World:
             checks=self.all_checks.get(n, {"pass": 1, "fail": 0, "pending": 0}),
             author=p["author"],
             cross_repo=p["cross_repo"],
+            labels=list(p["labels"]) if p["state"] == "OPEN" else None,
         )
 
     # -- the GhClient adapter
@@ -136,7 +142,42 @@ class World:
         p = self.prs[number]
         view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
         merge = p.get("merge_commit", f"merge-{number}")
-        return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge}
+        return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge,
+                "labels": list(p["labels"])}  # fmt: skip
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        self.calls.append(f"pr_ready {number}")
+        self.prs[number]["draft"] = False
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        self.calls.append(f"label_exists {name}")
+        return name in self.labels_defined
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        self.calls.append("base_rules")
+        return getattr(self, "rules", BaseRules())
+
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        self.calls.append(f"pr_enqueue {number}")
+        if getattr(self, "refuse_enqueue", None):
+            raise GhError(self.refuse_enqueue, returncode=1)  # type: ignore[attr-defined]
+        if self.prs[number]["draft"]:  # GitHub refuses to enqueue a draft
+            raise GhError("GraphQL: Pull request is in draft state", returncode=1)
+        assert self.prs[number]["head_oid"] == head_sha
+        self.enqueued: list[tuple[int, str, str]] = [
+            *getattr(self, "enqueued", []),
+            (number, head_sha, method),
+        ]
+        self.queue_states[number] = QueueState(in_queue=True, auto_merge=True)
+
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        self.calls.append(f"pr_dequeue {number}")
+        self.dequeued: list[int] = [*getattr(self, "dequeued", []), number]
+        self.queue_states[number] = QueueState(in_queue=False, auto_merge=False)
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        self.calls.append(f"pr_queue_state {number}")
+        return self.queue_states.get(number, QueueState(in_queue=False, auto_merge=False))
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         return list(self.checks.get(number, [{"name": "test", "bucket": "pass"}]))
@@ -187,9 +228,13 @@ class World:
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.calls.append("ensure_labels")
+        self.labels_defined.update(getattr(x, "name", x) for x in labels)
 
     def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
         self.calls.append(f"label {number}")
+        if number in self.prs:
+            gone = kw.get("remove", frozenset())
+            self.prs[number]["labels"] = [x for x in self.prs[number]["labels"] if x not in gone]
 
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
         # a dispatched member carries both labels; an unlabelling release reads them first
@@ -287,6 +332,9 @@ class DriveCheckout:
     def remove_worktree(self, where: Path) -> None:
         pass
 
+    def rev_parse(self, ref: str) -> str:
+        return f"{ref}@fetched"
+
     def fast_forward(self, *, switch: bool = False) -> None:
         self.forwarded += 1
         self.switched.append(switch)
@@ -354,7 +402,7 @@ def world_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
     w = World()
     passes: list[int] = []
 
-    def _recollect(scope: Any, target: Path) -> None:
+    def _recollect(scope: Any, target: Path, **_: Any) -> None:
         passes.append(1)
         (target / "facts.json").write_text(json.dumps(w.facts().to_json()), "utf-8")
 
@@ -580,7 +628,7 @@ def test_nothing_to_do_while_work_remains_exits_3(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     world.issues[1] = "open"
-    world.pr(101, "feat/batch-b1", [1], draft=True)
+    world.pr(101, "feat/batch-b1", [1], draft=True, labels=[])  # an unapproved draft
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 3, out
@@ -643,7 +691,7 @@ def test_a_ready_green_pr_is_merged_without_waiting(
 @pytest.mark.parametrize(
     "setup",
     [
-        lambda w: w.prs[101].update(draft=True),
+        lambda w: w.prs[101].update(draft=True, labels=[]),  # an approved draft merges
         lambda w: w.checks.update({101: [{"name": "test", "bucket": "pending"}]}),
         lambda w: (
             w.all_checks.update({101: {"pass": 0, "fail": 0, "pending": 2}})
@@ -660,7 +708,7 @@ def test_a_pr_that_is_not_ready_and_green_is_left(
     code, _ = _drive(tmp_path, "--once", "--yes")
     assert code == 3
     assert world.merged == []
-    assert not any(c.startswith(("ready", "approve")) for c in world.calls)
+    assert not any(c.startswith(("ready", "approve", "pr_ready")) for c in world.calls)
 
 
 def test_a_ci_none_repo_merges_on_non_draft_alone(
@@ -693,7 +741,10 @@ def test_a_failing_check_warns_once_per_head_across_loop_passes(
     monkeypatch.setattr(triage_batch_cmd, "_sleep", _fix_after_two)
     world.config = None
     code, out = _drive(tmp_path, "--yes", "--interval", "5")
-    assert _lines(out, "warn") == ["warn b1: PR #101 CI failing at sha-101: lint"]
+    # said once: the plain runner has no session to message, so the recovery decides
+    # needs-you once at that head (merge-train-safety §C) and the later pass is quiet
+    (line,) = _lines(out, "warn")
+    assert line.startswith("warn b1: PR #101 CI failing at sha-101: lint; ")
     assert world.merged == [(101, "sha-101", "squash")]
     assert sleeps[:2] == [5, 5]
 
@@ -1266,7 +1317,7 @@ def test_a_pass_that_acts_on_nothing_still_writes_the_board(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     world.issues[1] = "open"
-    world.pr(101, "feat/batch-b1", [1], draft=True)
+    world.pr(101, "feat/batch-b1", [1], draft=True, labels=[])
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
     code, _ = _drive(tmp_path, "--once", "--yes")
     assert code == 3
@@ -1572,8 +1623,10 @@ def test_a_head_that_moves_after_the_snapshot_is_not_merged(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch, required: bool,
 ) -> None:  # fmt: skip
-    """rg-2: the merge is pinned to the head whose checks were judged."""
+    """rg-2: the merge is pinned to the head whose checks were judged. Here the move is
+    fr's own update (recorded), so the train waits for it (p1-r10)."""
     _pr_open(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-101", "sha-pushed")
     if not required:
         world.checks[101] = []
     views: list[int] = []
@@ -1581,7 +1634,7 @@ def test_a_head_that_moves_after_the_snapshot_is_not_merged(
 
     def _view(repo: str, number: int) -> dict[str, Any]:
         views.append(number)
-        if len(views) == 2:  # after the snapshot read it: someone pushes
+        if len(views) == 3:  # after the approval settle and the snapshot: someone pushes
             world.prs[101]["head_oid"] = "sha-pushed"
         return real_view(repo, number)
 
@@ -1780,7 +1833,7 @@ def test_a_driver_does_not_remove_a_lock_it_no_longer_owns(
     rival = json.dumps({"pid": 4242, "started": "rival"})
     real = triage_batch_cmd.recollect
 
-    def _recollect(scope: Any, target: Path) -> None:
+    def _recollect(scope: Any, target: Path, **_: Any) -> None:
         lock.write_text(rival)
         real(scope, target)
 
@@ -1801,7 +1854,7 @@ def test_the_lock_is_written_whole_before_it_is_visible(
     seen: list[str] = []
     real = triage_batch_cmd.recollect
 
-    def _recollect(scope: Any, target: Path) -> None:
+    def _recollect(scope: Any, target: Path, **_: Any) -> None:
         seen.append(lock.read_text())
         real(scope, target)
 
@@ -1931,7 +1984,7 @@ def _flaky_collect(
         if len(calls) <= failures:
             raise ForgeError(message)
         (target / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
-        return None, target / "facts.json", CollectStats()
+        return world.facts(), target / "facts.json", CollectStats()
 
     monkeypatch.setattr(triage_batch_cmd, "recollect", REAL_RECOLLECT)
     monkeypatch.setattr(triage_batch_cmd, "collect_into", _collect_into)
@@ -2345,6 +2398,21 @@ def train(monkeypatch: pytest.MonkeyPatch) -> ScriptedMerge:
     return fake
 
 
+def _fr_moved(tmp_path: Path, bid: str, pr: int, before: str, after: str) -> None:
+    """Record, on *bid*, the operator's approval at *before* and fr's own update from it
+    to *after* (merge-train-safety §B): a head that moves there is fr's move."""
+    path = tmp_path / "judgements.yaml"
+    text = path.read_text("utf-8").replace("schema: 3\n", "schema: 9\n", 1)
+    marker = f"branch: feat/batch-{bid}}}\n"
+    extra = (
+        f"      - {{kind: approval, at: 2026-10-01T10:30:00Z, pr: {pr}, head: {before}}}\n"
+        f"      - {{kind: update, at: 2026-10-01T10:40:00Z, pr: {pr}, head_before: {before}, "
+        f"head_after: {after}, base: m1}}\n"
+    )
+    assert marker in text
+    path.write_text(text.replace(marker, marker + extra, 1), "utf-8")
+
+
 def _three_ready(world: World, tmp_path: Path) -> None:
     batches = []
     for i in (1, 2, 3):
@@ -2441,12 +2509,13 @@ def test_a_head_moved_since_the_checks_were_judged_stops_the_train(
     train: ScriptedMerge, monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
     _three_ready(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-101", "sha-pushed")  # fr's own move (p1-r10)
     seen: list[int] = []
     real_view = world.pr_view
 
     def _view(repo: str, number: int) -> dict[str, Any]:
         seen.append(number)
-        if number == 101 and seen.count(101) == 2:
+        if number == 101 and seen.count(101) == 3:  # after the settle and the snapshot
             world.prs[101]["head_oid"] = "sha-pushed"
         return real_view(repo, number)
 
@@ -2460,7 +2529,7 @@ def test_a_head_moved_since_the_checks_were_judged_stops_the_train(
     ]
 
 
-@pytest.mark.parametrize("outcome", ["failing", "draft"])
+@pytest.mark.parametrize("outcome", ["failing", "unapproved", "unready"])
 def test_a_head_that_is_failing_or_draft_at_merge_time_is_stepped_over(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, train: ScriptedMerge,
     outcome: str,
@@ -3444,7 +3513,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 8
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 9
 
 
 @pytest.mark.parametrize("status", ["idle", "absent", "working"])
@@ -4080,3 +4149,686 @@ def test_a_failing_publish_leaves_a_once_drive_exit_code_alone(
     (tmp_path / "scope.yaml").write_text(yaml.safe_dump({"publish": ["/no/such"]}))
     code, said = _drive(tmp_path, "--once", "--yes", "--single-pass")
     assert code == 0 and "could not publish the board" in said
+
+
+# ------------------------------------------- the approval gate (merge-train-safety §A)
+
+
+def _approvals(tmp_path: Path, bid: str) -> list[Any]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e for e in batch.events if e.kind in ("approval", "update")]
+
+
+def test_the_driver_holds_an_unlabelled_green_pr_and_says_it_awaits_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path, labels=[])
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+    assert "awaiting approval b1 (#101)" in out
+    assert _approvals(tmp_path, "b1") == []
+
+
+def test_the_driver_readies_and_merges_a_labelled_draft(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path, draft=True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "pr_ready 101" in world.calls
+    assert world.merged == [(101, "sha-101", "squash")]
+    (approval,) = _approvals(tmp_path, "b1")
+    assert (approval.pr, approval.head, approval.voided_at) == (101, "sha-101", None)
+
+
+def test_a_session_push_after_labelling_voids_the_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")  # records the approval at sha-101; CI is red
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "approval of PR #101 at sha-101 voided: head moved to sha-session" in out
+    assert "label 101" in world.calls and world.prs[101]["labels"] == []
+    assert world.merged == []
+    assert _approvals(tmp_path, "b1")[-1].voided_at == "sha-session"
+
+
+def test_a_driver_update_is_recorded_and_keeps_the_approval(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    checkout.behind.add("sha-101")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "updated PR #101 to sha-updated" in out, out
+    approval, update = _approvals(tmp_path, "b1")
+    assert (update.head_before, update.head_after, update.base) == (
+        "sha-101",
+        "sha-updated",
+        "origin/main@fetched",
+    )
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [(101, "sha-updated", "squash")], out
+    assert "voided" not in out
+
+
+def test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path, labels=[])
+    world.labels_defined.clear()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert f"created label approved-fr on {REPO}" in out
+    assert world.calls.count("label_exists approved-fr") == 1
+    _drive(tmp_path, "--once", "--yes")
+    assert world.calls.count("label_exists approved-fr") == 2  # one per pass
+    assert out.count("created label") == 1
+
+
+def test_a_foreign_push_after_the_snapshot_is_stepped_over_not_a_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    train: ScriptedMerge, monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p1-r10: a push fr did not make voids the approval, so the PR is stepped over like
+    any unapproved one and the PRs behind it are tried."""
+    _three_ready(world, tmp_path)
+    seen: list[int] = []
+    real_view = world.pr_view
+
+    def _view(repo: str, number: int) -> dict[str, Any]:
+        seen.append(number)
+        if number == 101 and seen.count(101) == 3:  # after the settle and the snapshot
+            world.prs[101]["head_oid"] = "sha-pushed"
+        return real_view(repo, number)
+
+    monkeypatch.setattr(world, "pr_view", _view)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "merge")[0] == (
+        "merge b1: held: PR #101 head moved from sha-101 to sha-pushed by a push fr did "
+        "not make; its approved-fr approval is void"
+    )
+    assert train.calls == [102, 103], out
+
+
+def test_a_pass_dispatching_several_batches_checks_the_label_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r5 (R4: at most once per repo per pass), whatever the pass dispatches."""
+    _proposed(world, tmp_path, 3)
+    code, out = _drive(tmp_path, "--once", "--yes", "--single-pass")
+    assert len(runner.dispatched) == 3, out
+    assert world.calls.count("label_exists approved-fr") == 1
+
+
+def test_the_pass_that_voids_an_approval_leaves_facts_and_board_without_the_label(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r9: the pass's facts were collected before it voided; the board it writes must
+    not show the voided PR as approved."""
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    _drive(tmp_path, "--once", "--yes")  # records the approval at sha-101
+    world.prs[101]["head_oid"] = "sha-session"
+    world.checks[101] = [{"name": "lint", "bucket": "pass"}]
+    _drive(tmp_path, "--once", "--yes")  # voids it
+    facts = load_facts(tmp_path / "facts.json")
+    every = [*facts.prs, *facts.batch_prs, *(p for i in facts.issues for p in i.prs)]
+    found = [p for p in every if p.number == 101]
+    assert found and all("approved-fr" not in (p.labels or []) for p in found)
+    rows = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    assert [r.text for r in rows if r.kind == "approve-pr"] == [
+        "PR #101 changed since you approved it at sha-101: re-label to merge"
+    ]
+
+
+def test_the_drivers_board_asks_for_the_label_in_a_ci_none_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p1-r2: the driver holds a `ci none` repo's unlabelled PR, so its board says so."""
+    _pr_open(world, tmp_path, labels=[])
+    world.checks[101] = []
+    world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
+    monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "awaiting approval b1 (#101)" in out
+    assert "awaiting approval" in _page(tmp_path)
+
+
+def test_a_local_clone_tells_the_board_its_repo_is_ci_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import triage_kanban_cmd
+
+    class Clone:
+        def origin_repo(self) -> str:
+            return REPO.upper()
+
+    monkeypatch.setattr(triage_kanban_cmd.Checkout, "at", classmethod(lambda cls, p: Clone()))
+    monkeypatch.setattr(triage_batch_cmd, "ci_none_at", lambda checkout: True)
+    facts = Facts(scope="s", kind="repo", collected_at="2026-10-11T00:00:00Z", repos=[REPO],
+                  issues=[])  # fmt: skip
+    assert triage_kanban_cmd.local_ci_none(facts) == frozenset({REPO})
+    monkeypatch.setattr(triage_batch_cmd, "ci_none_at", lambda checkout: False)
+    assert triage_kanban_cmd.local_ci_none(facts) == frozenset()
+
+
+# --------------------------- red recovery (merge-train-safety §C, R9-R11)
+
+
+def _red(world: World, tmp_path: Path) -> None:
+    """PR #101 of b1 is red at sha-101 on `lint`."""
+    _pr_open(world, tmp_path)
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    world.all_checks[101] = {"pass": 0, "fail": 1, "pending": 0}
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+
+
+def _red_events(tmp_path: Path, bid: str = "b1") -> list[Any]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e for e in batch.events if e.kind == "red_handback"]
+
+
+def _red_needs(tmp_path: Path) -> list[str]:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    facts = load_facts(tmp_path / "facts.json")
+    needs = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    return [n.kind for n in needs if n.kind in ("failing-ci", "red-pr")]
+
+
+def test_a_red_pr_is_handed_back_to_its_idle_session_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1, out
+    assert "sha-101" in text and "lint" in text and "PR" in text
+    (event,) = _red_events(tmp_path)
+    assert (event.pr, event.head, event.checks, event.delivered) == (
+        101,
+        "sha-101",
+        ["lint"],
+        "session",
+    )
+    (line,) = _lines(out, "warn")
+    assert "CI failing at sha-101: lint" in line and "handed back to its session" in line
+    assert world.merged == []
+    # the same red head again: nothing sent, nothing recorded, no warn line
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(messenger.messages) == 1 and len(_red_events(tmp_path)) == 1
+    assert _lines(out, "warn") == []
+
+
+def test_a_red_pr_whose_session_is_working_waits_and_records_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "working"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and _red_events(tmp_path) == []
+    (line,) = _lines(out, "warn")
+    assert "its session is working: nothing sent, retried next pass" in line
+
+
+@pytest.mark.parametrize("status", ["absent", "done"])
+def test_a_red_pr_with_no_session_to_take_it_needs_you_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner, status: str
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = status
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (event,) = _red_events(tmp_path)
+    assert event.delivered == "none" and event.head == "sha-101"
+    assert messenger.messages == [] and messenger.dispatched == []  # no fresh session (§C)
+    assert _red_needs(tmp_path) == ["red-pr"]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(_red_events(tmp_path)) == 1 and _lines(out, "warn") == []
+
+
+def test_a_delivered_hand_back_suppresses_failing_ci_on_the_board(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    assert _red_needs(tmp_path) == ["failing-ci"]  # before anything was sent
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert _red_needs(tmp_path) == []
+    world.prs[101]["head_oid"] = "sha-newer"  # a new red head is not covered
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert _red_needs(tmp_path) == ["failing-ci"]
+
+
+def test_a_red_pr_at_an_fr_made_head_with_a_moved_base_is_updated_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")  # base m1; the clone now says otherwise
+    checkout.behind.add("sha-101")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [], out  # an update, not a hand-back
+    assert world.prs[101]["head_oid"] == "sha-updated"
+    updates = [
+        e for b in load_judgements(tmp_path / "judgements.yaml").batches
+        for e in b.events if e.kind == "update"
+    ]  # fmt: skip
+    assert [(e.head_before, e.head_after) for e in updates] == [
+        ("sha-old", "sha-101"),
+        ("sha-101", "sha-updated"),
+    ]
+    assert updates[-1].base == "origin/main@fetched"
+    (line,) = _lines(out, "warn")
+    assert "updated PR #101 to sha-updated" in line
+
+
+def test_a_red_pr_at_an_fr_made_head_with_an_unmoved_base_is_handed_back(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _red(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")
+    monkeypatch.setattr(checkout, "rev_parse", lambda ref: "m1")  # the base has not moved
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert len(messenger.messages) == 1 and world.prs[101]["head_oid"] == "sha-101"
+
+
+def test_two_red_hand_backs_per_dispatch_then_the_third_needs_you(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    for head in ("sha-a", "sha-b", "sha-c"):
+        world.prs[101]["head_oid"] = head
+        _drive(tmp_path, "--once", "--yes")
+        (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert [e.delivered for e in _red_events(tmp_path)] == ["session", "session", "none"]
+    assert len(messenger.messages) == 2
+
+
+def test_the_base_rules_are_read_once_per_repo_per_pass_and_reach_the_merge_context(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """merge-train-safety §D: one read per pass; strict checks ride the context (R14)."""
+    seen: list[bool] = []
+
+    def _spy(ctx: Any, slot: Any, previous: Any) -> Any:
+        seen.append(ctx.strict_checks)
+        return MergeAttempt("merged", head="sha-101")
+
+    monkeypatch.setattr(triage_batch_cmd, "merge_ready", _spy)
+    world.rules = BaseRules(merge_queue=False, strict_checks=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path)
+    _drive(tmp_path, "--once", "--yes")
+    assert seen == [True] and world.calls.count("base_rules") == 1
+
+
+# ------------------- red recovery: no I/O for a decided head, deduped lines (p2-r2..r5)
+
+
+def test_an_already_handed_back_red_head_builds_no_context_and_reads_no_base(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _red(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert len(_red_events(tmp_path)) == 1
+    built: list[str] = []
+    fetched: list[int] = []
+    real = triage_batch_cmd._Driver.merge_ctx
+
+    def _spy(self: Any, facts: Any, repo: str) -> Any:
+        built.append(repo)
+        return real(self, facts, repo)
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "merge_ctx", _spy)
+    monkeypatch.setattr(checkout, "rev_parse", lambda ref: fetched.append(1) or "x")
+    _drive(tmp_path, "--once", "--yes")
+    assert built == [] and fetched == []
+
+
+def test_a_red_pr_whose_runner_this_driver_lacks_says_so_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.driver import HOST
+
+    _red(world, tmp_path)
+    monkeypatch.setattr(type(HOST), "carries", lambda self, runner: False)
+    sleeps: list[float] = []
+
+    def _stop(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise _StopError
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop)
+    result = _drive_named(tmp_path, "--yes", "--interval", "5")
+    lines = _lines(result.output, "warn")
+    assert len(lines) == 1 and "left to that runner's driver" in lines[0]
+    assert messenger.messages == [] and _red_events(tmp_path) == []
+
+
+def test_a_failing_status_read_and_a_failing_send_are_each_said_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _red(world, tmp_path)
+
+    def _boom_status(items: Any) -> dict[str, str]:
+        raise RuntimeError("socket down")
+
+    monkeypatch.setattr(messenger, "session_statuses", _boom_status)
+
+    def _two_passes() -> str:
+        sleeps: list[float] = []
+
+        def _stop(seconds: float) -> None:
+            sleeps.append(seconds)
+            if len(sleeps) == 2:
+                raise _StopError
+
+        monkeypatch.setattr(triage_batch_cmd, "_sleep", _stop)
+        return str(_drive_named(tmp_path, "--yes", "--interval", "5").output)
+
+    out = _two_passes()
+    assert out.count("could not be read: socket down") == 1
+
+    monkeypatch.setattr(messenger, "session_statuses", lambda items: {i.id: "idle" for i in items})
+
+    def _boom_send(item: Any, text: str) -> None:
+        raise RuntimeError("pane gone")
+
+    monkeypatch.setattr(messenger, "message", _boom_send)
+    out = _two_passes()
+    assert out.count("failed, retried next pass: pane gone") == 1
+    assert _red_events(tmp_path) == []
+
+
+def test_a_reupdate_keeps_the_approval_and_leaves_draft_and_labels_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _red(world, tmp_path)
+    world.prs[101]["draft"] = True
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")
+    checkout.behind.add("sha-101")
+    labels = list(world.prs[101]["labels"])
+    _drive(tmp_path, "--once", "--yes")
+    assert world.prs[101]["head_oid"] == "sha-updated"
+    assert world.prs[101]["draft"] is True and world.prs[101]["labels"] == labels
+    assert not any(c.startswith(("pr_ready", "label 101")) for c in world.calls)
+    kinds = [e.kind for b in load_judgements(tmp_path / "judgements.yaml").batches
+             for e in b.events]  # fmt: skip
+    assert kinds.count("approval") == 1 and kinds.count("update") == 2  # none voided or re-recorded
+
+
+# --------------------------- merge queues (merge-train-safety §D, R13)
+
+QUEUE_CONFIG = {
+    "version": {
+        "source": {"file": "pyproject.toml", "key": "project.version"},
+        "files": ["pyproject.toml"],
+        "set": "python scripts/bump.py {version}",
+    }
+}
+
+
+def _queue_repo(world: World, tmp_path: Path) -> None:
+    """PR #101 of b1 is green and approved on a repo whose base requires a merge queue."""
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path)
+
+
+def _enqueued(tmp_path: Path, bid: str, pr: int, head: str, base: str, *outcomes: str) -> None:
+    """Record, on *bid*, the driver's earlier enqueue of *pr* at *head* with the base at *base*."""
+    path = tmp_path / "judgements.yaml"
+    text = path.read_text("utf-8").replace("schema: 3\n", "schema: 9\n", 1)
+    marker = f"branch: feat/batch-{bid}}}\n"
+    extra = (
+        f"      - {{kind: approval, at: 2026-10-01T10:30:00Z, pr: {pr}, head: {head}}}\n"
+        f"      - {{kind: enqueue, at: 2026-10-01T10:40:00Z, pr: {pr}, head: {head}, "
+        f"base: {base}}}\n"
+        + "".join(
+            f"      - {{kind: enqueue, at: 2026-10-01T10:50:00Z, pr: {pr}, head: {head}, "
+            f"base: {base}, outcome: {o}, detail: not mergeable}}\n"
+            for o in outcomes
+        )
+    )
+    assert marker in text
+    path.write_text(text.replace(marker, marker + extra, 1), "utf-8")
+
+
+def test_a_queue_repo_enqueues_an_approved_green_pr_and_records_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.enqueued == [(101, "sha-101", "squash")] and world.merged == []  # type: ignore[attr-defined]
+    assert _lines(out, "enqueue") == ["enqueue b1: enqueued PR #101 at sha-101"]
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == "b1")
+    (event,) = [e for e in batch.events if e.kind == "enqueue"]
+    assert (event.pr, event.head, event.base) == (101, "sha-101", "origin/main@fetched")
+    # the next pass finds it in the queue and writes nothing
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert len(world.enqueued) == 1 and _lines(out, "enqueue") == []  # type: ignore[attr-defined]
+
+
+def test_plan_mode_names_the_enqueue_and_writes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path)
+    assert "enqueue b1: PR #101 at sha-101" in out and not hasattr(world, "enqueued")
+
+
+def test_a_pr_ejected_with_the_base_moved_is_enqueued_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _enqueued(tmp_path, "b1", 101, "sha-101", "old-base")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert len(world.enqueued) == 1  # type: ignore[attr-defined]
+    assert "enqueue b1: enqueued PR #101 at sha-101" in out
+    events = [e for e in _enqueue_events(tmp_path) if e.outcome == "enqueued"]
+    assert [e.base for e in events] == ["old-base", "origin/main@fetched"]
+
+
+def test_a_pr_ejected_with_the_base_unmoved_needs_you_and_is_not_enqueued_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _enqueued(tmp_path, "b1", 101, "sha-101", "origin/main@fetched")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not hasattr(world, "enqueued")
+    assert "PR #101 left the merge queue unmerged" in out
+    assert world.merged == []
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["enqueued", "ejected"]
+    assert _queue_needs(tmp_path) == ["queue-ejected"]  # facts-only needs_you, from the events
+    code, out = _drive(tmp_path, "--once", "--yes")  # recorded once per head: not again
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["enqueued", "ejected"]
+    assert "left the merge queue" not in out
+
+
+def test_a_pr_waiting_to_enter_the_queue_is_left_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _enqueued(tmp_path, "b1", 101, "sha-101", "old-base")
+    world.queue_states[101] = QueueState(in_queue=False, auto_merge=True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not hasattr(world, "enqueued") and "left the merge queue" not in out
+
+
+def test_a_refused_enqueue_is_a_held_line_and_records_only_the_refusal(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    world.refuse_enqueue = "gh: Pull request is not mergeable"  # type: ignore[attr-defined]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "held: PR #101 enqueue refused" in out
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["refused"]
+    assert _queue_needs(tmp_path) == []  # one refusal is a retry, not yet a need
+
+
+def test_a_version_block_holds_a_queue_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.config = QUEUE_CONFIG
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "fr does not reserve versions through one" in out
+    assert not hasattr(world, "enqueued") and world.merged == []
+
+
+def test_forge_api_rest_holds_a_queue_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    monkeypatch.setenv("FR_FORGE_API", "rest")
+    _queue_repo(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "forge.api rest cannot enqueue" in out
+    assert not hasattr(world, "enqueued") and world.merged == []
+
+
+def test_a_repo_without_a_queue_merges_as_before(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [(101, "sha-101", "squash")] and not hasattr(world, "enqueued")
+    assert "pr_queue_state" not in " ".join(world.calls)
+
+
+def test_a_clone_without_origin_head_does_not_abort_a_pass_that_has_nothing_to_enqueue(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Queue reads are for repos with a candidate, and an unknowable default branch is no
+    queue, never a failed pass (the cloud driver's clone has no origin/HEAD)."""
+    from fr.triage.gitseam import GitError
+
+    def _unset() -> str:
+        raise GitError("cannot tell the default branch (origin/HEAD is unset)")
+
+    _pr_open(world, tmp_path, draft=True, labels=[])
+    world.checks[101] = [{"name": "lint", "bucket": "fail"}]
+    world.all_checks[101] = {"pass": 0, "fail": 1, "pending": 0}
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    monkeypatch.setattr(checkout, "default_branch", _unset)
+    code, out = _drive(tmp_path)  # plan mode: a failing PR is no candidate
+    assert "base_rules" not in world.calls, out
+    world.checks[101] = [{"name": "test", "bucket": "pass"}]
+    world.all_checks[101] = {"pass": 1, "fail": 0, "pending": 0}
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    code, out = _drive(tmp_path)  # a candidate, but the branch is unknowable: read as no queue
+    assert code == 0 and "Traceback" not in out, out
+
+
+def _enqueue_events(tmp_path: Path, bid: str = "b1") -> list[Any]:
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == bid)
+    return [e for e in batch.events if e.kind == "enqueue"]
+
+
+def _queue_needs(tmp_path: Path) -> list[str]:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    facts = load_facts(tmp_path / "facts.json")
+    needs = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    return [n.kind for n in needs if n.kind in ("queue-ejected", "enqueue-refused")]
+
+
+def test_an_approved_draft_is_readied_then_enqueued(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path, draft=True)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.prs[101]["draft"] is False
+    assert world.calls.index("pr_ready 101") < world.calls.index("pr_enqueue 101")
+    assert world.enqueued == [(101, "sha-101", "squash")]  # type: ignore[attr-defined]
+
+
+def test_a_draft_whose_label_is_gone_is_not_enqueued(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _pr_open(world, tmp_path, draft=True, labels=[])
+    _drive(tmp_path, "--once", "--yes")
+    assert "pr_enqueue 101" not in world.calls
+
+
+def test_two_refusals_at_one_head_become_a_need_and_stop_the_retries(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    world.refuse_enqueue = "gh: Pull request is not mergeable"  # type: ignore[attr-defined]
+    for _ in range(3):
+        _drive(tmp_path, "--once", "--yes")
+        (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    assert world.calls.count("pr_enqueue 101") == 2  # the third pass does not try
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["refused", "refused"]
+    assert _queue_needs(tmp_path) == ["enqueue-refused"]
+
+
+def test_an_unknown_default_branch_holds_the_candidate_repo_and_says_so_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.gitseam import GitError
+
+    def _unset() -> str:
+        raise GitError("origin/HEAD is unset")
+
+    _pr_open(world, tmp_path)
+    monkeypatch.setattr(checkout, "default_branch", _unset)
+    code, out = _drive(tmp_path)
+    assert "cannot tell derio-net/super-fr's default branch: queue mode unknown" in out
+    assert out.count("queue mode unknown") >= 1 and world.merged == []
+
+
+def test_removing_the_label_after_the_enqueue_dequeues_the_pr_and_a_relabel_enqueues_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _queue_repo(world, tmp_path)
+    _drive(tmp_path, "--once", "--yes")
+    assert len(world.enqueued) == 1  # type: ignore[attr-defined]
+    world.prs[101]["labels"] = []  # the operator un-approves it
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "dequeued PR #101: its approved-fr approval is gone" in out
+    assert world.dequeued == [101]  # type: ignore[attr-defined]
+    assert [e.outcome for e in _enqueue_events(tmp_path)] == ["enqueued", "dequeued"]
+    world.prs[101]["labels"] = ["approved-fr"]
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    _drive(tmp_path, "--once", "--yes")
+    assert len(world.enqueued) == 2 and _queue_needs(tmp_path) == []  # type: ignore[attr-defined]
+
+
+def test_a_queue_repo_red_pr_is_never_re_updated(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p3-r7: a pre-queue update event does not make fr push an update in a queue repo."""
+    world.rules = BaseRules(merge_queue=True)  # type: ignore[attr-defined]
+    _red(world, tmp_path)
+    _fr_moved(tmp_path, "b1", 101, "sha-old", "sha-101")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    _drive(tmp_path, "--once", "--yes")
+    assert world.prs[101]["head_oid"] == "sha-101" and len(messenger.messages) == 1

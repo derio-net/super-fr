@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fr.gh import GhError
+from fr.ghclient import BaseRules
 
 
 @dataclass
@@ -45,6 +46,8 @@ class FakeGhClient:
         self.issue_authors: dict[tuple[str, int], str] = {}
         self.repo_labels: dict[str, set[str]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.label_checks: list[tuple[str, str]] = []
+        self.labels_missing: set[str] = set()
         self.attempted_mutations: int = 0
         self._next_issue_number: dict[str, int] = {}
         # Fail on Nth attempted mutation (0-indexed). The mutation is NOT
@@ -307,6 +310,9 @@ class FakeGhClient:
             if r == repo and p["head_ref"] == branch
         ]
 
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        return getattr(self, "rules", BaseRules())
+
     def required_check_names(self, repo: str, base: str) -> list[str]:
         self.calls.append(("required_check_names", {"repo": repo, "base": base}))
         return sorted(self.required_names.get((repo, base), []))
@@ -333,7 +339,19 @@ class FakeGhClient:
             "mergeable": p["mergeable"],
             "title": p["title"],
             "body": p["body"],
+            "labels": list(p.get("labels", [])),
         }
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        self.calls.append(("pr_ready", {"repo": repo, "number": number}))
+        self.prs[(repo, number)]["draft"] = False
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        """The approval label is defined unless a test lists *repo* in
+        `labels_missing` (merge-train-safety R4); kept out of `calls`, which
+        the call-sequence assertions predate."""
+        self.label_checks.append((repo, name))
+        return repo not in self.labels_missing
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         """`{name, bucket, state}` rows a test preloads in `required_checks`."""

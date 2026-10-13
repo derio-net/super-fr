@@ -121,6 +121,13 @@ def _cloud_preflight(
     return lines
 
 
+NO_APPROVAL_LINE = (
+    "Never add the `approved-fr` label: it is the operator's approval to merge, and fr "
+    "voids it on your next push."
+)
+"""Every brief fr sends a batch session carries it (merge-train-safety §A, R6)."""
+
+
 def render_brief(
     batch: Batch,
     judgements: Judgements,
@@ -195,7 +202,27 @@ def render_brief(
             "- These members were batched as ONE root cause; if investigation finds more "
             "than one, stop and ask before fixing any.",
         ]
+    lines += ["", NO_APPROVAL_LINE]
     return "\n".join(lines) + "\n"
+
+
+def red_brief(batch: Batch, *, pr_url: str, head: str, checks: Sequence[str]) -> str:
+    """The red hand-back brief (merge-train-safety §C, R10): the PR, the failing sha and
+    the failing checks, what to do about it and what to leave alone."""
+    named = ", ".join(checks) or "its checks"
+    return (
+        "\n".join(
+            [
+                f"Red CI on batch {batch.id} ({batch.title}): {pr_url} is red at {head}; "
+                f"failing: {named}.",
+                "Fix it on the PR's own branch: commit the fix and push. Do not force-push "
+                "and do not rebase: the PR's history stays as it is.",
+                "Leave the PR's draft or ready state and its labels alone.",
+                NO_APPROVAL_LINE,
+            ]
+        )
+        + "\n"
+    )
 
 
 def conflict_brief(
@@ -235,6 +262,7 @@ def conflict_brief(
             "5. Run the test suite, and fix what the merge broke.",
             f"6. Commit the merge and `git push origin {branch}`. The driver merges the PR "
             "once its checks are green.",
+            NO_APPROVAL_LINE,
         ]
     )
 

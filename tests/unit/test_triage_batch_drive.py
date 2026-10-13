@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fr.triage.approval import First, Unlabelled
 from fr.triage.batch import ForeignPr, QueueEntry, batch_item_id
 from fr.triage.batch_drive import (
     CLOSEOUT_FALLBACK,
@@ -99,6 +100,9 @@ def _snap(
     }  # fmt: skip
     kw.setdefault("default_branch", {REPO: "main"})
     kw.setdefault("scope_id", SID)
+    # Every queued PR carries the operator's label unless a test says otherwise
+    # (merge-train-safety §A): the walk's approval gate has its own tests.
+    kw.setdefault("approvals", {e.batch.id: First(e.pr.head_oid) for e in queue})
     return Snapshot(
         batches=tuple(batches),
         stages=stages,  # type: ignore[arg-type]
@@ -216,7 +220,11 @@ def test_only_proposed_batches_are_dispatched() -> None:
 )
 def test_a_pr_that_is_not_ready_and_green_is_never_merged(live: dict[str, Any], why: str) -> None:
     b = _dispatched("x", 1)
-    got = drive_pass(_snap([b], {"x": "pr-open"}, live={"x": _live(1000, "head-x", **live)}))
+    # a draft is a member only with a valid approval (merge-train-safety §A)
+    unapproved = {"approvals": {"x": Unlabelled()}} if why == "draft" else {}
+    got = drive_pass(
+        _snap([b], {"x": "pr-open"}, live={"x": _live(1000, "head-x", **live)}, **unapproved)
+    )
     assert "merge" not in [a.kind for a in got.actions]
     assert got.summary.in_flight == 1
 
@@ -233,14 +241,16 @@ def test_a_ready_green_pr_is_merged_at_its_head() -> None:
     assert (action.kind, action.pr, action.head) == ("merge", 1000, "head-x")
 
 
-def test_a_failing_check_warns_once_per_head_sha() -> None:
+def test_a_failing_check_warns_every_pass_and_the_command_decides_what_is_new() -> None:
+    """merge-train-safety §C: the dedup is the recorded events, read by `_recover`."""
     b = _dispatched("x", 1)
     live = {"x": _live(1000, "head-x", checks="failing", failing=("lint",))}
     first = drive_pass(_snap([b], {"x": "pr-open"}, live=live))
     assert _kinds(first.actions) == [("warn", "x")]
     assert first.actions[0].head == "head-x" and "lint" in first.actions[0].detail
+    assert first.actions[0].red is True
     again = drive_pass(_snap([b], {"x": "pr-open"}, live=live, warned=frozenset({"head-x"})))
-    assert again.actions == ()
+    assert _kinds(again.actions) == [("warn", "x")]
 
 
 def _foreign(n: int, reason: str = "opened from a fork") -> ForeignPr:
@@ -1874,3 +1884,18 @@ def test_a_batch_the_driver_refuses_is_a_hold_that_takes_no_in_flight_slot() -> 
     assert _kinds(got.actions) == [("held", "a"), ("dispatch", "b")]
     assert "herdr" in got.actions[0].detail
     assert got.summary.pending == 1 and got.summary.in_flight == 1
+
+
+def test_a_dispatch_hold_turns_every_dispatch_into_a_pending_hold() -> None:
+    """Spec 2026-10-12-quota-pacing §C: below the floor nothing is dispatched; each batch is
+    held and counted pending, never `held`, so the drive is not stalled."""
+    batches = [_batch("a", 1), _batch("b", 2)]
+    got = drive_pass(
+        _snap(batches, {"a": "proposed", "b": "proposed"}, dispatch_held="quota below floor")
+    )
+    assert [(a.kind, a.batch, a.detail) for a in got.actions] == [
+        ("held", "a", "quota below floor"),
+        ("held", "b", "quota below floor"),
+    ]
+    assert got.summary.pending == 2 and got.summary.held == 0
+    assert not got.summary.stalled and not got.summary.idle

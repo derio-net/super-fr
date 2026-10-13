@@ -17,6 +17,7 @@ name: acceptance-report
 # twice on every PR push (#941).
 on:
   pull_request: {}
+  merge_group: {}  # a merge queue's group branch (merge-train-safety R15)
   push:
     branches: [main]
   schedule:
