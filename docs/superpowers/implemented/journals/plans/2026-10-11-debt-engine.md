@@ -827,3 +827,33 @@ Kept deliberately (the claim-marker trust set, read from the default branch); sp
 ### p5-r4-resolved · finding [fixed] · resolves p5-r4: manual_open was shown under Plan debt but not counted in the badge (phase 5)
 
 3087f287: moved to the Listed, not debt line ('counted under Owed'); test asserts badge = sum of visible debt lines.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-10-13T20:17:50+00:00 state=open resolves=p1-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1181 -->
+### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1181] · resolves p1-r6: matrix_anchors repair reads with the live parse_matrix (silently a no-op on a pre-v5 matrix)
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1181.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved-2 created=2026-10-13T20:17:50+00:00 state=open resolves=p1-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1182 -->
+### p1-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1182] · resolves p1-r7: record 8→9 reads the row's raw verify; an unmigrated v3 `post-merge` row gives a misleading refusal
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1182.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved-2 created=2026-10-13T20:17:50+00:00 state=open resolves=p3-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1183 -->
+### p3-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1183] · resolves p3-r10: a refused archive still writes/stages manual-phase owed entries and files issues, even on the default branch
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1183.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved-2 created=2026-10-13T20:17:50+00:00 state=open resolves=p3-r11 tracked_by=https://github.com/derio-net/super-fr/issues/1184 -->
+### p3-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1184] · resolves p3-r11: _existing_owed's 200-issue listing cap can miss an existing marker and file a duplicate
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1184.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved-2 created=2026-10-13T20:17:51+00:00 state=open resolves=p4-r11 tracked_by=https://github.com/derio-net/super-fr/issues/1185 -->
+### p4-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1185] · resolves p4-r11: debt steps lacked if: always(), so failing-row weeks never updated the issue
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1185.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12-resolved-2 created=2026-10-13T20:17:51+00:00 state=open resolves=p4-r12 tracked_by=https://github.com/derio-net/super-fr/issues/1186 -->
+### p4-r12-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1186] · resolves p4-r12: Gitea/GitLab scaffolds give the debt steps no forge or push credentials
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1186.

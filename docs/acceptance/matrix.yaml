@@ -8080,9 +8080,9 @@ rows:
     acceptance: Triage keeps debt digests and fr:owed issues out of ranking in their
       own sets, and the board shows a per-repo Debt panel with figures and a trend.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R14
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R15
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R16
     levels:
       unit:
       - super-fr:tests/unit/test_triage_debt_panel.py#test_one_collapsed_section_with_status_categories_and_owed
@@ -8600,9 +8600,9 @@ rows:
       `fr archive --branch` holds a close-out with a step missing one (a skipped step
       is never silently dropped).
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R17
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R18
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R19
     levels:
       unit:
       - super-fr:tests/unit/test_closeout_outcome.py#test_test_plan_steps_numbers_top_level_items_by_position
@@ -8622,9 +8622,9 @@ rows:
     acceptance: Every owed step and every unticked manual phase at archive leaves an
       `owed` journal entry plus one fr:owed issue, idempotently, whatever --issues says.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R20
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R21
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R22
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R21
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R22
     levels:
       unit:
       - super-fr:tests/unit/test_journal_owed.py#test_open_finding_ids_ignores_records_naming_an_owed_entry
@@ -8792,11 +8792,11 @@ rows:
     acceptance: '`fr debt` reports acceptance by status, the three plan categories (archivable,
       stale, manual-open) and owed actions, as text and JSON, read-only.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R25
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R25
     levels:
       unit:
       - super-fr:tests/unit/test_debt_engine.py#test_archivable_plan_is_listed_with_command_and_merge_age
@@ -8810,9 +8810,9 @@ rows:
     acceptance: 'The weekly job keeps one `<repo>: Technical debt` issue, renaming a
       legacy Acceptance debt issue in place, never duplicating, closing at zero debt.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_debt_issue.py#test_creates_the_titled_issue
@@ -8825,7 +8825,7 @@ rows:
     acceptance: The weekly job opens or refreshes one draft archive PR for plans merged
       complete and unarchived beyond the stale threshold, never ready, never merged.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_debt_archive_pr_real.py#test_the_real_fr_archive_moves_the_plan_and_the_sweep_opens_a_draft_pr
@@ -8839,8 +8839,8 @@ rows:
       phases, walk-owed rows and unresolved owed entries (archived included), and resolving
       an owed entry with evidence removes it and closes its issue.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R23
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R24
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R23
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R24
     levels:
       unit:
       - super-fr:tests/unit/test_debt_owed.py#test_resolve_discharges_an_owed_entry_and_closes_its_issue
@@ -8861,10 +8861,10 @@ rows:
       matrix migration moves every existing skipped row into exactly one new status
       and every surface uses the new names.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_migration_matrix_status_split.py#test_skipped_rows_map_by_the_fixed_rule_and_nothing_else_moves
@@ -8882,7 +8882,7 @@ rows:
       init --refresh-ci` updates an fr-scaffolded workflow while refusing a foreign
       file.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_refresh_ci.py#test_a_legacy_scaffold_is_rewritten_to_the_current_one
@@ -8894,7 +8894,7 @@ rows:
     acceptance: 'An in-flight step record written before the split still applies after
       upgrade: its `skipped` acceptance status is migrated by the same rule as the matrix.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R27
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R27
     levels:
       unit:
       - super-fr:tests/unit/test_migration_record_status_split.py#test_a_v8_skipped_entry_moves_by_the_r6_rule
@@ -8908,7 +8908,7 @@ rows:
       with bodies, creates a draft PR, finds the open PR for a head and closes an issue,
       or raises the unsupported error by name.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R26
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R26
     levels:
       unit:
       - super-fr:tests/unit/test_forge_adapter_debt_ops.py#test_gh_edit_issue_builds_title_and_body_flags

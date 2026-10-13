@@ -477,3 +477,23 @@ Removing a status value strands older matrices unless every hop reads through a 
 ### tier-2026-10-11-debt-engine-p3 · decision · hard: journal kind 1→2, a new fold, and an archive hold on every archive path
 
 Changes fr journal check's fold and every archive mode's gate.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-10-13T20:16:21+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: `debt-weekly-issue-rename` (`live`). After `fr migrate artifacts --yes` has landed on `main`, dispatch `acceptance-report.yml` with `debt: true`. The open "Acceptance debt" issue (#363) is renamed `super-fr: Technical debt` in place, and its body carries Acceptance, Plans and Owed sections plus the encoded figures. No second issue is opened.
+
+Evidence: Dispatched acceptance-report.yml debt=true on main (run 38461331298, success). Issue #363 renamed in place to "super-fr: Technical debt"; body has Acceptance debt, Plans, Owed sections, the fr-technical-debt marker and base64 fr-debt-figures (total 52). No second debt issue open; no "Acceptance debt" titled issue remains.
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-2 created=2026-10-13T20:16:27+00:00 -->
+### test-plan-step-2 · owed · Test Plan step 2 owed
+
+what: `debt-archive-pr-weekly` (`live`). In the same run, with at least one plan merged complete and unarchived for more than 14 days, one draft PR from `chore/debt-archive-sweep` is opened (or refreshed), or the permission refusal is reported by name. A second dispatch refreshes the PR rather than opening another.
+why: Precondition not met on 2026-10-13: run 38461331298 archive-pr step printed "No plan has been merged and unarchived for more than 14 days." and opened no PR (correct no-op). The open-then-refresh walk needs a plan merged >14 days unarchived; the weekly Monday run will exercise it.
+how: fr journal resolve --scope spec --slug 2026-10-11-debt-engine --id test-plan-step-2 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-11-debt-engine#step2
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved created=2026-10-13T20:17:56+00:00 state=open resolves=test-plan-step-2 filed_as=derio-net/super-fr#1187 -->
+### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1187] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Filed at archive as derio-net/super-fr#1187; still owed until discharged.
