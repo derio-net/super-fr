@@ -24,6 +24,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.commands.common import resolve_repo_root
 from fr.verification.check import check_strategy
@@ -125,7 +126,7 @@ def exit_cmd(
                 raise AcceptanceError(f"no spec at {spec}")
             result = exit_for_spec(repo_root, spec)
     except (RunStateError, AcceptanceError, SectionError, OSError) as e:
-        err_console.print(f"[red]refused:[/red] {e}", soft_wrap=True)
+        err_console.print(f"[red]refused:[/red] {escape(str(e))}", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if result.remap_problem:
