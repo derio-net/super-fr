@@ -16,7 +16,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -100,7 +100,11 @@ class FakeForge:
         head_prs: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
         viewer: str = "operator",
         visibility: dict[str, str] | None = None,
+        closed_in_progress: dict[str, list[dict[str, Any]]] | None = None,
+        closed_listing_failing: dict[str, str] | None = None,
     ) -> None:
+        self.closed_in_progress = closed_in_progress or {}
+        self.closed_listing_failing = closed_listing_failing or {}
         self.issues = issues
         self.prs = prs
         self.repos = repos or []
@@ -131,8 +135,23 @@ class FakeForge:
         self.calls.append(("list_repos", {"owner": owner, "limit": limit}))
         return self.repos
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
-        self.calls.append(("list_issues", {"repo": repo, "state": state, "limit": limit}))
+    def list_issues(
+        self,
+        *,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        call: dict[str, Any] = {"repo": repo, "state": state, "limit": limit}
+        if labels is not None:
+            call["labels"] = list(labels)
+        self.calls.append(("list_issues", call))
+        if state == "closed":  # the closed + fr:in-progress read (board-truth §B)
+            if repo in self.closed_listing_failing:
+                raise ForgeError(self.closed_listing_failing[repo])
+            return self.closed_in_progress.get(repo, [])
         if repo in self.failing:
             raise ForgeError(self.failing[repo])
         return self.issues[repo]

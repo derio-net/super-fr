@@ -115,7 +115,8 @@ def test_every_r4_section_is_on_a_full_card() -> None:
         assert f"<h4>{heading}</h4>" in card, heading
     assert "merged" in card and "https://github.com/example-org/widgets/pull/10" in card
     assert "post_merge" in card and "closeout" in card
-    assert card.index("dispatch") < card.index("post_merge") < card.index("closeout")
+    timeline = card.split("<h4>Timeline</h4>", 1)[1]  # the front's own --closeout precedes it
+    assert timeline.index("dispatch") < timeline.index("post_merge") < timeline.index("closeout")
 
 
 def test_a_card_without_a_pr_has_no_pull_request_section() -> None:
@@ -153,10 +154,10 @@ def test_lifecycle_lists_each_dependency_with_its_state() -> None:
 def test_a_hand_closeout_has_no_closeout_button() -> None:
     page = _page()
     hand = _card(page, "c-hand")
-    assert hand.count('class="jump"') == 1  # the batch's own session only
+    assert hand.count('class="jump"') == 2  # the batch's own session: front and body
     assert "closeout" not in "".join(re.findall(r'data-command="([^"]*)"', hand))
     sess = _card(page, "c-session")
-    assert sess.count('class="jump"') == 2  # the batch's and the close-out's
+    assert sess.count('class="jump"') == 3  # front (close-out), body batch, body close-out
 
 
 def test_a_cancelled_card_carries_its_pill_and_a_blocked_session_highlights() -> None:
@@ -171,8 +172,7 @@ def test_the_jump_command_is_the_quoted_focus_command() -> None:
     card = _card(page, "c-session")
     commands = [html.unescape(c) for c in re.findall(r'data-command="([^"]*)"', card)]
     expected = shlex.join(["fr", "triage", "batch", "focus", "c-session", *SCOPE])
-    assert commands[0] == expected
-    assert commands[-1] == expected + " --closeout"
+    assert commands == [expected + " --closeout", expected, expected + " --closeout"]
     visible = [html.unescape(c) for c in re.findall(r'<code class="cmd"[^>]*>(.*?)</code>', card)]
     assert visible == [expected, expected + " --closeout"]
 
@@ -383,3 +383,75 @@ def test_no_recorded_budget_renders_the_footer_as_it_always_did() -> None:
         board, scope_args=SCOPE, rendered_at=AT, refresh=0, notes=notes, budget=None
     )
     assert plain == none and "forge quota" not in plain
+
+
+def _summary(card: str) -> str:
+    return card.split("</summary>", 1)[0]
+
+
+def _body_of(card: str) -> str:
+    return card.split("</summary>", 1)[1]
+
+
+def test_a_live_closeout_takes_the_card_front_and_the_body_jumps_to_the_batch() -> None:
+    card = _card(_page(), "c-session")
+    front = _summary(card)
+    cmds = [html.unescape(c) for c in re.findall(r'data-command="([^"]*)"', front)]
+    assert len(cmds) == 1 and cmds[0].endswith(" --closeout")
+    assert "status-idle" in front and "status-done" not in front
+    body = _body_of(card)
+    body_cmds = [html.unescape(c) for c in re.findall(r'data-command="([^"]*)"', body)]
+    assert [c.endswith(" --closeout") for c in body_cmds] == [False, True]  # each pair
+
+
+def test_without_a_live_closeout_the_front_is_the_batch_session() -> None:
+    page = _page()
+    for bid in ("c-hand", "r-run"):
+        front = _summary(_card(page, bid))
+        cmds = [html.unescape(c) for c in re.findall(r'data-command="([^"]*)"', front)]
+        assert len(cmds) == 1 and not cmds[0].endswith(" --closeout"), bid
+        body_cmds = re.findall(r'data-command="([^"]*)"', _body_of(_card(page, bid)))
+        assert len(body_cmds) == 1 and "closeout" not in body_cmds[0], bid
+
+
+def test_card_front_is_derived_from_the_closeout_status() -> None:
+    board, _ = _board()
+    assert board.card("c-session").front == "closeout"
+    assert board.card("c-hand").front == "batch"
+    assert board.card("r-run").front == "batch"
+    for status in (None, "absent", "unknown"):
+        from dataclasses import replace
+
+        assert replace(board.card("c-session"), closeout_status=status).front == "batch"
+
+
+def _closeout_variant(status: str) -> str:
+    f, jd, st, notes = world()
+    st = {**st, "example-org/widgets/run/closeout-c-session": status}
+    page = render_board(
+        build_board(f, jd, st), scope_args=SCOPE, rendered_at=AT, refresh=0, notes=notes
+    )
+    return _card(page, "c-session")
+
+
+def _cmds(fragment: str) -> list[str]:
+    return [html.unescape(c) for c in re.findall(r'data-command="([^"]*)"', fragment)]
+
+
+def test_an_unknown_closeout_status_leaves_the_front_to_the_batch_session() -> None:
+    card = _closeout_variant("unknown")
+    front = _summary(card)
+    assert len(_cmds(front)) == 1 and "--closeout" not in _cmds(front)[0]
+    assert "status-done" in front and "status-unknown" not in front
+    assert [c.endswith("--closeout") for c in _cmds(_body_of(card))] == [False, True]
+
+
+def test_an_absent_closeout_has_a_batch_front_and_no_closeout_jump_or_code() -> None:
+    card = _closeout_variant("absent")
+    front = _summary(card)
+    assert len(_cmds(front)) == 1 and "--closeout" not in _cmds(front)[0]
+    assert "status-done" in front
+    body = _body_of(card)
+    assert [c.endswith("--closeout") for c in _cmds(body)] == [False]
+    section = body.split("<h4>Close-out session</h4>", 1)[1]
+    assert 'class="jump"' not in section and 'class="cmd"' not in section

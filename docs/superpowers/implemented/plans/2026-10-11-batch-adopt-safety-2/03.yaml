@@ -1,0 +1,138 @@
+schema_version: 2
+phase:
+  number: 3
+  title: adopt --list columns, ref classification, skill docs (R11–R18)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-adopt-list-columns
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/isolation/adopt.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/gh.py
+  - tests/unit/**
+  - tests/scenarios/triage-adopt-list.sh
+  - tests/scenarios/fixtures/triage-adopt/**
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - docs/acceptance/**
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: RED/GREEN — pure parts (parse_refs, resolve_ref, session_state)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: unit tests in the batch tests for parse_refs(label): "derio-net/super-fr#314", "super-fr#12", bare "#97"
+      each recognised once and in order, an "owner/name#n" never also yielding a bare "#n"; resolve_ref against
+      repo "derio-net/super-fr" (name match resolves, a different name stays None, bare resolves);
+      session_state precedence per R12 (no agent, batch via "/run/batch-", unknown for no toplevel or no default,
+      on default branch, detached, adoptable), one test per edge.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement LabelRef, parse_refs, resolve_ref and session_state in packages/fr/src/fr/triage/batch.py,
+      plain values only (fr.triage never imports fr_dispatch). Green.
+- number: 2
+  title: RED/GREEN — Checkout.facts and GhClient.ref_kind
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: Checkout.facts(cwd) over a temp repo returns toplevel, origin URL, owner/name, current branch (None when
+      detached), default branch (None when origin/HEAD is unset), main worktree; None for a non-repo dir.
+      ref_kind: RealGhClient (via its injectable runner, as test_gh_host.py's patterns do) maps a `gh api
+      repos/<r>/issues/<n>` payload with a `pull_request` key to "pr", without to "issue"; the REST client the
+      same; glab/tea raise UnsupportedForgeOperation; the method is @_hosted (test_gh_host.py's check passes).
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement Checkout.facts as a classmethod in gitseam, GhClient.ref_kind in the protocol and every
+      client. Green.
+- number: 3
+  title: RED/GREEN — the listing
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: CliRunner tests of `batch adopt --list` with a fake runner whose sessions carry cwd/session/harness
+      pointing into temp checkouts, and a fake forge: header line exact; one row per state; fr workspace from a
+      session index, else from the workspace containing cwd, shown with ~; PR column "#<n> closes a#1,b#2" from
+      the newest OPEN non-cross-repository PR, never looked up for a default-branch row; refs classified "(pr)" /
+      "(issue)", unresolved "(?)"; each distinct ref and repo+branch read once (count calls); a row whose git read,
+      make_client or forge read raises shows "-"/"(?)" while the other rows and exit 0 survive; a runner
+      list_sessions failure still exits 1.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: rewrite _list_sessions per spec §D (per-row guard, clients cached by host, reads memoised per
+      listing). Green. REFACTOR: keep _list_sessions small by moving row assembly to a helper; or record why not.
+- number: 4
+  title: Scenario, skill docs, mirrors, matrix
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Write tests/scenarios/triage-adopt-list.sh: fake herdr (agent list with cwd/foreground_cwd/agent_session
+      pointing at temp checkouts) and fake gh answering one issue and one PR; run installed `fr triage batch adopt
+      --list`; expect_grep the header, an adoptable row with its PR, an "on default branch" row, "(pr)" and
+      "(issue)" refs. Run it with bash; green.
+  - id: P3.T4.S2
+    text: |-
+      Rewrite the adopt sentence at line 97 of plugins/super-fr/skills/fr-triage/SKILL.md in place to also name
+      --no-hold (held by default), adopting a session on the default branch (new workspace, base clone must be
+      clean), and --list's state column, without growing the file past 120 lines. Run
+      `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python
+      scripts/sync-hermes.py`, then the skill-validation and three mirror tripwire tests.
+  - id: P3.T4.S3
+    text: |-
+      Move triage-adopt-list-columns to ci with `uv run fr acceptance set-status --id triage-adopt-list-columns
+      --status ci --level unit=super-fr:<file>#<test> --notes "listing pinned by unit tests; scenario on
+      candidate"`. Leave triage-adopt-live-sweep not-implemented (post-merge live walk).
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+    P3.T4.S3:
+      state: x
+      ticked_at: '2026-10-11T22:26:42+00:00'
+      note: null
+  completion:
+    at: '2026-10-11T22:26:42+00:00'
+    note: null
+    observed_prs: []

@@ -273,11 +273,12 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     # report-less matrices / bare fixtures are untouched. Read-only — renders in
     # memory, compares bytes. An unresolvable identity can't render, so it is
     # skipped here (the render CLIs surface that separately).
-    from fr.acceptance.report import REPORT_SET, render_committed_set
+    from fr.acceptance.report import render_committed_set, tracked_reports
 
-    if any((root / rel).exists() for rel in REPORT_SET):
+    tracked = tracked_reports(root)  # CI-built (gitignored) reports are never compared
+    if any((root / rel).exists() for rel in tracked):
         try:
-            expected_reports = render_committed_set(matrix, root)
+            expected_reports = render_committed_set(matrix, root, only=tracked)
         except AcceptanceError:
             expected_reports = {}
         for rel, want in expected_reports.items():

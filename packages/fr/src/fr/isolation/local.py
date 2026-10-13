@@ -33,12 +33,12 @@ from fr.isolation.types import (
     IsolationState,
     _git_common_dir,
     carried_state,
+    default_worktree_path,
     delete_state,
     harden_secret_file,
     list_states,
     load_state,
     recorded_mode,
-    repo_cache_name,
     resolve_profile,
     save_state,
 )
@@ -1154,14 +1154,7 @@ class LocalWorktreeDevcontainerTarget:
             )
         # Keyed on the MAIN checkout's basename (spec 2026-09-04 §5.C): an `up`
         # from inside a linked worktree files under the repo, never `agent-…`.
-        worktree = path or (
-            _home()
-            / ".cache"
-            / "fr"
-            / "worktrees"
-            / repo_cache_name(self.repo_root)
-            / branch.replace("/", "__")
-        )
+        worktree = path or default_worktree_path(self.repo_root, branch)
         worktree.parent.mkdir(parents=True, exist_ok=True)
         return worktree
 

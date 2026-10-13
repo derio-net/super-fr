@@ -5,7 +5,7 @@ script**. Every new session runs that script before its first turn; a session th
 already running does not. A new session can also be a pre-warmed spare whose script ran
 before the latest release, so its `fr` may be older than the release (measured by the
 2026-10-08 live walk, derio-net/super-fr#1098): check `fr --version` first. fr relies on
-the script for four things, and on the repo for a fifth (spec
+the script for four things, and on the repo for two more (spec
 `docs/superpowers/implemented/specs/2026-10-07-cloud-triage-design.md`, R19-R23, §H).
 
 | Prerequisite | Why | Fixed by |
@@ -15,6 +15,7 @@ the script for four things, and on the repo for a fifth (spec
 | a current `fr` | the session's CLI is whatever the script installed | a new session |
 | `rsync` | `scripts/install.sh` copies the plugin with it | the setup script |
 | the repo's `agents` artifact | the plugin's agents are not dispatchable in a fresh session | `fr init agents` |
+| a merge method the driver may use | under `forge.api: rest` the driver sees no default merge method, so a repo allowing several refuses every merge | `merge_method` in `.fr/triage.yaml` |
 
 ## The setup script
 
@@ -58,11 +59,18 @@ until `fr migrate artifacts --yes` re-renders them. A host session sees both the
 and the repo's names, which is harmless: fr's gates accept either.
 
 A worker session (a batch dispatched through the `claude-cloud` runner) checks this
-first: `fr --version` (installing super-fr only when `fr` is missing), then that both
-agent types are dispatchable. When they are not, it ends its turn BLOCKED with a
-`needs_action` naming the artifact, and is not re-homed: a new session from the same
-commit would start the same way. A worker enters isolation through the CLI (`fr
-isolation up`), so isolation never depends on the plugin's hooks.
+first: `fr --version`, then `fr cloud doctor`'s `fr` line, rerunning the setup script
+when `fr` is missing or older than the latest release (a pre-warmed spare's); then that
+it can run the batch's skill (`/fr-goal`, or `/fr-debugging` for a debug batch), read
+from the plugin's installed copy when the session did not load it; then that both agent
+types are dispatchable (a file under `.claude/agents/` is not proof). When any of these
+fails it ends its turn BLOCKED with a `needs_action` naming what is missing, and is not
+re-homed: a new session from the same commit would start the same way. A worker never
+does the batch's work without its skill, since a PR with no run is a success that is
+false. It enters isolation through the CLI (`fr isolation up`), so isolation never
+depends on the plugin's hooks; in a cloud session (`CLAUDE_CODE_REMOTE=true`) `fr
+isolation up` defaults to the docker-less host-worktree mode, as
+`FR_ISOLATION_TARGET=worktree` would select.
 
 ## The cloud driver
 
@@ -78,4 +86,14 @@ pass` with the scope's arguments, executes the outbox it writes (session request
 its agent can make), records the results with `fr triage drive record`, and schedules
 the next wake. A re-homed driver's brief carries the same host id. The cloud driver runs
 no `post_merge`: every session it starts installs the current release through the setup
-script, and the driver updates itself before each pass (R18, R20).
+script, and the driver updates itself before each pass (R18, R20); that in-place update
+prints no "restart the session to re-pin" warning in a cloud session.
+
+The driver's clone is its own, so it needs no setup by hand: when `origin/HEAD` is unset
+fr asks origin for the default branch (`git remote set-head origin --auto`), and before a
+close-out the driver checks out the default branch when the clone is detached or on
+another branch (a clone with local changes is refused, never switched). A close-out
+session starts on the default branch, since the batch branch was deleted when its PR
+merged, and a session whose start failed (its `last_init_error`) reads as blocked, with
+the error as its note, never as working. A pass that restored the state from its ref
+says so.

@@ -14,6 +14,7 @@ statuses never refuses: whatever goes wrong is `unknown` plus one page note (R7)
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import time
 import webbrowser
 from collections.abc import Callable, Sequence
@@ -46,6 +47,7 @@ from fr.commands.triage_cmd import (
     rate_limit_reason,
     resolve_state_dir,
     triage_app,
+    warn_nav,
 )
 from fr.triage import gitseam, pacing_state
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
@@ -55,6 +57,8 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     wave_group,
 )
+from fr.triage.check import clean_label_targets
+from fr.triage.components import pages_present, refresh_navs, skew_banner, strip_nav
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
@@ -335,6 +339,17 @@ def read_sessions(
     return SessionReads(statuses, notes, said)
 
 
+def in_progress_note(facts: Facts, scope_args: Sequence[str]) -> str | None:
+    """The board's note on closed issues still labelled `fr:in-progress` (board-truth R2):
+    the count of stale ones and the command that cleans them, None when there are none."""
+    n = len(clean_label_targets(facts))
+    if not n:
+        return None
+    args = " ".join(scope_args)
+    cmd = f"fr triage clean-labels {args}".rstrip()
+    return f"{n} closed issue{'s' if n != 1 else ''} still labelled fr:in-progress: run `{cmd}`"
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -356,6 +371,8 @@ def write_board(
     except TriageError as exc:  # the board is a view: say what it cannot show, never refuse
         me = None
         notes.append(f"claims are not shown: {one_line(exc)}")
+    if (labels_note := in_progress_note(facts, scope_args)) is not None:
+        notes.append(labels_note)
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,
@@ -367,9 +384,12 @@ def write_board(
         refresh=refresh,
         notes=notes,
         budget=budget_from_json(pacing_state.load(target)[0].budget),
+        banner=skew_banner(facts),
+        present=pages_present(target, "batches"),
     )
     out = target / BOARD_FILE
     write_text_atomic(out, page)
+    refresh_navs(target, "batches", warn=warn_nav)
     return out, len(judgements.batches)
 
 
@@ -378,8 +398,12 @@ def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None
     warning per distinct cause (*failures* remembers them; a success forgets) and never
     changes an exit code, and a broken scope.yaml is the same kind of warning."""
     try:
-        cause = publish_board(scope, load_scope_config(target), board)
-    except TriageError as exc:
+        # The siblings are not published, so the copy handed over carries no nav (R10).
+        with tempfile.TemporaryDirectory(prefix="fr-board-") as tmp:
+            copy = Path(tmp) / board.name
+            copy.write_text(strip_nav(board.read_text(encoding="utf-8")), encoding="utf-8")
+            cause = publish_board(scope, load_scope_config(target), copy, cwd=board.parent)
+    except (TriageError, OSError) as exc:
         cause = one_line(exc)
     if cause is None:
         failures.clear()
@@ -577,7 +601,8 @@ def board_command(
     ] = False,
     quota_floor: QuotaFloorOpt = None,
 ) -> None:
-    """Write board.html: one card per batch in six lifecycle columns, with live session
+    """Write board.html: one card per batch in its lifecycle column
+    (`fr.triage.kanban.COLUMN_TITLES`), with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)

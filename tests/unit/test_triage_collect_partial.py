@@ -143,9 +143,7 @@ def test_collect_into_carries_and_calls_back_after_facts_json(tmp_path, monkeypa
         seen.append(load_facts(tmp_path / "facts.json") == facts)
         assert carried == {B}, "the repos the collect actually carried (p2-r5)"
 
-    facts, _, _ = triage_cmd.collect_into(
-        ORG, tmp_path, carry=True, lenient=True, only={A}, after_write=after
-    )
+    facts, _, _ = triage_cmd.collect_into(ORG, tmp_path, carry=True, only={A}, after_write=after)
     assert seen == [True]
     assert {kw["repo"] for kw in forge.called("list_issues")} == {A}
     assert _prs(facts, "alpha#7") == [(B, 800)]

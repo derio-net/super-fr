@@ -28,6 +28,11 @@ Pure: facts and judgements in, sets out. The command only formats them.
   marker's forge `createdAt` to `collected_at`, so every machine agrees and no
   clock is read; a marker time that cannot be read is skipped, never raised.
   Reported, never acted on;
+- **closed in progress** — a CLOSED issue still labelled `fr:in-progress` (board-truth
+  R2; `Facts.stale_in_progress`, read by collect): `stale` ones are what `fr triage
+  clean-labels` cleans (`clean_label_targets`, the one predicate), `release-pending`
+  ones carry this scope's own un-released claim (the next `claim sync` clears both
+  labels), `held` ones another scope's;
 - **awaiting live** — an open issue labelled `fr:awaiting-live`: its fix has merged
   and a post-merge acceptance row still waits for its walk (spec
   2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
@@ -62,6 +67,7 @@ from fr.triage.model import (
     IssueClaim,
     Judgements,
     PullRequest,
+    StaleInProgress,
     issue_key,
     normalize_key,
 )
@@ -184,6 +190,9 @@ class CheckResult:
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
+    closed_in_progress: list[StaleInProgress] = field(default_factory=list)
+    skipped: list[tuple[str, str]] = field(default_factory=list)
+    config_ignored: list[tuple[str, list[str]]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -199,6 +208,8 @@ class CheckResult:
             }
 
         return {
+            "skipped": [{"repo": r, "reason": why} for r, why in self.skipped],
+            "config_ignored": {r: list(keys) for r, keys in self.config_ignored},
             "unranked": [row(i) for i in self.unranked],
             "unranked_prs": [pr_row(pr) for pr in self.unranked_prs],
             "settled": [row(i) for i in self.settled],
@@ -239,6 +250,16 @@ class CheckResult:
                 }
                 for s in self.stale
             ],
+            "closed_in_progress": [
+                {
+                    "key": e.key,
+                    "title": e.title,
+                    "url": e.url,
+                    "closed_at": e.closed_at,
+                    "state": e.state,
+                }
+                for e in self.closed_in_progress
+            ],
             "held_elsewhere": [
                 {
                     "key": h.key,
@@ -261,6 +282,16 @@ class CheckResult:
             ],
             "claims_owed": [{"key": o.key, "batch": o.batch} for o in self.claims.claims_owed],
         }
+
+
+def skew_entries(
+    facts: Facts,
+) -> tuple[list[tuple[str, list[str]]], list[tuple[str, str]]]:
+    """The (repo, ignored keys) and (repo, skip reason) lists the skew banner and `check`
+    both report, sorted by repo (R5)."""
+    ignored = [(repo, sorted(keys)) for repo, keys in sorted(facts.config_ignored.items()) if keys]
+    skipped = [(s.repo, s.reason) for s in sorted(facts.skipped, key=lambda s: s.repo)]
+    return ignored, skipped
 
 
 def _unreachable_reason(key: str, facts: Facts) -> str | None:
@@ -342,6 +373,13 @@ def _aware(stamp: str | None) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo is not None else None
+
+
+def clean_label_targets(facts: Facts) -> list[StaleInProgress]:
+    """The closed issues `fr triage clean-labels` may unlabel: the `stale` ones only. A
+    `release-pending` one is the claim sync's to clear, a `held` one is another scope's
+    (board-truth R2, R3); `check` and the verb both select through this."""
+    return [e for e in facts.stale_in_progress if e.state == "stale"]
 
 
 def stale_dispatches(facts: Facts) -> list[Stale]:
@@ -457,13 +495,17 @@ def classify(
             orphaned.append(key)
         else:
             unreachable.append(Unreachable(key=key, reason=reason))
+    ignored_keys, skipped_repos = skew_entries(facts)
     return CheckResult(
+        skipped=skipped_repos,
+        config_ignored=ignored_keys,
         unranked=unranked,
         unranked_prs=unranked_prs,
         settled=settled,
         orphaned=orphaned,
         unreachable=unreachable,
         stale=stale_dispatches(facts),
+        closed_in_progress=list(facts.stale_in_progress),
         unplaced=unplaced_issues(facts, judgements),
         no_severity=[
             i

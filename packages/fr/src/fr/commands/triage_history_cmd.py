@@ -16,6 +16,7 @@ import typer
 from rich.markup import escape
 
 import fr.commands.triage_cmd as triage_cmd
+from fr.artifacts.atomic import write_text_atomic
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
@@ -25,6 +26,7 @@ from fr.commands.triage_cmd import (
     err_console,
     triage_app,
 )
+from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.history import GENERATED, HISTORY_DIR, MOVED, PAGE_FILE, render_history
@@ -67,16 +69,18 @@ def render_command(
     for note in notes:
         err_console.print(f"[yellow]warning:[/yellow] {escape(note)}", soft_wrap=True)
     out = target / PAGE_FILE
-    out.write_text(
+    write_text_atomic(
+        out,
         render_history(
             facts,
             judgements,
             snapshots=stored_snapshots(target),
             resolved=resolved,
             notes=notes,
+            present=pages_present(target, "history"),
         ),
-        encoding="utf-8",
     )
+    refresh_navs(target, "history", warn=triage_cmd.warn_nav)
     done = finished_waves(judgements.batches, batch_stages(facts, judgements))
     console.print(
         f"wrote {out} ({len(done)} finished wave{'' if len(done) == 1 else 's'}, "

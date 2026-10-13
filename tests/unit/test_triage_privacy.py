@@ -495,3 +495,56 @@ def test_a_5xx_after_a_cached_200_makes_the_visibility_unreadable() -> None:
 
     assert live_visibility(Client(), "o/r") == "private"
     assert live_visibility(Client(), "o/r") is None
+
+
+# ------------------------------------------- an unreadable member repo (gh#1144)
+
+
+def test_a_member_repo_whose_visibility_cannot_be_read_is_unreadable_not_a_leak(
+    tmp_path: Path, origin: Path, gh: FakeGhClient
+) -> None:
+    """A public state repo, and a key's repo the forge does not answer for (a rate
+    limit): nothing is known to leak, so the push refuses as retryable, naming the repo
+    it could not read, never as the leak line (gh#1144)."""
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    del gh.visibility[SECRET]
+    state = _state(tmp_path / "s", state_repo=REFS, with_facts=False)
+
+    with pytest.raises(VisibilityUnreadable) as caught:
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+    assert SECRET in str(caught.value) and REFS in str(caught.value)
+    assert "which is not public" not in str(caught.value)
+
+
+def test_a_definite_leak_outranks_an_unreadable_member_repo(gh: FakeGhClient) -> None:
+    """One key's repo is known private, another's cannot be read: the leak is certain,
+    so it is the leak refusal, which a looping driver does not retry (R10)."""
+    from fr.triage.privacy import guard_write
+
+    gh.visibility[REFS] = "public"
+    scope = Scope.group([OPEN_REPO, SECRET, "example-org/flaky"])
+    facts = _facts({OPEN_REPO: "public", SECRET: "private"})
+
+    with pytest.raises(PrivacyError, match="secret#7") as caught:
+        guard_write(
+            ["secret#7", "flaky#2"], scope=scope, facts=facts, state_repo=REFS,
+            client_for=lambda _r: gh,
+        )  # fmt: skip
+
+    assert not isinstance(caught.value, VisibilityUnreadable)
+
+
+def test_guard_write_with_an_unreadable_member_repo_is_unreadable(gh: FakeGhClient) -> None:
+    from fr.triage.privacy import guard_write
+
+    gh.visibility[REFS] = "public"
+    scope = Scope.group([OPEN_REPO, "example-org/flaky"])
+
+    with pytest.raises(VisibilityUnreadable, match="example-org/flaky"):
+        guard_write(
+            ["flaky#2"], scope=scope, facts=_facts(), state_repo=REFS,
+            client_for=lambda _r: gh,
+        )  # fmt: skip

@@ -4,15 +4,41 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 if TYPE_CHECKING:
     from fr.diff import Diff
     from fr.ghclient import GhClient
     from fr.parser import Plan
     from fr.states import GhState, RenderedState
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def models_errors_exit(fn: Callable[P, R]) -> Callable[P, R]:
+    """Command decorator: a broken models.yaml (`fr.models.ModelsError`) is
+    reported as `fr: <message>` on stderr and exit 2, never a traceback. One
+    handler at the command entry, so no `load_models` call site swallows it
+    (a broken config must never be read as unbound)."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        import typer
+
+        from fr.models import ModelsError
+
+        try:
+            return fn(*args, **kwargs)
+        except ModelsError as exc:
+            typer.echo(f"fr: {exc}", err=True)
+            raise typer.Exit(2) from exc
+
+    return wrapper
 
 
 def resolve_repo_root(cwd: Path | None = None) -> Path:

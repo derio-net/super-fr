@@ -52,6 +52,7 @@ from fr.triage.lease import (
 )
 from fr.triage.quota import is_rate_limited
 from fr.triage.scope_config import host_id, scope_id
+from fr.triage.state_ref import local_tree, ref_name
 
 lease_app = typer.Typer(
     name="lease",
@@ -363,6 +364,15 @@ def _self_update(
     return None, True
 
 
+def _state_tree(target: Path) -> object:
+    """*target*'s state as the ref carries it, to tell a restore from a warm pass; None
+    when it cannot be read (no clone yet), which a restore then differs from."""
+    try:
+        return local_tree(target)
+    except (TriageError, OSError):
+        return None
+
+
 def _read_json(path: Path | None, what: str) -> Any:
     if path is None or not path.exists():
         return None
@@ -475,10 +485,17 @@ def drive_pass_command(
 
     scope = triage_cmd._scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace, sync=False)
+    held = _state_tree(target)
     try:  # 1. restore: the brief's state repo finds the ref before any local state exists
-        triage_cmd.fetch_now(scope, target, state_repo=state_repo)
+        sha = triage_cmd.fetch_now(scope, target, state_repo=state_repo)
     except TriageError as exc:
         _fail(str(exc))
+    if sha is not None and _state_tree(target) != held:  # a restore reads as one (gh#1100)
+        console.print(
+            f"restored the scope's state from {ref_name(scope_id(scope))} at {sha[:12]}",
+            markup=False,
+            soft_wrap=True,
+        )
     target = resolve_state_dir(scope, dir_override, workspace)  # and push when it ends
     identity = identity_for("cloud")
     duration = lease_duration(interval, routine)
