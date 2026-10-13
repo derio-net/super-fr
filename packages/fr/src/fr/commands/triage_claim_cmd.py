@@ -112,7 +112,7 @@ def claim_list_command(
 
 def _say_result(result: SyncResult) -> None:
     for op, done in result.done:
-        console.print(f"  {op.kind} {op.key} ({op.batch}): {done.action}", markup=False)
+        console.print(f"  {op.kind} {op.label}: {done.action}", markup=False)
     for h in result.held:
         console.print(
             f"  held {h.key} ({h.batch}) by {h.holder.signer} (batch {h.holder.batch})",
@@ -138,7 +138,7 @@ def claim_sync_command(
         if op.kind == "claim":
             console.print(f"claim {op.key} for {op.batch}", markup=False)
         else:
-            console.print(f"{op.kind} {op.key} ({op.batch})", markup=False)
+            console.print(f"{op.kind} {op.label}", markup=False)
     for h in plan.held:
         console.print(
             f"held {h.key} ({h.batch}): {h.holder.signer} holds it for batch {h.holder.batch}, "

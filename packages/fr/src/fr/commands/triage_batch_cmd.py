@@ -385,7 +385,7 @@ def _settle_claims(env: ClaimEnv, ops: list[ClaimOp], *, yes: bool) -> SyncResul
         if op.kind == "claim":
             console.print(f"  claim {op.key} for {op.batch}", markup=False)
         else:
-            console.print(f"  {op.kind} {op.key} ({op.batch})", markup=False)
+            console.print(f"  {op.kind} {op.label}", markup=False)
     if not yes:
         console.print(
             "claims not written; `fr triage claim sync --yes` writes them (or re-run with --yes)",

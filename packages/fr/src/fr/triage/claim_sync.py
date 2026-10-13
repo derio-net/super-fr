@@ -21,6 +21,7 @@ from fr.triage import claim_writes as cw
 from fr.triage.batch import BatchStage, claim_authors, closeout_state, derive_batch_stage
 from fr.triage.claims import (
     Claim,
+    closed_settlements,
     from_issue_claim,
     holder,
     needs_refresh,
@@ -30,7 +31,7 @@ from fr.triage.claims import (
 from fr.triage.model import Batch, ClaimsReleasedEvent, Facts, Issue
 from fr.triage.scope_config import ScopeConfig
 
-OpKind = Literal["claim", "refresh", "release"]
+OpKind = Literal["claim", "refresh", "release", "settle"]
 # A refused claim write or a forge failure: reported per member, never fatal to the rest.
 _WRITE_ERRORS: tuple[type[Exception], ...] = (cw.ClaimError, *FORGE_ERRORS)
 
@@ -83,9 +84,21 @@ class ClaimEnv:
 
 @dataclass(frozen=True)
 class ClaimOp:
+    """One owed write. `batch` names the batch it serves; only a `settle` op may lack one
+    (a closed issue no batch of this scope holds)."""
+
     kind: OpKind
     key: str
-    batch: str
+    batch: str | None
+
+    def __post_init__(self) -> None:
+        if self.batch is None and self.kind != "settle":
+            raise ValueError(f"a {self.kind} op needs its batch")
+
+    @property
+    def label(self) -> str:
+        """The key, with its batch when it has one."""
+        return f"{self.key} ({self.batch})" if self.batch else self.key
 
 
 @dataclass(frozen=True)
@@ -119,9 +132,11 @@ def plan_sync(env: ClaimEnv, batches: Sequence[Batch], now: datetime) -> SyncPla
     plan = SyncPlan()
     for key, bid in owed_claims(batches, stages, archived):
         issue = env.issue(key)
-        if issue is None or issue.state != "open":
+        if issue is None:
             plan.ops.append(ClaimOp("refresh", key, bid))
             continue
+        if issue.state != "open":
+            continue  # closed: needs no claim; settled below
         claims = [from_issue_claim(c) for c in issue.claims]
         if (h := holder(claims, env.me)) is not None:
             plan.held.append(HeldMember(key, bid, h))
@@ -138,8 +153,14 @@ def plan_sync(env: ClaimEnv, batches: Sequence[Batch], now: datetime) -> SyncPla
         for c in i.claims
         if c.signer == env.me
     ]
+    settles = closed_settlements(env.facts)
+    settled = {k for k, _ in settles}
     for key, bid in owed_releases(batches, stages, archived, own=own_claims):
-        plan.ops.append(ClaimOp("release", key, bid))
+        if key not in settled:  # a settle releases the marker too
+            plan.ops.append(ClaimOp("release", key, bid))
+    for key, _ in settles:
+        member_of = next((b.id for b in batches if key in b.ids), None)
+        plan.ops.append(ClaimOp("settle", key, member_of))
     return plan
 
 
@@ -150,7 +171,14 @@ class SyncResult:
     failed: list[tuple[ClaimOp, str]] = field(default_factory=list)
 
     def released(self, batch: str) -> list[str]:
-        return [op.key for op, _ in self.done if op.kind == "release" and op.batch == batch]
+        """The members of *batch* released: a release op, or a settle that released an own
+        marker (post-merge truth R1)."""
+        return [
+            op.key
+            for op, out in self.done
+            if op.batch == batch
+            and (op.kind == "release" or (op.kind == "settle" and out.action == "released"))
+        ]
 
 
 def execute(env: ClaimEnv, ops: Sequence[ClaimOp], now: datetime) -> SyncResult:
@@ -171,7 +199,7 @@ def execute(env: ClaimEnv, ops: Sequence[ClaimOp], now: datetime) -> SyncResult:
                     owner_repo,
                     number,
                     me=env.me,
-                    batch=op.batch,
+                    batch=str(op.batch),
                     expiry=env.expiry,
                     now=now,
                     trusted=trusted,
@@ -186,6 +214,10 @@ def execute(env: ClaimEnv, ops: Sequence[ClaimOp], now: datetime) -> SyncResult:
                     now=now,
                     trusted=trusted,
                     due_only=True,
+                )
+            elif op.kind == "settle":
+                out = cw.settle_closed(
+                    client, owner_repo, number, me=env.me, now=now, trusted=trusted
                 )
             else:
                 out = cw.release(
@@ -202,7 +234,7 @@ def execute(env: ClaimEnv, ops: Sequence[ClaimOp], now: datetime) -> SyncResult:
             result.failed.append((op, str(exc)))
             continue
         if isinstance(out, cw.Held):
-            result.held.append(HeldMember(op.key, op.batch, out.claim))
+            result.held.append(HeldMember(op.key, str(op.batch), out.claim))
         else:
             result.done.append((op, out))
     return result
