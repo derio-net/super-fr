@@ -49,6 +49,8 @@ class Exit:
     rank: int
     rows: tuple[Row, ...]
     row_gates: dict[str, str]
+    row_kinds: dict[str, str]
+    run_kind: str
     remap_problem: str | None = None
 
     @property
@@ -63,7 +65,9 @@ def _build(verification: SpecVerification, rows: list[Row]) -> Exit:
 
     run_gate = verification.run_gate()
     row_gates = {r.id: verification.gate(r) for r in rows}
-    kinds = {kind(verification.run_strategy()), *(kind(verification.strategy(r)) for r in rows)}
+    run_kind = kind(verification.run_strategy())
+    row_kinds = {r.id: kind(verification.strategy(r)) for r in rows}
+    kinds = {run_kind, *row_kinds.values()}
     gates = {g for g in (run_gate, *row_gates.values()) if g != "none"}
     return Exit(
         kinds=frozenset(kinds),
@@ -73,6 +77,8 @@ def _build(verification: SpecVerification, rows: list[Row]) -> Exit:
         rank=max(kind_rank(k, verification.repo_root) for k in kinds),
         rows=tuple(rows),
         row_gates=row_gates,
+        row_kinds=row_kinds,
+        run_kind=run_kind,
         remap_problem=verification.remap_problem,
     )
 

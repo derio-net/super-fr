@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 __all__ = [
     "SpecVerification",
     "load_remap",
+    "remap_key_problems",
     "row_verification_issues",
     "run_verification",
     "shape_default",
@@ -65,7 +66,7 @@ def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
         return {}, None
     try:
         config, _ = parse_triage_config(yaml.safe_load(path.read_text()) or {})
-    except (OSError, yaml.YAMLError, ValidationError) as e:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError) as e:
         return {}, f"{path.relative_to(repo_root)} is not valid triage config: {e}"
     return (dict(config.exit.gates) if config.exit else {}), None
 
@@ -221,6 +222,52 @@ def unrunnable_strategies(
     return out
 
 
+def section_grammar_issues(section: Section | None, rows: Sequence[Row]) -> list[str]:
+    """Section lines that read differently across fr versions or name nothing
+    (exit-gates review p1-r1, p1-r3): a `gate: <row>=` / `- <row>:` line naming
+    a row no matrix row citing the spec has, and a section of `gate:` lines
+    alone (it exists for this fr, not for a released one)."""
+    if section is None:
+        return []
+    out: list[str] = []
+    known = sorted(r.id for r in rows)
+    named = [*section.row_gates, *(rid for rid in section.rows if rid not in section.row_gates)]
+    for rid in named:
+        if rid not in known:
+            where = "`gate: {0}=`" if rid in section.row_gates else "`- {0}:`"
+            out.append(
+                f"the section's {where.format(rid)} line names row `{rid}`, which no matrix "
+                "row citing the spec has (it would be silently ignored); rows citing the "
+                f"spec: {', '.join(known) or 'none'}"
+            )
+    if (
+        (section.gate is not None or section.row_gates)
+        and section.strategy is None
+        and not section.rows
+    ):
+        out.append(
+            "the section has `gate:` lines but no `strategy:` line and no row line, so a "
+            "released fr does not read it as a section at all — add `strategy: <name|none>` "
+            "(or `- <row-id>: <strategy|none> — <reason>` lines) so every fr reads it the same way"
+        )
+    return out
+
+
+def remap_key_problems(remap: Mapping[str, str], repo_root: Path) -> list[str]:
+    """One message per `.fr/triage.yaml` `exit.gates` key that can never match:
+    `none`, or a name that resolves to no strategy (exit-gates review p1-r7)."""
+    out: list[str] = []
+    for key in remap:
+        if key == RESERVED:
+            out.append(f"`exit.gates` key `{key}` is ignored: `none` has no gate to remap")
+            continue
+        try:
+            resolve_strategy(key, repo_root)
+        except StrategyError:
+            out.append(f"`exit.gates` key `{key}` names no strategy, so it is ignored")
+    return out
+
+
 def row_verification_issues(
     repo_root: Path,
     section: Section | None,
@@ -239,7 +286,8 @@ def row_verification_issues(
     Both `fr plan self-review` (errors) and the brainstorm warning (advisory)
     call it; neither re-derives a check."""
     verification = SpecVerification(repo_root, section, shape_default)
-    out = unrunnable_strategies(repo_root, section, rows)
+    out = section_grammar_issues(section, rows)
+    out += unrunnable_strategies(repo_root, section, rows)
 
     def reason_fix(row_id: str, name: str, why: str) -> str:
         if section is not None:

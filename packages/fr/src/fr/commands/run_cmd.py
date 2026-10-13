@@ -6088,7 +6088,7 @@ def resolve_cmd(
         for pair in emitted:
             name, _, value = pair.partition("=")
             if name == "spec" and value:
-                _print_unrunnable_warnings(resolve_repo_root(), _repo_relative(value))
+                _print_unrunnable_warnings(resolve_repo_root(), _repo_relative(value), run_id)
 
 
 def _repo_relative(value: str) -> str:
@@ -6100,8 +6100,14 @@ def _repo_relative(value: str) -> str:
         return value
 
 
-def _print_unrunnable_warnings(repo_root: Path, spec_rel: str) -> None:
-    for message in _unrunnable_spec_warnings(repo_root, spec_rel):
+def _print_unrunnable_warnings(repo_root: Path, spec_rel: str, run_id: str | None = None) -> None:
+    state = None
+    if run_id is not None:
+        try:
+            state = load_run_state(repo_root, run_id)
+        except Exception:  # noqa: BLE001
+            state = None  # advisory: no state means no shape default
+    for message in _unrunnable_spec_warnings(repo_root, spec_rel, state):
         err_console.print(f"warning: {message}", markup=False, soft_wrap=True)
 
 
@@ -6768,7 +6774,7 @@ def _resolve_with_record(
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
     if record.outcome == "done" and record.emitted.get("spec"):
-        _print_unrunnable_warnings(repo_root, record.emitted["spec"])
+        _print_unrunnable_warnings(repo_root, record.emitted["spec"], run_id)
     typer.echo(outcome.line)
     # deliver's closeout handoff is NOT printed here: the body prints it into
     # the held stdout, and `resolve_in_process` replays it among the notices
@@ -6777,18 +6783,21 @@ def _resolve_with_record(
         _advance_after_record(repo_root, run_id)
 
 
-def _unrunnable_spec_warnings(repo_root: Path, spec_rel: str) -> list[str]:
+def _unrunnable_spec_warnings(
+    repo_root: Path, spec_rel: str, state: RunState | None = None
+) -> list[str]:
     """R5 + R24: every per-row verification problem of the spec a record just
     emitted (`row_verification_issues`), with or without a section. A malformed
     section or an unreadable matrix says nothing here — `fr plan self-review`
     reports those."""
     from fr.requirements import load_spec_matrix, rows_citing
-    from fr.verification.rows import row_verification_issues, spec_section_at
+    from fr.verification.rows import row_verification_issues, shape_default, spec_section_at
 
     try:
         section = spec_section_at(repo_root, spec_rel)
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-        return row_verification_issues(repo_root, section, rows_citing(matrix, spec_ref), None)
+        shape = shape_default(repo_root, state) if state is not None else None
+        return row_verification_issues(repo_root, section, rows_citing(matrix, spec_ref), shape)
     except Exception:  # noqa: BLE001
         # Advisory, and it runs after the resolve already committed: nothing
         # it hits (a non-UTF-8 spec, a malformed matrix, ...) may fail the step.

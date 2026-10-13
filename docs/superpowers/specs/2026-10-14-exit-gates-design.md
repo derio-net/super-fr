@@ -382,8 +382,12 @@ clone, so a released fr reads its own `live.yaml`. The wheel copy is regenerated
 `gate:` lines. A malformed `gate:` line raises `SectionError` only in this fr.
 `TriageConfig` (`triage/model.py`, strict) gains `exit: ExitBlock | None`.
 
-Compatibility: a repo that sets `exit:` is refused by an older collector, so the
-minimum fr is this release. This repo does not set `exit:` in this PR; the
+The exit is computed from the PR's own tree (`deliver`, labels); the driver never
+recomputes it and reads the PR's `verification:`/`gate:` labels instead, so the two
+cannot diverge.
+
+Compatibility: an older fr ignores `exit:` (naming the dropped key), so it computes
+no remap. This repo does not set `exit:` in this PR; the
 defaults are enough.
 
 A read-only `fr verification exit --run <id> | --spec <path>` prints kinds,

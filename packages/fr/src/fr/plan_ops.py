@@ -1656,15 +1656,26 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     from fr.acceptance.model import AcceptanceError
     from fr.requirements import load_spec_matrix, rows_citing
     from fr.verification.effective import effective_shape_default
-    from fr.verification.rows import row_verification_issues, spec_section_at
+    from fr.verification.rows import (
+        load_remap,
+        remap_key_problems,
+        row_verification_issues,
+        spec_section_at,
+    )
     from fr.verification.spec_section import SectionError
     from fr.workflow.model import WorkflowError
     from fr.workflow.resolve import workflow_for_plan
 
     root = plan.repo_root
-    spec_rel = plan.spec_path or plan.meta.spec
-    if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
+    if root is None:
         return []
+    remap_warnings = [
+        ReviewIssue(severity="warn", message=f".fr/triage.yaml: {m}")
+        for m in remap_key_problems(load_remap(root)[0], root)
+    ]
+    spec_rel = plan.spec_path or plan.meta.spec
+    if not spec_rel or is_cross_repo_spec(spec_rel):
+        return remap_warnings
 
     def issue(message: str) -> ReviewIssue:
         return ReviewIssue(severity="error", message=f"spec ## Verification: {message}")
@@ -1672,7 +1683,7 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     try:
         section = spec_section_at(root, spec_rel)
     except SectionError as e:
-        return [issue(f"{spec_rel} {e}")]
+        return [*remap_warnings, issue(f"{spec_rel} {e}")]
     try:
         shape = effective_shape_default(workflow_for_plan(plan).verification, root)
     except WorkflowError:
@@ -1680,8 +1691,8 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     try:
         matrix, spec_ref = load_spec_matrix(root, spec_rel)
     except AcceptanceError:
-        return []  # `_acceptance_link_issues` reports an unreadable matrix
-    return [
+        return remap_warnings  # `_acceptance_link_issues` reports an unreadable matrix
+    return remap_warnings + [
         issue(m)
         for m in row_verification_issues(root, section, rows_citing(matrix, spec_ref), shape)
     ]

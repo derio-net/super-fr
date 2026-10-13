@@ -143,6 +143,7 @@ def exit_cmd(
                     "gates": sorted(result.gates),
                     "gated": result.is_gated,
                     "gated_rows": gated_rows,
+                    "remap_problem": result.remap_problem,
                 }
             )
         )
