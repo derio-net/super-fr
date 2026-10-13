@@ -7861,8 +7861,8 @@ rows:
   - id: triage-claim-take-recorded-first
     capability: triage-batches
     acceptance: fr triage claim take records the take before any forge write; a failed
-      judgements write writes nothing to the forge, and a failed forge write leaves
-      a take the next claim sync completes.
+      judgements write writes nothing to the forge, a forge refusal withdraws the recorded
+      take, and a failed forge write leaves a take the next claim sync completes.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R5
     levels: {}
