@@ -569,3 +569,18 @@ Usage and exit 2. Test: test_configure_main_protection.py#test_a_flag_missing_it
 ### p4-r9-resolved · finding [fixed] · resolves p4-r9: AGENTS.md states the bypass as fact, omits the variable requirement (phase 4)
 
 Reworded as a requirement, incl. keeping FR_AUTOMATION_APP_ID set. Test: docs only
+
+<!-- fr:journal kind=finding scope=plan id=p1-triage-batch-cmd-import-cycle-resolved-2 created=2026-10-13T18:12:43+00:00 state=open resolves=p1-triage-batch-cmd-import-cycle tracked_by=https://github.com/derio-net/super-fr/issues/1174 -->
+### p1-triage-batch-cmd-import-cycle-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1174] · resolves p1-triage-batch-cmd-import-cycle: Importing fr.commands.triage_batch_cmd before fr.cli fails on a cycle
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1174.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r12-resolved-2 created=2026-10-13T18:12:44+00:00 state=open resolves=p1-r12 tracked_by=https://github.com/derio-net/super-fr/issues/1175 -->
+### p1-r12-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1175] · resolves p1-r12: archive and export PR merges bypass the approval gate
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1175.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved-2 created=2026-10-13T18:12:44+00:00 state=open resolves=p3-r11 tracked_by=https://github.com/derio-net/super-fr/issues/1176 -->
+### p3-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1176] · resolves p3-r11: a repo without origin/HEAD and an approved green PR aborts every pass at merge_ctx
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1176.

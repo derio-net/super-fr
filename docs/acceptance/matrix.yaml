@@ -6787,7 +6787,7 @@ rows:
       once per head; repeated passes over the same red head send nothing new; an unreachable
       session puts it on Needs-you.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_4_the_session_status_decides
@@ -6805,7 +6805,7 @@ rows:
       green batch PRs instead of merging, treats queued PRs as in flight, and re-enqueues
       or hands back an ejected PR; a repo with no queue keeps its train unchanged.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_repo_enqueues_an_approved_green_pr_and_records_it
@@ -6827,7 +6827,7 @@ rows:
       train updates a behind batch PR before merging it, even when it is behind only
       by routine commits.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_merge_ready.py#test_strict_checks_update_a_pr_behind_only_by_a_release_commit
@@ -8710,7 +8710,7 @@ rows:
       is readied and merged, a session push after labelling voids the approval and removes
       the label, and the driver''s own update-from-base keeps it.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_merge_train_approval.py#test_a_chain_of_fr_updates_from_the_approved_head_stays_approved
@@ -8737,7 +8737,7 @@ rows:
       the approved-fr label when it is missing, warning once, and never fail on a forge
       that cannot.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_merge_train_label_board.py#test_a_missing_label_is_created_once_per_repo_and_said
@@ -8763,7 +8763,7 @@ rows:
     acceptance: fr triage batch merge with no ids skips batches another scope holds,
       naming each, and merges the rest; naming a held batch still refuses.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest
@@ -8779,7 +8779,7 @@ rows:
       batch PR, and no brief, skill, agent or rule fr ships tells a session to add the
       approved-fr label.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_merge_train_label_board.py#test_a_green_unlabelled_batch_pr_asks_for_the_label_draft_or_not
@@ -8803,7 +8803,7 @@ rows:
     acceptance: super-fr's CI and acceptance workflows report ci-ok for a merge queue's
       merge group.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R15
     levels:
       unit:
       - super-fr:tests/unit/test_ci_merge_group.py#test_the_workflow_triggers_on_merge_group
@@ -8817,7 +8817,7 @@ rows:
       as derio-fr-automation, CI runs on the release commit, and the follow-up release
       run is a no-op.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R16
     levels: {}
     status: not-implemented
     notes: ''
@@ -8827,7 +8827,7 @@ rows:
     acceptance: super-fr's main requires ci-ok with up-to-date branches, blocks a behind
       PR until it is updated, and still accepts the release bot's push through its bypass.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R18
     levels: {}
     status: not-implemented
     notes: ''
@@ -8838,7 +8838,7 @@ rows:
       ci-ok rule into main's ruleset without overwriting it, and refuses the rule until
       the bypass is in place and a release was pushed by the app.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R17
     levels:
       unit:
       - super-fr:tests/unit/test_configure_main_protection.py#test_require_adds_the_strict_ci_ok_check_and_keeps_every_other_rule
