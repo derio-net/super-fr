@@ -379,3 +379,6 @@ Spec rewritten: R21: release joins READ_ONLY_COMMANDS; R8: set inserts or rewrit
 ### sr-25-resolved · finding [out-of-scope] · resolves sr-25: The triage page counts mergeStateStatus BLOCKED as a conflict
 
 Pre-existing in the triage page's open-PR row; this change does not touch render.py's conflict test and introduces its own predicate for the card and needs_you. Listed under the spec's Non-goals.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p2 created=2026-10-13T23:05:59+00:00 -->
+### phase-split-2026-10-14-exit-gates-p2 · decision · ask: PR labels and fr verification set (R7, R8) are reviewable on their own over phase 1's exit
