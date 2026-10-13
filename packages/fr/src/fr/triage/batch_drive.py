@@ -22,6 +22,8 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from fr.ghclient import QueueState
+from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
@@ -32,7 +34,16 @@ from fr.triage.batch import (
     recorded_branch,
 )
 from fr.triage.claims import Claim, held_line, held_members
-from fr.triage.model import Batch, CloseoutEvent, ConflictEvent, DispatchEvent, Export
+from fr.triage.model import (
+    Batch,
+    CloseoutEvent,
+    ConflictEvent,
+    DispatchEvent,
+    EnqueueEvent,
+    Export,
+    RedHandbackEvent,
+    UpdateEvent,
+)
 
 DEFAULT_WORKSPACE_PREFIX = "drive"
 CLOSEOUT_FALLBACK = timedelta(minutes=10)
@@ -83,6 +94,7 @@ ActionKind = Literal[
     "export-merge",
     "export-reconcile",
     "export-closed",
+    "enqueue",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -208,6 +220,25 @@ class Snapshot:
     # paste-ready focus command.
     idle: tuple[IdleSession, ...] = ()
     scope_args: tuple[str, ...] = ()
+    # batch id -> its PR's approval verdict (merge-train-safety §A "The walk"): from the
+    # live labels in the driver, from facts on the board and `drive --plan`. A batch
+    # with no verdict here is never approved.
+    approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
+    # Merge queues (merge-train-safety §D "Queue mode", R13), from the driver's reads: the
+    # repos whose base requires one (their train picks no head), those of them with a
+    # `version:` block, whether `forge.api` is `rest` (which cannot enqueue), each queued
+    # batch's `QueueState`, and each such repo's base sha now. The board and `drive --plan`
+    # read no forge, so they leave all of these empty and show the ordinary train.
+    queue_repos: frozenset[str] = frozenset()
+    queue_versioned: frozenset[str] = frozenset()
+    queue_rest: bool = False
+    # Repos whose default branch could not be told: queue mode is unknown, so they are held.
+    queue_unknown: frozenset[str] = frozenset()
+    # Facts-only views (the board, `drive --plan`) read no queue state: a PR whose last
+    # event is an `enqueued` one at its current head is then shown in the merge queue.
+    queue_inferred: bool = False
+    queue_states: Mapping[str, QueueState] = field(default_factory=dict)
+    bases: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -227,6 +258,9 @@ class Action:
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
     key: str = ""  # claim, refresh, release: the issue key
+    red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
+    checks: tuple[str, ...] = ()  # warn (red): the failing check names
+    ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
 
 
 @dataclass(frozen=True)
@@ -287,6 +321,14 @@ class Train:
     queued: tuple[str, ...]  # the member that stopped the walk (not the head), then the rest
     stepped: tuple[str, ...]  # batches stepped over (failing)
     numbers: Mapping[str, int]  # batch id -> PR number, for train_line
+    # Members with no valid `approved-fr` approval: held, never the head, never a stop
+    # (merge-train-safety §A "The walk").
+    awaiting: tuple[str, ...] = ()
+    # Queue mode (§D): the members enqueued this pass and those already in the queue. A
+    # queue-mode train has no head and no candidates.
+    enqueue: tuple[str, ...] = ()
+    in_merge_queue: tuple[str, ...] = ()
+    queue_mode: bool = False
 
 
 @dataclass(frozen=True)
@@ -550,6 +592,61 @@ def conflict_decision(
     if handed >= HANDBACKS_PER_DISPATCH:
         return ConflictDecision("held")
     return ConflictDecision("handback")
+
+
+# ------------------------------------------------- red recovery (merge-train-safety §C)
+
+RED_HANDBACKS_PER_DISPATCH = 2
+"""R10: red hand-backs a batch gets per dispatch, counted apart from conflict ones."""
+
+RedDecisionKind = Literal["reupdate", "handback", "wait", "needs_you", "skip"]
+
+
+def red_decision(
+    events: Sequence[object],
+    pr: int,
+    head: str,
+    failing: Sequence[str],
+    base_now: str,
+    status: str,
+    *,
+    queue: bool = False,
+) -> RedDecisionKind:
+    """What the driver does with PR *pr* red at *head* (*failing* names the checks), by the
+    first rule that applies (R9-R11):
+
+    1. a `red_handback` event exists for (pr, head): `skip`;
+    2. *head* is an `update` event's `head_after`, the base moved past that event's base,
+       and no later `update` starts from *head*: `reupdate`;
+    3. `RED_HANDBACKS_PER_DISPATCH` delivered hand-backs have gone out since the latest
+       dispatch: `needs_you`;
+    4. the session's *status*: `idle` is a `handback`, `absent` or `done` a `needs_you`,
+       anything else `wait`.
+    """
+    red = [e for e in events if isinstance(e, RedHandbackEvent)]
+    if any(e.pr == pr and e.head == head for e in red):
+        return "skip"
+    updates = [e for e in events if isinstance(e, UpdateEvent) and e.pr == pr]
+    made = [e for e in updates if e.head_after == head]
+    # In a merge-queue repo fr never pushes an update (R13): rule 2 does not apply.
+    if (
+        not queue
+        and made
+        and made[-1].base != base_now
+        and not any(e.head_before == head for e in updates)
+    ):
+        return "reupdate"
+    handed = 0
+    for event in reversed(events):
+        if isinstance(event, DispatchEvent):
+            break
+        if isinstance(event, RedHandbackEvent) and event.delivered == "session":
+            handed += 1
+    if handed >= RED_HANDBACKS_PER_DISPATCH:
+        return "needs_you"
+    if status == "idle":
+        return "handback"
+    return "needs_you" if status in ("absent", "done") else "wait"
 
 
 def held_conflict(batch: Batch) -> ConflictEvent | None:
@@ -880,34 +977,176 @@ def _dispatch_key(batch: Batch) -> tuple[int, int, int, int, str]:
     return (wave is None, wave or 0, order is None, order or 0, batch.id)
 
 
+def _queue_hold(repo: str, snap: Snapshot) -> str | None:
+    """Why a merge-queue repo is held, or None (§D "Holds")."""
+    if repo in snap.queue_unknown:
+        return f"cannot tell {repo}'s default branch: queue mode unknown"
+    if repo in snap.queue_versioned:
+        return f"{repo} requires a merge queue, and fr does not reserve versions through one"
+    if snap.queue_rest:
+        return f"{repo} requires a merge queue, and forge.api rest cannot enqueue"
+    return None
+
+
+def last_enqueue(batch: Batch, pr: int) -> EnqueueEvent | None:
+    """The batch's latest `enqueue` event for PR *pr*, whatever it records."""
+    for event in reversed(batch.events):
+        if isinstance(event, EnqueueEvent) and event.pr == pr:
+            return event
+    return None
+
+
+REFUSALS_BEFORE_NEED = 2
+"""Enqueue refusals at one head before the driver stops retrying and asks the operator."""
+
+
+def enqueue_refusals(batch: Batch, pr: int, head: str) -> list[EnqueueEvent]:
+    return [
+        e for e in batch.events
+        if isinstance(e, EnqueueEvent) and e.pr == pr and e.head == head and e.outcome == "refused"
+    ]  # fmt: skip
+
+
+def _walk_queue(
+    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
+) -> tuple[Train | None, list[Action]]:
+    """§D "Queue mode": the walk of a repo whose base requires a merge queue. It picks no
+    head: every approved, green member not already queued is enqueued, a queued one is in
+    the merge queue, an ejected one (its last event an `enqueued` one at the current head,
+    open, out of the queue with auto-merge cleared) is enqueued again when the base moved,
+    a recorded need when it did not, and red when its checks failed. A held repo (*hold*)
+    enqueues nothing but still reports its red members. `--max-inflight` is untouched: a
+    queued batch is still `pr-open`. `_walk_train` branches here at its entry, so the merge
+    train's loop is untouched."""
+    actions: list[Action] = []
+    enqueue: list[str] = []
+    queued: list[str] = []
+    in_queue: list[str] = []
+    stepped: list[str] = []
+    awaiting: list[str] = []
+    numbers: dict[str, int] = {}
+    hold = _queue_hold(repo, snap)
+    members: list[QueueEntry] = []
+    for entry in entries:
+        pr = snap.live.get(entry.batch.id)
+        verdict = snap.approvals.get(entry.batch.id)
+        approved = verdict is not None and is_approved(verdict)
+        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
+            continue  # not a member
+        members.append(entry)
+        numbers[entry.batch.id] = pr.number
+    if not members:
+        return None, actions
+    if hold is not None:
+        actions.append(Action("held", members[0].batch.id, hold))
+    for entry in members:
+        bid = entry.batch.id
+        pr = snap.live[bid]
+        verdict = snap.approvals.get(bid)
+        approved = verdict is not None and is_approved(verdict)
+        state = snap.queue_states.get(bid)
+        event = last_enqueue(entry.batch, pr.number)
+        at_head = event is not None and event.head == pr.head
+        mine = at_head and event is not None and event.outcome == "enqueued"
+        if mine and state is not None and (state.in_queue or state.auto_merge):
+            in_queue.append(bid)  # in the queue, or waiting to enter it: never ejected
+            continue
+        if state is not None and not state.open:
+            continue  # merged or closed since it was read: it never left a queue unmerged
+        if pr.checks == "failing":
+            stepped.append(bid)
+            actions.append(
+                Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
+                       f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
+                       checks=pr.failing)
+            )  # fmt: skip
+            continue
+        if not approved:
+            awaiting.append(bid)
+            continue
+        if hold is not None:
+            queued.append(bid)
+            continue
+        if mine and state is None:
+            in_queue.append(bid)  # the state was not read: nothing to decide from
+            continue
+        if pr.head != entry.pr.head_oid or pr.checks == "pending":
+            queued.append(bid)
+            continue
+        base_moved = event is not None and snap.bases.get(repo, event.base) != event.base
+        why = f"at {pr.head[:12]}"
+        if mine or (at_head and event is not None and event.outcome == "ejected"):
+            if not base_moved:
+                if mine:  # the driver records it once; the recorded event is the need
+                    actions.append(
+                        Action("warn", bid, f"PR #{pr.number} left the merge queue unmerged",
+                               pr=pr.number, head=pr.head, ejected=True)
+                    )  # fmt: skip
+                continue
+            why = "the base moved since it was enqueued"
+        elif len(enqueue_refusals(entry.batch, pr.number, pr.head)) >= REFUSALS_BEFORE_NEED:
+            continue  # refused twice at this head: a recorded need, no third try
+        enqueue.append(bid)
+        actions.append(
+            Action("enqueue", bid, f"PR #{pr.number} {why}", pr=pr.number, head=pr.head,
+                   train=repo)
+        )  # fmt: skip
+    train = Train(repo, None, (), tuple(queued), tuple(stepped), numbers, tuple(awaiting),
+                  tuple(enqueue), tuple(in_queue), True)  # fmt: skip
+    return train, actions
+
+
 def _walk_train(
+    repo: str, entries: Sequence[QueueEntry], snap: Snapshot
+) -> tuple[Train | None, list[Action]]:
+    if repo in snap.queue_repos:
+        return _walk_queue(repo, entries, snap)
+    return _walk_merge_train(repo, entries, snap)
+
+
+def _walk_merge_train(
     repo: str, entries: Sequence[QueueEntry], snap: Snapshot
 ) -> tuple[Train | None, list[Action]]:
     """§A: walk one repo's *entries* (already in train order). A green member becomes
     a merge candidate and the walk goes on; a failing one is stepped over, wherever it
-    sits; a moved head or a pending one stops it, and every other member after the
-    stop is queued."""
+    sits; one without a valid approval awaits it, wherever it sits; a moved head or a
+    pending one stops it, and every other member after the stop is queued. A draft is
+    a member only with a valid approval (merge-train-safety §A)."""
     merges: list[Action] = []
     candidates: list[str] = []
     stepped: list[str] = []
+    awaiting: list[str] = []
     numbers: dict[str, int] = {}
     waiting: str | None = None
     queued: list[str] = []
+    in_queue: list[str] = []
     members = 0
     for entry in entries:
         bid = entry.batch.id
         pr = snap.live.get(bid)
-        if pr is None or pr.state != "OPEN" or pr.draft:
+        verdict = snap.approvals.get(bid)
+        approved = verdict is not None and is_approved(verdict)
+        if pr is None or pr.state != "OPEN" or (pr.draft and not approved):
             continue  # not a member
         members += 1
         numbers[bid] = pr.number
+        if snap.queue_inferred:  # facts only: what the events say fr did (§D, R13)
+            seen = last_enqueue(entry.batch, pr.number)
+            if seen is not None and seen.head == pr.head and seen.outcome == "enqueued":
+                in_queue.append(bid)
+                continue
         if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
             stepped.append(bid)
-            if pr.head not in snap.warned:
-                merges.append(
-                    Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
-                           f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head)
-                )  # fmt: skip
+            # Said on every pass: the command's recovery (§C) decides whether this pass
+            # has anything new to report, from the recorded events, not from memory.
+            merges.append(
+                Action("warn", bid, f"PR #{pr.number} CI failing at {pr.head[:12]}: "
+                       f"{', '.join(pr.failing)}", pr=pr.number, head=pr.head, red=True,
+                       checks=pr.failing)
+            )  # fmt: skip
+            continue
+        if not approved:  # never the head, never a stop
+            awaiting.append(bid)
             continue
         if waiting is not None or queued:
             queued.append(bid)
@@ -926,7 +1165,11 @@ def _walk_train(
     if not members:
         return None, merges
     head = candidates[0] if candidates else waiting
-    return Train(repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers), merges
+    train = Train(
+        repo, head, tuple(candidates), tuple(queued), tuple(stepped), numbers, tuple(awaiting),
+        in_merge_queue=tuple(in_queue),
+    )  # fmt: skip
+    return train, merges
 
 
 def _claim_actions(snap: Snapshot) -> list[Action]:
@@ -1223,6 +1466,19 @@ def train_line(train: Train) -> str:
     def ref(bid: str) -> str:
         return f"{bid} (#{train.numbers[bid]})" if bid in train.numbers else bid
 
+    if train.queue_mode:
+        parts = ["merge queue"]
+        if train.enqueue:
+            parts.append("enqueue " + ", ".join(ref(b) for b in train.enqueue))
+        if train.in_merge_queue:
+            parts.append("in merge queue " + ", ".join(ref(b) for b in train.in_merge_queue))
+        if train.queued:
+            parts.append("queued " + ", ".join(ref(b) for b in train.queued))
+        if train.stepped:
+            parts.append("stepped over " + ", ".join(ref(b) for b in train.stepped))
+        if train.awaiting:
+            parts.append("awaiting approval " + ", ".join(ref(b) for b in train.awaiting))
+        return f"train {train.repo}: " + " · ".join(parts)
     head = train.head
     parts = []
     if head is None:
@@ -1237,4 +1493,8 @@ def train_line(train: Train) -> str:
         parts.append("queued " + ", ".join(ref(b) for b in train.queued))
     if train.stepped:
         parts.append("stepped over " + ", ".join(ref(b) for b in train.stepped))
+    if train.awaiting:
+        parts.append("awaiting approval " + ", ".join(ref(b) for b in train.awaiting))
+    if train.in_merge_queue:
+        parts.append("in merge queue " + ", ".join(ref(b) for b in train.in_merge_queue))
     return f"train {train.repo}: " + " · ".join(parts)

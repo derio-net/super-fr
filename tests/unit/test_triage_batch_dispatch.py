@@ -1194,3 +1194,28 @@ def test_dispatch_rereads_members_facts_show_claimed_and_refuses_one_taken_since
     assert OTHER in out and "super-fr#575" in out
     assert "dispatch" not in runner.calls
     assert runner.dispatched == []
+
+
+# ------------------------------------------- the approval label (merge-train-safety R4)
+
+
+def test_dispatch_creates_the_missing_approval_label_once_and_says_so(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    gh.labels_missing.add(REPO)
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert f"created label approved-fr on {REPO}" in out
+    assert gh.label_checks == [(REPO, "approved-fr")]
+    assert "approved-fr" in gh.repo_labels[REPO]
+
+
+def test_a_dispatch_preview_checks_no_label(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    gh.labels_missing.add(REPO)
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 0, out
+    assert gh.label_checks == [] and "created label" not in out

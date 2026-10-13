@@ -691,6 +691,7 @@ def test_the_held_message_pins_every_line(tmp_path: Path) -> None:
         f"never push {OLD} again.",
         "The PR is now #101 (https://x/101); the earlier one was closed as superseded.",
         "Reserved version for this batch: 4.22.0.",
+        triage_batch_cmd.NO_APPROVAL_LINE,
         *HOLD_LINES,
     ]
     assert "driven" not in text

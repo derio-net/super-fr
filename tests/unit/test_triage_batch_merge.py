@@ -18,6 +18,7 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.gh import GhError
+from fr.ghclient import BaseRules
 from fr.triage.batch import merge_order
 from fr.triage.model import Facts, Issue, PullRequest, TriageConfig
 from typer.testing import CliRunner
@@ -53,6 +54,10 @@ class MergeForge:
         self.reads: list[int] = []  # each read of a PR's required checks
         self.methods: dict[str, Any] = {"default": "squash", "allowed": ["merge", "squash"]}
         self.method_reads = 0
+        self.readied: list[int] = []
+        self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
+        self.labels_defined: set[str] = {"approved-fr"}
+        self.created_labels: list[str] = []
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         self.method_reads += 1
@@ -66,11 +71,38 @@ class MergeForge:
             "head_ref": kw.pop("head_ref", f"feat/batch-{number}"),
             "mergeable": "MERGEABLE",
             "merge_state": "CLEAN",
+            # The operator's approval (merge-train-safety §A): on unless a test says not.
+            "labels": kw.pop("labels", ["approved-fr"]),
             **kw,
         }
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
-        return dict(self.prs[number])
+        return {**self.prs[number], "labels": list(self.prs[number]["labels"])}
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        self.readied.append(number)
+        self.prs[number]["draft"] = False
+
+    def edit_issue_labels(
+        self, repo: str, number: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        self.label_edits.append((number, add, remove))
+        pr = self.prs[number]
+        pr["labels"] = [x for x in pr["labels"] if x not in remove] + sorted(add)
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        return name in self.labels_defined
+
+    def ensure_labels(self, repo: str, labels: list[Any]) -> None:
+        for label in labels:
+            name = getattr(label, "name", label)
+            self.created_labels.append(name)
+            self.labels_defined.add(name)
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        if getattr(self, "rules_error", None):
+            raise GhError(self.rules_error, returncode=1)  # type: ignore[attr-defined]
+        return getattr(self, "rules", BaseRules())
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         self.reads.append(number)
@@ -188,6 +220,9 @@ class FakeCheckout:
 
     def remove_worktree(self, where: Path) -> None:
         self.removed.append(where)
+
+    def rev_parse(self, ref: str) -> str:
+        return f"{ref}@fetched"
 
     def on_push(self, branch: str, sha: str) -> None:
         for pr in self.forge.prs.values():
@@ -471,14 +506,17 @@ def test_a_named_batch_that_is_not_pr_open_is_refused(
 @pytest.mark.parametrize(
     ("mutate", "words"),
     [
-        (lambda f: f.prs[1001].update(draft=True), "draft"),
+        # An approved draft is readied and merged now (merge-train-safety R3); a label
+        # removed under the run stops it instead.
+        (lambda f: f.prs[1001].update(labels=[]), "approved-fr"),
         (
             lambda f: f.checks.__setitem__(1001, [{"name": "lint", "bucket": "fail"}]),
             "lint",
         ),
-        (lambda f: f.prs[1001].update(head_oid="someone-pushed"), "head moved"),
+        # a push fr did not make voids the approval: that is the stop's real cause
+        (lambda f: f.prs[1001].update(head_oid="someone-pushed"), "approved-fr label is void"),
     ],
-    ids=["draft", "failing-check", "moved-head"],
+    ids=["label-removed", "failing-check", "moved-head"],
 )
 def test_each_refusal_stops_the_queue_with_its_message(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutate: Any, words: str
@@ -496,7 +534,8 @@ def test_each_refusal_stops_the_queue_with_its_message(
 
     def _changes_after_plan(repo: str, number: int) -> dict[str, Any]:
         views.append(number)
-        if views.count(1001) == 2:  # the step-1 re-read, after the plan was printed
+        # the step-1 re-read, after the approval settle and the plan read it
+        if views.count(1001) == 3:
             mutate(forge)
         return real_view(repo, number)
 
@@ -748,7 +787,7 @@ def test_merge_refuses_a_batch_held_elsewhere(
     facts = load_facts(path)
     claimed = facts.issues[0].model_copy(update=held(marker(OTHER, "theirs", expires=FAR)))
     path.write_text(json.dumps(facts.model_copy(update={"issues": [claimed]}).to_json()), "utf-8")
-    code, out = _merge(tmp_path, "--yes")
+    code, out = _merge(tmp_path, "one", "--yes")  # naming it: still a refusal (R7)
     assert code == 2
     assert OTHER in out and "super-fr#1" in out
     assert forge.merged == [] and checkout.worktrees == []
@@ -814,3 +853,92 @@ def test_merge_uses_the_repos_configured_merge_method(
     code, out = _merge(tmp_path, "--yes")
     assert code == 0, out
     assert forge.merged == [(1001, "head-solo", "squash")]
+
+
+# ------------------------- batch merge skips held batches (merge-train-safety §E, R7)
+
+
+def _hold(tmp_path: Path, *issue_indexes: int) -> None:
+    from fr.triage.model import load_facts
+
+    from tests.unit.triage_claim_fixtures import FAR, OTHER, held, marker
+
+    path = tmp_path / "facts.json"
+    facts = load_facts(path)
+    issues = [
+        i.model_copy(update=held(marker(OTHER, "theirs", expires=FAR))) if n in issue_indexes else i
+        for n, i in enumerate(facts.issues)
+    ]
+    path.write_text(json.dumps(facts.model_copy(update={"issues": issues}).to_json()), "utf-8")
+
+
+_TWO = [
+    ("one", 1, None, "patch", "4.21.2", ["a.py"]),
+    ("two", 2, None, "patch", "4.21.3", ["b.py"]),
+]
+
+
+def test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.triage_claim_fixtures import OTHER
+
+    forge, _ = _setup(tmp_path, monkeypatch, _TWO, config=None)
+    _hold(tmp_path, 0)
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert f"skipped one: held by {OTHER}" in out
+    assert [n for n, *_ in forge.merged] == [1002]
+
+
+def test_merge_with_no_ids_says_nothing_to_merge_when_every_batch_is_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _setup(tmp_path, monkeypatch, _TWO, config=None)
+    _hold(tmp_path, 0, 1)
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert "skipped one: held by" in out and "skipped two: held by" in out
+    assert "nothing to merge" in out
+    assert forge.merged == [] and checkout.worktrees == []
+
+
+def test_merge_naming_a_held_batch_still_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, _ = _setup(tmp_path, monkeypatch, _TWO, config=None)
+    _hold(tmp_path, 0)
+    code, out = _merge(tmp_path, "one", "--yes")
+    assert code == 2 and "cannot be merged" in out
+    assert forge.merged == []
+
+
+# ------------------------- the base rules reach batch merge's context (§D, R12, R14)
+
+
+def test_batch_merge_reads_the_base_rules_once_and_strict_checks_update_a_routinely_behind_pr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.ghclient import BaseRules
+
+    forge, checkout = _setup(tmp_path, monkeypatch, _TWO[:1], config=None)
+    forge.rules = BaseRules(merge_queue=False, strict_checks=True)  # type: ignore[attr-defined]
+    reads: list[str] = []
+    real = forge.base_rules
+    forge.base_rules = lambda repo, branch: (reads.append(branch), real(repo, branch))[1]  # type: ignore[method-assign]
+    checkout.up_to_date.discard("head-one")
+    checkout.base_commits["head-one"] = (("arc", (("A", "docs/superpowers/implemented/x.md"),)),)
+    code, out = _merge(tmp_path, "--yes")
+    assert reads == ["main"], out
+    assert "pushed new-1" in out, out  # updated first, then merged at the new head
+    assert checkout.worktrees, "strict checks must start an update, not merge as it is"
+
+
+def test_a_forge_error_reading_the_base_rules_ends_batch_merge_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, _ = _setup(tmp_path, monkeypatch, _TWO[:1], config=None)
+    forge.rules_error = "connection reset"  # type: ignore[attr-defined]
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 1 and "a forge read failed" in out and "connection reset" in out
+    assert forge.merged == []

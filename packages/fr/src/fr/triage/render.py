@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -849,9 +849,12 @@ def _since_table(since: SnapshotDiff | None) -> str:
 
 
 def _needs_section(
-    facts: Facts, judgements: Judgements, session_notes: Mapping[str, str] | None = None
+    facts: Facts,
+    judgements: Judgements,
+    session_notes: Mapping[str, str] | None = None,
+    ci_none: Collection[str] = (),
 ) -> str:
-    rows = needs_you(facts, judgements, session_notes)
+    rows = needs_you(facts, judgements, session_notes, ci_none=ci_none)
     head = '<section class="decide" id="needs-you-now"><h2>Needs you now</h2>'
     if not rows:
         return f'{head}<p class="quiet">Nothing needs you now.</p></section>'
@@ -1052,6 +1055,7 @@ def render(
     *,
     board: bool = False,
     session_notes: Mapping[str, str] | None = None,
+    ci_none: Collection[str] = (),
     present: Sequence[str] = ("backlog",),
 ) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes.
@@ -1132,7 +1136,7 @@ def render(
 
     builders: dict[str, Callable[[], str]] = {
         "since": lambda: _since_table(since),
-        "needs": lambda: _needs_section(facts, judgements, session_notes),
+        "needs": lambda: _needs_section(facts, judgements, session_notes, ci_none),
         "next-up": lambda: _next_section(facts, judgements),
         "waves": lambda: _waves_section(facts, judgements),
         "possible-duplicates": lambda: _possible_duplicates(result.candidates, by_key),

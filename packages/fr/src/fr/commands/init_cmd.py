@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -107,6 +108,37 @@ def scaffold(
         typer.echo(f"error: {err}", err=True)
         raise typer.Exit(2) from err
     typer.echo(f"scaffolded: {path}")
+    _ensure_approval_label(repo.resolve())
+
+
+def approval_label_target(repo_root: Path) -> tuple[Any, str] | None:
+    """The forge client and OWNER/REPO the `approved-fr` label belongs on: a GitHub
+    origin only, else None (merge-train-safety R4). Tests replace this."""
+    from fr import _hosts
+    from fr.hostclient import client_for
+
+    try:
+        if _hosts.detect_backend(repo_root) != "github":
+            return None
+        slug = _hosts.origin_slug(repo_root)
+        return (client_for(repo_root), slug) if slug else None
+    except Exception:  # noqa: BLE001 — a scaffold never fails on the forge
+        return None
+
+
+def _ensure_approval_label(repo_root: Path) -> None:
+    """Create the label fr merges batch PRs by when it is missing; a warning on any
+    failure, never an error (merge-train-safety R4)."""
+    from fr.triage.approval import ensure_approval_label
+
+    target = approval_label_target(repo_root)
+    if target is None:
+        return
+    client, slug = target
+    try:
+        ensure_approval_label(client, slug, lambda line: typer.echo(line, err=True), seen=set())
+    except Exception as err:  # noqa: BLE001 — a scaffold never fails on the forge
+        typer.echo(f"warning: cannot ensure the approved-fr label on {slug}: {err}", err=True)
 
 
 @init_app.command()

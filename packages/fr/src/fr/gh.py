@@ -492,8 +492,11 @@ PR_LIST_FIELDS = (
     "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences,"
     "author,isCrossRepository"
 )
+# `labels`: the approval gate reads `approved-fr` from facts for the board and the drive
+# plan (2026-10-11-merge-train-safety §A); a merge reads it live.
 OPEN_PR_LIST_FIELDS = (
-    PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid"
+    PR_LIST_FIELDS
+    + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid,labels"
 )
 
 

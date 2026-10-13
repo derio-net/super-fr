@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""A fake `gh` for tests/scenarios/merge-train-label-gate.sh and merge-train-red-recovery.sh
+(FR_FORGE_API=rest).
+
+One repo (derio-net/super-fr), one open issue (#1074) and one batch PR (#1080), for
+the routes `fr triage batch drive` and `fr triage render` read and write under REST.
+
+Captures, never constructions: every record is a capture from tests/fixtures/github_rest
+(captured live 2026-10-08 and 2026-10-11, that directory's README), served as-is or with
+the WORLD's own facts written over it: the PR's head sha (read live from the bare remote,
+so the driver's update pushes move it), head branch, body (its `Closes` line), draft flag,
+labels and merge state; the issue's labels and comments. A pending head re-serves the
+captured check runs with `status: in_progress` and no conclusion, GitHub's own shape for
+a run still going. The world lives in $FAKE_FORGE (JSON), which the scenario edits to
+act as the operator; every call is appended to $FAKE_GH_LOG. Anything else fails loudly.
+
+Two more world keys serve the red-recovery scenario: `red` lists heads whose `test` check
+run is re-served with the captured run's own `failure` conclusion shape (`conclusion:
+failure`), and `strict` adds one `required_status_checks` rule (context `test`, a name the
+captured runs carry) with `strict_required_status_checks_policy: true` to the captured
+ruleset list, in the captured rules' own key shape. `queue` likewise adds a `merge_queue`
+rule (the documented ruleset parameters: the repo's own ruleset has none, so the shape is not
+a capture) for the merge-train-queue scenario.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlsplit
+
+HERE = Path(__file__).resolve().parent
+CAPS = HERE.parents[3] / "fixtures" / "github_rest"
+REPO = "repos/derio-net/super-fr"
+SHA = "095092b8f4ec27dffd445d5c8f1f717f9cd216e0"  # the captured head of #1080
+
+
+def cap(name: str) -> object:
+    return json.loads((CAPS / name).read_text())
+
+
+def load() -> dict:
+    return json.loads(Path(os.environ["FAKE_FORGE"]).read_text())
+
+
+def save(world: dict) -> None:
+    Path(os.environ["FAKE_FORGE"]).write_text(json.dumps(world, indent=1))
+
+
+def head(world: dict) -> str:
+    branch = world["pr"]["branch"]
+    out = subprocess.run(
+        ["git", "-C", world["bare"], "rev-parse", f"refs/heads/{branch}"],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    return out.stdout.strip()
+
+
+def label(name: str) -> dict:
+    return {**cap("repo_labels_bug.json"), "name": name}  # the captured shape, renamed
+
+
+def pull(world: dict) -> dict:
+    p = cap("repo_pulls_1080.json")
+    pr = world["pr"]
+    p["head"]["ref"] = pr["branch"]
+    p["head"]["sha"] = head(world)
+    p["draft"] = pr["draft"]
+    p["body"] = "Closes #1074"
+    p["labels"] = [label(n) for n in pr["labels"]]
+    p["mergeable"], p["mergeable_state"] = True, "clean"
+    if pr["merged"]:
+        p["state"], p["merged"] = "closed", True
+        p["merged_at"] = p["closed_at"] = "2026-10-11T12:00:00Z"
+        p["merge_commit_sha"] = head(world)
+    else:
+        p["state"], p["merged"], p["merged_at"], p["closed_at"] = "open", False, None, None
+    return p
+
+
+def issue(world: dict) -> dict:
+    i = cap("repo_issues_1074.json")
+    i["labels"] = [label(n) for n in world["issue_labels"]]
+    i["comments"] = len(world["comments"])
+    return i
+
+
+def check_runs(world: dict, sha: str) -> dict:
+    runs = cap(f"repo_commits_{SHA}_check-runs-per_page-100-page-1.json")
+    for r in runs["check_runs"]:
+        r["head_sha"] = sha
+        if sha in world["pending"]:
+            r["status"], r["conclusion"], r["completed_at"] = "in_progress", None, None
+        elif sha in world.get("red", []) and r["name"] == "test":
+            r["conclusion"] = "failure"
+    return runs
+
+
+def answer(world: dict, method: str, route: str, fields: dict[str, str]) -> object:
+    parts = urlsplit(route)
+    path, query = unquote(parts.path), parse_qs(parts.query)
+    page = int(query.get("page", ["1"])[0])
+    open_pr = not world["pr"]["merged"]
+    if method == "GET":
+        if path == "user":
+            return cap("user.json")
+        if path == REPO:
+            return cap("repo.json")
+        if path == f"{REPO}/contents/.fr/triage.yaml":
+            return world["config"]
+        if path == f"{REPO}/issues" and page == 1:
+            return [issue(world)]
+        if path == f"{REPO}/issues" or path.endswith("/comments") and page > 1:
+            return []
+        if path == f"{REPO}/issues/1074":
+            return issue(world)
+        if path == f"{REPO}/issues/1074/comments":
+            return world["comments"]
+        if path == f"{REPO}/pulls":
+            state = query.get("state", ["open"])[0]
+            return [pull(world)] if page == 1 and (state == "all" or open_pr) else []
+        if path == f"{REPO}/pulls/1080":
+            return pull(world)
+        if path == f"{REPO}/pulls/1080/files":
+            return cap("repo_pulls_1080_files-per_page-100-page-1.json") if page == 1 else []
+        if path == f"{REPO}/pulls/1080/reviews":
+            return []
+        if path.startswith(f"{REPO}/commits/") and path.endswith("/check-runs"):
+            sha = path.split("/")[-2]
+            return check_runs(world, sha) if page == 1 else {"check_runs": []}
+        if path.startswith(f"{REPO}/commits/") and path.endswith("/status"):
+            return cap(f"repo_commits_{SHA}_status.json")
+        if path == f"{REPO}/actions/runs":
+            if page > 1:
+                return {"workflow_runs": []}
+            return cap(f"repo_actions_runs-head_sha-{SHA}-per_page-100-page-1.json")
+        if path == f"{REPO}/branches/main":
+            return cap("repo_branches_main.json")
+        if path == f"{REPO}/rules/branches/main":
+            rules = cap("repo_rules_branches_main.json")
+            if world.get("strict"):
+                rules.append(
+                    {**rules[0], "type": "required_status_checks",
+                     "parameters": {"strict_required_status_checks_policy": True,
+                                    "required_status_checks": [{"context": "test"}]}}
+                )  # fmt: skip
+            if world.get("queue"):
+                rules.append(
+                    {**rules[0], "type": "merge_queue",
+                     "parameters": {"merge_method": "SQUASH", "grouping_strategy": "ALLGREEN"}}
+                )  # fmt: skip
+            return rules
+        if path == f"{REPO}/branches/main/protection":
+            err = cap("repo_branches_main_protection.error.json")  # the captured 404
+            sys.stdout.write(err["stdout"])
+            sys.stderr.write(err["stderr"])
+            sys.exit(err["exit"])
+        if path == f"{REPO}/releases/latest":
+            return cap("repo_releases_latest.json")
+        if path == f"{REPO}/labels/approved-fr":
+            if not world["label_defined"]:
+                err = cap("repo_labels_approved-fr.error.json")
+                sys.stdout.write(err["stdout"])
+                sys.stderr.write(err["stderr"])
+                sys.exit(err["exit"])
+            return label("approved-fr")
+    if method == "POST" and path == f"{REPO}/labels":
+        world["label_defined"] = True
+        return label(fields["name"])
+    if method == "POST" and path == f"{REPO}/pulls/1080/ccr/ready_for_review":
+        world["pr"]["draft"] = False
+        return {}
+    if method == "PUT" and path == f"{REPO}/pulls/1080/merge":
+        assert fields.get("sha") == head(world), "merged at a head that is not the PR's"
+        world["pr"]["merged"] = True
+        return {"merged": True, "sha": head(world)}
+    if method == "DELETE" and path.startswith(f"{REPO}/issues/1080/labels/"):
+        world["pr"]["labels"].remove(unquote(path.rsplit("/", 1)[1]))
+        return [label(n) for n in world["pr"]["labels"]]
+    if method == "POST" and path == f"{REPO}/issues/1074/labels":
+        world["issue_labels"] = sorted({*world["issue_labels"], *fields.get("labels[]", [])})
+        return [label(n) for n in world["issue_labels"]]
+    if method == "DELETE" and path.startswith(f"{REPO}/issues/1074/labels/"):
+        name = unquote(path.rsplit("/", 1)[1])
+        world["issue_labels"] = [n for n in world["issue_labels"] if n != name]
+        return []
+    if method == "POST" and path == f"{REPO}/issues/1074/comments":
+        posted = {**cap("repo_issues_1074_comments-per_page-100-page-1.json")[0]}
+        posted.update(id=900000 + len(world["comments"]), body=fields["body"],
+                      user=cap("user.json"), created_at="2026-10-11T12:00:00Z",
+                      updated_at="2026-10-11T12:00:00Z", author_association="OWNER")  # fmt: skip
+        world["comments"].append(posted)
+        return posted
+    if method == "PATCH" and path.startswith(f"{REPO}/issues/comments/"):
+        cid = int(path.rsplit("/", 1)[1])
+        for c in world["comments"]:
+            if c["id"] == cid:
+                c["body"] = fields["body"]
+                return c
+    raise LookupError(f"{method} {route}")
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] != "api":
+        print(f"fake gh: unexpected call: gh {' '.join(argv)}", file=sys.stderr)
+        return 1
+    args = argv[1:]
+    with open(os.environ["FAKE_GH_LOG"], "a") as log:
+        log.write(" ".join(args) + "\n")
+    method, accept, jq, fields = "GET", None, None, {}
+    route = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-X":
+            method, i = args[i + 1], i + 2
+        elif a == "-H":
+            accept, i = args[i + 1], i + 2
+        elif a == "--jq":
+            jq, i = args[i + 1], i + 2
+        elif a in ("-f", "-F"):
+            key, _, value = args[i + 1].partition("=")
+            if key.endswith("[]"):
+                fields.setdefault(key, []).append(value)
+            else:
+                fields[key] = value
+            i += 2
+        else:
+            route, i = a, i + 1
+    if fields and method == "GET":
+        method = "POST"
+    world = load()
+    try:
+        got = answer(world, method, route or "", fields)
+    except LookupError:
+        print(f"fake gh: no capture for: gh api {' '.join(args)}", file=sys.stderr)
+        return 1
+    save(world)
+    if jq == ".default_branch":
+        print("main")
+    elif accept and "raw" in accept:
+        sys.stdout.write(str(got))
+    else:
+        print(json.dumps(got))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -388,3 +388,13 @@ def complete_live_pr(monkeypatch: pytest.MonkeyPatch) -> None:
 
     body = "\n\n".join(f"{h}\n\nNone." for h in REQUIRED_SECTIONS)
     monkeypatch.setattr(fr.gh, "view_pr_body", lambda ref, *, cwd=None: body)
+
+
+@pytest.fixture(autouse=True)
+def _no_approval_label_from_scaffold(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fr init scaffold` creates the `approved-fr` label on a GitHub origin
+    (merge-train-safety R4); a test clone pointing at a real repo must never reach
+    the forge. Its own tests replace `approval_label_target` again."""
+    from fr.commands import init_cmd
+
+    monkeypatch.setattr(init_cmd, "approval_label_target", lambda repo_root: None)

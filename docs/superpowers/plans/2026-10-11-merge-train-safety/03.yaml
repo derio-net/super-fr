@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Merge queues in the driver and merge_group CI (R12, R13, R15)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - merge-train-queue
+  - ci-merge-group-trigger
+  tier: standard
+  files:
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/triage/*
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - .github/workflows/ci.yml
+  - .github/workflows/acceptance-report.yml
+  - tests/unit/*
+  - tests/scenarios/*
+  - tests/fixtures/*
+  - docs/acceptance/*
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Forge seams for the queue
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: `pr_enqueue(repo, number, *, head_sha, method)` (RealGhClient argv `gh pr merge --auto --match-head-commit <sha> --<method>`; REST and unsupported raise) and `pr_queue_state` (RealGhClient `gh api graphql` for isInMergeQueue + autoMergeRequest; REST `pulls/{n}.auto_merge`, in_queue None; unsupported (None, False)).
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement in the three backends and the in-process fake.
+- number: 2
+  title: Queue mode in the walk and the driver
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: with Snapshot.queue_repos containing the repo, the walk picks no head, emits an `enqueue` action (new ActionKind, kanban phrase "enqueue PR #n") for every Approved green unqueued member, puts queued members in Train.in_merge_queue ("in merge queue" on the kanban); a repo with a `version:` block or under forge.api rest gets a `held` action with the spec's text; the driver executes enqueue and records EnqueueEvent; ejection (last event EnqueueEvent at the current head, open, not in queue, auto_merge cleared) → green + moved base re-enqueues, green + unmoved base raises `queue-ejected` Need, red → red_decision; a PR waiting to enter the queue (auto_merge set) is never ejected; --max-inflight unchanged; a repo with no queue keeps its train byte-for-byte.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement per spec §D; NEED_LABELS gains queue-ejected.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: keep queue mode a branch at the walk's entry, not interleaved through the train loop.
+- number: 3
+  title: merge_group triggers
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_ci_merge_group.py asserts `merge_group` in both workflows' `on:` and that change-fragment keeps `if: github.event_name == 'pull_request'`.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: add the triggers to .github/workflows/ci.yml and .github/workflows/acceptance-report.yml.
+- number: 4
+  title: Scenario and acceptance
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Write tests/scenarios/merge-train-queue.sh (REST fake forge: rules/branches returns a merge_queue rule → the pass holds the repo with "forge.api rest cannot enqueue"; no rule → the train is unchanged). Move merge-train-queue (scenario + unit refs for the GraphQL path) and ci-merge-group-trigger (unit ref) with `fr acceptance set-status`.
+  - id: P3.T4.S2
+    text: |-
+      Full suite after the last code commit into a host-visible log, ruff check/format, mypy; fix anything red.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-10-11T23:16:49+00:00'
+      note: null
+  completion:
+    at: '2026-10-11T23:16:49+00:00'
+    note: null
+    observed_prs: []
