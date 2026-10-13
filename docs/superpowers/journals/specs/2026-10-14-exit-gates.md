@@ -403,3 +403,6 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-exit-gates-p3 created=2026-10-13T23:06:20+00:00 -->
 ### tier-2026-10-14-exit-gates-p3 · decision · hard: moves the record kind's stamp (migration + validator) and changes deliver's gate every run relies on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-exit-gates-p4 created=2026-10-13T23:06:23+00:00 -->
+### tier-2026-10-14-exit-gates-p4 · decision · hard: changes drive_pass close-out planning and the facts schema the wave driver depends on
