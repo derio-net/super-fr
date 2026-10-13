@@ -19,18 +19,50 @@ from __future__ import annotations
 
 import html
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 from fr.acceptance.anchors import is_python, line_of, node_line
-from fr.acceptance.model import LEVELS, Matrix, Row, archive_twin, split_ref
+from fr.acceptance.model import (
+    LEVELS,
+    Matrix,
+    Row,
+    archive_twin,
+    latest_passing_walk_at,
+    split_ref,
+)
 
 STATUS_LABEL = {
     "ci": ("CI · per-PR", "ci"),
     "scheduled": ("CI · scheduled", "sched"),
-    "skipped": ("skipped", "live"),
+    "unwired": ("unwired", "live"),
+    "walk-owed": ("walk owed", "live"),
+    "walked": ("walked live", "sched"),
+    "manual": ("manual", "sched"),
     "not-implemented": ("not implemented", "none"),
     "failing": ("FAILING", "fail"),
 }
+# One panel per status the `skipped` split introduced (spec 2026-10-11 §D), in
+# the order a reader acts on them: debt first, then what is proven or exempt.
+STATUS_PANELS: tuple[tuple[str, str], ...] = (
+    ("Unwired — a test exists but does not run in CI (wiring owed)", "unwired"),
+    ("Walk owed — a live or post-merge walk is owed", "walk-owed"),
+    ("Walked — proven live, dated by its latest passing walk", "walked"),
+    ("Manual — a process that is never automatable", "manual"),
+)
+FOOTER = (
+    "Statuses: ci / scheduled cannot drift silently; unwired, walk-owed and "
+    "not-implemented are acceptance debt, CI warnings gated by the backfill rule; "
+    "walked and manual are listed, never debt; failing fails CI."
+)
+
+
+def _walked_suffix(row: Row) -> str:
+    """` (walked <date>)` for a `walked` row with a passing walk, else ``."""
+    at = latest_passing_walk_at(row) if row.status == "walked" else None
+    return f" (walked {at[:10]})" if at else ""
+
+
 LEVEL_LABEL = {"unit": "UNIT", "api": "API", "int": "INT", "ui": "UI"}
 
 
@@ -197,7 +229,10 @@ def render(matrix: Matrix, links: LinkBuilder, stamp: str, *, aggregates: bool) 
     tiles = [
         ("ok", counts.get("ci", 0), "automated per-PR"),
         ("sched", counts.get("scheduled", 0), "automated scheduled"),
-        ("warn", counts.get("skipped", 0), "skipped — backfill owed"),
+        ("sched", counts.get("walked", 0), "walked live"),
+        ("sched", counts.get("manual", 0), "manual process"),
+        ("warn", counts.get("unwired", 0), "unwired — CI wiring owed"),
+        ("warn", counts.get("walk-owed", 0), "walk owed"),
         ("bad", counts.get("not-implemented", 0), "not implemented"),
         ("bad", counts.get("failing", 0), "failing"),
     ]
@@ -250,7 +285,8 @@ def render(matrix: Matrix, links: LinkBuilder, stamp: str, *, aggregates: bool) 
         if not items:
             return
         lis = "".join(
-            f"<li><b>{esc(r.id)}</b> — {esc(r.acceptance)}. <i>{esc(r.notes)}</i></li>"
+            f"<li><b>{esc(r.id)}</b>{esc(_walked_suffix(r))} — {esc(r.acceptance)}. "
+            f"<i>{esc(r.notes)}</i></li>"
             for r in items
         )
         out.append(f'<div class="panel {cls}"><h3>{esc(title)}</h3><ul>{lis}</ul></div>')
@@ -260,13 +296,10 @@ def render(matrix: Matrix, links: LinkBuilder, stamp: str, *, aggregates: bool) 
         panel(
             "Failing — the workflow is red until these are fixed or re-classified", "failing", "red"
         )
-        panel("Skipped — verification exists but does not run in CI (backfill owed)", "skipped")
+        for title, status in STATUS_PANELS:
+            panel(title, status)
         panel("Not implemented — no test or surface yet", "not-implemented", "red")
-    out.append(
-        "<footer>Statuses: ci / scheduled cannot drift silently; skipped and "
-        "not-implemented are CI warnings gated by the backfill rule; "
-        "failing fails CI.</footer></div>"
-    )
+    out.append(f"<footer>{esc(FOOTER)}</footer></div>")
     return "\n".join(out)
 
 
@@ -310,7 +343,10 @@ def render_markdown(matrix: Matrix, links: LinkBuilder, stamp: str, *, aggregate
         for count, label in (
             (counts.get("ci", 0), "CI · per-PR"),
             (counts.get("scheduled", 0), "CI · scheduled"),
-            (counts.get("skipped", 0), "skipped — backfill owed"),
+            (counts.get("walked", 0), "walked live"),
+            (counts.get("manual", 0), "manual process"),
+            (counts.get("unwired", 0), "unwired — CI wiring owed"),
+            (counts.get("walk-owed", 0), "walk owed"),
             (counts.get("not-implemented", 0), "not implemented"),
             (counts.get("failing", 0), "FAILING"),
         ):
@@ -349,19 +385,20 @@ def render_markdown(matrix: Matrix, links: LinkBuilder, stamp: str, *, aggregate
         out.append(f"### {md_cell(title)}")
         out.append("")
         for r in items:
-            out.append(f"- **{md_cell(r.id)}** — {md_cell(r.acceptance)}. _{md_cell(r.notes)}_")
+            out.append(
+                f"- **{md_cell(r.id)}**{md_cell(_walked_suffix(r))} — {md_cell(r.acceptance)}. "
+                f"_{md_cell(r.notes)}_"
+            )
         out.append("")
 
     if aggregates:
         out.append("## § The sharp line — where drift can hide")
         out.append("")
         section("Failing — the workflow is red until these are fixed or re-classified", "failing")
-        section("Skipped — verification exists but does not run in CI (backfill owed)", "skipped")
+        for title, status in STATUS_PANELS:
+            section(title, status)
         section("Not implemented — no test or surface yet", "not-implemented")
-    out.append(
-        "_Statuses: ci / scheduled cannot drift silently; skipped and not-implemented are "
-        "CI warnings gated by the backfill rule; failing fails CI._"
-    )
+    out.append(f"_{FOOTER}_")
     return "\n".join(out) + "\n"
 
 
@@ -431,15 +468,52 @@ REPORT_SET: dict[str, tuple[str, str]] = {
 STALE_LEGACY_REPORTS: tuple[str, ...] = ("docs/acceptance/report.github.html",)
 
 
-def render_committed_set(matrix: Matrix, root: Path) -> dict[str, str]:
+def ci_built_reports(root: Path) -> frozenset[str]:
+    """The `REPORT_SET` paths the repo gitignores and does not track — CI builds
+    them, so no fr commit path or sync check touches them (spec 2026-10-12 R1).
+
+    One `git check-ignore` call through `fr.git.git_answer` (C locale,
+    prompt-free, time-boxed; a tracked file is never reported ignored, so
+    tracked wins). Outside a git repo, or when git fails, the empty set: the
+    old behaviour. Compute it once per operation and pass it to
+    `tracked_reports`."""
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        proc = git_answer(root, "check-ignore", "--", *REPORT_SET)
+    except GitUnavailableError:
+        return frozenset()
+    if proc.returncode not in (0, 1):
+        return frozenset()
+    return frozenset(
+        line.strip() for line in proc.stdout.splitlines() if line.strip() in REPORT_SET
+    )
+
+
+def tracked_reports(
+    root: Path, ci_built: frozenset[str] | None = None
+) -> dict[str, tuple[str, str]]:
+    """`REPORT_SET` minus `ci_built_reports(root)` — the reports fr commits and
+    keeps in sync (spec 2026-10-12 R1). Pass `ci_built` when the caller already
+    computed it, so one operation asks git once."""
+    skipped = ci_built_reports(root) if ci_built is None else ci_built
+    return {rel: spec for rel, spec in REPORT_SET.items() if rel not in skipped}
+
+
+def render_committed_set(
+    matrix: Matrix, root: Path, only: Iterable[str] | None = None
+) -> dict[str, str]:
     """`{repo-relative path: rendered}` for every committed report — one per
-    entry in `REPORT_SET`, each a deterministic render of `matrix.yaml`. All
-    live in `docs/acceptance/`, so a shared `out_dir` keeps their relative links
-    consistent. A pure matrix→content function: no filesystem writes/deletes."""
+    entry in `REPORT_SET` (or only those named in `only`), each a deterministic
+    render of `matrix.yaml`. All live in `docs/acceptance/`, so a shared
+    `out_dir` keeps their relative links consistent. A pure matrix→content
+    function: no filesystem writes/deletes."""
     out_dir = root / "docs" / "acceptance"
+    wanted = set(REPORT_SET if only is None else only)
     return {
         rel: render_deterministic(matrix, root, out_dir, "..", link_mode, fmt)
         for rel, (link_mode, fmt) in REPORT_SET.items()
+        if rel in wanted
     }
 
 

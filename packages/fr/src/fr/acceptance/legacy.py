@@ -1,4 +1,8 @@
-"""The acceptance matrix's shape BEFORE version 4 — frozen.
+"""The acceptance matrix's shapes BEFORE version 5 — frozen.
+
+`MatrixV3` reads versions 1 to 3; `MatrixV4` (at the bottom) reads versions 1
+to 4, frozen when 4 -> 5 split the status `skipped` (spec
+`2026-10-11-debt-engine-design.md` §D).
 
 Matrix versions 1 through 3 only ever ADDED an optional, defaulted field
 (`verify`, then `visual`), so one closed-world model reads all three. The
@@ -116,3 +120,122 @@ def matrix_v3_from_data(data: dict[str, Any]) -> MatrixV3:
     if dupes:
         raise MatrixV3Error(f"duplicate row ids: {dupes}")
     return matrix
+
+
+# --- version 4 ----------------------------------------------------------------
+#
+# The 4 -> 5 migration (spec `2026-10-11-debt-engine-design.md` §D, R6) REMOVES
+# the status `skipped`, splitting it into `unwired` / `walk-owed` / `walked` /
+# `manual`. The live `Row` refuses `skipped` by name, so the live model is no
+# longer a superset of the bodies the older hops read: EVERY matrix hop reads
+# through `MatrixV4` from 4 -> 5 on, and the live `Matrix` is v5 only.
+#
+# `MatrixV4` is a closed SUPERSET of versions 1 to 4: `verify` takes any string
+# (the v1-v3 `post-merge` and a v4 strategy name alike) and a row may carry the
+# v4 fields. "Is this body v4?" is therefore `is_v4_body`: it reads as
+# `MatrixV4` and no row still says `post-merge`. Frozen the same way as
+# `MatrixV3` and pinned by `FROZEN_V4_CLASS_SHA256`
+# (`tests/unit/test_migration_matrix_status_split.py`). It must never be edited
+# again; a later removal freezes a `…V5` beside it.
+
+StatusV4 = Literal["ci", "scheduled", "skipped", "not-implemented", "failing"]
+WalkOutcomeV4 = Literal["pass", "fail"]
+
+
+class MatrixV4Error(Exception):
+    """A file that does not read as an acceptance matrix of version 1 to 4."""
+
+
+class VisualV4(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    states: tuple[StrictStr, ...] = ()
+    interactions: tuple[StrictStr, ...] = ()
+
+
+class WalkV4(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    strategy: StrictStr
+    harness: StrictStr
+    model: StrictStr
+    outcome: WalkOutcomeV4
+    at: StrictStr
+    evidence: StrictStr
+
+
+class RowV4(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    id: StrictStr
+    capability: StrictStr
+    acceptance: StrictStr
+    origin: tuple[StrictStr, ...] = ()
+    levels: dict[str, tuple[StrictStr, ...]] = Field(default={}, validate_default=True)
+    status: StatusV4
+    notes: StrictStr = ""
+    verify: StrictStr | None = None
+    visual: VisualV4 | None = None
+    scenario: StrictStr | None = None
+    issues: tuple[StrictStr, ...] = ()
+    harnesses: tuple[StrictStr, ...] = ()
+    walks: tuple[WalkV4, ...] = ()
+
+    @field_validator("levels")
+    @classmethod
+    def _known_keys_only(cls, v: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+        unknown = set(v) - set(LEVELS_V3)
+        if unknown:
+            raise ValueError(f"unknown level keys {sorted(unknown)} (allowed: {list(LEVELS_V3)})")
+        return {lv: v.get(lv, ()) for lv in LEVELS_V3}
+
+
+class MatrixV4(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    schema_version: Literal[1, 2, 3, 4] = 4
+    org: StrictStr | None = None
+    repo: StrictStr | None = None
+    rows: tuple[RowV4, ...] = ()
+
+    @field_validator("rows", mode="before")
+    @classmethod
+    def _none_is_empty(cls, v: object) -> object:
+        return () if v is None else v
+
+
+FROZEN_V4_CLASS_SHA256: dict[str, str] = {
+    "VisualV4": "1bd94debfb50f0ffac913a5d574a6b60ab3c3f43afc5881c9968b97acf0e950a",
+    "WalkV4": "6609426cf6c5d457b058d29e46eb74de56472c8494bb9bcda3b3db02f4b7f72d",
+    "RowV4": "4a3a4e212c4a31069927b49264003a3b14c5b24c7609db369521d375b08148de",
+    "MatrixV4": "80c72f844ba10aa95638b991baeff8f6726cb68e401d061ea43802152d5d7a24",
+}
+"""As `FROZEN_CLASS_SHA256`, for the classes version 4 froze."""
+
+
+def parse_matrix_v4(text: str) -> MatrixV4:
+    """Parse + validate `text` as a matrix of version 1 to 4, or raise
+    `MatrixV4Error` naming why — never a raw YAML or pydantic error."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise MatrixV4Error(f"not valid YAML: {e}") from e
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise MatrixV4Error(f"top level must be a mapping, got {type(data).__name__}")
+    try:
+        matrix = MatrixV4.model_validate({"schema_version": 1, **data})
+    except ValidationError as e:
+        raise MatrixV4Error(str(e)) from e
+    ids = [r.id for r in matrix.rows]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise MatrixV4Error(f"duplicate row ids: {dupes}")
+    return matrix
+
+
+def is_v4_body(text: str) -> bool:
+    """Whether `text` already reads as a version-4 body: a `MatrixV4` with no
+    row still carrying the v3 `verify: post-merge`."""
+    try:
+        matrix = parse_matrix_v4(text)
+    except MatrixV4Error:
+        return False
+    return not any(r.verify == "post-merge" for r in matrix.rows)

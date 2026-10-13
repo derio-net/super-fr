@@ -24,15 +24,25 @@ from __future__ import annotations
 import functools
 import json
 import re
+import sys
 import urllib.parse
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from fr import _hosts
 from fr import gh as _gh
 from fr.gh import GhError
-from fr.ghclient import MERGE_METHODS, CommandRunner, HostRefusedError, run_cli
+from fr.ghclient import (
+    MERGE_METHODS,
+    BaseRules,
+    CommandRunner,
+    HostRefusedError,
+    QueueState,
+    UnsupportedForgeOperation,
+    filter_issues_by_body,
+    run_cli,
+)
 from fr.labels import LabelDef
 
 GhRun = Callable[[list[str]], str]
@@ -422,6 +432,16 @@ def _plan_lacks_rulesets(exc: GhError) -> bool:
     return "HTTP 403" in text and FREE_PLAN_RULESETS_NOTICE in text
 
 
+_WARNED: set[str] = set()
+
+
+def _warn_once(message: str) -> None:
+    """Print *message* to stderr the first time this process sees it."""
+    if message not in _WARNED:
+        _WARNED.add(message)
+        print(f"warning: {message}", file=sys.stderr)
+
+
 def _is_404(exc: GhError) -> bool:
     text = f"{exc} {exc.stderr}".lower()
     return "http 404" in text or "not found" in text
@@ -604,10 +624,16 @@ class RealGhRestClient:
         )
 
     def list_issues(
-        self, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
+        filt = f"&labels={urllib.parse.quote(','.join(labels), safe='')}" if labels else ""
         raw = self._paged(
-            f"repos/{repo}/issues?state={state}",
+            f"repos/{repo}/issues?state={state}{filt}",
             limit=limit,
             keep=lambda i: "pull_request" not in i,
         )
@@ -665,7 +691,7 @@ class RealGhRestClient:
 
     def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
         """`fr.gh.OPEN_PR_LIST_FIELDS`: the list fields plus files, checks,
-        merge state and review decision, read per open PR (as GraphQL's are)."""
+        merge state, review decision and labels, read per open PR (as GraphQL's are)."""
         out = []
         for p in self._paged(f"repos/{repo}/pulls?state=open", limit=limit):
             pull = self._pull(repo, p["number"])
@@ -678,6 +704,7 @@ class RealGhRestClient:
                 mergeable=mergeable,
                 mergeStateStatus=merge_state,
                 reviewDecision=_review_decision(reviews),
+                labels=[{"name": lb.get("name") or ""} for lb in pull.get("labels") or []],
             )
             out.append(record)
         return out
@@ -689,6 +716,12 @@ class RealGhRestClient:
             record["files"] = self._files(repo, p["number"])
             out.append(record)
         return out
+
+    def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
+        payload = self._api(f"repos/{repo}/issues/{number}")
+        if not isinstance(payload, dict):
+            return None
+        return "pr" if "pull_request" in payload else "issue"
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         pull = self._pull(repo, number)
@@ -705,7 +738,23 @@ class RealGhRestClient:
             "merge_commit": (pull.get("merge_commit_sha") or "") if pull.get("merged_at") else "",
             "title": pull.get("title") or "",
             "body": pull.get("body") or "",
+            "labels": [lb.get("name") or "" for lb in pull.get("labels") or []],
         }
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        """`POST pulls/{n}/ccr/ready_for_review`: the route `hostclient`'s github-rest
+        table names for "ready" (merge-train-safety §A "Merging")."""
+        self._api(f"repos/{repo}/pulls/{number}/ccr/ready_for_review", method="POST")
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        """`GET labels/{name}`; a 404 is a missing label (merge-train-safety §A)."""
+        try:
+            self._api(f"repos/{repo}/labels/{_q(name)}")
+        except GhError as exc:
+            if _is_404(exc):
+                return False
+            raise
+        return True
 
     def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         from fr.triage.collect import _latest_runs
@@ -752,6 +801,48 @@ class RealGhRestClient:
                 required |= {c.get("context") for c in params.get("required_status_checks") or []}
         return sorted(str(n) for n in required if n)
 
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        """`GET rules/branches/{branch}` for a `merge_queue` rule and a strict
+        `required_status_checks` rule, plus classic protection's
+        `required_status_checks.strict` (a 404 is no protection: false), because
+        `required_check_names` reads that protection already (merge-train-safety §D, R12).
+        Degrades rather than raises where the forge refuses to say: a private free-plan
+        repo's 403 on the rules route (no rulesets there), and a 403 on the admin-only
+        protection route (a cloud token is refused it), read as "none", once warned.
+        GitHub still enforces the rule at merge time, and a refused merge is a
+        `MergeStopError` the driver steps over. `RealGhClient.base_rules` is this method."""
+        b = _q(branch)
+        queue = strict = False
+        try:
+            rules = self._api(f"repos/{repo}/rules/branches/{b}") or []
+        except GhError as exc:
+            if not _plan_lacks_rulesets(exc):
+                raise
+            rules = []
+        for rule in rules:
+            if rule.get("type") == "merge_queue":
+                queue = True
+            elif rule.get("type") == "required_status_checks":
+                params = rule.get("parameters") or {}
+                strict = strict or bool(params.get("strict_required_status_checks_policy"))
+        if not strict:
+            try:
+                protection = self._api(f"repos/{repo}/branches/{b}/protection") or {}
+            except GhError as exc:
+                if _is_404(exc):
+                    protection = {}
+                elif "HTTP 403" in f"{exc} {exc.stderr}" and not isinstance(exc, HostRefusedError):
+                    _warn_once(
+                        f"{repo} {branch}: branch protection is not readable with this token "
+                        "(403); strict up-to-date checks are not detected, so a PR behind only "
+                        "routinely may be refused at merge and is then stepped over"
+                    )
+                    protection = {}
+                else:
+                    raise
+            strict = bool((protection.get("required_status_checks") or {}).get("strict"))
+        return BaseRules(merge_queue=queue, strict_checks=strict)
+
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         """`{number, url}` of *branch*'s open PR from one `pulls?head=&state=open`
         page — no per-PR file list (p2-r7). `RealGhClient` calls this too."""
@@ -761,6 +852,19 @@ class RealGhRestClient:
         if not pulls:
             return None
         return {"number": int(pulls[0]["number"]), "url": str(pulls[0].get("html_url") or "")}
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of the open PR whose head *branch* lives in THIS repo,
+        None when there is none. A fork can carry the same head name (a same-owner
+        fork of another repo matches the `owner:branch` filter), so a PR whose head
+        repo differs is skipped, never reported (`fr debt archive-pr`, R12)."""
+        owner = repo.split("/", 1)[0]
+        head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
+        for pr in self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=30):
+            head_repo = str(((pr.get("head") or {}).get("repo") or {}).get("full_name") or "")
+            if head_repo.lower() == repo.lower():
+                return {"number": int(pr["number"]), "url": str(pr.get("html_url") or "")}
+        return None
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         """Every check on *sha* (spec §I): `commits/{sha}/check-runs?filter=latest`,
@@ -827,6 +931,7 @@ class RealGhRestClient:
             "state": _pr_state(chosen),
             "url": chosen.get("html_url", ""),
             "mergedAt": chosen.get("merged_at"),
+            "updatedAt": chosen.get("updated_at"),
         }
 
     # ---- GhClient: repo and files ----
@@ -859,11 +964,9 @@ class RealGhRestClient:
         return value if isinstance(value, bool) else None
 
     def repo_visibility(self, repo: str) -> str:
-        """`visibility` of `GET repos/{repo}`, else `private` read as public/private."""
-        value = _visibility_of(self._api(f"repos/{repo}"))
-        if value is None:
-            raise GhError(f"GET repos/{repo}: no visibility in the answer")
-        return value
+        """`visibility` of `GET repos/{repo}`, else `private` read as public/private; a
+        conditional read sharing `fr.gh`'s module-level ETag map (quota-pacing R12)."""
+        return _gh.repo_visibility(self._gh, self._host, repo)
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """`allowed` from the repo's `allow_*` flags. Gap: REST has no
@@ -910,6 +1013,16 @@ class RealGhRestClient:
 
     def viewer_login(self) -> str:
         return str(self._api("user")["login"])
+
+    def authenticated_login(self) -> str:
+        return self.viewer_login()
+
+    def rate_limit(self) -> dict[str, Any]:
+        return cast("dict[str, Any]", self._api("rate_limit"))
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        """A conditional REST read: unchanged on a 304 (spec 2026-10-12-quota-pacing R8)."""
+        return _gh.probe(self._gh, path, etag)
 
     def file_exists(self, repo: str, path: str) -> bool:
         try:
@@ -986,6 +1099,28 @@ class RealGhRestClient:
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._api(f"repos/{repo}/issues/{number}/comments", method="POST", fields={"body": body})
 
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        self._api(
+            f"repos/{repo}/issues/{number}", method="PATCH", fields={"title": title, "body": body}
+        )
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        # Oldest first, so the long-lived debt issue is in the first page whatever
+        # the repo's backlog; a capped scan is still reported as partial.
+        pages = self._paged(
+            f"repos/{repo}/issues?state=open&sort=created&direction=asc",
+            limit=limit,
+            keep=lambda i: "pull_request" not in i,
+        )
+        raw = [_project(_issue_record(i), "number,title,body,labels,author") for i in pages]
+        return filter_issues_by_body(raw, search, limit)
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        self.comment_issue(repo, number, comment)
+        self.edit_issue_state(repo, number, state="CLOSED", reason="completed")
+
     def create_issue(self, repo: str, *, title: str, body: str, labels: frozenset[str]) -> str:
         fields: dict[str, Any] = {"title": title, "body": body}
         if labels:
@@ -1030,6 +1165,27 @@ class RealGhRestClient:
             fields={"merge_method": method, "sha": head_sha},
         )
 
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        """REST has no route to enqueue (it needs GraphQL's enqueuePullRequest): raises."""
+        raise UnsupportedForgeOperation(
+            "pr_enqueue", "github-rest", tracked_by="merge-train-safety R13"
+        )
+
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        """`pulls/{n}.auto_merge`; queue membership is not in REST: `in_queue` None."""
+        pull = self._api(f"repos/{repo}/pulls/{number}") or {}
+        return QueueState(
+            in_queue=None,
+            auto_merge=bool(pull.get("auto_merge")),
+            open=pull.get("state", "open") == "open" and not pull.get("merged"),
+        )
+
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        """REST has no route to clear auto-merge (it needs GraphQL): raises."""
+        raise UnsupportedForgeOperation(
+            "pr_dequeue", "github-rest", tracked_by="merge-train-safety R13"
+        )
+
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
         made = self.create_pr(repo, head=head, base=base, title=title, body=body, draft=False)
         return int(made["number"])
@@ -1043,6 +1199,9 @@ class RealGhRestClient:
             fields={"head": head, "base": base, "title": title, "body": body, "draft": draft},
         )
         return {"number": int(made["number"]), "url": str(made["html_url"])}
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        self._api(f"repos/{repo}/pulls/{number}", method="PATCH", fields={"body": body})
 
     def close_pr(self, repo: str, number: int) -> None:
         self._api(f"repos/{repo}/pulls/{number}", method="PATCH", fields={"state": "closed"})

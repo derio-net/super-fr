@@ -195,7 +195,7 @@ def test_set_status_refuses_adding_a_pipeline_level_ref(
     result = runner.invoke(
         app,
         [
-            "acceptance", "set-status", "--id", "r1", "--status", "skipped",
+            "acceptance", "set-status", "--id", "r1", "--status", "unwired",
             "--notes", "x", "--level", "int=own:docs/superpowers/plans/p/01.yaml",
         ],
     )  # fmt: skip
@@ -217,7 +217,7 @@ def test_live_evidence_under_docs_acceptance_is_still_a_level_ref(
         [
             "acceptance", "add", "--id", "r2", "--capability", "Cap",
             "--acceptance", "Operator can do Y", "--origin", "own:docs/superpowers/specs/s.md",
-            "--level", "int=own:docs/acceptance/evidence/live.md", "--status", "skipped",
+            "--level", "int=own:docs/acceptance/evidence/live.md", "--status", "unwired",
         ],
     )  # fmt: skip
     assert result.exit_code == 0, result.output
@@ -234,7 +234,7 @@ def test_a_legacy_pipeline_ref_does_not_block_moving_its_row(
     )
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     result = runner.invoke(
-        app, ["acceptance", "set-status", "--id", "r1", "--status", "skipped", "--notes", "x"]
+        app, ["acceptance", "set-status", "--id", "r1", "--status", "unwired", "--notes", "x"]
     )
     assert result.exit_code == 0, result.output
 

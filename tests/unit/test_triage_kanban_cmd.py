@@ -352,7 +352,7 @@ class _Watch:
         self.tmp_path, self.stop = tmp_path, stop
         self.on_sleep: Any = None
         monkeypatch.setattr(
-            triage_kanban_cmd, "recollect", lambda s, t: self.calls.append("collect")
+            triage_kanban_cmd, "recollect", lambda s, t, **kw: self.calls.append("collect")
         )
         real = triage_kanban_cmd.write_board
 
@@ -436,7 +436,7 @@ def test_a_collect_that_fails_warns_once_and_the_loop_goes_on(
     _setup(tmp_path)
     w = _Watch(tmp_path, monkeypatch, stop=3)
 
-    def _boom(scope: Any, target: Path) -> None:
+    def _boom(scope: Any, target: Path, **_: Any) -> None:
         raise ForgeError("forge said no")
 
     monkeypatch.setattr(triage_kanban_cmd, "recollect", _boom)
@@ -474,7 +474,7 @@ def test_any_collect_failure_warns_once_and_the_loop_goes_on(
     _setup(tmp_path)
     w = _Watch(tmp_path, monkeypatch, stop=3)
 
-    def _boom(scope: Any, target: Path) -> None:
+    def _boom(scope: Any, target: Path, **_: Any) -> None:
         raise OSError("disk\nfull")
 
     monkeypatch.setattr(triage_kanban_cmd, "recollect", _boom)
@@ -617,7 +617,8 @@ def test_board_publish_publishes_after_the_render_with_the_default_name(
     out = _publishing(tmp_path)
     code, said = _board(tmp_path, "--publish")
     assert code == 0, said
-    assert out.read_text(encoding="utf-8") == f"super-fr batches|{tmp_path / 'board.html'}\n"
+    name, board = out.read_text(encoding="utf-8").rstrip("\n").split("|")
+    assert name == "super-fr batches" and Path(board).name == "board.html"
 
 
 def test_board_without_publish_never_runs_the_command(
@@ -687,3 +688,22 @@ def test_publish_runs_in_the_state_dir_with_the_operators_environment(
     cwd, probe = out.read_text(encoding="utf-8").split("\n")
     assert Path(cwd).resolve() == state.resolve()
     assert probe == "from-parent"
+
+
+def test_write_board_reads_the_budget_from_pacing_json_for_the_footer(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from fr.triage import pacing_state
+    from fr.triage.pacing_state import PacingState
+    from fr.triage.quota import Budget
+
+    _setup(tmp_path)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert "forge quota" not in path.read_text()  # no pacing.json: as today
+    budget = Budget("graphql", 812, 5000, datetime(2026, 10, 12, 16, 43, tzinfo=UTC))
+    pacing_state.save(tmp_path, PacingState(budget=budget.to_json()))
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert "forge quota: graphql 812/5000, resets 16:43Z · facts collected " in path.read_text()
+    (tmp_path / "pacing.json").write_text("{not json")  # unusable: the board still renders
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    assert "forge quota" not in path.read_text()

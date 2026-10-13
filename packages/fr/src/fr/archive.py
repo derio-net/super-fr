@@ -45,6 +45,7 @@ from fr.run.model import (
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
     from fr.parser import Plan
+    from fr.spec import Step
     from fr.states import GhState
 
 __all__ = [
@@ -67,6 +68,10 @@ __all__ = [
     "paths_dirty",
     "recording_moves",
     "spec_archive_sweep",
+    "missing_outcomes",
+    "outcome_hold",
+    "plan_spec_path",
+    "run_spec_path",
 ]
 
 PLANS_REL = Path("docs/superpowers/plans")
@@ -366,9 +371,12 @@ def paths_dirty(repo_root: Path, *paths: Path) -> bool:
 
 @dataclass
 class MoveLog:
-    """The ``(src_rel, dst_rel)`` pairs ``_git_mv`` staged, in order."""
+    """The ``(src_rel, dst_rel)`` pairs ``_git_mv`` staged, in order — and the
+    `(scope, slug)` journals a hold wrote an `owed` entry into, which the owed
+    filing reads beside the moved ones (spec 2026-10-11-debt-engine R22)."""
 
     moves: list[tuple[Path, Path]] = field(default_factory=list)
+    owed_journals: list[tuple[str, str]] = field(default_factory=list)
 
     def __bool__(self) -> bool:
         return bool(self.moves)
@@ -386,6 +394,13 @@ def recording_moves() -> Iterator[MoveLog]:
         yield log
     finally:
         _MOVE_LOG.reset(token)
+
+
+def note_owed_journal(scope: str, slug: str) -> None:
+    """Tell the current archive's follow-ups that `scope/slug` holds owed work."""
+    log = _MOVE_LOG.get()
+    if log is not None and (scope, slug) not in log.owed_journals:
+        log.owed_journals.append((scope, slug))
 
 
 def _git_mv(repo_root: Path, src_rel: Path, dst_rel: Path) -> None:
@@ -683,11 +698,174 @@ def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
             # `<slug>-design` filename stem; strip the suffix so the move
             # resolves the real file and follows the spec into
             # implemented/journals/specs/ (2026-07-22 spec §A; #417).
-            _archive_journal(repo_root, "spec", spec_journal_slug(spec_path.stem))
             moves.append(DirsMove(src=src_rel, dst=dst_rel, kind="spec"))
+            try:
+                _archive_journal(repo_root, "spec", spec_journal_slug(spec_path.stem))
+            except ArchiveError as e:  # review p3-r3(c): a note, never a traceback
+                notes.append(f"{spec_path.name}: its journal stayed live — {e}")
         elif note and "no Implementation Plans rows" not in note:
             notes.append(f"{spec_path.name}: {note}")
     return SpecSweepResult(moves=tuple(moves), notes=tuple(notes))
+
+
+# --- the Test Plan outcome hold (spec 2026-10-11-debt-engine §E, R19) -------
+
+OUTCOME_PREFIX = "test-plan-step-"
+
+
+def outcome_id(n: int) -> str:
+    """The spec-journal entry id of Test Plan step `n`'s outcome."""
+    return f"{OUTCOME_PREFIX}{n}"
+
+
+def spec_slug_of(spec_path: Path) -> str:
+    """The spec-journal slug of a spec file."""
+    return spec_journal_slug(spec_path.stem)
+
+
+def resolve_local_spec(repo_root: Path, ref: str) -> Path | None:
+    """`ref` (any spec-ref form) as a spec file this repo holds, live or
+    archived; `None` for a cross-repo or unresolvable ref."""
+    from fr import refs
+
+    if not ref.strip() or ref.strip().startswith("-"):
+        return None
+    try:
+        res = refs.resolve_spec_ref(ref, repo_root)
+    except Exception:  # noqa: BLE001 — an unreadable ref is "no local spec", not a crash
+        return None
+    return res.path if res.path is not None and res.path.is_file() else None
+
+
+def plan_spec_path(repo_root: Path, plan: Plan) -> Path | None:
+    """The local spec a plan names in `_meta.yaml`, or `None`."""
+    return resolve_local_spec(repo_root, plan.meta.spec) if plan.meta.spec else None
+
+
+def run_spec_path(repo_root: Path, run_id: str) -> Path | None:
+    """The local spec a run cursor (live or archived, any version) recorded as
+    `emitted.spec`, or `None`."""
+    for cursor in (run_path(repo_root, run_id), archived_run_path(repo_root, run_id)):
+        if not cursor.is_file():
+            continue
+        try:
+            state = _read_any_version(cursor.read_text())
+        except OSError:
+            continue
+        if state is None:
+            continue
+        for record in state.steps.values():
+            spec = (record.emitted or {}).get("spec")
+            if spec:
+                return resolve_local_spec(repo_root, str(spec))
+    return None
+
+
+def recorded_outcomes(journal: Path) -> set[str]:
+    """Ids of the Test Plan outcomes a spec journal holds (any kind)."""
+    from fr.journal.model import JournalParseError, parse_journal
+
+    if not journal.is_file():
+        return set()
+    try:
+        entries = parse_journal(journal.read_text())
+    except (JournalParseError, OSError):
+        return set()
+    return {e.id for e in entries if e.resolves is None and e.id.startswith(OUTCOME_PREFIX)}
+
+
+def missing_outcomes(repo_root: Path, spec_path: Path) -> list[Step]:
+    """The spec's Test Plan steps with no recorded outcome (R19), in order."""
+    from fr.journal.model import resolve_journal_read_path
+    from fr.spec import test_plan_steps
+
+    try:
+        steps = test_plan_steps(spec_path.read_text())
+    except OSError:
+        return []
+    if not steps:
+        return []
+    journal = resolve_journal_read_path(repo_root, "spec", spec_slug_of(spec_path))
+    done = recorded_outcomes(journal)
+    return [s for s in steps if outcome_id(s.n) not in done]
+
+
+def outcome_command(selector: str, n: int) -> list[str]:
+    """The commands that record step `n`'s outcome — one pasteable line per
+    alternative (ran, owed, n/a); `selector` is `--run <id>` or `--spec <path>`."""
+    base = f"fr closeout outcome {selector} --step {n}"
+    return [
+        f"{base} --ran --evidence '<what it showed>'",
+        f"{base} --owed --why '<why not now>'",
+        f"{base} --na --reason '<why it does not apply>'",
+    ]
+
+
+def outcome_selector(repo_root: Path, plan_rel: Path, spec_path: Path) -> str:
+    """`--run <id>` when a run cursor created the plan, else `--spec <path>`."""
+    run_id = find_run_for_plan(repo_root, plan_rel)
+    if run_id:
+        return f"--run {run_id}"
+    try:
+        return f"--spec {spec_path.relative_to(repo_root).as_posix()}"
+    except ValueError:
+        return f"--spec {spec_path.as_posix()}"
+
+
+def outcome_hold(repo_root: Path, plan: Plan, plan_rel: Path) -> list[str]:
+    """Why `plan` cannot archive yet for want of Test Plan outcomes — a
+    one-line reason, then one indented line per missing step and its command —
+    or `[]` when nothing is missing (R19). Every archive mode calls this before
+    it moves anything."""
+    spec = plan_spec_path(repo_root, plan)
+    if spec is None:
+        return []
+    missing = missing_outcomes(repo_root, spec)
+    if missing:
+        selector = outcome_selector(repo_root, plan_rel, spec)
+        lines = [
+            f"{spec.name}: Test Plan step(s) {', '.join(str(s.n) for s in missing)} have no "
+            "recorded outcome"
+        ]
+        for s in missing:
+            lines.append(f"    step {s.n}: {s.text}")
+            lines.extend(f"      {cmd}" for cmd in outcome_command(selector, s.n))
+        return lines
+    # Review p3-r3(a): the outcomes are recorded, but a spec journal git does not
+    # hold yet (an outcome written on the default branch, where fr never commits)
+    # would break the spec sweep's `git mv` half-way. Refuse before any move.
+    journal = journal_path(repo_root, "spec", spec_slug_of(spec))
+    if journal.exists() and paths_dirty(repo_root, journal):
+        rel = journal.relative_to(repo_root).as_posix()
+        return [
+            f"{rel} holds uncommitted Test Plan outcomes — commit it on a branch "
+            "(not the default branch), then re-run fr archive"
+        ]
+    return []
+
+
+def unticked_manual_phases(plan: Plan, blockers: tuple[str, ...]) -> list[int]:
+    """The `[manual]` phases holding `plan` when they are ALL that holds it
+    (R22): every blocker names one of them. A plan held for anything else
+    (an agentic phase open or unmerged) owes its manual phases nothing yet."""
+    import re
+
+    from fr.render import plan_locally_complete
+
+    manual = [
+        p.phase.number
+        for p in plan.phases
+        if p.phase.tag == "manual" and not plan_locally_complete(p)
+    ]
+    if not manual or not blockers:
+        return []
+    named: set[int] = set()
+    for b in blockers:
+        m = re.match(r"Phase (\d+):", b)
+        if m is None:
+            return []
+        named.add(int(m.group(1)))
+    return manual if named <= set(manual) else []
 
 
 # Re-exported for callers that catch both error families with one except.

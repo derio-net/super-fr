@@ -610,13 +610,6 @@ def test_a_forge_clock_behind_ours_clamps_the_event_to_the_prs_creation(
     assert event.at == behind
 
 
-def test_the_default_branch_is_refused(world: Any) -> None:
-    """p1-r3: adopting `main` would rename and delete the default branch."""
-    checkout = world[3]
-    checkout.worktrees["main"] = checkout.path.parent / "wt-main"
-    _refused(*world, *_args("--yes", branch="main"), match="default branch")
-
-
 def test_a_branch_checked_out_in_the_main_worktree_is_refused(world: Any) -> None:
     """p1-r3: only a linked worktree's branch is renamed."""
     checkout = world[3]
@@ -666,3 +659,108 @@ def test_the_batch_branch_as_branch_still_gets_the_worktree_refusals(world: Any)
     assert code == 2 and "mid-rebase" in out, out
     assert (tmp_path / "judgements.yaml").read_bytes() == before
     assert _writes(gh) == [] and runner.adopted == []
+
+
+# ------------------------------------------- the held message (2026-10-11 R1-R4, R9)
+
+HOLD_LINES = [
+    "HOLD: acknowledge this message only. Make no commits, merges, rebases, artifact",
+    "migrations, pushes or PR edits, and start no skill or pipeline run. Wait for the",
+    "operator's go-ahead.",
+]
+
+
+def _batch_for_message(tmp_path: Path) -> Any:
+    _state(tmp_path)
+    return load_judgements(tmp_path / "judgements.yaml").batches[0]
+
+
+def test_adopt_message_names_the_batch_id(tmp_path: Path) -> None:
+    batch = _batch_for_message(tmp_path)
+    text = triage_batch_cmd.adopt_message(batch, ITEM, OLD, NEW, None, None)
+    assert batch.id in text
+
+
+def test_the_held_message_pins_every_line(tmp_path: Path) -> None:
+    batch = _batch_for_message(tmp_path)
+    text = triage_batch_cmd.adopt_message(batch, ITEM, OLD, NEW, "#101 (https://x/101)", "4.22.0")
+    assert text.splitlines() == [
+        f"fr triage batch adopt: this session is now tracked as batch {batch.id} ({ITEM}).",
+        f"Your branch {OLD} was renamed to {NEW}; push to it from now on with "
+        f"`git push origin {NEW}` (its upstream is set). Your push target changed: "
+        f"never push {OLD} again.",
+        "The PR is now #101 (https://x/101); the earlier one was closed as superseded.",
+        "Reserved version for this batch: 4.22.0.",
+        triage_batch_cmd.NO_APPROVAL_LINE,
+        *HOLD_LINES,
+    ]
+    assert "driven" not in text
+
+
+def test_the_kept_branch_line_and_no_hold_omits_the_block(tmp_path: Path) -> None:
+    batch = _batch_for_message(tmp_path)
+    held = triage_batch_cmd.adopt_message(batch, ITEM, NEW, NEW, None, None)
+    assert f"Your branch is {NEW}; keep pushing to it." in held.splitlines()
+    assert held.splitlines()[-3:] == HOLD_LINES
+    free = triage_batch_cmd.adopt_message(batch, ITEM, NEW, NEW, None, None, hold=False)
+    assert "HOLD" not in free and free == "\n".join(held.splitlines()[:-3])
+
+
+def test_the_plan_prints_the_held_message_with_the_pr_to_be_opened(
+    world: Any, old_pr: dict[str, Any]
+) -> None:
+    tmp_path, gh, runner, checkout, rename = world
+    code, out = _adopt(tmp_path, *_args())
+    assert code == 0, out
+    lines = out.splitlines()
+    at = lines.index("  runner: message the agent (held)")
+    shown = [ln[6:] for ln in lines[at + 1 :] if ln.startswith("    | ")]
+    assert any("The PR is now #<new PR>" in ln for ln in shown)
+    assert shown[-3:] == HOLD_LINES
+    assert runner.messages == []
+
+
+def test_no_hold_prints_not_held_and_sends_no_hold_block(
+    world: Any, old_pr: dict[str, Any]
+) -> None:
+    tmp_path, gh, runner, checkout, rename = world
+    code, out = _adopt(tmp_path, *_args("--no-hold"))
+    assert code == 0, out
+    assert "  runner: message the agent (not held)" in out and "HOLD" not in out
+    code, out = _adopt(tmp_path, *_args("--no-hold", "--yes"))
+    assert code == 0, out
+    ((_, text),) = runner.messages
+    assert "HOLD" not in text
+
+
+def test_a_held_adoption_sends_the_hold_by_default(world: Any, old_pr: dict[str, Any]) -> None:
+    tmp_path, gh, runner, checkout, rename = world
+    code, out = _adopt(tmp_path, *_args("--yes"))
+    assert code == 0, out
+    assert runner.messages[0][1].splitlines()[-3:] == HOLD_LINES
+
+
+def test_the_stop_report_echoes_neither_flag_when_not_given(
+    world: Any, old_pr: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p1-r2: an always-echoed `--no-hold` would silently un-hold the re-run."""
+    _fail_at(world, "adopt", monkeypatch)
+    code, out = _adopt(world[0], *_args("--yes"))
+    assert code == 1, out
+    flat = " ".join(out.split())
+    assert "Re-run the same command" in flat
+    assert "--no-hold" not in flat and "--checkout" not in flat
+
+
+def test_the_stop_report_reruns_with_no_hold_and_checkout_when_given(
+    world: Any, old_pr: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _fail_at(world, "adopt", monkeypatch)
+    clone = world[0] / "clone"
+    code, out = _adopt(world[0], *_args("--yes", "--no-hold", "--checkout", str(clone)))
+    assert code == 1, out
+    flat = " ".join(out.split())
+    assert "--no-hold" in flat and f"--checkout {clone}" in flat
+    _heal(world)
+    code, out = _adopt(world[0], *_args("--yes"))
+    assert code == 0, out

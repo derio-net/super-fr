@@ -186,9 +186,9 @@ def test_acceptance_add_and_set_status_are_one_entry_records(repo: Path, spy) ->
     _clean(repo)
 
     spy.clear()
-    move = ["acceptance", "set-status", "--id", "row-a", "--status", "skipped", "--notes", "why"]
+    move = ["acceptance", "set-status", "--id", "row-a", "--status", "unwired", "--notes", "why"]
     line = _one_line(_fr(repo, move))
-    assert line == "row-a: not-implemented → skipped"
+    assert line == "row-a: not-implemented → unwired"
     assert len(spy) == 1
     _clean(repo)
 
@@ -250,7 +250,7 @@ def test_a_record_acceptance_entry_without_capability_is_move_only(repo: Path) -
     target = engine.RecordTarget(message="m")
     with pytest.raises(engine.RecordRefusedError, match="no such row"):
         engine.apply_record(
-            repo, None, _row_record(id="nope", status="skipped", notes="why"), target=target
+            repo, None, _row_record(id="nope", status="unwired", notes="why"), target=target
         )
     assert "nope" not in (repo / "docs" / "acceptance" / "matrix.yaml").read_text()
 

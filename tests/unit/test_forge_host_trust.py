@@ -104,6 +104,17 @@ def _glab_calls(tmp_path: Path) -> list[tuple[str, tuple[Any, ...], dict[str, An
         ("edit_issue_labels", ("g/p", 1), {"add": frozenset({"a"}), "remove": frozenset()}),
         ("edit_issue_state", ("g/p", 1), {"state": "CLOSED"}),
         ("edit_issue_body", ("g/p", 1, "b"), {}),
+        ("edit_issue", ("g/p", 1), {"title": "t", "body": "b"}),
+        ("close_issue", ("g/p", 1, "c"), {}),
+        ("list_open_issues_with_body", ("g/p",), {"search": ("m",), "limit": 5}),
+        ("open_pr_in_repo", ("g/p", "b"), {}),
+        (
+            "create_pr",
+            ("g/p",),
+            {"head": "h", "base": "main", "title": "t", "body": "b", "draft": True},
+        ),
+        ("edit_pr", ("g/p", 1), {"body": "b"}),
+        ("authenticated_login", (), {}),
         ("create_issue", ("g/p",), {"title": "t", "body": "b", "labels": frozenset()}),
         ("ensure_labels", ("g/p", ["a"]), {}),
         ("comment_issue", ("g/p", 1, "b"), {}),
@@ -474,7 +485,7 @@ def test_a_dotted_group_glab_does_not_know_is_still_a_group(recorder: _Recorder)
         ["mr", "view", "1", "--repo", "p"],
         ["mr", "view", "1", "--hostname", "evil.invalid"],
         ["api", "/projects/x"],
-        ["api", "user"],
+        ["api", "user/keys"],  # only the bare `user` endpoint is written (who we are)
     ],
 )
 def test_an_argv_fr_does_not_write_is_refused(recorder: _Recorder, args: list[str]) -> None:

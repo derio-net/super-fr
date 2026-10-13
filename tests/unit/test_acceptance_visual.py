@@ -226,7 +226,7 @@ def test_set_status_preserves_visual(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "--id",
         "new-row",
         "--status",
-        "skipped",
+        "unwired",
         "--notes",
         "verified live once",
     )

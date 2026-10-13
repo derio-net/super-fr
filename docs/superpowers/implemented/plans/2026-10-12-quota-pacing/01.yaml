@@ -1,0 +1,194 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Pacing core — /rate_limit budget, reset wait, secondary backoff, floor config,
+    lease-safe waits
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - quota-reset-wait
+  - quota-secondary-backoff
+  - quota-floor-config
+  - quota-lease-safe-wait
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/quota.py
+  - packages/fr/src/fr/triage/pacing_state.py
+  - packages/fr/src/fr/forgeapi.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - tests/unit/test_triage_quota.py
+  - tests/unit/test_triage_pacing_state.py
+  - tests/unit/test_forgeapi.py
+  - tests/unit/test_triage_quota_loop.py
+  - tests/unit/triage_fixtures.py
+  - tests/unit/test_real_ghclient.py
+  - tests/unit/test_real_ghrestclient.py
+  - docs/acceptance/*
+  - .changes/feat-batch-quota-pacing.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — the quota module exists and CI runs its test
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create packages/fr/src/fr/triage/quota.py with a module docstring (spec 2026-10-12-quota-pacing §A, R1–R6) and
+      tests/unit/test_triage_quota.py with one test importing it. Add .changes/feat-batch-quota-pacing.yaml
+      (`bump: minor`, summary: "drive: pace forge reads against the shared GraphQL quota — wait for the reset, a budget
+      floor (quota_floor / --quota-floor) with essential-only passes, and ETag-probed quiet passes"). Commit, push the
+      branch; CI on draft PR #1153 must be green on this trivial test (the skeleton smoke).
+- number: 2
+  title: §A pure pacing decisions (R1, R2 text rule, R3, R4, R5, R13)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED in tests/unit/test_triage_quota.py:
+      `Budget(resource, remaining, limit, reset: datetime)`; `budget_from_rate_limit(raw, api)` over a captured
+      `gh api rate_limit` JSON shape (`{"resources": {"core": {...}, "graphql": {...}}}`) picks graphql+core under
+      api="graphql" and core only under api="rest", returning the lowest remaining fraction (R1);
+      `is_rate_limited(text)` true for "GraphQL: API rate limit exceeded for user ID 123.", "gh: API rate limit
+      exceeded for user ID 1. (HTTP 403)", "You have exceeded a secondary rate limit (HTTP 403)", "HTTP 429 rate
+      limit", "RATE_LIMITED"; false for "HTTP 404 Not Found" and "timed out after 30s" (R2);
+      `decide(budget, floor, now, state)` → Pace kinds: `run` (budget ≥ floor), `essential` (0 < fraction < floor),
+      `wait(until=reset+30s)` when remaining == 0 (R3), `wait` from a recorded `wait_until` in the future; budget None
+      → `run` (R5); `after_rate_limit(budget, now, state, interval)` → wait until reset+30s when exhausted, else
+      secondary backoff interval·2^k capped at 900s with k incremented in the returned state (R4), and
+      `clean_pass(state)` resetting k; `quota_line(budget, floor, verdict)` renders e.g.
+      "quota: graphql 812/5000 (16%), resets 16:43Z; below floor 20%: essential-only pass, dispatch held, next pass in 8m" (R13).
+      Run `uv run pytest tests/unit/test_triage_quota.py -q --no-cov`: fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN — implement those pure functions and dataclasses in fr/triage/quota.py (no IO, clock passed in). Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR — keep one `Pace` dataclass (kind, until, why, essential flag); remove duplication between decide and after_rate_limit; ruff + mypy clean on the module.
+- number: 3
+  title: Floor configuration and pacing.json state (R6, R15 part)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_forgeapi.py — `quota_floor(flag)`: flag wins; else `quota_floor:` in the host file
+      (`config_path()`, HOME monkeypatched to tmp); else 0.20; 0, 1, -0.1, "x" refused with ForgeApiError naming
+      `--quota-floor` or the file path; a file with only `api:` yields 0.20 and `resolve()` still reads `api:`.
+      tests/unit/test_triage_pacing_state.py — `PacingState` load/save round-trip in a tmp state dir
+      (`pacing.json`: etags {repo: {path: etag}}, full_at, wait_until, backoff, next_pass_at, judgements_digest,
+      budget), missing file → empty state, unreadable JSON → empty state plus a reported warning (never a crash),
+      save via fr.artifacts.atomic.write_text_atomic; and `"pacing.json" not in state_ref.REF_FILES`.
+  - id: P1.T3.S2
+    text: |-
+      GREEN — add quota_floor to fr/forgeapi.py beside resolve (one reader of the host file); add fr/triage/pacing_state.py. Tests green.
+- number: 4
+  title: Forge seam — rate_limit() on both adapters
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: the `Forge` protocol (collect.py:68) and ClientForge gain `rate_limit() -> dict`; RealGhClient and
+      RealGhRestClient implement it as `gh api rate_limit` (REST under either API). Tests in test_real_ghclient.py and
+      test_real_ghrestclient.py with their fake gh run assert argv == ["api", "rate_limit"] and the parsed dict; FakeForge
+      in tests/unit/triage_fixtures.py gains a settable `rate_limit_answer` (default: ample budget) so existing tests keep
+      passing; `quota.read_budget(forge, api)` returns None when rate_limit raises (R5).
+  - id: P1.T4.S2
+    text: |-
+      GREEN — implement; run the touched test files plus tests/unit/test_triage_collect.py. Green.
+- number: 5
+  title: Host loop, cloud pass — wait for the reset, back off, never let the lease
+    lapse (R2, R3, R4, R5, R13, R16)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: new tests/unit/test_triage_quota_loop.py, reusing the leased-drive fixtures of
+      test_triage_drive_visibility_retry.py / test_triage_batch_drive_cmd.py (read them; reuse helpers, do not copy),
+      with `_sleep` and the clock faked:
+      (a) a pass raising ForgeReadError("GraphQL: API rate limit exceeded for user ID 1.") then /rate_limit showing
+      graphql 0 with reset T → the loop sleeps until T+30s and makes NO forge call (count FakeForge calls) before T;
+      the throttle line is printed;
+      (b) /rate_limit exhausted at pass start → no collect at all that pass (R3);
+      (c) a collect whose facts.skipped reason is rate-limited ends the pass before snapshot (no pr_view call) (R2);
+      (d) secondary limit (budget left) twice → sleeps interval, then 2·interval; a clean pass resets (R4);
+      (e) rate_limit raising → the pass runs as today and a single warning is printed across two passes (R5);
+      (f) a wait whose reset lies beyond lease expiry − 5 min (interval=1s so the lease is 60 min + 3 s) wakes, renews
+      the lease (take_lease called, push recorded) and sleeps again (R16);
+      (g) `fr triage drive pass` with an exhausted budget exits 3 with the quota line and takes no lease, and renews it
+      first when the lease would lapse before now + --interval; with a pacing.json `wait_until` in the future it exits 3
+      too (R16).
+      Run: fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: in triage_batch_cmd.py `_host_loop`, wrap `one_pass` with: read budget (quota.read_budget over the pass's
+      forge), `decide`, and on ForgeReadError / rate-limited recollect stats call after_rate_limit; persist wait_until and
+      backoff in pacing.json; sleep in chunks bounded by the lease (helper `_bounded_sleep(driver, until)` that renews via
+      driver.take_lease() at the bound). `recollect` returns enough to tell a rate-limited skip/unviewed (raise
+      ForgeReadError with the reason so the pass ends before snapshot). `--quota-floor` option on `batch drive` and `drive pass`.
+      In triage_drive_cmd.py `drive_pass_command`, check the budget and pacing.json before the pass as R16 says. Tests green.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR — keep pacing IO in one helper used by both adapters (host loop and cloud pass); confirm tests/unit/test_triage_batch_drive*.py, test_triage_driver_pass.py and test_triage_drive_visibility_retry.py still pass (targeted run).
+- number: 6
+  title: Acceptance rows
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      `uv run fr acceptance set-status` each of quota-reset-wait, quota-secondary-backoff, quota-floor-config,
+      quota-lease-safe-wait to `ci` with `--level unit=super-fr:tests/unit/<file>.py#<test name>` refs to the tests above
+      and a `--notes` line; `uv run fr acceptance check` passes.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-10-12T06:55:46+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T06:55:46+00:00'
+    note: null
+    observed_prs: []

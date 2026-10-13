@@ -1,0 +1,310 @@
+schema_version: 2
+run: 2026-10-12-feat-batch-board-truth
+captures:
+- host: h-27fe27ff
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-12T22:36:20+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: eb97f45e-7baf-433a-bc3e-5fd7ee16e0ad
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 638
+        cache_write: 943427
+        cache_read: 53611635
+        output: 117527
+        usd: 22.7754414
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 506
+        cache_write: 1252643
+        cache_read: 30173062
+        output: 4473
+        usd: 9.345617799999996
+        usd_source: exact
+      claude-haiku-5-5:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.00037239999999999994
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 11.911346096643587
+        turns: 287
+      other:
+        usd: 13.459735128585043
+        turns: 174
+      paperwork:
+        usd: 6.750350374771343
+        turns: 86
+    steps:
+      (outside run):
+        usd: 1.182878470204652
+        turns: 9
+        input: 20
+        cache_write: 89523
+        cache_read: 1960380
+        output: 2664
+      brainstorm:
+        usd: 2.519322083102049
+        turns: 24
+        input: 48
+        cache_write: 186929
+        cache_read: 3470590
+        output: 21314
+      spec-review:
+        usd: 2.3672002807867822
+        turns: 39
+        input: 80
+        cache_write: 176355
+        cache_read: 4706015
+        output: 13997
+      plan:
+        usd: 1.2759648564758854
+        turns: 12
+        input: 24
+        cache_write: 32367
+        cache_read: 2564749
+        output: 19578
+      implement:
+        usd: 20.892137593436384
+        turns: 425
+        input: 906
+        cache_write: 1674604
+        cache_read: 59766219
+        output: 50157
+      deliver:
+        usd: 3.8839283159942077
+        turns: 32
+        input: 66
+        cache_write: 36292
+        cache_read: 11316744
+        output: 14290
+    steps_by_role:
+      main:
+        (outside run):
+          usd: 1.1825060702046806
+          turns: 9
+          input: 20
+          cache_write: 89523
+          cache_read: 1960380
+          output: 2664
+        brainstorm:
+          usd: 2.5193220831020486
+          turns: 24
+          input: 48
+          cache_write: 186929
+          cache_read: 3470590
+          output: 21314
+        spec-review:
+          usd: 0.7254692276272428
+          turns: 7
+          input: 16
+          cache_write: 21942
+          cache_read: 1277137
+          output: 13337
+        plan:
+          usd: 1.2759648564758854
+          turns: 12
+          input: 24
+          cache_write: 32367
+          cache_read: 2564749
+          output: 19578
+        implement:
+          usd: 8.818611230989319
+          turns: 89
+          input: 222
+          cache_write: 102879
+          cache_read: 24670207
+          output: 44739
+        deliver:
+          usd: 3.8839283159942077
+          turns: 32
+          input: 66
+          cache_write: 36292
+          cache_read: 11316744
+          output: 14290
+      subagent:
+        implement:
+          usd: 12.073526362447058
+          turns: 336
+          input: 684
+          cache_write: 1571725
+          cache_read: 35096012
+          output: 5418
+        spec-review:
+          usd: 1.64173105315954
+          turns: 32
+          input: 64
+          cache_write: 154413
+          cache_read: 3428878
+          output: 660
+    units:
+      step/spec-review:
+        orchestrator:
+          usd: 0.7254692276272428
+          turns: 7
+          input: 16
+          cache_write: 21942
+          cache_read: 1277137
+          output: 13337
+        agent:
+          usd: 1.64173105315954
+          turns: 32
+          input: 64
+          cache_write: 154413
+          cache_read: 3428878
+          output: 660
+      step/plan:
+        orchestrator:
+          usd: 1.2759648564758854
+          turns: 12
+          input: 24
+          cache_write: 32367
+          cache_read: 2564749
+          output: 19578
+      phase/1/implement-phase:
+        orchestrator:
+          usd: 1.3276451550567494
+          turns: 16
+          input: 36
+          cache_write: 12977
+          cache_read: 3805486
+          output: 5912
+        executor:
+          usd: 3.1384869185483293
+          turns: 77
+          input: 158
+          cache_write: 392838
+          cache_read: 10466005
+          output: 1799
+      phase/1/review-phase:
+        orchestrator:
+          usd: 0.5934020553352751
+          turns: 6
+          input: 18
+          cache_write: 10990
+          cache_read: 1483599
+          output: 4912
+        reviewer:
+          usd: 0.7741616300363917
+          turns: 20
+          input: 40
+          cache_write: 95101
+          cache_read: 1339767
+          output: 280
+      phase/2/implement-phase:
+        orchestrator:
+          usd: 2.2041351888705702
+          turns: 24
+          input: 56
+          cache_write: 21358
+          cache_read: 6429069
+          output: 7665
+        executor:
+          usd: 2.40391639379195
+          turns: 71
+          input: 144
+          cache_write: 278779
+          cache_read: 8290807
+          output: 1414
+      phase/2/review-phase:
+        orchestrator:
+          usd: 0.7152645019992535
+          turns: 7
+          input: 20
+          cache_write: 8115
+          cache_read: 1952467
+          output: 4690
+        reviewer:
+          usd: 0.5276687962129193
+          turns: 19
+          input: 38
+          cache_write: 66663
+          cache_read: 890394
+          output: 184
+      phase/3/implement-phase:
+        orchestrator:
+          usd: 1.7993479419182792
+          turns: 18
+          input: 44
+          cache_write: 15325
+          cache_read: 5314423
+          output: 5781
+        executor:
+          usd: 1.394549481822773
+          turns: 37
+          input: 78
+          cache_write: 257372
+          cache_read: 3627847
+          output: 545
+      phase/3/review-phase:
+        orchestrator:
+          usd: 0.6955196365441669
+          turns: 6
+          input: 16
+          cache_write: 10064
+          cache_read: 1833870
+          output: 4986
+        reviewer:
+          usd: 0.48368283640060533
+          turns: 17
+          input: 34
+          cache_write: 66659
+          cache_read: 747151
+          output: 161
+      phase/4/implement-phase:
+        orchestrator:
+          usd: 0.5862216060911893
+          turns: 5
+          input: 12
+          cache_write: 8853
+          cache_read: 1577763
+          output: 3413
+        executor:
+          usd: 2.408665005836953
+          turns: 62
+          input: 126
+          cache_write: 323654
+          cache_read: 7788403
+          output: 715
+      phase/4/review-phase:
+        orchestrator:
+          usd: 0.8970751451738374
+          turns: 7
+          input: 20
+          cache_write: 15197
+          cache_read: 2273530
+          output: 7380
+        reviewer:
+          usd: 0.9423952997971498
+          turns: 33
+          input: 66
+          cache_write: 90659
+          cache_read: 1945638
+          output: 320
+      step/deliver:
+        orchestrator:
+          usd: 3.8839283159942077
+          turns: 32
+          input: 66
+          cache_write: 36292
+          cache_read: 11316744
+          output: 14290
+    briefs:
+      step/spec-review: 1896
+      phase/1/implement-phase: 3432
+      phase/1/review-phase: 3079
+      phase/2/implement-phase: 3610
+      phase/2/review-phase: 2894
+      phase/3/implement-phase: 4695
+      phase/3/review-phase: 3767
+      phase/4/implement-phase: 5992
+      phase/4/review-phase: 4269

@@ -82,10 +82,10 @@ def test_insert_into_flush_left_rows_keeps_the_matrix_valid(capability: str) -> 
 def test_replace_in_flush_left_rows_keeps_the_matrix_valid() -> None:
     from fr.acceptance.edit import replace_row
 
-    moved = _new("r1").model_copy(update={"capability": "demo", "status": "skipped"})
+    moved = _new("r1").model_copy(update={"capability": "demo", "status": "unwired"})
     out = replace_row(FLUSH, "r1", moved)
 
-    assert parse_matrix(out).rows[0].status == "skipped"
+    assert parse_matrix(out).rows[0].status == "unwired"
     assert out.startswith("org: derio-net\nrepo: own\nrows:\n- id: r1\n")
 
 
@@ -229,7 +229,7 @@ def test_check_leaves_line_anchors_into_other_files_alone(tmp_path: Path) -> Non
 def test_set_status_refuses_a_new_line_anchor_into_python(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = make_repo(tmp_path, row(id="target", status="skipped"))
+    root = make_repo(tmp_path, row(id="target", status="unwired"))
     before = _matrix(root).read_bytes()
     result = _invoke(
         root,
@@ -384,7 +384,7 @@ def test_set_status_with_an_unchanged_status_names_the_added_level(
 ) -> None:
     import fr.commands.acceptance_cmd as cmd
 
-    root = make_repo(tmp_path, row(id="target", status="skipped"))
+    root = make_repo(tmp_path, row(id="target", status="unwired"))
     (root / "tests" / "test_b.py").write_text("def test_b(): pass\n")
     messages: list[str] = []
     real = cmd._apply_rows
@@ -401,14 +401,14 @@ def test_set_status_with_an_unchanged_status_names_the_added_level(
         "--id",
         "target",
         "--status",
-        "skipped",
+        "unwired",
         "--notes",
         "more evidence",
         "--level",
         "unit=own:tests/test_b.py",
     )
     assert result.exit_code == 0, result.output
-    assert "skipped → skipped" not in messages[0] + result.output
+    assert "unwired → unwired" not in messages[0] + result.output
     assert "+1 level ref" in messages[0], messages
     assert "+1 level ref" in result.output
 
@@ -416,16 +416,16 @@ def test_set_status_with_an_unchanged_status_names_the_added_level(
 def test_describe_move_names_each_kind_of_change() -> None:
     from fr.acceptance.edit import describe_move
 
-    old = _new("r").model_copy(update={"status": "skipped"})
-    assert describe_move(old, old.model_copy(update={"status": "ci"})) == "skipped → ci"
+    old = _new("r").model_copy(update={"status": "unwired"})
+    assert describe_move(old, old.model_copy(update={"status": "ci"})) == "unwired → ci"
     more = old.model_copy(
         update={"levels": {"unit": ("own:tests/test_a.py",), "int": ("own:tests/i.py",)}}
     )
-    assert describe_move(old, more) == "skipped (+1 level ref)"
+    assert describe_move(old, more) == "unwired (+1 level ref)"
     fewer = old.model_copy(update={"levels": {}})
-    assert describe_move(old, fewer) == "skipped (-1 level ref)"
-    assert describe_move(old, old.model_copy(update={"notes": "other"})) == "skipped (notes)"
-    assert describe_move(old, old) == "skipped (unchanged)"
+    assert describe_move(old, fewer) == "unwired (-1 level ref)"
+    assert describe_move(old, old.model_copy(update={"notes": "other"})) == "unwired (notes)"
+    assert describe_move(old, old) == "unwired (unchanged)"
 
 
 # --- gh#654 / gh#656: unknown evidence levels -------------------------------
@@ -459,7 +459,7 @@ def test_the_engine_refuses_a_ref_both_dropped_and_added(tmp_path: Path) -> None
     from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
     from fr.record.model import AcceptanceItem, StepRecord
 
-    root = make_repo(tmp_path, row(id="target", status="skipped"))
+    root = make_repo(tmp_path, row(id="target", status="unwired"))
     before = _matrix(root).read_bytes()
     record = StepRecord(
         acceptance=(
@@ -488,12 +488,12 @@ def test_replace_keeps_a_section_comment_between_flush_left_rows() -> None:
     from fr.acceptance.edit import replace_row
 
     text = FLUSH + "\n# --- section B ---\n" + FLUSH.split("rows:\n", 1)[1].replace("r1", "r2")
-    moved = _new("r1").model_copy(update={"status": "skipped"})
+    moved = _new("r1").model_copy(update={"status": "unwired"})
 
     out = replace_row(text, "r1", moved)
 
     assert "\n\n# --- section B ---\n- id: r2\n" in out
-    assert [r.status for r in parse_matrix(out).rows] == ["skipped", "not-implemented"]
+    assert [r.status for r in parse_matrix(out).rows] == ["unwired", "not-implemented"]
 
 
 def test_the_repair_never_rewrites_inside_a_longer_repo_name(tmp_path: Path) -> None:

@@ -338,7 +338,17 @@ def test_github_tracker_transition_to_done_closes_the_issue():
 
     tracker.transition(item, "done")
 
-    assert gh.issues[(repo, n)].state == "closed"
+    assert gh.issues[(repo, n)].state == "CLOSED"
+    closes = [c for c in gh.calls if c[0] == "edit_issue_state"]
+    assert closes and closes[-1][1]["state"] == "CLOSED"
+
+
+def test_fake_gh_client_refuses_an_unknown_issue_state():
+    import pytest
+
+    gh = FakeGhClient()
+    with pytest.raises(ValueError, match="unknown issue state"):
+        gh.edit_issue_state("o/r", 1, state="closed")
 
 
 def test_github_tracker_transition_refuses_an_unsupported_state():

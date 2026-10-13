@@ -8,12 +8,13 @@ we leverage gh's existing auth.
 from __future__ import annotations
 
 import contextvars
+import json
 import os
 import re
 import shlex
 import subprocess
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -492,15 +493,24 @@ PR_LIST_FIELDS = (
     "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences,"
     "author,isCrossRepository"
 )
+# `labels`: the approval gate reads `approved-fr` from facts for the board and the drive
+# plan (2026-10-11-merge-train-safety §A); a merge reads it live.
 OPEN_PR_LIST_FIELDS = (
-    PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid"
+    PR_LIST_FIELDS
+    + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid,labels"
 )
 
 
 def list_issues(
-    *, repo: str, state: str, limit: int, fields: str = ISSUE_LIST_FIELDS
+    *,
+    repo: str,
+    state: str,
+    limit: int,
+    fields: str = ISSUE_LIST_FIELDS,
+    labels: Sequence[str] | None = None,
 ) -> list[dict[str, object]]:
-    """Return issues in *repo* via one bulk ``gh issue list``.
+    """Return issues in *repo* via one bulk ``gh issue list``, only those carrying
+    every label of *labels* when given.
 
     ``--limit`` is always explicit: gh's default is 30, which would silently
     truncate any backlog past thirty issues.
@@ -508,7 +518,7 @@ def list_issues(
     import json
 
     if (rest := _rest()) is not None:
-        return _records(rest.list_issues(repo, state, limit, fields))
+        return _records(rest.list_issues(repo, state, limit, fields, labels))
     out = _run_gh(
         [
             "issue",
@@ -521,6 +531,7 @@ def list_issues(
             str(limit),
             "--json",
             fields,
+            *[a for label in labels or () for a in ("--label", label)],
         ]
     )
     issues: list[dict[str, object]] = json.loads(out) if out else []
@@ -731,3 +742,91 @@ def with_retry(
             if attempt >= max_attempts or not is_transient(exc):
                 raise
             time.sleep(backoff_seconds[attempt - 1])
+
+
+_STATUS_LINE = re.compile(r"^HTTP/\S+\s+(\d{3})")
+_ETAG_HEADER = re.compile(r"^etag:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def _status_of(text: str) -> int | None:
+    match = _STATUS_LINE.match(text.lstrip())
+    return int(match.group(1)) if match else None
+
+
+def probe(run: Callable[[list[str]], str], path: str, etag: str | None) -> tuple[bool, str | None]:
+    """One conditional REST read (spec 2026-10-12-quota-pacing §B, R8), shared by both
+    GitHub adapters: `gh api -i [-H 'If-None-Match: <etag>'] <path>` through *run*.
+
+    `(False, etag)` when the forge answered 304 Not Modified, which costs no budget (gh
+    exits 1 with the status line first, captured live 2026-10-12); `(True, new etag)` on
+    a 200; `(True, None)` on anything else, a failure included: a failed probe is a
+    change, so the repo is read, never trusted unchanged."""
+    argv = ["api", "-i", *(["-H", f"If-None-Match: {etag}"] if etag else []), path]
+    try:
+        out = run(argv)
+    except GhError as exc:
+        for text in (exc.stdout, exc.stderr):
+            if _status_of(text or "") == 304:
+                return False, etag
+        return True, None
+    except FileNotFoundError:
+        return True, None
+    if _status_of(out) != 200:
+        return True, None
+    head = out.split("\n\n", 1)[0].split("\r\n\r\n", 1)[0]
+    found = _ETAG_HEADER.search(head)
+    return True, found.group(1) if found else None
+
+
+# OWNER/REPO's last visibility answer and the ETag it came with, per (host, repo): module
+# scope, because `triage_cmd.make_visibility_client` builds a new client for every push, so
+# a per-client cache would never be hit (spec 2026-10-12-quota-pacing R12).
+_VISIBILITY: dict[tuple[str, str], tuple[str, str]] = {}
+
+
+def _visibility_in(body: str) -> str | None:
+    try:
+        raw = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("visibility")
+    if isinstance(value, str) and value:
+        return value.lower()
+    if isinstance(raw.get("private"), bool):
+        return "private" if raw["private"] else "public"
+    return None
+
+
+def repo_visibility(run: Callable[[list[str]], str], host: str | None, repo: str) -> str:
+    """The visibility of *repo*, lowercased, by a conditional REST read (R12), shared by
+    both GitHub adapters. A 304 returns the answer cached for that ETag, still LIVE: the
+    forge was asked and said unchanged, at no budget. Any failure raises, so
+    `live_visibility` answers None and the guard refuses, as before."""
+    key = ((host or "github.com").lower(), repo.lower())
+    cached = _VISIBILITY.get(key)
+    path = f"repos/{repo}"
+    argv = ["api", "-i", *(["-H", f"If-None-Match: {cached[0]}"] if cached else []), path]
+    try:
+        out = run(argv)
+    except GhError as exc:
+        if cached and any(_status_of(t or "") == 304 for t in (exc.stdout, exc.stderr)):
+            return cached[1]
+        raise
+    head, body = "", out  # a runner that dropped the headers still answers the body
+    if (status := _status_of(out)) is not None:
+        if status != 200:
+            raise GhError(f"GET {path}: unexpected answer {out[:60]!r}")
+        head, sep, body = out.partition("\n\n")
+        if not sep:
+            head, _, body = out.partition("\r\n\r\n")
+    value = _visibility_in(body)
+    if value is None:
+        raise GhError(f"GET {path}: no visibility in the answer")
+    found = _ETAG_HEADER.search(head)
+    if found:
+        _VISIBILITY[key] = (found.group(1), value)
+    else:
+        _VISIBILITY.pop(key, None)
+    return value

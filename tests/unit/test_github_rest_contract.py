@@ -197,7 +197,8 @@ def test_mergeable_false_is_the_graphql_conflicting_enum() -> None:
         graphql["mergeStateStatus"],
     )
     assert sorted(rest) == sorted(
-        {*graphql, "author", "createdAt", "headRefOid", "isCrossRepository"}
+        # `labels` postdates the GraphQL capture too (merge-train-safety §A).
+        {*graphql, "author", "createdAt", "headRefOid", "isCrossRepository", "labels"}
     )
 
 

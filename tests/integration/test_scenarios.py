@@ -174,9 +174,18 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "spec-verification-section",
         "walk-recording-prints-close",
         "awaiting-live-triage",
+        "matrix-status-split",
+        "debt-report",
+        "closeout-owed",
+        "triage-closed-in-progress",
+        "triage-config-skew",
+        "triage-nav-pages",
+        "triage-cancelled-terminal",
         "prerelease-command-shape",
         "triage-claims-held",
         "triage-claims-expired",
+        "triage-adopt-hold",
+        "triage-adopt-list",
         "herdr-restart-idle",
         "herdr-opencode",
         "herdr-opencode-restart",
@@ -192,6 +201,10 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "cloud-triage-version-drift",
         "cloud-triage-repo-agents",
         "cloud-triage-cloud-remedy",
+        "merge-train-label-gate",
+        "merge-train-red-recovery",
+        "merge-train-queue",
+        "batch-merge-skip-held",
     }
     assert on_disk == here
 
@@ -214,6 +227,34 @@ def test_walk_recording_prints_close(installed: Path, tmp_path: Path) -> None:
 
 def test_awaiting_live_triage(installed: Path, tmp_path: Path) -> None:
     _scenario("awaiting-live-triage", installed, tmp_path)
+
+
+def test_matrix_status_split(installed: Path, tmp_path: Path) -> None:
+    _scenario("matrix-status-split", installed, tmp_path)
+
+
+def test_debt_report(installed: Path, tmp_path: Path) -> None:
+    _scenario("debt-report", installed, tmp_path)
+
+
+def test_closeout_owed(installed: Path, tmp_path: Path) -> None:
+    _scenario("closeout-owed", installed, tmp_path)
+
+
+def test_triage_closed_in_progress(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-closed-in-progress", installed, tmp_path)
+
+
+def test_triage_cancelled_terminal(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-cancelled-terminal", installed, tmp_path)
+
+
+def test_triage_config_skew(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-config-skew", installed, tmp_path)
+
+
+def test_triage_nav_pages(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-nav-pages", installed, tmp_path)
 
 
 def test_prerelease_command_shape(installed: Path, tmp_path: Path) -> None:
@@ -270,3 +311,27 @@ def test_cloud_triage_repo_agents(installed: Path, tmp_path: Path) -> None:
 
 def test_cloud_triage_cloud_remedy(installed: Path, tmp_path: Path) -> None:
     _scenario("cloud-triage-cloud-remedy", installed, tmp_path)
+
+
+def test_merge_train_label_gate(installed: Path, tmp_path: Path) -> None:
+    _scenario("merge-train-label-gate", installed, tmp_path)
+
+
+def test_merge_train_red_recovery(installed: Path, tmp_path: Path) -> None:
+    _scenario("merge-train-red-recovery", installed, tmp_path)
+
+
+def test_merge_train_queue(installed: Path, tmp_path: Path) -> None:
+    _scenario("merge-train-queue", installed, tmp_path)
+
+
+def test_batch_merge_skip_held(installed: Path, tmp_path: Path) -> None:
+    _scenario("batch-merge-skip-held", installed, tmp_path)
+
+
+def test_triage_adopt_hold(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-adopt-hold", installed, tmp_path)
+
+
+def test_triage_adopt_list(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-adopt-list", installed, tmp_path)

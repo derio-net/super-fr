@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# A fake `gh` for tests/scenarios/triage-adopt-list.sh (FR_FORGE_API=rest): one open PR on
+# the feature branch (pulls-head.json) and one issue and one PR as issues-route payloads
+# (issue-N.json), all projected from the captured REST fixtures in tests/fixtures/github_rest/
+# with the repo renamed to example-org/widgets. Anything else fails loudly.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ "${1:-}" = api ] || { echo "fake gh: unexpected call: gh $*" >&2; exit 1; }
+[ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+case "$*" in
+  *"repos/example-org/widgets/pulls?head=example-org:feat/hand-started"*"page=1"*) cat "$here/pulls-head.json" ;;
+  *"repos/example-org/widgets/pulls?head="*) echo '[]' ;;
+  *"repos/example-org/widgets/pulls/40/files"*) echo '[]' ;;
+  *"repos/example-org/widgets/issues/1") cat "$here/issue-1.json" ;;
+  *"repos/example-org/widgets/issues/40") cat "$here/issue-40.json" ;;
+  *) echo "fake gh: no answer for: $*" >&2; exit 1 ;;
+esac

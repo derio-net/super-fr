@@ -90,6 +90,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "usage",
     "services",
     "cloud",
+    "debt",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
 not mutate them on their behalf.
@@ -144,7 +145,9 @@ next gated command migrates. `fr init agents` (2026-10-07 cloud-triage R19) writ
 `agents` artifact only at its current version, so it too never leaves a stale one.
 `fr cloud` (same spec, R23) writes nothing: `doctor` reads the host's files and the
 repo's `agents` artifact, `setup-script` prints a template; and it is what an operator
-runs when the environment is not yet fit for fr, stale artifacts included."""
+runs when the environment is not yet fit for fr, stale artifacts included.
+`fr debt` (2026-10-11 debt-engine, R25) writes nothing; `issue` writes only to the forge and
+`archive-pr` only through a nested `fr archive`, which this gate checks on its own."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by

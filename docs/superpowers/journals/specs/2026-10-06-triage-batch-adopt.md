@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-06-triage-batch-adopt
 
 <!-- fr:journal kind=discovery scope=spec id=operator-brief created=2026-10-06T17:32:20+00:00 input=true -->

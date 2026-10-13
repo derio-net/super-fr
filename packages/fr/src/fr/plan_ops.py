@@ -29,7 +29,7 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
-from fr.journal.model import JournalEntry, journal_path
+from fr.journal.model import JournalEntry, journal_header, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_validator_wrapper import (
@@ -360,7 +360,7 @@ def create(
         journal_p = journal_path(repo_root, "plan", slug)
         if not journal_p.exists():
             journal_p.parent.mkdir(parents=True, exist_ok=True)
-            journal_p.write_text(f"# Journal: {slug}\n")
+            journal_p.write_text(journal_header(slug))
             written.append(journal_p)
 
     if spec_path is not None:
@@ -1654,9 +1654,10 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     acceptance linkage check."""
     from fr.acceptance.model import AcceptanceError
     from fr.requirements import load_spec_matrix, rows_citing
+    from fr.verification.effective import effective_shape_default
     from fr.verification.model import RESERVED, StrategyError
     from fr.verification.resolve import resolve_strategy
-    from fr.verification.rows import SpecVerification, spec_section_at
+    from fr.verification.rows import SpecVerification, spec_section_at, unrunnable_strategies
     from fr.verification.spec_section import SectionError
     from fr.workflow.model import WorkflowError
     from fr.workflow.resolve import workflow_for_plan
@@ -1676,7 +1677,7 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     if section is None:
         return []
     try:
-        shape = workflow_for_plan(plan).verification
+        shape = effective_shape_default(workflow_for_plan(plan).verification, root)
     except WorkflowError:
         shape = None  # `_workflow_issues` reports the shape itself
     try:
@@ -1684,7 +1685,9 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     except AcceptanceError:
         return []  # `_acceptance_link_issues` reports an unreadable matrix
     verification = SpecVerification(root, section, shape)
-    out: list[ReviewIssue] = []
+    out: list[ReviewIssue] = [
+        issue(m) for m in unrunnable_strategies(root, section, rows_citing(matrix, spec_ref))
+    ]
     for row in rows_citing(matrix, spec_ref):
         name = verification.strategy(row)
         if name is None:

@@ -85,12 +85,15 @@ class ClaudeCloudRunner:
         pending = self._box.pending(item.id, "dispatch")
         if pending is None:
             payload = item.payload
+            # A close-out runs `fr pickup` from the base clone, and its batch branch was
+            # deleted when the PR merged: it starts on the default branch (gh#1099).
+            closeout = payload.get("kind") == "closeout"
             pending = self._box.add(
                 item.id,
                 "dispatch",
                 tag=item.id,
                 repo=item.repo,
-                branch=payload.get("branch"),
+                branch=payload.get("base") if closeout else payload.get("branch"),
                 model=payload.get("model"),
                 prompt=payload.get("brief"),
             )

@@ -15,7 +15,8 @@ itself to it:
 
 - no pin, or a pin naming this `fr`: nothing happens;
 - a pin naming this package directory at another version — the install was
-  upgraded under a live session, one binary still: warn, suggest a restart;
+  upgraded under a live session, one binary still: warn, suggest a restart
+  (silent in a cloud session, whose driver updates itself by design);
 - a disagreeing pin, and this `fr` runs from no project venv — it was reached
   through PATH, which is the skew: REFUSE, naming both;
 - a disagreeing pin, and this `fr` runs from a venv (`uv run fr`, a `uv run`
@@ -41,6 +42,7 @@ import typer
 import fr
 from fr import __version__
 from fr.artifacts.trigger import _asks_for_help
+from fr.cloud import CLOUD_ENV
 
 PIN_ENV = "FR_HARNESS_FR"
 SKIP_ENV = "FR_SKIP_IDENTITY"
@@ -79,7 +81,10 @@ def judge(env: Mapping[str, str], *, identity: str, from_venv: bool) -> Verdict:
     if pin.partition(" ")[2] == identity.partition(" ")[2]:
         # Same package directory, another version: the one install was
         # upgraded under a live session (install.sh runs mid-flight), not a
-        # second binary on PATH.
+        # second binary on PATH. A cloud driver updates its own fr by design
+        # (cloud-triage R18): nothing to restart for, so nothing to say (gh#1100).
+        if env.get(CLOUD_ENV) == "true":
+            return Verdict("ok")
         return Verdict(
             "warn",
             f"fr: this fr was upgraded to {identity.partition(' ')[0]} after the session "

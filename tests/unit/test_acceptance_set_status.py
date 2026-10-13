@@ -70,7 +70,7 @@ def test_set_status_records_the_reason(tmp_path: Path, monkeypatch: pytest.Monke
         "--id",
         "target",
         "--status",
-        "skipped",
+        "unwired",
         "--notes",
         "walked live once, CI backfill owed",
     )
@@ -144,7 +144,7 @@ def test_unknown_status_is_refused_with_the_valid_set(
         root, monkeypatch, "set-status", "--id", "target", "--status", "sheduled", "--notes", "why"
     )
     assert result.exit_code != 0
-    for valid in ("ci", "scheduled", "skipped", "not-implemented", "failing"):
+    for valid in ("ci", "scheduled", "unwired", "walk-owed", "walked", "manual", "not-implemented"):
         assert valid in result.output
     assert _matrix(root).read_text() == before
 
@@ -210,7 +210,7 @@ def test_set_status_can_add_level_evidence(tmp_path: Path, monkeypatch: pytest.M
 def test_set_status_does_not_duplicate_an_existing_level_ref(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = make_repo(tmp_path, row(id="target", status="skipped"))
+    root = make_repo(tmp_path, row(id="target", status="unwired"))
     result = _invoke(
         root,
         monkeypatch,
@@ -389,7 +389,7 @@ _B = "own:tests/test_b.py"
 _REPORTS = ("report_local.html", "report_linked.html", "report_linked.md")
 
 
-def _two_ref_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str = "skipped") -> Path:
+def _two_ref_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str = "unwired") -> Path:
     root = make_repo(tmp_path, row(id="target", status=status, unit=f'"{_A}", "{_B}"'))
     (root / "tests" / "test_b.py").write_text("def test_b(): pass\n")
     (root / "tests" / "test_c.py").write_text("def test_c(): pass\n")

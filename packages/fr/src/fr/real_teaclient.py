@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fr import tea as _tea
-from fr.ghclient import CommandRunner, UnsupportedBatchOps, run_cli
+from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body, run_cli
 from fr.labels import LabelDef
 
 # Gitea-specific PR URL shape (https://{host}/{owner}/{repo}/pulls/{n}).
@@ -42,6 +42,13 @@ from fr.labels import LabelDef
 # fr._urls (issue-URL-only) or fr.real_glabclient's MR-URL pattern (which
 # needs the lazy-quantifier trick GitLab's nesting requires).
 _PR_URL_RE = re.compile(r"^https://[^/]+/([^/]+/[^/]+)/pulls/(\d+)/?$")
+
+
+def _login(author: Any) -> str:
+    """A login from tea's `author` field: a bare name or a user object."""
+    if isinstance(author, dict):
+        return str(author.get("login") or author.get("username") or "")
+    return str(author or "")
 
 
 class RealTeaClient(UnsupportedBatchOps):
@@ -184,6 +191,61 @@ class RealTeaClient(UnsupportedBatchOps):
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
         _tea.edit_issue_body(repo=repo, number=number, body=body)
 
+    def authenticated_login(self) -> str:
+        out = _tea._run_tea(["api", "user"])
+        try:
+            return str(json.loads(out)["login"])
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise _tea.TeaError(f"unreadable `tea api user` output: {exc}") from exc
+
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        _tea.edit_issue(repo=repo, number=number, title=title, body=body)
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        _tea.comment_close_issue(repo=repo, number=number, comment=comment)
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        # Gitea clamps a page to its own maximum (50 by default), whatever --limit
+        # says, so page until an empty page: a single page would be a silent cap.
+        got: list[Any] = []
+        page = 1
+        while len(got) < limit:
+            out = _tea._run_tea(
+                ["issues", "list", "--repo", repo, "--state", "open"]
+                + ["--limit", str(min(limit, 50)), "--page", str(page)]
+                + ["--fields", "index,title,body,labels,author", "--output", "json"]
+            )
+            try:
+                chunk = json.loads(out) if out.strip() else []
+            except json.JSONDecodeError as exc:
+                raise _tea.TeaError(f"unreadable `tea issues list` output: {exc}") from exc
+            if not isinstance(chunk, list):
+                raise _tea.TeaError("unreadable `tea issues list` output: not a JSON list")
+            if not chunk:
+                break
+            got.extend(chunk)
+            page += 1
+        got = got[:limit] if len(got) > limit else got
+        raw: list[dict[str, Any]] = []
+        for i in got:
+            if not isinstance(i, dict):
+                continue
+            labels = i.get("labels") or []
+            if isinstance(labels, str):
+                labels = [x.strip() for x in labels.split(",") if x.strip()]
+            raw.append(
+                {
+                    "number": i.get("index"),
+                    "title": i.get("title") or "",
+                    "body": i.get("body") or "",
+                    "labels": [str(x) for x in labels],
+                    "author": {"login": _login(i.get("author"))},
+                }
+            )
+        return filter_issues_by_body(raw, search, limit)
+
     def create_issue(
         self,
         repo: str,
@@ -251,7 +313,7 @@ class RealTeaClient(UnsupportedBatchOps):
                 "--state",
                 "all",
                 "--fields",
-                "state,merged,url,head",
+                "state,merged,url,head,updated",
                 "--output",
                 "json",
             ],
@@ -275,7 +337,12 @@ class RealTeaClient(UnsupportedBatchOps):
             state = "MERGED" if merged else ("CLOSED" if entry.get("state") == "closed" else "OPEN")
             # tea renders `merged` as the merge time when there is one.
             merged_at = merged if isinstance(merged, str) else None
-            return {"state": state, "url": entry.get("url", ""), "mergedAt": merged_at}
+            return {
+                "state": state,
+                "url": entry.get("url", ""),
+                "mergedAt": merged_at,
+                "updatedAt": entry.get("updated"),
+            }
         return None
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:

@@ -84,8 +84,8 @@ it never mutates the repo or gh (it may `git fetch` remote-tracking refs).
 
 ## Acceptance debt
 
-`fr acceptance status` — counts by status + open `skipped` / `not-implemented`
-rows (oldest first); `--brief` is the session-start form. `fr status <plan-dir>`
+`fr acceptance status` — counts by status + open debt (`unwired` / `walk-owed`
+/ `not-implemented` / `failing`) rows (oldest first); `--brief` is the session-start form. `fr status <plan-dir>`
 appends the same summary when a matrix exists. See `fr-acceptance`.
 
 ## Tick / complete phases

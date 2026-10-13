@@ -48,6 +48,7 @@ from fr.journal.model import (
     JournalParseError,
     appended_journal_text,
     journal_path,
+    owed_key,
     parse_journal,
     resolution_entry,
     spec_journal_slug,
@@ -86,6 +87,9 @@ class RecordTarget:
     phase: int | None = None
     message: str | None = None
     """The commit subject a verb record commits under."""
+    discharges_owed: bool = False
+    """`fr journal resolve`'s target: a `fixed` resolution may name an `owed`
+    entry (review p3-r6). Every other caller is refused one."""
     acceptance_drops: Mapping[str, Mapping[str, tuple[str, ...]]] = field(default_factory=dict)
     """Refs to remove from existing rows before the record's `levels` are
     merged in: row id → level → refs (gh#624). Verb-only — fed by
@@ -161,6 +165,9 @@ class _Context:
     phase: int | None
     completes_phase: bool
     emits_ticks: bool
+    discharges_owed: bool = False
+    """Only `fr journal resolve` discharges an owed entry: it closes the issue
+    the entry was filed as, which a step record's `resolves:` never does."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -303,10 +310,19 @@ def _journal_writes(
         if advisory is not None:
             notices.append(advisory)
 
-    def finding(fid: str) -> JournalEntry:
+    def finding(fid: str, *, discharge: bool = False) -> JournalEntry:
         hit = next((e for e in [*existing, *new] if e.id == fid), None)
         if hit is None:
             raise RecordRefusedError(f"no journal entry {fid!r} in {path.name} — nothing resolved")
+        if hit.kind == "owed" and discharge and ctx.discharges_owed:
+            return hit  # discharging an owed action (spec 2026-10-11 §E, R24)
+        if hit.kind == "owed":
+            raise RecordRefusedError(
+                f"entry {fid!r} is an owed action — discharge it with `fr journal resolve "
+                f"--scope <s> --slug <slug> --id {fid} --state fixed --note <evidence>`, "
+                "which also closes the issue it was filed as; a step record's `resolves:` "
+                "cannot"
+            )
         if hit.kind != "finding":
             raise RecordRefusedError(f"entry {fid!r} is a {hit.kind!r}, not a finding")
         return hit
@@ -350,6 +366,11 @@ def _journal_writes(
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e
+        if entry.kind == "owed" and owed_key(entry) is None:
+            raise RecordRefusedError(
+                f"owed entry {eid!r} needs an `owed_key: <key>` body line "
+                "(spec:<slug>#step<n>, plan:<name>#p<n>, row:<id>) — every owed item has one key"
+            )
         add(entry)
         key: str = "open finding" if entry.kind == "finding" and state == "open" else entry.kind
         if entry.resolves is not None:
@@ -357,7 +378,7 @@ def _journal_writes(
         counts[key] = counts.get(key, 0) + 1
 
     for res in record.resolves:
-        target_entry = finding(res.id)
+        target_entry = finding(res.id, discharge=res.state == "fixed")
         try:
             entry = resolution_entry(
                 target=target_entry,
@@ -663,8 +684,9 @@ def _acceptance_writes(
         parse_matrix,
         pipeline_ref_error,
         split_ref,
+        walked_error,
     )
-    from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set
+    from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set, tracked_reports
 
     matrix_path = repo_root / MATRIX_REL
     text = overlay.read(matrix_path)
@@ -767,6 +789,9 @@ def _acceptance_writes(
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
         except ValueError as e:
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
+        # p1-r2: `walked` means proven by a passing walk, on the row or in this entry.
+        if (why := walked_error(row)) is not None:
+            raise RecordRefusedError(f"acceptance {item.id}: {why}")
         # gh#775: `ci` means a CI run is the evidence, so a row moves there only
         # in a repo with CI. A row already `ci` is left alone — refusing it
         # would block every unrelated edit to it.
@@ -777,7 +802,7 @@ def _acceptance_writes(
         ):
             raise RecordRefusedError(
                 f"acceptance {item.id}: status `ci` needs a CI run as its evidence, but "
-                f"{no_ci}. Record it as `skipped` (verified, not in CI) instead."
+                f"{no_ci}. Record it as `unwired` (a test exists, not in CI) instead."
             )
         if creates and existing is not None:
             if existing == row:
@@ -800,7 +825,9 @@ def _acceptance_writes(
         raise RecordRefusedError(f"the rows would leave an invalid matrix: {e}") from e
     overlay.put(matrix_path, text)
     try:
-        for rel, rendered in render_committed_set(final, repo_root).items():
+        for rel, rendered in render_committed_set(
+            final, repo_root, only=tracked_reports(repo_root)
+        ).items():
             overlay.put(repo_root / rel, rendered)
         for rel in STALE_LEGACY_REPORTS:
             if (repo_root / rel).exists():
@@ -902,6 +929,7 @@ def apply_record(
             phase=target.phase,
             completes_phase=False,
             emits_ticks=target.plan_dir is not None,
+            discharges_owed=target.discharges_owed,
         )
 
     overlay = _Overlay()

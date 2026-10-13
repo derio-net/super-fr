@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-10-opencode-managed-auto
 
 <!-- fr:journal kind=repro scope=debug id=permission-prompt created=2026-10-10T09:28:10+00:00 -->

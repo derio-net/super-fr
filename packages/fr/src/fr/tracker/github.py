@@ -111,7 +111,7 @@ class GithubTracker:
         remove = all_lifecycle - add
         self.gh.edit_issue_labels(repo, number, add=frozenset(add), remove=frozenset(remove))
         if to == "done":
-            self.gh.edit_issue_state(repo, number, state="closed")
+            self.gh.edit_issue_state(repo, number, state="CLOSED")
 
     def link_parent(self, child: TrackedItem, parent: TrackedItem) -> None:
         """Refuses — GitHub has no native parent/epic link.

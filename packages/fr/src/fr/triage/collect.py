@@ -13,7 +13,7 @@ implementing the reads, not an edit to the collector (spec
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -32,12 +32,14 @@ from fr.triage.model import (
     BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
     Facts,
+    InProgressState,
     Issue,
     IssueClaim,
     IssueState,
     PullRequest,
     Scope,
     Skipped,
+    StaleInProgress,
     TriageConfig,
     Truncation,
     Unviewed,
@@ -46,11 +48,14 @@ from fr.triage.model import (
     normalize_key,
     parse_triage_config,
 )
+from fr.triage.scope_config import scope_id
 from fr.triage.stage import pr_rank
 
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
 REPO_LIMIT = 200
+# `author` is who opened an issue: a debt digest counts only from a trusted one (facts 9).
+ISSUE_FIELDS = "number,title,labels,createdAt,updatedAt,url,body,author"
 ORIGINS_ISSUE_LIST_FIELDS = (
     real_ghclient.ORIGINS_ISSUE_LIST_FIELDS
 )  # origins' own, wider issue fields
@@ -71,7 +76,13 @@ class Forge(Protocol):
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]: ...
 
     def list_issues(
-        self, *, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        *,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]: ...
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
@@ -87,6 +98,10 @@ class Forge(Protocol):
 
     def viewer_login(self) -> str: ...
 
+    def rate_limit(self) -> dict[str, Any]: ...
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]: ...
+
     def repo_visibility(self, *, repo: str) -> str | None: ...
 
 
@@ -98,6 +113,7 @@ GH_MISSING = (
 
 # A forge CLI's own error, and an operation the backend does not implement.
 _FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
+_READ_FAILURES: tuple[type[Exception], ...] = (TriageError, *_FAILURES)
 
 
 @contextmanager
@@ -119,6 +135,12 @@ class ClientForge:
     def __init__(self, client: GhClient) -> None:
         self._client = client
 
+    @property
+    def client(self) -> GhClient:
+        """The adapter itself: `fr triage collect` checks the approval label through it
+        (merge-train-safety R4); collect's own reads stay behind `Forge`."""
+        return self._client
+
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         # Archived repos included: the caller counts the raw list against its limit
         # before dropping them, or a full list with archived repos would not warn.
@@ -126,10 +148,16 @@ class ClientForge:
             return self._client.list_repos(owner, limit)
 
     def list_issues(
-        self, *, repo: str, state: str, limit: int, fields: str | None = None
+        self,
+        *,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
         with _forge_errors():
-            return self._client.list_issues(repo, state, limit, fields)
+            return self._client.list_issues(repo, state, limit, fields or ISSUE_FIELDS, labels)
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():
@@ -162,6 +190,14 @@ class ClientForge:
     def viewer_login(self) -> str:
         with _forge_errors():
             return self._client.viewer_login()
+
+    def rate_limit(self) -> dict[str, Any]:
+        with _forge_errors():
+            return self._client.rate_limit()
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        with _forge_errors():
+            return self._client.probe(path, etag)
 
     def repo_visibility(self, *, repo: str) -> str | None:
         with _forge_errors():
@@ -231,6 +267,8 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             mergeable=(r["mergeable"] or "UNKNOWN") if "mergeable" in r else None,
             merge_state=((r["mergeStateStatus"] or "UNKNOWN") if "mergeStateStatus" in r else None),
             review=r.get("reviewDecision") or None,
+            # Only an open-PR record carries labels; None is "never read" (merge-train §A).
+            labels=[lb["name"] for lb in r["labels"] or []] if "labels" in r else None,
             author=_login(r),
             cross_repo=r.get("isCrossRepository"),
         )
@@ -382,6 +420,15 @@ def invert(
     return links
 
 
+def _body(body: str) -> str:
+    """The body kept in facts: `BODY_LIMIT` characters, except a debt digest's, whose
+    embedded figures sit at its end and so must survive (to `BODY_READ_LIMIT`)."""
+    from fr.debt.render import BODY_READ_LIMIT
+    from fr.triage.debt import has_marker
+
+    return body[:BODY_READ_LIMIT] if has_marker(body) else body[:BODY_LIMIT]
+
+
 def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: IssueState) -> Issue:
     return Issue(
         repo=repo,
@@ -393,8 +440,9 @@ def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: Iss
         created_at=raw.get("createdAt"),
         updated_at=raw.get("updatedAt"),
         closed_at=raw.get("closedAt"),
-        body=(raw.get("body") or "")[:BODY_LIMIT],
+        body=_body(raw.get("body") or ""),
         prs=prs,
+        author=_login(raw),
     )
 
 
@@ -434,6 +482,9 @@ class CollectStats:
     carried: int = 0
     # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (gh#998)
     ignored: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # The repos a partial collect carried, not read (spec 2026-10-12-quota-pacing R10):
+    # the one answer the drive's snapshot and ETag promotion both use (p2-r5).
+    carried_repos: frozenset[str] = frozenset()
 
 
 def collect_facts(
@@ -495,7 +546,8 @@ def collect_facts_counted(
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
     carried: Iterable[Issue] = (),
-    lenient: bool = False,
+    only: Iterable[str] | None = None,
+    previous: Facts | None = None,
 ) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
@@ -509,8 +561,8 @@ def collect_facts_counted(
     `.fr/triage.yaml` is invalid — is recorded under `skipped` and the rest
     still collect; in repo scope the one repo failing is the error, and
     in org scope so is collecting no repo at all (review r-p2-empty).
-    *lenient* reads each config as the wave driver must (gh#998): an unknown
-    top-level key is dropped and named in the stats' `ignored`, never refused.
+    Every config is read leniently (R4): an unknown top-level key is dropped and
+    named in the stats' `ignored`, never refused; an invalid value still fails.
     Each *judged* key no longer open costs one `view_issue`, so the extra
     calls are bounded by the judgements, never by the backlog. The batch
     extras are bounded the same way (spec 2026-09-25-triage-batches §3.F): one
@@ -521,9 +573,26 @@ def collect_facts_counted(
     a merged or closed PR of that dispatch in *known_batch_prs* (the previous
     facts' `batch_prs`) is carried over instead of looked up again (review
     r2p-f3), so a finished batch costs nothing on later collects.
+
+    *only* with *previous* is a partial collect (spec 2026-10-12-quota-pacing R10): a
+    repo of *previous* outside *only* is not read at all. Its issues, unlinked PRs,
+    batch PRs, config and judged keys are carried from *previous*; the repo
+    list and the viewer too; never its visibility, which the privacy guard then reads
+    live. Each issue's PR links are this pass's, plus the previous
+    links whose PR lives in a carried repo, so a cross-repo link survives whichever side
+    was read. A repo *previous* skipped is read regardless: it has nothing to carry.
+    *only* None (or no *previous*) is the full collect, unchanged.
     """
-    repos, warnings, listed_visibility = _listed_repos(forge, scope, repo_limit=repo_limit)
-    viewer = forge.viewer_login() or None
+    keep = _carry_set(only, previous)
+    if keep and previous is not None:
+        repos = list(previous.repos)
+        warnings = [w for w in previous.warnings if w.source == "repos" or w.target in keep]
+        listed_visibility: dict[str, str] = {}
+        viewer = previous.viewer or forge.viewer_login() or None
+    else:
+        keep = frozenset()
+        repos, warnings, listed_visibility = _listed_repos(forge, scope, repo_limit=repo_limit)
+        viewer = forge.viewer_login() or None
     skipped: list[Skipped] = []
     collected: list[str] = []
     raw_issues: list[tuple[str, dict[str, Any]]] = []
@@ -536,12 +605,15 @@ def collect_facts_counted(
     ignored: dict[str, tuple[str, ...]] = {}
     markers: dict[tuple[str, int], str] = {}
     claims: dict[tuple[str, int], list[IssueClaim]] = {}
+    closed_hits: list[StaleInProgress] = []
     for repo in repos:
+        if repo in keep:
+            continue
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
-            repo_config, dropped = _read_config(forge, repo, lenient=lenient)
+            repo_config, dropped = read_config_lenient(forge, repo)
             trusted = claim_trusted(repo_config or TriageConfig(), viewer)
             for raw in issues:
                 at, found = _comment_facts(forge, repo, raw, trusted)
@@ -557,6 +629,7 @@ def collect_facts_counted(
             skipped.append(Skipped(repo=repo, reason=str(exc)))
             continue
         collected.append(repo)
+        closed_hits.extend(_closed_in_progress(forge, repo, scope, trusted, issue_limit, warnings))
         if repo_config is not None:
             config[repo] = repo_config
         if dropped:
@@ -574,7 +647,7 @@ def collect_facts_counted(
             (_anchor_pr(forge, pr, raw), refs)
             for (pr, refs), raw in zip(parsed_open, current, strict=True)
         )
-    if not collected:
+    if not collected and not keep:
         # Nothing to show is an error, never an empty board: an empty facts.json
         # would render as a clean backlog (spec §3.C, review r-p2-empty). Repo
         # scope already raised above; this is org scope.
@@ -585,10 +658,16 @@ def collect_facts_counted(
         raise ForgeError(f"{scope.owner} has no non-archived repos to triage")
     parsed_prs = join_open(parsed_prs, [pr for pr, _ in open_prs])
     links = invert(parsed_prs, scope)
+    kept = _kept_links(previous, keep)
 
     def linked(repo: str, number: int) -> list[PullRequest]:
         owner, name = repo.split("/", 1)
-        return links.get(_ref(owner, name, number), [])
+        ref = _ref(owner, name, number)
+        fresh = links.get(ref, [])
+        if ref not in kept:
+            return fresh
+        both = {(p.repo, p.number): p for p in [*fresh, *kept[ref]]}
+        return sorted(both.values(), key=lambda p: (pr_rank(p), -p.number))
 
     out = [
         _issue(repo, i, linked(repo, i["number"]), state="open").model_copy(
@@ -599,13 +678,29 @@ def collect_facts_counted(
         )
         for repo, i in raw_issues
     ]
+    prior = previous if keep else None
+    if prior is not None:
+        out.extend(
+            i.model_copy(update={"prs": linked(i.repo, i.number)})
+            for i in prior.issues
+            if i.repo in keep and i.state == "open"
+        )
     open_keys = {i.key for i in out}
     carry = {(i.repo.lower(), i.number): i for i in carried if i.state == "closed"}
     truncated = {w.target for w in warnings if w.source == "issues"}
     viewed = carried_n = 0
     unviewed: list[Unviewed] = []
     judged_prs: list[PullRequest] = []
-    for repo, number in _judged_elsewhere(judged, open_keys, collected):
+    for repo, number in _judged_elsewhere(judged, open_keys, [*collected, *sorted(keep)]):
+        if prior is not None and repo in keep:
+            known = _carried_judgement(prior, issue_key(repo, number))
+            if isinstance(known, PullRequest):
+                judged_prs.append(known)
+                continue
+            if isinstance(known, Issue):
+                out.append(known.model_copy(update={"prs": linked(repo, number)}))
+                carried_n += 1
+                continue
         if (listed := listed_prs.get(issue_key(repo, number))) is not None:
             judged_prs.append(listed)
             continue
@@ -637,6 +732,9 @@ def collect_facts_counted(
         for p, refs in open_prs
         if not any(_in_scope(ref, scope) for ref in refs) and (p.repo, p.number) not in linked_prs
     ]
+    if prior is not None:
+        unlinked += [p for p in prior.prs if p.repo in keep]
+        config.update({r: c for r, c in prior.config.items() if r in keep})
     batch_prs = _batch_prs(
         forge,
         batch_branches,
@@ -644,6 +742,8 @@ def collect_facts_counted(
         seen=[*linked_prs_all(out), *unlinked],
         known=list(known_batch_prs),
     )
+    if prior is not None:
+        batch_prs += [p for p in prior.batch_prs if p.repo in keep]
     in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
     judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
     facts = Facts(
@@ -661,9 +761,57 @@ def collect_facts_counted(
         judged_prs=judged_prs,
         config=config,
         viewer=viewer,
+        # Never carried: the privacy guard trusts a recorded visibility and reads a missing
+        # one live, so a carried "public" could outlive the repo going private (R10).
         visibility=_visibility(forge, collected, listed_visibility),
+        stale_in_progress=closed_hits,
+        config_ignored={r: list(keys) for r, keys in ignored.items()},
     )
-    return facts, CollectStats(viewed=viewed, carried=carried_n, ignored=ignored)
+    return facts, CollectStats(
+        viewed=viewed, carried=carried_n, ignored=ignored, carried_repos=keep
+    )
+
+
+def _carry_set(only: Iterable[str] | None, previous: Facts | None) -> frozenset[str]:
+    """The repos a partial collect carries (R10): *previous*'s, outside *only*, that
+    *previous* read. Empty for a full collect."""
+    if only is None or previous is None:
+        return frozenset()
+    named, skipped = set(only), {s.repo for s in previous.skipped}
+    return frozenset(r for r in previous.repos if r not in named and r not in skipped)
+
+
+def _kept_links(previous: Facts | None, carry: frozenset[str]) -> dict[IssueRef, list[PullRequest]]:
+    """Each previous issue's links whose PR lives in a carried repo: no read this pass
+    can recompute them, so they are kept (R10)."""
+    if previous is None or not carry:
+        return {}
+    kept: dict[IssueRef, list[PullRequest]] = {}
+    for issue in previous.issues:
+        prs = [p for p in issue.prs if p.repo in carry]
+        if prs:
+            owner, name = issue.repo.split("/", 1)
+            kept[_ref(owner, name, issue.number)] = prs
+    return kept
+
+
+def _carried_judgement(previous: Facts, key: str) -> Issue | PullRequest | None:
+    """What *previous* knew of a judged key of a carried repo: a PR or the issue; None
+    when it never saw the key, which is viewed. A key *previous* could not view is never
+    carried (p2-r2): its reason may be a rate limit, and carrying that would end every
+    partial pass on it until the next full one."""
+    for pr in [
+        *previous.judged_prs,
+        *previous.prs,
+        *previous.batch_prs,
+        *linked_prs_all(previous.issues),
+    ]:
+        if issue_key(pr.repo, pr.number) == key:
+            return pr
+    for issue in previous.issues:
+        if issue.key == key:
+            return issue
+    return None
 
 
 def linked_prs_all(issues: Iterable[Issue]) -> list[PullRequest]:
@@ -699,26 +847,14 @@ def join_open(
     return out
 
 
-def read_config(forge: Forge, repo: str) -> TriageConfig | None:
-    """*repo*'s `.fr/triage.yaml` at its default branch; None when it has none.
-
-    Absent (404) is the common case and means the defaults. Any other forge
-    failure propagates like the list calls' do; a file that is not valid config
-    is refused naming the repo and the file, never half-read — which fails a
-    repo-scope collect and skips just that repo in org scope (review r2p-f4).
-    """
-    return _read_config(forge, repo, lenient=False)[0]
-
-
 def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, tuple[str, ...]]:
-    """`read_config` as the wave driver reads it (gh#998): an unknown top-level key
-    is dropped and named, never refused (`parse_triage_config`)."""
-    return _read_config(forge, repo, lenient=True)
+    """*repo*'s `.fr/triage.yaml` at its default branch, and the top-level keys it ignored.
 
-
-def _read_config(
-    forge: Forge, repo: str, *, lenient: bool
-) -> tuple[TriageConfig | None, tuple[str, ...]]:
+    None when it has no file (404): the defaults. An unknown top-level key is dropped
+    and named, never refused (R4); a known key with a bad value, or a file that is not
+    valid config, is refused naming the repo and file, which fails a repo-scope collect
+    and skips just that repo in org scope (review r2p-f4). Any other forge failure
+    propagates like the list calls' do."""
     try:
         body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=DEFAULT_BRANCH_REF)
     except ForgeError as exc:
@@ -726,7 +862,7 @@ def _read_config(
             return None, ()
         raise
     try:
-        return parse_triage_config(yaml.safe_load(body) or {}, lenient=lenient)
+        return parse_triage_config(yaml.safe_load(body) or {})
     except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
 
@@ -761,6 +897,77 @@ def _comment_facts(
         )
     claims = [to_issue_claim(c) for c in read.claims]
     return (max(stamps) if stamps else None), claims
+
+
+def _closed_in_progress(
+    forge: Forge,
+    repo: str,
+    scope: Scope,
+    trusted: frozenset[str],
+    limit: int,
+    warnings: list[Truncation],
+) -> list[StaleInProgress]:
+    """Closed issues of *repo* still labelled `fr:in-progress` (board-truth §B, R2).
+
+    Outside the per-repo skip: a failure here is a warning on stderr and an empty set,
+    never a skipped repo. A hit that also carries `fr:claimed` has its comments read:
+    this scope's own un-released claim makes it `release-pending` (the next `claim sync`
+    takes both labels off), another scope's `held`, none `stale`."""
+    try:
+        raw = forge.list_issues(
+            repo=repo,
+            state="closed",
+            limit=limit,
+            fields=ORIGINS_ISSUE_LIST_FIELDS,
+            labels=[FR_IN_PROGRESS.name],
+        )
+    except _READ_FAILURES as exc:
+        print(f"fr triage: {repo}: closed fr:in-progress issues not read: {exc}", file=sys.stderr)
+        return []
+    if len(raw) == limit:
+        warnings.append(Truncation(source="closed-in-progress", target=repo, limit=limit))
+    me: str | None = None
+    me_failed = False
+    out: list[StaleInProgress] = []
+    for i in raw:
+        state: InProgressState = "stale"
+        names = {label["name"] for label in i.get("labels") or []}
+        if FR_CLAIMED.name in names:
+            try:
+                comments = forge.list_issue_comments(repo=repo, number=i["number"])
+            except _READ_FAILURES as exc:
+                print(
+                    f"fr triage: {repo}#{i['number']}: claim comments not read: {exc}",
+                    file=sys.stderr,
+                )
+                comments = []
+            signers = [c.signer for c in read_claims(comments, trusted).claims]
+            if signers and me is None and not me_failed:
+                try:
+                    me = scope_id(scope)
+                except TriageError as exc:
+                    me_failed = True
+                    print(
+                        f"fr triage: {repo}: this scope's id is unreadable ({exc}); closed "
+                        "in-progress issues with a claim are shown as held",
+                        file=sys.stderr,
+                    )
+            if signers and me is None:
+                state = "held"  # conservative: never a clean-labels target
+            elif any(s != me for s in signers):
+                state = "held"
+            elif signers:
+                state = "release-pending"
+        out.append(
+            StaleInProgress(
+                key=issue_key(repo, i["number"]),
+                title=i["title"],
+                url=i["url"],
+                closed_at=i.get("closedAt"),
+                state=state,
+            )
+        )
+    return out
 
 
 def _created_since(pr: PullRequest, at: datetime) -> bool:

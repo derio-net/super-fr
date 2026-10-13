@@ -11,10 +11,24 @@ from fr.triage.errors import TriageError
 from fr.triage.fragments import Entry, Resolved, resolve_manifest, splice
 
 
-def test_pages_registry_lists_the_four_pages() -> None:
-    assert tuple(p.key for p in PAGES) == ("board", "origins", "architecture", "history")
+def test_pages_registry_lists_the_five_pages() -> None:
+    assert tuple(p.key for p in PAGES) == (
+        "backlog",
+        "batches",
+        "origins",
+        "architecture",
+        "history",
+    )
+    assert tuple(p.title for p in PAGES) == (
+        "Backlog",
+        "Batches",
+        "Origins",
+        "Architecture",
+        "History",
+    )
     assert tuple(p.file for p in PAGES) == (
         "triage.html",
+        "board.html",
         "origins.html",
         "architecture.html",
         "history.html",
@@ -25,7 +39,7 @@ def test_pages_registry_lists_the_four_pages() -> None:
 def test_page_header_marks_the_current_page_and_states_the_goal() -> None:
     from fr.triage.components import page_header
 
-    h = page_header("origins")
+    h = page_header("origins", [p.key for p in PAGES])
     assert "<nav" in h
     for p in PAGES:
         assert f'href="{p.file}"' in h

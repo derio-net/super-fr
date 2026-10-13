@@ -209,24 +209,31 @@ def test_a_restore_never_overwrites_an_existing_forge_yaml(tmp_path: Path, home:
 def test_the_rest_client_reads_visibility_from_get_repos() -> None:
     fake = FixtureGh()
     assert RealGhRestClient(run=fake).repo_visibility("derio-net/super-fr") == "public"
-    assert fake.calls == [["api", "repos/derio-net/super-fr"]]
+    assert fake.calls == [["api", "-i", "repos/derio-net/super-fr"]]
 
 
-def test_the_graphql_client_reads_visibility_from_repo_view(
+def test_the_graphql_client_reads_visibility_by_a_conditional_rest_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fr import gh as _gh
     from fr.real_ghclient import RealGhClient
 
     seen: list[list[str]] = []
+    answer = 'HTTP/2.0 200 OK\nEtag: W/"v"\n\n{"visibility": "private"}'
 
     def fake(args: list[str], *a: Any, **kw: Any) -> str:
         seen.append(args)
-        return json.dumps({"visibility": "PRIVATE"})
+        if len(seen) > 1:
+            raise _gh.GhError("x", stdout="HTTP/2.0 304 Not Modified\n", returncode=1)
+        return answer
 
     monkeypatch.setattr(_gh, "_run_gh", fake)
     assert RealGhClient().repo_visibility("o/r") == "private"
-    assert seen == [["repo", "view", "o/r", "--json", "visibility"]]
+    assert RealGhClient().repo_visibility("o/r") == "private"  # a new client, the same map
+    assert seen == [
+        ["api", "-i", "repos/o/r"],
+        ["api", "-i", "-H", 'If-None-Match: W/"v"', "repos/o/r"],
+    ]
 
 
 # ------------------------------------------------- collect records and decides
@@ -330,7 +337,7 @@ def test_a_loop_collect_never_decides_and_warns_once_per_pass(
     monkeypatch.setattr(triage_cmd, "state_repo_prompt", lambda: _never)
     state = tmp_path / "s"
 
-    triage_cmd.collect_into(Scope(kind="repo", target=REPO), state, carry=True, lenient=True)
+    triage_cmd.collect_into(Scope(kind="repo", target=REPO), state, carry=True)
 
     assert not (state / SCOPE_DURABLE_FILE).exists()
     assert capsys.readouterr().err.count("no state repo") == 1

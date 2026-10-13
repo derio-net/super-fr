@@ -33,7 +33,7 @@ def _walk(harness: str = "claude-code", outcome: str = "pass") -> Walk:
 
 def _row(rid: str, **fields: object) -> Row:
     return Row.model_validate(
-        {"id": rid, "capability": "c", "acceptance": "x", "status": "skipped", **fields}
+        {"id": rid, "capability": "c", "acceptance": "x", "status": "unwired", **fields}
     )
 
 
@@ -103,7 +103,7 @@ def _target(root: Path, rid: str = "target") -> Row:
 
 
 def _set(*args: str):
-    return _fr("set-status", "--id", "target", "--status", "skipped", "--notes", "n", *args)
+    return _fr("set-status", "--id", "target", "--status", "unwired", "--notes", "n", *args)
 
 
 def test_add_takes_issue_scenario_harness_and_verify(repo: Path) -> None:

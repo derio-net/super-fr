@@ -12,8 +12,10 @@ session that inherits none of it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fr.git import GitUnavailableError, git_answer
 from fr.journal.model import (
@@ -25,6 +27,9 @@ from fr.journal.model import (
 )
 from fr.run.model import RunState
 from fr.services import ServicesError, TrackerRequiredError, require_tracker
+
+if TYPE_CHECKING:
+    from fr.acceptance.model import Row
 
 __all__ = [
     "CloseoutNotReadyError",
@@ -168,6 +173,9 @@ class RunExtras:
     has_test_plan: bool
     out_of_scope: list[tuple[str, str]]
     awaiting_live: list[str] = field(default_factory=list)
+    test_plan_steps: list[tuple[int, str]] = field(default_factory=list)
+    """`(n, text)` of each spec Test Plan step with no recorded outcome yet —
+    `fr archive` holds the plan until each has one (spec 2026-10-11 R19)."""
 
 
 def _housekeeping_branch(branch: str, run_extras: RunExtras | None) -> str:
@@ -240,6 +248,18 @@ def branch_closeout_brief(
 
     if run_extras is not None and run_extras.spec_path and run_extras.has_test_plan:
         lines.append(f"  run the spec's Test Plan: {run_extras.spec_path}")
+        if run_extras.test_plan_steps:
+            from fr.archive import outcome_command
+
+            lines.append(
+                "  record each step's outcome — `fr archive` holds the plan until every "
+                "step has one:"
+            )
+            for n, text in run_extras.test_plan_steps:
+                lines.append(f"    step {n}: {text}")
+                lines.extend(
+                    f"      {cmd}" for cmd in outcome_command(f"--run {run_extras.run_id}", n)
+                )
 
     if run_extras is not None:
         lines.extend(run_extras.awaiting_live)
@@ -300,6 +320,31 @@ def branch_closeout_brief(
     )
 
     return "\n".join(lines)
+
+
+def _effective_strategy_of(repo_root: Path, state: RunState) -> Callable[[Row], str]:
+    """`row -> the strategy that holds it open`: its own `verify`, else what the
+    run's spec section and shape default give it (the same resolution
+    `holds_open_for_run` uses), else the placeholder `<strategy>` (p1-r1)."""
+    from fr.requirements import run_spec
+    from fr.verification.rows import shape_default, spec_verification
+    from fr.verification.spec_section import SectionError
+
+    verification = None
+    spec_rel = run_spec(state)
+    if spec_rel is not None:
+        try:
+            verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
+        except (SectionError, OSError):
+            verification = None
+
+    def strategy_of(row: Row) -> str:
+        found = row.verify
+        if found is None and verification is not None:
+            found = verification.strategy(row)
+        return found or "<strategy>"
+
+    return strategy_of
 
 
 def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> list[str]:
@@ -370,6 +415,22 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
             for ref in refd
             if ref.split("#", 1)[0] == repo
         )
+    # The explicit move once a row is walked (spec 2026-10-11-debt-engine §D).
+    walked = [
+        row
+        for row in matrix.rows
+        if holds(row)
+        and any((normalize_issue_ref(i, identity) or i.lower()) in refd for i in row.issues)
+    ]
+    if walked:
+        strategy_of = _effective_strategy_of(repo_root, state)
+        lines.append("  after each row's walk, record it (the row moves to `walked`):")
+        lines.extend(
+            f"    fr acceptance set-status --id {row.id} --status walked --walk <log> "
+            f"--harness <harness> --model <model> --strategy {strategy_of(row)} "
+            '--walk-outcome pass --notes "<what the walk proved>"'
+            for row in walked
+        )
     return lines
 
 
@@ -391,12 +452,17 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
     plan_path = _emitted(state, "plan")
 
     has_test_plan = False
+    missing: list[tuple[int, str]] = []
     if spec_path:
         spec_file = repo_root / spec_path
         try:
             has_test_plan = TEST_PLAN_MARKER in spec_file.read_text()
         except OSError:
             has_test_plan = False
+        if has_test_plan:
+            from fr.archive import missing_outcomes
+
+            missing = [(s.n, s.text) for s in missing_outcomes(repo_root, spec_file)]
 
     out_of_scope: list[tuple[str, str]] = []
     if spec_path:
@@ -414,5 +480,6 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         has_test_plan=has_test_plan,
         out_of_scope=out_of_scope,
         awaiting_live=awaiting_live_lines(repo_root, state, pr),
+        test_plan_steps=missing,
     )
     return branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)

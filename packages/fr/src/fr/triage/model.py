@@ -50,26 +50,35 @@ from fr.triage.stage import Stage, derive_stage
 # the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
 # the stamp moves for the same reason. 8 adds per-config `merge_method` (2026-10-07-cloud-triage
 # §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects; the
-# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 3 to 7
-# still load, and the first collect upgrades them. Independent of JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[8] = 8
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8)
-# The version this fr WRITES: every engine write stamps 8 (the `claim_taken` event, gh#1120;
+# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 9 adds closed issues
+# still labelled `fr:in-progress` and the skew fields (board-truth §B). 10 adds per-PR
+# `labels` (2026-10-11-merge-train-safety §A): `to_json` dumps it, `null` included, which a
+# closed-world schema-9 reader rejects; a file below 10 reads `labels` as None, which never
+# approves. 3 to 9 still load, and the first collect upgrades them. Independent of
+# JUDGEMENTS_SCHEMA.
+# 11 adds per-issue `author` (debt-engine R14: only the workflow bot's or a trusted login's
+# debt digest counts): `to_json` dumps it, `null` included, which a closed-world schema-10
+# reader rejects; a file below 11 reads `author` as None, so its digests are untrusted.
+FACTS_SCHEMA: Literal[11] = 11
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11)
+# The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
+# `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
+# `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
 # §3.H: the `claims_released` event; 5 was 2026-10-06-verification-strategies §G: the
 # `conflict` event; 4 was
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[8] = 8
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8)
+JUDGEMENTS_SCHEMA: Literal[9] = 9
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
 PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
-TruncatedList = Literal["repos", "issues", "prs"]
+TruncatedList = Literal["repos", "issues", "prs", "closed-in-progress"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 Kind = Literal["defect", "feature", "parked"]
@@ -294,6 +303,9 @@ class PullRequest(_Strict):
     mergeable: str | None = None
     merge_state: str | None = None
     review: str | None = None
+    # Open PRs only, like `checks`: the PR's label names, `None` when never read, which
+    # never approves (2026-10-11-merge-train-safety §A). Facts schema 9.
+    labels: list[str] | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""
@@ -332,6 +344,8 @@ class Issue(_Strict):
     # The claims on the issue (facts schema 7): read only for issues labelled fr:claimed or
     # fr:in-progress, from the same comment read as `dispatch_marker_at`.
     claims: list[IssueClaim] = []
+    # The login that opened the issue (facts schema 11); None when never read.
+    author: str | None = None
 
     @property
     def key(self) -> str:
@@ -376,6 +390,12 @@ class Truncation(_Strict):
         the issue and repo lists have none, and the sentence says so rather than
         inventing one.
         """
+        if self.source == "closed-in-progress":
+            return (
+                f"the closed fr:in-progress list for {target} returned exactly its limit "
+                f"({self.limit}), so the closed-but-in-progress set may be incomplete; "
+                "no flag raises this limit"
+            )
         remedy = "raise it with --pr-limit" if self.source == "prs" else "no flag raises this limit"
         return (
             f"the {_LIST_WORDS[self.source]} for {target} returned exactly its limit "
@@ -383,7 +403,12 @@ class Truncation(_Strict):
         )
 
 
-_LIST_WORDS: dict[str, str] = {"prs": "PR list", "issues": "issue list", "repos": "repo list"}
+_LIST_WORDS: dict[str, str] = {
+    "prs": "PR list",
+    "issues": "issue list",
+    "repos": "repo list",
+    "closed-in-progress": "closed fr:in-progress list",
+}
 
 
 class Launch(_Strict):
@@ -497,24 +522,35 @@ def claim_trusted(config: TriageConfig, viewer: str | None) -> frozenset[str]:
     return frozenset(login.lower() for login in logins)
 
 
-def parse_triage_config(
-    data: object, *, lenient: bool = False
-) -> tuple[TriageConfig, tuple[str, ...]]:
+def parse_triage_config(data: object) -> tuple[TriageConfig, tuple[str, ...]]:
     """`.fr/triage.yaml`'s parsed body as config, and the top-level keys it ignored.
 
-    Strict by default: an unknown key is refused, so a typo fails where a person
-    runs `fr triage collect` by hand. *lenient* is the wave driver's (gh#998): it
-    reads the file from the default branch every pass, and its own merges land a
-    key the running `fr` predates before the release that knows it can. It drops
-    unknown TOP-LEVEL keys and names them; a known key with a bad value, or an
-    unknown key nested in a known block, is still refused.
+    Every triage read is lenient (R4, gh#998): a merge can land a key the running `fr`
+    predates before the release that knows it. Unknown TOP-LEVEL keys are dropped and
+    named (collect records them, the skew banner and `check` show them); a known key
+    with a bad value, or an unknown key nested in a known block, is still refused.
     """
-    if not lenient or not isinstance(data, dict):
+    if not isinstance(data, dict):
         return TriageConfig.model_validate(data), ()
     known = {f.alias or name for name, f in TriageConfig.model_fields.items()}
     ignored = tuple(sorted(str(k) for k in data if k not in known))
     kept = {k: v for k, v in data.items() if k in known}
     return TriageConfig.model_validate(kept), ignored
+
+
+InProgressState = Literal["stale", "release-pending", "held"]
+
+
+class StaleInProgress(_Strict):
+    """A CLOSED issue still labelled `fr:in-progress` (board-truth §B, R2). `stale` is
+    safe to clean; `release-pending` carries this scope's own un-released claim (the
+    next `claim sync` releases both labels); `held` carries another scope's."""
+
+    key: str
+    title: str
+    url: str
+    closed_at: str | None = None
+    state: InProgressState
 
 
 class Facts(_Strict):
@@ -525,7 +561,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8] = Field(8, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11] = Field(11, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -550,6 +586,11 @@ class Facts(_Strict):
     # visibility the forge answered (cloud-triage §B, §C): the state-repo decision and
     # the privacy guard read it; a repo missing here is read live by the guard.
     visibility: dict[str, str] = {}
+    # Closed issues still labelled `fr:in-progress` (board-truth §B, R2), schema 9.
+    stale_in_progress: list[StaleInProgress] = []
+    # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (R4,
+    # schema 9; the skew banner reads it).
+    config_ignored: dict[str, list[str]] = {}
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:
@@ -764,6 +805,64 @@ class ReplacementEvent(_Strict):
     reconciled: bool = False
 
 
+class UpdateEvent(_Strict):
+    """fr pushed an update to this batch's PR #*pr*: from *head_before* to *head_after*,
+    with the base at *base* as fetched at the time (2026-10-11-merge-train-safety §B,
+    R8). Approval and red recovery read these. Needs judgements schema 9. Written by
+    the engine only."""
+
+    kind: Literal["update"]
+    at: AwareDatetime
+    pr: int
+    head_before: str = Field(min_length=1)
+    head_after: str = Field(min_length=1)
+    base: str = Field(min_length=1)
+
+
+class ApprovalEvent(_Strict):
+    """fr recorded the operator's `approved-fr` label on PR #*pr* at *head*; *voided_at*
+    is the head that voided it, None while it is live (§A, R2). Needs judgements schema
+    9. Written by the engine only."""
+
+    kind: Literal["approval"]
+    at: AwareDatetime
+    pr: int
+    head: str = Field(min_length=1)
+    voided_at: str | None = None
+
+
+RedDelivery = Literal["session", "none"]
+
+
+class RedHandbackEvent(_Strict):
+    """The driver handed red PR #*pr* at *head* back to its session, naming the failing
+    *checks* (§C, R10). Needs judgements schema 9. Written by the engine only."""
+
+    kind: Literal["red_handback"]
+    at: AwareDatetime
+    pr: int
+    head: str = Field(min_length=1)
+    checks: list[str] = []
+    delivered: RedDelivery
+
+
+class EnqueueEvent(_Strict):
+    """The driver put PR #*pr* at *head* into the base's merge queue with the base at
+    *base* (§D, R13). Needs judgements schema 9. Written by the engine only."""
+
+    kind: Literal["enqueue"]
+    at: AwareDatetime
+    pr: int
+    head: str = Field(min_length=1)
+    base: str = Field(min_length=1)
+    # What this event records about the PR at *head*: `enqueued` (the write), `ejected` (it
+    # left the queue unmerged with the base unmoved: a need, said once), `dequeued` (fr took
+    # it out when its approval went), `refused` (the forge refused the enqueue; *detail* has
+    # its words). Only `enqueued` means "in the queue".
+    outcome: Literal["enqueued", "ejected", "dequeued", "refused"] = "enqueued"
+    detail: str = ""
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -772,6 +871,19 @@ SCHEMA_6_EVENTS = frozenset({"claims_released"})
 """The event kinds only a schema 6 `judgements.yaml` may carry (triage-claims §3.H)."""
 SCHEMA_8_EVENTS = frozenset({"claim_taken"})
 """The event kinds only a schema 8 `judgements.yaml` may carry (gh#1120)."""
+SCHEMA_9_EVENTS = frozenset({"update", "approval", "red_handback", "enqueue"})
+"""The event kinds only a schema 9 `judgements.yaml` may carry (merge-train-safety §B)."""
+
+# Every schema-gated event kind, with the judgements schema it first appears in: the one
+# table `Judgements` refuses a too-low stamp from.
+_EVENT_SCHEMAS: tuple[tuple[int, frozenset[str]], ...] = (
+    (3, SCHEMA_3_EVENTS),
+    (5, SCHEMA_5_EVENTS),
+    (6, SCHEMA_6_EVENTS),
+    (7, frozenset({"replacement"})),
+    (8, SCHEMA_8_EVENTS),
+    (9, SCHEMA_9_EVENTS),
+)
 
 
 BatchEvent = Annotated[
@@ -782,7 +894,11 @@ BatchEvent = Annotated[
     | ConflictEvent
     | ClaimsReleasedEvent
     | ReplacementEvent
-    | ClaimTakenEvent,
+    | ClaimTakenEvent
+    | UpdateEvent
+    | ApprovalEvent
+    | RedHandbackEvent
+    | EnqueueEvent,
     Field(discriminator="kind"),
 ]
 
@@ -890,7 +1006,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -984,43 +1100,18 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
             )
-        late = sorted({e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_3_EVENTS})
-        if self.schema_ < 3 and late:
-            raise ValueError(
-                f"`{'`, `'.join(late)}` events need schema 3, but this file is stamped "
-                f"schema {self.schema_}"
-            )
         if self.exports and self.schema_ < 4:
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
-        later = sorted(
-            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_5_EVENTS}
-        )
-        if self.schema_ < 5 and later:
-            raise ValueError(
-                f"`{'`, `'.join(later)}` events need schema 5, but this file is stamped "
-                f"schema {self.schema_}"
-            )
-        latest = sorted(
-            {e.kind for b in self.batches for e in b.events if e.kind in SCHEMA_6_EVENTS}
-        )
-        if self.schema_ < 6 and latest:
-            raise ValueError(
-                f"`{'`, `'.join(latest)}` events need schema 6, but this file is stamped "
-                f"schema {self.schema_}"
-            )
-        if self.schema_ < 7 and any(
-            isinstance(e, ReplacementEvent) for b in self.batches for e in b.events
-        ):
-            raise ValueError("replacement events need schema 7")
-        if self.schema_ < 8 and any(
-            e.kind in SCHEMA_8_EVENTS for b in self.batches for e in b.events
-        ):
-            raise ValueError(
-                "`claim_taken` events need schema 8, but this file is stamped "
-                f"schema {self.schema_}"
-            )
+        carried = {e.kind for b in self.batches for e in b.events}
+        for needs, kinds in _EVENT_SCHEMAS:
+            late = sorted(carried & kinds)
+            if self.schema_ < needs and late:
+                raise ValueError(
+                    f"`{'`, `'.join(late)}` events need schema {needs}, but this file is "
+                    f"stamped schema {self.schema_}"
+                )
         return self
 
 

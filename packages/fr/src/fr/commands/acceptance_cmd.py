@@ -6,6 +6,7 @@ Spec: docs/superpowers/specs/2026-07-04-acceptance-matrix-design.md §4.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -152,10 +153,12 @@ def report_cmd(
     With no flags, renders the ad-hoc, uncommitted `report.html` (git-stamped,
     honoring --link-mode). `--out` narrows to a single explicit file."""
     from fr.acceptance.report import (
+        ci_built_reports,
         prune_stale_reports,
         render_committed_set,
         render_deterministic,
         render_report,
+        tracked_reports,
     )
 
     if link_mode not in ("github", "local"):
@@ -175,7 +178,8 @@ def report_cmd(
                     )
                 }
             else:
-                expected = render_committed_set(matrix, root)
+                ci_built = ci_built_reports(root)
+                expected = render_committed_set(matrix, root, only=tracked_reports(root, ci_built))
         except AcceptanceError as e:
             err_console.print(f"[red]error:[/red] {escape(str(e))}")
             raise typer.Exit(1) from e
@@ -186,7 +190,14 @@ def report_cmd(
             if got != want:
                 stale.append(rel)
         if not stale:
-            typer.echo(f"{', '.join(expected)} in sync with matrix.yaml")
+            line = (
+                f"{', '.join(expected)} in sync with matrix.yaml"
+                if expected
+                else "no tracked reports to check"
+            )
+            if out is None and ci_built:
+                line += f" (CI-built, skipped: {', '.join(sorted(ci_built))})"
+            typer.echo(line)
             return
         typer.echo(
             f"ERROR: stale (drifted from docs/acceptance/matrix.yaml): {', '.join(stale)} — "
@@ -234,7 +245,7 @@ def status_cmd(
         False, "--brief", help="Counts + the 3 oldest open rows (session-start injection)."
     ),
 ) -> None:
-    """Terminal nag: counts by status + open skipped/not-implemented rows.
+    """Terminal nag: counts by status + the open acceptance debt rows.
 
     Read-only and exit-0 always — allowlist-safe like `fr status`.
     """
@@ -276,7 +287,10 @@ def summary_cmd() -> None:
         "|---|---:|",
         f"| ci | {counts.get('ci', 0)} |",
         f"| scheduled | {counts.get('scheduled', 0)} |",
-        f"| skipped | {counts.get('skipped', 0)} |",
+        f"| unwired | {counts.get('unwired', 0)} |",
+        f"| walk-owed | {counts.get('walk-owed', 0)} |",
+        f"| walked | {counts.get('walked', 0)} |",
+        f"| manual | {counts.get('manual', 0)} |",
         f"| not-implemented | {counts.get('not-implemented', 0)} |",
         f"| failing | {counts.get('failing', 0)} |",
         "",
@@ -328,6 +342,27 @@ def _check_verify(root: Path, verify: str | None) -> None:
         raise typer.Exit(2)
 
 
+def _walk_at(value: str | None) -> str | None:
+    """`--walk-at` as the walk's `at`: an ISO date (midnight UTC) or an ISO
+    timestamp, for a walk recorded after the fact. None when not given; a value
+    that is neither is refused, exit 2."""
+    import datetime as _dt
+
+    if value is None:
+        return None
+    try:
+        if len(value) == 10:
+            return _dt.date.fromisoformat(value).strftime("%Y-%m-%dT00:00:00Z")
+        _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return value
+    except ValueError:
+        err_console.print(
+            f"[red]error:[/red] --walk-at {value!r} is not an ISO date or timestamp "
+            "(e.g. 2026-07-09 or 2026-07-09T12:00:00Z); nothing changed"
+        )
+        raise typer.Exit(2) from None
+
+
 def _walk_from_flags(
     root: Path,
     evidence: str | None,
@@ -335,6 +370,7 @@ def _walk_from_flags(
     model: str | None,
     strategy: str | None,
     outcome: str,
+    at: str | None = None,
 ) -> Walk | None:
     """`--walk` and its companions as a `Walk`, or `None` without `--walk`.
     Each companion is required; the strategy must resolve (spec 2026-10-06 R14)."""
@@ -345,7 +381,8 @@ def _walk_from_flags(
 
     if evidence is None:
         stray = [f for f, v in (("--harness", harness), ("--model", model),
-                                ("--strategy", strategy)) if v is not None]  # fmt: skip
+                                ("--strategy", strategy), ("--walk-at", at))
+                 if v is not None]  # fmt: skip
         if stray:
             err_console.print(f"[red]error:[/red] {', '.join(stray)} only go with --walk")
             raise typer.Exit(2)
@@ -373,7 +410,7 @@ def _walk_from_flags(
             harness=harness,  # type: ignore[arg-type]  # checked non-empty above
             model=model,  # type: ignore[arg-type]
             outcome=outcome,  # type: ignore[arg-type]  # pydantic validates the literal
-            at=_dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            at=_walk_at(at) or _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             evidence=evidence,
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
@@ -448,7 +485,9 @@ def _apply_rows(
 def set_status_cmd(
     row_id: str = typer.Option(..., "--id", help="Existing row id (never created here)."),
     status: str = typer.Option(
-        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+        ...,
+        "--status",
+        help="ci | scheduled | unwired | walk-owed | walked | manual | not-implemented | failing.",
     ),
     notes: str = typer.Option(
         ...,
@@ -499,6 +538,12 @@ def set_status_cmd(
         None, "--strategy", help="--walk: the verification strategy the walk ran."
     ),
     walk_outcome: str = typer.Option("pass", "--walk-outcome", help="--walk: pass | fail."),
+    walk_at: str | None = typer.Option(
+        None,
+        "--walk-at",
+        help="--walk: when the walk happened (ISO date or timestamp); default now. For a "
+        "walk recorded after the fact, from the evidence's own date.",
+    ),
 ) -> None:
     """Move an existing row's status, in place, with a reason (spec §3.G.2).
 
@@ -543,7 +588,7 @@ def set_status_cmd(
         )
         raise typer.Exit(2)
     _check_verify(root, verify)
-    new_walk = _walk_from_flags(root, walk, harness, model, strategy, walk_outcome)
+    new_walk = _walk_from_flags(root, walk, harness, model, strategy, walk_outcome, walk_at)
     target = next((r for r in matrix.rows if r.id == row_id), None)
     if target is None:
         known = ", ".join(r.id for r in matrix.rows) or "none"
@@ -590,6 +635,11 @@ def set_status_cmd(
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     _validate_refs(new_row)
+    from fr.acceptance.model import walked_error
+
+    if (why := walked_error(new_row)) is not None:
+        err_console.print(f"[red]error:[/red] {escape(why)}; nothing changed")
+        raise typer.Exit(2)
 
     from fr.record.model import AcceptanceItem
 
@@ -625,7 +675,9 @@ def add_cmd(
         [], "--level", help="'<level>=<repo>:<path>[#test_name]' test ref (repeatable)."
     ),
     status: str = typer.Option(
-        ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
+        ...,
+        "--status",
+        help="ci | scheduled | unwired | walk-owed | walked | manual | not-implemented | failing.",
     ),
     notes: str = typer.Option("", "--notes", help="Evidence detail / backfill owed."),
     verify: str | None = typer.Option(
@@ -737,6 +789,13 @@ def init_cmd(
         help="Scaffold the CI workflow even though the repo has no CI config for its "
         "backend yet (by default one is written only beside existing CI).",
     ),
+    refresh_ci: bool = typer.Option(
+        False,
+        "--refresh-ci",
+        help="Rewrite an existing fr-scaffolded GitHub/Gitea workflow to the current "
+        "scaffold (a file that is not fr's is refused). For GitLab, whose "
+        ".gitlab-ci.yml is shared, print the job to paste instead.",
+    ),
 ) -> None:
     """Scaffold matrix + CI workflow + backfill rule + gitignore (idempotent).
 
@@ -762,6 +821,9 @@ def init_cmd(
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
     ci = services.ci
+    if refresh_ci:
+        _refresh_ci(root, services, with_ci=with_ci)
+        return
     if ci.source == "declared" and ci.type == "none":
         if with_ci:
             err_console.print(
@@ -793,6 +855,8 @@ def init_cmd(
         typer.echo(f"removed {rel} (superseded legacy report)")
     for rel in outcome.skipped:
         typer.echo(f"exists  {rel} (left untouched)")
+    for rel in outcome.ci_built:
+        typer.echo(f"skipped {rel} (gitignored — CI builds it)")
     for notice in outcome.notices:
         typer.echo(notice)
     # gh#775: commit every path changed here, as every fr writer does (gh#610).
@@ -804,6 +868,50 @@ def init_cmd(
     paths = _committable(root, outcome.written, outcome.removed)
     if paths:
         commit_records(root, [Path(rel) for rel in paths], "chore(fr): acceptance init")
+
+
+def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
+    """`init --refresh-ci`: exit 0 rewritten/current, 1 refused (foreign file,
+    nothing to refresh, or GitLab's shared file with the job to paste)."""
+    from fr.acceptance.ci import DEBT_PLATFORM, SCAFFOLD_PATHS
+    from fr.acceptance.scaffold import refresh_ci
+    from fr.records_commit import commit_records
+
+    if with_ci:
+        err_console.print("[red]error:[/red] --refresh-ci takes no --with-ci")
+        raise typer.Exit(2)
+    ci_type = services.ci.type
+    if ci_type not in SCAFFOLD_PATHS:
+        err_console.print(
+            f"[red]error:[/red] this repo's ci service is {ci_type!r}: nothing to refresh"
+        )
+        raise typer.Exit(1)
+    debt = services.tracking.type == DEBT_PLATFORM[ci_type]
+    out = refresh_ci(root, ci_type, debt=debt)
+    if out.status == "missing":
+        err_console.print(f"[red]error:[/red] {out.path} does not exist; run `fr acceptance init`")
+        raise typer.Exit(1)
+    if out.status == "foreign":
+        err_console.print(
+            f"[red]error:[/red] {out.path} is not an fr-scaffolded acceptance pipeline; "
+            "not touching it"
+        )
+        raise typer.Exit(1)
+    if out.status == "paste":
+        typer.echo(
+            f"{out.path} is shared by every job in the repo, so fr will not rewrite it. "
+            "Replace the `acceptance-report:` job with these jobs "
+            "(keep `acceptance` in `stages:`):\n"
+        )
+        typer.echo(out.text)
+        raise typer.Exit(1)
+    if out.status == "current":
+        typer.echo(f"{out.path} is already current")
+        return
+    typer.echo(
+        f"rewrote {out.path} to the current scaffold (review the diff: local edits are replaced)"
+    )
+    commit_records(root, [Path(out.path)], "chore(fr): acceptance init --refresh-ci")
 
 
 def _committable(root: Path, written: list[str], removed: list[str]) -> list[str]:
@@ -833,10 +941,12 @@ BACKFILL_PROTOCOL = """\
 1. Inventory: the uncited Test Plan specs and unlinked plans above, plus any
    design/study docs with acceptance-like tables, and the test tree(s).
 2. DRAFT rows — one row per business acceptance, not per test — with real
-   refs and HONEST statuses: per-PR-automated evidence ⇒ `ci`; anything
-   proven only by hand or once-live ⇒ `skipped`; absent ⇒ `not-implemented`.
-   The drift channel is precisely the hand-tracked claims — when in doubt
-   between `ci` and `skipped`, choose skipped.
+   refs and HONEST statuses: per-PR-automated evidence ⇒ `ci`; a test that
+   exists but does not run in CI ⇒ `unwired`; proven live by a recorded walk
+   ⇒ `walked`; a live walk still owed ⇒ `walk-owed`; a process that is never
+   automatable ⇒ `manual`; absent ⇒ `not-implemented`. The drift channel is
+   precisely the hand-tracked claims — when in doubt between `ci` and
+   `unwired`, choose unwired.
 3. Add rows via `fr acceptance add` (never hand-edit YAML shapes), run
    `fr acceptance check`, fix, and open a review PR — the operator audits
    statuses; do not inflate coverage.
@@ -912,22 +1022,10 @@ DIGEST_MARKER = "<!-- fr-acceptance-digest -->"
 def digest_cmd() -> None:
     """Markdown for the upserted "Acceptance debt" issue (idempotence marker
     included; zero debt prints a closable body)."""
-    from fr.acceptance.check import open_rows
+    from fr.debt.engine import acceptance_from_matrix
+    from fr.debt.render import acceptance_section
 
-    root = resolve_repo_root()
-    matrix = _load(root)
-    opens = open_rows(matrix)
-    lines = ["## Acceptance debt", ""]
-    if not opens:
-        lines.append("No open acceptance debt.")
-    else:
-        lines += [
-            "| id | status | acceptance | notes |",
-            "|---|---|---|---|",
-            *(
-                f"| {r.id} | {r.status} | {r.acceptance} | {r.notes} |".replace("\n", " ")
-                for r in opens
-            ),
-        ]
-    lines += ["", DIGEST_MARKER, "", "_generated by `fr acceptance digest`_"]
+    matrix = _load(resolve_repo_root())
+    section = acceptance_section(acceptance_from_matrix(matrix))
+    lines = [section, "", DIGEST_MARKER, "", "_generated by `fr acceptance digest`_"]
     typer.echo("\n".join(lines))

@@ -15,8 +15,9 @@ Verbs:
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
-from typing import get_args
+from typing import TYPE_CHECKING, get_args
 
 import typer
 from rich.console import Console
@@ -32,6 +33,9 @@ from fr.journal.model import (
     journal_now,
     journal_path,
     open_finding_ids,
+    open_owed_ids,
+    owed_filed_as,
+    owed_key,
     parse_journal,
     resolution_record_id,
     resolve_journal_read_path,
@@ -40,6 +44,9 @@ from fr.journal.model import (
     unauthorized_fixes,
 )
 from fr.run.model import AnsweredBy
+
+if TYPE_CHECKING:
+    from fr.ghclient import GhClient
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
@@ -316,7 +323,16 @@ def add(
     typer.echo(f"added {entry.kind} {entry.id} to {scope}/{slug}")
 
 
-def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, message: str) -> None:
+def _apply(
+    root: Path,
+    record: object,
+    *,
+    scope: str,
+    slug: str,
+    path: Path,
+    message: str,
+    discharges_owed: bool = False,
+) -> None:
     """Hand a one-entry record to the engine; a refusal is exit 2, as before."""
     from fr.record import apply as engine
 
@@ -326,7 +342,11 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
             None,
             record,  # type: ignore[arg-type]
             target=engine.RecordTarget(
-                journal_scope=scope, journal_slug=slug, journal_file=path, message=message
+                journal_scope=scope,
+                journal_slug=slug,
+                journal_file=path,
+                message=message,
+                discharges_owed=discharges_owed,
             ),
         )
     except engine.RecordRefusedError as e:
@@ -442,7 +462,13 @@ def resolve(
             "(`fr journal render` lists the ids this journal carries)"
         )
         raise typer.Exit(2)
-    if target.kind != "finding":
+    if target.kind == "owed" and state != "fixed":
+        err_console.print(
+            f"[red]entry `{entry_id}` is an owed action[/red] — it is discharged with "
+            "`--state fixed --note <evidence>`, never refuted, deferred or scoped out"
+        )
+        raise typer.Exit(2)
+    if target.kind not in ("finding", "owed"):
         err_console.print(
             f"[red]entry `{entry_id}` is a `{target.kind}`, not a finding[/red] — only a "
             "finding has a state to resolve"
@@ -469,9 +495,127 @@ def resolve(
         slug=slug,
         path=path,
         message=f"chore(fr): journal {scope}/{slug} — finding {record_id}",
+        discharges_owed=target.kind == "owed",
     )
     shown = f"deferred → {tracked_by}" if tracked_by else state
     typer.echo(f"{entry_id} → {shown} (record {record_id})")
+    if target.kind == "owed":
+        filed = owed_filed_as(entries).get(entry_id)
+        if filed is not None:
+            _close_owed_issue(root, filed, note, owed_key(target))
+
+
+def _make_gh_client() -> GhClient:
+    """Factory seam — tests monkeypatch it (the archive command's own shape)."""
+    from fr.hostclient import client_for
+
+    return client_for(Path.cwd())
+
+
+_SAFE_REPO = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+$")
+_SHORT_REF = re.compile(r"^#([0-9]+)$")
+_LONG_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
+_URL_PATH = re.compile(
+    r"^/([A-Za-z0-9_.][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+)/(?:-/)?issues/([0-9]+)/?$"
+)
+
+
+def _shown(ref: str) -> str:
+    """`ref` safe to echo (review p3-r5): printable ASCII as is, else its repr."""
+    return ref if ref.isascii() and ref.isprintable() else repr(ref)
+
+
+def _own_issue(root: Path, ref: str, own: str) -> tuple[str, int] | str:
+    """`(owner/repo, number)` when `filed_as` names an issue in `own` — THIS
+    repo, from `owed_identity` (the origin remote) — else the reason it does
+    not. `filed_as` comes from a committed journal, so it is untrusted: a ref
+    naming another owner/repo, or a URL on another host or repo, is never acted
+    on. The number is ASCII digits."""
+    from urllib.parse import urlparse
+
+    from fr import _hosts
+
+    if (m := _SHORT_REF.match(ref)) is not None:
+        repo, number = own, int(m.group(1))
+    elif (m := _LONG_REF.match(ref)) is not None:
+        repo, number = m.group(1), int(m.group(2))
+    elif ref.startswith(("http://", "https://")):
+        url = urlparse(ref)
+        origin = _hosts.origin_hostname(root)
+        host = (url.hostname or "").lower()
+        if not origin or host != origin.lower():
+            return (
+                f"{_shown(ref)} is on {_shown(host) or 'no host'}, not this repo's forge "
+                f"({origin or 'unknown'})"
+            )
+        if (m := _URL_PATH.match(url.path)) is None:
+            return f"{_shown(ref)} is not an issue URL"
+        repo, number = m.group(1), int(m.group(2))
+    else:
+        return f"{_shown(ref)} is not an issue reference"
+    if repo.lower() != own.lower():
+        return f"{_shown(ref)} names {_shown(repo)}, not this repo ({own})"
+    return own, number
+
+
+def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
+    """R24: close a discharged owed action's issue through the forge, the
+    note as its comment — only when it is an open issue in THIS repo (the
+    origin remote, review p3-r1) that `owned_owed_key` accepts for this very
+    entry's key (review p3-r4). Otherwise, or when the forge cannot be reached
+    or the repo declares `tracking: none`, print the command for the operator.
+    The discharge is already recorded; this never changes the exit code."""
+    from fr.archive_followups import OWED_ISSUE_FIELDS, owed_identity, owned_owed_key
+    from fr.hostclient import issue_command
+    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+
+    shown = _shown(ref)
+    comment = f"Discharged: {note}"
+    command = f"close {shown} with the note as its comment"
+    own, why = owed_identity(root)
+    target: tuple[str, int] | str = why if own is None else _own_issue(root, ref, own)
+    if isinstance(target, tuple):
+        try:
+            command = issue_command(
+                root, "issue-close", ref=f"{target[0]}#{target[1]}", comment=comment
+            )
+        except Exception:  # noqa: BLE001 — fall back to the plain instruction
+            pass
+    try:
+        require_tracker(root)
+    except (TrackerRequiredError, ServicesError):
+        typer.echo(f"no tracker configured — close it yourself: {command}")
+        return
+    if isinstance(target, str):
+        typer.echo(f"warning: not closing {shown} — {target}; close it yourself if it is yours")
+        return
+    repo, number = target
+    try:
+        gh = _make_gh_client()
+        me = gh.viewer_login()
+        issues = gh.list_issues(repo, "open", 200, fields=OWED_ISSUE_FIELDS)
+    except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
+        typer.echo(
+            f"could not read {shown} ({type(e).__name__}: {e}) — close it yourself: {command}"
+        )
+        return
+    issue = next((i for i in issues if i.get("number") == number), None)
+    found = owned_owed_key(issue, me) if issue is not None else None
+    if key is None or found != key:
+        typer.echo(
+            f"warning: not closing {shown} — it is not an open fr:owed issue this account "
+            f"filed ending in this entry's marker; close it yourself if it is yours: {command}"
+        )
+        return
+    try:
+        gh.comment_issue(repo, number, comment)
+        gh.edit_issue_state(repo, number, state="CLOSED")
+    except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
+        typer.echo(
+            f"could not close {shown} ({type(e).__name__}: {e}) — close it yourself: {command}"
+        )
+        return
+    typer.echo(f"closed {shown}")
 
 
 def _deferrals(entries: list[JournalEntry]) -> list[tuple[str, str]]:
@@ -523,7 +667,16 @@ _SECTION_KINDS = {
     "decisions": {"decision"},
     "discoveries": {"discovery"},
     "reviews": {"review"},
+    "owed": {"owed"},
 }
+
+
+def _split_owed(entries: list[JournalEntry]) -> tuple[list[JournalEntry], list[JournalEntry]]:
+    """(everything else, the `owed` entries and every record naming one) — an
+    owed action renders in its own block, never among the findings (spec §E)."""
+    owed = {e.id for e in entries if e.kind == "owed"}
+    rest = [e for e in entries if e.id not in owed and e.resolves not in owed]
+    return rest, [e for e in entries if e.id in owed or e.resolves in owed]
 
 
 @journal_app.command("render")
@@ -531,7 +684,7 @@ def render(
     scope: str = typer.Option(..., "--scope"),
     slug: str = typer.Option(..., "--slug"),
     section: str = typer.Option(
-        "all", "--section", help="findings | decisions | discoveries | reviews | all."
+        "all", "--section", help="findings | decisions | discoveries | reviews | owed | all."
     ),
 ) -> None:
     """Emit journal entries as Markdown (fail-open: missing/bad file → nothing)."""
@@ -544,14 +697,19 @@ def render(
     except JournalParseError:
         return  # fail-open: never block a render on a malformed file
     states = effective_finding_states(entries)
+    entries, owed = _split_owed(entries)
     keep = _SECTION_KINDS.get(section)
     if keep is not None:
         entries = [e for e in entries if e.kind in keep]
-    if not entries:
+        if "owed" not in keep:
+            owed = []
+    if not entries and not owed:
         return
     main, out = _group_findings(entries, states)
     if out:
         main.append("## Out-of-scope findings\n\n" + "\n".join(out))
+    if owed:
+        main.append("## Owed actions\n\n" + "\n".join(serialize_entry(e) for e in owed))
     # Emit RAW — this feeds a PR body. A Rich console would treat `[...]` in a
     # finding title/body (Markdown links, `[PR #12]`) as markup and drop it.
     typer.echo("\n".join(main))
@@ -635,6 +793,17 @@ def check(
     out_of_scope = [fid for fid, st in states.items() if st == "out-of-scope"]
     if out_of_scope:
         console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
+    # Owed actions pass the gate (spec §E, R20) and are listed: they are the
+    # operator's to do after the change, never this change's to fix.
+    owed_open = open_owed_ids(entries)
+    if owed_open:
+        filed = owed_filed_as(entries)
+        console.print(
+            f"{len(owed_open)} owed action(s) open: "
+            + ", ".join(f"{oid} → {filed[oid]}" if oid in filed else oid for oid in owed_open),
+            soft_wrap=True,
+            markup=False,
+        )
     unauthorized = unauthorized_fixes(entries)
     if unauthorized:
         err_console.print(

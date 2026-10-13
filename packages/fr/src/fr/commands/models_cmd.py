@@ -38,7 +38,7 @@ from fr.bindings.choose import Choice
 from fr.bindings.health import BindingHealth, check_bindings, propose_for
 from fr.bindings.probe import default_probe_cache
 from fr.bindings.wording import Substitution, proposal_text, substitution_line
-from fr.commands.common import resolve_repo_root
+from fr.commands.common import models_errors_exit, resolve_repo_root
 from fr.models import (
     REPO_MODELS_REL,
     ModelsConfig,
@@ -133,6 +133,7 @@ def _apply_binding(
 
 
 @models_app.command("set")
+@models_errors_exit
 def set_cmd(
     harness: str = typer.Option(..., "--harness", help="e.g. claude-code | opencode | hermes."),
     tier: str = typer.Option(
@@ -223,6 +224,7 @@ def _health_line(harness: str, h: BindingHealth) -> str:
 
 
 @models_app.command("check")
+@models_errors_exit
 def check_cmd(
     harness: str | None = typer.Option(None, "--harness", help="Limit to one harness."),
 ) -> None:
@@ -268,6 +270,7 @@ def check_cmd(
 
 
 @models_app.command("get")
+@models_errors_exit
 def get_cmd(
     harness: str | None = typer.Option(None, "--harness", help="Limit to one harness."),
 ) -> None:
@@ -281,6 +284,7 @@ def get_cmd(
 
 
 @models_app.command("resolve")
+@models_errors_exit
 def resolve_cmd(
     harness: str = typer.Option(..., "--harness"),
     tier: str = typer.Option(..., "--tier"),
@@ -292,6 +296,7 @@ def resolve_cmd(
 
 
 @models_app.command("apply")
+@models_errors_exit
 def apply_cmd(
     harness: str = typer.Option(..., "--harness", help="Harness to materialize bindings for."),
 ) -> None:

@@ -37,7 +37,10 @@ def parse_api(argv: list[str]) -> tuple[str, str | None, str, list[str]]:
     assert argv[0] == "api", argv
     rest = argv[1:]
     method, header = "GET", None
-    while rest and rest[0] in {"-X", "-H"}:
+    while rest and rest[0] in {"-X", "-H", "-i"}:
+        if rest[0] == "-i":  # include the response headers: not part of the route's identity
+            rest = rest[1:]
+            continue
         if rest[0] == "-X":
             method = rest[1]
         else:

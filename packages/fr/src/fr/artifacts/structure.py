@@ -186,12 +186,32 @@ def validate_journal(path: Path) -> list[str]:
     except JournalParseError as e:
         return [str(e)]
 
+    from fr.artifacts.registry import _read_journal_stamp
+    from fr.journal.model import owed_key
+
     problems: list[str] = []
     seen: set[str] = set()
     for entry in entries:
         if entry.id in seen:
             problems.append(f"duplicate journal entry id `{entry.id}` — the entry appears twice")
         seen.add(entry.id)
+    owed = [e for e in entries if e.kind == "owed"]
+    for entry in owed:
+        if owed_key(entry) is None:
+            problems.append(
+                f"owed entry `{entry.id}` has no well-formed `owed_key:` line — every owed "
+                "item carries exactly one key (spec:<slug>#step<n>, plan:<name>#p<n>, row:<id>)"
+            )
+    if owed:
+        try:
+            version = _read_journal_stamp(path) or 1
+        except Exception:  # noqa: BLE001 — the stamp check reports an unreadable stamp
+            version = None
+        if version is not None and version < 2:
+            problems.append(
+                f"carries `owed` entr(ies) {', '.join(e.id for e in owed)} but is stamped "
+                f"journal schema {version} — the `owed` kind needs schema 2"
+            )
     return problems
 
 

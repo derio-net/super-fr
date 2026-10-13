@@ -14,13 +14,14 @@ statuses never refuses: whatever goes wrong is `unknown` plus one page note (R7)
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import time
 import webbrowser
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, NoReturn, get_args
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn, get_args
 
 import typer
 from rich.markup import escape
@@ -30,6 +31,7 @@ from fr.artifacts.atomic import write_text_atomic
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    QuotaFloorOpt,
     RepoOpt,
     WorkspaceOpt,
     _load_state,
@@ -39,10 +41,15 @@ from fr.commands.triage_cmd import (
     console,
     drive_lock_dir,
     err_console,
+    make_forge,
+    make_pacer,
+    plan_paced_pass,
+    rate_limit_reason,
     resolve_state_dir,
     triage_app,
+    warn_nav,
 )
-from fr.triage import gitseam
+from fr.triage import gitseam, pacing_state
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
@@ -50,13 +57,17 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     wave_group,
 )
+from fr.triage.check import clean_label_targets
+from fr.triage.components import pages_present, refresh_navs, skew_banner, strip_nav
 from fr.triage.drive_lock import live_driver
 from fr.triage.driver import Mailbox
 from fr.triage.errors import TriageError
+from fr.triage.gitseam import Checkout
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope
+from fr.triage.quota import budget_from_json
 from fr.triage.render import plural
 from fr.triage.scope_config import load_scope_config, publish_board, scope_id
 
@@ -329,6 +340,33 @@ def read_sessions(
     return SessionReads(statuses, notes, said)
 
 
+def local_ci_none(facts: Facts) -> frozenset[str]:
+    """The scope's repos known to declare `ci none` (R4), from the clone this command
+    runs in when its origin is one of them: what the driver judges checks by, so the
+    board asks for the approval label where the driver holds a PR (merge-train-safety
+    p1-r2). Best effort: no clone, another repo or an unreadable one is none known."""
+    from fr.commands.triage_batch_cmd import ci_none_at  # it imports this module
+
+    try:
+        checkout = Checkout.at(None)
+        origin = (checkout.origin_repo() or "").lower()
+        repo = next((r for r in facts.repos if r.lower() == origin), None)
+        return frozenset({repo}) if repo and ci_none_at(checkout) else frozenset()
+    except Exception:  # noqa: BLE001 — the board is a view; it never fails on this
+        return frozenset()
+
+
+def in_progress_note(facts: Facts, scope_args: Sequence[str]) -> str | None:
+    """The board's note on closed issues still labelled `fr:in-progress` (board-truth R2):
+    the count of stale ones and the command that cleans them, None when there are none."""
+    n = len(clean_label_targets(facts))
+    if not n:
+        return None
+    args = " ".join(scope_args)
+    cmd = f"fr triage clean-labels {args}".rstrip()
+    return f"{n} closed issue{'s' if n != 1 else ''} still labelled fr:in-progress: run `{cmd}`"
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -337,6 +375,7 @@ def write_board(
     refresh: int = DEFAULT_REFRESH,
     prefix: str = DEFAULT_WORKSPACE_PREFIX,
     loader: Callable[[str], Runner] | None = None,
+    ci_none: Collection[str] | None = None,
 ) -> tuple[Path, int]:
     """Render `board.html` into the state directory *target* from the facts and judgements
     on disk now, with live session statuses. Returns the path written and its card count."""
@@ -350,9 +389,12 @@ def write_board(
     except TriageError as exc:  # the board is a view: say what it cannot show, never refuse
         me = None
         notes.append(f"claims are not shown: {one_line(exc)}")
+    if (labels_note := in_progress_note(facts, scope_args)) is not None:
+        notes.append(labels_note)
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,
+        ci_none=local_ci_none(facts) if ci_none is None else ci_none,
     )  # fmt: skip
     page = render_board(
         board,
@@ -360,9 +402,13 @@ def write_board(
         rendered_at=rendered_at,
         refresh=refresh,
         notes=notes,
+        budget=budget_from_json(pacing_state.load(target)[0].budget),
+        banner=skew_banner(facts),
+        present=pages_present(target, "batches"),
     )
     out = target / BOARD_FILE
     write_text_atomic(out, page)
+    refresh_navs(target, "batches", warn=warn_nav)
     return out, len(judgements.batches)
 
 
@@ -371,8 +417,12 @@ def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None
     warning per distinct cause (*failures* remembers them; a success forgets) and never
     changes an exit code, and a broken scope.yaml is the same kind of warning."""
     try:
-        cause = publish_board(scope, load_scope_config(target), board)
-    except TriageError as exc:
+        # The siblings are not published, so the copy handed over carries no nav (R10).
+        with tempfile.TemporaryDirectory(prefix="fr-board-") as tmp:
+            copy = Path(tmp) / board.name
+            copy.write_text(strip_nav(board.read_text(encoding="utf-8")), encoding="utf-8")
+            cause = publish_board(scope, load_scope_config(target), copy, cwd=board.parent)
+    except (TriageError, OSError) as exc:
         cause = one_line(exc)
     if cause is None:
         failures.clear()
@@ -384,14 +434,46 @@ def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None
         )
 
 
-def recollect(scope: Scope, target: Path) -> None:
-    """Collect facts.json as `fr triage collect` does (no carry-over); tests replace this."""
-    collect_into(scope, target)
+def recollect(
+    scope: Scope,
+    target: Path,
+    *,
+    only: frozenset[str] | None = None,
+    after_write: Callable[[Facts, frozenset[str]], None] | None = None,
+) -> None:
+    """Collect facts.json as `fr triage collect` does (a full read carries nothing over; with
+    *only*, the repos it names are re-read and the unchanged ones carried); tests replace this.
+    *only* and *after_write* are a paced pass's (spec 2026-10-12-quota-pacing R10, R11, R17).
+    A rate limit that did not raise (a repo skipped, a key unviewed) raises here, so the
+    watch backs off instead of rendering a half-read board."""
+    facts, _, _ = collect_into(scope, target, only=only, after_write=after_write)
+    if (reason := rate_limit_reason(facts)) is not None:
+        raise RuntimeError(reason)
 
 
 def _sleep(seconds: float) -> None:
     """The watch loop's wait between iterations; tests replace it."""
     time.sleep(seconds)
+
+
+def _now() -> datetime:
+    """The watch's clock for pacing; tests replace it."""
+    return datetime.now(UTC)
+
+
+def _pace_forge() -> Any:
+    """The forge `/rate_limit` is read through (free); tests replace it."""
+    return make_forge()
+
+
+def _probe_forge() -> Any:
+    """The forge the watch's probes go through; tests replace it."""
+    return make_forge()
+
+
+def _until(until: datetime | None, floor: float) -> float:
+    """Seconds from now to *until*, at least *floor* (a wait never spins)."""
+    return floor if until is None else max(floor, (until - _now()).total_seconds())
 
 
 def _watch(
@@ -403,15 +485,25 @@ def _watch(
     open_: bool,
     publish_: bool = False,
     lock_dir: Path | None = None,
+    quota_floor: float | None = None,
 ) -> None:
     """Re-collect and re-render every *interval* seconds until interrupted (R12). A live
     drive keeps the board fresh itself, so an iteration that finds its lock held skips.
-    The lock is read from *lock_dir* (`triage_cmd.drive_lock_dir`, p3-r3), else *target*."""
+    The lock is read from *lock_dir* (`triage_cmd.drive_lock_dir`, p3-r3), else *target*.
+
+    The drive's pacing, shared through `pacing.json` (spec 2026-10-12-quota-pacing R17): an
+    exhausted budget waits for its reset, below the floor the loop waits four intervals,
+    probes decide whether anything is collected at all, and the board is rendered only
+    after a collect. The watch holds no lease and dispatches nothing, so nothing is held."""
     lock_at = lock_dir if lock_dir is not None else target
     if (holder := live_driver(lock_at)) is not None:
         _fail(f"a drive ({holder}) holds {lock_at / 'drive.lock'}; it keeps the board fresh")
     skipping, failures, opened = False, set[str](), False
     publish_failures: set[str] = set()
+    pacer = make_pacer(
+        target, quota_floor=quota_floor, interval_s=interval, forge=lambda: _pace_forge(),
+        now=lambda: _now(),
+    )  # fmt: skip
 
     def recovered(what: str) -> None:
         failures.difference_update({f for f in failures if f.startswith(f"{what}\0")})
@@ -440,14 +532,42 @@ def _watch(
                 _sleep(interval)
                 continue
             skipping = False
+            pace = pacer.before_pass()
+            if pace.kind == "wait":
+                console.print(pacer.line(pace), markup=False, soft_wrap=True)
+                _sleep(_until(pace.until, interval))
+                continue
+            if pace.essential:  # below the floor: only what changed, four intervals apart
+                console.print(pacer.line(pace), markup=False, soft_wrap=True)
+                pacer.stretch(pace.until)
+            quiet = False
             # Nothing but an interrupt ends the watch (R12): a degraded forge, a missing
             # facts.json or a failed write is one warning per cause, then the next interval.
             try:
-                recollect(scope, target)
+                plan = plan_paced_pass(
+                    pacer, scope, target, _probe_forge(), essential=pace.essential, board=True
+                )
+                quiet = not plan.collects
+                if plan.collects:
+
+                    def stored(facts: Facts, carried: frozenset[str], plan: Any = plan) -> None:
+                        pacer.after_collect(plan, facts, carried)
+
+                    recollect(scope, target, only=plan.only, after_write=stored)
+                    pacer.record_digest(plan.digest)
             except Exception as exc:  # noqa: BLE001
+                if pacer.limited(str(exc)):  # a limit waits for its reset, never retries
+                    pace = pacer.rate_limited()
+                    console.print(pacer.line(pace), markup=False, soft_wrap=True)
+                    _sleep(_until(pace.until, interval))
+                    continue
                 warn_once("collect", exc)
             else:
                 recovered("collect")
+                pacer.clean()
+            if quiet and (target / BOARD_FILE).exists():
+                _sleep(_until(pace.until, interval) if pace.essential else interval)
+                continue  # nothing was read: the board on disk is still the facts' (R17)
             try:
                 with err_console.capture() as said:
                     out, cards = write_board(scope, target, scope_args=args, refresh=refresh)
@@ -466,7 +586,7 @@ def _watch(
                 if open_ and not opened:
                     webbrowser.open(out.resolve().as_uri())
                     opened = True
-            _sleep(interval)
+            _sleep(_until(pace.until, interval) if pace.essential else interval)
     except KeyboardInterrupt:
         console.print("stopped", markup=False)
 
@@ -498,8 +618,10 @@ def board_command(
             help="After each render, run the scope's `publish` command from scope.yaml.",
         ),
     ] = False,
+    quota_floor: QuotaFloorOpt = None,
 ) -> None:
-    """Write board.html: one card per batch in six lifecycle columns, with live session
+    """Write board.html: one card per batch in its lifecycle column
+    (`fr.triage.kanban.COLUMN_TITLES`), with live session
     status and a jump command. Reads facts.json and judgements.yaml; collects nothing."""
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
@@ -514,6 +636,7 @@ def board_command(
             open_,
             publish_,
             lock_dir=drive_lock_dir(scope, dir_override),
+            quota_floor=quota_floor,
         )
         return
     out, cards = write_board(scope, target, scope_args=args, refresh=refresh)

@@ -1,7 +1,7 @@
 """The acceptance gate: ref resolution, staleness guard, exit contract.
 
 Exit contract (spec §4): any `failing` row → 2; resolution / staleness /
-schema errors → 1; `skipped` / `not-implemented` rows → 0 with
+schema errors → 1; acceptance debt rows (`DEBT_STATUSES`) → 0 with
 `::warning::`-formatted annotation lines.
 """
 
@@ -79,11 +79,13 @@ def _age_key(row: Row) -> str:
 
 
 def open_rows(matrix: Matrix) -> list[Row]:
-    """The nag set: `skipped` / `not-implemented` rows, oldest origin first.
+    """The nag set: the `DEBT_STATUSES` rows, oldest origin first.
 
     The sort is stable, so rows of the same age keep their matrix order.
     """
-    opens = [r for r in matrix.rows if r.status in ("skipped", "not-implemented")]
+    from fr.acceptance.model import DEBT_STATUSES
+
+    opens = [r for r in matrix.rows if r.status in DEBT_STATUSES]
     return sorted(opens, key=_age_key)
 
 
@@ -273,11 +275,12 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     # report-less matrices / bare fixtures are untouched. Read-only — renders in
     # memory, compares bytes. An unresolvable identity can't render, so it is
     # skipped here (the render CLIs surface that separately).
-    from fr.acceptance.report import REPORT_SET, render_committed_set
+    from fr.acceptance.report import render_committed_set, tracked_reports
 
-    if any((root / rel).exists() for rel in REPORT_SET):
+    tracked = tracked_reports(root)  # CI-built (gitignored) reports are never compared
+    if any((root / rel).exists() for rel in tracked):
         try:
-            expected_reports = render_committed_set(matrix, root)
+            expected_reports = render_committed_set(matrix, root, only=tracked)
         except AcceptanceError:
             expected_reports = {}
         for rel, want in expected_reports.items():
@@ -289,6 +292,9 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
                     "run `fr acceptance report --deterministic` and commit the report set"
                 )
 
+    from fr.acceptance.model import walked_error
+
+    result.errors.extend(why for row in matrix.rows if (why := walked_error(row)) is not None)
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]
     result.warning_rows = open_rows(matrix)
     result.summary = (

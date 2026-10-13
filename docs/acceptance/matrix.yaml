@@ -11,12 +11,15 @@
 #               (a .py fragment names a test, pytest-style: #TestX::test_y —
 #               never a #L<n> line, which rots as code moves; gh#531)
 #               ([] = level does not verify this row)
-#   status:     ci | scheduled | skipped | not-implemented | failing
+#   status:     ci | scheduled | unwired | walk-owed | walked | manual
+#               | not-implemented | failing
 #     ci               automated on every PR — cannot drift silently
 #     scheduled        automated on cron/path triggers
-#     skipped          verification exists but does not run in CI (proven
-#                      live once / manual walk) → CI warning, backfill owed
-#     not-implemented  no test or surface exists yet → CI warning
+#     unwired          a test exists but does not run in CI → debt, CI warning
+#     walk-owed        a live or post-merge walk is owed → debt, CI warning
+#     walked           proven live, dated by its latest passing walk
+#     manual           a process that is never automatable
+#     not-implemented  no test or surface exists yet → debt, CI warning
 #     failing          known red → `fr acceptance check` exits 2, CI FAILS
 #   notes:      evidence detail, drift context
 #
@@ -26,7 +29,7 @@
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
-schema_version: 4
+schema_version: 5
 org: derio-net
 repo: super-fr
 rows:
@@ -75,9 +78,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_plan_acceptance_links.py
-    status: skipped
-    notes: Mechanics unit-pinned per-PR; end-to-end toy walk (Test Plan item 4) owed
-      post-merge.
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      end-to-end toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap.
+      Mechanics unit-pinned per-PR.'
   - id: acceptance-added-since
     capability: Acceptance matrix
     acceptance: Mid-flight row additions are diffable against a base ref and defended
@@ -87,9 +91,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_status_add.py
-    status: skipped
-    notes: 'CLI diff ci-pinned; the PR-body defense is process — demonstrated in PR
-      #352, not automated.'
+    status: manual
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      PR-body defense is a review process (demonstrated in PR #352), never automatable;
+      the CLI diff itself is ci-pinned.'
   - id: acceptance-nag-channels
     capability: Acceptance matrix
     acceptance: Session start surfaces open debt (capped), fr status carries the summary,
@@ -101,10 +106,18 @@ rows:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py
       - super-fr:tests/unit/test_plan_acceptance_links.py
       - super-fr:tests/unit/test_acceptance_init.py
-    status: skipped
-    notes: Hook, digest formatter, and branch/PR/main Actions summary scaffold are
-      ci-pinned; live weekly upsert/close remains unverified until the first scheduled
-      run.
+    status: walked
+    notes: 'walked (p1-r4): the live weekly upsert has been observed, issue #363 refreshed
+      by the schedule on 2026-10-05; hook, digest formatter and Actions summary scaffold
+      are ci-pinned. The close at zero debt is not yet observed.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-05T00:00:00Z'
+      evidence: issue derio-net/super-fr#363 'Acceptance debt' is open and was last
+        refreshed by the scheduled acceptance-report run (github-actions) on 2026-10-05
   - id: isolation-suite-lifecycle
     capability: Isolation
     acceptance: 'Operator can init a devcontainer profile and run isolated work: up
@@ -116,9 +129,18 @@ rows:
       - super-fr:tests/unit/test_isolation.py
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/unit/test_init_scaffold.py
-    status: skipped
-    notes: CLI + scaffold unit-pinned; the live worktree+container walk was proven at
-      the 2.4.0 release, not in CI.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): CLI +
+      scaffold unit-pinned; the live worktree+container walk was proven at the 2.4.0
+      release, dated by that release''s tag.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-06-04T00:00:00Z'
+      evidence: the live worktree+container walk proven at the 2.4.0 release (tag v2.4.0,
+        2026-06-04)
   - id: isolation-guard-base-deny
     capability: Isolation
     acceptance: While an fr pipeline is active, base-repo-cwd Bash is denied and worktree
@@ -349,16 +371,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
-    status: skipped
-    notes: >-
-      Unit test guards mirror drift (CI). Test Plan step 1 walked post-merge
-      (2026-07-09, fresh isolation devcontainer on merged main, no prior
-      install step): `opencode debug skill` in the checkout discovered all
-      9 `fr-*` skills, each resolving to
-      `.opencode/skills/<name>/SKILL.md` in the worktree — confirms the
-      "clone and use, no install" claim. Not automated in CI (requires a
-      live `opencode` binary) — backfill to `ci` owed if that becomes
-      scriptable.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      step 1 walked live post-merge 2026-07-09; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-09T00:00:00Z'
+      evidence: 'Test Plan step 1 post-merge walk: opencode debug skill in a fresh isolation
+        devcontainer on merged main discovered all fr-* skills'
   - id: opencode-skills-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get super-fr's skills available
@@ -368,15 +391,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_skills.py
-    status: skipped
-    notes: >-
-      Unit test guards the install.sh wiring (CI). Test Plan step 2 walked
-      post-merge (2026-07-09, fresh isolation devcontainer, scratch $HOME,
-      merged main): `scripts/install.sh` with `OPENCODE_SKILLS_INSTALL=1`
-      delivered all 9 skills to `$HOME/.config/opencode/skills/`, and
-      `scripts/install.sh --uninstall` removed them cleanly (dir emptied).
-      Not automated in CI — backfill owed if that becomes scriptable
-      end-to-end.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      step 2 walked live post-merge 2026-07-09; install.sh wiring guarded in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-09T00:00:00Z'
+      evidence: 'Test Plan step 2 post-merge walk: install.sh with OPENCODE_SKILLS_INSTALL=1
+        delivered the skills, --uninstall removed them (scratch HOME)'
   - id: opencode-isolation-enforcement
     capability: OpenCode adaptation
     acceptance: Edits to tracked source in an fr-isolation-enabled repo are blocked
@@ -404,16 +429,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
-    status: skipped
-    notes: Unit test guards mirror drift (CI) — tests/unit/test_tripwire_opencode_commands_sync.py
-      passes (2026-07-08). Test Plan steps 1-2 walked post-merge (2026-07-08, fresh
-      clone of merged main) — `opencode debug config` resolved all 9 generated commands
-      (fr-goal, fr-plan, ... — zero install), and a live `opencode run --command fr-progress`
-      call (opencode/north-mini-code-free, no arguments) correctly invoked the skill
-      tool with name=fr-progress and got a sensible response — confirms the empty-$ARGUMENTS
-      case end to end. Not automated in CI (requires a live opencode binary + model
-      call) — backfill owed if that becomes scriptable, same pattern as the sibling
-      opencode-skills-in-repo row.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      steps 1-2 walked live post-merge 2026-07-08; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: opencode/north-mini-code-free
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan steps 1-2 post-merge walk: opencode debug config resolved
+        the generated commands; opencode run --command fr-progress invoked one'
   - id: opencode-commands-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
@@ -423,16 +449,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
-    status: skipped
-    notes: Unit test guards the install.sh wiring (CI) — tests/unit/test_install_copies_opencode_commands.py
-      passes (2026-07-08). Live-verified twice — pre-merge (2026-07-08, scratch HOME,
-      VK_INSTALL_SKIP_PREFLIGHT=1) and re-confirmed post-merge as Test Plan step 3
-      (2026-07-08, fresh clone of merged main, real preflight passing — no skip
-      needed) — both times full scripts/install.sh delivered all 9 commands
-      byte-identical to .opencode/commands/, and --uninstall removed them cleanly
-      with no collateral damage. Not automated in CI (requires real filesystem/HOME
-      side effects) — backfill owed if that becomes scriptable, same pattern as the
-      sibling opencode-skills-installer row.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      pre- and post-merge 2026-07-08; install.sh wiring guarded in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan step 3 post-merge walk: full scripts/install.sh from a fresh
+        clone of merged main delivered all commands'
   - id: cncd-runner-ingest-dispatch
     capability: CNCD runner
     acceptance: An operator can dispatch an eligible tracked plan phase to cncd via
@@ -459,28 +486,17 @@ rows:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test__urls.py
-    status: skipped
-    notes: 'LIVE-VERIFIED 2026-09-19 against a self-hosted GitLab (gh-486): fr apply
-      rendered, observed, diffed and applied two phases as GitLab Issues with correctly-shaped
-      labels (#-prefixed 6-hex, applied once), re-ran clean, and propagated a state
-      change then re-converged. Transcript in the PR. The row was previously ''ci''
-      for a capability broken FOUR independent ways, none findable by unit test: the
-      missing mandatory ref parameter; the Issue web_url being /-/work_items/N, which
-      fr stored and then refused to parse (crashing observe on every re-apply, on gitlab.com
-      too); ensure_labels aborting the whole apply on a 409 for a label that already
-      existed, a tolerance its own docstring had claimed since 2026-07-09; and the body
-      diff never converging because GitLab strips the rendered trailing newline. ''skipped'',
-      NOT ''ci'': CI cannot reach a private instance, so the live half is hand-run per-PR.
-      The unit half now asserts the REQUEST and the real captured error vocabulary,
-      so the arg-blind ''lambda args:'' mocks that hid all of this are gone. LIVE 2026-09-24
-      (multi-backend P9.T1.S1), a self-hosted GitLab (host/user/project redacted; private
-      scratch project, deleted after): every RealGlabClient operation fr apply/observe
-      uses passed when driven directly (ensure_labels create+converge, colour round-trip,
-      create_issue returning /-/work_items/N, view, label add/remove, comment, list_linked_prs
-      via related_merge_requests, pr_status_by_url, file_exists/list_dir/read_file,
-      close). related_merge_requests is eventually consistent (empty right after the
-      MR, populated seconds later). NOT walked: an end-to-end `fr apply` on a GitLab-backed
-      plan, so the status stays skipped.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE-VERIFIED
+      2026-09-19 against a self-hosted GitLab (host redacted); unit refs in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-19T00:00:00Z'
+      evidence: 'gh-486 live run against a self-hosted GitLab (host redacted): render,
+        observe, diff, apply converged; transcript in the PR'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
@@ -656,10 +672,11 @@ rows:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_phase_executor_agent.py
       - super-fr:tests/unit/test_install_allowlists_phase_executor.py
-    status: skipped
-    notes: Skill wiring + agent def + allowlist helper unit-pinned per-PR; the live
-      per-phase dispatch was demonstrated by this feature's own fr-goal run, not yet a
-      CI integration test (backfill owed).
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch
+      was demonstrated by the feature''s own fr-goal run, but name no dated evidence
+      to record as a walk; wiring unit-pinned. Re-walk and record it with set-status
+      --walk.'
   - id: fr-goal-journal-handoff-complete
     capability: fr-goal subagent execution
     acceptance: A fresh subagent given only fr journal render + spec + its phase yaml
@@ -671,10 +688,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_journal_cmd.py
-    status: skipped
-    notes: render/check unit-pinned; the completeness bar (a fresh subagent implements
-      from journal+spec+phase alone) was met live in this feature's own run — a CI
-      integration test dispatching fr-phase-executor is owed.
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
+      live in the feature''s own run, but name no dated evidence to record as a walk;
+      render/check unit-pinned. Re-walk and record it with set-status --walk.'
   - id: fr-goal-phase-tiering
     capability: fr-goal subagent execution
     acceptance: fr-plan annotates each phase with a tier; the orchestrator dispatches
@@ -701,8 +718,8 @@ rows:
       closes that gap: they pin that a tier written in a --phases-file reaches the dispatch
       brief as resolved_tier. Still NOT claimed: no automated level dispatches a real
       subagent (Claude Code Agent, OpenCode task tool, or Hermes delegate_task) and
-      reads back a session row''s model -- that live claim stays with opencode-subagent-dispatch
-      at skipped.'
+      reads back a session row''s model -- that live claim stays with opencode-subagent-dispatch,
+      which records its live walks (walked, not in CI).'
   - id: fr-goal-pr-body-derived
     capability: fr-goal subagent execution
     acceptance: The fr-goal PR body findings and decisions sections are generated by
@@ -727,15 +744,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_fr_debugging_journal.py
-    status: skipped
-    notes: 'SKILL.md wiring (debug-scope add/render, hypothesis/ruled-out trail) content-pinned
-      per-PR; the live debugging walk that records to a debug journal is demonstrated-not-
-      automated (backfill owed). First live walk recorded at
-      journals/debug/2026-09-08-session-unbind-hook-cancelled.md — repro, three ruled-out
-      entries, root-cause and finding all written via `fr journal add --scope debug` as the
-      investigation proceeded, PR body derived from `fr journal render --scope debug`. Kept
-      at skipped rather than flipped to ci because one demonstration is not automation, and
-      the backfill owed here is a harness that runs the walk.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): a live
+      debugging walk recorded to the 2026-09-08 session-unbind-hook-cancelled debug
+      journal; SKILL.md wiring content-pinned per-PR.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-08T00:00:00Z'
+      evidence: live debugging walk recorded at docs/superpowers/journals/debug/2026-09-08-session-unbind-hook-cancelled.md
   - id: fr-journal-scope-keyed
     capability: fr-goal subagent execution
     acceptance: 'The fr journal primitive is scope-keyed (spec|plan|debug) and pipeline-agnostic:
@@ -811,10 +830,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_hermes_dispatch.py
       - super-fr:tests/unit/test_models_hermes_first_run.py
-    status: skipped
-    notes: Wiring unit-tested (fr-goal names delegate_task; no guessed hermes model
-      bindings ship, so fr-goal asks the operator per tier on first run). End-to-end
-      run is post-merge manual Test Plan item 6 (toy feature in real Hermes).
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): wiring
+      is unit-tested; the end-to-end run is post-merge Test Plan item 6 (a toy feature
+      in real Hermes), a walk still owed, not a CI wiring gap.'
   - id: acceptance-report-tracked
     capability: Acceptance report
     acceptance: The acceptance HTML report is a tracked, version-controlled artifact
@@ -1362,7 +1381,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_no_direct_click_import.py
-    status: skipped
+    status: unwired
     notes: Spec 8.0. 4.0.0 shipped a direct import of click - typer's TRANSITIVE dep,
       not one fr declares - so the installed CLI could not start while the full local
       suite stayed green; only CI's uv-tool path caught it. The tripwire pins that one
@@ -2087,14 +2106,18 @@ rows:
       unit:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test__urls.py
-    status: skipped
-    notes: 'Unit half in CI asserts the REQUEST (every contents read pins ref=HEAD,
-      captured via a recording double rather than an arg-discarding mock). Live half
-      hand-run 2026-09-19 against a self-hosted GitLab whose default branch is ''master'',
-      which is why ref=HEAD rather than a branch name: file_exists True for a present
-      file and False for an absent one, list_dir real entries, read_file real text —
-      all four broken before this PR. ''skipped'' because CI cannot reach a private
-      instance.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live half
+      hand-run 2026-09-19 against a self-hosted GitLab (host redacted); request shape
+      unit-pinned in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-19T00:00:00Z'
+      evidence: 'hand-run against a self-hosted GitLab (host redacted, default branch
+        master): file_exists, list_dir and read_file all real'
   - id: gitlab-selfhosted-host-targeting
     capability: Multi-backend git hosting
     acceptance: 'An operator whose GitLab is self-hosted reaches it by declaring ''backend:
@@ -2108,17 +2131,10 @@ rows:
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test_glab.py
       - super-fr:tests/unit/test_pr_observe.py
-    status: skipped
-    notes: 'All three clauses now hold. (a) ''backend: gitlab'' ALONE suffices — verified
-      live from a checkout with no host: key: host_for derived gitlab.internal.example
-      from the git remote and client_for built a RealGlabClient carrying it. (b) ''host:''
-      overrides the derived value. (c) A host declared for a backend fr cannot target
-      warns once, on next use rather than at scaffold time. Also closes the bare-URL
-      case the config tiers cannot reach: backend_for_url reads the forge off the URL
-      path, so the VK bridge stops resolving a self-hosted GitLab MR to the GitHub adapter.
-      KNOWN LIMIT, stated in the PR: pr_state''s Issue auto-close still targets the
-      SaaS host, blocked on closer''s 3-arg arity, not on backend resolution. ''skipped''
-      because the live half is hand-run.'
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
+      against a self-hosted GitLab (host redacted) but give no date to record a walk
+      with; unit refs in CI. Re-walk and record it with set-status --walk.'
   - id: forge-errors-are-not-absence
     capability: Multi-backend git hosting
     acceptance: A malformed or unauthorized GitLab request surfaces as an error rather
@@ -2166,56 +2182,19 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
-    status: skipped
-    notes: 'LIVE-VERIFIED 2026-09-21 — the post-merge run this row was owed. A real
-      headless /fr-goal on OpenCode (github-copilot/gpt-5.6-terra) dispatched a phase:
-      opencode.db child session ses_f3b00175… with parent_id set, agent=fr-phase-executor-mechanical
-      (the tier the plan phase declared), on the answered model, with its own usage
-      and its 32 tool calls recorded under the child rather than the orchestrator. Evidence:
-      the gh#494 phase-6 and gh#498 phase-4 journals (p6-live-evidence, p4-live-evidence).
-      STILL skipped, correctly: reproducing it needs a live opencode binary and a model,
-      neither available in CI. SCOPE, unchanged from before and still true: the headline
-      proves a genuine dispatch, not that tiering resolved — the tiering claim lives
-      in opencode-tier-binding-reaches-dispatch. The headline cannot be corrected because
-      there is no fr acceptance edit verb; that is #522, since folded into #510. CORRECTION:
-      an earlier version of this note said a follow-up for that verb had been filed.
-      It had not — #522 found the claim false. #522 became that follow-up and is now
-      folded into #510. Found by the same run, and filed: #537 (fr''s cursor names the
-      wrong holder for an OpenCode dispatch, and cannot name the tier agent that ran)
-      and #538 (fr-goal never asked the model-per-tier question it is gated on). DISCRIMINATING
-      RUN, 2026-09-22 (the model-level proof the earlier runs could not give): the 2026-09-21
-      run''s orchestrator and child both ran on gpt-5.6-terra and all three tiers were
-      bound to it, so its session-row model could not tell a tiered dispatch from an
-      untiered one; its proof rested on the agent NAME alone, for one tier. This run
-      bound FOUR distinct models - mechanical github-copilot/gpt-5.6-luna, standard
-      github-copilot/gpt-5.6-terra, hard github-copilot/gpt-5.6-sol, orchestrator github-copilot/claude-sonnet-5
-      - in a throwaway local repo (fr-tier-proof, local bare origin, no forge resource)
-      whose plan declared phases 1/2/3 as mechanical/standard/hard. opencode.db, root
-      ses_f37014a55ffePrm0GvcXNde25v (build, claude-sonnet-5), three parented children
-      in phase order: ses_f36fd32e5ffeLnEhUiVhc8dhwj fr-phase-executor-mechanical gpt-5.6-luna
-      $0.0132; ses_f36fb6911ffeFuz6aUuFfsbWjz fr-phase-executor-standard gpt-5.6-terra
-      $0.1326; ses_f36f9f94dffeXlvlEQ6t1mCyBs fr-phase-executor-hard gpt-5.6-sol $0.3867
-      (run total $1.71). All six assertions PASS: three children; declared tier -> tier
-      agent in order; each child on its tier''s binding (read from the installed agent
-      files, last written before the run and stable through it); NO child on the session
-      model; child models pairwise distinct; bindings themselves distinct, i.e. the
-      test could have failed. That closes the gap the scope note above records: tiering
-      resolves to the bound MODEL per tier, not merely to a tier-named agent. #537 reproduced
-      in the same run: fr''s cursor records agent_type super-fr:fr-phase-executor for
-      all three, never the tier agent that ran - though it does record the three child
-      session ids, matching opencode.db exactly, so the two stores can be joined by
-      session id. Still skipped: live-only, no CI level. PAID RUN (2026-09-23, #564
-      Test Plan step 3, fr 4.17.2, real feature #457 -> PR #586, orchestrator build
-      on github-copilot/gpt-6-luna). Cursor vs opencode.db: both phases (plan tier mechanical)
-      were dispatched to fr-phase-executor-mechanical on github-copilot/claude-haiku-4.5
-      = the binding; each cursor holder id equals its child session id exactly; both
-      review-phase reviewer= ids equal the dispatched general child sessions exactly
-      (on gpt-6-luna); every child is parented to the root; deliver carries tests=<log>.
-      The cursor''s agent_type still reads super-fr:fr-phase-executor, never the tier
-      agent (#537). The question batch WAS asked and the turn ended; the operator answered.
-      But brainstorm was resolved with no --emitted spec= and no --answered-by operator,
-      so the cursor records answered_by=agent and no spec, and fr accepted it (#587).
-      Row stays skipped (live-only).'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE-VERIFIED
+      2026-09-21 (and a discriminating four-model run 2026-09-22): a real headless /fr-goal
+      on OpenCode dispatched each phase to its tier''s child session.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: github-copilot/gpt-5.6-terra
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: headless /fr-goal on OpenCode dispatched a phase to fr-phase-executor-mechanical
+        as a child session; gh#494 phase-6 and gh#498 phase-4 journals (p6-live-evidence,
+        p4-live-evidence)
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
@@ -2542,17 +2521,25 @@ rows:
     levels:
       int:
       - super-fr:docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md
-    status: skipped
-    notes: 'not-implemented -> skipped on 2026-09-21: driven live post-merge on the
-      installed fr 4.12.0, one throwaway one-phase /fr-goal per harness (Claude Code
-      and OpenCode; ids and the OpenCode model redacted in the evidence file). Both
-      wrote the same attempt keys, each DETECTING its own harness with no --harness
-      flag, and both refused a second advance with exit 2 naming the holder. skipped,
-      not ci: a manual live run no CI job can repeat. The run surfaced five defects
-      (C1-C5 in the evidence file), all fixed in #527 - notably that on OpenCode the
-      child session id is only returned when the blocking task tool returns, which fr
-      now states in the dispatch-holder-identity parity row. run-pickup-on-another-host
-      and run-idle-reprompt-opencode were NOT exercised and stay not-implemented.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): driven
+      live post-merge 2026-09-21 on fr 4.12.0, one /fr-goal per harness (Claude Code
+      and OpenCode), both walks recorded.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md (Claude
+        Code run)
+    - strategy: live
+      harness: opencode
+      model: redacted
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md (OpenCode
+        run, model redacted in the evidence file)
   - id: run-advance-refuses-running
     capability: Run state
     acceptance: An operator re-entering the loop cold is told to wait rather than handed
@@ -3272,21 +3259,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_skill_tokens.py
-    status: skipped
-    notes: 'Moved not-implemented → skipped, NOT ci, deliberately: verification now
-      exists but it is prose-level only, and calling that ci would be an overclaim.
-      test_skill_tokens.py::test_fr_phase_executor_names_the_dispatch_refusal and ::test_fr_execute_names_the_dispatch_refusal
-      pin that the BLOCKER-not-a-tick contract is PRESENT on both surfaces — the canonical
-      agent file and the fr-execute skill. They cannot show an executor OBEYED it: that
-      behaviour is agent-side and not unit-testable, and the only thing that could demonstrate
-      it is a live run against a plan containing a dispatch step — which #428''s lint
-      now refuses to let anyone author. So the enforcement is a pair: the lint stops
-      the step being written (executably pinned by goal-agentic-dispatch-purity and
-      goal-dispatch-lint-precision) and this prose catches a step that predates the
-      lint or arrives from outside. On Hermes the prose IS the whole enforcement — nothing
-      there denies a further delegate_task — which is why the contract lives in the
-      skill and not only in the Claude Code agent file. Backfill owed: a live executor
-      run against a pre-lint dispatch step.'
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      unit tests pin only that the BLOCKER-not-a-tick contract is present in the prose;
+      the refusal itself is behaviour only a live executor run proves, so a walk is
+      owed.'
   - id: run-resolve-requires-briefing
     capability: Run cursor
     acceptance: A grouped unit cannot be resolved through its own member resolve until
@@ -3461,17 +3438,17 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py#test_advance_records_the_observed_model_of_an_orchestrator_run_step
       - super-fr:tests/unit/test_run_cli.py#test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model
-    status: skipped
-    notes: 'C3. The cursor stored ''opus'' (the claim) while the transcript fr already
-      read said claude-opus-5; the whole fr-goal run''s orchestrator was claude-sonnet-5
-      and nothing recorded it. Record + warn, never block. LIVE, Run C (#592, a real
-      Claude Code fr-goal run on #526, 2026-09-23): every attempt records the served
-      model id (claude-opus-5-5 for the orchestrator and executors, claude-sonnet-5
-      for reviewers), not an alias. gh#531: line anchors re-pointed to the tests they
-      were recorded for (they had slid onto other tests as lines moved). gh#531: the
-      served-model-over-alias half lost its only test in #628 (test_resolve_records_the_served_model_not_the_claimed_alias,
-      deleted) — that half is proven live (Run C) only, so ci → skipped until a test
-      pins it again.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE,
+      Run C (#592, 2026-09-23); unit refs in CI.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-09-23T00:00:00Z'
+      evidence: 'Run C (#592): a real Claude Code fr-goal run on #526 recorded the served
+        model id on every attempt'
   - id: run-deliver-tests-log-opencode
     capability: Run cursor
     acceptance: 'On OpenCode, deliver''s tests=<log> is verified against the session
@@ -3670,13 +3647,17 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: skipped
-    notes: 'Walked live post-merge 2026-09-22 (Test Plan 11) on Claude Code 2.1.278
-      / Opus 5: repo scope as a SYNC of an OpenCode-written ranking (1 new issue judged,
-      0 existing changed) and org scope over live derio-net (18/19 repos collected,
-      1 skipped with its reason, 112 issues rendered, willikins ranked by operator scope).
-      Both found fr-triage from a plain ask. Evidence: plan journal walk-claude-code-repo
-      and walk-claude-code-org. Not in CI: needs a live harness and model.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): walked
+      live post-merge 2026-09-22 (Test Plan 11); evidence in the plan journal.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: Opus 5
+      outcome: pass
+      at: '2026-09-22T00:00:00Z'
+      evidence: 'Test Plan 11 post-merge walk on Claude Code 2.1.278: repo-scope sync
+        and org scope over derio-net; plan journal walk-claude-code-repo'
   - id: triage-skill-opencode
     capability: Backlog triage
     acceptance: An agent on OpenCode, which has no Artifact tool, can follow fr-triage
@@ -3684,12 +3665,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: skipped
-    notes: 'Walked live post-merge 2026-09-22 (Test Plan 12) on OpenCode with github-copilot/gpt-5.6-terra,
-      a non-Claude model: first-run repo triage (33 issues judged into a new judgements.yaml,
-      board rendered, no forge writes); fr-triage discovered from a plain ask. It surfaced
-      a skill defect (the YAML example teaches invalid YAML), fixed separately. Evidence:
-      plan journal walk-opencode. Not in CI: needs a live OpenCode session.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): walked
+      live post-merge 2026-09-22 (Test Plan 12) with a non-Claude model; evidence in
+      plan journal walk-opencode.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: github-copilot/gpt-5.6-terra
+      outcome: pass
+      at: '2026-09-22T00:00:00Z'
+      evidence: 'Test Plan 12 post-merge walk on OpenCode: first-run repo triage; plan
+        journal walk-opencode'
   - id: triage-skill-hermes
     capability: Backlog triage
     acceptance: An agent on Hermes can follow fr-triage end to end
@@ -4046,14 +4033,17 @@ rows:
       - super-fr:tests/unit/test_scaffold_java_version.py
       - super-fr:tests/unit/test_init_scaffold.py
       - super-fr:tests/unit/test_scaffold_tools.py
-    status: skipped
-    notes: 'gh#574: --tool java/maven map to the java devcontainer feature (installMaven).
-      The version is detected from version files, then the root pom.xml; unit tests
-      pin this. Live walk 2026-09-23 on arm64 (journal p6-live-574, recorded in the
-      PR): with pom.xml maven.compiler.release 17, scaffold printed ''java 17 (from
-      pom.xml maven.compiler.release)''. In the container, mvn -v reported Maven 3.9.16
-      on Java 17.0.20.1 and java -version reported 17.0.20.1. The status is skipped
-      because that live container walk is not in CI.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live walk
+      2026-09-23 on arm64 (journal p6-live-574); unit-pinned.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-23T00:00:00Z'
+      evidence: 'live walk on arm64, journal p6-live-574: scaffold detected java 17
+        from pom.xml; mvn -v ran in the container'
   - id: scaffold-host-cli-arch
     capability: fr init scaffold
     acceptance: glab/tea postCreate installs the binary for the container's own architecture,
@@ -4193,11 +4183,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
-    status: skipped
-    notes: 'Both harnesses walked live: Claude Code (PR #609) and OpenCode in devcontainer
-      mode (PR #679, usage/2026-09-26-fix-659-isolation-gc-fetch.yaml, 7/7 steps). Stays
-      skipped until #637 (Claude Code omits subagent cost) is fixed; OpenCode needs
-      an explicit session binding until #636.'
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both
+      harnesses were walked live (PR #609, PR #679), but the row stays owed until #637
+      (Claude Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit
+      binding until #636.'
   - id: light-path-shape
     capability: fr-goal-cost
     acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light`
@@ -4540,17 +4530,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R2
     levels: {}
-    status: skipped
-    notes: 'Verified live 2026-09-29 (super-fr-3 take 12: feature-C brief, OpenCode
-      1.18.33, gpt-6-sol everywhere, fr 5.0.0, fr-goal-light@1, self-hosted GitLab without
-      CI): the spec journal carries the brief verbatim (basket-goal-brief, input=true)
-      and the Q1 answer verbatim (decision missing-model-staff-check); the spec has
-      a plain R1..R7 list; spec-plan-review ran once (one fr-spec-reviewer dispatch,
-      4 in-scope findings fixed, no loop); deliver resolved (MR merged). $3.50 / 32.0
-      min to deliver. Hit the 5.0.0 plan fr_version ceiling bug at the plan step; the
-      agent widened _meta.yaml by hand and went on. Passes for this harness and model
-      only (#822).'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): verified
+      live 2026-09-29 (super-fr-3 take 12) for this harness and model only (#822).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: gpt-6-sol
+      outcome: pass
+      at: '2026-09-29T00:00:00Z'
+      evidence: 'super-fr-3 take 12 (feature-C brief, OpenCode 1.18.33, fr 5.0.0, fr-goal-light@1,
+        self-hosted GitLab without CI): brief and answer verbatim in the spec journal'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
@@ -4998,14 +4989,16 @@ rows:
       - super-fr:tests/unit/test_isolation_branch_rename.py#test_a_worktree_mid_rebase_is_refused
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_an_untrusted_open_pr_on_the_old_branch_is_refused
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_an_untrusted_open_pr_on_the_batch_branch_is_refused
-      - super-fr:tests/unit/test_triage_batch_adopt.py#test_the_default_branch_is_refused
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_branch_checked_out_in_the_main_worktree_is_refused
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_the_batch_branch_as_branch_still_gets_the_worktree_refusals
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_a_dispatched_or_pr_open_batch_is_refused
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_the_base_clone_is_left_untouched
     status: ci
     notes: 'Code review p1: adds untrusted-PR (fork/foreign/unread author, either branch),
       default-branch, main-worktree, same-branch-R9 and real dispatched/pr-open stage
-      refusals.'
+      refusals. The default-branch refusal became the default-branch adopt path (2026-10-11
+      R5); its safety (never renaming or touching the default branch) is pinned by the
+      base-clone snapshot test.'
   - id: triage-batch-adopt-list
     capability: Backlog triage
     acceptance: An operator can list every running herdr session with the issue refs
@@ -5051,11 +5044,11 @@ rows:
       - super-fr:tests/unit/test_github_rest_contract.py
       - super-fr:tests/unit/test_github_rest_no_graphql.py
       - super-fr:tests/unit/test_forgeapi.py
-    status: skipped
-    notes: 'Walk 16 passed live in a cloud session (after #1092 moved the state ref
-      under refs/heads/). Not in CI, so skipped. Still owed: the board-matches-a-host-render
-      comparison (needs the operator''s host). Gaps found under rest: verify-merge and
-      pickup still read the PR over GraphQL, and a repo allowing several merge methods
+    status: walk-owed
+    notes: 'walk-owed (p1-r4): walk 16 passed live in a cloud session (recorded) after
+      #1092 moved the state ref under refs/heads/; the board-matches-a-host-render comparison
+      is still owed and needs the operator''s host. Gaps found under rest: verify-merge
+      and pickup still read the PR over GraphQL, and a repo allowing several merge methods
       needs merge_method (derio-net/super-fr#1100).'
     verify: client-live
     walks:
@@ -5364,11 +5357,17 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
-    status: skipped
-    notes: 'Live-verified 2026-09-26 (Test Plan 15, #628 phase 4): /fr-goal on #624
-      in devcontainer mode (PR #635) captured a readable session (host label only, no
-      host names); fr run/usage refused inside the container. Manual walk, not in CI.
-      Caveat: subagent transcripts omitted (#637).'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      2026-09-26 (Test Plan 15). Caveat: subagent transcripts omitted (#637).'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-26T00:00:00Z'
+      evidence: 'Test Plan 15 (#628 phase 4): /fr-goal on #624 in devcontainer mode,
+        PR #635, captured a readable session'
   - id: step-record-one-resolve
     capability: Lean cost-aware pipeline
     acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
@@ -5764,9 +5763,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_ci_shards.py
-    status: skipped
-    notes: shard layout + partition unit-pinned; branch CI run 36247922786 took 155s;
-      post-merge main observation owed
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
+      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
+      is owed.'
   - id: ci-budget-ticket-dedup
     capability: CI
     acceptance: A CI file that runs over its budget gets exactly one open ci-budget
@@ -5816,11 +5816,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_actions_pinned.py
-    status: skipped
-    notes: test_tripwire_actions_pinned.py pins .github/dependabot.yml's shape (github-actions
-      ecosystem, weekly, one *-group), so config is pinned; the first weekly Dependabot
-      run is a post-merge observation not exercised in CI (spec 2026-09-27-ci-hardening
-      §3.B).
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): dependabot.yml
+      shape is unit-pinned; the first weekly Dependabot run is a post-merge observation
+      still owed.'
   - id: ci-ok-single-required-check
     capability: CI
     acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
@@ -5974,7 +5973,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
       - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: live
   - id: pages-explainers-preserved
@@ -5986,7 +5985,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: live
   - id: pages-acceptance-report-discoverable
@@ -6017,13 +6016,34 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_publishes_a_placeholder_before_upload
       - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_still_fails_the_run_after_deploying
       - super-fr:tests/unit/test_pages_workflow.py#test_the_placeholder_says_the_report_was_not_rendered
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned and the placeholder script executed in the unit
       suite; a live deploy over a gate refusal has not been observed (it needs stale
       artifacts on main).
     verify: live
     issues:
     - derio-net/super-fr#924
+  - id: acceptance-ci-built-reports
+    capability: acceptance-matrix
+    acceptance: In a repo that gitignores the generated acceptance reports, fr's commits
+      (record resolve, acceptance add/set-status, archive, init, migrations) succeed
+      without them and fr acceptance check / report --check report no drift for them,
+      while report --deterministic still writes them.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_check_reports_no_drift_for_absent_or_stale_ignored_reports
+      - super-fr:tests/unit/test_acceptance_ci_built_reports.py#test_report_deterministic_writes_ignored_reports
+      int:
+      - super-fr:tests/integration/test_acceptance_ci_built_reports.py#test_acceptance_set_status_commits_without_ignored_reports
+      - super-fr:tests/integration/test_acceptance_ci_built_reports.py#test_a_record_with_an_acceptance_row_commits_without_ignored_reports
+    status: ci
+    notes: 'Review p1-r5: anchor R3 (--deterministic writes ignored reports) and the
+      record-apply commit path the issue is about.'
+    verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -6181,13 +6201,18 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R1
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R3
     levels: {}
-    status: skipped
-    notes: 'Proven live 2026-09-29 in a fresh session from the base clone: fr pickup
-      --run 2026-09-28-feat-batch-closeout-always-2 named fr archive --branch feat/batch-closeout-always-2;
-      run in the chore/archive workspace it archived spec, plan, run, usage and both
-      journals with no held: line, and fr status then reported no owed artifact from
-      the branch. Manual live run, not in CI.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): proven
+      live 2026-09-29 in a fresh session; manual, not in CI.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-29T00:00:00Z'
+      evidence: 'fresh session from the base clone: fr pickup --run 2026-09-28-feat-batch-closeout-always-2
+        named fr archive --branch, which archived everything with no held line'
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
     acceptance: Every shipped skill that ends its flow at a PR it opens relays a close-out
@@ -6757,6 +6782,64 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: merge-train-red-recovery
+    capability: triage-batch-drive
+    acceptance: A batch PR made red by the driver's own update is updated again once
+      the base moves; a PR red at a session commit is handed back to an idle session
+      once per head; repeated passes over the same red head send nothing new; an unreachable
+      session puts it on Needs-you.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_4_the_session_status_decides
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_red_pr_is_handed_back_to_its_idle_session_once
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_red_recovery
+    status: ci
+    notes: Phase 2 shipped red_decision, the driver recovery and the board changes;
+      the scenario drives re-update, hand-back once, needs-you.
+    verify: candidate
+    scenario: tests/scenarios/merge-train-red-recovery.sh
+  - id: merge-train-queue
+    capability: triage-batch-drive
+    acceptance: Where the base branch requires a merge queue, the driver enqueues approved
+      green batch PRs instead of merging, treats queued PRs as in flight, and re-enqueues
+      or hands back an ejected PR; a repo with no queue keeps its train unchanged.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_repo_enqueues_an_approved_green_pr_and_records_it
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_pr_ejected_with_the_base_moved_is_enqueued_again
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_pr_ejected_with_the_base_unmoved_needs_you_and_is_not_enqueued_again
+      - super-fr:tests/unit/test_merge_train_queue_walk.py#test_every_approved_green_unqueued_member_is_enqueued_and_none_is_merged
+      - super-fr:tests/unit/test_merge_queue_forge.py#test_queue_state_reads_graphql
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_queue
+    status: ci
+    notes: 'Phase 3: queue mode built. Scenario holds a queue repo under forge.api rest
+      and merges when the rule is gone; the GraphQL enqueue, ejection and re-enqueue
+      path is unit-tested over fakes (no live merge queue exists to capture).'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-queue.sh
+  - id: merge-train-strict-up-to-date
+    capability: triage-batch-drive
+    acceptance: Where the base branch requires strict up-to-date status checks, the
+      train updates a behind batch PR before merging it, even when it is behind only
+      by routine commits.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge_ready.py#test_strict_checks_update_a_pr_behind_only_by_a_release_commit
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_red_recovery
+    status: ci
+    notes: 'Phase 2: strict_checks drops the routine-commit exemption; base_rules read
+      per pass; scenario phase C.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-red-recovery.sh
   - id: driver-once-dispatch-refused
     capability: triage-batch-drive
     acceptance: '`fr triage batch drive --once --yes` whose pass would dispatch refuses
@@ -6783,9 +6866,15 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_lease_push_cannot_read_the_visibility
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_member_repo_visibility_cannot_be_read
+      - super-fr:tests/unit/test_triage_drive_visibility_retry.py#test_a_loop_skips_a_pass_whose_judgements_write_cannot_read_the_visibility
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_member_repo_whose_visibility_cannot_be_read_is_unreadable_not_a_leak
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_definite_leak_outranks_an_unreadable_member_repo
     status: ci
     notes: 'Unit tests: a looping drive skips and retries, once/cloud/export still refuse,
-      a leak still ends the driver'
+      a leak still ends the driver; since gh#1144/gh#1145 also an unreadable member
+      repo (public state repo) and a mid-pass judgements-write check skip the pass,
+      and a certain leak outranks an unreadable repo'
     verify: none
   - id: rest-rulesets-free-plan-403
     capability: triage-batch-drive
@@ -6800,6 +6889,183 @@ rows:
     status: ci
     notes: 'Unit tests: the free-plan 403 means no rulesets; other 403s and host refusals
       still raise'
+    verify: none
+  - id: quota-reset-wait
+    capability: triage-batch-drive
+    acceptance: After a rate-limit response, a looping drive reads /rate_limit once
+      and makes no forge call on the exhausted budget until the announced reset; a pass
+      that starts with nothing left does not run; a secondary limit backs off doubling
+      to 15 minutes; an unreadable /rate_limit fails open.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_a_rate_limited_pass_waits_for_the_reset_and_spends_nothing_until_then
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_an_exhausted_budget_at_pass_start_runs_no_pass_at_all
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_a_rate_limited_skip_in_the_collect_ends_the_pass_before_the_snapshot
+      - super-fr:tests/unit/test_triage_quota.py#test_exhausted_budget_waits_for_the_reset_plus_thirty_seconds
+    status: ci
+    notes: 'Phase 1: the host loop waits to reset+30s with no forge call, a collect
+      that skips on a rate limit ends the pass before the snapshot, and an exhausted
+      budget at pass start runs no pass.'
+    verify: none
+  - id: quota-floor-essential-pass
+    capability: triage-batch-drive
+    acceptance: Below the host's budget floor (default 20%, quota_floor in forge.yaml
+      or --quota-floor), a drive pass collects only live-batch repos, dispatches nothing
+      (held, quota below floor), still merges and closes out, keeps the last board,
+      and waits four intervals.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_below_the_floor_nothing_is_dispatched_and_the_drive_keeps_going
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_below_the_floor_a_forced_full_pass_reads_only_the_live_batch_repos
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_dispatch_hold_turns_every_dispatch_into_a_pending_hold
+    status: ci
+    notes: 'Essential-only pass built in phase 2: below the floor no dispatch, held
+      batches counted pending (never stalled), board kept, next pass 4x interval; a
+      forced full pass reads only live-batch repos.'
+    verify: none
+  - id: quota-quiet-pass
+    capability: triage-batch-drive
+    acceptance: A drive pass with no forge changes costs only conditional REST probes
+      answered 304 (no GraphQL point) and skips collect, plan and board; a pass with
+      changes collects only the changed repos and carries the rest; a full pass runs
+      at least every 15 minutes; ETags are stored only with the facts they describe.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_a_quiet_pass_reads_nothing_plans_nothing_and_renews_the_lease
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_an_edited_judgements_file_is_never_quiet_and_a_carried_repo_reads_nothing_live
+      - super-fr:tests/unit/test_triage_probe.py#test_pass_kinds
+    status: ci
+    notes: 'Quiet pass built in phase 2: all probes 304 and judgements digest unchanged
+      skip collect, snapshot, plan and board; the lease is still renewed.'
+    verify: none
+  - id: visibility-conditional-read
+    capability: triage-batch-drive
+    acceptance: The state repo's visibility is still read live before every push, but
+      through a conditional REST request whose 304 answer costs no budget.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gh.py#TestConditionalVisibility::test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer
+    status: ci
+    notes: 'Built in phase 3: fr.gh.repo_visibility, a conditional REST read with a
+      module-level (host, repo) ETag map shared by both adapters; a 304 returns the
+      cached answer, an error raises.'
+    verify: none
+  - id: quota-board-footer
+    capability: triage-batch-drive
+    acceptance: The drive logs the remaining quota, reset time and action whenever it
+      throttles itself, and board.html's footer shows the last budget read and when
+      facts were last collected.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_footer_names_the_last_budget_and_when_the_facts_were_collected
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_write_board_reads_the_budget_from_pacing_json_for_the_footer
+    status: ci
+    notes: Drive logging landed in phase 1; the board footer (last budget and facts
+      collected_at, read from pacing.json by write_board) in phase 3.
+    verify: none
+  - id: quota-shared-token-live
+    capability: triage-batch-drive
+    acceptance: Several org drivers running overnight on one token no longer exhaust
+      the shared GraphQL budget.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: quota-secondary-backoff
+    capability: triage-batch-drive
+    acceptance: A secondary rate limit backs off from --interval, doubling to a 15-minute
+      cap and resetting after a clean pass; an unreadable /rate_limit fails open, reported
+      once per cause.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_a_secondary_limit_backs_off_from_the_interval_and_a_clean_pass_resets_it
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_the_backoff_stops_at_fifteen_minutes
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_an_unreadable_rate_limit_runs_the_pass_and_warns_once
+      - super-fr:tests/unit/test_triage_quota.py#test_secondary_limit_backs_off_exponentially_to_a_cap
+    status: ci
+    notes: Backoff doubles from the interval to the 15 minute cap and a clean pass resets
+      it; an unreadable /rate_limit fails open with one warning.
+    verify: none
+  - id: quota-floor-config
+    capability: triage-batch-drive
+    acceptance: The budget floor resolves from --quota-floor, else quota_floor in ~/.config/fr/forge.yaml,
+      else 0.20, and a value fr cannot use is refused naming its source.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forgeapi.py#test_floor_flag_beats_the_host_file
+      - super-fr:tests/unit/test_forgeapi.py#test_floor_in_the_file_must_be_a_fraction
+      - super-fr:tests/unit/test_forgeapi.py#test_floor_flag_must_be_a_fraction
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_an_unusable_quota_floor_is_refused_naming_the_flag
+    status: ci
+    notes: quota_floor resolves flag over host file over 0.20 and refuses an unusable
+      value naming the flag or the file.
+    verify: none
+  - id: quota-partial-carry
+    capability: triage-batch-drive
+    acceptance: A pass collects only changed repos and carries the rest from the last
+      facts, keeping cross-repo PR-to-issue links whichever side was read; carried repos
+      are never reported unread.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_only_the_named_repos_are_read_and_the_rest_carried
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_cross_repo_links_survive_whichever_side_is_read
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_a_carried_repo_s_visibility_is_left_out_for_the_guard_to_read_live
+    status: ci
+    notes: 'Partial collect built in phase 2: only changed repos read, the rest carried
+      (visibility never carried), cross-repo PR links kept both ways.'
+    verify: none
+  - id: quota-etag-consistency
+    capability: triage-batch-drive
+    acceptance: Probes precede each repo's collect, only successfully read repos keep
+      their ETags, written after facts.json, so a change between probe and collect is
+      never hidden by a later 304.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_probe.py#test_an_interleaved_change_is_never_a_stale_304
+      - super-fr:tests/unit/test_triage_probe.py#test_promote_keeps_read_repos_drops_failed_and_leaves_the_rest
+      - super-fr:tests/unit/test_triage_collect_partial.py#test_collect_into_carries_and_calls_back_after_facts_json
+    status: ci
+    notes: 'ETag consistency built in phase 2: probes precede the collect, pending ETags
+      promoted only for successfully read repos after facts.json is written, a failed
+      repo''s dropped.'
+    verify: none
+  - id: quota-lease-safe-wait
+    capability: triage-batch-drive
+    acceptance: A reset wait or stretched interval never lets the drive lease lapse,
+      and the cloud drive pass exits 3 while waiting, renewing the lease first when
+      it would lapse.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_a_wait_longer_than_the_lease_renews_it_and_sleeps_again
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_the_cloud_pass_exits_3_on_an_exhausted_budget_and_takes_no_lease
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_the_cloud_pass_renews_a_lease_that_would_lapse_before_its_next_wake
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_the_cloud_pass_honours_a_recorded_wait
+    status: ci
+    notes: 'Phase 1: a reset wait longer than the lease renews it and sleeps again;
+      the cloud pass exits 3 on an exhausted budget or a recorded wait and renews a
+      lease that would lapse. The essential-pass stretch reuses this wait in phase 2.'
     verify: none
   - id: triage-scope-groups
     capability: triage-scope
@@ -6873,15 +7139,15 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R7
     levels:
       unit:
-      - super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_four_pages
       - super-fr:tests/unit/test_triage_render.py#test_the_board_carries_its_nav_and_goal
       - super-fr:tests/unit/test_triage_origins.py#test_the_origins_page_carries_its_nav_and_goal
       - super-fr:tests/unit/test_triage_architecture.py#test_the_page_opens_with_its_nav_and_goal
       - super-fr:tests/unit/test_triage_architecture.py#test_the_page_no_longer_shows_what_other_pages_own
       - super-fr:tests/unit/test_triage_history.py#test_the_history_page_opens_with_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_five_pages
     status: ci
-    notes: 'Phase 1: all four pages carry nav and goal; architecture no longer duplicates
-      board/origins sections; visual evidence captured at 1280 and 390, light and dark'
+    notes: 'Ref re-pointed: the registry test was renamed when the nav gained the Batches
+      page (board-truth R9).'
     visual:
       states:
       - board-page
@@ -7043,6 +7309,34 @@ rows:
     status: ci
     notes: gates/status/check answer a drifted cursor with one warning (check now tested,
       review p1-r2); schema mismatch still refuses gates
+  - id: run-claim-first-wins
+    capability: run-cursor
+    acceptance: Re-claiming an open unit by the agent that holds it never rewrites the
+      recorded harness, model or agent type and makes no commit when nothing changes;
+      a different agent is refused; a held unit is not re-briefed after an interrupted
+      orchestrator restarts.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_an_identical_reclaim_is_a_no_change_with_no_commit
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_another_family_keeps_the_model_and_warns
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_the_opencode_sequence_keeps_the_plugin_claims_model_and_tier
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_different_agent_is_still_refused
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_advance_after_an_interruption_names_the_holder_and_does_not_rebrief
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_resolve_model_without_agent_keeps_the_claimed_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_in_the_same_model_family_keeps_the_recorded_model
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_first_claim_overrides_what_advance_prefilled
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_fills_an_empty_field_and_commits_it
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_by_the_manifest_id_keeps_the_recorded_tier_variant
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_another_tier_keeps_the_agent_type_and_warns
+      - super-fr:tests/unit/test_run_claim_first_wins.py#test_a_reclaim_as_a_different_agent_type_is_refused
+    status: ci
+    notes: 'R7/R8 review fixes: agent_type re-claim validated against the dispatched
+      base agent; fill, keep+warn, same-family, resolve and interruption paths now have
+      refs'
+    verify: none
   - id: adopt-supersede-carries-provenance
     capability: run-adoption
     acceptance: Adopting a plan that already has a run supersedes it on request, and
@@ -7239,13 +7533,19 @@ rows:
     levels:
       int:
       - super-fr:docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md
-    status: skipped
-    notes: 'not-implemented -> skipped on 2026-10-06: all three post-merge Test Plan
-      items driven live inside herdr against a real fr triage batch drive over 101 batches
-      (columns vs an independent gh oracle, cards moving on acting and non-acting passes,
-      reloads keeping expansion, jump switching the tab, two blocked sessions shown
-      as needs-you). Manual and post-merge only, so not in CI.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): all three
+      post-merge Test Plan items driven live 2026-10-06 inside herdr; evidence in the
+      int ref.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: 'docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md: all
+        three post-merge Test Plan items driven inside herdr over 101 batches'
   - id: triage-dedupe-candidates
     capability: triage-dedupe
     acceptance: fr triage check lists candidate duplicate groups among open issues,
@@ -7406,6 +7706,131 @@ rows:
     notes: 'super-fr#892: make_client resolves through hostclient.client_for_url, keeping
       a self-hosted host; RealGhClient threads it as GH_HOST only for a host gh is logged
       into (fail closed).'
+  - id: triage-in-progress-release
+    capability: triage-batches
+    acceptance: When a scope releases a finished, cancelled or abandoned batch's claim
+      on a member no other scope holds, fr:in-progress comes off that member too; a
+      member another scope holds keeps it.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_release_with_unlabel_removes_both_labels_in_one_edit
+      - super-fr:tests/unit/test_triage_claim_writes.py#test_unlabel_removes_neither_label_while_another_scopes_claim_stands
+    status: ci
+    notes: claim_writes.release(unlabel=True), passed by claim sync's releases, takes
+      fr:in-progress off with fr:claimed when no other scope holds the issue; claim
+      release and scope retire leave it.
+    verify: none
+  - id: triage-closed-in-progress-set
+    capability: triage-batches
+    acceptance: fr triage check and the board name closed issues still labelled fr:in-progress,
+      held ones apart, and fr triage clean-labels --yes removes the label from the rest
+      (dry-run without --yes).
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_with_yes_it_rereads_each_target_and_removes_the_label_from_the_rest
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_check_json_lists_the_whole_set_with_each_entrys_state
+    status: ci
+    notes: check lists the set with each state, the page folds it, the board notes the
+      clean command; clean-labels is a dry run without --yes and re-reads each target
+      with it; the scenario drives the installed fr.
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-in-progress.sh
+  - id: triage-config-skew-visible
+    capability: triage-batches
+    acceptance: A repo whose .fr/triage.yaml carries keys this fr does not know is still
+      collected; the ignored keys and any skipped repo appear as a prominent banner
+      on the backlog and batch pages and in fr triage check.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_config_skew.py#test_the_banner_names_ignored_keys_and_skipped_repos_escaped
+      - super-fr:tests/unit/test_triage_config_skew.py#test_check_names_skipped_and_ignored_in_json_and_first_in_the_text
+      - super-fr:tests/unit/test_triage_config_skew.py#test_an_unknown_key_is_collected_and_named_without_any_lenient_argument
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_config_skew
+    status: ci
+    notes: R4 unit ref and the scenario's integration test added; scenario now also
+      renders board.html and uses org scope
+    verify: candidate
+    scenario: tests/scenarios/triage-config-skew.sh
+  - id: triage-closeout-card-front
+    capability: triage-batches
+    acceptance: While a batch's close-out session is live, its card front shows the
+      close-out's status and jumps to it; the batch session's jump is in the card body.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_live_closeout_takes_the_card_front_and_the_body_jumps_to_the_batch
+    status: ci
+    notes: 'R6/R7: Card.front derived from closeout_status; front pill and Jump speak
+      for the live close-out; body has a Jump and code pair per session. Browser shots
+      taken and opened.'
+    verify: none
+    visual:
+      states:
+      - closeout-live-front
+      - closeout-absent-front
+      - body-both-sessions
+      interactions:
+      - front-jump-closeout
+      - body-jump-batch
+  - id: triage-cancelled-batch-terminal
+    capability: triage-batches
+    acceptance: A dispatched batch that was cancelled and had its claims released reads
+      as cancelled, owes no claim or release, and never renders as Running, including
+      right after a fresh collect and render.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_a_cancelled_released_batch_never_renders_as_running
+      - super-fr:tests/unit/test_triage_cancelled_terminal.py#test_right_after_a_fresh_collect_and_render_it_is_still_cancelled
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_cancelled_terminal
+    status: ci
+    notes: R8 also pinned through a real collect then render (wave and wave-less); scenario
+      states claims-only.
+    verify: candidate
+    scenario: tests/scenarios/triage-cancelled-terminal.sh
+  - id: triage-nav-present-pages
+    capability: triage-batches
+    acceptance: Every triage page, the batch board included, navigates only to the pages
+      the scope has (Backlog, Batches, Origins, Architecture, History), and rendering
+      any page brings every existing page's nav up to date.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-board-truth-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_nav_pages.py#test_rendering_the_board_updates_the_other_pages_navs
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_nav_pages
+    status: ci
+    notes: 'R9-R12: tests/unit/test_triage_nav_pages.py covers registry, presence, per-page
+      nav, refresh (atomic, skip-if-current, no-nav warn) and the nav-stripped publish
+      copy; tests/scenarios/triage-nav-pages.sh renders triage, history, board from
+      an org fixture. Visual states checked in a browser in phase 4.'
+    verify: candidate
+    visual:
+      states:
+      - org-scope-nav
+      - repo-scope-five-tabs
+      - current-tab-marked
+      - phone-width-nav
+      interactions:
+      - nav-link-each-tab
+    scenario: tests/scenarios/triage-nav-pages.sh
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
@@ -7548,14 +7973,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels: {}
-    status: skipped
-    notes: 'Live-verified 2026-10-06 at closeout: `fr verification prerelease --branch
-      chore/archive-2026-10-06-verification-strategies` dispatched prerelease.yml (run
-      37498798304, success); tag rc/chore-archive-2026-10-06-verification-strategies/09352274256d
-      sits on the branch head and its GitHub release is a pre-release; main and the
-      version surfaces unchanged (bump-version --check ok). Not in CI; the other-forge
-      refusal is unit-pinned only if a level is added.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      2026-10-06 at closeout; main and version surfaces unchanged.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: fr verification prerelease dispatched prerelease.yml run 37498798304
+        (success); rc tag and pre-release created
   - id: super-fr-candidate-contract
     capability: verification
     acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
@@ -7634,15 +8063,104 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
-    status: skipped
-    notes: 'Verified live 2026-10-06 on fr 5.11.2/5.12.0 (wave 9 of a real drive): batch
-      model-bindings'' PR #1042 conflicted with main in docs/acceptance/matrix.yaml;
-      the driver logged ''handed back to its session derio-net/super-fr/run/batch-model-bindings'',
-      the idle herdr session received the hand-back brief (merge origin/main, no rebase
-      or force-push, resolve the named path), resolved and pushed, and the train merged
-      #1042 (340553c4). A re-run driver did not re-send for the same head. Earlier the
-      same day #1031''s session was working when its conflict arrived; the driver waited
-      (''nothing sent, retried next pass'') rather than interrupt it.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): verified
+      live 2026-10-06 (wave 9 of a real drive).'
+    verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: 'wave 9 of a real drive on fr 5.11.2/5.12.0: PR #1042''s conflict was
+        handed back to its herdr session, resolved and pushed'
+  - id: triage-debt-panel
+    capability: triage
+    acceptance: Triage keeps debt digests and fr:owed issues out of ranking in their
+      own sets, and the board shows a per-repo Debt panel with figures and a trend.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_debt_panel.py#test_one_collapsed_section_with_status_categories_and_owed
+      - super-fr:tests/unit/test_triage_debt_sets.py#test_either_marker_lands_in_the_debt_set_and_owed_in_its_own
+    status: ci
+    notes: 'Shipped in #1139: sets and panel render unit-tested in CI; the visual states
+      were captured and opened by the executor, the reviewer and at deliver.'
+    visual:
+      states:
+      - panel-with-figures
+      - trend-vs-previous
+      - repo-without-report
+      - legacy-digest-without-figures
+      interactions:
+      - expand-repo-section
+  - id: triage-adopt-holds-agent
+    capability: triage
+    acceptance: batch adopt's message to an adopted agent ends with an explicit hold
+      by default (acknowledge only, no commits/merges/migrations/pushes/runs, wait for
+      the operator), --no-hold drops it, and the plan without --yes prints the exact
+      text
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt.py#test_the_held_message_pins_every_line
+    status: ci
+    notes: held message pinned by unit tests; scenario on candidate
+    verify: candidate
+    scenario: tests/scenarios/triage-adopt-hold.sh
+  - id: triage-adopt-default-branch
+    capability: triage
+    acceptance: 'batch adopt takes a session on the default branch: it creates the batch
+      branch''s fr workspace from origin/<default>, binds the session, records the dispatch
+      and tells the held agent the workspace path; it refuses a dirty base clone or
+      unpushed default-branch commits, never changes the base clone, and is resumable'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_yes_enters_the_workspace_binds_adopts_records_marks_and_messages
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_a_dirty_base_clone_is_refused_with_its_paths
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_a_local_default_ahead_of_origin_is_refused_with_its_commits
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_the_base_clone_is_left_untouched
+      - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_a_failed_mark_resumes_the_workspace_and_finishes
+    status: ci
+    notes: default-branch adopt pinned by unit tests over a real temp repo
+    verify: none
+  - id: triage-adopt-list-columns
+    capability: triage
+    acceptance: 'batch adopt --list shows each session''s state (adoptable / on default
+      branch / batch / no agent / unknown), repo, branch, fr workspace and open PR,
+      and classifies every label ref, bare #n included, as issue or PR through the forge,
+      writing nothing'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_the_listing_has_one_row_per_state
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_session_state_precedence
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_each_distinct_ref_and_branch_is_read_once
+      - super-fr:tests/unit/test_triage_adopt_list.py#test_one_rows_failures_degrade_only_that_row
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_adopt_list
+    status: ci
+    notes: listing pinned by unit tests; scenario on candidate
+    verify: candidate
+    scenario: tests/scenarios/triage-adopt-list.sh
+  - id: triage-adopt-live-sweep
+    capability: triage
+    acceptance: On a real herdr host, adopt --list correlates live agents with their
+      repo, branch, workspace and PR, and adopted agents (feature branch and main) acknowledge
+      and wait without acting
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
     verify: live
   - id: triage-claims-identity
     capability: triage-claims
@@ -8076,6 +8594,53 @@ rows:
     status: ci
     notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
       is still owed'
+  - id: closeout-step-outcomes
+    capability: closeout
+    acceptance: Every Test Plan step gets an explicit ran / owed / n/a outcome, and
+      `fr archive --branch` holds a close-out with a step missing one (a skipped step
+      is never silently dropped).
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R19
+    levels:
+      unit:
+      - super-fr:tests/unit/test_closeout_outcome.py#test_test_plan_steps_numbers_top_level_items_by_position
+      - super-fr:tests/unit/test_closeout_outcome.py#test_owed_writes_an_owed_entry_with_its_key
+      - super-fr:tests/unit/test_closeout_outcome.py#test_a_step_already_recorded_is_refused_and_nothing_is_written
+      - super-fr:tests/unit/test_archive_owed.py#test_plan_dir_archive_holds_a_step_with_no_outcome_and_names_its_command
+      - super-fr:tests/unit/test_archive_owed.py#test_branch_archive_holds_a_step_with_no_outcome
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the Test Plan parser, fr closeout outcome and the archive hold
+      on --branch, plan-dir and --all (--force included) are unit-tested in CI; the
+      candidate scenario closeout-owed runs in CI via test_scenarios'
+    scenario: tests/scenarios/closeout-owed.sh
+  - id: owed-durable-at-archive
+    capability: closeout
+    acceptance: Every owed step and every unticked manual phase at archive leaves an
+      `owed` journal entry plus one fr:owed issue, idempotently, whatever --issues says.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R21
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R22
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_owed.py#test_open_finding_ids_ignores_records_naming_an_owed_entry
+      - super-fr:tests/unit/test_journal_owed.py#test_the_journal_kind_is_reachable_from_version_one
+      - super-fr:tests/unit/test_archive_owed.py#test_open_owed_entries_are_filed_even_under_no_issues
+      - super-fr:tests/unit/test_archive_owed.py#test_an_open_issue_with_the_owed_marker_is_reused
+      - super-fr:tests/unit/test_archive_owed.py#test_nothing_is_filed_under_tracking_none
+      - super-fr:tests/unit/test_archive_owed.py#test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the owed journal kind (journal 1->2), owed filing outside --issues/--no-issues,
+      reuse by marker, nothing filed under tracking none, and the manual-phase owed
+      entry are unit-tested in CI; the candidate scenario closeout-owed runs in CI via
+      test_scenarios'
+    scenario: tests/scenarios/closeout-owed.sh
   - id: herdr-opencode-launch
     capability: herdr OpenCode batch lifecycle
     acceptance: OpenCode batches launch autonomously with the selected model from the
@@ -8174,7 +8739,7 @@ rows:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_live_instructions
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_documented_no_argument_walk_and_explicit_mode_use_tty_with_captured_output
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_noninteractive_default_still_reports_owed_and_never_passes
-    status: skipped
+    status: walked
     notes: 'Scoped pre-merge walk recorded under explicit operator proxy-verdict and
       Ready authorization. Actual native candidate observations and real read-only #1107
       current-head/conflict recovery proof supplied; runtime packages unchanged from
@@ -8201,7 +8766,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
     levels: {}
-    status: skipped
+    status: walked
     notes: 'Live post-merge walk on 2026-10-10: new OpenCode 1.18.35 / openai/gpt-6.1-sol
       control session stayed in stable primary checkout through real pickup, merge verification,
       scoped archive and delivered feature-session/tab cleanup. Initial stale-record
@@ -8222,3 +8787,355 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: debt-report
+    capability: debt
+    acceptance: '`fr debt` reports acceptance by status, the three plan categories (archivable,
+      stale, manual-open) and owed actions, as text and JSON, read-only.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R25
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_engine.py#test_archivable_plan_is_listed_with_command_and_merge_age
+      - super-fr:tests/unit/test_debt_cmd.py#test_json_validates_as_a_debt_report
+    status: ci
+    notes: 'Shipped in #1139: engine and CLI unit-tested in CI; candidate walk row debt-report
+      passed (walk log 20261012T013958Z).'
+    scenario: tests/scenarios/debt-report.sh
+  - id: debt-weekly-issue-rename
+    capability: debt
+    acceptance: 'The weekly job keeps one `<repo>: Technical debt` issue, renaming a
+      legacy Acceptance debt issue in place, never duplicating, closing at zero debt.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_issue.py#test_creates_the_titled_issue
+    status: walk-owed
+    notes: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
+      on main is the post-merge Test Plan step 1.'
+    verify: live
+  - id: debt-archive-pr-weekly
+    capability: debt
+    acceptance: The weekly job opens or refreshes one draft archive PR for plans merged
+      complete and unarchived beyond the stale threshold, never ready, never merged.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_archive_pr_real.py#test_the_real_fr_archive_moves_the_plan_and_the_sweep_opens_a_draft_pr
+    status: walk-owed
+    notes: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
+      scheduled run on main is the post-merge Test Plan step 2.'
+    verify: live
+  - id: debt-owed-discharge
+    capability: debt
+    acceptance: '`fr debt` lists owed actions from owed/awaiting-live issues, held manual
+      phases, walk-owed rows and unresolved owed entries (archived included), and resolving
+      an owed entry with evidence removes it and closes its issue.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R23
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R24
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_owed.py#test_resolve_discharges_an_owed_entry_and_closes_its_issue
+      - super-fr:tests/unit/test_debt_owed.py#test_an_unreachable_forge_prints_the_close_command
+      - super-fr:tests/unit/test_debt_owed.py#test_debt_lists_open_owed_entries_from_live_and_archived_journals_once
+      - super-fr:tests/unit/test_debt_owed.py#test_a_discharged_owed_entry_drops_out_even_while_its_issue_is_open
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: resolving an owed entry (live or archived) closes its issue through
+      the forge double or prints the close command, and fr debt folds owed journal entries
+      once, dropping a discharged one; unit-tested in CI, and the candidate scenario
+      closeout-owed shows fr debt listing the filed step'
+    scenario: tests/scenarios/closeout-owed.sh
+  - id: matrix-status-split
+    capability: acceptance
+    acceptance: '`skipped` is replaced by unwired / walk-owed / walked / manual; the
+      matrix migration moves every existing skipped row into exactly one new status
+      and every surface uses the new names.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_matrix_status_split.py#test_skipped_rows_map_by_the_fixed_rule_and_nothing_else_moves
+      - super-fr:tests/unit/test_acceptance_status_split.py#test_a_skipped_row_is_refused_by_name_with_the_migrate_command
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_matrix_status_split
+    status: ci
+    notes: 'phase 1: the 4->5 migration, the refused-by-name validator and every surface
+      renamed, unit-tested in CI; the candidate scenario migrates a fixture matrix and
+      runs in CI via test_scenarios'
+    scenario: tests/scenarios/matrix-status-split.sh
+  - id: debt-ci-scaffold-refresh
+    capability: acceptance
+    acceptance: The CI scaffolds on all three forges call `fr debt`, and `fr acceptance
+      init --refresh-ci` updates an fr-scaffolded workflow while refusing a foreign
+      file.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_refresh_ci.py#test_a_legacy_scaffold_is_rewritten_to_the_current_one
+    status: ci
+    notes: 'Shipped in #1139: regenerated goldens and --refresh-ci rewrite/refusal unit-tested
+      in CI.'
+  - id: step-record-status-migration
+    capability: acceptance
+    acceptance: 'An in-flight step record written before the split still applies after
+      upgrade: its `skipped` acceptance status is migrated by the same rule as the matrix.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R27
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_v8_skipped_entry_moves_by_the_r6_rule
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_migrated_record_then_applies
+    status: ci
+    notes: 'phase 1: the record 8->9 hop (frozen RecordV8, R6''s rule from the entry
+      and its row) and the apply after it are unit-tested in CI'
+  - id: forge-adapter-debt-ops
+    capability: forge
+    acceptance: Every forge adapter edits an issue's title and body, lists open issues
+      with bodies, creates a draft PR, finds the open PR for a head and closes an issue,
+      or raises the unsupported error by name.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-debt-engine-design.md#R26
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_adapter_debt_ops.py#test_gh_edit_issue_builds_title_and_body_flags
+    status: ci
+    notes: 'Shipped in #1139: every client''s debt ops unit-tested in CI against recorded-command
+      doubles (glab/tea not live-captured; a live walk of those forges is owed).'
+  - id: merge-train-label-gate
+    capability: triage-batch-merge
+    acceptance: 'fr merges a batch PR only with a valid approved-fr label bound to its
+      head: an unlabelled green PR is held naming the label, a labelled green draft
+      is readied and merged, a session push after labelling voids the approval and removes
+      the label, and the driver''s own update-from-base keeps it.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_approval.py#test_a_chain_of_fr_updates_from_the_approved_head_stays_approved
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_walk
+      - super-fr:tests/unit/test_merge_train_gate.py#test_settle_voids_a_head_the_chain_does_not_reach_and_removes_the_label
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_green_draft_is_readied_then_merged
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval
+      - super-fr:tests/unit/test_merge_train_commands.py#test_a_default_merge_holds_an_unlabelled_batch_and_merges_the_rest
+      - super-fr:tests/unit/test_merge_train_commands.py#test_naming_an_unapproved_batch_exits_2_naming_the_label
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_after_labelling_voids_the_approval
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: the label gate on every fr merge path. Unit: the pure verdict (test_merge_train_approval),
+      settle/walk/merge gate/update events (test_merge_train_gate), batch merge held/refused/settled
+      under --yes (test_merge_train_commands), the driver''s settle, ready-and-merge,
+      void and update (test_triage_batch_drive_cmd). Scenario: tests/scenarios/merge-train-label-gate.sh
+      drives five passes against a fake REST forge and a real bare remote.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
+  - id: approval-label-created
+    capability: triage-batch-merge
+    acceptance: fr init scaffold and the triage commands that touch a repo's PRs create
+      the approved-fr label when it is missing, warning once, and never fail on a forge
+      that cannot.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_missing_label_is_created_once_per_repo_and_said
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_forge_that_cannot_check_labels_warns_and_never_fails
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_collect_creates_the_label_on_each_collected_repo
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_init_scaffold_creates_the_label_on_a_github_origin
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_creates_the_missing_approval_label_once_and_says_so
+      - super-fr:tests/unit/test_merge_train_commands.py#test_merge_creates_the_missing_label_under_yes_only
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it
+      - super-fr:tests/unit/test_merge_train_forge_seams.py#test_rest_label_exists_from_the_captured_200_and_404
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: ensure_approval_label creates a missing approved-fr label once
+      per repo per pass or command and warns; a forge that cannot is a warning. Called
+      by collect, batch dispatch, batch merge (under --yes), every drive pass and fr
+      init scaffold on a GitHub origin. Scenario: the label-gate scenario''s first pass
+      creates it.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
+  - id: batch-merge-skip-held
+    capability: triage-batch-merge
+    acceptance: fr triage batch merge with no ids skips batches another scope holds,
+      naming each, and merges the rest; naming a held batch still refuses.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_batch_merge_skip_held
+    status: ci
+    notes: 'Phase 2: batch merge with no ids partitions held batches.'
+    verify: candidate
+    scenario: tests/scenarios/batch-merge-skip-held.sh
+  - id: approval-board-and-briefs
+    capability: triage-board
+    acceptance: The board asks the operator to label (or re-label) a green unapproved
+      batch PR, and no brief, skill, agent or rule fr ships tells a session to add the
+      approved-fr label.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_green_unlabelled_batch_pr_asks_for_the_label_draft_or_not
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_voided_approval_asks_for_a_re_label
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_the_kanban_card_of_an_unapproved_green_member_awaits_approval
+      - super-fr:tests/unit/test_tripwire_approval_label_prose.py#test_no_shipped_skill_agent_or_rule_asks_for_the_label
+      - super-fr:tests/unit/test_tripwire_approval_label_prose.py#test_every_brief_renderer_carries_the_line
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: Needs you shows approve-pr (label it / re-label after a void) for
+      a green batch PR, draft or not, in place of ready-pr; the kanban shows awaiting
+      approval; every brief carries NO_APPROVAL_LINE, and the prose tripwire fails a
+      shipped skill, agent, rule or mirror asking anyone but the operator to add the
+      label. The red hand-back brief joins in its phase. Scenario: the label-gate scenario
+      renders both asks.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
+  - id: ci-merge-group-trigger
+    capability: ci
+    acceptance: super-fr's CI and acceptance workflows report ci-ok for a merge queue's
+      merge group.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_merge_group.py#test_the_workflow_triggers_on_merge_group
+    status: ci
+    notes: 'Phase 3: both workflows trigger on merge_group; change-fragment stays pull-request-only
+      and ci-ok treats its skip as a pass.'
+    verify: none
+  - id: release-pushes-as-app
+    capability: release
+    acceptance: With the app configured, super-fr's release commit and tag are pushed
+      as derio-fr-automation, CI runs on the release commit, and the follow-up release
+      run is a no-op.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: main-requires-ci-ok
+    capability: release
+    acceptance: super-fr's main requires ci-ok with up-to-date branches, blocks a behind
+      PR until it is updated, and still accepts the release bot's push through its bypass.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R18
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: main-protection-script
+    capability: release
+    acceptance: configure-main-protection.sh merges the bypass actor and the strict
+      ci-ok rule into main's ruleset without overwriting it, and refuses the rule until
+      the bypass is in place and a release was pushed by the app.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_configure_main_protection.py#test_require_adds_the_strict_ci_ok_check_and_keeps_every_other_rule
+      - super-fr:tests/unit/test_configure_main_protection.py#test_require_refuses_when_the_newest_release_was_not_pushed_by_the_app
+    status: ci
+    notes: 'configure-main-protection.sh tested with a stub gh: merge-not-overwrite
+      body, both refusals, --force, --dry-run, idempotence'
+  - id: tracker-done-closes-issue
+    capability: tracker protocol
+    acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
+      without raising.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracker.py#test_github_tracker_transition_to_done_closes_the_issue
+      - super-fr:tests/unit/test_tracker.py#test_fake_gh_client_refuses_an_unknown_issue_state
+    status: ci
+    notes: GithubTracker passes CLOSED; the fake refuses any other state.
+    verify: none
+  - id: models-dead-reason-trimmed
+    capability: model binding health
+    acceptance: A dead binding's reason ends at the provider's message, without the
+      wrapper's closing brackets.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bindings_probe.py#test_dead_detail_is_trimmed_of_the_wrapper_tail
+      - super-fr:tests/unit/test_bindings_probe.py#test_dead_detail_from_a_cause_wrapper_line_drops_the_brackets
+    status: ci
+    notes: classify trims the wrapper tail.
+    verify: none
+  - id: models-corrupt-config-reported
+    capability: model bindings
+    acceptance: A corrupt models.yaml is reported in one line naming the file; fr run
+      start still starts, fr run advance, resolve's chained advance and fr models refuse
+      with exit 2, and none prints a traceback.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_run_start_warns_and_still_starts
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_run_advance_exits_2_with_the_message
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_record_resolve_applies_then_reports_the_refused_advance
+    status: ci
+    notes: ModelsError reported per command; start warns, others exit 2.
+    verify: none
+  - id: triage-skill-board-columns
+    capability: triage board
+    acceptance: The fr-triage skill names every column the board renders, and CI fails
+      when a column is added or renamed without the skill following.
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_triage_board_columns.py#test_the_skill_names_every_column
+      - super-fr:tests/unit/test_tripwire_triage_board_columns.py#test_the_skill_states_no_column_count
+    status: ci
+    notes: Tripwire reads COLUMN_TITLES live.
+    verify: none
+  - id: verification-unrunnable-strategy
+    capability: verification-strategies
+    acceptance: 'A repo that cannot run a strategy''s install program is never owed
+      that strategy''s walk from the shape default, and an explicitly named unrunnable
+      strategy is reported by plan self-review (error) and the brainstorm resolve (warning)
+      before deliver; a malformed strategy: line names the accepted form.'
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-run-pipeline-failures-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_shape_default_is_dropped_without_the_install_program
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_walk_owed_owes_nothing_from_the_default_when_every_row_says_none
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_unrunnable_strategies_names_each_explicit_strategy_once
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_self_review_errors_on_an_explicit_unrunnable_strategy
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_the_brainstorm_resolve_warns_and_still_resolves
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_a_malformed_strategy_line_shows_the_accepted_form
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r5_the_flag_form_resolve_prints_the_same_warning
+      - super-fr:tests/unit/test_verification_unrunnable.py#test_p2_r1_a_rows_verify_alone_is_flagged_and_names_the_row_and_the_fix
+      - super-fr:tests/unit/test_verification_walk.py#test_p2_r7_a_default_the_repo_cannot_run_says_so_instead_of_naming_no_strategy
+    status: ci
+    notes: 'review p2: sources named per strategy, flag-form warning, never-raise, walk
+      message'
+    verify: none

@@ -16,7 +16,7 @@ assert len(_SKILL_DIRS) >= 10, f"skill glob collapsed: {_SKILL_DIRS}"
 # skill must carry its acceptance duty. Substrings, not prose — the duty can
 # be reworded but not dropped.
 _ACCEPTANCE_CONTENT: dict[str, tuple[str, ...]] = {
-    "fr-acceptance": ("fr acceptance backfill", "fr acceptance check", "choose skipped"),
+    "fr-acceptance": ("fr acceptance backfill", "fr acceptance check", "choose unwired"),
     "fr-brainstorming": ("fr acceptance add", "defense"),
     "fr-plan": ("acceptance:", "fr acceptance add"),
     "fr-execute": ("flip", "fr acceptance"),

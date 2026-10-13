@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-11-driver-resilience
 
 <!-- fr:journal kind=discovery scope=plan id=p1-d1-single-pass-guard-fallout created=2026-10-11T20:56:45+00:00 phase=1 -->

@@ -453,9 +453,15 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
     assert report.failed == ()
     for name, p in paths.items():
-        if name in ("run", "matrix"):
+        if name in ("run", "matrix", "journal"):
             continue  # stamped on purpose — see the block comment above
         assert _unchanged(p, frozen[name]), f"the runner wrote to a {name} artifact"
+    # The journal moved 1 -> 2 (spec 2026-10-11-debt-engine §E): a stamp line
+    # is prepended, and nothing else of the body moves.
+    assert paths["journal"].read_text() == (
+        "<!-- fr:journal-schema=2 -->\n"
+        "<!-- fr:journal kind=discovery scope=plan id=d created=2026-08-30 -->\n"
+    )
     # And the closed-world models still parse — the failure mode the finding
     # named. For the run cursor this is now the load-bearing assertion: it WAS
     # written to, and it must still parse afterwards.
@@ -475,9 +481,9 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
 def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> None:
     for name in (
-        "journal",
         "spec",
-    ):  # matrix moved off 1 (spec 2026-09-28-requirements-traceability-design.md §H)
+    ):  # matrix moved off 1 (spec 2026-09-28-requirements-traceability-design.md §H);
+        # journal moved off 1 (spec 2026-10-11-debt-engine-design.md §E)
         assert MIGRATIONS.schema_migrations(name) == (), (
             f"{name} is at current_version=1; a schema migration for it would make the "
             f"runner stamp a live file whose model is extra='forbid'"

@@ -41,9 +41,12 @@ from fr.archive import (
     archive_run_cursor,
     emitted_plan,
     merge_evidence,
+    note_owed_journal,
+    outcome_hold,
     paths_dirty,
     recording_moves,
     spec_archive_sweep,
+    unticked_manual_phases,
 )
 from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
@@ -263,7 +266,11 @@ def _archive_branch_plan(
         return f"parse error: {e}"
     blockers = archive_blockers(report.plan, report.observed, evidence)
     if blockers:
+        _write_manual_owed(repo_root, report.plan, blockers)
         return "; ".join(blockers)
+    hold = outcome_hold(repo_root, report.plan, plan_rel)
+    if hold:
+        return "\n".join(hold)
     if paths_dirty(repo_root, target):
         return "worktree dirty at the plan path — commit or stash first"
     try:
@@ -395,6 +402,8 @@ def _after_moves(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         steps += [("usage refresh", _refresh_usage), ("matrix retarget", _retarget_matrix)]
     if log or opts.issues is not None:
         steps.append(("open ends", _open_ends_step))
+    if log or log.owed_journals:
+        steps.append(("owed actions", _owed_step))
     for name, step in steps:
         try:
             step(repo_root, log, opts)
@@ -453,7 +462,7 @@ def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
 
     from fr.acceptance.check import resolve_identity
     from fr.acceptance.model import parse_matrix
-    from fr.acceptance.report import render_committed_set
+    from fr.acceptance.report import render_committed_set, tracked_reports
     from fr.acceptance.retarget import retarget_text
     from fr.artifacts.atomic import write_text_atomic
     from fr.commands.acceptance_cmd import MATRIX_REL
@@ -467,7 +476,9 @@ def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         new_text, changes = retarget_text(text, own, log.moves)
         if not changes:
             return
-        renders = render_committed_set(parse_matrix(new_text), repo_root)
+        renders = render_committed_set(
+            parse_matrix(new_text), repo_root, only=tracked_reports(repo_root)
+        )
     except Exception as e:  # noqa: BLE001 — a refusal is a warning, never a failure
         err_console.print(f"[yellow]warning:[/yellow] matrix retarget skipped — {escape(str(e))}")
         return
@@ -564,6 +575,95 @@ def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         typer.echo(f"  {'reused' if filed.reused else 'filed'}: {qid} -> {filed.url}")
 
 
+def _write_manual_owed(repo_root: Path, plan: Any, blockers: tuple[str, ...]) -> None:
+    """R22: a plan held only by unticked `[manual]` phases owes them — one
+    `owed` entry each in its plan journal (staged), filed by `_owed_step`."""
+    import subprocess
+
+    from fr import archive_followups as af
+
+    phases = unticked_manual_phases(plan, blockers)
+    if not phases:
+        return
+    name = plan.dir.name
+    try:
+        path = af.write_manual_owed(repo_root, name, phases)
+        if path is not None:
+            subprocess.run(
+                ["git", "-C", str(repo_root), "add", "--", str(path)],
+                check=True,
+                capture_output=True,
+            )
+    except Exception as e:  # noqa: BLE001 — the hold stands; say the journal is behind
+        err_console.print(
+            f"[yellow]warning:[/yellow] could not record owed manual phase(s) of {name} — "
+            f"{escape(str(e))}"
+        )
+        return
+    note_owed_journal("plan", name)
+
+
+def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
+    """R21: file every open `owed` entry of the moved (or held-and-owing)
+    journals as one `fr:owed` issue — whatever `--issues`/`--no-issues` say —
+    and record where it went. Nothing is filed under `tracking: none`."""
+    import subprocess
+
+    from fr import archive_followups as af
+    from fr.run.closeout import services_invalid_text
+    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+
+    journals = af.journals_from_log(log.moves)
+    journals += [j for j in log.owed_journals if j not in journals]
+    ends = af.owed_ends(repo_root, journals)
+    if not ends:
+        return
+    typer.echo("  owed actions:")
+    for end in ends:
+        typer.echo(f"    - {end.key}: {end.title}")
+    try:
+        require_tracker(repo_root)
+    except TrackerRequiredError:
+        typer.echo("  no tracker configured — owed actions stay in the journal")
+        return
+    except ServicesError as exc:
+        err_console.print(
+            f"[yellow]warning:[/yellow] {escape(services_invalid_text(exc))}; "
+            "owed actions left in the journal"
+        )
+        return
+    repo, why = af.owed_identity(repo_root)
+    if repo is None:
+        err_console.print(
+            f"[yellow]warning:[/yellow] owed actions not filed — {escape(why)}; they stay "
+            "in the journal (file each as an fr:owed issue carrying its "
+            "`<!-- fr-owed:<key> -->` marker yourself)",
+            soft_wrap=True,
+        )
+        return
+    for filed in af.file_owed_ends(repo_root, ends, _make_gh_client(), repo):
+        if filed.ref is None:
+            err_console.print(
+                f"[yellow]warning:[/yellow] could not file owed {filed.end.key} — "
+                f"{escape(filed.error or '')}"
+            )
+            continue
+        try:
+            path = af.write_owed_back(filed)
+            subprocess.run(
+                ["git", "-C", str(repo_root), "add", "--", str(path)],
+                check=True,
+                capture_output=True,
+            )
+        except Exception as e:  # noqa: BLE001 — the issue exists; say the journal is behind
+            err_console.print(
+                f"[yellow]warning:[/yellow] filed {filed.end.key} as {filed.ref} but could "
+                f"not record it — {escape(str(e))}"
+            )
+            continue
+        typer.echo(f"  {'reused' if filed.reused else 'filed'}: {filed.end.key} -> {filed.ref}")
+
+
 def _repo_slug(repo_root: Path) -> str:
     """`org/repo` — the identity the matrix retarget uses (explicit matrix keys,
     else the origin remote)."""
@@ -617,7 +717,9 @@ def archive_command(
     force: bool = typer.Option(
         False,
         "--force",
-        help="Archive even when the gate reports incomplete phases (single plan only).",
+        help="Archive even when the gate reports incomplete phases (single plan only). "
+        "It does not lift the Test Plan hold: record a step that does not apply with "
+        "`fr closeout outcome --na`.",
     ),
     no_spec_sweep: bool = typer.Option(
         False,
@@ -751,6 +853,7 @@ def archive_command(
 
         blockers = archive_blockers(report.plan, report.observed, evidence)
         if blockers and not force:
+            _write_manual_owed(repo_root, report.plan, blockers)
             if not all_plans:
                 err_console.print("refusing to archive — plan is not complete or not merged:")
                 for b in blockers:
@@ -758,6 +861,18 @@ def archive_command(
                 err_console.print("(override with --force if you know the work is done)")
                 raise typer.Exit(2)
             skipped.append(f"{target.name}: skipped — {'; '.join(blockers)}")
+            continue
+
+        # R19: a spec Test Plan step with no recorded outcome holds the plan in
+        # every mode, `--force` included — a skipped step is never dropped.
+        hold = outcome_hold(repo_root, report.plan, target.resolve().relative_to(repo_root))
+        if hold:
+            if not all_plans:
+                err_console.print(f"refusing to archive — {hold[0]}:", soft_wrap=True, markup=False)
+                for line in hold[1:]:
+                    err_console.print(line, soft_wrap=True, markup=False)
+                raise typer.Exit(2)
+            skipped.append(f"{target.name}: skipped — " + "\n".join(hold))
             continue
 
         if paths_dirty(repo_root, target):

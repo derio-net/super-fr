@@ -59,6 +59,13 @@ Captured 2026-10-08 in a later session of the same run (review finding p1-r1):
 `label-remove-missing-issue.{stdout,stderr}`, the plain 404 "Not Found" of the
 same DELETE on issue 99999999, which it still raises. Both exited 1.
 
+Captured 2026-10-11 from a host session with `gh api` against
+`derio-net/super-fr` (spec `2026-10-11-merge-train-safety` §A, `label_exists`):
+`repo_labels_bug.json`, the 200 of `gh api repos/derio-net/super-fr/labels/bug`,
+and `repo_labels_approved-fr.error.json`, the 404 "Not Found" of the same route
+for `approved-fr` before the label existed (exit 1), which `label_exists` reads
+as "missing".
+
 **The GraphQL side.** The plan asked for the matching GraphQL-backed `gh --json`
 outputs "for the same moment" from a host session into `graphql/`. No host
 session was available to this capture, so **there is no `graphql/` directory**.

@@ -17,12 +17,12 @@ The matrix (`docs/acceptance/matrix.yaml`) is the registry of business-level acc
 
 ## Statuses — the honesty scale
 
-`ci` / `scheduled` = automated, cannot drift · `skipped` = verification exists
-but not in CI (warning, backfill owed) · `not-implemented` = nothing yet
-(warning) · `failing` = known red, `fr acceptance check` exits 2 and CI fails.
+`ci` / `scheduled` = automated · `walked` = proven live (dated by its walk) ·
+`manual` = never automatable · debt: `unwired` (test not in CI), `walk-owed`,
+`not-implemented` · `failing` = known red, `fr acceptance check` exits 2.
 Statuses move **explicitly, never silently** — with `fr acceptance
-set-status`, never a hand-edit; when in doubt between ci and skipped,
-**choose skipped**. Do not inflate coverage; the operator audits at review.
+set-status`, never a hand-edit; when in doubt between ci and unwired,
+**choose unwired**. Do not inflate coverage; the operator audits at review.
 
 ## Backfill an existing repo
 
@@ -42,7 +42,7 @@ set-status`, never a hand-edit; when in doubt between ci and skipped,
 ## Flip statuses (execution hand-off)
 
 When a plan phase carrying `acceptance: [row-ids]` completes, flip those rows
-up the ladder (`not-implemented` → `skipped` → `ci`/`scheduled`) with
+up the ladder (`not-implemented` → `unwired` → `ci`/`scheduled`) with
 `fr acceptance set-status --id <row> --status <new> --notes "<why it moved>"
 --level unit=<repo>:<path>` — one command for the whole transition: it moves
 the row in place, adds the test refs that justify the move, and regenerates the

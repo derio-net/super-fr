@@ -11,7 +11,7 @@ what it would do (`drive_pass` over `drive_snapshot`) and falls back per column.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Literal
@@ -33,6 +33,8 @@ from fr.triage.batch_drive import (
     Action,
     IdleSession,
     LivePr,
+    Pass,
+    Snapshot,
     closeout_event,
     closeout_item_id,
     default_selection,
@@ -50,6 +52,7 @@ from fr.triage.model import (
     Facts,
     Judgements,
     Launch,
+    RedHandbackEvent,
 )
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot
@@ -87,6 +90,7 @@ _DEAD: frozenset[DependencyState] = frozenset({"unsatisfiable", "unknown"})
 _ACTION_PHRASES: Mapping[str, str] = {
     "dispatch": "dispatch next",
     "merge": "merge ready",
+    "enqueue": "enqueue PR",  # `action_phrase` adds the number (merge-train-safety R13)
     "warn": "CI failing",
     "closeout": "close-out due",
     "archive": "archive PR ready to merge",
@@ -118,6 +122,10 @@ HINT_REVIEW = "awaiting review"
 HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
+# A green train member without a valid `approved-fr` label (merge-train-safety R5).
+HINT_AWAITING_APPROVAL = "awaiting approval"
+# A member the base's merge queue already holds (merge-train-safety R13).
+HINT_IN_MERGE_QUEUE = "in merge queue"
 
 
 def _idle_hint(idle: IdleSession, collected_at: str) -> str:
@@ -241,6 +249,14 @@ class Card:
     events: tuple[EventRow, ...]
     claim_expiry: ClaimExpiry | None = None
 
+    @property
+    def front(self) -> Literal["batch", "closeout"]:
+        """Whose session the card's pill and Jump speak for (spec 2026-10-12 R6): the
+        close-out's once one is live, the batch's otherwise."""
+        if self.closeout_status in (None, "absent", "unknown"):
+            return "batch"
+        return "closeout"
+
 
 @dataclass(frozen=True)
 class ColumnView:
@@ -292,15 +308,43 @@ def pill_of(batch: Batch, facts: Facts) -> str | None:
 # -------------------------------------------------------------------- hints
 
 
-def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
-    """The first action the driver would take per batch on these facts, selecting what
-    the drive selects by default, at its default in-flight cap (R6)."""
-    snapshot = drive_snapshot(facts, judgements)
+def _default_plan(
+    facts: Facts, judgements: Judgements, ci_none: Collection[str] = ()
+) -> tuple[Snapshot, Pass]:
+    """The snapshot and the pass the drive would make on these facts, selecting what it
+    selects by default, at its default in-flight cap (R6): built once per board."""
+    snapshot = drive_snapshot(facts, judgements, ci_none=ci_none)
     chosen = replace(snapshot, selected=default_selection(judgements.batches))
+    return chosen, drive_pass(chosen)
+
+
+def _first_actions(plan: Pass) -> dict[str, Action]:
     first: dict[str, Action] = {}
-    for action in drive_pass(chosen).actions:
+    for action in plan.actions:
         first.setdefault(action.batch, action)
     return first
+
+
+def _in_merge_queue(plan: Pass) -> frozenset[str]:
+    return frozenset(b for t in plan.trains for b in t.in_merge_queue)
+
+
+def _awaiting(snapshot: Snapshot, plan: Pass) -> frozenset[str]:
+    held = (b for t in plan.trains for b in t.awaiting)
+    return frozenset(b for b in held if (pr := snapshot.live.get(b)) and pr.checks == "green")
+
+
+def first_actions(facts: Facts, judgements: Judgements) -> dict[str, Action]:
+    """The first action the driver would take per batch on these facts (R6)."""
+    return _first_actions(_default_plan(facts, judgements)[1])
+
+
+def awaiting_approval(
+    facts: Facts, judgements: Judgements, ci_none: Collection[str] = ()
+) -> frozenset[str]:
+    """The green train members the driver holds for the operator's `approved-fr` label
+    (`Train.awaiting`, merge-train-safety R5); a pending one still reads `CI pending`."""
+    return _awaiting(*_default_plan(facts, judgements, ci_none))
 
 
 def action_phrase(action: Action) -> str:
@@ -309,7 +353,29 @@ def action_phrase(action: Action) -> str:
         return f"blocked: {action.detail}"
     if action.kind == "held" and action.detail == AWAITING_LIVE_HOLD:
         return "held: its members await a live walk"
+    if action.kind == "held" and "requires a merge queue" in action.detail:
+        return f"held: {action.detail}"
+    if action.kind == "enqueue":
+        return f"enqueue PR #{action.pr}"
     return _ACTION_PHRASES[action.kind]
+
+
+def _red_phrase(batch: Batch, action: Action) -> str:
+    """The card's line for a red PR (merge-train-safety R11): still in progress while a
+    delivered hand-back covers its head, a need when none could take it; "" otherwise."""
+    if action.kind != "warn" or not action.red:
+        return ""
+    covering = [
+        e for e in batch.events
+        if isinstance(e, RedHandbackEvent) and (e.pr, e.head) == (action.pr, action.head)
+    ]  # fmt: skip
+    if not covering:
+        return ""
+    return (
+        "red: handed back to its session"
+        if covering[-1].delivered == "session"
+        else "needs you: red PR, no session can take it"
+    )
 
 
 def fallback_hint(
@@ -407,6 +473,8 @@ def _card(
     claim_expiry: ClaimExpiry | None = None,
     now: datetime | None = None,
     notes: Mapping[str, str] | None = None,
+    awaiting: frozenset[str] = frozenset(),
+    queued: frozenset[str] = frozenset(),
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -436,7 +504,11 @@ def _card(
         # stopped merge never lands, so it waits on it as the driver does ("held").
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
-        hint = action_phrase(actions[batch.id])
+        hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
+    elif batch.id in queued:
+        hint = HINT_IN_MERGE_QUEUE
+    elif batch.id in awaiting:
+        hint = HINT_AWAITING_APPROVAL
     else:
         hint = fallback_hint(batch, column, facts, batches, selected=batch.id in selected)
     pr = batch_pr(batch, facts)
@@ -523,6 +595,7 @@ def build_board(
     me: str | None = None,
     now: datetime | None = None,
     notes: Mapping[str, str] | None = None,
+    ci_none: Collection[str] = (),
 ) -> Board:
     """One card per batch in seven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
@@ -537,7 +610,9 @@ def build_board(
         raise ValueError("build_board needs `now` (the clock is passed in) when given `me`")
     expiries = _own_expiries(facts, me, now) if me and now else {}
     batches = judgements.batches
-    actions = first_actions(facts, judgements)
+    snapshot, plan = _default_plan(facts, judgements, ci_none)  # one plan per board (p1-r8)
+    actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
+    queued = _in_merge_queue(plan)
     selected = default_selection(batches)
     live = live_stops(batches, facts, stops or {})
     cards = [
@@ -552,6 +627,8 @@ def build_board(
             claim_expiry=expiries.get(b.id),
             now=now,
             notes=notes,
+            awaiting=awaiting,
+            queued=queued,
         )
         for b in batches
     ]

@@ -28,11 +28,20 @@ Pure: facts and judgements in, sets out. The command only formats them.
   marker's forge `createdAt` to `collected_at`, so every machine agrees and no
   clock is read; a marker time that cannot be read is skipped, never raised.
   Reported, never acted on;
+- **closed in progress** — a CLOSED issue still labelled `fr:in-progress` (board-truth
+  R2; `Facts.stale_in_progress`, read by collect): `stale` ones are what `fr triage
+  clean-labels` cleans (`clean_label_targets`, the one predicate), `release-pending`
+  ones carry this scope's own un-released claim (the next `claim sync` clears both
+  labels), `held` ones another scope's;
 - **awaiting live** — an open issue labelled `fr:awaiting-live`: its fix has merged
   and a post-merge acceptance row still waits for its walk (spec
   2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
   so it is in neither unranked, unplaced, no severity nor stale dispatch, and the
   board shows it in a group of its own;
+- **debt digests** and **owed** — open issues carrying the debt marker (current or
+  legacy) as a line of their own, and open `fr:owed` issues (debt-engine R14, R16). Like
+  awaiting live they are never ranked, unranked, unplaced or without severity; each
+  digest's figures are parsed from its body at check time;
 - **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
   proposes as duplicates, with each flagged pair's reasons. A proposal, never a
   verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;
@@ -51,9 +60,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS
+from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS, FR_OWED
 from fr.triage.batch import closeout_state, derive_batch_stage, is_open
 from fr.triage.claims import expired, from_issue_claim, holder, owed_claims
+from fr.triage.debt import is_marked, is_trusted_digest, issue_figures
 from fr.triage.dedupe import CandidateGroup, candidates
 from fr.triage.model import (
     Batch,
@@ -62,6 +72,7 @@ from fr.triage.model import (
     IssueClaim,
     Judgements,
     PullRequest,
+    StaleInProgress,
     issue_key,
     normalize_key,
 )
@@ -181,9 +192,15 @@ class CheckResult:
     # leaves no original on the board for its members (review p3-r2).
     duplicate_chained: list[str] = field(default_factory=list)
     awaiting_live: list[Issue] = field(default_factory=list)
+    debt_digests: list[Issue] = field(default_factory=list)
+    untrusted_digests: list[Issue] = field(default_factory=list)
+    owed: list[Issue] = field(default_factory=list)
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
+    closed_in_progress: list[StaleInProgress] = field(default_factory=list)
+    skipped: list[tuple[str, str]] = field(default_factory=list)
+    config_ignored: list[tuple[str, list[str]]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -199,6 +216,8 @@ class CheckResult:
             }
 
         return {
+            "skipped": [{"repo": r, "reason": why} for r, why in self.skipped],
+            "config_ignored": {r: list(keys) for r, keys in self.config_ignored},
             "unranked": [row(i) for i in self.unranked],
             "unranked_prs": [pr_row(pr) for pr in self.unranked_prs],
             "settled": [row(i) for i in self.settled],
@@ -210,6 +229,9 @@ class CheckResult:
             "duplicate_unknown": list(self.duplicate_unknown),
             "duplicate_chained": list(self.duplicate_chained),
             "awaiting_live": [row(i) for i in self.awaiting_live],
+            "debt_digests": [{**row(i), "figures": issue_figures(i)} for i in self.debt_digests],
+            "untrusted_digests": [row(i) for i in self.untrusted_digests],
+            "owed": [row(i) for i in self.owed],
             "duplicate_candidates": [
                 {
                     "keys": list(g.keys),
@@ -239,6 +261,16 @@ class CheckResult:
                 }
                 for s in self.stale
             ],
+            "closed_in_progress": [
+                {
+                    "key": e.key,
+                    "title": e.title,
+                    "url": e.url,
+                    "closed_at": e.closed_at,
+                    "state": e.state,
+                }
+                for e in self.closed_in_progress
+            ],
             "held_elsewhere": [
                 {
                     "key": h.key,
@@ -261,6 +293,16 @@ class CheckResult:
             ],
             "claims_owed": [{"key": o.key, "batch": o.batch} for o in self.claims.claims_owed],
         }
+
+
+def skew_entries(
+    facts: Facts,
+) -> tuple[list[tuple[str, list[str]]], list[tuple[str, str]]]:
+    """The (repo, ignored keys) and (repo, skip reason) lists the skew banner and `check`
+    both report, sorted by repo (R5)."""
+    ignored = [(repo, sorted(keys)) for repo, keys in sorted(facts.config_ignored.items()) if keys]
+    skipped = [(s.repo, s.reason) for s in sorted(facts.skipped, key=lambda s: s.repo)]
+    return ignored, skipped
 
 
 def _unreachable_reason(key: str, facts: Facts) -> str | None:
@@ -344,6 +386,13 @@ def _aware(stamp: str | None) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
+def clean_label_targets(facts: Facts) -> list[StaleInProgress]:
+    """The closed issues `fr triage clean-labels` may unlabel: the `stale` ones only. A
+    `release-pending` one is the claim sync's to clear, a `held` one is another scope's
+    (board-truth R2, R3); `check` and the verb both select through this."""
+    return [e for e in facts.stale_in_progress if e.state == "stale"]
+
+
 def stale_dispatches(facts: Facts) -> list[Stale]:
     """The stale-dispatch set: see the module docstring."""
     collected = _aware(facts.collected_at)
@@ -384,6 +433,23 @@ def is_awaiting_live(issue: Issue) -> bool:
     return issue.state == "open" and FR_AWAITING_LIVE.name in issue.labels
 
 
+def is_debt_digest(issue: Issue, facts: Facts) -> bool:
+    """Whether `issue` is an open debt digest: the marker, current or legacy, as a line
+    of its own, written by a trusted author (debt-engine R14; `fr.triage.debt`)."""
+    return is_trusted_digest(issue, facts)
+
+
+def is_owed(issue: Issue) -> bool:
+    """Whether `issue` is open and carries `fr:owed` (debt-engine R16)."""
+    return issue.state == "open" and FR_OWED.name in issue.labels
+
+
+def is_set_apart(issue: Issue, facts: Facts) -> bool:
+    """Whether `issue` is in a set of its own that is never ranked or proposed as work:
+    awaiting live, a debt digest or owed."""
+    return is_awaiting_live(issue) or is_debt_digest(issue, facts) or is_owed(issue)
+
+
 def batch_awaits_live(batch: Batch, facts: Facts) -> bool:
     """Whether every open member of *batch* awaits its live walk (at least one is
     open): such a batch is no work, so the driver holds it (spec §F, R18)."""
@@ -408,7 +474,7 @@ def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
     return [
         i
         for i in facts.issues
-        if i.state == "open" and i.key not in placed and not is_awaiting_live(i)
+        if i.state == "open" and i.key not in placed and not is_set_apart(i, facts)
     ]
 
 
@@ -426,7 +492,7 @@ def classify(
     unranked = [
         i
         for i in facts.issues
-        if i.state == "open" and i.key not in judged and not is_awaiting_live(i)
+        if i.state == "open" and i.key not in judged and not is_set_apart(i, facts)
     ]
     unranked_prs = [
         pr for pr in facts.prs if pr.state == "OPEN" and issue_key(pr.repo, pr.number) not in judged
@@ -457,13 +523,17 @@ def classify(
             orphaned.append(key)
         else:
             unreachable.append(Unreachable(key=key, reason=reason))
+    ignored_keys, skipped_repos = skew_entries(facts)
     return CheckResult(
+        skipped=skipped_repos,
+        config_ignored=ignored_keys,
         unranked=unranked,
         unranked_prs=unranked_prs,
         settled=settled,
         orphaned=orphaned,
         unreachable=unreachable,
         stale=stale_dispatches(facts),
+        closed_in_progress=list(facts.stale_in_progress),
         unplaced=unplaced_issues(facts, judgements),
         no_severity=[
             i
@@ -471,7 +541,7 @@ def classify(
             if i.state == "open"
             and i.key in judged
             and judgements.issues[i.key].severity is None
-            and not is_awaiting_live(i)
+            and not is_set_apart(i, facts)
         ],
         duplicate_unknown=sorted(
             k
@@ -487,6 +557,11 @@ def classify(
         ),
         settled_prs=settled_prs,
         awaiting_live=awaiting_live_issues(facts),
+        debt_digests=[i for i in facts.issues if is_debt_digest(i, facts)],
+        untrusted_digests=[
+            i for i in facts.issues if is_marked(i) and not is_debt_digest(i, facts)
+        ],
+        owed=[i for i in facts.issues if is_owed(i)],
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
         claims=(

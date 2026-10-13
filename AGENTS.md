@@ -166,7 +166,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
     engine-appended `events` (fr reads schemas 1–8 and writes 8, see
-    the waves paragraph below) and `facts.json` schema 3
+    the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
     (stages, open-batch rule, the one writer, the §3.F merge order),
@@ -232,6 +232,22 @@ uv workspace monorepo, version lockstepped across every manifest (see
     mode, and the `run`/`usage` groups refuse in-process on a devcontainer-mode
     workspace (`target: devcontainer` marker + container evidence), never on a host-worktree pod or an
     external marker.
+  - **`fr/debt`** (2026-10-11 spec, `debt-engine`) — what a repo owes, as one
+    `DebtReport` (`model.py`; `schema_version: 1`, frozen). `engine.compute(repo_root,
+    *, forge, now, stale_days)` is pure given the forge and the clock: acceptance from
+    `load_matrix` (an unreadable matrix is `available: false`, never zero), plans from
+    `fr.closeout.plan_sweep` (archivable with merge age from `git log` on the default ref,
+    stale when the plan dir, its run branch and its PR's `updatedAt` are all older than
+    `stale_days`), and owed items folded by `fold_owed(OwedSources)`, one per key
+    (`spec:`, `plan:`, `row:`, `issue:`), precedence journal > row > plan > issue (a new
+    source is one `OwedSources` field and one `OWED_PRECEDENCE` entry). `debt_total()`
+    is the one definition of zero debt. `render.py` has `text`, `markdown` (markers
+    `<!-- fr-technical-debt -->` and base64 `fr-debt-figures`) and `parse_figures`;
+    `forge.py` adapts `GhClient` to the engine's `DebtForge` protocol. `.fr/debt.yaml`
+    takes one key, `stale_days`. CLI: `fr debt [--json] [--stale-days N] [--offline]`
+    (`commands/debt_cmd.py`), read-only, so `debt` is in `READ_ONLY_COMMANDS`;
+    `fr acceptance digest` re-renders the report's Acceptance section. `DEBT_STATUSES`
+    (`acceptance/model.py`) is the one status set `open_rows`, status and the digest count.
   - **`fr/record`** (2026-09-25 spec, `lean-cost-aware-process` §5.C) — step
     records: one YAML per agent step at
     `docs/superpowers/runs/<run-id>.records/<step>[__<item>].yaml` (artifact kind
@@ -506,6 +522,17 @@ read-only and fine to run anywhere. A hand-written `fr_version` floor
 (`>=X.Y.Z,<X.Y.Z` under `packages/*/src`) naming an unreleased version must
 name the predicted one: the base version plus this PR's highest fragment bump.
 
+**Release identity.** `release.yml` pushes as the `derio-fr-automation` GitHub
+App when the repo variable `FR_AUTOMATION_APP_ID` is set (a token minted from
+secret `FR_AUTOMATION_APP_KEY` by a sha-pinned `actions/create-github-app-token`
+step, scoped to this repo with contents and issues write only, never persisted by
+checkout and stripped from the staged test run), and falls back to `GITHUB_TOKEN` when it is unset. The two differ in one
+way: a `GITHUB_TOKEN` push runs no CI on the release commit, an app push does,
+and `release.yml` then runs once more as a no-op. The app is the ruleset's bypass
+actor once `scripts/configure-main-protection.sh --stage bypass` has run; `--stage
+require` then adds the required `ci-ok` check and refuses until a release was
+pushed by the app. Order and consumer adoption: `docs/merge-protection.md`.
+
 On every push to `main`, `.github/workflows/release.yml` runs
 `scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`
 and then `fr migrate artifacts --yes` at the new number (at a major that widens
@@ -514,16 +541,18 @@ know; gh#861, and that moves the stamp of a live artifact a PR merged with after
 another PR bumped its kind — the #1058 release), `git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
 whole suite on that staged tree with `fr` installed at the new number**, and only
 then pushes it to `main` (the only commits that land there without a PR), tags
-it and publishes a GitHub Release whose notes are the fragment summaries. No CI
-runs on the release commit itself (it is pushed with the `GITHUB_TOKEN`), so that
-pre-push run is the only test the new number gets: a red suite pushes, tags and
+it and publishes a GitHub Release whose notes are the fragment summaries. In the
+`GITHUB_TOKEN` fallback no CI runs on the release commit, so that pre-push run is
+the only test the new number gets (an app push does run CI): a red suite pushes, tags and
 publishes nothing (gh#854 — 5.0.0 shipped refusing its own plans before it
 existed). It is why the Release job has its own budget in
 `.github/ci-budget.yaml`. To release a specific
 number, run the workflow by hand (`workflow_dispatch`) with an explicit
-`version`. `main`'s ruleset forbids only force-push and deletion today; **if a
-required-PR or required-checks rule is ever added, the release bot needs a
-bypass actor on it**, or every release fails (release.py reports that refusal
+`version`. `main`'s ruleset forbids only force-push and deletion today; **once
+a required-PR or required-checks rule is added (`--stage require`), the app must
+be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting the
+variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
+every release fails (release.py reports that refusal
 by name, never as a lost race).
 
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible

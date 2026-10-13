@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fr.gh import GhError
+from fr.ghclient import BaseRules
 
 
 @dataclass
@@ -41,8 +42,12 @@ class FakeGhClient:
 
     def __init__(self) -> None:
         self.issues: dict[tuple[str, int], FakeIssue] = {}
+        self.issue_titles: dict[tuple[str, int], str] = {}
+        self.issue_authors: dict[tuple[str, int], str] = {}
         self.repo_labels: dict[str, set[str]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.label_checks: list[tuple[str, str]] = []
+        self.labels_missing: set[str] = set()
         self.attempted_mutations: int = 0
         self._next_issue_number: dict[str, int] = {}
         # Fail on Nth attempted mutation (0-indexed). The mutation is NOT
@@ -196,6 +201,8 @@ class FakeGhClient:
         reason: str | None = None,
     ) -> None:
         self._gate()
+        if state not in ("OPEN", "CLOSED"):
+            raise ValueError(f"unknown issue state: {state!r}")
         self.calls.append(
             ("edit_issue_state", {"repo": repo, "number": number, "state": state, "reason": reason})
         )
@@ -205,6 +212,53 @@ class FakeGhClient:
         self._gate()
         self.calls.append(("edit_issue_body", {"repo": repo, "number": number, "body": body}))
         self.issues[(repo, number)].body = body
+
+    def authenticated_login(self) -> str:
+        return self.comment_author
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        self.calls.append(("open_pr_in_repo", {"repo": repo, "branch": branch}))
+        for (r, _), p in sorted(self.prs.items()):
+            if (
+                r == repo
+                and p["head_ref"] == branch
+                and p["state"] == "OPEN"
+                and not p.get("cross_repo", False)
+            ):
+                return {"number": p["number"], "url": p["url"]}
+        return None
+
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        self._gate()
+        self.calls.append(
+            ("edit_issue", {"repo": repo, "number": number, "title": title, "body": body})
+        )
+        self.issues[(repo, number)].body = body
+        self.issue_titles[(repo, number)] = title
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        from fr.ghclient import filter_issues_by_body
+
+        self.calls.append(("list_open_issues_with_body", {"repo": repo, "search": search}))
+        raw = [
+            {
+                "number": n,
+                "title": self.issue_titles.get((r, n), ""),
+                "body": i.body,
+                "labels": sorted(i.labels),
+                "author": {"login": self.issue_authors.get((r, n), self.comment_author)},
+            }
+            for (r, n), i in sorted(self.issues.items())
+            if r == repo and i.state == "OPEN"
+        ]
+        return filter_issues_by_body(raw, search, limit)
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        self._gate()
+        self.calls.append(("close_issue", {"repo": repo, "number": number, "comment": comment}))
+        self.issues[(repo, number)].state = "CLOSED"
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._gate()
@@ -256,6 +310,9 @@ class FakeGhClient:
             if r == repo and p["head_ref"] == branch
         ]
 
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        return getattr(self, "rules", BaseRules())
+
     def required_check_names(self, repo: str, base: str) -> list[str]:
         self.calls.append(("required_check_names", {"repo": repo, "base": base}))
         return sorted(self.required_names.get((repo, base), []))
@@ -282,7 +339,19 @@ class FakeGhClient:
             "mergeable": p["mergeable"],
             "title": p["title"],
             "body": p["body"],
+            "labels": list(p.get("labels", [])),
         }
+
+    def pr_ready(self, repo: str, number: int) -> None:
+        self.calls.append(("pr_ready", {"repo": repo, "number": number}))
+        self.prs[(repo, number)]["draft"] = False
+
+    def label_exists(self, repo: str, name: str) -> bool:
+        """The approval label is defined unless a test lists *repo* in
+        `labels_missing` (merge-train-safety R4); kept out of `calls`, which
+        the call-sequence assertions predate."""
+        self.label_checks.append((repo, name))
+        return repo not in self.labels_missing
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
         """`{name, bucket, state}` rows a test preloads in `required_checks`."""
@@ -308,6 +377,11 @@ class FakeGhClient:
             created_at=self.pr_created_at or datetime.now(UTC).replace(microsecond=0).isoformat(),
         )  # fmt: skip
         return {"number": number, "url": made["url"]}
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        self._gate()
+        self.calls.append(("edit_pr", {"repo": repo, "number": number, "body": body}))
+        self.prs[(repo, number)]["body"] = body
 
     def close_pr(self, repo: str, number: int) -> None:
         self._gate()

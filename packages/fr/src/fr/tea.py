@@ -115,6 +115,19 @@ def edit_issue_body(*, repo: str, number: int, body: str) -> None:
     _run_tea(["issues", "edit", str(number), "--repo", repo, "--description", body])
 
 
+def edit_issue(*, repo: str, number: int, title: str, body: str) -> None:
+    """Replace an Issue's title and description (`tea issues edit`)."""
+    _run_tea(
+        ["issues", "edit", str(number), "--repo", repo, "--title", title, "--description", body]
+    )
+
+
+def comment_close_issue(*, repo: str, number: int, comment: str) -> None:
+    """Comment on an Issue, then close it."""
+    _run_tea(["comments", "add", str(number), comment, "--repo", repo])
+    close_issue(repo=repo, number=number)
+
+
 def swap_issue_labels(
     *,
     repo: str,

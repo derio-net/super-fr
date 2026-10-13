@@ -15,10 +15,22 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from fr.triage.components import GUTTER_CSS, TOKENS_CSS, stamp_text, when
+from fr.triage.components import (
+    CHROME_CSS,
+    GUTTER_CSS,
+    SKEW_CSS,
+    TOKENS_CSS,
+    page_header,
+    stamp_text,
+    when,
+)
 from fr.triage.kanban import Board, BoardStatus, Card, ColumnView, HeldIssue, Member, PrView
 from fr.triage.render import FONTS, _safe_url, esc, noun
+
+if TYPE_CHECKING:
+    from fr.triage.quota import Budget
 
 STATUS_LABELS: dict[BoardStatus, str] = {
     "working": "working",
@@ -83,7 +95,9 @@ code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--gr
 @media (max-width: 1100px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .board { grid-template-columns: minmax(0, 1fr); } }
 """
+    + CHROME_CSS
     + GUTTER_CSS
+    + SKEW_CSS
 )
 
 # One constant script: copy buttons, the reload timer, and the expanded cards and scroll
@@ -272,7 +286,10 @@ def _body(card: Card, scope_args: Sequence[str]) -> str:
     parts.append(_lifecycle(card))
     parts.append(_timeline(card))
     if card.status is not None:
-        session = f"<p>{_status(card.status)}</p>"
+        session = f"<p>{_status(card.status)}"
+        if card.show_jump:
+            session += f" {_jump(bid, scope_args, closeout=False)}"
+        session += "</p>"
         if card.show_jump:
             session += f"<p>{_code(bid, scope_args, closeout=False)}</p>"
         parts.append("<h4>Session</h4>" + session)
@@ -298,13 +315,16 @@ def _card(card: Card, scope_args: Sequence[str]) -> str:
         word = "expired" if card.claim_expiry.expired else "expire"
         meta.append(f"claims {word} {_when(card.claim_expiry.at)}")
     pills = ""
-    if card.status is not None:
-        pills += " " + _status(card.status)
+    front_closeout = card.front == "closeout"
+    front_status = card.closeout_status if front_closeout else card.status
+    if front_status is not None:
+        pills += " " + _status(front_status)
     if card.pill:
         pills += f' <span class="pill stage-{esc(card.pill)}">{esc(card.pill)}</span>'
     if card.blocked:
         pills += ' <span class="pill flag">blocked</span>'
-    jump = " " + _jump(bid, scope_args, closeout=False) if card.show_jump else ""
+    show = card.show_closeout_jump if front_closeout else card.show_jump
+    jump = " " + _jump(bid, scope_args, closeout=front_closeout) if show else ""
     summary = (
         f'<summary><span class="mono">{esc(bid)}</span>'
         f'<span class="title">{esc(card.batch.title)}</span>'
@@ -357,10 +377,15 @@ def render_board(
     rendered_at: datetime,
     refresh: int,
     notes: Sequence[str],
+    budget: Budget | None = None,
+    banner: str = "",
+    present: Sequence[str] = ("batches",),
 ) -> str:
-    """The board page: same inputs, same bytes. *scope_args* are the `--repo`/`--org`
-    (and `--dir`, when given) words the copied commands carry; *refresh* is the reload
-    interval in seconds, 0 for none."""
+    """The board page: same inputs, same bytes. *budget* is the drive's last recorded forge
+    budget (quota-pacing R14): the footer says what it was and how old the facts are, so a
+    board that stopped moving is told apart from a quiet one. None: no quota clause.
+    *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
+    commands carry; *refresh* is the reload interval in seconds, 0 for none."""
     if board.batch_count:
         body = (
             '<div class="board">'
@@ -374,19 +399,29 @@ def render_board(
         if notes
         else ""
     )
+    quota = (
+        ""
+        if budget is None
+        else (
+            f'<p class="meta quota">forge quota: {esc(budget.resource)} '
+            f"{budget.remaining}/{budget.limit}, resets {budget.reset:%H:%M}Z · "
+            f"facts collected {_stamp(board.collected_at)}</p>\n"
+        )
+    )
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>Batch board · {esc(board.scope)}</title>\n"
+        f"<title>Batches · {esc(board.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n"
         f'<body data-refresh="{max(0, int(refresh))}">\n<main>\n'
-        f"<header><h1>Batch board</h1>"
+        f"<header><h1>Batches</h1>"
         f'<p class="meta">{esc(board.scope)} · rendered {_when(rendered_at)} · '
         f"facts collected {_stamp(board.collected_at)}</p>{note_list}</header>\n"
+        f"{page_header('batches', present)}\n{banner}\n"
         f"{_held(board.held)}\n"
         f"{body}\n"
-        '<footer class="meta">Rendered by <code>fr triage board</code> from facts.json and '
-        "judgements.yaml.</footer>\n"
+        f'<footer class="meta">{quota}Rendered by <code>fr triage board</code> from facts.json '
+        "and judgements.yaml.</footer>\n"
         f"</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n"
     )

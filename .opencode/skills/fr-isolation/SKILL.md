@@ -19,7 +19,7 @@ commands in the profile's devcontainer, base repo untouched while the run is liv
 
 - Inside a git repo. **devcontainer mode** (default) needs ≥1 profile (`.devcontainer/<profile>/devcontainer.json`); missing →
   exit 2 pointing at fr-init. NEVER proceed unisolated; offer the fr-init interview (pause, resume).
-- **host-worktree** (`FR_ISOLATION_TARGET=worktree`, docker-less): host env as-is, NO profile/secrets; restart/stats refuse, stop/rebuild no-op.
+- **host-worktree** (`FR_ISOLATION_TARGET=worktree`, docker-less; the default in a Claude Code cloud session): host env as-is, NO profile/secrets; restart/stats refuse, stop/rebuild no-op.
 - **external** mode (valid preparer-written `.fr-isolation` marker, `mode:external`): fr adopts the container's checkout — `up --branch`
   ensures the branch in place; restart/stop/rebuild/stats refuse, gc reports (the container's owner runs them).
 - Any other `FR_ISOLATION_TARGET` value fails closed (`devcontainer|worktree`). **It selects the mode at `up` only:** every later command

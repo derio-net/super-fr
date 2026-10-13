@@ -31,6 +31,7 @@ import fr.commands.triage_cmd as triage_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    QuotaFloorOpt,
     RepoOpt,
     WorkspaceOpt,
     console,
@@ -49,7 +50,9 @@ from fr.triage.lease import (
     lease_duration,
     load_lease,
 )
+from fr.triage.quota import is_rate_limited
 from fr.triage.scope_config import host_id, scope_id
+from fr.triage.state_ref import local_tree, ref_name
 
 lease_app = typer.Typer(
     name="lease",
@@ -361,6 +364,15 @@ def _self_update(
     return None, True
 
 
+def _state_tree(target: Path) -> object:
+    """*target*'s state as the ref carries it, to tell a restore from a warm pass; None
+    when it cannot be read (no clone yet), which a restore then differs from."""
+    try:
+        return local_tree(target)
+    except (TriageError, OSError):
+        return None
+
+
 def _read_json(path: Path | None, what: str) -> Any:
     if path is None or not path.exists():
         return None
@@ -445,6 +457,7 @@ def drive_pass_command(
         int,
         typer.Option("--max-inflight", min=1, help="Batches dispatched and unmerged at once."),
     ] = 3,
+    quota_floor: QuotaFloorOpt = None,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
@@ -459,8 +472,12 @@ def drive_pass_command(
     A session whose --generation is older than the lease's (another session replaced it
     by a self-re-home) drives nothing and exits 0 (p6-r4).
 
-    Exit codes: 0 acted, everything is done, or superseded; 3 nothing to do but wait, or a
-    wake that only renewed the lease; 2 a refusal (another driver's lease included); 1 a
+    A wake that finds the paced rate budget exhausted, or a recorded wait still ahead, makes no
+    forge call but `/rate_limit`: it renews the lease if that would lapse before the next wake
+    and exits 3 with the quota line (quota-pacing R16).
+
+    Exit codes: 0 acted, everything is done, or superseded; 3 nothing to do but wait, a wake
+    that only renewed the lease, or a rate limit; 2 a refusal (another driver's lease included); 1 a
     forge write failed."""
     from fr.commands import triage_batch_cmd as batch
     from fr.commands.triage_kanban_cmd import scope_args, try_load
@@ -468,10 +485,17 @@ def drive_pass_command(
 
     scope = triage_cmd._scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace, sync=False)
+    held = _state_tree(target)
     try:  # 1. restore: the brief's state repo finds the ref before any local state exists
-        triage_cmd.fetch_now(scope, target, state_repo=state_repo)
+        sha = triage_cmd.fetch_now(scope, target, state_repo=state_repo)
     except TriageError as exc:
         _fail(str(exc))
+    if sha is not None and _state_tree(target) != held:  # a restore reads as one (gh#1100)
+        console.print(
+            f"restored the scope's state from {ref_name(scope_id(scope))} at {sha[:12]}",
+            markup=False,
+            soft_wrap=True,
+        )
     target = resolve_state_dir(scope, dir_override, workspace)  # and push when it ends
     identity = identity_for("cloud")
     duration = lease_duration(interval, routine)
@@ -483,6 +507,24 @@ def drive_pass_command(
         current = load_lease(target)
     except TriageError as exc:
         _fail(str(exc))
+    pacer = batch.make_pacer(target, quota_floor=quota_floor, interval_s=interval * 60, now=_now)
+    pace = pacer.before_pass()
+    if pace.kind == "wait":  # R16: no pass, no forge call but /rate_limit; keep the lease alive
+        if current is not None and current.holder == holder_of(sid, identity):
+            if current.expires - batch.LEASE_MARGIN < now + timedelta(minutes=interval):
+                try:
+                    acquire(target, identity, now, scope_id=sid, duration=duration,
+                            generation=generation,
+                            push=lambda: triage_cmd.push_now(scope, target))  # fmt: skip
+                except TriageError as exc:  # the same limit may block the renewal's read (p1-r3)
+                    err_console.print(
+                        f"[yellow]warning:[/yellow] cannot renew the lease while waiting: "
+                        f"{escape(str(exc))}",
+                        soft_wrap=True,
+                    )
+        _write_outbox(outbox, [])
+        console.print(pacer.line(pace), markup=False, soft_wrap=True)
+        raise typer.Exit(code=3)
     recent = (
         current is not None
         and current.holder == holder_of(sid, identity)
@@ -517,6 +559,12 @@ def drive_pass_command(
         statuses=_read_json(statuses, "statuses"),
         lease=batch.LeaseTerms(identity, duration, generation),
     )
+    # The same paced pass as the host loop (spec 2026-10-12-quota-pacing §E): probes,
+    # quiet and partial passes, and below the floor the essential-only one.
+    driver.pacer, driver.pace = pacer, pace
+    if pace.essential:
+        console.print(pacer.line(pace), markup=False, soft_wrap=True)
+        pacer.stretch(pace.until)
     # The cloud runner is opened before the pass, so a request still pending from an
     # earlier pass is re-emitted even when this pass asks nothing new of it (§F).
     # A pass that could write no session request refuses before it acts (p4-r6).
@@ -544,7 +592,13 @@ def drive_pass_command(
             if newer is None and stop is None and not reexec:
                 acted, summary, _ = batch.one_pass(driver, lease_taken=True)
     except batch.ForgeReadError as exc:
-        _fail(str(exc), code=exc.code)
+        if not is_rate_limited(str(exc)):
+            _fail(str(exc), code=exc.code)
+        # a rate limit ends the pass, not the session: record the wait, exit 3 (R2, R16)
+        _write_outbox(outbox, driver.outbox())
+        console.print(pacer.line(pacer.rate_limited()), markup=False, soft_wrap=True)
+        raise typer.Exit(code=3) from exc
+    pacer.clean()
     if newer is not None:
         _stop_superseded(outbox, newer, generation, "it drove nothing")
     if reexec:  # outside drive.lock: the new process takes it again under this pid

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from fr.journal.model import (
     IMPLEMENTED_JOURNALS_REL,
     SCOPE_DIRS,
+    TRACKED_BY_RE,
     JournalEntry,
     JournalParseError,
     append_journal_entry,
@@ -45,6 +46,15 @@ __all__ = [
     "open_ends",
     "select",
     "write_back",
+    "FiledOwed",
+    "OwedEnd",
+    "file_owed_ends",
+    "owed_ends",
+    "owed_identity",
+    "owed_marker",
+    "owned_owed_key",
+    "write_manual_owed",
+    "write_owed_back",
 ]
 
 FOLLOW_UP_LABEL = "follow-up"
@@ -280,3 +290,301 @@ def write_back(filed: Filed) -> Path:
     )
     append_journal_entry(path, filed.end.slug, entry)
     return path
+
+
+# --- owed actions (spec 2026-10-11-debt-engine §E, R21, R22) -----------------
+#
+# Filed OUTSIDE the `--issues`/`--no-issues` selection: an owed action is the
+# operator's, never this change's to drop, so archive always files it — unless
+# the repo declares `tracking: none`, when the journal holds it.
+
+_SAFE_REPO = re.compile(r"^[\w.][\w.-]*(/[\w.-]+)+$")
+_TRAILING_NUMBER = re.compile(r"/(\d+)/?$")
+
+
+@dataclass(frozen=True)
+class OwedEnd:
+    scope: str
+    slug: str
+    id: str
+    title: str
+    key: str
+    what: str
+    how: str
+    path: Path
+
+
+def owed_marker(key: str) -> str:
+    """The body marker that identifies an owed action's issue (R21)."""
+    return f"<!-- fr-owed:{key} -->"
+
+
+def owed_ends(repo_root: Path, journals: list[tuple[str, str]]) -> list[OwedEnd]:
+    """Every open `owed` entry of the named journals not yet filed, each once."""
+    from fr.journal.model import open_owed_ids, owed_fields, owed_filed_as, owed_key
+
+    out: list[OwedEnd] = []
+    for scope, slug in journals:
+        path = resolve_journal_read_path(repo_root, scope, slug)  # type: ignore[arg-type]
+        entries = _entries(path)
+        filed = owed_filed_as(entries)
+        still = set(open_owed_ids(entries))
+        for e in entries:
+            key = owed_key(e) if e.kind == "owed" else None
+            if key is None or e.id not in still or e.id in filed:
+                continue
+            if any(o.key == key for o in out):
+                continue
+            fields = owed_fields(e)
+            out.append(
+                OwedEnd(
+                    scope,
+                    slug,
+                    e.id,
+                    e.title,
+                    key,
+                    fields.get("what", ""),
+                    fields.get("how", ""),
+                    path,
+                )
+            )
+    return out
+
+
+@dataclass(frozen=True)
+class FiledOwed:
+    end: OwedEnd
+    ref: str | None = None
+    reused: bool = False
+    error: str | None = None
+
+
+def _issue_ref(repo: str, number: object, url: object) -> str | None:
+    """`owner/repo#n` when that is a valid reference, else the URL; `None`
+    when neither is."""
+    if not isinstance(number, int) and isinstance(url, str):
+        m = _TRAILING_NUMBER.search(url)
+        number = int(m.group(1)) if m else None
+    if isinstance(number, int):
+        ref = f"{repo}#{number}"
+        if TRACKED_BY_RE.match(ref):
+            return ref
+    return url if isinstance(url, str) and TRACKED_BY_RE.match(url) else None
+
+
+_OWED_MARKER_LINE = re.compile(r"^<!-- fr-owed:(\S+) -->$")
+
+
+def owed_identity(repo_root: Path, *, allow_nested: bool = False) -> tuple[str | None, str]:
+    """`(owner/repo, "")` — the repo every owed forge write acts on — or
+    `(None, why)` when it cannot be trusted (review p3-r1).
+
+    Taken from the origin remote's CONFIGURED url only (`git config
+    remote.origin.url`, never the matrix): a committed `org:`/`repo:` must not
+    be able to redirect owed filing, reuse or closing to another repo. When the
+    matrix names a different repo than the remote, that disagreement is itself
+    a refusal. The configured url, not `git remote get-url`, so a local
+    `insteadOf` mirror never changes whose tracker this is. *allow_nested*
+    accepts a GitLab `group/sub/project` path (the weekly debt commands)."""
+    import subprocess
+
+    from fr import _hosts
+
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo_root), "config", "--get", "remote.origin.url"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as e:
+        return None, f"cannot read the origin remote ({e})"
+    url = done.stdout.strip() if done.returncode == 0 else ""
+    slug = _hosts.slug_from_url(url) if url else None
+    if not slug or not _SAFE_REPO.match(slug) or (slug.count("/") != 1 and not allow_nested):
+        return None, f"the origin remote {url!r} does not name an owner/repo"
+    matrix = _matrix_identity(repo_root)
+    if matrix is not None and matrix.lower() != slug.lower():
+        return None, f"the matrix names {matrix} but the origin remote is {slug}"
+    return slug, ""
+
+
+def _matrix_identity(repo_root: Path) -> str | None:
+    import yaml
+
+    path = repo_root / "docs/acceptance/matrix.yaml"
+    try:
+        data = yaml.safe_load(path.read_text()) if path.is_file() else None
+    except (OSError, yaml.YAMLError):
+        return None
+    if isinstance(data, dict) and data.get("org") and data.get("repo"):
+        return f"{data['org']}/{data['repo']}"
+    return None
+
+
+def owned_owed_key(issue: dict[str, object], me: str) -> str | None:
+    """The owed key an open issue stands for, when it is one fr may act on —
+    THE predicate reuse (`fr archive`) and closing (`fr journal resolve`) share
+    (review p3-r4): written by this account, labelled `fr:owed`, a numeric
+    `number`, and its LAST line exactly an owed marker. `None` otherwise."""
+    from fr.labels import FR_OWED
+
+    author = issue.get("author")
+    login = author.get("login") if isinstance(author, dict) else author
+    number = issue.get("number")
+    body = str(issue.get("body") or "").rstrip()
+    raw_labels = issue.get("labels")
+    labels = {
+        str(lab.get("name", "")) if isinstance(lab, dict) else str(lab)
+        for lab in (raw_labels if isinstance(raw_labels, list) else [])
+    }
+    if not me or login != me or not body:
+        return None
+    if not isinstance(number, int) or isinstance(number, bool):
+        return None
+    if FR_OWED.name not in labels:
+        return None
+    m = _OWED_MARKER_LINE.match(body.splitlines()[-1].strip())
+    return m.group(1) if m else None
+
+
+OWED_ISSUE_FIELDS = "number,url,body,author,labels"
+
+
+def _existing_owed(gh: GhClient, repo: str) -> dict[str, str]:
+    """`owed key -> owner/repo#n` of the open issues in THIS repo (`repo`, from
+    `owed_identity`) that `owned_owed_key` accepts. A reused ref is later
+    CLOSED by `fr journal resolve`, so nothing anyone else wrote is reused."""
+    try:
+        me = gh.viewer_login()
+        issues = gh.list_issues(repo, "open", 200, fields=OWED_ISSUE_FIELDS)
+    except Exception:  # noqa: BLE001 — dedup is best-effort, as for open ends
+        return {}
+    found: dict[str, str] = {}
+    for issue in issues:
+        key = owned_owed_key(issue, me)
+        ref = f"{repo}#{issue.get('number')}"
+        if key and TRACKED_BY_RE.match(ref):
+            found.setdefault(key, ref)
+    return found
+
+
+def _owed_body(end: OwedEnd, repo_root: Path) -> str:
+    try:
+        journal = end.path.relative_to(repo_root).as_posix()
+    except ValueError:
+        journal = end.path.as_posix()
+    lines = [
+        f"Owed: {end.what or end.title}",
+        "",
+        f"Complete it, then discharge it: `{end.how}`" if end.how else "Complete it.",
+        "",
+        f"Journal: `{journal}` (entry `{end.id}`)",
+        "",
+        owed_marker(end.key),
+    ]
+    return "\n".join(lines)
+
+
+def file_owed_ends(
+    repo_root: Path, ends: list[OwedEnd], gh: GhClient, repo: str
+) -> list[FiledOwed]:
+    """One `fr:owed` issue per owed action (R21), idempotent by its owed key:
+    an open issue already carrying the key's marker is reused. `repo` must be
+    an `owner/repo` path — it reaches the forge CLI's argv."""
+    from fr.labels import FR_OWED
+
+    if not ends:
+        return []
+    if not _SAFE_REPO.match(repo):
+        return [FiledOwed(e, error=f"repo {repo!r} is not owner/repo") for e in ends]
+    known = _existing_owed(gh, repo)
+    labels = frozenset({FR_OWED.name})
+    try:
+        gh.ensure_labels(repo, [FR_OWED])
+    except Exception:  # noqa: BLE001 — file without the label rather than not at all
+        labels = frozenset()
+    out: list[FiledOwed] = []
+    for end in ends:
+        hit = known.get(end.key)
+        if hit is not None:
+            out.append(FiledOwed(end, ref=hit, reused=True))
+            continue
+        try:
+            url = gh.create_issue(
+                repo,
+                title=f"Owed: {end.title}",
+                body=_owed_body(end, repo_root),
+                labels=labels,
+            )
+        except Exception as e:  # noqa: BLE001 — a forge error is per action
+            out.append(FiledOwed(end, error=str(e)))
+            continue
+        ref = _issue_ref(repo, None, url)
+        if ref is None:
+            out.append(FiledOwed(end, error=f"the forge returned no issue reference ({url!r})"))
+            continue
+        known[end.key] = ref
+        out.append(FiledOwed(end, ref=ref))
+    return out
+
+
+def write_owed_back(filed: FiledOwed) -> Path:
+    """Append the `open` record carrying `filed_as=<ref>` (still owed) to the
+    owed entry's journal. Returns the journal path; the caller stages it."""
+    assert filed.ref is not None
+    path = filed.end.path
+    entries = parse_journal(path.read_text())
+    target = next(e for e in entries if e.id == filed.end.id and e.resolves is None)
+    entry = resolution_entry(
+        target=target,
+        scope=filed.end.scope,  # type: ignore[arg-type]
+        taken={e.id for e in entries},
+        created=journal_now(),
+        state="open",
+        body=f"Filed at archive as {filed.ref}; still owed until discharged.",
+        phase=target.phase,
+        filed_as=filed.ref,
+    )
+    append_journal_entry(path, filed.end.slug, entry)
+    return path
+
+
+def write_manual_owed(repo_root: Path, plan_name: str, phases: list[int]) -> Path | None:
+    """One `owed` entry `manual-phase-<n>` (key `plan:<name>#p<n>`) per unticked
+    manual phase holding the plan, into its plan journal (R22). Idempotent: a
+    phase that already has its entry is skipped. Returns the journal path when
+    anything was written; the caller stages it."""
+    from fr.journal.model import OWED_KEY_RE, journal_path, owed_body
+
+    path = journal_path(repo_root, "plan", plan_name)
+    if path.exists():
+        entries = parse_journal(path.read_text())
+    else:
+        entries = []
+    taken = {e.id for e in entries}
+    wrote = False
+    for n in phases:
+        eid = f"manual-phase-{n}"
+        key = f"plan:{plan_name}#p{n}"
+        if eid in taken or not OWED_KEY_RE.match(key):
+            continue
+        entry = JournalEntry(
+            kind="owed",
+            scope="plan",
+            id=eid,
+            created=journal_now(),
+            phase=n,
+            title=f"{plan_name}: manual phase {n} is not ticked",
+            body=owed_body(
+                what=f"do manual phase {n} of {plan_name} and tick its steps",
+                why="fr archive holds the plan until its manual phases are ticked",
+                how=f"tick phase {n} (fr plan edit --tick), then fr archive "
+                f"docs/superpowers/plans/{plan_name}",
+                key=key,
+            ),
+        )
+        append_journal_entry(path, plan_name, entry)
+        taken.add(eid)
+        wrote = True
+    return path if wrote else None

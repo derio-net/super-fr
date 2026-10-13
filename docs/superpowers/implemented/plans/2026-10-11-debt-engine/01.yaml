@@ -1,0 +1,133 @@
+schema_version: 2
+phase:
+  number: 1
+  title: skipped split — matrix 4→5 and record 8→9 migrations, status surfaces, this
+    repo reclassified (R5–R8, R27)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - matrix-status-split
+  - step-record-status-migration
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/acceptance/*
+  - packages/fr/src/fr/artifacts/*
+  - packages/fr/src/fr/record/*
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/run/closeout.py
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - plugins/super-fr/skills/fr-execute/SKILL.md
+  - plugins/super-fr/skills/fr-progress/SKILL.md
+  - plugins/super-fr/hooks/fr-acceptance-nag.sh
+  - .opencode/*
+  - .hermes/*
+  - .claude/rules/acceptance-matrix.md
+  - .github/workflows/acceptance-report.yml
+  - docs/acceptance/*
+  - docs/superpowers/*
+  - tests/unit/*
+  - tests/fixtures/*
+  - tests/scenarios/matrix-status-split.sh
+  - .changes/feat-batch-debt-engine.yaml
+  estimate_lines: 1600
+tasks:
+- number: 1
+  title: Smoke — CI green on a trivial test, fragment added
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `.changes/feat-batch-debt-engine.yaml` (`bump: minor`, summary "fr debt: one debt engine, a weekly Technical debt issue, skipped split into unwired/walk-owed/walked/manual, owed operator actions") and a trivial passing test `tests/unit/test_debt_smoke.py::test_debt_status_vocabulary_is_importable` importing `fr.acceptance.model.Status`; run it with `uv run pytest tests/unit/test_debt_smoke.py -q --no-cov`; commit and push so the draft PR #1139 CI runs.
+- number: 2
+  title: Statuses, DEBT_STATUSES and the refused-by-name validator (spec §D, R5, R8)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED in tests/unit/test_acceptance_status_split.py: a Row with `status: skipped` raises AcceptanceError naming `fr migrate artifacts --yes`; each of unwired/walk-owed/walked/manual parses; `DEBT_STATUSES == {"not-implemented","unwired","walk-owed","failing"}`; `open_rows` returns exactly the DEBT_STATUSES rows.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/acceptance/model.py widen `Status`, add `DEBT_STATUSES`, a `mode="before"` status validator modelled on `check_verify`; point `check.open_rows` at DEBT_STATUSES.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: replace every `skipped` name/count (report.py panels and counts, acceptance_cmd summary row + digest, scaffold.py comment blocks, record/apply.py message, run/closeout.py awaiting-live lines printing `--status walked`), keeping report goldens regenerated; `grep -rn "skipped" packages/fr/src/fr/acceptance packages/fr/src/fr/record` shows only legacy/migration uses.
+- number: 3
+  title: Matrix 4→5 migration with frozen MatrixV4 (spec §D steps 1–5, R6)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED in tests/unit/test_migration_matrix_status_split.py: a v4 matrix with skipped rows maps pass-walk→walked, post-merge verify (live) without a pass→walk-owed, else→unwired; other statuses untouched; an unresolvable verify leaves the file byte-identical and reports failure; committed reports regenerated in the same write; an already-v5 body is recognised (crash window); the chain from a v1 matrix carrying skipped rows reaches 5 via hops [2, 3, 4, 5].
+  - id: P1.T3.S2
+    text: |-
+      GREEN: freeze `fr.acceptance.legacy.MatrixV4` (closed superset v1–v4, StatusV4 incl. skipped inlined) with its source sha pinned like `legacy.FROZEN_CLASS_SHA256`; move `matrix_strategies._is_v4` and its output check to MatrixV4; add `fr/artifacts/matrix_status_split.py` (SchemaMigration 4→5: in-memory rewrite + `render_committed_set` companions, `write_text_atomic`), import it in `fr/artifacts/__init__.py`, bump matrix `current_version` to 5 in registry.py.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: assert the structure validator (`fr validate artifacts`) rejects a v5 matrix carrying skipped; keep the existing matrix hop tests green.
+- number: 4
+  title: Record 8→9 (spec §D, R27)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED in tests/unit/test_migration_record_status_split.py: an in-flight v8 step record with an acceptance item `status: skipped` migrates by the R6 rule and then applies; a v9 record with skipped is refused by name.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: freeze `RecordV8` (old JournalKind and Status inlined) beside RecordV7, add the 8→9 migration, bump record `current_version` to 9; every record hop reads through the frozen models (no live parser in a migration).
+- number: 5
+  title: Migrate and reclassify this repo; docs and skills (R7, R8)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Run `uv run fr migrate artifacts --yes` in the worktree and commit; then for each former skipped row whose mechanical status is wrong (e.g. isolation-suite-lifecycle, opencode-*-in-repo walked; acceptance-added-since manual; acceptance-pipeline-rows walk-owed) run `uv run fr acceptance set-status --id <row> --status <s> --notes "<why: reclassified at the skipped split>"`; `uv run fr acceptance check` passes.
+  - id: P1.T5.S2
+    text: |-
+      Update `.claude/rules/acceptance-matrix.md`, the fr-acceptance/fr-execute/fr-progress skills and `plugins/super-fr/hooks/fr-acceptance-nag.sh`, plus `.github/workflows/acceptance-report.yml` comments, to the four statuses; run `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`; candidate scenario `tests/scenarios/matrix-status-split.sh` migrates a fixture matrix and asserts the four statuses (set it on matrix-status-split with `fr acceptance set-status --scenario`).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-11T20:59:18+00:00'
+      note: null
+  completion:
+    at: '2026-10-11T20:59:18+00:00'
+    note: null
+    observed_prs: []

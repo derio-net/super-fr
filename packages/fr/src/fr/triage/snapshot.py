@@ -17,12 +17,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from fr.triage.batch import derive_batch_stage
 from fr.triage.check import classify
+from fr.triage.debt import figures_by_repo
 from fr.triage.stage import IN_FLIGHT
 
 if TYPE_CHECKING:
@@ -57,12 +58,15 @@ class Acceptance(_M):
 
 
 class Snapshot(_M):
-    schema_version: Literal[1] = 1
+    # 1 -> 2 added `debt` (debt-engine R15); a version 1 file still reads, as "no trend".
+    schema_version: Literal[1, 2] = 2
     batches: dict[str, str]
     issues: dict[str, IssueState]
     prs: dict[str, PrState]
     acceptance: Acceptance | None = None
     figures: dict[str, int]
+    # Repo -> the cleaned figures of its debt digest (schema 2); None on a version 1 file.
+    debt: dict[str, dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +92,9 @@ class SnapshotDiff:
     figures_changed: list[tuple[str, int, int]]
     acceptance_note: str | None = None  # set when the new board tracks no acceptance rows
     transitions: list[Transition] = field(default_factory=list)
+    # The previous snapshot's debt figures per repo; None when it predates schema 2
+    # (no trend can be drawn, and the Debt panel says why).
+    debt_before: dict[str, dict[str, Any]] | None = None
 
     @property
     def empty(self) -> bool:
@@ -156,6 +163,7 @@ def take_snapshot(
         },
         acceptance=acc,
         figures=figures(facts, judgements),
+        debt=figures_by_repo(facts),
     )
 
 
@@ -312,4 +320,4 @@ def diff_snapshots(previous: Snapshot | None, new: Snapshot) -> SnapshotDiff | N
             changed.append((name, was, value))
             ts.append(Transition("figure", name, str(was), str(value)))
     note = ACCEPTANCE_UNTRACKED if new.acceptance is None else None
-    return SnapshotDiff(done, filed, stages, moved, changed, note, ts)
+    return SnapshotDiff(done, filed, stages, moved, changed, note, ts, previous.debt)

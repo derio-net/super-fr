@@ -126,6 +126,11 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
     `cloud` was added by 2026-10-07 cloud-triage phase 7 (R23): `fr cloud doctor`
     reads and `fr cloud setup-script` prints; neither writes, and doctor must
     diagnose an environment that is not yet fit for fr.
+
+    `debt` was added by 2026-10-11 debt-engine phase 2 (R25): `fr debt` writes
+    nothing, `issue` writes only to the forge with `--yes`, and `archive-pr`
+    mutates artifacts only through a nested `fr archive`, which the gate checks
+    on its own. The gate matches the top-level subcommand, so all three are covered.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
@@ -141,6 +146,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "usage",
             "services",
             "cloud",
+            "debt",
         }
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
@@ -158,6 +164,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "usage",
         "services",
         "cloud",
+        "debt",
         "FR_SKIP_MIGRATION=1",
     )
 

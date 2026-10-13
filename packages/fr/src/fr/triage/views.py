@@ -22,7 +22,10 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from fr.labels import APPROVED_FR
+from fr.triage.approval import ApprovalVerdict, Void, approval_verdict, is_approved, voided_at
 from fr.triage.batch import (
+    QueueEntry,
     batch_item_id,
     batch_pr,
     batch_repo,
@@ -37,20 +40,30 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
+    REFUSALS_BEFORE_NEED,
     LivePr,
     Snapshot,
     checks_verdict,
     closeout_event,
     closeout_item_id,
     drive_pass,
+    enqueue_refusals,
     held_conflict,
+    last_enqueue,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
-from fr.triage.check import batch_awaits_live, classify, is_awaiting_live, stale_dispatches
-from fr.triage.model import Batch, Facts, Judgement, Judgements, PullRequest, Severity
+from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.model import (
+    Batch,
+    Facts,
+    Judgement,
+    Judgements,
+    RedHandbackEvent,
+    Severity,
+)
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -80,18 +93,25 @@ def collected(facts: Facts) -> datetime:
 
 
 def drive_snapshot(
-    facts: Facts, judgements: Judgements, *, max_inflight: int = DEFAULT_MAX_INFLIGHT
+    facts: Facts,
+    judgements: Judgements,
+    *,
+    max_inflight: int = DEFAULT_MAX_INFLIGHT,
+    ci_none: Collection[str] = (),
 ) -> Snapshot:
     """The snapshot the driver would decide from, built from the facts alone: each
     open batch PR as the facts show it (no forge read), every stage derived, the
-    release commit unknown (so a close-out falls back to the ten-minute rule)."""
+    release commit unknown (so a close-out falls back to the ten-minute rule). A PR of
+    a repo in *ci_none* (its default branch declares `ci none`, known only from a
+    clone) is green on its checks as the driver judges it (R4, p1-r2)."""
     batches = judgements.batches
     repos = {b.id: r for b in batches if (r := batch_repo(b, facts)) is not None}
     stages = {b.id: derive_batch_stage(b, facts) for b in batches}
     queue = tuple(pr_open_queue(batches, facts, judgements.issues))
     live: dict[str, LivePr] = {}
     for entry in queue:
-        verdict, failing = checks_verdict([], entry.pr.checks or {}, ci_none=False)
+        none = repos.get(entry.batch.id) in ci_none
+        verdict, failing = checks_verdict([], entry.pr.checks or {}, ci_none=none)
         live[entry.batch.id] = LivePr(
             number=entry.pr.number,
             state=entry.pr.state,
@@ -120,7 +140,19 @@ def drive_snapshot(
         merged_at=merged_at,
         foreign={b.id: found for b in batches if (found := tuple(foreign_batch_prs(b, facts)))},
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
+        approvals=fact_approvals(queue),
+        queue_inferred=True,
     )
+
+
+def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
+    """Each queued batch's approval verdict from the collected labels and its events
+    (merge-train-safety §A "The walk"): the board and `drive --plan` read no forge. A
+    PR whose labels were never read (facts before schema 9) is unlabelled."""
+    return {
+        e.batch.id: approval_verdict(e.batch.events, e.pr.number, e.pr.head_oid, e.pr.labels)
+        for e in queue
+    }
 
 
 # ------------------------------------------------------------------ needs you now
@@ -128,8 +160,8 @@ def drive_snapshot(
 
 @dataclass(frozen=True)
 class Need:
-    # ready-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch | unplaced
-    # | merge-conflict | session-blocked
+    # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
+    # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -137,7 +169,10 @@ class Need:
 
 
 NEED_LABELS = {
-    "ready-pr": "Ready a green draft",
+    "approve-pr": "Label a green PR approved-fr",
+    "red-pr": "Red PR its session cannot fix",
+    "queue-ejected": "PR ejected from the merge queue",
+    "enqueue-refused": "PR the merge queue refuses",
     "failing-ci": "Failing CI",
     "foreign-pr": "Foreign PR on a batch branch",
     "blocked-batch": "Blocked batch",
@@ -149,56 +184,100 @@ NEED_LABELS = {
 }
 
 
-def _all_prs(facts: Facts) -> list[PullRequest]:
-    seen: set[tuple[str, int]] = set()
-    out: list[PullRequest] = []
-    for pr in [*facts.prs, *facts.batch_prs, *(p for i in facts.issues for p in i.prs)]:
-        if (pr.repo, pr.number) not in seen:
-            seen.add((pr.repo, pr.number))
-            out.append(pr)
+def queue_needs(snap: Snapshot) -> list[Need]:
+    """What the driver recorded about a PR it enqueued, as needs (merge-train-safety §D):
+    one that left the merge queue unmerged with the base unmoved (`ejected`), and one the
+    forge refused to enqueue twice at its current head (`refused`). Read from the events,
+    like `red-pr`, so the facts-only board shows them too."""
+    out: list[Need] = []
+    for entry in snap.queue:
+        live = snap.live.get(entry.batch.id)
+        if live is None or live.state != "OPEN":
+            continue
+        event = last_enqueue(entry.batch, live.number)
+        if event is None or event.head != live.head:
+            continue
+        if event.outcome == "ejected":
+            out.append(
+                Need("queue-ejected", entry.batch.id,
+                     f"PR #{live.number} left the merge queue unmerged", entry.pr.url)
+            )  # fmt: skip
+        elif event.outcome == "refused":
+            refused = enqueue_refusals(entry.batch, live.number, live.head)
+            if len(refused) >= REFUSALS_BEFORE_NEED:
+                why = f": {event.detail}" if event.detail else ""
+                out.append(
+                    Need("enqueue-refused", entry.batch.id,
+                         f"PR #{live.number} cannot be put in the merge queue{why}", entry.pr.url)
+                )  # fmt: skip
     return out
 
 
 def needs_you(
-    facts: Facts, judgements: Judgements, session_notes: Mapping[str, str] | None = None
+    facts: Facts,
+    judgements: Judgements,
+    session_notes: Mapping[str, str] | None = None,
+    *,
+    ci_none: Collection[str] = (),
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
     (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is."""
-    snap = drive_snapshot(facts, judgements)
+    snap = drive_snapshot(facts, judgements, ci_none=ci_none)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
-    batch_of_pr = {
-        (pr.repo, pr.number): b.id
-        for b in judgements.batches
-        if (pr := batch_pr(b, facts)) is not None
-    }
     foreign = {
         (found.pr.repo, found.pr.number): found for found_all in snap.foreign.values()
         for found in found_all
     }  # fmt: skip
     out: list[Need] = []
 
-    for pr in _all_prs(facts):
-        if pr.state != "OPEN" or not pr.is_draft or (pr.repo, pr.number) in foreign:
-            continue  # a foreign PR is never one to ready (gh#936)
-        verdict, _ = checks_verdict([], pr.checks or {}, ci_none=False)
-        if verdict != "green":
+    # The approval gate (merge-train-safety §A, R5): a green batch PR, draft or not,
+    # merges only once the operator labels it; a voided label is asked for again.
+    for entry in snap.queue:
+        pr = entry.pr
+        if pr.state != "OPEN" or (pr.repo, pr.number) in foreign:
+            continue  # a foreign PR is never one to approve (gh#936)
+        live = snap.live.get(entry.batch.id)  # its checks as the driver judges them (R4)
+        verdict = live.checks if live is not None else "pending"
+        approval = snap.approvals.get(entry.batch.id)
+        if verdict != "green" or (approval is not None and is_approved(approval)):
             continue
-        bid = batch_of_pr.get((pr.repo, pr.number))
-        ref = bid or f"PR #{pr.number}"
-        out.append(
-            Need("ready-pr", ref, f"PR #{pr.number} is a draft and its checks are green: ready it",
-                 pr.url)
-        )  # fmt: skip
+        was = (
+            approval.approved_head
+            if isinstance(approval, Void)
+            else voided_at(entry.batch.events, pr.number)
+        )
+        text = (
+            f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
+            if was is not None
+            else f"PR #{pr.number} is green: label it {APPROVED_FR.name} to merge"
+        )
+        out.append(Need("approve-pr", entry.batch.id, text, pr.url))
 
+    out.extend(queue_needs(snap))
     for action in plan.actions:
-        if action.kind == "warn":
+        if action.kind == "warn" and not action.ejected:
             failing_pr = batch_pr(by_id[action.batch], facts)
-            out.append(
-                Need("failing-ci", action.batch, action.detail,
-                     failing_pr.url if failing_pr else None)
-            )  # fmt: skip
+            url = failing_pr.url if failing_pr else None
+            # R11: a red hand-back delivered at this head means its session has it in hand,
+            # so no `failing-ci` need; one nobody could take is a `red-pr` need instead.
+            covering = [
+                e for e in by_id[action.batch].events
+                if action.red and isinstance(e, RedHandbackEvent)
+                and (e.pr, e.head) == (action.pr, action.head)
+            ]  # fmt: skip
+            if covering and covering[-1].delivered == "session":
+                continue
+            if covering:
+                out.append(
+                    Need("red-pr", action.batch,
+                         f"PR #{action.pr} is red at {action.head[:12]} "
+                         f"({', '.join(action.checks) or 'checks failing'}) and no session "
+                         "can take it", url)
+                )  # fmt: skip
+                continue
+            out.append(Need("failing-ci", action.batch, action.detail, url))
     for action in plan.actions:
         if action.kind == "foreign":
             found_pr = next(
@@ -362,7 +441,7 @@ def next_up(
         open_ids = [
             i.key
             for i in facts.issues
-            if i.state == "open" and i.key in feature.ids and not is_awaiting_live(i)
+            if i.state == "open" and i.key in feature.ids and not is_set_apart(i, facts)
         ]
         if not open_ids:
             continue

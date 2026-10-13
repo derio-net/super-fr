@@ -236,6 +236,32 @@ def test_the_cloud_runs_neither_post_merge_nor_its_restart(
     assert "restart" not in capsys.readouterr().out
 
 
+def test_the_cloud_close_out_switches_its_own_clone_and_starts_on_the_default_branch(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners
+) -> None:
+    """gh#1100, gh#1099: the cloud driver's clone is its own (detached in a fresh cloud
+    session), so it is checked out on the default branch; the close-out item names that
+    branch as its `base`, where the cloud session starts."""
+    _merged(world, tmp_path, checkout, "claude-cloud")
+
+    _cloud_pass(tmp_path)
+
+    assert checkout.switched == [True]
+    (item,) = runners.by_name["claude-cloud"].dispatched
+    assert item.payload["base"] == "main"
+    assert item.payload["branch"] == "feat/batch-b1"  # the brief's pickup still names it
+
+
+def test_the_host_never_switches_the_operators_clone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners
+) -> None:
+    _merged(world, tmp_path, checkout, "herdr")
+
+    _drive(tmp_path, "--once", "--yes")
+
+    assert checkout.switched == [False]
+
+
 def test_a_close_out_another_drivers_runner_owns_is_reported_and_left_to_it(
     tmp_path: Path,
     world: World,
