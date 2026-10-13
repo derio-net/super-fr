@@ -9148,9 +9148,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_exit.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_exit_gates_declared_exit
+    status: ci
+    notes: scenario drives fr verification exit; unit tests cover the exit model
     scenario: tests/scenarios/exit-gates-declared-exit.sh
   - id: exit-gates-set-downgrade
     capability: exit-gates
