@@ -397,3 +397,6 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p7 created=2026-10-13T23:06:14+00:00 -->
 ### phase-split-2026-10-14-exit-gates-p7 · decision · ask: release gating and RC versions (R20, R21, R25, R26)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p8 created=2026-10-13T23:06:17+00:00 -->
+### phase-split-2026-10-14-exit-gates-p8 · decision · ask: install channels in bootstrap.sh/install.sh (R22, R23)
