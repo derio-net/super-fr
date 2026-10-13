@@ -63,7 +63,7 @@ def test_the_placeholder_set_is_closed() -> None:
         ("driver: robot\n", "driver"),
         ("install: do {nonsense}\n", "install"),
         ("scenario: run {nope}\n", "scenario"),
-        ("schema: 2\n", "schema"),
+        ("schema: 3\n", "schema"),
     ],
 )
 def test_a_bad_manifest_is_refused_naming_the_field(patch: str, field: str) -> None:
@@ -88,3 +88,29 @@ def test_a_non_mapping_or_invalid_yaml_is_a_strategy_error() -> None:
 def test_the_error_names_its_source() -> None:
     with pytest.raises(StrategyError, match="somewhere/x.yaml"):
         parse_strategy("when: later\n", source="somewhere/x.yaml")
+
+
+def test_a_schema_1_manifest_with_a_gate_is_refused_naming_schema_2() -> None:
+    with pytest.raises(StrategyError, match="schema: 2"):
+        parse_strategy(VALID + "gate: tester\n", source="x.yaml")
+
+
+def test_a_schema_2_manifest_with_a_gate_parses() -> None:
+    m = parse_strategy(VALID.replace("schema: 1", "schema: 2") + "gate: tester\n", source="x")
+
+    assert m.schema_version == 2
+    assert m.gate == "tester"
+
+
+def test_an_absent_gate_reads_none_and_a_schema_2_gate_is_closed() -> None:
+    assert parse_strategy(VALID, source="x").gate == "none"
+    with pytest.raises(StrategyError, match="gate"):
+        parse_strategy(VALID.replace("schema: 1", "schema: 2") + "gate: owner\n", source="x")
+
+
+def test_the_shipped_gates() -> None:
+    from fr.verification.resolve import resolve_strategy
+
+    assert resolve_strategy("live", None).gate == "tester"
+    for name in ("candidate", "client-live", "prerelease"):
+        assert resolve_strategy(name, None).gate == "none", name

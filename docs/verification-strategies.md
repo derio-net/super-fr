@@ -45,8 +45,18 @@ driver: agent               # agent: the walk runs it; operator: a human drives 
 install: <argv or null>     # how to install the build, see below
 scenario: <argv or null>    # how to run one row's scenario
 source: worktree            # worktree | prerelease | none
+gate: tester                # schema 2 only: none | tester | devops (default none)
 notes: free text
 ```
+
+`schema: 2` is the version that may carry `gate:`, the strategy's default
+post-merge gate (who must act on a run that uses it once it has merged). A
+schema 1 manifest with a `gate:` is refused, and an absent `gate:` means `none`.
+The shipped `live` is schema 2 with `gate: tester`; the others stay schema 1.
+A repo can remap a kind's gate in `.fr/triage.yaml` (`exit: {gates: {<kind>:
+<gate>}}`), and a spec's `## Verification` section can set the run's gate with
+`gate: <gate>` and one row's with `gate: <row-id>=<gate>`. `fr verification exit
+--run <id> | --spec <path>` prints the resulting kinds, gates and gated rows.
 
 `install` and `scenario` are a string (split like a shell would) or a list of
 strings. They may interpolate these placeholders and no others:

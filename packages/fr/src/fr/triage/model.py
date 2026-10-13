@@ -468,6 +468,15 @@ class ExportConfig(_Strict):
         return norm
 
 
+class ExitBlock(_Strict):
+    """`.fr/triage.yaml`'s `exit:` (spec 2026-10-14 exit-gates R4): the repo's
+    remap of a strategy kind's gate. It holds whatever the kind's `when` is."""
+
+    gates: dict[
+        str, Literal["none", "developer", "reviewer", "tester", "devops", "owner", "security"]
+    ] = {}
+
+
 class TriageConfig(_Strict):
     """`.fr/triage.yaml` of one repo, read at its default branch (spec §3.I).
 
@@ -501,6 +510,8 @@ class TriageConfig(_Strict):
     # §A): REST has no `viewerDefaultMergeMethod`, so a repo allowing several methods needs
     # this, or `--method`, to merge. The forge's own default still wins where it names one.
     merge_method: Literal["merge", "squash", "rebase"] | None = None
+    # The repo's remap of each strategy kind's gate (spec 2026-10-14 exit-gates R4).
+    exit: ExitBlock | None = None
 
 
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:

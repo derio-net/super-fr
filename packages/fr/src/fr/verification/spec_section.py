@@ -7,6 +7,8 @@ PR body (never compared as strings by those consumers — they call
     ## Verification
 
     strategy: candidate
+    gate: <gate>                 (optional, run-level; spec 2026-10-14 R5)
+    gate: <row-id>=<gate>        (optional, one row each)
     - <row-id>: <strategy|none> — <reason>
 
 The `strategy:` line is optional (the shape's default stands in). The reason
@@ -27,6 +29,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from fr.gates import GATES
+
 _HEADING = re.compile(r"^##\s+Verification\s*$")
 _ANY_H2 = re.compile(r"^##\s")
 _FENCE = re.compile(r"^\s*(```|~~~)")
@@ -36,6 +40,11 @@ _ROW_LINE = re.compile(
     rf"^-\s+(?P<row>[A-Za-z0-9][A-Za-z0-9._-]*):\s+(?P<strategy>{_NAME})"
     r"(?:\s+—\s+(?P<reason>\S.*?))?\s*$"
 )
+_GATE_LINE = re.compile(
+    r"^gate:\s*(?:(?P<row>[A-Za-z0-9][A-Za-z0-9._-]*)=)?(?P<gate>[a-z][a-z0-9-]*)\s*$"
+)
+GATE_NAMES = GATES | {"none"}
+"""What a `gate:` line may name: the closed vocabulary, or `none` (no gate)."""
 
 
 class SectionError(ValueError):
@@ -52,6 +61,8 @@ class RowLine:
 class Section:
     strategy: str | None = None
     rows: dict[str, RowLine] = field(default_factory=dict)
+    gate: str | None = None
+    row_gates: dict[str, str] = field(default_factory=dict)
 
 
 def _section_lines(text: str) -> list[tuple[int, str]] | None:
@@ -81,7 +92,7 @@ def _section_lines(text: str) -> list[tuple[int, str]] | None:
 def _is_grammar(line: str) -> bool:
     """Does `line` belong to the grammar: any `strategy:` line, or a bullet the
     row grammar accepts?"""
-    return line.startswith("strategy:") or _ROW_LINE.match(line) is not None
+    return line.startswith(("strategy:", "gate:")) or _ROW_LINE.match(line) is not None
 
 
 def parse_section(text: str) -> Section | None:
@@ -92,10 +103,27 @@ def parse_section(text: str) -> Section | None:
         return None
 
     strategy: str | None = None
+    gate: str | None = None
+    row_gates: dict[str, str] = {}
     rows: dict[str, RowLine] = {}
     for n, raw in lines:
         line = raw.strip()
-        if line.startswith("strategy:"):
+        if line.startswith("gate:"):
+            m = _GATE_LINE.match(line)
+            if m is None or m["gate"] not in GATE_NAMES:
+                raise SectionError(
+                    f"line {n}: malformed `gate:` line: {raw!r} — expected `gate: <gate>` or "
+                    f"`gate: <row-id>=<gate>` with a gate of {sorted(GATE_NAMES)}"
+                )
+            if m["row"] is None:
+                if gate is not None:
+                    raise SectionError(f"line {n}: a second `gate:` line (already {gate!r})")
+                gate = m["gate"]
+            else:
+                if m["row"] in row_gates:
+                    raise SectionError(f"line {n}: row {m['row']!r} has more than one `gate:` line")
+                row_gates[m["row"]] = m["gate"]
+        elif line.startswith("strategy:"):
             m = _STRATEGY_LINE.match(line)
             if m is None:
                 raise SectionError(
@@ -116,4 +144,4 @@ def parse_section(text: str) -> Section | None:
             if m["row"] in rows:
                 raise SectionError(f"line {n}: row {m['row']!r} appears more than once")
             rows[m["row"]] = RowLine(m["strategy"], m["reason"])
-    return Section(strategy=strategy, rows=rows)
+    return Section(strategy=strategy, rows=rows, gate=gate, row_gates=row_gates)

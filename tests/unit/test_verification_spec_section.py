@@ -186,3 +186,53 @@ def test_a_repo_authored_post_merge_strategy_counts(tmp_path: Path) -> None:
 def test_an_unresolvable_name_raises(tmp_path: Path) -> None:
     with pytest.raises(StrategyError, match="ghost"):
         is_post_merge("ghost", tmp_path)
+
+
+# --- gate lines (spec 2026-10-14 exit-gates R5) ---------------------------------
+
+
+def _spec(*lines: str) -> str:
+    return "## Verification\n\n" + "\n".join(lines) + "\n"
+
+
+def test_a_run_gate_line_sets_section_gate() -> None:
+    s = parse_section(_spec("strategy: candidate", "gate: tester"))
+
+    assert s is not None
+    assert s.gate == "tester"
+    assert s.row_gates == {}
+
+
+def test_a_row_gate_line_sets_that_rows_gate() -> None:
+    s = parse_section(_spec("strategy: live", "gate: row-a=devops", "gate: row-b=none"))
+
+    assert s is not None
+    assert s.gate is None
+    assert s.row_gates == {"row-a": "devops", "row-b": "none"}
+
+
+def test_a_section_with_only_a_gate_line_still_parses() -> None:
+    s = parse_section(_spec("gate: devops"))
+
+    assert s is not None
+    assert s.gate == "devops"
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["gate:", "gate: wizard", "gate: row-a=wizard", "gate tester", "gate: a b", "gate: =tester"],
+)
+def test_a_malformed_or_unknown_gate_line_names_the_line(line: str) -> None:
+    if not line.startswith("gate:"):
+        # not a grammar line at all: ignored, so the section holds no grammar
+        assert parse_section(_spec(line)) is None
+        return
+    with pytest.raises(SectionError, match="gate"):
+        parse_section(_spec("strategy: candidate", line))
+
+
+def test_a_second_run_gate_line_and_a_duplicate_row_gate_are_errors() -> None:
+    with pytest.raises(SectionError, match="second `gate:`"):
+        parse_section(_spec("gate: tester", "gate: devops"))
+    with pytest.raises(SectionError, match="row-a"):
+        parse_section(_spec("gate: row-a=tester", "gate: row-a=devops"))
