@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 __all__ = [
     "SpecVerification",
     "load_remap",
+    "row_verification_issues",
     "run_verification",
     "shape_default",
     "spec_section_at",
@@ -172,7 +173,9 @@ def run_verification(repo_root: Path, state: RunState) -> tuple[str | None, Spec
     return spec_rel, spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
 
 
-def unrunnable_strategies(repo_root: Path, section: Section, rows: Sequence[Row]) -> list[str]:
+def unrunnable_strategies(
+    repo_root: Path, section: Section | None, rows: Sequence[Row]
+) -> list[str]:
     """One message per distinct strategy the spec names EXPLICITLY — the
     section's `strategy:`, a per-row line, or a `verify:` of one of `rows` —
     that resolves and whose install program the repo cannot run (spec
@@ -184,9 +187,10 @@ def unrunnable_strategies(repo_root: Path, section: Section, rows: Sequence[Row]
         if name and name != RESERVED and (kind, where) not in sources.setdefault(name, []):
             sources[name].append((kind, where))
 
-    add(section.strategy, "section", "the section's `strategy:` line")
-    for rid, line in section.rows.items():
-        add(line.strategy, "line", f"the `- {rid}:` line")
+    if section is not None:
+        add(section.strategy, "section", "the section's `strategy:` line")
+        for rid, line in section.rows.items():
+            add(line.strategy, "line", f"the `- {rid}:` line")
     for r in rows:
         add(r.verify, "verify", f"row `{r.id}`'s own `verify:`")
     out: list[str] = []
@@ -214,4 +218,63 @@ def unrunnable_strategies(repo_root: Path, section: Section, rows: Sequence[Row]
             f"{problem} (named by {where}). Either say it does not need it — "
             f"{', or '.join(fixes)} — or add the executable"
         )
+    return out
+
+
+def row_verification_issues(
+    repo_root: Path,
+    section: Section | None,
+    rows: Sequence[Row],
+    shape_default: str | None,
+) -> list[str]:
+    """Every per-row verification problem of the rows citing a spec (spec
+    2026-10-14 exit-gates R24, gh#1155), with or without a `## Verification`
+    section — without one, only a row's own `verify:` counts:
+
+    - the strategy does not resolve;
+    - the repo cannot run its install;
+    - an agent-driven pre-merge row has no `scenario:`;
+    - a post-merge or `none` row has no reason.
+
+    Both `fr plan self-review` (errors) and the brainstorm warning (advisory)
+    call it; neither re-derives a check."""
+    verification = SpecVerification(repo_root, section, shape_default)
+    out = unrunnable_strategies(repo_root, section, rows)
+
+    def reason_fix(row_id: str, name: str, why: str) -> str:
+        if section is not None:
+            return f"add `- {row_id}: {name} — <{why}>`"
+        return (
+            f"add a `## Verification` section with `- {row_id}: {name} — <{why}>` "
+            "(every other row citing the spec then takes the section's `strategy:`, "
+            "or the shape default when it has no `strategy:` line)"
+        )
+
+    for row in rows:
+        name = verification.strategy(row)
+        if name is None:
+            continue
+        if name == RESERVED:
+            if not verification.reason(row):
+                out.append(
+                    f"row `{row.id}` is `none` with no reason — "
+                    + reason_fix(row.id, "none", "what verifies it instead")
+                )
+            continue
+        try:
+            manifest = resolve_strategy(name, repo_root)
+        except StrategyError as e:
+            out.append(f"row `{row.id}`: {e}")
+            continue
+        if manifest.when == "post-merge" and not verification.reason(row):
+            out.append(
+                f"row `{row.id}` is post-merge (`{name}`) with no reason — "
+                + reason_fix(row.id, name, "why no pre-merge strategy applies")
+            )
+        if manifest.when == "pre-merge" and manifest.driver == "agent" and not row.scenario:
+            out.append(
+                f"row `{row.id}` is walked by an agent before merge (`{name}`) but names "
+                "no `scenario` — set one with `fr acceptance set-status "
+                f"--id {row.id} ... --scenario <path>`"
+            )
     return out

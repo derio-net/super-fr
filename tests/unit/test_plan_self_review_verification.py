@@ -54,7 +54,9 @@ def _setup(
 
 
 def test_a_spec_with_no_section_passes_unchanged(tmp_path: Path) -> None:
-    assert _setup(tmp_path, None, [_row("a", "    verify: live\n")]) == []
+    # no section and no row `verify:` — the world before strategies (a row with its
+    # own `verify:` is checked even so: spec 2026-10-14 R24, test_row_verification_issues)
+    assert _setup(tmp_path, None, [_row("a")]) == []
 
 
 def test_a_malformed_section_fails_naming_the_line(tmp_path: Path) -> None:

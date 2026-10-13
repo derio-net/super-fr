@@ -129,7 +129,9 @@ def exit_cmd(
         raise typer.Exit(2) from e
 
     if result.remap_problem:
-        err_console.print(f"warning: {result.remap_problem} — no gate remap applied", soft_wrap=True)
+        err_console.print(
+            f"warning: {result.remap_problem} — no gate remap applied", soft_wrap=True
+        )
     gated_rows = [{"id": r.id, "gate": result.row_gates[r.id]} for r in result.gated_rows]
     if as_json:
         console.print_json(

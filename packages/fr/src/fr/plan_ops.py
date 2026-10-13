@@ -1649,15 +1649,14 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     name: a malformed `## Verification`; a row citing the spec whose effective
     strategy is post-merge or `none` with no reason line in the section; a row
     whose effective strategy is agent-driven and pre-merge with no `scenario`;
-    and a strategy that does not resolve. A spec with no section is the world
-    before strategies and passes unchanged. Same-repo specs only, as the
-    acceptance linkage check."""
+    and a strategy that does not resolve. The per-row checks are
+    `row_verification_issues`' and run with or without a section (without one,
+    only a row's own `verify:` counts; spec 2026-10-14 R24). Same-repo specs
+    only, as the acceptance linkage check."""
     from fr.acceptance.model import AcceptanceError
     from fr.requirements import load_spec_matrix, rows_citing
     from fr.verification.effective import effective_shape_default
-    from fr.verification.model import RESERVED, StrategyError
-    from fr.verification.resolve import resolve_strategy
-    from fr.verification.rows import SpecVerification, spec_section_at, unrunnable_strategies
+    from fr.verification.rows import row_verification_issues, spec_section_at
     from fr.verification.spec_section import SectionError
     from fr.workflow.model import WorkflowError
     from fr.workflow.resolve import workflow_for_plan
@@ -1674,8 +1673,6 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
         section = spec_section_at(root, spec_rel)
     except SectionError as e:
         return [issue(f"{spec_rel} {e}")]
-    if section is None:
-        return []
     try:
         shape = effective_shape_default(workflow_for_plan(plan).verification, root)
     except WorkflowError:
@@ -1684,44 +1681,10 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
         matrix, spec_ref = load_spec_matrix(root, spec_rel)
     except AcceptanceError:
         return []  # `_acceptance_link_issues` reports an unreadable matrix
-    verification = SpecVerification(root, section, shape)
-    out: list[ReviewIssue] = [
-        issue(m) for m in unrunnable_strategies(root, section, rows_citing(matrix, spec_ref))
+    return [
+        issue(m)
+        for m in row_verification_issues(root, section, rows_citing(matrix, spec_ref), shape)
     ]
-    for row in rows_citing(matrix, spec_ref):
-        name = verification.strategy(row)
-        if name is None:
-            continue
-        if name == RESERVED:
-            if not verification.reason(row):
-                out.append(
-                    issue(
-                        f"row `{row.id}` is `none` with no reason — add "
-                        f"`- {row.id}: none — <what verifies it instead>`"
-                    )
-                )
-            continue
-        try:
-            manifest = resolve_strategy(name, root)
-        except StrategyError as e:
-            out.append(issue(f"row `{row.id}`: {e}"))
-            continue
-        if manifest.when == "post-merge" and not verification.reason(row):
-            out.append(
-                issue(
-                    f"row `{row.id}` is post-merge (`{name}`) with no reason — add "
-                    f"`- {row.id}: {name} — <why no pre-merge strategy applies>`"
-                )
-            )
-        if manifest.when == "pre-merge" and manifest.driver == "agent" and not row.scenario:
-            out.append(
-                issue(
-                    f"row `{row.id}` is walked by an agent before merge (`{name}`) but names "
-                    "no `scenario` — set one with `fr acceptance set-status "
-                    f"--id {row.id} ... --scenario <path>`"
-                )
-            )
-    return out
 
 
 def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:

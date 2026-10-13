@@ -6778,18 +6778,17 @@ def _resolve_with_record(
 
 
 def _unrunnable_spec_warnings(repo_root: Path, spec_rel: str) -> list[str]:
-    """R5: the explicit strategies of the spec a record just emitted that the
-    repo cannot run. A missing or malformed section, or an unreadable matrix,
-    says nothing here — `fr plan self-review` reports those."""
+    """R5 + R24: every per-row verification problem of the spec a record just
+    emitted (`row_verification_issues`), with or without a section. A malformed
+    section or an unreadable matrix says nothing here — `fr plan self-review`
+    reports those."""
     from fr.requirements import load_spec_matrix, rows_citing
-    from fr.verification.rows import spec_section_at, unrunnable_strategies
+    from fr.verification.rows import row_verification_issues, spec_section_at
 
     try:
         section = spec_section_at(repo_root, spec_rel)
-        if section is None:
-            return []
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-        return unrunnable_strategies(repo_root, section, rows_citing(matrix, spec_ref))
+        return row_verification_issues(repo_root, section, rows_citing(matrix, spec_ref), None)
     except Exception:  # noqa: BLE001
         # Advisory, and it runs after the resolve already committed: nothing
         # it hits (a non-UTF-8 spec, a malformed matrix, ...) may fail the step.
