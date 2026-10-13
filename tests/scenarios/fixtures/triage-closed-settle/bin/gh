@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""A fake `gh` for tests/scenarios/triage-closed-settle.sh and triage-retire-sync.sh
+(FR_FORGE_API=rest).
+
+One repo (derio-net/super-fr) and the issue and comment routes `fr triage claim sync`,
+`scope retire` and `clean-labels` use under REST: read an issue, list its comments, edit a
+comment, post one, add and remove labels.
+
+Captures, never constructions: every record is the capture tests/fixtures/github_rest holds
+(repo_issues_1074.json, repo_issues_1074_comments-per_page-100-page-1.json,
+repo_labels_bug.json, refused/label-remove-absent.*), served with the WORLD's own facts written over it: the issue's number,
+state and labels, the comment's id, author, association, time and body. The world lives in
+$FAKE_FORGE (JSON: {"issues": {"<n>": {"state", "labels", "comments": [...]}}}); every call
+is appended to $FAKE_GH_LOG. Anything else fails loudly.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlsplit
+
+HERE = Path(__file__).resolve().parent
+CAPS = HERE.parents[3] / "fixtures" / "github_rest"
+REPO = "repos/derio-net/super-fr"
+
+
+def cap(name: str) -> object:
+    return json.loads((CAPS / name).read_text())
+
+
+def load() -> dict:
+    return json.loads(Path(os.environ["FAKE_FORGE"]).read_text())
+
+
+def save(world: dict) -> None:
+    Path(os.environ["FAKE_FORGE"]).write_text(json.dumps(world, indent=1))
+
+
+def label(name: str) -> dict:
+    return {**cap("repo_labels_bug.json"), "name": name}  # the captured shape, renamed
+
+
+def issue(world: dict, n: str) -> dict:
+    w = world["issues"][n]
+    i = cap("repo_issues_1074.json")
+    i.update(number=int(n), state=w["state"], title=f"issue {n}", body="")
+    i["labels"] = [label(x) for x in w["labels"]]
+    i["comments"] = len(w["comments"])
+    return i
+
+
+def comment(c: dict, n: str) -> dict:
+    r = dict(cap("repo_issues_1074_comments-per_page-100-page-1.json")[0])
+    r["id"] = c["id"]
+    r["html_url"] = f"https://github.com/derio-net/super-fr/issues/{n}#issuecomment-{c['id']}"
+    r["user"] = {**r["user"], "login": c["login"]}
+    r["author_association"] = c["association"]
+    r["created_at"] = r["updated_at"] = c["created_at"]
+    r["body"] = c["body"]
+    return r
+
+
+class Refused(Exception):
+    """A route the forge answers with a captured error (tests/fixtures/github_rest/refused)."""
+
+
+def answer(world: dict, method: str, route: str, fields: dict) -> object:
+    parts = urlsplit(route)
+    path, query = unquote(parts.path), parse_qs(parts.query)
+    page = int(query.get("page", ["1"])[0])
+    issues = world["issues"]
+    tail = path[len(REPO) + 1 :] if path.startswith(REPO + "/") else ""
+    seg = tail.split("/")
+    if seg[0] == "issues" and len(seg) >= 2 and seg[1].isdigit() and seg[1] in issues:
+        n, w = seg[1], issues[seg[1]]
+        rest = seg[2:]
+        if method == "GET" and not rest:
+            return issue(world, n)
+        if method == "GET" and rest == ["comments"]:
+            return [comment(c, n) for c in w["comments"]] if page == 1 else []
+        if method == "POST" and rest == ["comments"]:
+            c = {"id": 900000 + sum(len(x["comments"]) for x in issues.values()),
+                 "login": world["viewer"], "association": "OWNER",
+                 "created_at": "2026-10-14T12:00:00Z", "body": fields["body"]}  # fmt: skip
+            w["comments"].append(c)
+            return comment(c, n)
+        if method == "POST" and rest == ["labels"]:
+            w["labels"] = sorted({*w["labels"], *fields.get("labels[]", [])})
+            return [label(x) for x in w["labels"]]
+        if method == "DELETE" and rest[:1] == ["labels"]:
+            name = "/".join(rest[1:])
+            if name not in w["labels"]:
+                raise Refused("label-remove-absent")  # the captured 404
+            w["labels"] = [x for x in w["labels"] if x != name]
+            return []
+    if method == "PATCH" and seg[:2] == ["issues", "comments"]:
+        cid = int(seg[2])
+        for n, w in issues.items():
+            for c in w["comments"]:
+                if c["id"] == cid:
+                    c["body"] = fields["body"]
+                    return comment(c, n)
+    if method == "POST" and tail == "labels":
+        return label(fields["name"])
+    raise LookupError(f"{method} {route}")
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] != "api":
+        print(f"fake gh: unexpected call: gh {' '.join(argv)}", file=sys.stderr)
+        return 1
+    args = argv[1:]
+    with open(os.environ["FAKE_GH_LOG"], "a") as log:
+        log.write(" ".join(args) + "\n")
+    method, fields, route = "GET", {}, None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-X":
+            method, i = args[i + 1], i + 2
+        elif a in ("-H", "--jq"):
+            i += 2
+        elif a in ("-f", "-F"):
+            key, _, value = args[i + 1].partition("=")
+            if key.endswith("[]"):
+                fields.setdefault(key, []).append(value)
+            else:
+                fields[key] = value
+            i += 2
+        else:
+            route, i = a, i + 1
+    if fields and method == "GET":
+        method = "POST"
+    world = load()
+    try:
+        got = answer(world, method, route or "", fields)
+    except Refused as err:
+        refused = CAPS / "refused" / str(err)
+        sys.stdout.write(Path(f"{refused}.stdout").read_text())
+        sys.stderr.write(Path(f"{refused}.stderr").read_text())
+        return 1
+    except LookupError:
+        print(f"fake gh: no capture for: gh api {' '.join(args)}", file=sys.stderr)
+        return 1
+    save(world)
+    print(json.dumps(got))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

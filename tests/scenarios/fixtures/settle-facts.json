@@ -1,0 +1,60 @@
+{
+  "schema": 11,
+  "scope": "derio-net--super-fr",
+  "kind": "repo",
+  "collected_at": "2026-10-14T00:00:00Z",
+  "repos": [
+    "derio-net/super-fr"
+  ],
+  "issues": [
+    {
+      "repo": "derio-net/super-fr",
+      "number": 101,
+      "title": "issue 101",
+      "state": "closed",
+      "labels": [],
+      "url": "https://github.com/derio-net/super-fr/issues/101",
+      "created_at": null,
+      "updated_at": null,
+      "closed_at": null,
+      "body": "",
+      "prs": [],
+      "dispatch_marker_at": null,
+      "claims": [],
+      "author": null
+    }
+  ],
+  "prs": [],
+  "skipped": [],
+  "unviewed": [],
+  "warnings": [],
+  "batch_prs": [],
+  "judged_prs": [],
+  "config": {},
+  "viewer": "operator",
+  "visibility": {},
+  "stale_in_progress": [
+    {
+      "key": "super-fr#101",
+      "title": "issue 101",
+      "url": "https://github.com/derio-net/super-fr/issues/101",
+      "closed_at": null,
+      "state": "release-pending"
+    },
+    {
+      "key": "super-fr#102",
+      "title": "issue 102",
+      "url": "https://github.com/derio-net/super-fr/issues/102",
+      "closed_at": null,
+      "state": "stale"
+    },
+    {
+      "key": "super-fr#103",
+      "title": "issue 103",
+      "url": "https://github.com/derio-net/super-fr/issues/103",
+      "closed_at": null,
+      "state": "held"
+    }
+  ],
+  "config_ignored": {}
+}
