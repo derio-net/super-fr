@@ -209,3 +209,8 @@ Dispatched read-only reviewer verified R11-R18 (header, state precedence, worksp
 ### p3-r1-resolved · finding [fixed] · resolves p3-r1: parse_refs reads feat-#12 as a named ref (phase 3)
 
 Names must end in a word character and a bare #n may follow a hyphen; test_parse_refs_reads_a_hyphen_prefixed_number_as_bare.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved-2 created=2026-10-13T00:01:59+00:00 state=open resolves=p2-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1166 -->
+### p2-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1166] · resolves p2-r7: resume picks the backend from FR_ISOLATION_TARGET, not the workspace's recorded mode
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1166.
