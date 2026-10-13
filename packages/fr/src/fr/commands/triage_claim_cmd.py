@@ -9,6 +9,7 @@ the one resolver the batch verbs share.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -18,6 +19,7 @@ from typing import Annotated, NoReturn
 import typer
 import yaml
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.commands import triage_batch_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
@@ -405,6 +407,7 @@ def scope_retire_command(
         console.print("nothing written; re-run with --yes to retire it", markup=False)
         return
     failed: list[str] = []
+    released: set[str] = set()
     for k, _ in held:
         owner_repo, number = _repo_of(env, k)
         try:
@@ -426,10 +429,30 @@ def scope_retire_command(
         except FORGE_ERRORS as exc:
             failed.append(f"{k}: {exc}")
             continue
+        released.add(k)
         console.print(f"released {k}", markup=False)
+    _forget_claims(target, facts, signer, released)
     if failed:
         _fail("these were not released; re-run to complete: " + "; ".join(failed), code=1)
     console.print(
-        f"retired {signer}; re-run `fr triage collect` before `claim sync` or `batch create`",
+        f"retired {signer}; `fr triage claim sync --yes` claims the members a batch owes",
         markup=False,
     )
+
+
+def _forget_claims(target: Path, facts: Facts, signer: str, keys: set[str]) -> None:
+    """Drop *signer*'s claims on *keys* from the stored facts (post-merge truth R6): facts
+    record only un-released claims, so this is what a fresh collect would write, and the
+    next `check` and `claim sync` read the retired scope as gone with no collect between.
+    `facts.json` is host-local state (never a state-ref file), written atomically."""
+    if not keys:
+        return
+    issues = [
+        i.model_copy(update={"claims": [c for c in i.claims if c.signer != signer]})
+        if i.key in keys
+        else i
+        for i in facts.issues
+    ]
+    updated = facts.model_copy(update={"issues": issues})
+    body = json.dumps(updated.to_json(), indent=2, ensure_ascii=False) + "\n"
+    write_text_atomic(target / "facts.json", body)

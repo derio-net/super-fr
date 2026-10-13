@@ -583,3 +583,28 @@ def test_take_transport_failure_keeps_the_event_and_next_sync_claims_the_member(
     code, out = _run(tmp_path, "claim", "sync")
     assert code == 0, out
     assert "claim super-fr#6 for revive" in out and "release super-fr#6" not in out
+
+
+# ------------------------------------------- post-merge truth R6: retire then sync
+
+
+def test_scope_retire_yes_removes_the_signers_claims_from_facts(
+    world: tuple[Path, FakeGhClient], me: str
+) -> None:
+    tmp_path, client = world
+    text = (tmp_path / "judgements.yaml").read_text("utf-8")
+    text += '  - {id: revive, title: revive, ids: ["super-fr#7"], wave: 1}\n'
+    (tmp_path / "judgements.yaml").write_text(text, "utf-8")
+    code, out = _run(tmp_path, "claim", "sync")
+    assert "held super-fr#7" in out and "claim super-fr#7" not in out
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    assert "fr triage collect" not in out and "claim sync --yes" in out
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    seven = next(i for i in facts["issues"] if i["number"] == 7)
+    assert seven["claims"] == []
+    assert any(i["claims"] for i in facts["issues"] if i["number"] != 7)  # the rest stand
+    code, out = _run(tmp_path, "check", "--json")
+    assert all(h["key"] != "super-fr#7" for h in json.loads(out)["held_elsewhere"])
+    code, out = _run(tmp_path, "claim", "sync")
+    assert "claim super-fr#7 for revive" in out and "held super-fr#7" not in out
