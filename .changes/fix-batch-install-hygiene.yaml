@@ -1,0 +1,2 @@
+bump: patch
+summary: "Install hygiene: the double-registered WorktreeCreate hook no longer races on agent-* worktrees, the installers name every missing prerequisite with its install command, and the bare fr-phase-executor / fr-spec-reviewer project-agent names are allowlisted."

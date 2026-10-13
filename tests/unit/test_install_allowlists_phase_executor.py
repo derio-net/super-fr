@@ -63,7 +63,13 @@ def test_idempotent(tmp_path: Path) -> None:
     _run(hook)
     twice = hook.read_text()
     assert once == twice
-    assert twice.count("fr-phase-executor") == 1
+    # One member per spelling: the plugin-qualified id and the bare
+    # project-agent name `fr init agents` writes (gh#1105).
+    members = (
+        next(line for line in twice.splitlines() if "Explore|Plan|" in line).strip().split("|")
+    )
+    assert members.count("super-fr:fr-phase-executor") == 1
+    assert members.count("fr-phase-executor") == 1
 
 
 def test_absent_hook_is_noop(tmp_path: Path) -> None:

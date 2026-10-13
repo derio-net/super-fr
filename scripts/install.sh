@@ -311,14 +311,56 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
-# Preflight: hard-require jq and uv. Both are used unconditionally downstream;
-# continuing past a missing one yields a half-install that looks successful.
-for cmd in jq uv rsync git; do
-  if ! command -v "$cmd" &>/dev/null; then
-    echo "ERROR: '$cmd' not found in PATH. Install it first." >&2
-    exit 1
+# >>> prereq preflight (keep identical in scripts/install.sh and scripts/bootstrap.sh)
+# Name EVERY missing prerequisite and the command that installs it on this host,
+# then exit 1 (gh#1087). Stopping at the first one with "install it first" cost a
+# round trip per tool and left the reader to work out the package manager.
+require_prereqs() {
+  local cmd missing=() pkgs=() os sudo=""
+  for cmd in "$@"; do
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+  done
+  [ "${#missing[@]}" -eq 0 ] && return 0
+  for cmd in "${missing[@]}"; do
+    echo "ERROR: '$cmd' not found in PATH." >&2
+    [ "$cmd" = uv ] || pkgs+=("$cmd")
+  done
+  echo "Install the missing prerequisites, then re-run:" >&2
+  if [ "${#pkgs[@]}" -gt 0 ]; then
+    os="$(uname -s 2>/dev/null || echo unknown)"
+    [ "$(id -u 2>/dev/null || echo 0)" = 0 ] || sudo="sudo "
+    case "$os" in
+      Darwin)
+        command -v brew >/dev/null 2>&1 || echo "  (Homebrew first: https://brew.sh)" >&2
+        echo "  brew install ${pkgs[*]}" >&2 ;;
+      *)
+        if command -v apt-get >/dev/null 2>&1; then
+          echo "  ${sudo}apt-get update && ${sudo}apt-get install -y ${pkgs[*]}" >&2
+        elif command -v dnf >/dev/null 2>&1; then
+          echo "  ${sudo}dnf install -y ${pkgs[*]}" >&2
+        elif command -v yum >/dev/null 2>&1; then
+          echo "  ${sudo}yum install -y ${pkgs[*]}" >&2
+        elif command -v apk >/dev/null 2>&1; then
+          echo "  ${sudo}apk add ${pkgs[*]}" >&2
+        elif command -v pacman >/dev/null 2>&1; then
+          echo "  ${sudo}pacman -S --needed ${pkgs[*]}" >&2
+        elif command -v zypper >/dev/null 2>&1; then
+          echo "  ${sudo}zypper install -y ${pkgs[*]}" >&2
+        else
+          echo "  install with your system's package manager: ${pkgs[*]}" >&2
+        fi ;;
+    esac
   fi
-done
+  case " ${missing[*]} " in
+    *" uv "*)
+      echo "  curl -LsSf https://astral.sh/uv/install.sh | sh   # uv; then put ~/.local/bin on PATH" >&2 ;;
+  esac
+  exit 1
+}
+# <<< prereq preflight
+# Preflight: every one is used unconditionally downstream; continuing past a
+# missing one yields a half-install that looks successful.
+require_prereqs jq uv rsync git
 
 # The two files Claude Code registers a plugin in. Without them steps 2 and 4
 # used to skip with a warning and exit 0, so a cloud environment's setup script
