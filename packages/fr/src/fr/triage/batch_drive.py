@@ -1183,7 +1183,8 @@ def _walk_merge_train(
 def _claim_actions(snap: Snapshot) -> list[Action]:
     """The claim writes of a pass, ahead of every other action (§3.F): claims, then
     refreshes, then releases, then the settles of closed issues. A batch outside the
-    selection is left alone; one the snapshot does not know (a dropped member's old batch) is still released."""
+    selection is left alone; one the snapshot does not know (a dropped member's old
+    batch) is still released."""
     known = {b.id for b in snap.batches}
 
     def mine(bid: str) -> bool:
