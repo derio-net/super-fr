@@ -43,6 +43,30 @@ def test_model_not_found_is_dead_with_the_line_and_the_hint() -> None:
     assert got.hint == "gpt-6.1-sol"
 
 
+def test_dead_detail_is_trimmed_of_the_wrapper_tail() -> None:
+    got = classify(
+        _read("opencode-run-not-found.stdout"), _read("opencode-run-not-found.stderr"), 1
+    )
+    assert got.detail.endswith("Did you mean: gpt-6.1-sol?")
+    assert got.hint == "gpt-6.1-sol"
+
+
+def test_dead_detail_from_a_cause_wrapper_line_drops_the_brackets() -> None:
+    line = (
+        'cause="Cause([Fail(ProviderModelNotFoundError: Model not found: p/m. Did you mean: m2?)]))'
+    )
+    got = classify("", line, 1)
+    assert got.verdict == "dead"
+    assert got.detail == "ProviderModelNotFoundError: Model not found: p/m. Did you mean: m2?"
+
+
+def test_dead_detail_keeps_an_inner_parenthesis() -> None:
+    line = "ProviderModelNotFoundError: Model not found: p/foo(beta). Did you mean: m2?)])"
+    got = classify("", line, 1)
+    assert "foo(beta)" in got.detail
+    assert got.detail.endswith("m2?")
+
+
 def test_not_supported_transcribed_from_591_is_dead() -> None:
     # Transcribed from super-fr#591 (the retired-but-still-listed shape), not captured here.
     got = classify("", _read("opencode-run-not-supported.stderr"), 1)
@@ -283,3 +307,18 @@ def test_the_cache_is_written_atomically_via_replace(
     cache.probe(_Counting(), "opencode", "p/m")
     assert calls and calls[0][1] == str(tmp_path / "probes.json")
     assert [p.name for p in tmp_path.iterdir()] == ["probes.json"]
+
+
+def test_a_providers_own_trailing_parenthesis_survives_the_trim() -> None:
+    """p1-r3: only the wrapper's unbalanced closers are trimmed."""
+    bare = 'error="ProviderModelNotFoundError: Model not found: p/m (preview)"'
+    assert classify("", bare, 1).detail == (
+        "ProviderModelNotFoundError: Model not found: p/m (preview)"
+    )
+    wrapped = (
+        'cause="Cause([Fail(ProviderModelNotFoundError: Model not found: p/m (preview). '
+        'Did you mean: m2?)])"'
+    )
+    assert classify("", wrapped, 1).detail == (
+        "ProviderModelNotFoundError: Model not found: p/m (preview). Did you mean: m2?"
+    )

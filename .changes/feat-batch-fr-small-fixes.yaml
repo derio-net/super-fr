@@ -1,0 +1,2 @@
+bump: patch
+summary: Tracker done now closes the issue with CLOSED, a dead-binding reason drops the wrapper's brackets, a corrupt models.yaml is reported without a traceback, and the fr-triage skill names the board's columns.

@@ -49,7 +49,7 @@ from fr.bindings.wording import (
     proposal_text,
     substitution_line,
 )
-from fr.commands.common import resolve_repo_root
+from fr.commands.common import models_errors_exit, resolve_repo_root
 from fr.git import GitUnavailableError, git_answer
 from fr.harness import HARNESSES, load_matrix
 from fr.harness.detect import detect_harness
@@ -75,6 +75,7 @@ from fr.journal.model import (
 )
 from fr.models import (
     REPO_MODELS_REL,
+    ModelsError,
     binding_layer,
     default_models_path,
     load_models,
@@ -4858,14 +4859,21 @@ def start_cmd(
     # the failure look like "the session is here" while the cursor the session
     # was bound for does not exist.
     _bind_session(workspace, branch, *_sessions.ambient_binding(session, harness, os.environ))
-    notice = _orchestrator_model_notice(workspace)
-    if notice is not None:
-        err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
-    # R6: report, never block — the run has started either way.
-    health = _binding_health(workspace)
-    if health is not None:
-        for line in _binding_notice_lines(*health):
-            err_console.print(f"[yellow]{escape(line)}[/yellow]", soft_wrap=True)
+    try:
+        notice = _orchestrator_model_notice(workspace)
+        if notice is not None:
+            err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
+        # R6: report, never block — the run has started either way.
+        health = _binding_health(workspace)
+        if health is not None:
+            for line in _binding_notice_lines(*health):
+                err_console.print(f"[yellow]{escape(line)}[/yellow]", soft_wrap=True)
+    except ModelsError as exc:
+        err_console.print(
+            f"[yellow]{escape(f'warning: {exc} — model bindings ignored for this notice')}"
+            "[/yellow]",
+            soft_wrap=True,
+        )
 
 
 @run_app.command("reshape")
@@ -5460,6 +5468,7 @@ def _observed_holder(state: RunState, key: str) -> str | None:
 
 @run_app.command("advance")
 @_commits_run_writes("advance")
+@models_errors_exit
 def advance_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     redispatch: bool = typer.Option(
@@ -6804,7 +6813,15 @@ def _advance_after_record(repo_root: Path, run_id: str) -> None:
         if record is not None and record.state == "done":
             if _next_step_id(manifest, state.cursor) is None:
                 return
-    stop = _advance_chain(repo_root, run_id, redispatch=False)
+    try:
+        stop = _advance_chain(repo_root, run_id, redispatch=False)
+    except ModelsError as exc:
+        err_console.print(
+            f"record applied; the advance after it was refused: fr: {exc}",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from exc
     if stop == "cli-failed":
         state = load_run_state(repo_root, run_id)
         failed = state.steps.get(state.cursor)
