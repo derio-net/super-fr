@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-14-exit-gates-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-13T22:50:37+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-13T22:50:37+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: 73abb433-5601-4db7-ba08-a64b67cbfcfb
   plan:
     state: pending
   plan-review:
