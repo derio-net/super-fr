@@ -388,3 +388,6 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p4 created=2026-10-13T23:06:05+00:00 -->
 ### phase-split-2026-10-14-exit-gates-p4 · decision · ask: driver routing of gated batches and the gate ledger (R13, R14)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p5 created=2026-10-13T23:06:08+00:00 -->
+### phase-split-2026-10-14-exit-gates-p5 · decision · ask: the board's Needs-you lanes and the conflicting predicate (R17-R19)
