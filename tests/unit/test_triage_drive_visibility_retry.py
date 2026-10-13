@@ -252,3 +252,93 @@ def test_a_leak_still_ends_a_looping_driver(
     assert result.exit_code == 2, result.output
     assert "state repo" in " ".join(result.output.split())
     assert "retrying" not in result.output
+
+
+class MemberFlaky:
+    """A public state repo; the member repo's visibility read fails on its first *fails*
+    reads (a rate limit), then answers public."""
+
+    def __init__(self, fails: int = 1) -> None:
+        self.fails = fails
+        self.asked: list[str] = []
+
+    def repo_visibility(self, repo: str) -> str:
+        self.asked.append(repo)
+        if repo == REFS:
+            return "public"
+        if self.fails:
+            self.fails -= 1
+            raise GhError("HTTP 403: API rate limit exceeded")
+        return "public"
+
+
+def test_a_loop_skips_a_pass_whose_member_repo_visibility_cannot_be_read(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gh#1144: with a public state repo, a failed read of a member repo's visibility is
+    unreadable, not a leak: the pass is skipped and the next one reads again."""
+    client = MemberFlaky()
+    _use(monkeypatch, client)
+    _, state = _workspace(tmp_path, "a")
+    _world(world, state)
+    (state / "scope-durable.yaml").write_text(f"state_repo: {REFS}\n")
+    seen: list[dict[str, Any]] = []
+
+    result = _loop_two_passes(
+        state,
+        monkeypatch,
+        seen,
+        lambda: {"merged": list(world.merged), "passes": len(world.passes)},  # type: ignore[attr-defined]
+    )
+
+    flat = " ".join(result.output.split())
+    assert REPO in client.asked, "the member repo was read live"
+    assert "which is not public" not in flat, result.output
+    assert flat.count("pass skipped, retrying every") == 1, result.output
+    assert seen[0] == {"merged": [], "passes": 0}, "nothing acted"
+    assert seen[1]["merged"], "the second pass ran"
+
+
+def test_a_loop_skips_a_pass_whose_judgements_write_cannot_read_the_visibility(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gh#1145: a VisibilityUnreadable from guard_write mid-pass (the dispatch's write
+    check) skips the pass like the lease's and the save's do, rather than ending the
+    loop. Today's driver writes add no key, so the guard is forced to answer unreadable."""
+    from fr.triage.privacy import VisibilityUnreadable
+
+    _use(monkeypatch, Scripted([]))
+    real = triage_batch_cmd.guard_write
+    calls: list[int] = []
+
+    def guard_write(*args: Any, **kwargs: Any) -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            raise VisibilityUnreadable("cannot read the visibility of example-org/x")
+        real(*args, **kwargs)
+
+    monkeypatch.setattr(triage_batch_cmd, "guard_write", guard_write)
+    state = _leased_state(tmp_path, world)
+    seen: list[dict[str, Any]] = []
+
+    result = _loop_two_passes(
+        state, monkeypatch, seen, lambda: {"dispatched": runners.dispatched_any()}
+    )
+
+    flat = " ".join(result.output.split())
+    assert calls, "the dispatch's write check ran"
+    assert flat.count("pass skipped, retrying every") == 1, result.output
+    assert seen[0] == {"dispatched": False}, "nothing launched on the skipped pass"
+    assert seen[1] == {"dispatched": True}, "the next pass dispatched"

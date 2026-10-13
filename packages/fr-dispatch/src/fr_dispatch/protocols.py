@@ -218,6 +218,9 @@ class AdoptTarget:
     *label* is the runner's raw label: parsing issue refs out of it is triage
     vocabulary and lives in `fr.triage`. *agent* is the session's single agent,
     None when it has none or several; *group* the label of what holds it.
+    *cwd* is the agent's foreground directory (else its own), *session* its harness
+    session id and *harness* `claude | opencode | hermes`; all three are None when
+    the tab holds no single agent (2026-10-11 R10), and *session* when it reports none.
     """
 
     tab: str
@@ -225,6 +228,9 @@ class AdoptTarget:
     group: str | None
     agent: str | None
     status: str
+    cwd: str | None = None
+    session: str | None = None
+    harness: str | None = None
 
 
 @runtime_checkable

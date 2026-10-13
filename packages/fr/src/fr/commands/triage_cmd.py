@@ -28,17 +28,20 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
 from fr.triage.batch import last_dispatch, lifecycle_events
-from fr.triage.check import ClaimSets, classify
+from fr.triage.check import ClaimSets, classify, clean_label_targets
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
+from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.model import (
@@ -67,6 +70,20 @@ from fr.triage.state_ref import NEW_REPO, Ask, decide_state_repo
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+_NAV_WARNED: set[str] = set()
+
+
+def warn_nav(message: str) -> None:
+    """The warning `refresh_navs` gives for a page it could not bring up to date. Said
+    once per message in a process, so a driver loop or `board --watch` does not repeat it
+    every pass (the message names the page's path and the cause)."""
+    if message in _NAV_WARNED:
+        return
+    _NAV_WARNED.add(message)
+    err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+
 
 BOARD_DIR = "board"  # `<state>/board/manifest.yaml`: the board's authored fragments
 
@@ -381,6 +398,13 @@ def _report(facts: Facts) -> None:
         err_console.print(
             f"[yellow]skipped[/yellow] {escape(s.repo)}: {escape(s.reason)}", soft_wrap=True
         )
+    for repo, keys in sorted(facts.config_ignored.items()):
+        err_console.print(
+            f"[yellow]ignored[/yellow] {escape(repo)}: .fr/triage.yaml keys "
+            f"{escape(', '.join(keys))} "
+            "(written for a newer fr, or a typo)",
+            soft_wrap=True,
+        )
     for u in facts.unviewed:
         err_console.print(
             f"[yellow]unviewed[/yellow] {escape(u.key)}: {escape(u.reason)} "
@@ -425,7 +449,6 @@ def collect_into(
     *,
     pr_limit: int = PR_LIMIT,
     carry: bool = False,
-    lenient: bool = False,
     settle: bool = False,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
@@ -434,9 +457,9 @@ def collect_into(
     driver pass reads the forge exactly as `fr triage collect` does. With
     *carry* (the driver's passes) a judged issue the previous facts.json for
     this scope holds closed is carried over instead of viewed again (gh#911);
-    `fr triage collect` never carries. *lenient* (the driver's passes too) drops an
-    unknown top-level `.fr/triage.yaml` key instead of refusing it (gh#998); `fr
-    triage collect` stays strict. *settle* (an explicit `fr triage collect` only, never
+    `fr triage collect` never carries. Every config read drops an unknown
+    top-level `.fr/triage.yaml` key instead of refusing it (R4). *settle* (an explicit
+    `fr triage collect` only, never
     the drive or watch loop, p3-r7) decides an undecided state repo; without it an
     undecided scope warns once and keeps its state local. Returns the stats of
     single-issue reads. Raises `TriageError` on a refusal; writes nothing then.
@@ -469,7 +492,6 @@ def collect_into(
         known_batch_prs=previous.batch_prs if previous else [],
         pr_limit=pr_limit,
         carried=[i for i in previous.issues if i.state == "closed"] if previous and carry else (),
-        lenient=lenient,
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
@@ -610,6 +632,22 @@ def check_command(
     if as_json:
         print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
         return
+    console.print(f"[bold]skipped repos[/bold] ({len(result.skipped)}) — not collected")
+    for repo, why in result.skipped:
+        console.print(f"  {escape(repo)}  {escape(why)}", soft_wrap=True)
+    console.print(
+        f"[bold]config ignored[/bold] ({len(result.config_ignored)}) — written for a newer fr: "
+        "upgrade fr to read these keys"
+    )
+    for repo, keys in result.config_ignored:
+        console.print(f"  {escape(repo)}  {escape(', '.join(keys))}", soft_wrap=True)
+    console.print(
+        f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
+        "labelled fr:in-progress; stale ones: `fr triage clean-labels`"
+    )
+    for state in ("stale", "release-pending", "held"):
+        for e in (e for e in result.closed_in_progress if e.state == state):
+            console.print(f"  {escape(e.key)}  {state}  {escape(e.title)}", soft_wrap=True)
     console.print(f"[bold]unranked[/bold] ({len(result.unranked)}) — open, no judgement")
     for i in result.unranked:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
@@ -697,6 +735,71 @@ def check_command(
     print_claim_sets(result.claims)
 
 
+@triage_app.command("clean-labels")
+def clean_labels_command(
+    yes: bool = typer.Option(
+        False, "--yes", help="Write; without it, print what would be removed."
+    ),
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Remove `fr:in-progress` from closed issues that still carry it (board-truth R3).
+
+    Targets are the facts' `stale` closed-but-in-progress entries (`check` lists them);
+    release-pending and held ones are never touched. With --yes each target is re-read
+    first and skipped if it is open again or now carries `fr:claimed`. Dry-run without
+    --yes. A per-issue failure is reported and the rest continue; the exit is then 1."""
+    from fr.commands import triage_batch_cmd
+    from fr.commands.triage_kanban_cmd import _fail
+    from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
+    from fr.hostclient import FORGE_ERRORS
+    from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
+
+    scope = _scope(repo, org)
+    _, facts, _ = _load_state(scope, dir_override, workspace)
+    targets = clean_label_targets(facts)
+    if not targets:
+        console.print("nothing to clean", markup=False)
+        return
+    if not yes:
+        for t in targets:
+            console.print(
+                f"would remove {FR_IN_PROGRESS.name} from {t.key}  {t.title}",
+                markup=False,
+                soft_wrap=True,
+            )
+        console.print("nothing written; re-run with --yes to write", markup=False)
+        return
+    failed = 0
+    for t in targets:
+        parts = urlparse(t.url)
+        owner_repo = "/".join(parts.path.strip("/").split("/")[:2])
+        number = int(t.key.rpartition("#")[2])
+        try:
+            client = triage_batch_cmd.make_client(f"https://{parts.hostname}/{owner_repo}")
+            if isinstance(client, UnsupportedBatchOps):  # glab/tea: GitHub-only (§3.J)
+                raise UnsupportedForgeOperation("clean-labels", client.backend)
+            now = client.view_issue(owner_repo, number)
+            if str(now.get("state", "")).upper() == "OPEN":
+                console.print(f"skipped {t.key}: open again", markup=False)
+            elif FR_CLAIMED.name in (now.get("labels") or []):
+                console.print(f"skipped {t.key}: now carries {FR_CLAIMED.name}", markup=False)
+            else:
+                client.edit_issue_labels(
+                    owner_repo, number, add=frozenset(), remove=frozenset({FR_IN_PROGRESS.name})
+                )
+                console.print(f"removed {FR_IN_PROGRESS.name} from {t.key}", markup=False)
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            failed += 1
+            console.print(f"failed {t.key}: {exc}", markup=False, soft_wrap=True)
+    if failed:
+        raise typer.Exit(1)
+
+
 def print_claim_sets(sets: ClaimSets) -> None:
     """R7's three sets, shared by `check` and `claim list`."""
     console.print(
@@ -778,9 +881,10 @@ def render_command(
     noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
-        session_notes=noted,
+        session_notes=noted, present=pages_present(target_dir, "backlog"),
     )  # fmt: skip
-    out.write_text(page, encoding="utf-8")
+    write_text_atomic(out, page)
+    refresh_navs(target_dir, "backlog", warn=warn_nav)
     # Stored only once the page exists, and only when the board differs from the latest
     # snapshot: a re-render with nothing new must not erase "Since last report".
     if snap != latest_snapshot(target_dir):

@@ -241,6 +241,14 @@ class Card:
     events: tuple[EventRow, ...]
     claim_expiry: ClaimExpiry | None = None
 
+    @property
+    def front(self) -> Literal["batch", "closeout"]:
+        """Whose session the card's pill and Jump speak for (spec 2026-10-12 R6): the
+        close-out's once one is live, the batch's otherwise."""
+        if self.closeout_status in (None, "absent", "unknown"):
+            return "batch"
+        return "closeout"
+
 
 @dataclass(frozen=True)
 class ColumnView:
