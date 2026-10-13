@@ -7833,7 +7833,7 @@ rows:
       the operator), --no-hold drops it, and the plan without --yes prints the exact
       text
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_the_held_message_pins_every_line
@@ -7848,7 +7848,7 @@ rows:
       and tells the held agent the workspace path; it refuses a dirty base clone or
       unpushed default-branch commits, never changes the base clone, and is resumable'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_adopt_default.py#test_yes_enters_the_workspace_binds_adopts_records_marks_and_messages
@@ -7866,7 +7866,7 @@ rows:
       and classifies every label ref, bare #n included, as issue or PR through the forge,
       writing nothing'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_triage_adopt_list.py#test_the_listing_has_one_row_per_state
@@ -7885,7 +7885,7 @@ rows:
       repo, branch, workspace and PR, and adopted agents (feature branch and main) acknowledge
       and wait without acting
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
     levels: {}
     status: not-implemented
     notes: ''
