@@ -235,6 +235,8 @@ def test_debt_report(installed: Path, tmp_path: Path) -> None:
 
 def test_closeout_owed(installed: Path, tmp_path: Path) -> None:
     _scenario("closeout-owed", installed, tmp_path)
+
+
 def test_triage_closed_in_progress(installed: Path, tmp_path: Path) -> None:
     _scenario("triage-closed-in-progress", installed, tmp_path)
 
