@@ -8468,6 +8468,62 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: tracker-done-closes-issue
+    capability: tracker protocol
+    acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
+      without raising.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracker.py#test_github_tracker_transition_to_done_closes_the_issue
+      - super-fr:tests/unit/test_tracker.py#test_fake_gh_client_refuses_an_unknown_issue_state
+    status: ci
+    notes: GithubTracker passes CLOSED; the fake refuses any other state.
+    verify: none
+  - id: models-dead-reason-trimmed
+    capability: model binding health
+    acceptance: A dead binding's reason ends at the provider's message, without the
+      wrapper's closing brackets.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bindings_probe.py#test_dead_detail_is_trimmed_of_the_wrapper_tail
+      - super-fr:tests/unit/test_bindings_probe.py#test_dead_detail_from_a_cause_wrapper_line_drops_the_brackets
+    status: ci
+    notes: classify trims the wrapper tail.
+    verify: none
+  - id: models-corrupt-config-reported
+    capability: model bindings
+    acceptance: A corrupt models.yaml is reported in one line naming the file; fr run
+      start still starts, fr run advance, resolve's chained advance and fr models refuse
+      with exit 2, and none prints a traceback.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_run_start_warns_and_still_starts
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_run_advance_exits_2_with_the_message
+      - super-fr:tests/unit/test_models_corrupt_config.py#test_record_resolve_applies_then_reports_the_refused_advance
+    status: ci
+    notes: ModelsError reported per command; start warns, others exit 2.
+    verify: none
+  - id: triage-skill-board-columns
+    capability: triage board
+    acceptance: The fr-triage skill names every column the board renders, and CI fails
+      when a column is added or renamed without the skill following.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_triage_board_columns.py#test_the_skill_names_every_column
+      - super-fr:tests/unit/test_tripwire_triage_board_columns.py#test_the_skill_states_no_column_count
+    status: ci
+    notes: Tripwire reads COLUMN_TITLES live.
+    verify: none
   - id: verification-unrunnable-strategy
     capability: verification-strategies
     acceptance: 'A repo that cannot run a strategy''s install program is never owed

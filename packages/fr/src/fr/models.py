@@ -53,11 +53,25 @@ def default_models_path() -> Path:
     return xdg_config_home() / "fr" / "models.yaml"
 
 
+def _yaml_problem(exc: yaml.YAMLError) -> str:
+    """What is wrong and where. PyYAML's first line is its parsing CONTEXT
+    ("while parsing a flow sequence"); the problem and its mark are what an
+    operator needs to fix the file."""
+    problem = getattr(exc, "problem", None)
+    mark = getattr(exc, "problem_mark", None)
+    if problem and mark is not None:
+        return f"{problem} (line {mark.line + 1}, column {mark.column + 1})"
+    return (str(exc).strip().splitlines() or [""])[0]
+
+
 def load_models(path: Path) -> ModelsConfig:
     """Parse a ``harness → tier → model`` mapping. A missing file yields ``{}``."""
     if not path.exists():
         return {}
-    raw = yaml.safe_load(path.read_text()) or {}
+    try:
+        raw = yaml.safe_load(path.read_text()) or {}
+    except yaml.YAMLError as exc:
+        raise ModelsError(f"{path}: not valid YAML: {_yaml_problem(exc)}") from exc
     if not isinstance(raw, dict):
         raise ModelsError(f"{path}: top level must be a harness→tier→model mapping")
     out: ModelsConfig = {}

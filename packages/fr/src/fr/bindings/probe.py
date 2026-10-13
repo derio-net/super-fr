@@ -95,6 +95,20 @@ def _has_text_event(stdout: str) -> bool:
     return False
 
 
+def _trim_wrapper(reason: str) -> str:
+    """Drop the closers of the wrapper OpenCode prints around the message
+    (`Cause([Fail(<message>)])`), which the regex runs on into. Only an
+    UNBALANCED closer is the wrapper's: a `)` that closes the message's own
+    `(` stays (gh#1057)."""
+    reason = reason.rstrip()
+    while reason and reason[-1] in ")]":
+        opener = "(" if reason[-1] == ")" else "["
+        if reason.count(reason[-1]) <= reason.count(opener):
+            break
+        reason = reason[:-1].rstrip()
+    return reason
+
+
 def classify(stdout: str, stderr: str, returncode: int) -> ProbeResult:
     """Read one `opencode run` outcome. ``returncode`` is not evidence either
     way: OpenCode has exited 0 on a failed model and 1 on a missing one. The
@@ -107,7 +121,7 @@ def classify(stdout: str, stderr: str, returncode: int) -> ProbeResult:
             hint = _HINT.search(line)
             return ProbeResult(
                 "dead",
-                (found.group(0) if found else line.strip()),
+                (_trim_wrapper(found.group(0)) if found else line.strip()),
                 hint.group(1) if hint else None,
                 0.0,
             )
