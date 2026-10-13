@@ -1,2 +1,0 @@
-bump: minor
-summary: "Merge train safety: fr merges a batch PR only with the operator's approved-fr label (bound to a head, voided by any push fr did not make, a labelled draft is readied and merged), recovers red PRs (re-update or hand back to the session), enqueues into GitHub merge queues and honours strict up-to-date checks, skips held batches in a default batch merge, and the release can push as the derio-fr-automation app."
