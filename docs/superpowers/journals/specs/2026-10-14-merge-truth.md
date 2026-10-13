@@ -243,3 +243,8 @@ Phase 2 serves its own ask.
 ### phase-split-2026-10-14-merge-truth-p3 · decision · ask: drive robustness (#1176, #1178) is an independently reviewable ask, R13-R14
 
 Phase 3 serves its own ask.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-merge-truth-p2 created=2026-10-13T23:05:49+00:00 -->
+### tier-2026-10-14-merge-truth-p2 · decision · hard: judgements schema 9→10 migration plus a new hand-back path the whole merge train's stop/Need machinery relies on
+
+Phase 2 changes a closed-world judgements schema every triage reader loads and extends the conflict hand-back and stop recording used by every drive pass.
