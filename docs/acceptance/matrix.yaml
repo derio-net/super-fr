@@ -7899,9 +7899,14 @@ rows:
       a batch owes.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: scenario named at plan time; phase 1 writes it
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claim_cmd.py#test_scope_retire_yes_removes_the_signers_claims_from_facts
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_retire_sync
+    status: ci
+    notes: 'phase 1: retire drops the signer''s claims from facts.json; check and sync
+      read them gone with no collect; scenario drives the installed fr'
     verify: candidate
     scenario: tests/scenarios/triage-retire-sync.sh
   - id: triage-archive-pr-visible
