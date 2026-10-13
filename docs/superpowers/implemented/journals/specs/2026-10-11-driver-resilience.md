@@ -117,3 +117,8 @@ R3 and §A print a single-repo scope's defaulted checkout explicitly as --checko
 ### sr-6-resolved · finding [out-of-scope] · resolves sr-6: A transient failure reading a member repo's visibility (public state repo) is reported as a leak and still ends a looping driver
 
 Not caused by this change: the member-repo live read and its leak-refusal wording predate it, and the operator scoped #1134 to the state repo's own visibility. To file as its own issue.
+
+<!-- fr:journal kind=finding scope=spec id=sr-6-resolved-2 created=2026-10-11T22:34:38+00:00 state=open resolves=sr-6 tracked_by=https://github.com/derio-net/super-fr/issues/1144 -->
+### sr-6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1144] · resolves sr-6: A transient failure reading a member repo's visibility (public state repo) is reported as a leak and still ends a looping driver
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1144.
