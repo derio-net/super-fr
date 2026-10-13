@@ -8674,7 +8674,7 @@ rows:
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
       without raising.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_tracker.py#test_github_tracker_transition_to_done_closes_the_issue
@@ -8687,7 +8687,7 @@ rows:
     acceptance: A dead binding's reason ends at the provider's message, without the
       wrapper's closing brackets.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R3
     levels:
       unit:
       - super-fr:tests/unit/test_bindings_probe.py#test_dead_detail_is_trimmed_of_the_wrapper_tail
@@ -8701,9 +8701,9 @@ rows:
       start still starts, fr run advance, resolve's chained advance and fr models refuse
       with exit 2, and none prints a traceback.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_models_corrupt_config.py#test_run_start_warns_and_still_starts
@@ -8717,7 +8717,7 @@ rows:
     acceptance: The fr-triage skill names every column the board renders, and CI fails
       when a column is added or renamed without the skill following.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-11-fr-small-fixes-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-11-fr-small-fixes-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_triage_board_columns.py#test_the_skill_names_every_column
