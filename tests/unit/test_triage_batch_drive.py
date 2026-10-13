@@ -1899,3 +1899,25 @@ def test_a_dispatch_hold_turns_every_dispatch_into_a_pending_hold() -> None:
     ]
     assert got.summary.pending == 2 and got.summary.held == 0
     assert not got.summary.stalled and not got.summary.idle
+
+
+def test_drive_pass_emits_settle_actions_after_releases() -> None:
+    batches = [_batch("a", 1)]
+    got = drive_pass(
+        _snap(
+            batches,
+            {"a": "proposed"},
+            me="s-me",
+            releases_owed=(("super-fr#9", "old"),),
+            settles_owed=(("super-fr#3", "a"), ("super-fr#4", "")),
+        )
+    )
+    assert [(a.kind, a.batch, a.key) for a in got.actions[:3]] == [
+        ("release", "old", "super-fr#9"),
+        ("settle", "a", "super-fr#3"),
+        ("settle", "", "super-fr#4"),
+    ]
+    from fr.triage.batch_drive import action_line
+
+    assert action_line(got.actions[1]) == "settle super-fr#3 (a): closed"
+    assert action_line(got.actions[2]) == "settle super-fr#4: closed"

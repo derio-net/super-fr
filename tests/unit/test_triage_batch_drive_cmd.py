@@ -66,6 +66,7 @@ class World:
         self.titles: dict[int, str] = {}
         self.labels_defined: set[str] = {"approved-fr"}
         self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
+        self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -108,6 +109,7 @@ class World:
             ],  # fmt: skip
             prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
+            stale_in_progress=self.stale_in_progress,
             viewer="operator",
         )
 
@@ -4832,3 +4834,39 @@ def test_a_queue_repo_red_pr_is_never_re_updated(
     messenger.status[BATCH_ITEM_B1] = "idle"
     _drive(tmp_path, "--once", "--yes")
     assert world.prs[101]["head_oid"] == "sha-101" and len(messenger.messages) == 1
+
+
+def test_settle_of_a_carried_repo_waits_by_the_keys_repo() -> None:
+    from fr.triage.batch_drive import Action
+    from fr.triage.claim_sync import ClaimEnv
+    from fr.triage.scope_config import ScopeConfig
+
+    facts = Facts(
+        viewer="operator", scope="derio-net--super-fr", kind="repo",
+        collected_at=NOW.isoformat(), repos=[REPO], issues=[],
+    )  # fmt: skip
+    env = ClaimEnv(me="s-me", config=ScopeConfig(), facts=facts, client_for=lambda r: None)  # type: ignore[arg-type,return-value]
+    settle = Action("settle", "", "closed", key="super-fr#4")  # names no batch
+    assert triage_batch_cmd.read_repo(settle, {}, env) == REPO
+    assert triage_batch_cmd.read_repo(settle, {}, None) is None
+    merge = Action("merge", "b1", "x")
+    assert triage_batch_cmd.read_repo(merge, {"b1": REPO}, env) == REPO
+    assert "settle" in triage_batch_cmd._LIVE_READ_ACTIONS
+
+
+def test_a_yes_pass_settles_a_closed_hit_no_batch_holds(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    from fr.triage.model import StaleInProgress
+
+    world.issues[1] = "closed"
+    world.stale_in_progress = [
+        StaleInProgress(key="super-fr#1", title="t", url="https://example.com/1", state="stale")
+    ]
+    _state(tmp_path, world)
+    code, out = _drive(tmp_path, "--once")
+    assert _lines(out, "settle") == ["settle super-fr#1: closed"]
+    assert "label 1" not in world.calls  # plan mode writes nothing
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "settle") == ["settle super-fr#1: unlabelled"]
+    assert "label 1" in world.calls

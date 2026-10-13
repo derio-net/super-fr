@@ -377,7 +377,10 @@ def test_closed_settlements_targets_stale_and_release_pending_never_held() -> No
 
     def entry(n: int, state: str) -> StaleInProgress:
         return StaleInProgress(
-            key=f"widgets#{n}", title="t", url="https://example.com/x", state=state  # type: ignore[arg-type]
+            key=f"widgets#{n}",
+            title="t",
+            url="https://example.com/x",
+            state=state,  # type: ignore[arg-type]
         )
 
     facts = Facts.model_construct(

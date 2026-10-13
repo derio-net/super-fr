@@ -90,6 +90,7 @@ ActionKind = Literal[
     "claim",
     "refresh",
     "release",
+    "settle",
     "export",
     "export-merge",
     "export-reconcile",
@@ -214,6 +215,9 @@ class Snapshot:
     claims_owed: tuple[tuple[str, str], ...] = ()
     refresh_owed: tuple[tuple[str, str], ...] = ()
     releases_owed: tuple[tuple[str, str], ...] = ()
+    # Closed issues to settle (post-merge truth R1, R2): (key, batch id), the batch "" when
+    # no batch of this scope holds the key. Written after the releases.
+    settles_owed: tuple[tuple[str, str], ...] = ()
     # Sessions the runner reports idle with no PR, past `idle_session_minutes` (driver-sessions
     # §D, R7): built by the command from live statuses, never by `views.drive_snapshot`
     # (whose warns all read as a failing CI). `scope_args` are the drive's own, for the
@@ -261,7 +265,7 @@ class Action:
     # highest wave the export PR covers, which names its branch
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
-    key: str = ""  # claim, refresh, release: the issue key
+    key: str = ""  # claim, refresh, release, settle: the issue key
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
@@ -1178,8 +1182,8 @@ def _walk_merge_train(
 
 def _claim_actions(snap: Snapshot) -> list[Action]:
     """The claim writes of a pass, ahead of every other action (§3.F): claims, then
-    refreshes, then releases. A batch outside the selection is left alone; one the
-    snapshot does not know (a dropped member's old batch) is still released."""
+    refreshes, then releases, then the settles of closed issues. A batch outside the
+    selection is left alone; one the snapshot does not know (a dropped member's old batch) is still released."""
     known = {b.id for b in snap.batches}
 
     def mine(bid: str) -> bool:
@@ -1190,6 +1194,7 @@ def _claim_actions(snap: Snapshot) -> list[Action]:
         ("claim", snap.claims_owed, "owed"),
         ("refresh", snap.refresh_owed, "heartbeat due"),
         ("release", snap.releases_owed, "no longer owed"),
+        ("settle", snap.settles_owed, "closed"),
     ):
         out.extend(
             Action(kind, bid, why, key=key)  # type: ignore[arg-type]
@@ -1449,8 +1454,9 @@ def action_line(action: Action, outcome: str | None = None) -> str:
     the same words in `--once` and loop mode."""
     if action.kind == "dedupe":  # names no batch
         return f"dedupe: {outcome or action.detail}"
-    if action.kind in ("claim", "refresh", "release"):
-        return f"{action.kind} {action.key} ({action.batch}): {outcome or action.detail}"
+    if action.kind in ("claim", "refresh", "release", "settle"):
+        where = f" ({action.batch})" if action.batch else ""
+        return f"{action.kind} {action.key}{where}: {outcome or action.detail}"
     if action.wave is not None:
         return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"

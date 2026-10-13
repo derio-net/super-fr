@@ -3829,16 +3829,15 @@ class _Driver:
         plan = plan_sync(env, judgements.batches, now)
 
         def blind(op: ClaimOp) -> bool:
-            """A refresh of a member facts cannot see (closed: collect reads no closed
-            issue's comments): a read that writes only when the marker is due, so it is
-            made with --yes and never announced in a plan."""
-            issue = env.issue(op.key)
-            return op.kind == "refresh" and (issue is None or issue.state != "open")
+            """A refresh of a member facts cannot see (unviewed, or its repo skipped): a
+            read that writes only when the marker is due, so it is made with --yes and
+            never announced in a plan."""
+            return op.kind == "refresh" and env.issue(op.key) is None
 
         def owed(kind: str) -> tuple[tuple[str, str], ...]:
             return tuple(
-                (op.key, op.batch) for op in plan.ops
-                if op.kind == kind and repos.get(op.batch) not in unread
+                (op.key, op.batch or "") for op in plan.ops
+                if op.kind == kind and _op_repo(env, op, repos) not in unread
                 and (self.yes or not blind(op))
             )  # fmt: skip
 
@@ -3849,6 +3848,7 @@ class _Driver:
             "claims_owed": owed("claim"),
             "refresh_owed": owed("refresh"),
             "releases_owed": owed("release"),
+            "settles_owed": owed("settle"),
         }
 
     def _default_branch(self, repo: str) -> str:
@@ -4452,7 +4452,8 @@ class _Driver:
         if carried:  # nothing was read live for them: no merge, close-out or archive (R10)
             plan = replace(plan, actions=tuple(
                 a for a in plan.actions
-                if not (a.kind in _LIVE_READ_ACTIONS and snap.repos.get(a.batch) in carried)
+                if not (a.kind in _LIVE_READ_ACTIONS
+                        and read_repo(a, snap.repos, self._claims) in carried)
             ))  # fmt: skip
         if self.single_pass is not None:
             self.planned_dispatch = any(a.kind == "dispatch" for a in plan.actions)
@@ -4477,7 +4478,7 @@ class _Driver:
                     action = replace(action, kind="warn")
                 if (
                     outcome
-                    or action.kind not in ("close", "claim", "refresh", "release")
+                    or action.kind not in ("close", "claim", "refresh", "release", "settle")
                     and not (action.kind == "warn" and action.red)
                 ):
                     # a close reported already stays quiet, as does a claim write that wrote
@@ -4616,7 +4617,7 @@ class _Driver:
             return action.detail, False, in_flight
         if action.kind in ("blocked", "held"):
             return action.detail, False, in_flight
-        if action.kind in ("claim", "refresh", "release"):
+        if action.kind in ("claim", "refresh", "release", "settle"):
             if action.kind == "claim" and action.batch in self._held_now:
                 return "", False, in_flight  # one claim was lost: the batch's rest wait (R6)
             line, did = self._claim_write(action)
@@ -4709,7 +4710,7 @@ class _Driver:
         R10). A claim that turned out held (R4) stops the pass acting on its batch; a
         failed write is reported, makes `--once` exit 1, and is retried next pass."""
         assert self._claims is not None
-        op = ClaimOp(action.kind, action.key, action.batch)  # type: ignore[arg-type]
+        op = ClaimOp(action.kind, action.key, action.batch or None)  # type: ignore[arg-type]
         try:
             result = execute(self._claims, [op], _now())
         except UnsupportedForgeOperation as exc:
@@ -4829,7 +4830,7 @@ class _Driver:
     def _record_released(self, facts: Facts) -> None:
         """One `claims_released` event per batch released this pass, after its releases,
         through the one judgements writer, so the next pass owes nothing (R10)."""
-        if not any(op.kind == "release" for op, _ in self._claim_done.done):
+        if not any(op.kind in ("release", "settle") for op, _ in self._claim_done.done):
             return
         batches = load_judgements(self.target / "judgements.yaml").batches
         recorded = record_releases(batches, self._claim_done, _now())
@@ -5662,7 +5663,23 @@ class _Driver:
 
 # The actions a pass plans only from what it read live this pass (R10): a carried repo's
 # batches get none of them.
-_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt"})
+_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt", "settle"})
+
+
+def _op_repo(env: ClaimEnv, op: ClaimOp, repos: Mapping[str, str]) -> str | None:
+    """The repo *op* writes in: a settle's is its key's (it may hold no batch), any other
+    op's is its batch's."""
+    if op.kind == "settle":
+        return env.owner_repo(op.key)
+    return repos.get(op.batch or "")
+
+
+def read_repo(action: Action, repos: Mapping[str, str], env: ClaimEnv | None) -> str | None:
+    """The repo a live-read *action* reads, to hold it back when that repo was carried: its
+    batch's, or for a settle (which may name no batch) its key's."""
+    if action.kind == "settle":
+        return env.owner_repo(action.key) if env is not None else None
+    return repos.get(action.batch)
 
 
 def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:

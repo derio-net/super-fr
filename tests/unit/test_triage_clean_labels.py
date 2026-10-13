@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from fr.gh import GhError
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 from fr.triage.check import classify, clean_label_targets
+from fr.triage.claims import Marker, render_marker
 from fr.triage.model import Facts
 from typer.testing import CliRunner
 
@@ -89,11 +91,17 @@ def test_the_board_note_names_the_count_and_the_command_only_when_stale() -> Non
 
 @pytest.fixture
 def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, FakeGhClient]:
+    monkeypatch.setenv("FR_HOST_ID", "0123456789abcdef")
     client = FakeGhClient()
     for n in (1, 2, 3, 4, 5, 6):
         client.add_issue(REPO, n, labels={"fr:in-progress"}, state="CLOSED")
     client.issues[(REPO, 2)].state = "OPEN"  # reopened since collect
-    client.issues[(REPO, 3)].labels.add("fr:claimed")  # claimed since collect
+    client.issues[(REPO, 3)].labels.add("fr:claimed")  # claimed since collect, by another scope
+    t = datetime(2026, 10, 1, tzinfo=UTC)
+    rival = Marker(signer="s-22222222", batch="b", claimed=t, heartbeat=t, expires=t)
+    client.issue_comments[(REPO, 3)] = [
+        {"author": "operator", "body": render_marker(rival), "created_at": t.isoformat(), "id": 1}
+    ]
     f = make_facts(
         [],
         stale_in_progress=[
@@ -142,16 +150,32 @@ def test_with_yes_it_rereads_each_target_and_removes_the_label_from_the_rest(
     assert code == 0, out
     assert "fr:in-progress" not in client.issues[(REPO, 1)].labels
     assert "fr:in-progress" not in client.issues[(REPO, 6)].labels
-    # re-read: #2 is open again, #3 carries fr:claimed now; both skipped with a reason
+    # re-read: #2 is open again, #3 is held by another scope now; both left alone
     assert "fr:in-progress" in client.issues[(REPO, 2)].labels
     assert "fr:in-progress" in client.issues[(REPO, 3)].labels
-    assert "open again" in out and "fr:claimed" in out
+    assert "skipped widgets#2" in out and "skipped widgets#3" in out
     # release-pending and held are never targets
     assert "fr:in-progress" in client.issues[(REPO, 4)].labels
     assert "fr:in-progress" in client.issues[(REPO, 5)].labels
     assert [c["number"] for c in _edits(client)] == [1, 6]
-    assert all(c["remove"] == frozenset({"fr:in-progress"}) for c in _edits(client))
+    both = frozenset({"fr:claimed", "fr:in-progress"})
+    assert all(c["remove"] == both for c in _edits(client) if c["remove"])
     assert sum(1 for line in out.splitlines() if "widgets#" in line) == 4  # one outcome each
+
+
+def test_clean_labels_removes_both_labels_and_no_longer_skips_fr_claimed(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    tmp_path, client = world
+    client.add_issue(REPO, 7, labels={"fr:in-progress", "fr:claimed"}, state="CLOSED")
+    f = make_facts([], stale_in_progress=[_entry(7, "stale")])
+    (tmp_path / "facts.json").write_text(json.dumps(f.to_json()), "utf-8")
+    code, out = _run(tmp_path, "--yes")
+    assert code == 0, out
+    assert not {"fr:claimed", "fr:in-progress"} & client.issues[(REPO, 7)].labels
+    assert "skipped" not in out
+    removals = [c["remove"] for c in _edits(client) if c["remove"]]
+    assert removals == [frozenset({"fr:claimed", "fr:in-progress"})]
 
 
 def test_a_per_issue_failure_is_reported_the_rest_continue_and_the_exit_is_nonzero(

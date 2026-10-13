@@ -109,6 +109,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "claim": "claims owed; the drive writes them",
     "refresh": "claims due a refresh",
     "release": "claims to release",
+    "settle": "closed issues to settle",
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason
