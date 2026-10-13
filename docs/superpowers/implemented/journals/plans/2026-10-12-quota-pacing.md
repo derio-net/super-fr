@@ -319,3 +319,13 @@ budget_from_json normalises naive to UTC and aware to astimezone(UTC). Tests tes
 ### p3-r5-resolved · finding [out-of-scope] · resolves p3-r5: drive lock is checked only at the start of each watch iteration (phase 3)
 
 Existing lock design (triage_kanban_cmd _watch predates this change); pacing.json writes are atomic and advisory, so an interleave is bounded. Not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved-2 created=2026-10-13T18:44:06+00:00 state=open resolves=p1-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1178 -->
+### p1-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1178] · resolves p1-r4: host wait_out renewal retries a GraphQL visibility read every 60s inside the exhausted window until R12 lands
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1178.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved-2 created=2026-10-13T18:44:06+00:00 state=open resolves=p3-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1179 -->
+### p3-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1179] · resolves p3-r5: drive lock is checked only at the start of each watch iteration
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1179.

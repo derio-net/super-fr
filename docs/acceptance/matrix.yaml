@@ -6895,7 +6895,7 @@ rows:
       that starts with nothing left does not run; a secondary limit backs off doubling
       to 15 minutes; an unreadable /rate_limit fails open.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R2
     levels:
       unit:
       - super-fr:tests/unit/test_triage_quota_loop.py#test_a_rate_limited_pass_waits_for_the_reset_and_spends_nothing_until_then
@@ -6914,7 +6914,7 @@ rows:
       (held, quota below floor), still merges and closes out, keeps the last board,
       and waits four intervals.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_triage_quota_passes.py#test_below_the_floor_nothing_is_dispatched_and_the_drive_keeps_going
@@ -6932,7 +6932,7 @@ rows:
       changes collects only the changed repos and carries the rest; a full pass runs
       at least every 15 minutes; ETags are stored only with the facts they describe.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_triage_quota_passes.py#test_a_quiet_pass_reads_nothing_plans_nothing_and_renews_the_lease
@@ -6947,7 +6947,7 @@ rows:
     acceptance: The state repo's visibility is still read live before every push, but
       through a conditional REST request whose 304 answer costs no budget.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_gh.py#TestConditionalVisibility::test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer
@@ -6962,7 +6962,7 @@ rows:
       throttles itself, and board.html's footer shows the last budget read and when
       facts were last collected.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_triage_kanban_render.py#test_the_footer_names_the_last_budget_and_when_the_facts_were_collected
@@ -6976,7 +6976,7 @@ rows:
     acceptance: Several org drivers running overnight on one token no longer exhaust
       the shared GraphQL budget.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R1
     levels: {}
     status: not-implemented
     notes: ''
@@ -6987,7 +6987,7 @@ rows:
       cap and resetting after a clean pass; an unreadable /rate_limit fails open, reported
       once per cause.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_triage_quota_loop.py#test_a_secondary_limit_backs_off_from_the_interval_and_a_clean_pass_resets_it
@@ -7003,7 +7003,7 @@ rows:
     acceptance: The budget floor resolves from --quota-floor, else quota_floor in ~/.config/fr/forge.yaml,
       else 0.20, and a value fr cannot use is refused naming its source.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_forgeapi.py#test_floor_flag_beats_the_host_file
@@ -7020,7 +7020,7 @@ rows:
       facts, keeping cross-repo PR-to-issue links whichever side was read; carried repos
       are never reported unread.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_triage_collect_partial.py#test_only_the_named_repos_are_read_and_the_rest_carried
@@ -7036,7 +7036,7 @@ rows:
       their ETags, written after facts.json, so a change between probe and collect is
       never hidden by a later 304.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_triage_probe.py#test_an_interleaved_change_is_never_a_stale_304
@@ -7053,7 +7053,7 @@ rows:
       and the cloud drive pass exits 3 while waiting, renewing the lease first when
       it would lapse.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-12-quota-pacing-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R16
     levels:
       unit:
       - super-fr:tests/unit/test_triage_quota_loop.py#test_a_wait_longer_than_the_lease_renews_it_and_sleeps_again
