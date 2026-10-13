@@ -400,3 +400,6 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p8 created=2026-10-13T23:06:17+00:00 -->
 ### phase-split-2026-10-14-exit-gates-p8 · decision · ask: install channels in bootstrap.sh/install.sh (R22, R23)
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-exit-gates-p3 created=2026-10-13T23:06:20+00:00 -->
+### tier-2026-10-14-exit-gates-p3 · decision · hard: moves the record kind's stamp (migration + validator) and changes deliver's gate every run relies on
