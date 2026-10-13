@@ -7855,9 +7855,14 @@ rows:
       check and both pages say so.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_claim_sync.py#test_sync_never_refreshes_a_member_facts_show_closed
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_every_surface_states_the_same_clearing_rule
+      - super-fr:tests/unit/test_triage_clean_labels.py#test_the_board_note_fires_on_stale_or_release_pending_and_names_the_rule
+    status: ci
+    notes: 'phase 1: a closed member is settled, never refreshed; check, the page and
+      the board share one clearing rule'
     verify: none
   - id: triage-claim-take-recorded-first
     capability: triage-batches
