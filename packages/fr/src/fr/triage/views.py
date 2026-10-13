@@ -61,7 +61,6 @@ from fr.triage.model import (
     Facts,
     Judgement,
     Judgements,
-    PullRequest,
     RedHandbackEvent,
     Severity,
 )
