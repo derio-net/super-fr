@@ -369,3 +369,21 @@ def test_closed_settlements_is_exported() -> None:
     from fr.triage import claims
 
     assert hasattr(claims, "closed_settlements")
+
+
+def test_closed_settlements_targets_stale_and_release_pending_never_held() -> None:
+    from fr.triage import claims
+    from fr.triage.model import Facts, StaleInProgress
+
+    def entry(n: int, state: str) -> StaleInProgress:
+        return StaleInProgress(
+            key=f"widgets#{n}", title="t", url="https://example.com/x", state=state  # type: ignore[arg-type]
+        )
+
+    facts = Facts.model_construct(
+        stale_in_progress=[entry(1, "stale"), entry(2, "release-pending"), entry(3, "held")]
+    )
+    assert claims.closed_settlements(facts) == [
+        ("widgets#1", "stale"),
+        ("widgets#2", "release-pending"),
+    ]

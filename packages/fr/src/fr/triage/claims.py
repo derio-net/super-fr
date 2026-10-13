@@ -402,6 +402,9 @@ def held_map(facts: Facts, me: str) -> dict[str, Claim]:
     return out
 
 
-def closed_settlements(facts: Facts) -> list:
-    """Stub: closed hits to settle (implemented in the next task)."""
-    return []
+def closed_settlements(facts: Facts) -> list[tuple[str, str]]:
+    """(key, state) of each closed hit the drive and `claim sync` settle (post-merge truth
+    R1, R2): the `stale` and `release-pending` entries, never a `held` one."""
+    return [
+        (e.key, e.state) for e in facts.stale_in_progress if e.state in ("stale", "release-pending")
+    ]
