@@ -13,7 +13,7 @@ import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 import yaml
@@ -39,7 +39,7 @@ from fr.triage.check import claim_sets
 from fr.triage.claim_sync import ClaimEnv, SyncResult, execute, plan_sync, record_releases
 from fr.triage.claims import SCOPE_ID_PATTERN, Claim, expired, from_issue_claim, holder, stale
 from fr.triage.errors import TriageError
-from fr.triage.model import Batch, ClaimTakenEvent, Facts, normalize_key
+from fr.triage.model import Batch, ClaimTakenEvent, Facts, load_judgements, normalize_key
 from fr.triage.scope_config import default_board_name, load_scope_config, scope_id
 
 scope_app = typer.Typer(name="scope", help="This triage scope's identity and config.")
@@ -242,8 +242,16 @@ def claim_take_command(
         console.print("nothing written; re-run with --yes to take it", markup=False)
         return
     owner_repo, number = _repo_of(env, key)
-    out = _write_one(
-        lambda: cw.take(
+    # The take makes the member owed (gh#1120): without the event a wave-less, undispatched
+    # batch owes nothing, and the next sync would release the claim just written. It is
+    # recorded FIRST (post-merge truth R5), so a failed write leaves the forge untouched and
+    # a forge write that lands can never be released by a sync that does not know of it.
+    event = ClaimTakenEvent(kind="claim_taken", at=now, keys=[key])
+    taken = chosen.model_copy(update={"events": [*chosen.events, event]})
+    batches = [taken if b.id == chosen.id else b for b in judgements.batches]
+    triage_batch_cmd._write(target, batches, facts, read=list(judgements.batches))
+    try:
+        out = cw.take(
             env.client(owner_repo),
             owner_repo,
             number,
@@ -253,19 +261,46 @@ def claim_take_command(
             now=now,
             trusted=env.trusted(owner_repo),
             allow=allow,
-        ),
-        key,
-    )
+        )
+    except (cw.ClaimError, UnsupportedForgeOperation) as exc:
+        _withdraw_take(target, facts, chosen.id, event, str(exc))
+    except FORGE_ERRORS as exc:
+        _fail(
+            f"{key}: {exc}. The take stays recorded for batch {chosen.id}; "
+            "`fr triage claim sync --yes` finishes it"
+        )
     if isinstance(out, cw.Held):
-        _fail(f"{key}: still held by {out.claim.signer} (batch {out.claim.batch})")
+        _withdraw_take(
+            target,
+            facts,
+            chosen.id,
+            event,
+            f"{key}: still held by {out.claim.signer} (batch {out.claim.batch})",
+        )
     console.print(f"took {key} for batch {chosen.id}", markup=False)
-    # The take makes the member owed (gh#1120): without the event a wave-less, undispatched
-    # batch owes nothing, and the next sync would release the claim just written.
-    taken = chosen.model_copy(
-        update={"events": [*chosen.events, ClaimTakenEvent(kind="claim_taken", at=now, keys=[key])]}
-    )
-    batches = [taken if b.id == chosen.id else b for b in judgements.batches]
-    triage_batch_cmd._write(target, batches, facts, read=list(judgements.batches))
+
+
+def _withdraw_take(
+    target: Path, facts: Facts, batch_id: str, event: ClaimTakenEvent, why: str
+) -> NoReturn:
+    """Remove the `claim_taken` event `take` just recorded, because the forge refused the
+    take: no take is recorded for a take that did not happen. Exits 2 naming *why*; when the
+    withdrawal write fails too, it names the stray event instead."""
+    try:
+        current = load_judgements(target / "judgements.yaml").batches
+        cleaned = [
+            b.model_copy(update={"events": [e for e in b.events if e != event]})
+            if b.id == batch_id
+            else b
+            for b in current
+        ]
+        triage_batch_cmd._save(target, cleaned, facts, read=list(current))
+    except TriageError as exc:
+        _fail(
+            f"{why}. The recorded claim_taken event on batch {batch_id} could not be withdrawn "
+            f"({exc}); remove it by hand"
+        )
+    _fail(why)
 
 
 @claim_app.command("release")
