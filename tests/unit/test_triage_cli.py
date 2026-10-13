@@ -32,9 +32,11 @@ class _Forge:
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         return [{"name": "alpha", "isArchived": False}, {"name": "beta", "isArchived": False}]
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+    def list_issues(self, *, repo: str, state: str, limit: int, **kw: Any) -> list[dict[str, Any]]:
         if self.fail_with is not None and repo.endswith(("/super-fr", "/beta")):
             raise ForgeError(self.fail_with)
+        if state != "open":
+            return []  # the closed + fr:in-progress read (board-truth §B)
         return _load("super-fr-issues.json")
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:

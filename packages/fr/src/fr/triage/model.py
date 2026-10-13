@@ -50,13 +50,14 @@ from fr.triage.stage import Stage, derive_stage
 # the key (`to_json` dumps it, `[]` included), which a closed-world schema-6 reader rejects, so
 # the stamp moves for the same reason. 8 adds per-config `merge_method` (2026-10-07-cloud-triage
 # §A): `to_json` dumps it, `null` included, which a closed-world schema-7 reader rejects; the
-# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 9 adds per-PR
+# same unreleased 8 adds the scope's `visibility` map (§B), `{}` included. 9 adds closed issues
+# still labelled `fr:in-progress` and the skew fields (board-truth §B). 10 adds per-PR
 # `labels` (2026-10-11-merge-train-safety §A): `to_json` dumps it, `null` included, which a
-# closed-world schema-8 reader rejects; a schema-8 file reads `labels` as None, which never
-# approves. 3 to 8 still load, and the first collect upgrades them. Independent of
+# closed-world schema-9 reader rejects; a file below 10 reads `labels` as None, which never
+# approves. 3 to 9 still load, and the first collect upgrades them. Independent of
 # JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[9] = 9
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9)
+FACTS_SCHEMA: Literal[10] = 10
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10)
 # The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
 # `claim_taken` event, gh#1120;
@@ -74,7 +75,7 @@ SCOPE_NAME_LIMIT = 80
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
 PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
-TruncatedList = Literal["repos", "issues", "prs"]
+TruncatedList = Literal["repos", "issues", "prs", "closed-in-progress"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 Kind = Literal["defect", "feature", "parked"]
@@ -384,6 +385,12 @@ class Truncation(_Strict):
         the issue and repo lists have none, and the sentence says so rather than
         inventing one.
         """
+        if self.source == "closed-in-progress":
+            return (
+                f"the closed fr:in-progress list for {target} returned exactly its limit "
+                f"({self.limit}), so the closed-but-in-progress set may be incomplete; "
+                "no flag raises this limit"
+            )
         remedy = "raise it with --pr-limit" if self.source == "prs" else "no flag raises this limit"
         return (
             f"the {_LIST_WORDS[self.source]} for {target} returned exactly its limit "
@@ -391,7 +398,12 @@ class Truncation(_Strict):
         )
 
 
-_LIST_WORDS: dict[str, str] = {"prs": "PR list", "issues": "issue list", "repos": "repo list"}
+_LIST_WORDS: dict[str, str] = {
+    "prs": "PR list",
+    "issues": "issue list",
+    "repos": "repo list",
+    "closed-in-progress": "closed fr:in-progress list",
+}
 
 
 class Launch(_Strict):
@@ -505,24 +517,35 @@ def claim_trusted(config: TriageConfig, viewer: str | None) -> frozenset[str]:
     return frozenset(login.lower() for login in logins)
 
 
-def parse_triage_config(
-    data: object, *, lenient: bool = False
-) -> tuple[TriageConfig, tuple[str, ...]]:
+def parse_triage_config(data: object) -> tuple[TriageConfig, tuple[str, ...]]:
     """`.fr/triage.yaml`'s parsed body as config, and the top-level keys it ignored.
 
-    Strict by default: an unknown key is refused, so a typo fails where a person
-    runs `fr triage collect` by hand. *lenient* is the wave driver's (gh#998): it
-    reads the file from the default branch every pass, and its own merges land a
-    key the running `fr` predates before the release that knows it can. It drops
-    unknown TOP-LEVEL keys and names them; a known key with a bad value, or an
-    unknown key nested in a known block, is still refused.
+    Every triage read is lenient (R4, gh#998): a merge can land a key the running `fr`
+    predates before the release that knows it. Unknown TOP-LEVEL keys are dropped and
+    named (collect records them, the skew banner and `check` show them); a known key
+    with a bad value, or an unknown key nested in a known block, is still refused.
     """
-    if not lenient or not isinstance(data, dict):
+    if not isinstance(data, dict):
         return TriageConfig.model_validate(data), ()
     known = {f.alias or name for name, f in TriageConfig.model_fields.items()}
     ignored = tuple(sorted(str(k) for k in data if k not in known))
     kept = {k: v for k, v in data.items() if k in known}
     return TriageConfig.model_validate(kept), ignored
+
+
+InProgressState = Literal["stale", "release-pending", "held"]
+
+
+class StaleInProgress(_Strict):
+    """A CLOSED issue still labelled `fr:in-progress` (board-truth §B, R2). `stale` is
+    safe to clean; `release-pending` carries this scope's own un-released claim (the
+    next `claim sync` releases both labels); `held` carries another scope's."""
+
+    key: str
+    title: str
+    url: str
+    closed_at: str | None = None
+    state: InProgressState
 
 
 class Facts(_Strict):
@@ -533,7 +556,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8, 9] = Field(9, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10] = Field(10, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -558,6 +581,11 @@ class Facts(_Strict):
     # visibility the forge answered (cloud-triage §B, §C): the state-repo decision and
     # the privacy guard read it; a repo missing here is read live by the guard.
     visibility: dict[str, str] = {}
+    # Closed issues still labelled `fr:in-progress` (board-truth §B, R2), schema 9.
+    stale_in_progress: list[StaleInProgress] = []
+    # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (R4,
+    # schema 9; the skew banner reads it).
+    config_ignored: dict[str, list[str]] = {}
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:

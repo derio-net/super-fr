@@ -864,3 +864,30 @@ def test_an_origins_entry_that_duplicates_itself_is_refused(tmp_path: Path) -> N
     )
     with pytest.raises(Exception, match="widgets#6"):
         load_origins(tmp_path / "origins.yaml")
+
+
+def test_origins_render_refreshes_the_nav_of_a_sibling_page(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.triage.components import nav_html
+
+    (tmp_path / "triage.html").write_text(
+        f"<html>{nav_html('backlog', ('backlog',))}</html>\n", encoding="utf-8"
+    )
+    _page(monkeypatch, tmp_path)
+    sibling = (tmp_path / "triage.html").read_text(encoding="utf-8")
+    assert 'href="origins.html"' in sibling
+
+
+def test_origins_render_writes_its_page_atomically(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import fr.commands.triage_origins_cmd as cmd
+
+    written: list[Path] = []
+    real = cmd.write_text_atomic
+    monkeypatch.setattr(
+        cmd, "write_text_atomic", lambda p, t: (written.append(Path(p)), real(p, t))
+    )
+    _page(monkeypatch, tmp_path)
+    assert tmp_path / "origins.html" in written

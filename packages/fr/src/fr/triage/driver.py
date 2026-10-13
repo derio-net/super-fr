@@ -8,6 +8,8 @@ runs in two environments, and the adapter is what differs between them:
   `defaults.launch.runner`), the cloud adapter dispatches every batch through
   `claude-cloud`, whatever `.fr/triage.yaml` names, and reports a batch whose explicit
   `launch.runner` is another (`refusal`), which the pass then does not dispatch;
+- the clone: the host's is the operator's and is never switched off its branch; the
+  cloud's is the session's own, checked out on the default branch when it is not (gh#1100);
 - `post_merge`, an operation of the environment (R20): the host runs the repo's argument
   list in its clone, as today; the cloud runs nothing (every new session installs the
   current release, and the driver updates itself), so `post_merge_restart` never follows.
@@ -70,6 +72,12 @@ class Driver(Protocol):
         own default (`ADOPT_LIST_RUNNER`)."""
         ...
 
+    @property
+    def owns_checkout(self) -> bool:
+        """Whether the clone the pass fast-forwards is this driver's own, so it may check
+        out the default branch there (gh#1100). The host's is the operator's: never."""
+        ...
+
 
 @dataclass(frozen=True)
 class HostDriver:
@@ -94,6 +102,10 @@ class HostDriver:
     @property
     def adopt_runner(self) -> str | None:
         return None
+
+    @property
+    def owns_checkout(self) -> bool:
+        return False  # the operator's clone: a branch they left checked out is theirs
 
 
 @dataclass(frozen=True)
@@ -131,6 +143,10 @@ class CloudDriver:
     @property
     def adopt_runner(self) -> str | None:
         return self.runner
+
+    @property
+    def owns_checkout(self) -> bool:
+        return True  # the cloud session's own clone, detached at whatever it started on
 
 
 HOST = HostDriver()

@@ -1,0 +1,50 @@
+{
+  "id": "cli:agent:list",
+  "result": {
+    "agents": [
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000005"
+        },
+        "agent_status": "idle",
+        "cwd": "@FEAT@",
+        "focused": false,
+        "foreground_cwd": "@FEAT@",
+        "pane_id": "w7:p5",
+        "revision": 4,
+        "state_change_seq": 100,
+        "tab_id": "w7:t5",
+        "terminal_id": "term_5555555555555",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      },
+      {
+        "agent": "claude",
+        "agent_session": {
+          "agent": "claude",
+          "kind": "id",
+          "source": "herdr:claude",
+          "value": "00000000-0000-4000-8000-000000000006"
+        },
+        "agent_status": "idle",
+        "cwd": "@MAIN@",
+        "focused": false,
+        "foreground_cwd": "@MAIN@",
+        "pane_id": "w7:p6",
+        "revision": 4,
+        "state_change_seq": 100,
+        "tab_id": "w7:t6",
+        "terminal_id": "term_6666666666666",
+        "terminal_title": "claude",
+        "terminal_title_stripped": "claude",
+        "workspace_id": "w7"
+      }
+    ],
+    "type": "agent_list"
+  }
+}

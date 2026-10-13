@@ -13,7 +13,7 @@ import re
 import shlex
 import subprocess
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -501,9 +501,15 @@ OPEN_PR_LIST_FIELDS = (
 
 
 def list_issues(
-    *, repo: str, state: str, limit: int, fields: str = ISSUE_LIST_FIELDS
+    *,
+    repo: str,
+    state: str,
+    limit: int,
+    fields: str = ISSUE_LIST_FIELDS,
+    labels: Sequence[str] | None = None,
 ) -> list[dict[str, object]]:
-    """Return issues in *repo* via one bulk ``gh issue list``.
+    """Return issues in *repo* via one bulk ``gh issue list``, only those carrying
+    every label of *labels* when given.
 
     ``--limit`` is always explicit: gh's default is 30, which would silently
     truncate any backlog past thirty issues.
@@ -511,7 +517,7 @@ def list_issues(
     import json
 
     if (rest := _rest()) is not None:
-        return _records(rest.list_issues(repo, state, limit, fields))
+        return _records(rest.list_issues(repo, state, limit, fields, labels))
     out = _run_gh(
         [
             "issue",
@@ -524,6 +530,7 @@ def list_issues(
             str(limit),
             "--json",
             fields,
+            *[a for label in labels or () for a in ("--label", label)],
         ]
     )
     issues: list[dict[str, object]] = json.loads(out) if out else []

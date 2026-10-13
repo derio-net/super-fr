@@ -236,6 +236,11 @@ class World:
             gone = kw.get("remove", frozenset())
             self.prs[number]["labels"] = [x for x in self.prs[number]["labels"] if x not in gone]
 
+    def view_issue(self, repo: str, number: int) -> dict[str, Any]:
+        # a dispatched member carries both labels; an unlabelling release reads them first
+        state = "OPEN" if self.issues.get(number) == "open" else "CLOSED"
+        return {"state": state, "labels": ["fr:claimed", "fr:in-progress"]}
+
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         # an id and a time, like the gh adapter's, and authored as the facts' viewer: a
         # dispatch claims its members first (triage-claims R3, R17)
@@ -284,6 +289,7 @@ class DriveCheckout:
         self.commands: list[list[str]] = []
         self.command_fails: str | None = None
         self.forwarded = 0
+        self.switched: list[bool] = []  # each fast-forward's `switch`
         self.files: dict[tuple[str, str], str] = {}
         self.release_probes: list[str] = []
         self.added: dict[str, tuple[str, ...]] = {}  # merge commit -> paths it added
@@ -329,8 +335,9 @@ class DriveCheckout:
     def rev_parse(self, ref: str) -> str:
         return f"{ref}@fetched"
 
-    def fast_forward(self) -> None:
+    def fast_forward(self, *, switch: bool = False) -> None:
         self.forwarded += 1
+        self.switched.append(switch)
 
     def released_after(self, merge_commit: str) -> bool:
         self.release_probes.append(merge_commit)
@@ -3507,6 +3514,23 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
     assert load_judgements(tmp_path / "judgements.yaml").schema_ == 9
+
+
+@pytest.mark.parametrize("status", ["idle", "absent", "working"])
+def test_a_conflict_the_pass_handles_is_no_failed_write(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: ScriptedMerge, status: str,
+) -> None:  # fmt: skip
+    """gh#1099: a conflict handed back (or waiting on a busy session) is the train doing
+    what it should; `--once` exits 1 only for a write that failed."""
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = status
+    train.script[101] = _conflict_error()
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code != 1, out
+    assert _lines(out, "merge")[0].startswith("merge b1: stopped: PR #101")
 
 
 @pytest.mark.parametrize("status", ["absent", "done"])

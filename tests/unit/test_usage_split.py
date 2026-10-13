@@ -232,6 +232,19 @@ def test_subagent_messages_go_to_executor_reviewer_and_flat_agent_roles() -> Non
     assert UNATTRIBUTED_NOT_PRESENT not in entry.units
 
 
+@pytest.mark.parametrize("path", ["index", "rekey"])
+def test_a_reviewer_brief_is_keyed_by_its_unit_not_the_agent_id(path: str) -> None:
+    """gh#1060: `rv1` is known to the cursor only as `evidence.reviewer` (its
+    review attempt carries no agent), yet its brief lands on the unit — on the
+    capture path (`index`) and the backfill/refresh path (`rekey`) alike."""
+    record = UsageRecord(session="s", harness="claude-code", briefs={"rv1": 100, "sr1": 7})
+    if path == "index":
+        entry = session_entry(record, (), INDEX)
+    else:
+        entry = session_entry(record, (), rekey=units_by_agent(UNIT_CURSOR))
+    assert entry.briefs == {"phase/1/review-phase": 100, "step/spec-review": 7}
+
+
 UNATTRIBUTED_NOT_PRESENT = "(unattributed)"
 
 

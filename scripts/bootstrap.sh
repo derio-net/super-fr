@@ -23,13 +23,56 @@ set -euo pipefail
 REMOTE="${FR_SRC_REMOTE:-https://github.com/derio-net/super-fr}"
 SRC="${FR_SRC_DIR:-$HOME/.cache/fr/src/super-fr}"
 
-# Preflight: the deps install.sh needs unconditionally. Fail loud and early.
-for cmd in git uv jq; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "ERROR: '$cmd' not found in PATH. Install it first, then re-run." >&2
-    exit 1
+# >>> prereq preflight (keep identical in scripts/install.sh and scripts/bootstrap.sh)
+# Name EVERY missing prerequisite and the command that installs it on this host,
+# then exit 1 (gh#1087). Stopping at the first one with "install it first" cost a
+# round trip per tool and left the reader to work out the package manager.
+require_prereqs() {
+  local cmd missing=() pkgs=() os sudo=""
+  for cmd in "$@"; do
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+  done
+  [ "${#missing[@]}" -eq 0 ] && return 0
+  for cmd in "${missing[@]}"; do
+    echo "ERROR: '$cmd' not found in PATH." >&2
+    [ "$cmd" = uv ] || pkgs+=("$cmd")
+  done
+  echo "Install the missing prerequisites, then re-run:" >&2
+  if [ "${#pkgs[@]}" -gt 0 ]; then
+    os="$(uname -s 2>/dev/null || echo unknown)"
+    [ "$(id -u 2>/dev/null || echo 0)" = 0 ] || sudo="sudo "
+    case "$os" in
+      Darwin)
+        command -v brew >/dev/null 2>&1 || echo "  (Homebrew first: https://brew.sh)" >&2
+        echo "  brew install ${pkgs[*]}" >&2 ;;
+      *)
+        if command -v apt-get >/dev/null 2>&1; then
+          echo "  ${sudo}apt-get update && ${sudo}apt-get install -y ${pkgs[*]}" >&2
+        elif command -v dnf >/dev/null 2>&1; then
+          echo "  ${sudo}dnf install -y ${pkgs[*]}" >&2
+        elif command -v yum >/dev/null 2>&1; then
+          echo "  ${sudo}yum install -y ${pkgs[*]}" >&2
+        elif command -v apk >/dev/null 2>&1; then
+          echo "  ${sudo}apk add ${pkgs[*]}" >&2
+        elif command -v pacman >/dev/null 2>&1; then
+          echo "  ${sudo}pacman -S --needed ${pkgs[*]}" >&2
+        elif command -v zypper >/dev/null 2>&1; then
+          echo "  ${sudo}zypper install -y ${pkgs[*]}" >&2
+        else
+          echo "  install with your system's package manager: ${pkgs[*]}" >&2
+        fi ;;
+    esac
   fi
-done
+  case " ${missing[*]} " in
+    *" uv "*)
+      echo "  curl -LsSf https://astral.sh/uv/install.sh | sh   # uv; then put ~/.local/bin on PATH" >&2 ;;
+  esac
+  exit 1
+}
+# <<< prereq preflight
+# Preflight: the deps install.sh needs unconditionally (its own list), checked
+# here too so a missing one fails before the clone, not after it.
+require_prereqs git uv jq rsync
 
 if [ -d "$SRC/.git" ]; then
   echo "Updating super-fr source at $SRC ..."

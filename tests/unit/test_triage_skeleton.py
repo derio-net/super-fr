@@ -34,9 +34,9 @@ class FixtureForge:
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         return [{"name": "super-fr", "isArchived": False}]
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+    def list_issues(self, *, repo: str, state: str, limit: int, **kw: Any) -> list[dict[str, Any]]:
         assert repo == "derio-net/super-fr"
-        return self.issues
+        return self.issues if state == "open" else []
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         assert repo == "derio-net/super-fr"

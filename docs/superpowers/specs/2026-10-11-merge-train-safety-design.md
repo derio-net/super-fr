@@ -235,9 +235,10 @@ filled for open PRs only, and `None` means never read, the same rule as
 `checks`.
 - Both collectors fill it: GraphQL (`collect.py:222-230` field list) and REST
   (`real_ghrestclient.py`).
-- `FACTS_SCHEMA` goes 8 → 9 and `FACTS_READS` widens to 3–9
-  (`model.py:55-65`). A facts file at 8 reads `labels` as `None`, which never
-  approves.
+- `FACTS_SCHEMA` goes 9 → 10 and `FACTS_READS` widens to 3–10
+  (`model.py:55-65`). It was written as 8 → 9, but board-truth (#1151) took facts
+  schema 9 on `main` first and was released, so this change took 10 at the merge.
+  A facts file below 10 reads `labels` as `None`, which never approves.
 
 `GhClient.pr_view` also returns labels:
 - `RealGhClient`: `--json …,labels`, `real_ghclient.py:375-386`.

@@ -74,9 +74,9 @@ def test_a_pull_request_never_read_for_labels_carries_none() -> None:
     assert PullRequest(**{**pr.model_dump(), "labels": ["x"]}).labels == ["x"]
 
 
-def test_facts_schema_is_9_and_reads_3_to_9() -> None:
-    assert FACTS_SCHEMA == 9
-    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9)
+def test_facts_schema_is_10_and_reads_3_to_10() -> None:
+    assert FACTS_SCHEMA == 10
+    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10)
 
 
 def test_a_schema_8_facts_file_reads_labels_as_none(tmp_path: Path) -> None:

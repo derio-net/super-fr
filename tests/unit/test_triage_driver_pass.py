@@ -343,6 +343,34 @@ def test_a_fresh_workspace_restores_from_the_ref_renews_the_lease_and_pushes(
     assert "b1" in _git(remote, "show", f"{after}:judgements.yaml")
 
 
+def test_a_pass_that_restored_the_state_says_so_and_a_warm_pass_does_not(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: _Private,
+) -> None:
+    """gh#1100: after a container restart a restore was indistinguishable from a warm
+    pass; the pass names the ref it restored from."""
+    _, seeded = _workspace(tmp_path, "a")
+    _world(world, seeded)
+    (seeded / "scope-durable.yaml").write_text(f"state_repo: {REPO}\n")
+    assert triage_cmd.push_now(SCOPE, seeded) is not None
+    ws, _ = _workspace(tmp_path, "b")
+    argv = ["triage", "drive", "pass", "--repo", REPO, "--workspace", str(ws),
+            "--state-repo", REPO, "--outbox", str(tmp_path / "outbox.json")]  # fmt: skip
+
+    restored = CliRunner().invoke(app, argv)
+    clock[0] = NOW + timedelta(hours=1)
+    warm = CliRunner().invoke(app, argv)
+
+    assert restored.exit_code == 0, restored.output
+    assert "restored the scope's state from" in " ".join(restored.output.split())
+    assert "restored" not in warm.output, warm.output
+
+
 def test_record_applies_every_result_empties_the_outbox_and_pushes_the_ref(
     tmp_path: Path,
     world: World,

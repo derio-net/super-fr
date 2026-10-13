@@ -330,7 +330,7 @@ def test_a_loop_collect_never_decides_and_warns_once_per_pass(
     monkeypatch.setattr(triage_cmd, "state_repo_prompt", lambda: _never)
     state = tmp_path / "s"
 
-    triage_cmd.collect_into(Scope(kind="repo", target=REPO), state, carry=True, lenient=True)
+    triage_cmd.collect_into(Scope(kind="repo", target=REPO), state, carry=True)
 
     assert not (state / SCOPE_DURABLE_FILE).exists()
     assert capsys.readouterr().err.count("no state repo") == 1

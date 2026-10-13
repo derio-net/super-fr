@@ -16,7 +16,9 @@
 # arm must pass `isolation: "worktree"` — and a worktree cut from `main` cannot
 # see the feature branch's spec it is dispatched to review.
 #
-# - Inserts `fr-phase-executor` into the existing allowlist `case` pattern.
+# - Inserts the qualified id AND its bare name into the allowlist `case` arm
+#   (gh#1105: `fr init agents` renders project agents dispatched by the bare
+#   name, `fr-phase-executor`, while the plugin's is `super-fr:fr-phase-executor`).
 # - Idempotent: a second run is a no-op.
 # - Safe no-op when the hook file is absent (e.g. a machine without the org
 #   convention installed) — never creates it.
@@ -28,15 +30,17 @@ hook="${1:?usage: ensure-phase-executor-allowlist.sh <hook-path> [<plugin-qualif
 # Absent hook → nothing to manage. Exit success so install.sh flows on.
 [ -f "$hook" ] || exit 0
 
-# Claude Code dispatches a PLUGIN subagent by its plugin-qualified id, so the
-# hook sees `super-fr:fr-phase-executor` — not the bare directory name. The
-# already-present `hookify:conversation-analyzer` entry is the precedent. An
-# allowlist carrying only the bare name never matches, and every fr-goal phase
-# dispatch is blocked (fr-goal then degrades to inline execution).
+# Claude Code dispatches a PLUGIN subagent by its plugin-qualified id
+# (`super-fr:fr-phase-executor`) and a PROJECT agent by its bare name
+# (`fr-phase-executor`). Both exist: the plugin ships one, and `fr init agents`
+# renders `.claude/agents/fr-phase-executor.md` into a repo (cloud-triage §H). So
+# both spellings are allowlisted. The bare name was once stripped here as a
+# stale entry, written by a pre-fix version that inserted ONLY the bare name;
+# since project agents exist it is a real dispatch target (gh#1105).
 QUALIFIED="${2:-super-fr:fr-phase-executor}"
-# The bare directory name — only ever a STALE entry to strip (the pre-fix
-# script wrote `fr-phase-executor`), never one to insert.
 BARE="${QUALIFIED#*:}"
+IDS=("$QUALIFIED")
+[ "$BARE" = "$QUALIFIED" ] || IDS+=("$BARE")
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
@@ -44,105 +48,87 @@ trap 'rm -f "$tmp"' EXIT
 # The hook has TWO surfaces naming the allowlist, and they drift apart: the
 # `case` arm that actually decides, and a human-readable "Exempt: …" stderr
 # message a few lines below that tells a blocked caller what IS allowed. Each
-# gets its OWN probe and its own repair.
+# gets its OWN probe and its own repair, PER ID.
 #
-# Probing once for both is the exact bug this file already records: a probe
-# satisfied by one surface reports "already done" for the other, forever. (The
-# original probe was `grep -q fr-phase-executor`, which a stale *bare* entry
-# satisfied, so every reinstall skipped the repair.) So: no shared early exit.
+# Probing once for several things is the exact bug this file already records: a
+# probe satisfied by one surface (or one spelling) reports "already done" for
+# the other, forever. (The original probe was `grep -q fr-phase-executor`, which
+# a bare entry satisfied, so the qualified one was never inserted.) So: no shared
+# early exit, and each id is probed as a WHOLE member — `fr-phase-executor` is
+# never found inside `super-fr:fr-phase-executor`.
 changed=0
 
 # --- 1. The `case` arm (authoritative; drift here fails loud) ----------------
 #
 # The allowlist is a single case arm whose pattern is a `|`-joined list, e.g.:
 #   Explore|Plan|claude-code-guide|statusline-setup|hookify:conversation-analyzer)
-# Anchor on the known-stock `Explore|Plan` prefix and prepend our type. Using
-# Explore as the anchor keeps the edit robust to trailing members.
-#
-# ONLY the qualified id is inserted — that is what Claude Code sends, and the
-# allowlist must stay fail-closed for anything else. The strip expressions
-# remove a stale bare entry left by the pre-fix script, so an already-broken
-# hook is repaired rather than ending up with both spellings — at the head of
-# the arm (where the pre-fix script put it) AND as a `|`-delimited member
-# anywhere else, which the head-anchored form alone silently left behind
-# (rev2-f6).
+# Anchor on the known-stock `Explore|Plan|` and insert a missing id just before
+# it. Membership is position-independent: an id already anywhere in the arm is
+# left alone, so a hand-placed entry is never duplicated.
 #
 # Every expression is scoped to NON-COMMENT lines, and so is the probe: a hook
 # whose header comment documents its own allowlist verbatim otherwise satisfies
 # a file-wide probe, so the real `case` arm is never patched and this script
 # exits 0 reporting success while dispatch stays blocked — re-creating the
 # silent inline-degradation incident it was written to end (rev2-f6).
-#
-# The probe asks "is the qualified id a MEMBER of the arm ahead of the anchor",
-# not "does it sit immediately before `Explore`": with two managed ids the first
-# one inserted is no longer adjacent to the anchor, and an adjacency probe would
-# re-insert it on every run.
 in_arm() {
-  grep -v '^[[:space:]]*#' "$1" |
-    grep -Eq "^[[:space:]]*([^|)#[:space:]]+\|)*$QUALIFIED\|([^|)#[:space:]]+\|)*Explore\|Plan\|"
+  grep -v '^[[:space:]]*#' "$1" | grep -E 'Explore\|Plan\|' |
+    grep -Eq "(^[[:space:]]*|\|)$2(\||\))"
 }
-if ! in_arm "$hook"; then
-  sed -e "/^[[:space:]]*#/!s/^\([[:space:]]*\)$BARE|Explore|Plan|/\1Explore|Plan|/" \
-      -e "/^[[:space:]]*#/!s/|$BARE\([|)]\)/\1/" \
-      -e "/^[[:space:]]*#/!s/^\([[:space:]]*\)\(\([^|)#[:space:]]*|\)*\)Explore|Plan|/\1\2$QUALIFIED|Explore|Plan|/" \
-      "$hook" >"$tmp"
-
-  if ! in_arm "$tmp"; then
+for id in "${IDS[@]}"; do
+  in_arm "$hook" "$id" && continue
+  sed -e "/^[[:space:]]*#/!s/^\([[:space:]]*\)\(\([^|)#[:space:]]*|\)*\)Explore|Plan|/\1\2$id|Explore|Plan|/" \
+    "$hook" >"$tmp"
+  if ! in_arm "$tmp" "$id"; then
     # Anchor not found (hook shape changed). Fail loud rather than silently
     # skip, so drift is visible instead of leaving dispatch mysteriously
     # blocked.
     echo "ensure-phase-executor-allowlist: could not find the 'Explore|Plan|' allowlist anchor in $hook" >&2
     exit 1
   fi
-
   cat "$tmp" >"$hook"
   changed=1
-fi
+done
 
 # --- 2. The "Exempt: …" stderr message (advisory; absence is fine) -----------
 #
-# super-fr#420 checklist item 4: left alone, this message keeps listing the
-# pre-fix five and so contradicts the `case` arm three lines above it — anyone
-# reading a denial to learn what is permitted is told the wrong thing.
+# super-fr#420 checklist item 4: left alone, this message contradicts the `case`
+# arm three lines above it — anyone reading a denial to learn what is permitted
+# is told the wrong thing.
 #
 # Unlike the `case` anchor this is NOT required to exist: the message is the org
 # hook's own prose, and a host whose hook has none is simply left alone. Absence
 # is a silent no-op, never a failure.
 #
-# Decided PER LINE, and never on a line that is not ours to edit (rev2-f5). The
-# live org hook carries the exempt list TWICE — a "Read-only subagent types (…)"
-# rationale comment as well as the real stderr message — so the previous
-# file-wide probe plus unanchored expressions:
-#   * rewrote the comment too, asserting that fr-phase-executor is a READ-ONLY
-#     subagent type, which super-fr's own shipped rule contradicts in as many
-#     words ("The reason is *not* 'this agent is read-only'"); and
-#   * let one already-qualified line satisfy the probe for every other, so once
-#     any line was fixed the real message stayed stale forever — verbatim the
-#     "one surface reports done for another" failure this file's header warns
-#     about.
-#
-# awk rather than sed because the decision has three cases (not ours /
-# already-correct / repairable), and `changed` is decided by comparing content,
-# so the repair is its own probe — no separate predicate is left that the wrong
-# surface can satisfy. The two boundary-qualified strips (`: ` / `, `) replace
-# the stale bare entry in one step, which is what keeps a foreign plugin id like
-# `someplugin:fr-phase-executor` from being eaten mid-token.
-awk -v q="$QUALIFIED" -v b="$BARE" '
-  /^[[:space:]]*#/  { print; next }
-  index($0, q)      { print; next }
-  !/Explore, Plan,/ { print; next }
-  {
-    if (!sub(": " b ", Explore, Plan,", ": " q ", Explore, Plan,") &&
-        !sub(", " b ", Explore, Plan,", ", " q ", Explore, Plan,"))
-      sub(/Explore, Plan,/, q ", Explore, Plan,")
-    print
-  }
-' "$hook" >"$tmp"
-
-if ! cmp -s "$hook" "$tmp"; then
-  cat "$tmp" >"$hook"
-  changed=1
-fi
+# Decided PER LINE, and never on a line that is not ours to edit (rev2-f5): the
+# live org hook carries the exempt list twice — a "Read-only subagent types (…)"
+# rationale comment as well as the real stderr message — and the comment must
+# not come to call a code-writing agent read-only. An id counts as present only
+# as a whole, comma-separated member (preceded by a space or `(`, followed by
+# `,` or `)`), so the bare name is not found inside a qualified one, and a
+# foreign id like `someplugin:fr-phase-executor` is never edited. `changed` is
+# decided by comparing content, so the repair is its own probe.
+for id in "${IDS[@]}"; do
+  awk -v q="$id" '
+    function has(line, tok,   i, pre, post) {
+      while ((i = index(line, tok)) > 0) {
+        pre = (i == 1) ? "" : substr(line, i - 1, 1)
+        post = substr(line, i + length(tok), 1)
+        if ((pre == " " || pre == "(") && (post == "," || post == ")")) return 1
+        line = substr(line, i + length(tok))
+      }
+      return 0
+    }
+    /^[[:space:]]*#/  { print; next }
+    !/Explore, Plan,/ { print; next }
+    has($0, q)        { print; next }
+    { sub(/Explore, Plan,/, q ", Explore, Plan,"); print }
+  ' "$hook" >"$tmp"
+  if ! cmp -s "$hook" "$tmp"; then
+    cat "$tmp" >"$hook"
+    changed=1
+  fi
+done
 
 [ "$changed" -eq 1 ] || exit 0
-echo "allowlisted $QUALIFIED in $hook"
+echo "allowlisted ${IDS[*]} in $hook"

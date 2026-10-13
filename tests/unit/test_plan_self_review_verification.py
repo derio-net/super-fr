@@ -28,8 +28,15 @@ def _row(rid: str, extra: str = "") -> str:
     )
 
 
-def _setup(tmp_path: Path, section: str | None, rows: list[str]) -> list[str]:
+def _setup(
+    tmp_path: Path, section: str | None, rows: list[str], *, install: bool = True
+) -> list[str]:
     repo = _repo(tmp_path, matrix=True)
+    if install:  # the repo can run `candidate` (R5 flags an explicit one it cannot)
+        program = repo / ".fr" / "candidate-install"
+        program.parent.mkdir(parents=True, exist_ok=True)
+        program.write_text("#!/bin/sh\n")
+        program.chmod(0o755)
     (repo / "docs" / "acceptance" / "matrix.yaml").write_text(
         "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + "".join(rows)
     )
