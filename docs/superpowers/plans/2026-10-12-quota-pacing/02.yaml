@@ -1,0 +1,150 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Probes, partial collect and the essential-only pass
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - quota-floor-essential-pass
+  - quota-quiet-pass
+  - quota-partial-carry
+  - quota-etag-consistency
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/probe.py
+  - packages/fr/src/fr/triage/pacing_state.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_drive_cmd.py
+  - tests/unit/test_triage_probe.py
+  - tests/unit/test_triage_collect_partial.py
+  - tests/unit/test_triage_quota_passes.py
+  - tests/unit/triage_fixtures.py
+  - tests/unit/test_real_ghclient.py
+  - tests/unit/test_real_ghrestclient.py
+  - tests/unit/test_triage_batch_drive.py
+  - docs/acceptance/*
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: §B conditional probes on the forge seam (R8)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: `Forge.probe(path, etag) -> tuple[bool, str | None]` on both adapters via `gh api -i [-H "If-None-Match: <etag>"] <path>`.
+      Fake gh run tests: a GhError whose stdout/stderr begins "HTTP/2.0 304 Not Modified" (gh exits 1 — captured live
+      2026-10-12) → (False, etag); a 200 with header `ETag: W/"abc"` → (True, 'W/"abc"'); any other error → (True, None);
+      no etag → no If-None-Match header. FakeForge gains a scripted probe table.
+  - id: P2.T1.S2
+    text: |-
+      GREEN — implement in real_ghclient.py and real_ghrestclient.py (one shared parsing helper in fr/triage/probe.py or the client module). Green.
+- number: 2
+  title: §B probe set, ordering and ETag promotion (R8, R9, R11, R15)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED tests/unit/test_triage_probe.py: `probe_set(scope repos, facts, judgements)` yields per repo the issues probe
+      path `repos/{r}/issues?state=all&sort=updated&direction=desc&per_page=1`, and per open PR of a live batch
+      (LIVE_STAGES) or an open close-out/archive PR the `commits/{head}/check-runs?per_page=100` and `commits/{head}/status`
+      paths; `run_probes(forge, probes, state, full)` sends unconditional probes on full, conditional otherwise, returns
+      changed repos and PENDING etags; `promote(state, pending, read_ok, failed)` keeps only successfully read repos' etags
+      and drops failed repos'; `pass_kind(state, now, changed, judgements_digest, below_floor)` → full (no pacing.json /
+      full_at ≥ 15 min), quiet (nothing changed and digest equal), partial, essential.
+      Interleave test: probe answers 200 etag E1, the repo changes before collect (facts carry the newer data), next pass
+      probe with E1 answers 200 again → never a stale 304.
+  - id: P2.T2.S2
+    text: |-
+      GREEN — implement fr/triage/probe.py over PacingState. Green.
+- number: 3
+  title: §B partial collect with carry and cross-repo links (R10)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED tests/unit/test_triage_collect_partial.py: `collect_facts_counted(..., only={A}, previous=facts)` reads only
+      repo A (FakeForge call log); B's issues, unlinked PRs, batch PRs, config and visibility equal previous; a PR in A
+      closing B#5 appears in B#5.prs; with only={B}, the previous link from A's PR to B#5 is kept; judged keys in B resolve
+      from previous without view_issue; `only=None` behaves exactly as today (existing test_triage_collect*.py green).
+  - id: P2.T3.S2
+    text: |-
+      GREEN — add `only`/`previous` to collect_facts_counted and thread them through triage_cmd.collect_into (which also runs the probes, writes facts.json then pacing.json in that order). Green.
+- number: 4
+  title: Quiet, partial and essential passes in the drive (R7, R9, R10 snapshot, R13)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED tests/unit/test_triage_quota_passes.py (drive fixtures, fake clock):
+      (a) all probes 304 + judgements unchanged → no list_issues/list_prs/pr_view calls, no board write, lease renewed,
+      "quiet: N probes unchanged" printed; (b) judgements.yaml edited → not quiet; (c) one repo changed → only it
+      collected; a pr-open batch in the carried repo gets no pr_view and no merge action, and no `unread` warning;
+      (d) budget below floor (fake rate_limit) with proposed batches only → no dispatch, each reported held
+      "quota below floor", Summary.pending counts them, the loop does NOT exit 3 (not stalled), next sleep 4×interval,
+      no board write, quota line printed; (e) below floor, the forced full pass reads only live-batch repos;
+      (f) above floor after (d) → dispatch resumes. Batch_drive unit: Snapshot(dispatch_held="quota below floor") turns
+      dispatch actions into held ones counted pending.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: Snapshot gains `dispatch_held: str | None` (batch_drive.py:119) and drive_pass converts dispatch actions;
+      _Driver.run_pass computes the pass kind before recollect, skips snapshot reads for carried repos
+      (triage_batch_cmd.py:2901-2979) and drops their merge/close-out/archive actions, skips _write_board on quiet and
+      essential passes, records next_pass_at; the cloud pass uses the same run_pass. Green.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR — one `PassPlan` value (kind, only, carried, dispatch_held) flows from probe.py into run_pass; targeted run of tests/unit/test_triage_batch_drive*.py, test_triage_driver_pass.py, test_triage_collect*.py green.
+- number: 5
+  title: Acceptance rows
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Move quota-floor-essential-pass, quota-quiet-pass, quota-partial-carry, quota-etag-consistency to `ci` with `uv run fr acceptance set-status --level unit=super-fr:tests/unit/<file>.py#<test>` and notes; `uv run fr acceptance check` passes.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-10-12T07:56:06+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T07:56:06+00:00'
+    note: null
+    observed_prs: []

@@ -47,7 +47,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
@@ -61,10 +61,11 @@ from rich.markup import escape
 from fr import __version__
 from fr.acceptance.ci import CI_CONFIG_PATHS
 from fr.artifacts.atomic import write_text_atomic
-from fr.commands import triage_kanban_cmd
+from fr.commands import triage_cmd, triage_kanban_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
     OrgOpt,
+    QuotaFloorOpt,
     RepoOpt,
     WorkspaceOpt,
     _load_state,
@@ -76,7 +77,9 @@ from fr.commands.triage_cmd import (
     drive_lock_dir,
     err_console,
     fetch_now,
+    plan_paced_pass,
     push_now,
+    rate_limit_reason,
     resolve_state_dir,
 )
 from fr.commands.triage_kanban_cmd import _fail, probe_item, try_load
@@ -250,7 +253,10 @@ from fr.triage.model import (
     load_scope_facts,
 )
 from fr.triage.operation_lock import replacement_scope_lock
+from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
+from fr.triage.probe import PassPlan
+from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -2934,7 +2940,13 @@ class ForgeReadError(Exception):
         self.code = code
 
 
-def recollect(scope: Scope, target: Path) -> Mapping[str, tuple[str, ...]]:
+def recollect(
+    scope: Scope,
+    target: Path,
+    *,
+    only: frozenset[str] | None = None,
+    after_write: Callable[[Facts, frozenset[str]], None] | None = None,
+) -> Mapping[str, tuple[str, ...]]:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
     every stage is derived from facts, so each pass starts here (wave-driver §B).
     Unlike `fr triage collect` it carries known-closed facts over from the
@@ -2942,11 +2954,24 @@ def recollect(scope: Scope, target: Path) -> Mapping[str, tuple[str, ...]]:
     and says what the pass cost. Config is read leniently (gh#998): returns the
     top-level `.fr/triage.yaml` keys dropped, per repo. A forge that fails to answer,
     or any other refusal (a config broken on the default branch, a judgements file
-    mid-edit), raises `ForgeReadError`: the loop waits for it to be fixed."""
+    mid-edit), raises `ForgeReadError`: the loop waits for it to be fixed.
+
+    A paced pass (spec 2026-10-12-quota-pacing R10, R11) reads *only* those repos,
+    carrying the rest, and stores its probes' ETags in *after_write*, once facts.json is
+    written. Without either, the collect is exactly the unpaced one."""
+    paced: dict[str, Any] = (
+        {"only": only, "after_write": after_write}
+        if only is not None or after_write is not None
+        else {}
+    )
     try:
-        _, _, stats = collect_into(scope, target, carry=True)
+        facts, _, stats = collect_into(scope, target, carry=True, **paced)
     except TriageError as exc:  # ForgeError included
         raise ForgeReadError(str(exc), code=2) from exc
+    # A rate limit that did not raise: a repo skipped, a judged key unviewed. The pass ends
+    # here, before it plans on facts the exhausted budget left half-read (R2).
+    if (reason := rate_limit_reason(facts)) is not None:
+        raise ForgeReadError(reason, code=2)
     _say(f"collect: {plural(stats.viewed, 'issue')} viewed, {stats.carried} carried over")
     return stats.ignored
 
@@ -2976,6 +3001,73 @@ def _now() -> datetime:
 def _sleep(seconds: float) -> None:
     """The loop's wait between passes; tests replace it."""
     time.sleep(seconds)
+
+
+def _probe_forge() -> Any:
+    """The forge the pass's probes go through (spec 2026-10-12-quota-pacing R8): the
+    collect's own. Tests replace it."""
+    from fr.commands import triage_cmd
+
+    return triage_cmd.make_forge()
+
+
+def _pace_forge() -> Any:
+    """The forge `/rate_limit` is read through (free, REST under either API); tests replace it."""
+    from fr.commands import triage_cmd
+
+    return triage_cmd.make_forge()
+
+
+def make_pacer(
+    target: Path,
+    *,
+    quota_floor: float | None,
+    interval_s: float,
+    now: Callable[[], datetime] | None = None,
+) -> Pacer:
+    """The pacing both adapters share (spec 2026-10-12-quota-pacing): the floor from
+    `--quota-floor` or the host file, the adapter `forge.api` names, `pacing.json` in *target*.
+    A floor or `forge.api` fr cannot use is refused here, naming where it came from (R6)."""
+    return triage_cmd.make_pacer(
+        target,
+        quota_floor=quota_floor,
+        interval_s=interval_s,
+        forge=_pace_forge,
+        now=now or (lambda: _now()),
+    )
+
+
+def _report_read_failure(driver: _Driver, message: str, action: str) -> None:
+    """A forge read failure, reported once per cause until a pass reads cleanly (gh#910)."""
+    if message not in driver.read_failures:
+        driver.read_failures.add(message)
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}; {action}", soft_wrap=True)
+
+
+# A wait that outlives the lease renews it this long before it would lapse (R16).
+LEASE_MARGIN = timedelta(minutes=5)
+RENEW_RETRY_S = 60
+
+
+def wait_out(driver: _Driver, pace: Pace) -> None:
+    """Sleep until *pace* is over without ever letting the drive's lease lapse (R16): a
+    wait that reaches the lease's expiry minus five minutes wakes, renews the lease (the
+    state push and its visibility read, the one call a wait makes), and sleeps again."""
+    assert pace.until is not None
+    left = max(0.0, (pace.until - _now()).total_seconds())
+    while left > 0:
+        held = load_lease(driver.target) if driver.leased else None
+        room = (held.expires - LEASE_MARGIN - _now()).total_seconds() if held else None
+        if room is not None and room <= 0:
+            try:
+                driver.take_lease()
+                continue
+            except ForgeReadError as exc:  # unreadable visibility: try again a minute on
+                _report_read_failure(driver, str(exc), f"renewal retried every {RENEW_RETRY_S}s")
+                room = RENEW_RETRY_S
+        chunk = left if room is None else min(left, room)
+        _sleep(chunk)
+        left -= chunk
 
 
 def _installed_version() -> str | None:
@@ -3265,6 +3357,11 @@ class _Driver:
         # The latest fr release, read by the cloud driver's pass before it runs; None
         # (the host loop, or a release that could not be read) checks no drift (R17).
         self.fr_release: str | None = None
+        # Quota pacing (spec 2026-10-12-quota-pacing): set by a looping drive or the cloud
+        # pass, never `--once` or plan mode. With a pacer the pass probes first and may be
+        # quiet, partial or essential-only; `pace` is this pass's verdict.
+        self.pacer: Pacer | None = None
+        self.pace: Pace | None = None
 
     # -------------------------------------------------------------- reaching out
 
@@ -3521,9 +3618,20 @@ class _Driver:
 
     # ------------------------------------------------------------------ snapshot
 
-    def snapshot(self, facts: Facts, judgements: Judgements, now: datetime) -> Snapshot:
+    def snapshot(
+        self,
+        facts: Facts,
+        judgements: Judgements,
+        now: datetime,
+        carried: frozenset[str] = frozenset(),
+    ) -> Snapshot:
         """Every batch of the file, with the selection marked: the in-flight cap and
-        the dependencies read them all, the actions only the selection (rg-3)."""
+        the dependencies read them all, the actions only the selection (rg-3).
+
+        A *carried* repo (a paced pass did not read it, spec 2026-10-12-quota-pacing R10)
+        is not unread: its batches count and dispatch as usual. But no live read is made
+        for them (PR view, required checks, merge commit, hand close-out, archive PRs,
+        claim and export reads), so none is merged, closed out or archived this pass."""
         repos = {b.id: r for b in judgements.batches if (r := batch_repo(b, facts)) is not None}
         # A repo collect skipped (org or group scope: its lists or config failed) still
         # resolves its batches, but with no PRs, so a pr-open or merged one would read
@@ -3542,7 +3650,7 @@ class _Driver:
         queue = tuple(
             e
             for e in pr_open_queue(judgements.batches, facts, judgements.issues)
-            if e.batch.id in ids
+            if e.batch.id in ids and repos.get(e.batch.id) not in carried
         )
         live: dict[str, LivePr] = {}
         approvals: dict[str, ApprovalVerdict] = {}
@@ -3584,6 +3692,10 @@ class _Driver:
                 if stages[b.id] not in ("merged", "partial") or b.id not in repos:
                     continue
                 if repos[b.id] in unread:
+                    continue
+                if repos[b.id] in carried:  # nothing read: unknown, so nothing planned
+                    if closeout_event(b) is None:
+                        unverified.add(b.id)
                     continue
                 mine = b.id in ids
                 event = closeout_event(b)
@@ -3634,8 +3746,11 @@ class _Driver:
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
+        # A carried repo's issues and claim comments are current (its probes answered
+        # unchanged), so its owed claims are planned like any read repo's (p2-r6).
         claim_plan = self._claim_plan(facts, judgements, repos, unread, now)
         export_path, export_refused = self._export_config(facts)
+        export_path = {r: p for r, p in export_path.items() if r not in carried}
         export_prs, export_orphans = self._export_reads(
             facts, judgements, repos, done_waves, export_path
         )
@@ -4212,7 +4327,7 @@ class _Driver:
         return True
 
     def _settle_approvals(
-        self, facts: Facts, judgements: Judgements
+        self, facts: Facts, judgements: Judgements, carried: frozenset[str] = frozenset()
     ) -> tuple[bool, set[tuple[str, int]]]:
         """Record or void each selected open batch PR's approval before the walk
         (merge-train-safety §A "Recording and voiding", R2); whether it wrote any, and
@@ -4220,7 +4335,9 @@ class _Driver:
         Read-only passes never settle: the walk then reads a first label as approved."""
         repos = {b.id: r for b in judgements.batches if (r := batch_repo(b, facts)) is not None}
         chosen = {b.id for b in _chosen(judgements.batches, self.named)}
-        unread = {s.repo for s in facts.skipped}
+        # A carried repo (quota-pacing R10) was not read this pass: its labels are read
+        # live when its probes next change or at the full pass, never on carried facts.
+        unread = {s.repo for s in facts.skipped} | carried
         by_repo: dict[str, list[tuple[Batch, int]]] = {}
         for e in pr_open_queue(judgements.batches, facts, judgements.issues):
             repo = repos.get(e.batch.id)
@@ -4251,8 +4368,31 @@ class _Driver:
 
     def run_pass(self) -> tuple[bool, Summary, list[str]]:
         """One pass: re-collect, decide, act (with --yes) or print the plan.
-        Returns whether it acted, the settled summary, and the blocked batch ids."""
-        ignored = recollect(self.scope, self.target) or {}
+        Returns whether it acted, the settled summary, and the blocked batch ids.
+
+        Paced (a pacer set, spec 2026-10-12-quota-pacing §B, §C), it probes first: a quiet
+        pass ends there; a partial one collects only the changed repos and reads nothing
+        live for the carried ones; an essential-only one dispatches nothing and leaves
+        the board as it was."""
+        paced = self._pass_plan()
+        if paced is not None and not paced.collects:
+            return self._quiet_pass(paced)
+        # The repos the collect actually carried (p2-r5): one value for the ETags it
+        # promotes and the snapshot's live reads, so the two cannot drift.
+        collected_carried: list[frozenset[str]] = []
+        if paced is None:
+            ignored = recollect(self.scope, self.target) or {}
+        else:
+            pacer = self.pacer
+            assert pacer is not None
+
+            def after_write(facts: Facts, carried: frozenset[str]) -> None:
+                collected_carried.append(carried)
+                pacer.after_collect(paced, facts, carried)
+
+            ignored = recollect(
+                self.scope, self.target, only=paced.only, after_write=after_write
+            ) or {}  # fmt: skip
         for repo, keys in sorted(ignored.items()):
             self._report_once(
                 f"ignored\0{repo}\0{','.join(keys)}",
@@ -4261,9 +4401,16 @@ class _Driver:
                 "ignored until an fr that knows them runs",
             )
         _, facts, judgements = _load_state(self.scope, self.target, None)
+        carried = (
+            collected_carried[-1]
+            if collected_carried
+            else paced.carried
+            if paced is not None
+            else frozenset[str]()
+        )
         self._label_seen: set[str] = set()  # one approval-label check per repo per pass (R4)
         if self.yes:
-            wrote, voided = self._settle_approvals(facts, judgements)
+            wrote, voided = self._settle_approvals(facts, judgements, carried)
             if voided:  # what the forge says now: this pass's views never show them approved
                 facts = facts_without_label(facts, voided, APPROVED_FR.name)
                 write_text_atomic(
@@ -4283,7 +4430,9 @@ class _Driver:
         self._export_failures = 0
         self._held_now, self._claim_done = {}, SyncResult()
         self.failed_write = False
-        snap = self.snapshot(facts, judgements, _now())
+        snap = self.snapshot(facts, judgements, _now(), carried)
+        if paced is not None and paced.dispatch_held is not None:
+            snap = replace(snap, dispatch_held=paced.dispatch_held)
         for repo, why in sorted(self._unread.items()):
             mine = sorted(b for b, r in self._left_out.items() if r == repo)
             self._report_once(
@@ -4300,6 +4449,11 @@ class _Driver:
                 + (f", so no close-out is planned for {', '.join(mine)}" if mine else ""),
             )  # fmt: skip
         plan = drive_pass(snap)
+        if carried:  # nothing was read live for them: no merge, close-out or archive (R10)
+            plan = replace(plan, actions=tuple(
+                a for a in plan.actions
+                if not (a.kind in _LIVE_READ_ACTIONS and snap.repos.get(a.batch) in carried)
+            ))  # fmt: skip
         if self.single_pass is not None:
             self.planned_dispatch = any(a.kind == "dispatch" for a in plan.actions)
             if self.planned_dispatch and not self.single_pass.allowed:
@@ -4347,14 +4501,36 @@ class _Driver:
         finally:
             if self.yes:
                 self._restart_sessions()  # soft: never raises out of here
+        if self.pacer is not None and paced is not None:
+            self.pacer.record_summary(
+                asdict(summary), digest=paced.digest, held=paced.dispatch_held is not None
+            )
         if self.yes:
-            self._write_board()
+            if paced is None or paced.kind != "essential":
+                self._write_board()  # an essential-only pass keeps the last board (R14)
         else:
             _say("nothing done; re-run with --yes to act")
         stuck = [a.batch for a in plan.actions if a.kind == "blocked"]
         stuck += [f"export wave {a.wave} {a.batch}" for a in plan.actions
                   if a.wave is not None and a.kind == "warn"]  # fmt: skip
         return acted, summary, stuck
+
+    def _pass_plan(self) -> PassPlan | None:
+        """Probe, then decide the pass (spec 2026-10-12-quota-pacing R7-R11); None when
+        unpaced (`--once`, plan mode) or when the pace is not a pass to run."""
+        if self.pacer is None or self.pace is None or self.pace.kind == "wait":
+            return None
+        return plan_paced_pass(
+            self.pacer, self.scope, self.target, _probe_forge(), essential=self.pace.essential
+        )
+
+    def _quiet_pass(self, paced: PassPlan) -> tuple[bool, Summary, list[str]]:
+        """R9: nothing changed since the last planned pass, so nothing is collected,
+        read, planned or rendered; that pass's summary stands for this one."""
+        self.failed_write = False
+        _say(f"quiet: {plural(paced.probes, 'probe')} unchanged")
+        assert self.pacer is not None and self.pacer.state.summary is not None
+        return False, Summary(**self.pacer.state.summary), []
 
     def _restart_sessions(self) -> None:
         """Restart idle sessions once per recorded runner, after every close-out this pass
@@ -5484,6 +5660,11 @@ class _Driver:
         return f"merged export PR #{action.pr} at {action.head[:12]}"
 
 
+# The actions a pass plans only from what it read live this pass (R10): a carried repo's
+# batches get none of them.
+_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt"})
+
+
 def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:
     """What the export left out because the target repo ignores it (p4-r9), the first
     few named: the warn's words, or (*short*) the export line's."""
@@ -5678,29 +5859,57 @@ def _sigterm_interrupts() -> Iterator[None]:
         signal.signal(signal.SIGTERM, previous)
 
 
-def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
+def _host_loop(
+    driver: _Driver, *, once: bool, interval: int, pacer: Pacer | None = None
+) -> str | None:
     """`fr triage batch drive`'s loop around `one_pass` (the host adapter, R10). The newer
-    fr a `post_merge` installed, when the loop stopped to restart on it; else None."""
+    fr a `post_merge` installed, when the loop stopped to restart on it; else None.
+    With a *pacer*, a looping drive reads the budget before each pass, waits out an
+    exhausted one, and backs off a rate limit instead of retrying it (R2-R4)."""
+    paced = pacer if pacer is not None and driver.yes and not once else None
+    driver.pacer = paced
+    pace: Pace | None = None
     while True:
+        if paced is not None:
+            pace = paced.before_pass()
+            if pace.kind == "wait":
+                _say(paced.line(pace))
+                wait_out(driver, pace)
+                continue
+            driver.pace = pace
+            if pace.essential:  # below the floor: the essential-only pass (R7, R13)
+                _say(paced.line(pace))
+                paced.stretch(pace.until)
         try:
             acted, summary, blocked = one_pass(driver)
         except ForgeReadError as exc:
             if once or not driver.yes:
                 _fail(str(exc), code=exc.code)
+            if paced is not None and paced.limited(str(exc)):
+                pace = paced.rate_limited()
+                _say(paced.line(pace))
+                if driver.restart_to is not None:
+                    return driver.restart_to
+                wait_out(driver, pace)
+                continue
             # Like a refused merge (rg-4), a degraded forge ends neither the run nor
             # the loop: reported once per cause, then read again (gh#910).
-            if str(exc) not in driver.read_failures:
-                driver.read_failures.add(str(exc))
-                err_console.print(
-                    f"[yellow]warning:[/yellow] {escape(str(exc))}; pass skipped, "
-                    f"retrying every {interval}s",
-                    soft_wrap=True,
-                )
+            _report_read_failure(driver, str(exc), f"pass skipped, retrying every {interval}s")
             if driver.restart_to is not None:  # a skipped save_pass follows a pass whose
                 return driver.restart_to  # post_merge installed a newer fr (gh#998)
             _sleep(interval)
             continue
         driver.read_failures.clear()
+        if paced is not None and driver.failed_write and paced.limited():
+            # a failed write with the budget gone is the limit, not a clean pass (p1-r2)
+            pace = paced.rate_limited()
+            _say(paced.line(pace))
+            if driver.restart_to is not None:
+                return driver.restart_to
+            wait_out(driver, pace)
+            continue
+        if paced is not None:
+            paced.clean()
         if not driver.yes:
             return None  # the plan of one pass, in loop mode too
         if once:
@@ -5718,6 +5927,9 @@ def _host_loop(driver: _Driver, *, once: bool, interval: int) -> str | None:
         if summary.stalled:
             _say(_stalled_line(blocked, driver.held_by))
             raise typer.Exit(code=3)
+        if pace is not None and pace.essential and pace.until is not None:
+            wait_out(driver, Pace("wait", pace.until, "below floor"))  # 4x, lease-safe (R16)
+            continue
         _sleep(interval)
 
 
@@ -5754,6 +5966,7 @@ def batch_drive_command(
     yes: Annotated[
         bool, typer.Option("--yes", help="Act; without it, print one pass's plan and exit.")
     ] = False,
+    quota_floor: QuotaFloorOpt = None,
     single_pass: Annotated[
         bool,
         typer.Option(
@@ -5779,6 +5992,7 @@ def batch_drive_command(
         _fail("--single-pass only applies to --once: a looping driver is not a single pass")
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
+    pacer = make_pacer(target, quota_floor=quota_floor, interval_s=interval)  # refuses a bad floor
     guard: SinglePass | None = None
     if once and yes:
         command = loop_command(
@@ -5812,7 +6026,7 @@ def batch_drive_command(
     with drive_lock(drive_lock_dir(scope, dir_override)):  # the fast same-host check first
         try:
             with _sigterm_interrupts():
-                restart = _host_loop(driver, once=once, interval=interval)
+                restart = _host_loop(driver, once=once, interval=interval, pacer=pacer)
         except KeyboardInterrupt:  # Ctrl-C or SIGTERM: a clean stop too (p4-r4)
             driver.release_lease()
             raise

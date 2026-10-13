@@ -115,6 +115,43 @@ def _graphql_forge_api_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_live_rate_limit_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer the drive's `/rate_limit` read with an ample budget (spec 2026-10-12-quota-pacing).
+
+    The read is free on GitHub but is still a `gh` call: no drive test may make one, or
+    its result would depend on the operator's token. The patch is unconditional (it
+    imports the module itself): a test that never imported the drive before would
+    otherwise make a real `gh api rate_limit`. Tests of pacing install their own forge
+    on `_pace_forge`."""
+    # `fr.cli` first: `triage_batch_cmd` imported on its own is a circular import
+    # (`triage_kanban_cmd` <-> `triage_claim_cmd`), so a test file that never imported
+    # the CLI would error in this fixture before its first test ran.
+    import fr.cli  # noqa: F401
+
+    class _Ample:
+        # Inlined, not imported from `tests.unit.triage_fixtures`: the suite-isolation tests
+        # run this conftest in a subprocess from a temp dir, where `tests` is no package.
+        def rate_limit(self) -> dict:
+            full = {"limit": 5000, "used": 0, "remaining": 5000, "reset": 4_102_444_800}
+            return {"resources": {"core": dict(full), "graphql": dict(full)}}
+
+    monkeypatch.setattr("fr.commands.triage_batch_cmd._pace_forge", lambda: _Ample())
+
+    class _Unknown:
+        """Every probe a change with no ETag: a paced pass then reads every repo, as an
+        unpaced one does, and no probe reaches a real `gh` (spec 2026-10-12-quota-pacing R8).
+        Tests of probes install their own forge on `_probe_forge`."""
+
+        def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+            return True, None
+
+    monkeypatch.setattr("fr.commands.triage_batch_cmd._probe_forge", lambda: _Unknown())
+    # The board's watch paces itself on the same seams (spec 2026-10-12-quota-pacing R17).
+    monkeypatch.setattr("fr.commands.triage_kanban_cmd._pace_forge", lambda: _Ample())
+    monkeypatch.setattr("fr.commands.triage_kanban_cmd._probe_forge", lambda: _Unknown())
+
+
+@pytest.fixture(autouse=True)
 def _no_cloud_remedy_carried_between_tests() -> Iterator[None]:
     """The cloud remedy items a failure notes are process-global, printed once by the
     CLI boundary (p7-r3): one test's GraphQL 403 must not print in the next one's CLI."""
@@ -388,6 +425,17 @@ def complete_live_pr(monkeypatch: pytest.MonkeyPatch) -> None:
 
     body = "\n\n".join(f"{h}\n\nNone." for h in REQUIRED_SECTIONS)
     monkeypatch.setattr(fr.gh, "view_pr_body", lambda ref, *, cwd=None: body)
+
+
+@pytest.fixture(autouse=True)
+def _no_visibility_etags_carried_between_tests() -> Iterator[None]:
+    """`fr.gh`'s visibility ETag map is process-global (quota-pacing R12): one test's
+    cached answer must not turn the next test's first read into a 304."""
+    from fr import gh
+
+    gh._VISIBILITY.clear()
+    yield
+    gh._VISIBILITY.clear()
 
 
 @pytest.fixture(autouse=True)

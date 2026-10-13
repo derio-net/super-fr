@@ -23,17 +23,18 @@ from __future__ import annotations
 
 import json
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr import forgeapi
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
@@ -56,6 +57,9 @@ from fr.triage.model import (
     load_scope_facts,
     state_dir,
 )
+from fr.triage.pacing import Pacer
+from fr.triage.probe import PassPlan, Prober, judgements_digest
+from fr.triage.quota import is_rate_limited
 from fr.triage.render import GENERATED, plural, render
 from fr.triage.scope_config import load_durable, mirror_state_repo, scope_id, write_durable
 from fr.triage.snapshot import (
@@ -130,6 +134,14 @@ DirOpt = Annotated[
     typer.Option(
         "--dir",
         help="State directory, outright (default: <workspace>/.fr/triage-state/<scope>/).",
+    ),
+]
+QuotaFloorOpt = Annotated[
+    float | None,
+    typer.Option(
+        "--quota-floor",
+        help="Budget fraction (0-1) below which the drive paces itself; default: "
+        "`quota_floor:` in ~/.config/fr/forge.yaml, else 0.20.",
     ),
 ]
 WorkspaceOpt = Annotated[
@@ -460,6 +472,8 @@ def collect_into(
     pr_limit: int = PR_LIMIT,
     carry: bool = False,
     settle: bool = False,
+    only: Iterable[str] | None = None,
+    after_write: Callable[[Facts, frozenset[str]], None] | None = None,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
@@ -473,6 +487,12 @@ def collect_into(
     the drive or watch loop, p3-r7) decides an undecided state repo; without it an
     undecided scope warns once and keeps its state local. Returns the stats of
     single-issue reads. Raises `TriageError` on a refusal; writes nothing then.
+
+    *only* (a paced drive pass, spec 2026-10-12-quota-pacing R10) reads just those repos
+    and carries the rest from the previous facts.json. *after_write* runs once facts.json
+    is written, never before, with the repos this collect actually carried: the drive
+    stores the probes' ETags there, so they always describe facts already on disk (R11),
+    and takes that one carried set for its snapshot too (p2-r5).
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
@@ -502,12 +522,16 @@ def collect_into(
         known_batch_prs=previous.batch_prs if previous else [],
         pr_limit=pr_limit,
         carried=[i for i in previous.issues if i.state == "closed"] if previous and carry else (),
+        only=only,  # None: the full collect, *previous* unused
+        previous=previous,
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if after_write is not None:
+        after_write(facts, stats.carried_repos)
     if settle:
         _settle_state_repo(target_dir, facts)
     elif load_durable(target_dir).state_repo is None:
@@ -561,6 +585,68 @@ def _settle_state_repo(target_dir: Path, facts: Facts) -> None:
         return
     write_durable(target_dir, durable.model_copy(update={"state_repo": chosen}))
     mirror_state_repo(target_dir, chosen)
+
+
+def make_pacer(
+    target: Path,
+    *,
+    quota_floor: float | None,
+    interval_s: float,
+    forge: Callable[[], Any],
+    now: Callable[[], datetime],
+) -> Pacer:
+    """The pacing every loop shares (spec 2026-10-12-quota-pacing): the floor from
+    `--quota-floor` or the host file, the adapter `forge.api` names, `pacing.json` in *target*.
+    A floor or `forge.api` fr cannot use is refused (exit 2), naming where it came from (R6)."""
+    try:
+        floor, api = forgeapi.quota_floor(quota_floor), forgeapi.resolve()
+    except forgeapi.ForgeApiError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+
+    def warn(message: str) -> None:
+        err_console.print(f"[yellow]warning:[/yellow] {escape(message)}", soft_wrap=True)
+
+    return Pacer(
+        target, floor=floor, interval_s=interval_s, api=api, forge=forge, now=now, warn=warn
+    )
+
+
+def plan_paced_pass(
+    pacer: Pacer, scope: Scope, target: Path, forge: Prober, *, essential: bool, board: bool = False
+) -> PassPlan:
+    """Probe, then decide the pass (spec 2026-10-12-quota-pacing R7-R11): the drive's pass
+    and the board's watch plan through this one function, over the facts and judgements
+    on disk."""
+    previous = _previous_facts(target / "facts.json", scope)
+    path = target / "judgements.yaml"
+    try:
+        judgements = load_judgements(path) if path.exists() else None
+    except TriageError:
+        judgements = None  # the collect refuses it, naming the file
+    if previous is not None:
+        repos = list(previous.repos)
+    elif scope.kind == "repo":
+        repos = [scope.target]
+    else:
+        repos = list(scope.repos)
+    return pacer.plan(
+        forge,
+        repos=repos,
+        facts=previous,
+        judgements=judgements,
+        digest=judgements_digest(path),
+        essential=essential,
+        board=board,
+    )
+
+
+def rate_limit_reason(facts: Facts) -> str | None:
+    """A rate limit that did not raise: a repo skipped, a judged key unviewed (R2)."""
+    for reason in [s.reason for s in facts.skipped] + [u.reason for u in facts.unviewed]:
+        if is_rate_limited(reason):
+            return reason
+    return None
 
 
 def _previous_facts(path: Path, scope: Scope) -> Facts | None:

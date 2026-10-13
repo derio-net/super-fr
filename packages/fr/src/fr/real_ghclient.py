@@ -566,11 +566,9 @@ class RealGhClient:
 
     @_hosted
     def repo_visibility(self, repo: str) -> str:
-        raw = json.loads(_gh._run_gh(["repo", "view", repo, "--json", "visibility"]))
-        value = raw.get("visibility") if isinstance(raw, dict) else None
-        if not isinstance(value, str) or not value:
-            raise _gh.GhError(f"gh repo view {repo}: no visibility in the answer")
-        return value.lower()
+        # A conditional REST read (quota-pacing R12): GraphQL budget is not spent, and a
+        # new client per push still shares the module-level ETag map.
+        return _gh.repo_visibility(_gh._run_gh, self._host, repo)
 
     @_hosted
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
@@ -648,6 +646,15 @@ class RealGhClient:
     @_hosted
     def viewer_login(self) -> str:
         return _gh.viewer_login()
+
+    @_hosted
+    def rate_limit(self) -> dict[str, Any]:
+        return cast("dict[str, Any]", json.loads(_gh._run_gh(["api", "rate_limit"])))
+
+    @_hosted
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        """A conditional REST read: unchanged on a 304 (spec 2026-10-12-quota-pacing R8)."""
+        return _gh.probe(_gh._run_gh, path, etag)
 
     @_hosted
     def view_issue_record(self, repo: str, number: int) -> dict[str, Any]:

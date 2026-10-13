@@ -239,6 +239,10 @@ class Snapshot:
     queue_inferred: bool = False
     queue_states: Mapping[str, QueueState] = field(default_factory=dict)
     bases: Mapping[str, str] = field(default_factory=dict)
+    # Why this pass dispatches nothing at all (spec 2026-10-12-quota-pacing R7: "quota below
+    # floor"); None dispatches as usual. Each dispatch it stops is a `held` action counted
+    # pending, never `Summary.held`: the budget recovers, so the drive is not stalled.
+    dispatch_held: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1381,6 +1385,10 @@ def drive_pass(snap: Snapshot) -> Pass:
             pending += 1
             actions.append(Action("held", batch.id, f"the in-flight cap ({snap.max_inflight}) "
                                   f"is full: {', '.join(sorted(occupants))}"))  # fmt: skip
+            continue
+        if snap.dispatch_held is not None:
+            pending += 1
+            actions.append(Action("held", batch.id, snap.dispatch_held))
             continue
         occupants.add(batch.id)
         in_flight += 1

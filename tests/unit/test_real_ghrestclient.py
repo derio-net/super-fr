@@ -7,6 +7,7 @@ the tests also pin that only `gh api` REST routes are spelled.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,7 @@ READS = (
     "view_issue view_issue_record list_issues list_prs list_open_prs list_prs_by_head pr_view "
     "pr_checks pr_required_checks pr_status_by_url pr_body list_issue_comments list_linked_prs "
     "file_exists list_dir read_file read_file_at_ref list_repos viewer_login repo_merge_methods "
-    "closing_ref default_branch pr_for_branch issues_enabled"
+    "closing_ref default_branch pr_for_branch issues_enabled rate_limit"
 ).split()
 
 
@@ -468,6 +469,7 @@ def _every_call(client: RealGhRestClient, repo_dir: Path, run: Any) -> dict[str,
         "read_file_at_ref": lambda: client.read_file_at_ref(REPO, "x", "HEAD"),
         "list_repos": lambda: client.list_repos("derio-net", 5),
         "viewer_login": lambda: client.viewer_login(),
+        "rate_limit": lambda: client.rate_limit(),
         "repo_merge_methods": lambda: client.repo_merge_methods(REPO),
         "default_branch": lambda: client.default_branch(cwd=repo_dir, run=run),
         "pr_for_branch": lambda: client.pr_for_branch("b", cwd=repo_dir, run=run),
@@ -843,3 +845,37 @@ def test_a_host_refusal_on_the_rules_route_is_reraised() -> None:
     client = RealGhRestClient(run=_rules_run(GhHostRefusedError(_FREE_PLAN_403)))
     with pytest.raises(GhHostRefusedError):
         client.required_check_names(REPO, "main")
+
+
+def test_rate_limit_is_one_free_rest_route() -> None:
+    captured = (Path(__file__).parent.parent / "fixtures" / "rate_limit.json").read_text()
+    argvs: list[list[str]] = []
+
+    def run(argv: list[str]) -> str:
+        argvs.append(argv)
+        return captured
+
+    got = RealGhRestClient(run=run).rate_limit()
+    assert argvs == [["api", "rate_limit"]]
+    assert got == json.loads(captured)
+
+
+def test_probe_is_a_conditional_rest_route() -> None:
+    argvs: list[list[str]] = []
+
+    def run(argv: list[str]) -> str:
+        argvs.append(argv)
+        raise GhError("x", stdout='HTTP/2.0 304 Not Modified\nEtag: W/"e"\n', returncode=1)
+
+    assert RealGhRestClient(run=run).probe("repos/o/r/issues", 'W/"e"') == (False, 'W/"e"')
+    assert argvs == [["api", "-i", "-H", 'If-None-Match: W/"e"', "repos/o/r/issues"]]
+
+
+def test_probe_200_and_failure() -> None:
+    ok = 'HTTP/2.0 200 OK\nEtag: W/"n"\n\n[]'
+    assert RealGhRestClient(run=lambda argv: ok).probe("p", None) == (True, 'W/"n"')
+
+    def boom(argv: list[str]) -> str:
+        raise GhError("HTTP 403: rate limit", stderr="HTTP 403", returncode=1)
+
+    assert RealGhRestClient(run=boom).probe("p", 'W/"e"') == (True, None)

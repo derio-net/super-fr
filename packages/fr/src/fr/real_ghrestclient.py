@@ -28,7 +28,7 @@ import sys
 import urllib.parse
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fr import _hosts
 from fr import gh as _gh
@@ -949,11 +949,9 @@ class RealGhRestClient:
         return value if isinstance(value, bool) else None
 
     def repo_visibility(self, repo: str) -> str:
-        """`visibility` of `GET repos/{repo}`, else `private` read as public/private."""
-        value = _visibility_of(self._api(f"repos/{repo}"))
-        if value is None:
-            raise GhError(f"GET repos/{repo}: no visibility in the answer")
-        return value
+        """`visibility` of `GET repos/{repo}`, else `private` read as public/private; a
+        conditional read sharing `fr.gh`'s module-level ETag map (quota-pacing R12)."""
+        return _gh.repo_visibility(self._gh, self._host, repo)
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """`allowed` from the repo's `allow_*` flags. Gap: REST has no
@@ -1000,6 +998,13 @@ class RealGhRestClient:
 
     def viewer_login(self) -> str:
         return str(self._api("user")["login"])
+
+    def rate_limit(self) -> dict[str, Any]:
+        return cast("dict[str, Any]", self._api("rate_limit"))
+
+    def probe(self, path: str, etag: str | None) -> tuple[bool, str | None]:
+        """A conditional REST read: unchanged on a 304 (spec 2026-10-12-quota-pacing R8)."""
+        return _gh.probe(self._gh, path, etag)
 
     def file_exists(self, repo: str, path: str) -> bool:
         try:

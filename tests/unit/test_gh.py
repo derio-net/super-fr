@@ -642,3 +642,119 @@ class TestRunGhTimeout:
 
     def test_the_list_bound_is_capped(self) -> None:
         assert gh.list_timeout(10**6) == gh.GH_LIST_TIMEOUT_CAP_SECONDS <= 600
+
+
+# ---------------------------------------------------- conditional visibility (quota-pacing R12)
+
+_VIS_200 = (
+    'HTTP/2.0 200 OK\nContent-Type: application/json\nEtag: W/"v1"\n\n{"visibility": "private"}'
+)
+_VIS_304 = 'HTTP/2.0 304 Not Modified\nEtag: W/"v1"\n'
+
+
+class TestConditionalVisibility:
+    def _runner(self, answers):
+        seen: list[list[str]] = []
+
+        def run(argv: list[str]) -> str:
+            seen.append(argv)
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        return run, seen
+
+    def test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer(self):
+        from fr import gh
+
+        run, seen = self._runner([_VIS_200, GhError("gh: HTTP 304", stdout=_VIS_304, returncode=1)])
+        assert gh.repo_visibility(run, None, "o/r") == "private"
+        assert gh.repo_visibility(run, None, "o/r") == "private"
+        assert seen[0] == ["api", "-i", "repos/o/r"]
+        assert seen[1] == ["api", "-i", "-H", 'If-None-Match: W/"v1"', "repos/o/r"]
+
+    def test_a_200_updates_the_cached_answer(self):
+        from fr import gh
+
+        new = 'HTTP/2.0 200 OK\nEtag: W/"v2"\n\n{"private": false}'
+        run, seen = self._runner([_VIS_200, new, GhError("x", stdout=_VIS_304, returncode=1)])
+        assert gh.repo_visibility(run, None, "o/r") == "private"
+        assert gh.repo_visibility(run, None, "o/r") == "public"
+        assert gh.repo_visibility(run, None, "o/r") == "public"
+        assert seen[2][3] == 'If-None-Match: W/"v2"'
+
+    def test_an_error_raises_and_a_304_with_no_cache_raises(self):
+        from fr import gh
+
+        run, _ = self._runner([GhError("HTTP 500", stdout="HTTP/2.0 500 x\n", returncode=1)])
+        with pytest.raises(GhError):
+            gh.repo_visibility(run, None, "o/r")
+        run, _ = self._runner([GhError("x", stdout=_VIS_304, returncode=1)])
+        with pytest.raises(GhError):
+            gh.repo_visibility(run, None, "o/r")
+
+    def test_the_map_is_keyed_by_host_and_repo(self):
+        from fr import gh
+
+        run, seen = self._runner([_VIS_200, _VIS_200])
+        gh.repo_visibility(run, None, "o/r")
+        gh.repo_visibility(run, "ghe.example.com", "o/r")
+        assert seen[1] == ["api", "-i", "repos/o/r"]  # no ETag from the other host
+
+    def test_a_cached_etag_with_a_non_304_error_raises_and_keeps_the_entry(self):
+        from fr import gh
+
+        run, seen = self._runner(
+            [_VIS_200, GhError("HTTP 500", stdout="HTTP/2.0 500 x\n", returncode=1), _VIS_200]
+        )
+        gh.repo_visibility(run, None, "o/r")
+        with pytest.raises(GhError):
+            gh.repo_visibility(run, None, "o/r")
+        gh.repo_visibility(run, None, "o/r")
+        assert seen[2][3] == 'If-None-Match: W/"v1"'  # the entry survived the failure
+
+    def test_an_exit_0_304_with_a_cache_raises(self):
+        from fr import gh
+
+        run, _ = self._runner([_VIS_200, _VIS_304])
+        gh.repo_visibility(run, None, "o/r")
+        with pytest.raises(GhError):
+            gh.repo_visibility(run, None, "o/r")
+
+    @pytest.mark.parametrize(
+        "body", ["not json", '{"name": "x"}', '["visibility"]', '{"visibility": ""}']
+    )
+    def test_a_200_without_a_usable_visibility_raises(self, body):
+        from fr import gh
+
+        run, _ = self._runner([f'HTTP/2.0 200 OK\nEtag: W/"v1"\n\n{body}'])
+        with pytest.raises(GhError):
+            gh.repo_visibility(run, None, "o/r")
+
+    def test_a_200_with_no_etag_drops_the_entry_and_the_next_read_is_unconditional(self):
+        from fr import gh
+
+        bare = 'HTTP/2.0 200 OK\n\n{"visibility": "public"}'
+        run, seen = self._runner([_VIS_200, bare, _VIS_200])
+        gh.repo_visibility(run, None, "o/r")
+        assert gh.repo_visibility(run, None, "o/r") == "public"
+        gh.repo_visibility(run, None, "o/r")
+        assert seen[1][3] == 'If-None-Match: W/"v1"'
+        assert seen[2] == ["api", "-i", "repos/o/r"]
+
+    def test_a_status_less_body_answers_and_caches_nothing(self):
+        from fr import gh
+
+        run, seen = self._runner(['{"visibility": "internal"}', '{"visibility": "internal"}'])
+        assert gh.repo_visibility(run, None, "o/r") == "internal"
+        assert gh.repo_visibility(run, None, "o/r") == "internal"
+        assert seen[1] == ["api", "-i", "repos/o/r"]
+
+    def test_another_repo_on_the_same_host_carries_no_etag(self):
+        from fr import gh
+
+        run, seen = self._runner([_VIS_200, _VIS_200])
+        gh.repo_visibility(run, None, "o/r")
+        gh.repo_visibility(run, None, "o/other")
+        assert seen[1] == ["api", "-i", "repos/o/other"]
