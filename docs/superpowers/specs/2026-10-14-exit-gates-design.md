@@ -605,3 +605,9 @@ exercise.
    `vX.Y.Z-rc.N` as a pre-release. After the pass, the next run cuts the final
    `vX.Y.Z`. `bootstrap.sh --version RC` installs the RC, and with no argument it
    installs the final.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-14-exit-gates | `derio-net/super-fr` | `2026-10-14-exit-gates` | — |

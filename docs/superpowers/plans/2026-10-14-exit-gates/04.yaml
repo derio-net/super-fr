@@ -1,0 +1,104 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Driver routing — merged-PR labels and cursor in facts, gated batches, gate
+    pass, fr gate pass
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - exit-gates-driver-routing
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/gate_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_triage_*.py
+  - tests/unit/test_gate_cmd.py
+  - tests/unit/test_migration_trigger.py
+  - tests/fixtures/triage/*
+  - docs/acceptance/*
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Facts — merged-PR labels and cursor position (FACTS_SCHEMA move)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: collect tests — a batch's merged PR record carries labels; the batch PR head's run cursor position (blocked step gate / deliver done / manual unit next / none) is read through gitseam show; FACTS_SCHEMA is main's+1 and its comment cites the labels, cursor and TriageConfig.exit; older facts schemas still load.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: extend collect.py and the facts model; bump FACTS_SCHEMA and FACTS_READS; regenerate fixtures the existing tests pin.
+- number: 2
+  title: Gated batches skip close-out; awaiting-live and gate-pass actions (R13, R14)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: drive_pass tests over fixture snapshots — a landed batch whose merged PR has gate:tester is not closed out; its first pass plans awaiting-live label actions for issues its gated rows cite; when every gated row reads walked in the default-branch matrix a gate-pass action is planned (label swap + comment); a batch with gate:tester-passed closes out normally.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: Snapshot fields (gate labels per batch, matrix rows at default branch via gitseam); drive_pass step 2 changes; action kinds awaiting-live and gate-pass with phrases; executor in triage_batch_cmd performing the forge writes only with --yes through edit_pr_labels/comment_pr and issue labels.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: is_gated(batch, snap) as the one predicate drive_pass and views share.
+- number: 3
+  title: fr gate pass (R14)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: gate_cmd tests — dry-run prints the label swap and comment; --yes performs them; refuses an unknown gate, a PR without gate:<g>, or a non-post-merge gate; prints the release dispatch command; `gate` is in READ_ONLY_COMMANDS (update test_the_exemption_list_is_exactly_these_things).
+  - id: P4.T3.S2
+    text: |-
+      GREEN: commands/gate_cmd.py registered in cli.py; trigger.READ_ONLY_COMMANDS gains gate.
+- number: 4
+  title: Matrix
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Record exit-gates-driver-routing's unit levels via fr acceptance set-status (it stays live-owed).
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

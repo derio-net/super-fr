@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Board lanes — Needs you · Developer / Reviewer / Tester / DevOps from the
+    cursor, one conflicting predicate
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - exit-gates-board-lanes
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/mergeability.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_triage_*.py
+  - tests/unit/test_kanban*.py
+  - docs/acceptance/*
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: conflicting predicate and merge-ready hint (R19)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests — conflicting(mergeable, merge_state) true for CONFLICTING or DIRTY only (BLOCKED false); a card whose PR is conflicting never shows `merge ready` and shows `conflicting — the driver updates it or hands it back`; the merge train still plans the merge for it (existing hand-back tests stay green).
+  - id: P5.T1.S2
+    text: |-
+      GREEN: triage/mergeability.py; kanban card hint and needs_you use it.
+- number: 2
+  title: Needs-you lanes from the cursor and gate labels (R17, R18)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: tests — COLUMNS order is R17's; a batch whose cursor is blocked on a step gate or has a manual unit next is in needs-developer; deliver done and not approved (or merge stopped) is needs-reviewer; a landed gated batch is needs-tester / needs-devops per its gate; session status alone never moves a card into a lane but a blocked session still flags it; needs_you emits one Need per card in a lane; the rendered board shows the four columns.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: Column/COLUMN_TITLES additions, column_of reading facts cursor + gate labels, needs_you additions, kanban_render columns.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR: one lane function both column_of and needs_you call.
+- number: 3
+  title: Prose and matrix
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      fr-triage SKILL.md: the four lanes and how a card leaves one; sync mirrors; move exit-gates-board-lanes to ci. Read #1107's diff (gh pr diff 1107) for cursor-reading code worth reusing and note in the phase record what was salvaged or why nothing was.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

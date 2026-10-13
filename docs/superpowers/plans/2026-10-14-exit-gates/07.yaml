@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 7
+  title: Release gating — fr release status, RC versions, final when clear, floors
+    admit RCs
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - exit-gates-release-gating
+  tier: hard
+  files:
+  - scripts/release.py
+  - scripts/bump-version.py
+  - scripts/changes.py
+  - scripts/floors.py
+  - scripts/version_surfaces.py
+  - .github/workflows/release.yml
+  - packages/fr/src/fr/version_floor.py
+  - packages/fr/src/fr/release_status.py
+  - packages/fr/src/fr/commands/release_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_release*.py
+  - tests/unit/test_bump_version*.py
+  - tests/unit/test_changes*.py
+  - tests/unit/test_floors*.py
+  - tests/unit/test_version_floor*.py
+  - tests/unit/test_migration_trigger.py
+  - docs/acceptance/*
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: fr release status (R21)
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: tests with a fake forge — lists PRs merged since the last FINAL tag (^v\d+\.\d+\.\d+$, RC tags ignored) carrying gate:tester or gate:devops without the -passed label, with gate and owed rows; --json shape pinned; `release` in READ_ONLY_COMMANDS.
+  - id: P7.T1.S2
+    text: |-
+      GREEN: fr/release_status.py + commands/release_cmd.py registered in cli.py; trigger exemption.
+- number: 2
+  title: RC version spellings across the tooling (R25, R26)
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      RED: tests — bump-version accepts 5.27.0-rc.1, writes 5.27.0rc1 to pyproject/uv.lock and 5.27.0-rc.1 to plugin.json/marketplace.json/package.json, --check passes on that mixed set and fails on real drift; changes.bumped/floors.parse_version/release.compute treat an RC as based on the last final; version_floor.admits('>=5.27.0', '5.27.0rc1') is true and ('>=5.27.1', '5.27.0rc1') false.
+  - id: P7.T2.S2
+    text: |-
+      GREEN: SEMVER_RE and normalization in bump-version.py, version_surfaces.write_version two spellings, changes/floors/version_floor changes.
+- number: 3
+  title: release.py decides RC or final (R20)
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      RED: release.py tests with injectable Commands — something waits and new merges since the newest RC → RC commit (no fragment consumed) tagged vX.Y.Z-rc.N, --prerelease; something waits and nothing new since the RC → no-op; nothing waits and HEAD is an RC (fragments still pending) → final X.Y.Z consuming fragments; nothing waits, no fragments, HEAD final → no-op; N is one past the newest vX.Y.Z-rc.*; previous_tag ignores RC tags.
+  - id: P7.T3.S2
+    text: |-
+      GREEN: compute/release_to_main/tag_and_release changes; Commands entry calling `fr release status --json`; release.yml gains a daily schedule (keep its ci-budget wiring valid).
+  - id: P7.T3.S3
+    text: |-
+      REFACTOR: one Version value object for final/RC parsing shared by release.py and bump-version.py.
+- number: 4
+  title: Matrix
+  steps:
+  - id: P7.T4.S1
+    text: |-
+      Record exit-gates-release-gating's unit levels (stays live-owed).
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

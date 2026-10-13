@@ -1,0 +1,133 @@
+schema_version: 2
+phase:
+  number: 3
+  title: deliver accounts for leftovers — fr journal file, narrowing decisions, widened
+    Closes guard, record kind 10
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - exit-gates-deliver-accounting
+  tier: hard
+  files:
+  - packages/fr/src/fr/journal/model.py
+  - packages/fr/src/fr/journal/file.py
+  - packages/fr/src/fr/archive_followups.py
+  - packages/fr/src/fr/record/*.py
+  - packages/fr/src/fr/artifacts/*.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - docs/superpowers/runs/*
+  - docs/superpowers/plans/*
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/skills/fr-goal/SKILL.md
+  - .hermes/skills/fr/fr-goal/SKILL.md
+  - docs/explainers/01-fr-goal.*
+  - tests/unit/test_journal*.py
+  - tests/unit/test_record*.py
+  - tests/unit/test_migration*.py
+  - tests/unit/test_pr_body*.py
+  - tests/unit/test_exit_gates_*.py
+  - tests/integration/test_exit_gates_deliver.py
+  - docs/acceptance/*
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Journal decision tokens gate=, narrows=, answered_by= (R12)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: journal model tests — a decision round-trips gate=owner, narrows=derio-net/super-fr#1,#2 (comma-separated) and answered_by=operator; tokens are serialized only when set; an older-shaped parse (named projection) ignores them; answered_by stays refused on a finding that is not a resolution record.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: JournalEntry fields and header serialization/parsing; `fr journal add --gate --narrows --answered-by operator` (the last verified like journal resolve --answered-by).
+- number: 2
+  title: Record kind 9 → 10 (artifact-versioning rule)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests — JournalItem accepts gate/narrows; the record kind's current_version is 10; a v9 record migrates to 10 (stamp hop asserted in the chain test like the existing record hops); validator accepts both fields; the brainstorm resolve writes answered_by=operator on its decisions.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: record/model.py fields; registry current_version 10; register the migration in MIGRATIONS via the module fr/artifacts/__init__.py imports; structure validator; run `uv run fr migrate artifacts --yes` and commit the result.
+- number: 3
+  title: fr journal file (R10)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests with a fake forge — filing an out-of-scope finding calls file_open_ends (label follow-up) and appends a deferred --tracked-by resolution; filing an owed entry calls file_owed_ends (fr:owed) and records filed_as; filing a narrowing decision records tracked_by=; tracking none refuses with a clear message; unknown id refused, nothing written.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/journal/file.py over archive_followups' two filers + `fr journal file` in journal_cmd.py writing through the journal resolve engine.
+- number: 4
+  title: unaccounted leftovers and the widened Closes guard (R9, R11)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: tests — unaccounted lists an open out-of-scope finding, an owed entry without filed_as, an owed row neither gated nor carrying issues:, a narrowing decision without tracked_by; each fix line is printed; premature_closes refuses Closes over an issue cited by a gated row (even under a remap that makes its strategy pre-merge), keeps refusing a post-merge unwalked row's issue under a remap to none, and refuses Closes over a narrows= issue lacking answered_by=operator.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: pr_body.unaccounted(repo_root, state, exit); premature_closes takes exit + narrowing decisions; deliver gate refusal in run_cmd.
+  - id: P3.T4.S3
+    text: |-
+      Integration test tests/integration/test_exit_gates_deliver.py driving a full deliver resolve against a stubbed forge: refuses with leftovers, passes after `fr journal file`.
+  - id: P3.T4.S4
+    text: |-
+      REFACTOR: one Leftover type with kind + fix line; no duplicated journal folding.
+- number: 5
+  title: Prose and matrix
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      fr-goal SKILL.md §8: file leftovers with fr journal file before deliver; Refs vs Closes for gated issues (120-line cap); sync mirrors; update docs/explainers/01-fr-goal.md where it describes delivery and re-render the .html per .claude/rules/explainers-currency.md (from /, --isolated, byte-identical check first); move exit-gates-deliver-accounting to ci.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
