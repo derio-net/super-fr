@@ -467,11 +467,12 @@ def load_runner(name: str) -> Runner:
     return kanban_load_runner(name, DISPATCH_INSTALL_HINT)
 
 
-def event_writer(target: Path, facts: Facts) -> EventWriter:
+def event_writer(target: Path, facts: Facts, *, read_errors: bool = False) -> EventWriter:
     """Append one event to a batch through the one judgements writer (`_write`),
     re-reading the file each time, so a write never races an earlier one of the same
     command (merge-train-safety §A, §B). An event older than the batch's last is
-    stamped at that time: a skewed clock never breaks the time-order rule."""
+    stamped at that time: a skewed clock never breaks the time-order rule. The driver
+    passes *read_errors*, so an unreadable visibility skips its pass (gh#1145)."""
 
     def write(batch_id: str, event: BatchEvent) -> None:
         judgements = load_judgements(target / "judgements.yaml")
@@ -479,7 +480,10 @@ def event_writer(target: Path, facts: Facts) -> EventWriter:
         if batch.events and event.at < batch.events[-1].at:
             event = event.model_copy(update={"at": batch.events[-1].at})
         new = batch.model_copy(update={"events": [*batch.events, event]})
-        _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
+        _write(
+            target, _replace(judgements.batches, new), facts, read=judgements.batches,
+            read_errors=read_errors,
+        )  # fmt: skip
 
     return write
 
@@ -4224,7 +4228,7 @@ class _Driver:
                 by_repo.setdefault(repo, []).append((e.batch, e.pr.number))
         wrote = False
         voided: set[tuple[str, int]] = set()
-        writer = event_writer(self.target, facts)
+        writer = event_writer(self.target, facts, read_errors=True)
         repo_of = {b.id: r for b, r in ((b, repos.get(b.id)) for b in judgements.batches) if r}
 
         def record(batch_id: str, event: BatchEvent) -> None:
@@ -4710,7 +4714,7 @@ class _Driver:
                     in_flight,
                     True,
                 )
-            writer = event_writer(self.target, facts)
+            writer = event_writer(self.target, facts, read_errors=True)
             ctx.on_update = update_recorder(
                 writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
             )
@@ -5020,7 +5024,7 @@ class _Driver:
             slots, _ = plan_queue(ctx, entries)
             if not slots or slots[0].head != action.head:
                 return "", False  # merged, or the head moved: judged again next pass
-            writer = event_writer(self.target, facts)
+            writer = event_writer(self.target, facts, read_errors=True)
             ctx.on_update = update_recorder(
                 writer, lambda pr: batch.id if pr == slots[0].step.pr.number else None
             )
