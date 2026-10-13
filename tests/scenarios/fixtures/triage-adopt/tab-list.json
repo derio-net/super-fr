@@ -1,0 +1,17 @@
+{
+  "id": "cli:tab:list",
+  "result": {
+    "tabs": [
+      {
+        "agent_status": "idle",
+        "focused": false,
+        "label": "example-org/widgets#1 fr-goal",
+        "number": 1,
+        "pane_count": 1,
+        "tab_id": "w7:t5",
+        "workspace_id": "w7"
+      }
+    ],
+    "type": "tab_list"
+  }
+}

@@ -276,10 +276,10 @@ class TestCaseArmProbeIgnoresComments:
             "the real case arm must be repaired even when a comment quotes the fixed form"
         )
 
-    def test_bare_entry_not_at_head_is_still_stripped(self, tmp_path: Path) -> None:
-        """The strip was anchored to the head of the arm, so a stale bare entry
-        elsewhere survived alongside the prepended qualified one — which the
-        comment claims cannot happen."""
+    def test_bare_entry_not_at_head_is_kept_not_duplicated(self, tmp_path: Path) -> None:
+        """gh#1105: the bare name is no longer stale (`fr init agents` writes
+        project agents Claude Code dispatches by it), so an existing bare member
+        anywhere in the arm is kept, and not inserted a second time."""
         hook = write_hook(
             tmp_path,
             STOCK_HOOK.replace(
@@ -289,8 +289,41 @@ class TestCaseArmProbeIgnoresComments:
         )
         assert run_script(hook).returncode == 0
         arm = next(line for line in hook.read_text().splitlines() if "Explore|Plan|" in line)
-        assert "|fr-phase-executor|" not in arm, "the stale bare entry must be removed"
-        assert f"{QUALIFIED}|Explore|Plan|" in arm
+        assert arm.count("|fr-phase-executor|") == 1
+        assert f"{QUALIFIED}|" in arm
+
+
+# --- gh#1105: the bare project-agent name is allowlisted too ---------------
+#
+# `fr init agents` renders `.claude/agents/fr-{phase-executor,spec-reviewer}.md`
+# (cloud-triage §H). Claude Code dispatches a PROJECT agent by its bare name, so
+# the org hook sees `fr-phase-executor`, not `super-fr:fr-phase-executor`, and
+# blocked it for lacking a worktree it must not have.
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="hook needs jq")
+@pytest.mark.parametrize("qualified", ["super-fr:fr-phase-executor", "super-fr:fr-spec-reviewer"])
+def test_the_bare_project_agent_name_is_allowlisted(tmp_path: Path, qualified: str) -> None:
+    bare = qualified.split(":", 1)[1]
+    hook = write_hook(tmp_path, STOCK_HOOK)
+    assert not hook_allows(hook, bare)  # precondition: blocked by name
+    assert run_script_for(hook, qualified).returncode == 0
+    assert hook_allows(hook, qualified)
+    assert hook_allows(hook, bare), f"the bare project-agent name {bare} must be allowed"
+    message = next(line for line in hook.read_text().splitlines() if "Explore, Plan," in line)
+    assert f" {bare}," in message, "the exempt message must name the bare spelling too"
+    once = hook.read_text()
+    assert run_script_for(hook, qualified).returncode == 0
+    assert hook.read_text() == once, "second run must be a no-op"
+
+
+def test_a_hook_with_only_the_qualified_name_gains_the_bare_one(tmp_path: Path) -> None:
+    """The live host state today: qualified present, bare absent. The probe for
+    the qualified id must not report the whole job done."""
+    hook = write_hook(tmp_path, CASE_FIXED_MESSAGE_STALE_HOOK)
+    assert run_script(hook).returncode == 0
+    arm = next(line for line in hook.read_text().splitlines() if "Explore|Plan|" in line)
+    assert "|fr-phase-executor|" in arm
 
 
 # --- a second read-only type: fr-spec-reviewer (2026-09-24 spec §E, gh#593) --

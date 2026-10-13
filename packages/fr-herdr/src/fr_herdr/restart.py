@@ -26,7 +26,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from fr_herdr import managed, opencode
-from fr_herdr._herdr import HerdrError, _run_herdr, poll, start_agent
+from fr_herdr._herdr import (
+    HerdrError,
+    _run_herdr,
+    agent_cwd,
+    agent_session,
+    poll,
+    start_agent,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
@@ -529,12 +536,12 @@ def _inputs(
         "agent": agent,
         "screen": "",
         "argv": None,
-        "cwd": str(agent.get("foreground_cwd") or agent.get("cwd") or ""),
+        "cwd": agent_cwd(agent) or "",
         "transcript_exists": False,
         "self_pane": self_pane,
         "excluded": frozenset(exclude),
     }
-    session_id = (agent.get("agent_session") or {}).get("value")
+    session_id = agent_session(agent)
     if agent.get("agent_status") not in IDLE_STATUSES or not session_id:
         return inputs
     proc = _claude_process(_run_herdr(["pane", "process-info", "--pane", pane]))

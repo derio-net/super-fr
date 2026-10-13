@@ -23,6 +23,7 @@ import re
 import shlex
 import stat
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +115,17 @@ def show_text(cwd: Path, ref: str, file: str) -> str | None:
         return content.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise GitError(f"{file} at {ref} is not UTF-8 text ({exc.reason}); cannot read it") from exc
+
+
+def _head_branch(worktree: Path) -> str | None:
+    """The branch *worktree* has checked out, or None when its HEAD is detached.
+    `symbolic-ref`, not `rev-parse --abbrev-ref`: the latter says `heads/main` when a
+    tag `main` also exists."""
+    try:
+        out = git(["symbolic-ref", "-q", "HEAD"], worktree).strip()
+    except GitError:  # non-zero: HEAD is detached
+        return None
+    return out.removeprefix("refs/heads/") or None
 
 
 def git_ok(args: list[str], cwd: Path) -> bool:
@@ -360,6 +372,21 @@ def repo_of_url(url: str) -> str | None:
     return "/".join(parts[-2:]) if len(parts) >= 2 else None
 
 
+@dataclass(frozen=True)
+class CheckoutFacts:
+    """What `adopt --list` reads of an agent's working directory: the worktree's
+    toplevel, `origin`'s URL and `owner/name` (None when it has none), the branch
+    checked out there (None when detached), the default branch (None when
+    `origin/HEAD` is unset) and the repository's main worktree."""
+
+    toplevel: Path
+    origin_url: str | None
+    repo: str | None
+    branch: str | None
+    default: str | None
+    main_worktree: Path
+
+
 class Checkout:
     """A local clone of a batch's repo (spec §3.I), driven through git only."""
 
@@ -382,6 +409,39 @@ class Checkout:
             ) from exc
         return cls(Path(top))
 
+    @classmethod
+    def facts(cls, cwd: Path) -> CheckoutFacts | None:
+        """The facts of the checkout *cwd* sits in; None when it is no checkout. Only
+        a missing toplevel is None: an `origin` or default branch that cannot be read
+        is that field alone None."""
+        if not cwd.is_dir():
+            return None
+        try:
+            top = Path(git(["rev-parse", "--show-toplevel"], cwd).strip())
+        except GitError:
+            return None
+        checkout = cls(top)
+        try:
+            url: str | None = checkout.origin_url()
+        except GitError:
+            url = None
+        try:
+            default: str | None = checkout.default_branch()
+        except GitError:
+            default = None
+        try:
+            main = checkout.main_worktree()
+        except GitError:
+            main = top.resolve()
+        return CheckoutFacts(
+            toplevel=top.resolve(),
+            origin_url=url,
+            repo=repo_of_url(url) if url else None,
+            branch=checkout.head_branch(),
+            default=default,
+            main_worktree=main,
+        )
+
     def origin_url(self) -> str:
         return git(["remote", "get-url", "origin"], self.path).strip()
 
@@ -389,14 +449,21 @@ class Checkout:
         return repo_of_url(self.origin_url())
 
     def default_branch(self) -> str:
-        """`origin/HEAD`'s branch, which `git clone` records."""
+        """`origin/HEAD`'s branch, which `git clone` records. A clone without it (a
+        cloud session's, gh#1100) asks origin once and records the answer."""
+        head = ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]
         try:
-            ref = git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], self.path)
-        except GitError as exc:
-            raise GitError(
-                f"cannot tell {self.path}'s default branch (origin/HEAD is unset); run "
-                "`git remote set-head origin --auto` there"
-            ) from exc
+            ref = git(head, self.path)
+        except GitError:
+            try:
+                git(["remote", "set-head", "origin", "--auto"], self.path)
+                ref = git(head, self.path)
+            except GitError as exc:
+                raise GitError(
+                    f"cannot tell {self.path}'s default branch (origin/HEAD is unset, and "
+                    f"origin did not say: {exc}); run `git remote set-head origin --auto` "
+                    "there"
+                ) from exc
         return ref.strip().removeprefix("origin/")
 
     def fetch(self) -> None:
@@ -437,6 +504,44 @@ class Checkout:
             if line.startswith("worktree "):
                 return Path(line.removeprefix("worktree ")).resolve()
         return self.path.resolve()
+
+    def current_branch(self) -> str | None:
+        """The branch checked out in the MAIN worktree, or None when HEAD is detached."""
+        return _head_branch(self.main_worktree())
+
+    def head_branch(self) -> str | None:
+        """The branch checked out in THIS checkout's worktree, or None when detached."""
+        return _head_branch(self.path)
+
+    def dirty_paths(self) -> tuple[str, ...]:
+        """The paths `git status --porcelain` reports in the MAIN worktree, tracked or
+        untracked; empty when it is clean (default-branch adopt, R7)."""
+        raw = git(["status", "--porcelain", "-z"], self.main_worktree()).split("\0")
+        paths: list[str] = []
+        skip = False
+        for entry in raw:
+            if skip:  # the source path of a rename or copy
+                skip = False
+                continue
+            if len(entry) < 4:
+                continue
+            paths.append(entry[3:])
+            skip = entry[0] in "RC"
+        return tuple(paths)
+
+    def unpushed(self, branch: str) -> tuple[str, ...]:
+        """`<sha> <subject>` for each commit on local *branch* that `origin/<branch>`
+        lacks, newest first, read in the main worktree (R7). Fetch first."""
+        out = git(
+            ["log", "--format=%h %s", f"origin/{branch}..refs/heads/{branch}"],
+            self.main_worktree(),
+        )
+        return tuple(line for line in out.splitlines() if line)
+
+    def ahead(self, ref: str, base: str) -> int:
+        """How many commits *ref* has that *base* lacks (`base..ref`)."""
+        out = git(["rev-list", "--count", f"{base}..{ref}"], self.main_worktree())
+        return int(out.strip() or "0")
 
     def publish_branch(self, branch: str) -> None:
         """Push local *branch* to origin and make that its upstream (batch adopt, §C)."""
@@ -514,13 +619,23 @@ class Checkout:
 
     # ------------------------------------------------------ the wave driver
 
-    def fast_forward(self) -> None:
+    def fast_forward(self, *, switch: bool = False) -> None:
         """Fetch, then fast-forward the checked-out default branch to origin's
         (wave-driver §B). A clone on any other branch is refused by name: the
-        driver never switches an operator's branch for them."""
+        driver never switches an operator's branch for them. With *switch* — a clone
+        that is the driver's own, a cloud session's (gh#1100) — a clean one on another
+        branch or a detached HEAD is checked out on the default branch first."""
         self.fetch()
         default = self.default_branch()
         current = git(["rev-parse", "--abbrev-ref", "HEAD"], self.path).strip()
+        if current != default and switch:
+            if git(["status", "--porcelain", "--untracked-files=no"], self.path).strip():
+                raise GitError(
+                    f"{self.path} is on {current} with local changes, so the driver does "
+                    f"not check out {default} there; commit or discard them"
+                )
+            git(["checkout", "--quiet", default], self.path)  # tracks origin's when new
+            current = default
         if current != default:
             raise GitError(
                 f"{self.path} is on {current}, not {default}; the driver fast-forwards "

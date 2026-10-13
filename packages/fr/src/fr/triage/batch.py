@@ -133,6 +133,71 @@ def label_refs(label: str) -> list[str]:
     return [f"{m[1]}#{m[2]}" for m in _LABEL_REF.finditer(label)]
 
 
+_REF_NAME = r"[A-Za-z0-9](?:[\w.-]*\w)?"
+# A named ref starts clear of a word, path or hyphen; its name ends in a word
+# character, so `feat-#12` is a bare `#12` after a hyphen, never a repo `feat-`
+# (review p3-r1). A bare ref only needs no word, `.` or `/` right before its `#`.
+_ANY_REF = re.compile(
+    rf"(?:(?<![\w./-])(?P<a>{_REF_NAME})(?:/(?P<b>{_REF_NAME}))?|(?<![\w./]))#(?P<n>\d+)\b"
+)
+
+
+@dataclass(frozen=True)
+class LabelRef:
+    """One issue or PR reference in a session label: `owner/name#n` (both set),
+    `name#n` (name only) or a bare `#n` (neither)."""
+
+    owner: str | None
+    name: str | None
+    number: int
+
+    def text(self) -> str:
+        head = f"{self.owner}/{self.name}" if self.owner else (self.name or "")
+        return f"{head}#{self.number}"
+
+
+def parse_refs(label: str) -> list[LabelRef]:
+    """Every reference in *label*, each once and in order (`adopt --list`, spec
+    2026-10-11-batch-adopt-safety-2 §D). `owner/name#n` is one match, never also a
+    bare `#n`."""
+    out: list[LabelRef] = []
+    for m in _ANY_REF.finditer(label):
+        if m["b"] is not None:
+            out.append(LabelRef(m["a"], m["b"], int(m["n"])))
+        else:
+            out.append(LabelRef(None, m["a"], int(m["n"])))
+    return out
+
+
+def resolve_ref(ref: LabelRef, repo: str | None) -> str | None:
+    """The `owner/name` *ref* names, against the agent's own *repo* (R16): written in
+    full, or by a name matching *repo*'s, or bare. None when it cannot be told."""
+    if ref.owner is not None and ref.name is not None:
+        return f"{ref.owner}/{ref.name}"
+    if repo is None:
+        return None
+    if ref.name is None or ref.name == repo.split("/", 1)[-1]:
+        return repo
+    return None
+
+
+def session_state(
+    *, has_agent: bool, label: str, toplevel: object | None, branch: str | None, default: str | None
+) -> str:
+    """The listing's state for one session, the first that applies (R12)."""
+    if not has_agent:
+        return "no agent"
+    if "/run/batch-" in label:
+        return "batch"
+    if toplevel is None or default is None:
+        return "unknown"
+    if branch == default:
+        return "on default branch"
+    if branch is None:
+        return "detached"
+    return "adoptable"
+
+
 # ------------------------------------------------------------------- stage
 
 

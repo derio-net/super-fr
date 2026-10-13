@@ -419,3 +419,44 @@ def test_two_concurrent_removals_do_not_overlap(
         p.communicate(timeout=60)
     assert all(p.returncode == 0 for p in procs)
     assert "OVERLAP" not in logged(stub_fr), "two fr isolation down runs overlapped"
+
+
+# gh#1124: the lock above covered only the `fr isolation up` path. `agent-*`
+# worktrees (every `isolation: "worktree"` Agent dispatch) took `mimic_default`
+# BEFORE the lock, so the two registered copies both ran `git worktree add` on
+# one path: the loser hit `.git/worktrees/agent-<id>/index.lock` and the
+# dispatch failed. A slow `git worktree add` shim makes the overlap certain.
+SLOW_GIT = r"""#!/bin/bash
+if [ "${3:-}" = "worktree" ] && [ "${4:-}" = "add" ]; then sleep 1; fi
+exec "$REAL_GIT" "$@"
+"""
+
+
+def test_two_concurrent_agent_worktree_creations_both_succeed(
+    repo: Path, stub_fr: dict[str, str]
+) -> None:
+    bin_dir = Path(stub_fr["PATH"].split(":")[0])
+    git = bin_dir / "git"
+    git.write_text(SLOW_GIT)
+    git.chmod(0o755)
+    env = {**stub_fr, "REAL_GIT": shutil.which("git") or "git"}
+    payload = Path(stub_fr["HOME"]) / "agent-payload.json"
+    payload.write_text(json.dumps(create_payload("agent-twice", repo)))
+    procs = []
+    for _ in range(2):
+        with payload.open() as stdin:
+            procs.append(
+                subprocess.Popen(
+                    ["bash", str(CREATE)],
+                    stdin=stdin,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                )
+            )
+    outs = [p.communicate(timeout=60) for p in procs]
+    assert all(p.returncode == 0 for p in procs), [o[1] for o in outs]
+    expected = str(repo / ".claude" / "worktrees" / "agent-twice")
+    assert {last_line(o[0]) for o in outs} == {expected}
+    assert worktrees(repo).count(expected) == 1
