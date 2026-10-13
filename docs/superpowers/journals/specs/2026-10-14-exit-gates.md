@@ -409,3 +409,6 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-exit-gates-p6 created=2026-10-13T23:06:25+00:00 -->
 ### tier-2026-10-14-exit-gates-p6 · decision · hard: replaces per-batch close-outs with a collected one, a new hand-back event and a judgements schema move
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-exit-gates-p7 created=2026-10-13T23:06:28+00:00 -->
+### tier-2026-10-14-exit-gates-p7 · decision · hard: changes how every release is cut and how versions and fr_version floors are read
