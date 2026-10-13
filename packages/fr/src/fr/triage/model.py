@@ -392,7 +392,8 @@ class Truncation(_Strict):
         """
         if self.source == "closed-in-progress":
             return (
-                f"a closed fr:in-progress / fr:claimed list for {target} returned exactly its limit "
+                f"a closed fr:in-progress / fr:claimed list for {target} returned exactly "
+                f"its limit "
                 f"({self.limit}), so the closed-but-in-progress set may be incomplete; "
                 "no flag raises this limit"
             )
