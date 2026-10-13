@@ -7878,8 +7878,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R6
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario named at plan time; phase 1 writes it
     verify: candidate
+    scenario: tests/scenarios/triage-retire-sync.sh
   - id: triage-archive-pr-visible
     capability: triage-batches
     acceptance: The drive reads live checks for an attributed archive PR the facts lack,
