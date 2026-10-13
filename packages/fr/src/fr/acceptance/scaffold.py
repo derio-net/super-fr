@@ -10,6 +10,7 @@ backend, or when the caller asks (`--with-ci`) — see `fr.acceptance.ci`.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,12 +33,15 @@ MATRIX_TEMPLATE = """\
 #               (a .py fragment names a test, pytest-style: #TestX::test_y —
 #               never a #L<n> line, which rots as code moves; gh#531)
 #               ([] = level does not verify this row)
-#   status:     ci | scheduled | skipped | not-implemented | failing
+#   status:     ci | scheduled | unwired | walk-owed | walked | manual
+#               | not-implemented | failing
 #     ci               automated on every PR — cannot drift silently
 #     scheduled        automated on cron/path triggers
-#     skipped          verification exists but does not run in CI (proven
-#                      live once / manual walk) → CI warning, backfill owed
-#     not-implemented  no test or surface exists yet → CI warning
+#     unwired          a test exists but does not run in CI → debt, CI warning
+#     walk-owed        a live or post-merge walk is owed → debt, CI warning
+#     walked           proven live, dated by its latest passing walk
+#     manual           a process that is never automatable
+#     not-implemented  no test or surface exists yet → debt, CI warning
 #     failing          known red → `fr acceptance check` exits 2, CI FAILS
 #   notes:      evidence detail, drift context
 #
@@ -65,7 +69,7 @@ the following updates the matrix in the SAME PR:**
 - adds or changes a spec `## Test Plan` (new spec ⇒ new rows; the CI
   staleness guard fails a spec with a Test Plan that no row cites)
 - adds tests that verify an existing row (add the ref to `levels`, move
-  `status` up: `not-implemented` → `skipped` → `ci`/`scheduled`)
+  `status` up: `not-implemented` → `unwired` → `ci`/`scheduled`)
 - ships a surface or capability a `not-implemented` row waits on
 - changes CI workflows that run matrix-referenced checks
 - discovers a red acceptance: set `status: failing` — the
@@ -73,9 +77,10 @@ the following updates the matrix in the SAME PR:**
   re-classified with reasoning in `notes`
 
 Statuses move **explicitly, never silently**: `ci` | `scheduled` (automated
-— the safe end) · `skipped` (verification exists, not in CI — warning,
-backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
-(fails CI).
+— the safe end) · `walked` (proven live, dated by its walk) · `manual` (a
+process that is never automatable) · `unwired` (a test exists, not in CI —
+debt) · `walk-owed` (a live or post-merge walk is owed — debt) ·
+`not-implemented` (nothing exists — debt) · `failing` (fails CI).
 
 ## How
 
@@ -107,8 +112,8 @@ name: acceptance-report
 
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warning annotations; the
-#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (branch, PR, main).
 # - The built report (GitHub-linked at this ref) is uploaded as an artifact.
 @@DEBT_COMMENT@@# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
@@ -133,6 +138,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v5
       - name: Install fr
         run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
@@ -180,8 +187,8 @@ name: acceptance-report
 
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warning annotations; the
-#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (branch, PR, main) —
 #   Gitea Actions supports GITHUB_STEP_SUMMARY (aliased GITEA_STEP_SUMMARY,
 #   confirmed against Gitea's own Actions-variables docs).
@@ -247,8 +254,8 @@ jobs:
 WORKFLOW_TEMPLATE_GITLAB = """\
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this pipeline (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warnings; the backfill
-#   rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as
+#   warnings; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - The built report is kept as a pipeline artifact.
 @@DEBT_COMMENT@@# - No step-summary equivalent — GitLab CI has none (see module comment).
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
@@ -275,98 +282,98 @@ acceptance-report:
   script:
     - fr acceptance check
     - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
-@@DEBT_STEP@@  artifacts:
+  artifacts:
     paths:
       - docs/acceptance/report.html
     expire_in: 90 days
-"""
+@@DEBT_STEP@@"""
 
 
-# The weekly "Acceptance debt" issue step, split out of each template so it is
+# The weekly technical-debt steps, split out of each template so they are
 # included only when the tracker is the ci type's own platform (#774 §3.E): the
-# step files through that platform's CLI with the pipeline's own credentials.
+# steps file through that platform's CLI with the pipeline's own credentials.
+# `fr debt issue --yes` keeps the one `<repo>: Technical debt` issue and
+# `fr debt archive-pr --yes` the one draft archive PR (spec 2026-10-11-debt-engine
+# R9-R13); both run on the schedule and on a manual dispatch with `debt: true`.
 _DEBT_COMMENT_ACTIONS = (
-    '# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).\n'
+    '# - The weekly run (and a dispatch with `debt`) upserts one "<repo>: Technical debt"\n'
+    "#   issue (closed at zero debt) and refreshes a draft PR archiving long-merged plans.\n"
 )
 DEBT_COMMENT = {
     "github-actions": _DEBT_COMMENT_ACTIONS,
     "gitea-actions": _DEBT_COMMENT_ACTIONS,
-    "gitlab-ci": '# - The weekly (scheduled) run upserts one "Acceptance debt" issue.\n',
+    "gitlab-ci": '# - The weekly (scheduled) run upserts one "<repo>: Technical debt" issue and\n'
+    "#   refreshes a draft PR archiving long-merged plans.\n",
 }
 DEBT_STEP_GITHUB = """\
-      - name: Upsert acceptance-debt issue (weekly digest)
-        if: github.event_name == 'schedule'
+
+  # The debt job holds the write permissions and the dedicated token; the matrix
+  # job above (which runs this repo's code on every PR) holds neither. It does not
+  # `needs:` the matrix, so a week with failing rows still updates the issue.
+  debt:
+    if: github.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+      - name: Technical debt issue (weekly)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          fr acceptance digest > /tmp/digest.md
-          # Idempotence keyed on the body marker `fr acceptance digest` emits,
-          # not the title — a pre-existing issue that merely says "Acceptance
-          # debt" in its title must not be hijacked.
-          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \\
-                --json number --jq '.[0].number // empty')
-          if grep -q "No open acceptance debt." /tmp/digest.md; then
-            if [ -n "$num" ]; then
-              gh issue close "$num" --comment "Acceptance debt cleared — closing."
-            fi
-          elif [ -n "$num" ]; then
-            gh issue edit "$num" --body-file /tmp/digest.md
-          else
-            gh issue create --title "Acceptance debt" --body-file /tmp/digest.md
-          fi
+        run: fr debt issue --yes
+      - name: Archive sweep PR (weekly)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+        run: fr debt archive-pr --yes
 """
 DEBT_STEP_GITEA = """\
-      - name: Upsert acceptance-debt issue (weekly digest)
-        if: gitea.event_name == 'schedule'
-        run: |
-          fr acceptance digest > /tmp/digest.md
-          # Idempotence keyed on the body marker `fr acceptance digest` emits,
-          # not the title — a pre-existing issue that merely says "Acceptance
-          # debt" in its title must not be hijacked.
-          num=$(tea issues list --state open --output json \\
-                --fields index,body | python3 -c '
-          import json, sys
-          rows = json.load(sys.stdin)
-          for r in rows:
-              if "fr-acceptance-digest" in (r.get("body") or ""):
-                  print(r["index"])
-                  break
-          ')
-          if grep -q "No open acceptance debt." /tmp/digest.md; then
-            if [ -n "$num" ]; then
-              tea comments add "$num" "Acceptance debt cleared — closing."
-              tea issues close "$num"
-            fi
-          elif [ -n "$num" ]; then
-            tea issues edit "$num" --description "$(cat /tmp/digest.md)"
-          else
-            tea issues create --title "Acceptance debt" --description "$(cat /tmp/digest.md)"
-          fi
+
+  debt:
+    if: gitea.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+      - name: Technical debt issue (weekly)
+        run: fr debt issue --yes
+      - name: Archive sweep PR (weekly)
+        env:
+          FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+        run: fr debt archive-pr --yes
 """
 DEBT_STEP_GITLAB = """\
-    - |
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ]; then
-        fr acceptance digest > /tmp/digest.md
-        # Idempotence keyed on the body marker `fr acceptance digest` emits.
-        iid=$(glab api "projects/:id/issues?search=fr-acceptance-digest&in=description" \\
-              | python3 -c '
-        import json, sys
-        rows = json.load(sys.stdin)
-        for r in rows:
-            if "fr-acceptance-digest" in (r.get("description") or ""):
-                print(r["iid"])
-                break
-        ')
-        if grep -q "No open acceptance debt." /tmp/digest.md; then
-          if [ -n "$iid" ]; then
-            glab api "projects/:id/issues/$iid" -X PUT -F state_event=close
-          fi
-        elif [ -n "$iid" ]; then
-          glab api "projects/:id/issues/$iid" -X PUT -F description=@/tmp/digest.md
-        else
-          glab api projects/:id/issues -F title="Acceptance debt" -F description=@/tmp/digest.md
-        fi
-      fi
+
+# Its own job, so a failing `fr acceptance check` above never skips the debt run.
+technical-debt:
+  stage: acceptance
+  image: python:3.12
+  variables:
+    GIT_DEPTH: "0"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+  script:
+    - fr debt issue --yes
+    - fr debt archive-pr --yes
 """
 DEBT_STEP = {
     "github-actions": DEBT_STEP_GITHUB,
@@ -380,18 +387,70 @@ WORKFLOW_TEMPLATES = {
 }
 
 
-DEBT_PERMS = "  issues: write\n"
+_DISPATCH = "  workflow_dispatch:\n"
+_DISPATCH_DEBT = (
+    "  workflow_dispatch:\n    inputs:\n      debt:\n"
+    "        description: Run the technical-debt steps now\n"
+    "        type: boolean\n        default: false\n"
+)
 
 
 def render_workflow(ci_type: str, *, debt: bool) -> str:
-    """The scaffolded pipeline for `ci_type`, with or without the debt step
-    (and the `issues: write` permission only that step needs)."""
+    """The scaffolded pipeline for `ci_type`, with or without the debt job (and
+    the `debt` dispatch input only it reads). The write permissions and the
+    dedicated token live on the debt job alone."""
     text = WORKFLOW_TEMPLATES[ci_type]
+    if debt and ci_type != "gitlab-ci":
+        text = text.replace(_DISPATCH, _DISPATCH_DEBT)
     return (
-        text.replace("@@DEBT_PERMS@@", DEBT_PERMS if debt else "")
+        text.replace("@@DEBT_PERMS@@", "")
         .replace("@@DEBT_COMMENT@@", DEBT_COMMENT[ci_type] if debt else "")
         .replace("@@DEBT_STEP@@", DEBT_STEP[ci_type] if debt else "")
     )
+
+
+@dataclass(frozen=True)
+class RefreshOutcome:
+    """What `fr acceptance init --refresh-ci` did, or why it did not."""
+
+    status: str  # rewritten | current | foreign | missing | paste
+    path: str
+    text: str = ""
+    """For `paste` (GitLab): the exact job to paste over the existing one."""
+
+
+_FR_STEP = re.compile(r"fr acceptance digest|fr debt issue")
+
+
+def refresh_ci(root: Path, ci_type: str, *, debt: bool) -> RefreshOutcome:
+    """Bring an fr-scaffolded pipeline up to the current scaffold (R13).
+
+    GitHub and Gitea files are recognised by their `name: acceptance-report`
+    header plus an `fr acceptance digest` or `fr debt issue` step, and rewritten
+    whole; a file without both is someone else's and is never touched. GitLab's
+    `.gitlab-ci.yml` is shared by every job in the repo, so it is never
+    rewritten: the current job is returned to paste."""
+    from fr.acceptance.ci import SCAFFOLD_PATHS
+
+    rel = SCAFFOLD_PATHS[ci_type]
+    path = root / rel
+    if not path.is_file():
+        return RefreshOutcome("missing", rel)
+    current = path.read_text()
+    fresh = render_workflow(ci_type, debt=debt)
+    if ci_type == "gitlab-ci":
+        if not re.search(r"^acceptance-report:\s*$", current, re.MULTILINE):
+            return RefreshOutcome("foreign", rel)
+        job = fresh[fresh.index("acceptance-report:") :]
+        return RefreshOutcome("paste", rel, job)
+    if not re.search(
+        r"^name:\s*acceptance-report\s*$", current, re.MULTILINE
+    ) or not _FR_STEP.search(current):
+        return RefreshOutcome("foreign", rel)
+    if current == fresh:
+        return RefreshOutcome("current", rel)
+    path.write_text(fresh)
+    return RefreshOutcome("rewritten", rel)
 
 
 # The matrix header's gate line, and the rule's CI bullet. GitHub's wording is
@@ -405,8 +464,8 @@ _CI_BULLET_GITHUB = """\
 _CI_BULLET = """\
 - CI: the acceptance job in `{path}` runs `fr acceptance check` on every
   pipeline{debt}."""
-_DEBT_TAIL_GITHUB = ', and upserts the weekly "Acceptance debt" issue'
-_DEBT_TAIL = ' and upserts the weekly "Acceptance debt" issue'
+_DEBT_TAIL_GITHUB = ', and upserts the weekly "Technical debt" issue'
+_DEBT_TAIL = ' and upserts the weekly "Technical debt" issue'
 _NO_CI_BULLET = """\
 - CI: none is configured. `fr acceptance check` runs locally, and no row may
   move to `ci` until the repo has a CI config (`fr acceptance init --with-ci`
@@ -516,7 +575,7 @@ def init(
         write_if_missing(scaffold_path, render_workflow(ci_type, debt=debt))
         if not debt:
             notices.append(
-                f'no debt  the weekly "Acceptance debt" issue step is omitted from '
+                f'no debt  the weekly "Technical debt" steps are omitted from '
                 f"{scaffold_path} — tracking is {tracking_type!r}, not the {ci_type} platform's "
                 f"own ({DEBT_PLATFORM[ci_type]}); see `fr services`"
             )

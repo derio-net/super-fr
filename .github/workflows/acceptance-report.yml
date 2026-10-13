@@ -2,11 +2,12 @@ name: acceptance-report
 
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warning annotations; the
-#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (PR, main).
 # - The built report (GitHub-linked at this ref) is uploaded as an artifact.
-# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
+# - The weekly run (and a dispatch with `debt`) upserts one "super-fr: Technical debt"
+#   issue (closed at zero debt) and refreshes a draft PR archiving long-merged plans.
 # Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
 # check` warns and verifies them on local runs, where siblings exist.
 # If PR-time path filters are added later, they must include every own-repo
@@ -22,10 +23,14 @@ on:
   schedule:
     - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
   workflow_dispatch:
+    inputs:
+      debt:
+        description: Run the technical-debt steps now
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   matrix:
@@ -33,6 +38,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install fr (from this checkout — super-fr self-hosts)
         # Deviation from the scaffolded template on purpose: installing from
@@ -54,23 +61,32 @@ jobs:
           name: acceptance-report
           path: docs/acceptance/report.html
           retention-days: 90
-      - name: Upsert acceptance-debt issue (weekly digest)
-        if: github.event_name == 'schedule'
+
+  # The debt job holds the write permissions and the dedicated token; the matrix
+  # job above (which runs a PR's code) holds neither. No `needs:` on matrix: a
+  # week with failing rows still updates the issue.
+  debt:
+    if: github.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install fr (from this checkout — super-fr self-hosts)
+        run: uv tool install ./packages/fr
+      - name: Technical debt issue (weekly)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          fr acceptance digest > /tmp/digest.md
-          # Idempotence keyed on the body marker `fr acceptance digest` emits,
-          # not the title — a pre-existing issue that merely says "Acceptance
-          # debt" in its title must not be hijacked.
-          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \
-                --json number --jq '.[0].number // empty')
-          if grep -q "No open acceptance debt." /tmp/digest.md; then
-            if [ -n "$num" ]; then
-              gh issue close "$num" --comment "Acceptance debt cleared — closing."
-            fi
-          elif [ -n "$num" ]; then
-            gh issue edit "$num" --body-file /tmp/digest.md
-          else
-            gh issue create --title "Acceptance debt" --body-file /tmp/digest.md
-          fi
+        run: fr debt issue --yes
+      - name: Archive sweep PR (weekly)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+        run: fr debt archive-pr --yes

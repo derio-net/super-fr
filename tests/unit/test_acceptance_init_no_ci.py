@@ -81,7 +81,7 @@ def test_init_with_ci_flag_scaffolds_the_pipeline(
     root = _repo(tmp_path)
     result = _invoke(root, monkeypatch, "init", "--with-ci")
     assert result.exit_code == 0, result.output
-    assert "glab " in (root / ".gitlab-ci.yml").read_text()
+    assert "fr debt issue --yes" in (root / ".gitlab-ci.yml").read_text()
 
 
 def test_init_scaffolds_the_workflow_beside_an_existing_github_ci(tmp_path: Path) -> None:
@@ -108,7 +108,7 @@ def test_init_leaves_an_existing_gitlab_ci_untouched(tmp_path: Path) -> None:
 def test_set_status_ci_refused_in_a_repo_without_ci(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = make_repo(tmp_path, row(id="target", status="skipped"), ci=False)
+    root = make_repo(tmp_path, row(id="target", status="unwired"), ci=False)
     matrix = root / "docs" / "acceptance" / "matrix.yaml"
     before = matrix.read_text()
     result = _invoke(
@@ -143,7 +143,7 @@ def test_add_ci_refused_in_a_repo_without_ci(
 def test_non_ci_statuses_need_no_ci(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row(id="target", status="not-implemented"), ci=False)
     result = _invoke(
-        root, monkeypatch, "set-status", "--id", "target", "--status", "skipped", "--notes", "n"
+        root, monkeypatch, "set-status", "--id", "target", "--status", "unwired", "--notes", "n"
     )
     assert result.exit_code == 0, result.output
 
@@ -151,7 +151,7 @@ def test_non_ci_statuses_need_no_ci(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_set_status_ci_allowed_with_a_ci_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = make_repo(tmp_path, row(id="target", status="skipped"), ci=True)
+    root = make_repo(tmp_path, row(id="target", status="unwired"), ci=True)
     result = _invoke(
         root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "n"
     )

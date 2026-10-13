@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-12-quota-pacing
 
 <!-- fr:journal kind=decision scope=plan id=p1-pacing-loop-only created=2026-10-12T06:55:45+00:00 phase=1 -->

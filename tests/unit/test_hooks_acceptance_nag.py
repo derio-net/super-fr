@@ -1,6 +1,6 @@
 """fr-acceptance-nag.sh — SessionStart hook injects open acceptance debt.
 
-Spec §6.1: fr-enabled repos surface open skipped/not-implemented rows into
+Spec §6.1: fr-enabled repos surface open unwired/not-implemented rows into
 every agent session (capped — counts + top-3 oldest). The hook must NEVER
 break session start: any missing precondition is a silent exit 0.
 """
@@ -47,7 +47,7 @@ def _git(root: Path) -> None:
 
 
 def test_nag_emits_capped_debt(tmp_path: Path) -> None:
-    rows = row(id="green") + "".join(row(id=f"debt-{i}", status="skipped") for i in range(5))
+    rows = row(id="green") + "".join(row(id=f"debt-{i}", status="unwired") for i in range(5))
     root = make_repo(tmp_path, rows, git=False)
     _git(root)
     result = run_hook(root)
@@ -60,7 +60,7 @@ def test_nag_emits_capped_debt(tmp_path: Path) -> None:
 
 
 def test_nag_emits_hermes_json_context_on_first_llm_call(tmp_path: Path) -> None:
-    root = make_repo(tmp_path, row(id="debt", status="skipped"), git=False)
+    root = make_repo(tmp_path, row(id="debt", status="unwired"), git=False)
     _git(root)
 
     result = run_hook(root, event="pre_llm_call", is_first_turn=True)
@@ -72,7 +72,7 @@ def test_nag_emits_hermes_json_context_on_first_llm_call(tmp_path: Path) -> None
 
 
 def test_nag_is_silent_after_hermes_first_turn(tmp_path: Path) -> None:
-    root = make_repo(tmp_path, row(id="debt", status="skipped"), git=False)
+    root = make_repo(tmp_path, row(id="debt", status="unwired"), git=False)
     _git(root)
 
     result = run_hook(root, event="pre_llm_call", is_first_turn=False)

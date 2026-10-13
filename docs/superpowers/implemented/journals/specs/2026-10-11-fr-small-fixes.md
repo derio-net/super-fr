@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-11-fr-small-fixes
 
 <!-- fr:journal kind=discovery scope=spec id=operator-brief created=2026-10-12T15:09:26+00:00 input=true -->

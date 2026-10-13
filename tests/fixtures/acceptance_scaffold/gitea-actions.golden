@@ -2,13 +2,14 @@ name: acceptance-report
 
 # The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warning annotations; the
-#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (branch, PR, main) —
 #   Gitea Actions supports GITHUB_STEP_SUMMARY (aliased GITEA_STEP_SUMMARY,
 #   confirmed against Gitea's own Actions-variables docs).
 # - The built report is uploaded as an artifact.
-# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
+# - The weekly run (and a dispatch with `debt`) upserts one "<repo>: Technical debt"
+#   issue (closed at zero debt) and refreshes a draft PR archiving long-merged plans.
 #
 # IMPORTANT: Gitea Actions must be enabled for this repo (Settings ->
 # Enable Repository Actions) even if the instance has Actions on globally,
@@ -31,6 +32,11 @@ on:
   schedule:
     - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
   workflow_dispatch:
+    inputs:
+      debt:
+        description: Run the technical-debt steps now
+        type: boolean
+        default: false
 
 jobs:
   matrix:
@@ -56,29 +62,21 @@ jobs:
           name: acceptance-report
           path: docs/acceptance/report.html
           retention-days: 90
-      - name: Upsert acceptance-debt issue (weekly digest)
-        if: gitea.event_name == 'schedule'
-        run: |
-          fr acceptance digest > /tmp/digest.md
-          # Idempotence keyed on the body marker `fr acceptance digest` emits,
-          # not the title — a pre-existing issue that merely says "Acceptance
-          # debt" in its title must not be hijacked.
-          num=$(tea issues list --state open --output json \
-                --fields index,body | python3 -c '
-          import json, sys
-          rows = json.load(sys.stdin)
-          for r in rows:
-              if "fr-acceptance-digest" in (r.get("body") or ""):
-                  print(r["index"])
-                  break
-          ')
-          if grep -q "No open acceptance debt." /tmp/digest.md; then
-            if [ -n "$num" ]; then
-              tea comments add "$num" "Acceptance debt cleared — closing."
-              tea issues close "$num"
-            fi
-          elif [ -n "$num" ]; then
-            tea issues edit "$num" --description "$(cat /tmp/digest.md)"
-          else
-            tea issues create --title "Acceptance debt" --description "$(cat /tmp/digest.md)"
-          fi
+
+  debt:
+    if: gitea.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+      - name: Technical debt issue (weekly)
+        run: fr debt issue --yes
+      - name: Archive sweep PR (weekly)
+        env:
+          FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+        run: fr debt archive-pr --yes

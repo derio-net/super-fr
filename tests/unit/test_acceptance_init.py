@@ -52,7 +52,7 @@ def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.Monkey
 
     rule = (root / ".claude" / "rules" / "acceptance-matrix.md").read_text()
     assert "SAME PR" in rule
-    assert "not-implemented" in rule and "skipped" in rule  # the status ladder
+    assert "not-implemented" in rule and "unwired" in rule  # the status ladder
 
     # The committed SET (report_local.html + report_linked.html +
     # report_linked.md) is generated; ad-hoc report.html is gitignored.
@@ -181,9 +181,22 @@ def test_workflow_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     assert "GITHUB_STEP_SUMMARY" in scripted
     assert "fr acceptance summary" in scripted
     assert "fr acceptance report --link-mode github" in scripted
-    assert "fr acceptance digest" in scripted
-    digest_steps = [s for s in steps if "gh issue" in s.get("run", "")]
-    assert all("schedule" in s.get("if", "") for s in digest_steps)
+    assert "fr debt" not in scripted  # the matrix job, which runs PR code, holds no debt step
+    assert wf["permissions"] == {"contents": "read"}
+    assert steps[0]["with"]["persist-credentials"] is False
+    debt = wf["jobs"]["debt"]
+    assert "schedule" in debt["if"] and "inputs.debt" in debt["if"]
+    assert "needs" not in debt  # a failing matrix never skips the debt run
+    assert debt["permissions"] == {
+        "contents": "write",
+        "issues": "write",
+        "pull-requests": "write",
+    }
+    debt_run = "\n".join(s.get("run", "") for s in debt["steps"])
+    assert "fr debt issue --yes" in debt_run and "fr debt archive-pr --yes" in debt_run
+    assert debt["steps"][0]["with"]["fetch-depth"] == 0
+    assert "FR_DEBT_TOKEN" in debt["steps"][0]["with"]["token"]
+    assert "debt" in wf["on"]["workflow_dispatch"]["inputs"]
     uploads = [s for s in steps if "upload-artifact" in s.get("uses", "")]
     assert uploads and uploads[0]["with"]["path"] == "docs/acceptance/report.html"
     header = (root / ".github" / "workflows" / "acceptance-report.yml").read_text()
@@ -293,7 +306,7 @@ def test_backfill_protocol(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert "uncited.md" in out
     assert "2026-01-01-toy" in out
     assert "one row per business acceptance" in out
-    assert "choose skipped" in out  # honesty calibration
+    assert "choose unwired" in out  # honesty calibration
     assert "fr acceptance check" in out
     assert "tests/" in out  # test-tree hint
 
@@ -374,7 +387,7 @@ def test_init_gitlab_backend_writes_gitlab_ci_at_root(
     ci_file = root / ".gitlab-ci.yml"
     assert ci_file.exists()
     text = ci_file.read_text()
-    assert "glab " in text
+    assert "fr debt issue --yes" in text and "fr debt archive-pr --yes" in text
     assert "gh issue" not in text
     assert "GITHUB_STEP_SUMMARY" not in text  # no equivalent — GitLab CI has none
     doc = yaml.safe_load(text)

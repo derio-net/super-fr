@@ -55,8 +55,15 @@ from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
-from fr.triage.check import batch_awaits_live, classify, is_awaiting_live, stale_dispatches
-from fr.triage.model import Batch, Facts, Judgement, Judgements, RedHandbackEvent, Severity
+from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.model import (
+    Batch,
+    Facts,
+    Judgement,
+    Judgements,
+    RedHandbackEvent,
+    Severity,
+)
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 
@@ -434,7 +441,7 @@ def next_up(
         open_ids = [
             i.key
             for i in facts.issues
-            if i.state == "open" and i.key in feature.ids and not is_awaiting_live(i)
+            if i.state == "open" and i.key in feature.ids and not is_set_apart(i, facts)
         ]
         if not open_ids:
             continue

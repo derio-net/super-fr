@@ -1,0 +1,35 @@
+# A version-4 matrix written before the `skipped` split (spec
+# 2026-10-11-debt-engine §D): one row per branch of the migration's rule.
+schema_version: 4
+org: example-org
+repo: widgets
+rows:
+  - id: walked-row
+    capability: demo
+    acceptance: A skipped row with a passing walk becomes walked
+    status: skipped
+    verify: live
+    walks:
+      - strategy: live
+        harness: claude-code
+        model: example-model
+        outcome: pass
+        at: "2026-10-01T10:00:00+00:00"
+        evidence: walked by hand
+  - id: owed-row
+    capability: demo
+    acceptance: A skipped row whose verify is post-merge owes a walk
+    status: skipped
+    verify: live
+  - id: plain-row
+    capability: demo
+    acceptance: A skipped row with neither becomes unwired
+    status: skipped
+  - id: process-row
+    capability: demo
+    acceptance: A process that is never automatable
+    status: skipped
+  - id: green-row
+    capability: demo
+    acceptance: Other statuses are untouched
+    status: ci

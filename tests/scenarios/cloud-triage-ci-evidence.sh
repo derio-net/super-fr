@@ -47,7 +47,9 @@ require_exit 0 "$out"
 
 record=docs/superpowers/runs/r1.records/verify.yaml
 mkdir -p "$(dirname "$record")"
-printf 'schema_version: 8\nrun: r1\nstep: verify\noutcome: done\nevidence: {tests: ci}\n' > "$record"
+record_version="$("$(candidate_python)" -c 'from fr.record.model import RECORD_SCHEMA_VERSION as v; print(v)')" \
+  || fail "cannot read the candidate's record version"
+printf 'schema_version: %s\nrun: r1\nstep: verify\noutcome: done\nevidence: {tests: ci}\n' "$record_version" > "$record"
 git add "$record" && git commit -qm "record" || fail "record commit"
 git push -q origin "$branch" || fail "push"
 cursor=docs/superpowers/runs/r1.yaml

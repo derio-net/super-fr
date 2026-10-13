@@ -9,7 +9,7 @@ the following updates the matrix in the SAME PR:**
 - adds or changes a spec `## Test Plan` (new spec ⇒ new rows; the CI
   staleness guard fails a spec with a Test Plan that no row cites)
 - adds tests that verify an existing row (add the ref to `levels`, move
-  `status` up: `not-implemented` → `skipped` → `ci`/`scheduled`)
+  `status` up: `not-implemented` → `unwired` → `ci`/`scheduled`)
 - ships a surface or capability a `not-implemented` row waits on
 - changes CI workflows that run matrix-referenced checks
 - discovers a red acceptance: set `status: failing` — the
@@ -18,9 +18,14 @@ the following updates the matrix in the SAME PR:**
 
 Statuses move **explicitly, never silently** — and they move with
 `fr acceptance set-status`, never a hand-edit: `ci` | `scheduled` (automated
-— the safe end) · `skipped` (verification exists, not in CI — warning,
-backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
-(fails CI).
+— the safe end) · `walked` (proven live, dated by its latest passing walk —
+`set-status --walk … --status walked` is the move after a walk) · `manual` (a
+process that is never automatable) · `unwired` (a test exists, not in CI —
+debt) · `walk-owed` (a live or post-merge walk is owed — debt) ·
+`not-implemented` (nothing exists — debt) · `failing` (fails CI). The debt set
+is `DEBT_STATUSES` (`fr.acceptance.model`); `walked` and `manual` are listed,
+never debt. The old `skipped` (matrix v4) is refused by name — `fr migrate
+artifacts --yes` splits it.
 
 ## How
 

@@ -166,7 +166,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
     engine-appended `events` (fr reads schemas 1–8 and writes 8, see
-    the waves paragraph below) and `facts.json` schema 3
+    the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
     (stages, open-batch rule, the one writer, the §3.F merge order),
@@ -232,6 +232,22 @@ uv workspace monorepo, version lockstepped across every manifest (see
     mode, and the `run`/`usage` groups refuse in-process on a devcontainer-mode
     workspace (`target: devcontainer` marker + container evidence), never on a host-worktree pod or an
     external marker.
+  - **`fr/debt`** (2026-10-11 spec, `debt-engine`) — what a repo owes, as one
+    `DebtReport` (`model.py`; `schema_version: 1`, frozen). `engine.compute(repo_root,
+    *, forge, now, stale_days)` is pure given the forge and the clock: acceptance from
+    `load_matrix` (an unreadable matrix is `available: false`, never zero), plans from
+    `fr.closeout.plan_sweep` (archivable with merge age from `git log` on the default ref,
+    stale when the plan dir, its run branch and its PR's `updatedAt` are all older than
+    `stale_days`), and owed items folded by `fold_owed(OwedSources)`, one per key
+    (`spec:`, `plan:`, `row:`, `issue:`), precedence journal > row > plan > issue (a new
+    source is one `OwedSources` field and one `OWED_PRECEDENCE` entry). `debt_total()`
+    is the one definition of zero debt. `render.py` has `text`, `markdown` (markers
+    `<!-- fr-technical-debt -->` and base64 `fr-debt-figures`) and `parse_figures`;
+    `forge.py` adapts `GhClient` to the engine's `DebtForge` protocol. `.fr/debt.yaml`
+    takes one key, `stale_days`. CLI: `fr debt [--json] [--stale-days N] [--offline]`
+    (`commands/debt_cmd.py`), read-only, so `debt` is in `READ_ONLY_COMMANDS`;
+    `fr acceptance digest` re-renders the report's Acceptance section. `DEBT_STATUSES`
+    (`acceptance/model.py`) is the one status set `open_rows`, status and the digest count.
   - **`fr/record`** (2026-09-25 spec, `lean-cost-aware-process` §5.C) — step
     records: one YAML per agent step at
     `docs/superpowers/runs/<run-id>.records/<step>[__<item>].yaml` (artifact kind

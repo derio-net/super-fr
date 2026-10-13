@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 4
+  title: weekly Technical debt issue, archive PR, forge adapters, CI scaffolds (R9–R13,
+    R26)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - debt-weekly-issue-rename
+  - debt-archive-pr-weekly
+  - debt-ci-scaffold-refresh
+  - forge-adapter-debt-ops
+  tier: standard
+  files:
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_*.py
+  - packages/fr/src/fr/glab.py
+  - packages/fr/src/fr/tea.py
+  - packages/fr/src/fr/hostclient.py
+  - packages/fr/src/fr/debt/*
+  - packages/fr/src/fr/commands/debt_cmd.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/acceptance/scaffold.py
+  - .github/workflows/acceptance-report.yml
+  - tests/fixtures/acceptance_scaffold/*
+  - tests/unit/*
+  - docs/acceptance/*
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: Forge adapter operations (spec §B Adapters, R26)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED in tests/unit/test_forge_adapter_debt_ops.py with recorded-command doubles: `edit_issue`, `list_open_issues_with_body`, `create_pr(draft=True)`, `open_pr_for_head`, `close_issue` on GhClient (gh), RealGhRestClient (REST routes only), glab and tea build the right commands/routes; an operation a forge lacks raises UnsupportedForgeOperation by name.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: implement on each client (protocol in ghclient.py, real_ghclient.py, real_ghrestclient.py, real_glabclient.py, real_teaclient.py).
+- number: 2
+  title: fr debt issue (spec §B, R9–R11)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED in tests/unit/test_debt_issue.py: without --yes previews; creates `<repo>: Technical debt`; renames a legacy `fr-acceptance-digest` issue in place and rewrites its body with both new markers; refreshes an existing new-marker issue; uses the oldest of several and warns; closes with a comment at zero debt.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: `fr debt issue` in commands/debt_cmd.py over `fr.hostclient.client_for`.
+- number: 3
+  title: fr debt archive-pr (spec §B, R12)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED in tests/unit/test_debt_archive_pr.py on a git fixture with a fake forge: only archivable plans with merge age > stale_days selected; R19-held plans skipped and listed "held: Test Plan outcomes missing"; branch chore/debt-archive-sweep force-pushed with lease; one draft PR opened or refreshed; FR_DEBT_TOKEN preferred, fallback note in the body; a create-PR permission refusal prints a `::warning::` naming both remedies and exits 0; nothing selected exits 0.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: `fr debt archive-pr` running `fr archive <plan-dir>` as a subprocess.
+- number: 4
+  title: Scaffolds, --refresh-ci, this repo's workflow (spec §B, R13)
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      RED: regenerate goldens in tests/fixtures/acceptance_scaffold/ (fetch-depth 0, `debt` dispatch input, `fr debt issue --yes` + `fr debt archive-pr --yes`, GitHub contents/pull-requests write); tests in tests/unit/test_acceptance_refresh_ci.py: `fr acceptance init --refresh-ci` rewrites an fr-scaffolded GitHub/Gitea file (legacy digest step or new step), refuses a foreign file, and for GitLab refuses with the job to paste.
+  - id: P4.T4.S2
+    text: |-
+      GREEN: scaffold.py templates + `--refresh-ci`; update .github/workflows/acceptance-report.yml the same way (keeping its self-hosted fr install); `uv run pytest tests/unit/test_ci_budget.py -q --no-cov` stays green.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+    P4.T4.S2:
+      state: x
+      ticked_at: '2026-10-12T00:23:24+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T00:23:24+00:00'
+    note: null
+    observed_prs: []

@@ -11,12 +11,15 @@
 #               (a .py fragment names a test, pytest-style: #TestX::test_y —
 #               never a #L<n> line, which rots as code moves; gh#531)
 #               ([] = level does not verify this row)
-#   status:     ci | scheduled | skipped | not-implemented | failing
+#   status:     ci | scheduled | unwired | walk-owed | walked | manual
+#               | not-implemented | failing
 #     ci               automated on every PR — cannot drift silently
 #     scheduled        automated on cron/path triggers
-#     skipped          verification exists but does not run in CI (proven
-#                      live once / manual walk) → CI warning, backfill owed
-#     not-implemented  no test or surface exists yet → CI warning
+#     unwired          a test exists but does not run in CI → debt, CI warning
+#     walk-owed        a live or post-merge walk is owed → debt, CI warning
+#     walked           proven live, dated by its latest passing walk
+#     manual           a process that is never automatable
+#     not-implemented  no test or surface exists yet → debt, CI warning
 #     failing          known red → `fr acceptance check` exits 2, CI FAILS
 #   notes:      evidence detail, drift context
 #
@@ -26,7 +29,7 @@
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
-schema_version: 4
+schema_version: 5
 org: derio-net
 repo: super-fr
 rows:
@@ -75,9 +78,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_plan_acceptance_links.py
-    status: skipped
-    notes: Mechanics unit-pinned per-PR; end-to-end toy walk (Test Plan item 4) owed
-      post-merge.
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      end-to-end toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap.
+      Mechanics unit-pinned per-PR.'
   - id: acceptance-added-since
     capability: Acceptance matrix
     acceptance: Mid-flight row additions are diffable against a base ref and defended
@@ -87,9 +91,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_status_add.py
-    status: skipped
-    notes: 'CLI diff ci-pinned; the PR-body defense is process — demonstrated in PR
-      #352, not automated.'
+    status: manual
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      PR-body defense is a review process (demonstrated in PR #352), never automatable;
+      the CLI diff itself is ci-pinned.'
   - id: acceptance-nag-channels
     capability: Acceptance matrix
     acceptance: Session start surfaces open debt (capped), fr status carries the summary,
@@ -101,10 +106,18 @@ rows:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py
       - super-fr:tests/unit/test_plan_acceptance_links.py
       - super-fr:tests/unit/test_acceptance_init.py
-    status: skipped
-    notes: Hook, digest formatter, and branch/PR/main Actions summary scaffold are
-      ci-pinned; live weekly upsert/close remains unverified until the first scheduled
-      run.
+    status: walked
+    notes: 'walked (p1-r4): the live weekly upsert has been observed, issue #363 refreshed
+      by the schedule on 2026-10-05; hook, digest formatter and Actions summary scaffold
+      are ci-pinned. The close at zero debt is not yet observed.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-05T00:00:00Z'
+      evidence: issue derio-net/super-fr#363 'Acceptance debt' is open and was last
+        refreshed by the scheduled acceptance-report run (github-actions) on 2026-10-05
   - id: isolation-suite-lifecycle
     capability: Isolation
     acceptance: 'Operator can init a devcontainer profile and run isolated work: up
@@ -116,9 +129,18 @@ rows:
       - super-fr:tests/unit/test_isolation.py
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/unit/test_init_scaffold.py
-    status: skipped
-    notes: CLI + scaffold unit-pinned; the live worktree+container walk was proven at
-      the 2.4.0 release, not in CI.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): CLI +
+      scaffold unit-pinned; the live worktree+container walk was proven at the 2.4.0
+      release, dated by that release''s tag.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-06-04T00:00:00Z'
+      evidence: the live worktree+container walk proven at the 2.4.0 release (tag v2.4.0,
+        2026-06-04)
   - id: isolation-guard-base-deny
     capability: Isolation
     acceptance: While an fr pipeline is active, base-repo-cwd Bash is denied and worktree
@@ -349,16 +371,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
-    status: skipped
-    notes: >-
-      Unit test guards mirror drift (CI). Test Plan step 1 walked post-merge
-      (2026-07-09, fresh isolation devcontainer on merged main, no prior
-      install step): `opencode debug skill` in the checkout discovered all
-      9 `fr-*` skills, each resolving to
-      `.opencode/skills/<name>/SKILL.md` in the worktree — confirms the
-      "clone and use, no install" claim. Not automated in CI (requires a
-      live `opencode` binary) — backfill to `ci` owed if that becomes
-      scriptable.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      step 1 walked live post-merge 2026-07-09; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-09T00:00:00Z'
+      evidence: 'Test Plan step 1 post-merge walk: opencode debug skill in a fresh isolation
+        devcontainer on merged main discovered all fr-* skills'
   - id: opencode-skills-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get super-fr's skills available
@@ -368,15 +391,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_skills.py
-    status: skipped
-    notes: >-
-      Unit test guards the install.sh wiring (CI). Test Plan step 2 walked
-      post-merge (2026-07-09, fresh isolation devcontainer, scratch $HOME,
-      merged main): `scripts/install.sh` with `OPENCODE_SKILLS_INSTALL=1`
-      delivered all 9 skills to `$HOME/.config/opencode/skills/`, and
-      `scripts/install.sh --uninstall` removed them cleanly (dir emptied).
-      Not automated in CI — backfill owed if that becomes scriptable
-      end-to-end.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      step 2 walked live post-merge 2026-07-09; install.sh wiring guarded in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-09T00:00:00Z'
+      evidence: 'Test Plan step 2 post-merge walk: install.sh with OPENCODE_SKILLS_INSTALL=1
+        delivered the skills, --uninstall removed them (scratch HOME)'
   - id: opencode-isolation-enforcement
     capability: OpenCode adaptation
     acceptance: Edits to tracked source in an fr-isolation-enabled repo are blocked
@@ -404,16 +429,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
-    status: skipped
-    notes: Unit test guards mirror drift (CI) — tests/unit/test_tripwire_opencode_commands_sync.py
-      passes (2026-07-08). Test Plan steps 1-2 walked post-merge (2026-07-08, fresh
-      clone of merged main) — `opencode debug config` resolved all 9 generated commands
-      (fr-goal, fr-plan, ... — zero install), and a live `opencode run --command fr-progress`
-      call (opencode/north-mini-code-free, no arguments) correctly invoked the skill
-      tool with name=fr-progress and got a sensible response — confirms the empty-$ARGUMENTS
-      case end to end. Not automated in CI (requires a live opencode binary + model
-      call) — backfill owed if that becomes scriptable, same pattern as the sibling
-      opencode-skills-in-repo row.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      steps 1-2 walked live post-merge 2026-07-08; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: opencode/north-mini-code-free
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan steps 1-2 post-merge walk: opencode debug config resolved
+        the generated commands; opencode run --command fr-progress invoked one'
   - id: opencode-commands-installer
     capability: OpenCode adaptation
     acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
@@ -423,16 +449,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_install_copies_opencode_commands.py
-    status: skipped
-    notes: Unit test guards the install.sh wiring (CI) — tests/unit/test_install_copies_opencode_commands.py
-      passes (2026-07-08). Live-verified twice — pre-merge (2026-07-08, scratch HOME,
-      VK_INSTALL_SKIP_PREFLIGHT=1) and re-confirmed post-merge as Test Plan step 3
-      (2026-07-08, fresh clone of merged main, real preflight passing — no skip
-      needed) — both times full scripts/install.sh delivered all 9 commands
-      byte-identical to .opencode/commands/, and --uninstall removed them cleanly
-      with no collateral damage. Not automated in CI (requires real filesystem/HOME
-      side effects) — backfill owed if that becomes scriptable, same pattern as the
-      sibling opencode-skills-installer row.
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      pre- and post-merge 2026-07-08; install.sh wiring guarded in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan step 3 post-merge walk: full scripts/install.sh from a fresh
+        clone of merged main delivered all commands'
   - id: cncd-runner-ingest-dispatch
     capability: CNCD runner
     acceptance: An operator can dispatch an eligible tracked plan phase to cncd via
@@ -459,28 +486,17 @@ rows:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test__urls.py
-    status: skipped
-    notes: 'LIVE-VERIFIED 2026-09-19 against a self-hosted GitLab (gh-486): fr apply
-      rendered, observed, diffed and applied two phases as GitLab Issues with correctly-shaped
-      labels (#-prefixed 6-hex, applied once), re-ran clean, and propagated a state
-      change then re-converged. Transcript in the PR. The row was previously ''ci''
-      for a capability broken FOUR independent ways, none findable by unit test: the
-      missing mandatory ref parameter; the Issue web_url being /-/work_items/N, which
-      fr stored and then refused to parse (crashing observe on every re-apply, on gitlab.com
-      too); ensure_labels aborting the whole apply on a 409 for a label that already
-      existed, a tolerance its own docstring had claimed since 2026-07-09; and the body
-      diff never converging because GitLab strips the rendered trailing newline. ''skipped'',
-      NOT ''ci'': CI cannot reach a private instance, so the live half is hand-run per-PR.
-      The unit half now asserts the REQUEST and the real captured error vocabulary,
-      so the arg-blind ''lambda args:'' mocks that hid all of this are gone. LIVE 2026-09-24
-      (multi-backend P9.T1.S1), a self-hosted GitLab (host/user/project redacted; private
-      scratch project, deleted after): every RealGlabClient operation fr apply/observe
-      uses passed when driven directly (ensure_labels create+converge, colour round-trip,
-      create_issue returning /-/work_items/N, view, label add/remove, comment, list_linked_prs
-      via related_merge_requests, pr_status_by_url, file_exists/list_dir/read_file,
-      close). related_merge_requests is eventually consistent (empty right after the
-      MR, populated seconds later). NOT walked: an end-to-end `fr apply` on a GitLab-backed
-      plan, so the status stays skipped.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE-VERIFIED
+      2026-09-19 against a self-hosted GitLab (host redacted); unit refs in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-19T00:00:00Z'
+      evidence: 'gh-486 live run against a self-hosted GitLab (host redacted): render,
+        observe, diff, apply converged; transcript in the PR'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
@@ -656,10 +672,11 @@ rows:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_phase_executor_agent.py
       - super-fr:tests/unit/test_install_allowlists_phase_executor.py
-    status: skipped
-    notes: Skill wiring + agent def + allowlist helper unit-pinned per-PR; the live
-      per-phase dispatch was demonstrated by this feature's own fr-goal run, not yet a
-      CI integration test (backfill owed).
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch
+      was demonstrated by the feature''s own fr-goal run, but name no dated evidence
+      to record as a walk; wiring unit-pinned. Re-walk and record it with set-status
+      --walk.'
   - id: fr-goal-journal-handoff-complete
     capability: fr-goal subagent execution
     acceptance: A fresh subagent given only fr journal render + spec + its phase yaml
@@ -671,10 +688,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_journal_cmd.py
-    status: skipped
-    notes: render/check unit-pinned; the completeness bar (a fresh subagent implements
-      from journal+spec+phase alone) was met live in this feature's own run — a CI
-      integration test dispatching fr-phase-executor is owed.
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
+      live in the feature''s own run, but name no dated evidence to record as a walk;
+      render/check unit-pinned. Re-walk and record it with set-status --walk.'
   - id: fr-goal-phase-tiering
     capability: fr-goal subagent execution
     acceptance: fr-plan annotates each phase with a tier; the orchestrator dispatches
@@ -701,8 +718,8 @@ rows:
       closes that gap: they pin that a tier written in a --phases-file reaches the dispatch
       brief as resolved_tier. Still NOT claimed: no automated level dispatches a real
       subagent (Claude Code Agent, OpenCode task tool, or Hermes delegate_task) and
-      reads back a session row''s model -- that live claim stays with opencode-subagent-dispatch
-      at skipped.'
+      reads back a session row''s model -- that live claim stays with opencode-subagent-dispatch,
+      which records its live walks (walked, not in CI).'
   - id: fr-goal-pr-body-derived
     capability: fr-goal subagent execution
     acceptance: The fr-goal PR body findings and decisions sections are generated by
@@ -727,15 +744,17 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_fr_debugging_journal.py
-    status: skipped
-    notes: 'SKILL.md wiring (debug-scope add/render, hypothesis/ruled-out trail) content-pinned
-      per-PR; the live debugging walk that records to a debug journal is demonstrated-not-
-      automated (backfill owed). First live walk recorded at
-      journals/debug/2026-09-08-session-unbind-hook-cancelled.md — repro, three ruled-out
-      entries, root-cause and finding all written via `fr journal add --scope debug` as the
-      investigation proceeded, PR body derived from `fr journal render --scope debug`. Kept
-      at skipped rather than flipped to ci because one demonstration is not automation, and
-      the backfill owed here is a harness that runs the walk.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): a live
+      debugging walk recorded to the 2026-09-08 session-unbind-hook-cancelled debug
+      journal; SKILL.md wiring content-pinned per-PR.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-08T00:00:00Z'
+      evidence: live debugging walk recorded at docs/superpowers/journals/debug/2026-09-08-session-unbind-hook-cancelled.md
   - id: fr-journal-scope-keyed
     capability: fr-goal subagent execution
     acceptance: 'The fr journal primitive is scope-keyed (spec|plan|debug) and pipeline-agnostic:
@@ -811,10 +830,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_fr_goal_hermes_dispatch.py
       - super-fr:tests/unit/test_models_hermes_first_run.py
-    status: skipped
-    notes: Wiring unit-tested (fr-goal names delegate_task; no guessed hermes model
-      bindings ship, so fr-goal asks the operator per tier on first run). End-to-end
-      run is post-merge manual Test Plan item 6 (toy feature in real Hermes).
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): wiring
+      is unit-tested; the end-to-end run is post-merge Test Plan item 6 (a toy feature
+      in real Hermes), a walk still owed, not a CI wiring gap.'
   - id: acceptance-report-tracked
     capability: Acceptance report
     acceptance: The acceptance HTML report is a tracked, version-controlled artifact
@@ -1362,7 +1381,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_no_direct_click_import.py
-    status: skipped
+    status: unwired
     notes: Spec 8.0. 4.0.0 shipped a direct import of click - typer's TRANSITIVE dep,
       not one fr declares - so the installed CLI could not start while the full local
       suite stayed green; only CI's uv-tool path caught it. The tripwire pins that one
@@ -2087,14 +2106,18 @@ rows:
       unit:
       - super-fr:tests/unit/test_real_glabclient.py
       - super-fr:tests/unit/test__urls.py
-    status: skipped
-    notes: 'Unit half in CI asserts the REQUEST (every contents read pins ref=HEAD,
-      captured via a recording double rather than an arg-discarding mock). Live half
-      hand-run 2026-09-19 against a self-hosted GitLab whose default branch is ''master'',
-      which is why ref=HEAD rather than a branch name: file_exists True for a present
-      file and False for an absent one, list_dir real entries, read_file real text —
-      all four broken before this PR. ''skipped'' because CI cannot reach a private
-      instance.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live half
+      hand-run 2026-09-19 against a self-hosted GitLab (host redacted); request shape
+      unit-pinned in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-19T00:00:00Z'
+      evidence: 'hand-run against a self-hosted GitLab (host redacted, default branch
+        master): file_exists, list_dir and read_file all real'
   - id: gitlab-selfhosted-host-targeting
     capability: Multi-backend git hosting
     acceptance: 'An operator whose GitLab is self-hosted reaches it by declaring ''backend:
@@ -2108,17 +2131,10 @@ rows:
       - super-fr:tests/unit/test_hostclient.py
       - super-fr:tests/unit/test_glab.py
       - super-fr:tests/unit/test_pr_observe.py
-    status: skipped
-    notes: 'All three clauses now hold. (a) ''backend: gitlab'' ALONE suffices — verified
-      live from a checkout with no host: key: host_for derived gitlab.internal.example
-      from the git remote and client_for built a RealGlabClient carrying it. (b) ''host:''
-      overrides the derived value. (c) A host declared for a backend fr cannot target
-      warns once, on next use rather than at scaffold time. Also closes the bare-URL
-      case the config tiers cannot reach: backend_for_url reads the forge off the URL
-      path, so the VK bridge stops resolving a self-hosted GitLab MR to the GitHub adapter.
-      KNOWN LIMIT, stated in the PR: pr_state''s Issue auto-close still targets the
-      SaaS host, blocked on closer''s 3-arg arity, not on backend resolution. ''skipped''
-      because the live half is hand-run.'
+    status: walk-owed
+    notes: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
+      against a self-hosted GitLab (host redacted) but give no date to record a walk
+      with; unit refs in CI. Re-walk and record it with set-status --walk.'
   - id: forge-errors-are-not-absence
     capability: Multi-backend git hosting
     acceptance: A malformed or unauthorized GitLab request surfaces as an error rather
@@ -2166,56 +2182,19 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
-    status: skipped
-    notes: 'LIVE-VERIFIED 2026-09-21 — the post-merge run this row was owed. A real
-      headless /fr-goal on OpenCode (github-copilot/gpt-5.6-terra) dispatched a phase:
-      opencode.db child session ses_f3b00175… with parent_id set, agent=fr-phase-executor-mechanical
-      (the tier the plan phase declared), on the answered model, with its own usage
-      and its 32 tool calls recorded under the child rather than the orchestrator. Evidence:
-      the gh#494 phase-6 and gh#498 phase-4 journals (p6-live-evidence, p4-live-evidence).
-      STILL skipped, correctly: reproducing it needs a live opencode binary and a model,
-      neither available in CI. SCOPE, unchanged from before and still true: the headline
-      proves a genuine dispatch, not that tiering resolved — the tiering claim lives
-      in opencode-tier-binding-reaches-dispatch. The headline cannot be corrected because
-      there is no fr acceptance edit verb; that is #522, since folded into #510. CORRECTION:
-      an earlier version of this note said a follow-up for that verb had been filed.
-      It had not — #522 found the claim false. #522 became that follow-up and is now
-      folded into #510. Found by the same run, and filed: #537 (fr''s cursor names the
-      wrong holder for an OpenCode dispatch, and cannot name the tier agent that ran)
-      and #538 (fr-goal never asked the model-per-tier question it is gated on). DISCRIMINATING
-      RUN, 2026-09-22 (the model-level proof the earlier runs could not give): the 2026-09-21
-      run''s orchestrator and child both ran on gpt-5.6-terra and all three tiers were
-      bound to it, so its session-row model could not tell a tiered dispatch from an
-      untiered one; its proof rested on the agent NAME alone, for one tier. This run
-      bound FOUR distinct models - mechanical github-copilot/gpt-5.6-luna, standard
-      github-copilot/gpt-5.6-terra, hard github-copilot/gpt-5.6-sol, orchestrator github-copilot/claude-sonnet-5
-      - in a throwaway local repo (fr-tier-proof, local bare origin, no forge resource)
-      whose plan declared phases 1/2/3 as mechanical/standard/hard. opencode.db, root
-      ses_f37014a55ffePrm0GvcXNde25v (build, claude-sonnet-5), three parented children
-      in phase order: ses_f36fd32e5ffeLnEhUiVhc8dhwj fr-phase-executor-mechanical gpt-5.6-luna
-      $0.0132; ses_f36fb6911ffeFuz6aUuFfsbWjz fr-phase-executor-standard gpt-5.6-terra
-      $0.1326; ses_f36f9f94dffeXlvlEQ6t1mCyBs fr-phase-executor-hard gpt-5.6-sol $0.3867
-      (run total $1.71). All six assertions PASS: three children; declared tier -> tier
-      agent in order; each child on its tier''s binding (read from the installed agent
-      files, last written before the run and stable through it); NO child on the session
-      model; child models pairwise distinct; bindings themselves distinct, i.e. the
-      test could have failed. That closes the gap the scope note above records: tiering
-      resolves to the bound MODEL per tier, not merely to a tier-named agent. #537 reproduced
-      in the same run: fr''s cursor records agent_type super-fr:fr-phase-executor for
-      all three, never the tier agent that ran - though it does record the three child
-      session ids, matching opencode.db exactly, so the two stores can be joined by
-      session id. Still skipped: live-only, no CI level. PAID RUN (2026-09-23, #564
-      Test Plan step 3, fr 4.17.2, real feature #457 -> PR #586, orchestrator build
-      on github-copilot/gpt-6-luna). Cursor vs opencode.db: both phases (plan tier mechanical)
-      were dispatched to fr-phase-executor-mechanical on github-copilot/claude-haiku-4.5
-      = the binding; each cursor holder id equals its child session id exactly; both
-      review-phase reviewer= ids equal the dispatched general child sessions exactly
-      (on gpt-6-luna); every child is parented to the root; deliver carries tests=<log>.
-      The cursor''s agent_type still reads super-fr:fr-phase-executor, never the tier
-      agent (#537). The question batch WAS asked and the turn ended; the operator answered.
-      But brainstorm was resolved with no --emitted spec= and no --answered-by operator,
-      so the cursor records answered_by=agent and no spec, and fr accepted it (#587).
-      Row stays skipped (live-only).'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE-VERIFIED
+      2026-09-21 (and a discriminating four-model run 2026-09-22): a real headless /fr-goal
+      on OpenCode dispatched each phase to its tier''s child session.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: github-copilot/gpt-5.6-terra
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: headless /fr-goal on OpenCode dispatched a phase to fr-phase-executor-mechanical
+        as a child session; gh#494 phase-6 and gh#498 phase-4 journals (p6-live-evidence,
+        p4-live-evidence)
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
@@ -2542,17 +2521,25 @@ rows:
     levels:
       int:
       - super-fr:docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md
-    status: skipped
-    notes: 'not-implemented -> skipped on 2026-09-21: driven live post-merge on the
-      installed fr 4.12.0, one throwaway one-phase /fr-goal per harness (Claude Code
-      and OpenCode; ids and the OpenCode model redacted in the evidence file). Both
-      wrote the same attempt keys, each DETECTING its own harness with no --harness
-      flag, and both refused a second advance with exit 2 naming the holder. skipped,
-      not ci: a manual live run no CI job can repeat. The run surfaced five defects
-      (C1-C5 in the evidence file), all fixed in #527 - notably that on OpenCode the
-      child session id is only returned when the blocking task tool returns, which fr
-      now states in the dispatch-holder-identity parity row. run-pickup-on-another-host
-      and run-idle-reprompt-opencode were NOT exercised and stay not-implemented.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): driven
+      live post-merge 2026-09-21 on fr 4.12.0, one /fr-goal per harness (Claude Code
+      and OpenCode), both walks recorded.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md (Claude
+        Code run)
+    - strategy: live
+      harness: opencode
+      model: redacted
+      outcome: pass
+      at: '2026-09-21T00:00:00Z'
+      evidence: docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md (OpenCode
+        run, model redacted in the evidence file)
   - id: run-advance-refuses-running
     capability: Run state
     acceptance: An operator re-entering the loop cold is told to wait rather than handed
@@ -3272,21 +3259,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_skill_tokens.py
-    status: skipped
-    notes: 'Moved not-implemented → skipped, NOT ci, deliberately: verification now
-      exists but it is prose-level only, and calling that ci would be an overclaim.
-      test_skill_tokens.py::test_fr_phase_executor_names_the_dispatch_refusal and ::test_fr_execute_names_the_dispatch_refusal
-      pin that the BLOCKER-not-a-tick contract is PRESENT on both surfaces — the canonical
-      agent file and the fr-execute skill. They cannot show an executor OBEYED it: that
-      behaviour is agent-side and not unit-testable, and the only thing that could demonstrate
-      it is a live run against a plan containing a dispatch step — which #428''s lint
-      now refuses to let anyone author. So the enforcement is a pair: the lint stops
-      the step being written (executably pinned by goal-agentic-dispatch-purity and
-      goal-dispatch-lint-precision) and this prose catches a step that predates the
-      lint or arrives from outside. On Hermes the prose IS the whole enforcement — nothing
-      there denies a further delegate_task — which is why the contract lives in the
-      skill and not only in the Claude Code agent file. Backfill owed: a live executor
-      run against a pre-lint dispatch step.'
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      unit tests pin only that the BLOCKER-not-a-tick contract is present in the prose;
+      the refusal itself is behaviour only a live executor run proves, so a walk is
+      owed.'
   - id: run-resolve-requires-briefing
     capability: Run cursor
     acceptance: A grouped unit cannot be resolved through its own member resolve until
@@ -3461,17 +3438,17 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py#test_advance_records_the_observed_model_of_an_orchestrator_run_step
       - super-fr:tests/unit/test_run_cli.py#test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model
-    status: skipped
-    notes: 'C3. The cursor stored ''opus'' (the claim) while the transcript fr already
-      read said claude-opus-5; the whole fr-goal run''s orchestrator was claude-sonnet-5
-      and nothing recorded it. Record + warn, never block. LIVE, Run C (#592, a real
-      Claude Code fr-goal run on #526, 2026-09-23): every attempt records the served
-      model id (claude-opus-5-5 for the orchestrator and executors, claude-sonnet-5
-      for reviewers), not an alias. gh#531: line anchors re-pointed to the tests they
-      were recorded for (they had slid onto other tests as lines moved). gh#531: the
-      served-model-over-alias half lost its only test in #628 (test_resolve_records_the_served_model_not_the_claimed_alias,
-      deleted) — that half is proven live (Run C) only, so ci → skipped until a test
-      pins it again.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE,
+      Run C (#592, 2026-09-23); unit refs in CI.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-09-23T00:00:00Z'
+      evidence: 'Run C (#592): a real Claude Code fr-goal run on #526 recorded the served
+        model id on every attempt'
   - id: run-deliver-tests-log-opencode
     capability: Run cursor
     acceptance: 'On OpenCode, deliver''s tests=<log> is verified against the session
@@ -3670,13 +3647,17 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: skipped
-    notes: 'Walked live post-merge 2026-09-22 (Test Plan 11) on Claude Code 2.1.278
-      / Opus 5: repo scope as a SYNC of an OpenCode-written ranking (1 new issue judged,
-      0 existing changed) and org scope over live derio-net (18/19 repos collected,
-      1 skipped with its reason, 112 issues rendered, willikins ranked by operator scope).
-      Both found fr-triage from a plain ask. Evidence: plan journal walk-claude-code-repo
-      and walk-claude-code-org. Not in CI: needs a live harness and model.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): walked
+      live post-merge 2026-09-22 (Test Plan 11); evidence in the plan journal.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: Opus 5
+      outcome: pass
+      at: '2026-09-22T00:00:00Z'
+      evidence: 'Test Plan 11 post-merge walk on Claude Code 2.1.278: repo-scope sync
+        and org scope over derio-net; plan journal walk-claude-code-repo'
   - id: triage-skill-opencode
     capability: Backlog triage
     acceptance: An agent on OpenCode, which has no Artifact tool, can follow fr-triage
@@ -3684,12 +3665,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: skipped
-    notes: 'Walked live post-merge 2026-09-22 (Test Plan 12) on OpenCode with github-copilot/gpt-5.6-terra,
-      a non-Claude model: first-run repo triage (33 issues judged into a new judgements.yaml,
-      board rendered, no forge writes); fr-triage discovered from a plain ask. It surfaced
-      a skill defect (the YAML example teaches invalid YAML), fixed separately. Evidence:
-      plan journal walk-opencode. Not in CI: needs a live OpenCode session.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): walked
+      live post-merge 2026-09-22 (Test Plan 12) with a non-Claude model; evidence in
+      plan journal walk-opencode.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: github-copilot/gpt-5.6-terra
+      outcome: pass
+      at: '2026-09-22T00:00:00Z'
+      evidence: 'Test Plan 12 post-merge walk on OpenCode: first-run repo triage; plan
+        journal walk-opencode'
   - id: triage-skill-hermes
     capability: Backlog triage
     acceptance: An agent on Hermes can follow fr-triage end to end
@@ -4046,14 +4033,17 @@ rows:
       - super-fr:tests/unit/test_scaffold_java_version.py
       - super-fr:tests/unit/test_init_scaffold.py
       - super-fr:tests/unit/test_scaffold_tools.py
-    status: skipped
-    notes: 'gh#574: --tool java/maven map to the java devcontainer feature (installMaven).
-      The version is detected from version files, then the root pom.xml; unit tests
-      pin this. Live walk 2026-09-23 on arm64 (journal p6-live-574, recorded in the
-      PR): with pom.xml maven.compiler.release 17, scaffold printed ''java 17 (from
-      pom.xml maven.compiler.release)''. In the container, mvn -v reported Maven 3.9.16
-      on Java 17.0.20.1 and java -version reported 17.0.20.1. The status is skipped
-      because that live container walk is not in CI.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live walk
+      2026-09-23 on arm64 (journal p6-live-574); unit-pinned.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-23T00:00:00Z'
+      evidence: 'live walk on arm64, journal p6-live-574: scaffold detected java 17
+        from pom.xml; mvn -v ran in the container'
   - id: scaffold-host-cli-arch
     capability: fr init scaffold
     acceptance: glab/tea postCreate installs the binary for the container's own architecture,
@@ -4193,11 +4183,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
-    status: skipped
-    notes: 'Both harnesses walked live: Claude Code (PR #609) and OpenCode in devcontainer
-      mode (PR #679, usage/2026-09-26-fix-659-isolation-gc-fetch.yaml, 7/7 steps). Stays
-      skipped until #637 (Claude Code omits subagent cost) is fixed; OpenCode needs
-      an explicit session binding until #636.'
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both
+      harnesses were walked live (PR #609, PR #679), but the row stays owed until #637
+      (Claude Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit
+      binding until #636.'
   - id: light-path-shape
     capability: fr-goal-cost
     acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light`
@@ -4540,17 +4530,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-is-the-contract-design.md#R2
     levels: {}
-    status: skipped
-    notes: 'Verified live 2026-09-29 (super-fr-3 take 12: feature-C brief, OpenCode
-      1.18.33, gpt-6-sol everywhere, fr 5.0.0, fr-goal-light@1, self-hosted GitLab without
-      CI): the spec journal carries the brief verbatim (basket-goal-brief, input=true)
-      and the Q1 answer verbatim (decision missing-model-staff-check); the spec has
-      a plain R1..R7 list; spec-plan-review ran once (one fr-spec-reviewer dispatch,
-      4 in-scope findings fixed, no loop); deliver resolved (MR merged). $3.50 / 32.0
-      min to deliver. Hit the 5.0.0 plan fr_version ceiling bug at the plan step; the
-      agent widened _meta.yaml by hand and went on. Passes for this harness and model
-      only (#822).'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): verified
+      live 2026-09-29 (super-fr-3 take 12) for this harness and model only (#822).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: gpt-6-sol
+      outcome: pass
+      at: '2026-09-29T00:00:00Z'
+      evidence: 'super-fr-3 take 12 (feature-C brief, OpenCode 1.18.33, fr 5.0.0, fr-goal-light@1,
+        self-hosted GitLab without CI): brief and answer verbatim in the spec journal'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
@@ -5053,11 +5044,11 @@ rows:
       - super-fr:tests/unit/test_github_rest_contract.py
       - super-fr:tests/unit/test_github_rest_no_graphql.py
       - super-fr:tests/unit/test_forgeapi.py
-    status: skipped
-    notes: 'Walk 16 passed live in a cloud session (after #1092 moved the state ref
-      under refs/heads/). Not in CI, so skipped. Still owed: the board-matches-a-host-render
-      comparison (needs the operator''s host). Gaps found under rest: verify-merge and
-      pickup still read the PR over GraphQL, and a repo allowing several merge methods
+    status: walk-owed
+    notes: 'walk-owed (p1-r4): walk 16 passed live in a cloud session (recorded) after
+      #1092 moved the state ref under refs/heads/; the board-matches-a-host-render comparison
+      is still owed and needs the operator''s host. Gaps found under rest: verify-merge
+      and pickup still read the PR over GraphQL, and a repo allowing several merge methods
       needs merge_method (derio-net/super-fr#1100).'
     verify: client-live
     walks:
@@ -5366,11 +5357,17 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
-    status: skipped
-    notes: 'Live-verified 2026-09-26 (Test Plan 15, #628 phase 4): /fr-goal on #624
-      in devcontainer mode (PR #635) captured a readable session (host label only, no
-      host names); fr run/usage refused inside the container. Manual walk, not in CI.
-      Caveat: subagent transcripts omitted (#637).'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      2026-09-26 (Test Plan 15). Caveat: subagent transcripts omitted (#637).'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-26T00:00:00Z'
+      evidence: 'Test Plan 15 (#628 phase 4): /fr-goal on #624 in devcontainer mode,
+        PR #635, captured a readable session'
   - id: step-record-one-resolve
     capability: Lean cost-aware pipeline
     acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
@@ -5766,9 +5763,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_ci_shards.py
-    status: skipped
-    notes: shard layout + partition unit-pinned; branch CI run 36247922786 took 155s;
-      post-merge main observation owed
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
+      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
+      is owed.'
   - id: ci-budget-ticket-dedup
     capability: CI
     acceptance: A CI file that runs over its budget gets exactly one open ci-budget
@@ -5818,11 +5816,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_actions_pinned.py
-    status: skipped
-    notes: test_tripwire_actions_pinned.py pins .github/dependabot.yml's shape (github-actions
-      ecosystem, weekly, one *-group), so config is pinned; the first weekly Dependabot
-      run is a post-merge observation not exercised in CI (spec 2026-09-27-ci-hardening
-      §3.B).
+    status: walk-owed
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): dependabot.yml
+      shape is unit-pinned; the first weekly Dependabot run is a post-merge observation
+      still owed.'
   - id: ci-ok-single-required-check
     capability: CI
     acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
@@ -5976,7 +5973,7 @@ rows:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
       - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: live
   - id: pages-explainers-preserved
@@ -5988,7 +5985,7 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
     verify: live
   - id: pages-acceptance-report-discoverable
@@ -6019,7 +6016,7 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_publishes_a_placeholder_before_upload
       - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_still_fails_the_run_after_deploying
       - super-fr:tests/unit/test_pages_workflow.py#test_the_placeholder_says_the_report_was_not_rendered
-    status: skipped
+    status: walk-owed
     notes: Workflow shape unit-pinned and the placeholder script executed in the unit
       suite; a live deploy over a gate refusal has not been observed (it needs stale
       artifacts on main).
@@ -6204,13 +6201,18 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R1
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-closeout-always-design.md#R3
     levels: {}
-    status: skipped
-    notes: 'Proven live 2026-09-29 in a fresh session from the base clone: fr pickup
-      --run 2026-09-28-feat-batch-closeout-always-2 named fr archive --branch feat/batch-closeout-always-2;
-      run in the chore/archive workspace it archived spec, plan, run, usage and both
-      journals with no held: line, and fr status then reported no owed artifact from
-      the branch. Manual live run, not in CI.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): proven
+      live 2026-09-29 in a fresh session; manual, not in CI.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-29T00:00:00Z'
+      evidence: 'fresh session from the base clone: fr pickup --run 2026-09-28-feat-batch-closeout-always-2
+        named fr archive --branch, which archived everything with no held line'
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
     acceptance: Every shipped skill that ends its flow at a PR it opens relays a close-out
@@ -7531,13 +7533,19 @@ rows:
     levels:
       int:
       - super-fr:docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md
-    status: skipped
-    notes: 'not-implemented -> skipped on 2026-10-06: all three post-merge Test Plan
-      items driven live inside herdr against a real fr triage batch drive over 101 batches
-      (columns vs an independent gh oracle, cards moving on acting and non-acting passes,
-      reloads keeping expansion, jump switching the tab, two blocked sessions shown
-      as needs-you). Manual and post-merge only, so not in CI.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): all three
+      post-merge Test Plan items driven live 2026-10-06 inside herdr; evidence in the
+      int ref.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: 'docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md: all
+        three post-merge Test Plan items driven inside herdr over 101 batches'
   - id: triage-dedupe-candidates
     capability: triage-dedupe
     acceptance: fr triage check lists candidate duplicate groups among open issues,
@@ -7965,14 +7973,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R24
     levels: {}
-    status: skipped
-    notes: 'Live-verified 2026-10-06 at closeout: `fr verification prerelease --branch
-      chore/archive-2026-10-06-verification-strategies` dispatched prerelease.yml (run
-      37498798304, success); tag rc/chore-archive-2026-10-06-verification-strategies/09352274256d
-      sits on the branch head and its GitHub release is a pre-release; main and the
-      version surfaces unchanged (bump-version --check ok). Not in CI; the other-forge
-      refusal is unit-pinned only if a level is added.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      2026-10-06 at closeout; main and version surfaces unchanged.'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: fr verification prerelease dispatched prerelease.yml run 37498798304
+        (success); rc tag and pre-release created
   - id: super-fr-candidate-contract
     capability: verification
     acceptance: super-fr provides .fr/candidate-install and scenario scripts, exercised
@@ -8051,16 +8063,41 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-verification-strategies-design.md#R20
     levels: {}
-    status: skipped
-    notes: 'Verified live 2026-10-06 on fr 5.11.2/5.12.0 (wave 9 of a real drive): batch
-      model-bindings'' PR #1042 conflicted with main in docs/acceptance/matrix.yaml;
-      the driver logged ''handed back to its session derio-net/super-fr/run/batch-model-bindings'',
-      the idle herdr session received the hand-back brief (merge origin/main, no rebase
-      or force-push, resolve the named path), resolved and pushed, and the train merged
-      #1042 (340553c4). A re-run driver did not re-send for the same head. Earlier the
-      same day #1031''s session was working when its conflict arrived; the driver waited
-      (''nothing sent, retried next pass'') rather than interrupt it.'
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): verified
+      live 2026-10-06 (wave 9 of a real drive).'
     verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: 'wave 9 of a real drive on fr 5.11.2/5.12.0: PR #1042''s conflict was
+        handed back to its herdr session, resolved and pushed'
+  - id: triage-debt-panel
+    capability: triage
+    acceptance: Triage keeps debt digests and fr:owed issues out of ranking in their
+      own sets, and the board shows a per-repo Debt panel with figures and a trend.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R15
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_debt_panel.py#test_one_collapsed_section_with_status_categories_and_owed
+      - super-fr:tests/unit/test_triage_debt_sets.py#test_either_marker_lands_in_the_debt_set_and_owed_in_its_own
+    status: ci
+    notes: 'Shipped in #1139: sets and panel render unit-tested in CI; the visual states
+      were captured and opened by the executor, the reviewer and at deliver.'
+    visual:
+      states:
+      - panel-with-figures
+      - trend-vs-previous
+      - repo-without-report
+      - legacy-digest-without-figures
+      interactions:
+      - expand-repo-section
   - id: triage-adopt-holds-agent
     capability: triage
     acceptance: batch adopt's message to an adopted agent ends with an explicit hold
@@ -8557,6 +8594,53 @@ rows:
     status: ci
     notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
       is still owed'
+  - id: closeout-step-outcomes
+    capability: closeout
+    acceptance: Every Test Plan step gets an explicit ran / owed / n/a outcome, and
+      `fr archive --branch` holds a close-out with a step missing one (a skipped step
+      is never silently dropped).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R18
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R19
+    levels:
+      unit:
+      - super-fr:tests/unit/test_closeout_outcome.py#test_test_plan_steps_numbers_top_level_items_by_position
+      - super-fr:tests/unit/test_closeout_outcome.py#test_owed_writes_an_owed_entry_with_its_key
+      - super-fr:tests/unit/test_closeout_outcome.py#test_a_step_already_recorded_is_refused_and_nothing_is_written
+      - super-fr:tests/unit/test_archive_owed.py#test_plan_dir_archive_holds_a_step_with_no_outcome_and_names_its_command
+      - super-fr:tests/unit/test_archive_owed.py#test_branch_archive_holds_a_step_with_no_outcome
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the Test Plan parser, fr closeout outcome and the archive hold
+      on --branch, plan-dir and --all (--force included) are unit-tested in CI; the
+      candidate scenario closeout-owed runs in CI via test_scenarios'
+    scenario: tests/scenarios/closeout-owed.sh
+  - id: owed-durable-at-archive
+    capability: closeout
+    acceptance: Every owed step and every unticked manual phase at archive leaves an
+      `owed` journal entry plus one fr:owed issue, idempotently, whatever --issues says.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R20
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R21
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R22
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_owed.py#test_open_finding_ids_ignores_records_naming_an_owed_entry
+      - super-fr:tests/unit/test_journal_owed.py#test_the_journal_kind_is_reachable_from_version_one
+      - super-fr:tests/unit/test_archive_owed.py#test_open_owed_entries_are_filed_even_under_no_issues
+      - super-fr:tests/unit/test_archive_owed.py#test_an_open_issue_with_the_owed_marker_is_reused
+      - super-fr:tests/unit/test_archive_owed.py#test_nothing_is_filed_under_tracking_none
+      - super-fr:tests/unit/test_archive_owed.py#test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the owed journal kind (journal 1->2), owed filing outside --issues/--no-issues,
+      reuse by marker, nothing filed under tracking none, and the manual-phase owed
+      entry are unit-tested in CI; the candidate scenario closeout-owed runs in CI via
+      test_scenarios'
+    scenario: tests/scenarios/closeout-owed.sh
   - id: herdr-opencode-launch
     capability: herdr OpenCode batch lifecycle
     acceptance: OpenCode batches launch autonomously with the selected model from the
@@ -8655,7 +8739,7 @@ rows:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_live_instructions
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_documented_no_argument_walk_and_explicit_mode_use_tty_with_captured_output
       - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_noninteractive_default_still_reports_owed_and_never_passes
-    status: skipped
+    status: walked
     notes: 'Scoped pre-merge walk recorded under explicit operator proxy-verdict and
       Ready authorization. Actual native candidate observations and real read-only #1107
       current-head/conflict recovery proof supplied; runtime packages unchanged from
@@ -8682,7 +8766,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-09-herdr-opencode-replacement-design.md#R12
     levels: {}
-    status: skipped
+    status: walked
     notes: 'Live post-merge walk on 2026-10-10: new OpenCode 1.18.35 / openai/gpt-6.1-sol
       control session stayed in stable primary checkout through real pickup, merge verification,
       scoped archive and delivered feature-session/tab cleanup. Initial stale-record
@@ -8703,6 +8787,134 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: debt-report
+    capability: debt
+    acceptance: '`fr debt` reports acceptance by status, the three plan categories (archivable,
+      stale, manual-open) and owed actions, as text and JSON, read-only.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R25
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_engine.py#test_archivable_plan_is_listed_with_command_and_merge_age
+      - super-fr:tests/unit/test_debt_cmd.py#test_json_validates_as_a_debt_report
+    status: ci
+    notes: 'Shipped in #1139: engine and CLI unit-tested in CI; candidate walk row debt-report
+      passed (walk log 20261012T013958Z).'
+    scenario: tests/scenarios/debt-report.sh
+  - id: debt-weekly-issue-rename
+    capability: debt
+    acceptance: 'The weekly job keeps one `<repo>: Technical debt` issue, renaming a
+      legacy Acceptance debt issue in place, never duplicating, closing at zero debt.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_issue.py#test_creates_the_titled_issue
+    status: walk-owed
+    notes: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
+      on main is the post-merge Test Plan step 1.'
+    verify: live
+  - id: debt-archive-pr-weekly
+    capability: debt
+    acceptance: The weekly job opens or refreshes one draft archive PR for plans merged
+      complete and unarchived beyond the stale threshold, never ready, never merged.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_archive_pr_real.py#test_the_real_fr_archive_moves_the_plan_and_the_sweep_opens_a_draft_pr
+    status: walk-owed
+    notes: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
+      scheduled run on main is the post-merge Test Plan step 2.'
+    verify: live
+  - id: debt-owed-discharge
+    capability: debt
+    acceptance: '`fr debt` lists owed actions from owed/awaiting-live issues, held manual
+      phases, walk-owed rows and unresolved owed entries (archived included), and resolving
+      an owed entry with evidence removes it and closes its issue.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R23
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R24
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_owed.py#test_resolve_discharges_an_owed_entry_and_closes_its_issue
+      - super-fr:tests/unit/test_debt_owed.py#test_an_unreachable_forge_prints_the_close_command
+      - super-fr:tests/unit/test_debt_owed.py#test_debt_lists_open_owed_entries_from_live_and_archived_journals_once
+      - super-fr:tests/unit/test_debt_owed.py#test_a_discharged_owed_entry_drops_out_even_while_its_issue_is_open
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: resolving an owed entry (live or archived) closes its issue through
+      the forge double or prints the close command, and fr debt folds owed journal entries
+      once, dropping a discharged one; unit-tested in CI, and the candidate scenario
+      closeout-owed shows fr debt listing the filed step'
+    scenario: tests/scenarios/closeout-owed.sh
+  - id: matrix-status-split
+    capability: acceptance
+    acceptance: '`skipped` is replaced by unwired / walk-owed / walked / manual; the
+      matrix migration moves every existing skipped row into exactly one new status
+      and every surface uses the new names.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_matrix_status_split.py#test_skipped_rows_map_by_the_fixed_rule_and_nothing_else_moves
+      - super-fr:tests/unit/test_acceptance_status_split.py#test_a_skipped_row_is_refused_by_name_with_the_migrate_command
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_matrix_status_split
+    status: ci
+    notes: 'phase 1: the 4->5 migration, the refused-by-name validator and every surface
+      renamed, unit-tested in CI; the candidate scenario migrates a fixture matrix and
+      runs in CI via test_scenarios'
+    scenario: tests/scenarios/matrix-status-split.sh
+  - id: debt-ci-scaffold-refresh
+    capability: acceptance
+    acceptance: The CI scaffolds on all three forges call `fr debt`, and `fr acceptance
+      init --refresh-ci` updates an fr-scaffolded workflow while refusing a foreign
+      file.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_refresh_ci.py#test_a_legacy_scaffold_is_rewritten_to_the_current_one
+    status: ci
+    notes: 'Shipped in #1139: regenerated goldens and --refresh-ci rewrite/refusal unit-tested
+      in CI.'
+  - id: step-record-status-migration
+    capability: acceptance
+    acceptance: 'An in-flight step record written before the split still applies after
+      upgrade: its `skipped` acceptance status is migrated by the same rule as the matrix.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R27
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_v8_skipped_entry_moves_by_the_r6_rule
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_migrated_record_then_applies
+    status: ci
+    notes: 'phase 1: the record 8->9 hop (frozen RecordV8, R6''s rule from the entry
+      and its row) and the apply after it are unit-tested in CI'
+  - id: forge-adapter-debt-ops
+    capability: forge
+    acceptance: Every forge adapter edits an issue's title and body, lists open issues
+      with bodies, creates a draft PR, finds the open PR for a head and closes an issue,
+      or raises the unsupported error by name.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-debt-engine-design.md#R26
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_adapter_debt_ops.py#test_gh_edit_issue_builds_title_and_body_flags
+    status: ci
+    notes: 'Shipped in #1139: every client''s debt ops unit-tested in CI against recorded-command
+      doubles (glab/tea not live-captured; a live walk of those forges is owed).'
   - id: merge-train-label-gate
     capability: triage-batch-merge
     acceptance: 'fr merges a batch PR only with a valid approved-fr label bound to its

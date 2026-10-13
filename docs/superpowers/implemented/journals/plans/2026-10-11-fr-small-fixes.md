@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-11-fr-small-fixes
 
 <!-- fr:journal kind=discovery scope=plan id=p1-d-fake-state-case created=2026-10-12T15:43:37+00:00 phase=1 -->

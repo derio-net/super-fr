@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-12-quota-pacing
 
 <!-- fr:journal kind=discovery scope=spec id=operator-brief created=2026-10-12T06:11:02+00:00 input=true -->

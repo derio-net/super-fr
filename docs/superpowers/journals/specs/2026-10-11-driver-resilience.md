@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: 2026-10-11-driver-resilience
 
 <!-- fr:journal kind=discovery scope=spec id=operator-brief created=2026-10-11T17:07:44+00:00 input=true -->

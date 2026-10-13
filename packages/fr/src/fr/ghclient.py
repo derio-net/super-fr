@@ -63,6 +63,37 @@ class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec 
         )
 
 
+class ListingCapped(Exception):  # noqa: N818 — a signal carrying the partial answer, not a fault
+    """A bulk issue listing hit its cap: `.issues` is what the scan found, and
+    "nothing found" must not be read from it (no silent caps)."""
+
+    def __init__(self, issues: list[dict[str, Any]], limit: int) -> None:
+        super().__init__(f"listing capped at {limit} issues; the answer is partial")
+        self.issues = issues
+        self.limit = limit
+
+
+def filter_issues_by_body(
+    raw: list[dict[str, Any]], search: tuple[str, ...], limit: int
+) -> list[dict[str, Any]]:
+    """The scanned issues whose body holds any of *search*, oldest first.
+
+    Raises `ListingCapped` (carrying the matches) when the scan hit *limit*:
+    an issue past the cap is unseen, so the caller must not read "none found".
+    """
+
+    def digits(i: dict[str, Any]) -> bool:
+        n = str(i.get("number", ""))
+        return n.isascii() and n.isdigit()
+
+    # A forge-returned number that is not plain digits is skipped, never `int()`ed.
+    hits = [i for i in raw if digits(i) and any(s in (i.get("body") or "") for s in search)]
+    hits.sort(key=lambda i: int(i["number"]))
+    if len(raw) >= limit:
+        raise ListingCapped(hits, limit)
+    return hits
+
+
 class HostRefusedError(Exception):
     """A forge adapter's host trust gate refused to point its CLI at a host
     the CLI is not logged into (spec 2026-10-06-forge-remainder §4.E; gh#1014).
@@ -173,6 +204,25 @@ class GhClient(Protocol):
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         """Post a comment on an Issue (`fr undispatch` leaves its trail here)."""
+        ...
+
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        """Replace an Issue's title and body in one call (`fr debt issue`, R26)."""
+        ...
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        """Open issues whose body contains any of the *search* substrings, as
+        `{number, title, body, labels}` oldest first. At most *limit* issues are
+        scanned: a caller that gets back `limit` scanned issues must treat the
+        answer as partial (the scan count is `len(raw)` before filtering, so
+        implementations return the filtered list and raise `ListingCapped`
+        carrying it when the cap was hit)."""
+        ...
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        """Comment on an Issue, then close it (`fr debt issue` at zero debt, R26)."""
         ...
 
     def create_issue(
@@ -342,6 +392,21 @@ class GhClient(Protocol):
         """Close PR *number* unmerged (batch adopt's supersede, §C)."""
         ...
 
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of the open PR whose head *branch* is in THIS repo (a
+        fork's PR on the same name is skipped), None when there is none."""
+        ...
+
+    def authenticated_login(self) -> str:
+        """The account the forge credentials act as (`fr debt issue` trusts only
+        issues this account or the workflow bot wrote)."""
+        ...
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        """Replace PR *number*'s description (`fr debt archive-pr` refreshes its
+        one draft PR, R12)."""
+        ...
+
     def delete_branch(self, repo: str, branch: str) -> None:
         """Delete *branch* on the forge (batch adopt's old head, §C)."""
         ...
@@ -432,9 +497,10 @@ class GhClient(Protocol):
         self, branch: str, *, cwd: Path, run: CommandRunner | None = None
     ) -> dict[str, Any] | None:
         """The PR/MR whose head is *branch* in the repository at *cwd*:
-        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None}`,
-        each forge's own state vocabulary coerced to that one. None when there
-        is none, or the CLI fails, is missing or prints something unparseable."""
+        `{"state": "OPEN"|"MERGED"|"CLOSED", "url": str, "mergedAt": str|None,
+        "updatedAt": str|None}`, each forge's own state vocabulary coerced to that
+        one. None when there is none, or the CLI fails, is missing or prints something
+        unparseable."""
         ...
 
     def issues_enabled(self, repo: str | None = None) -> bool | None:
@@ -528,6 +594,15 @@ class UnsupportedBatchOps:
 
     def close_pr(self, repo: str, number: int) -> None:
         raise self._unsupported("close_pr")
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        raise self._unsupported("edit_pr")
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        raise self._unsupported("open_pr_in_repo")
+
+    def authenticated_login(self) -> str:
+        raise self._unsupported("authenticated_login")
 
     def delete_branch(self, repo: str, branch: str) -> None:
         raise self._unsupported("delete_branch")

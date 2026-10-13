@@ -1,8 +1,8 @@
 #!/bin/bash
 # SessionStart hook: inject open acceptance debt (2026-07-04 spec §6.1).
 #
-# Repos that adopted the acceptance matrix surface their open skipped /
-# not-implemented rows into every agent session — the conversational nag the
+# Repos that adopted the acceptance matrix surface their open acceptance debt
+# (unwired / walk-owed / not-implemented / failing) into every agent session — the conversational nag the
 # operator mandated (warnings on a cron run's Actions page reach nobody).
 # Output is capped by `fr acceptance status --brief` (counts + 3 oldest).
 #

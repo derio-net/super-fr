@@ -1,5 +1,5 @@
 {
-  "schema": 10,
+  "schema": 11,
   "scope": "example-org--widgets",
   "kind": "repo",
   "collected_at": "2026-10-12T00:00:00Z",
@@ -20,7 +20,8 @@
       "body": "",
       "prs": [],
       "dispatch_marker_at": null,
-      "claims": []
+      "claims": [],
+      "author": null
     },
     {
       "repo": "example-org/widgets",
@@ -35,7 +36,8 @@
       "body": "",
       "prs": [],
       "dispatch_marker_at": null,
-      "claims": []
+      "claims": [],
+      "author": null
     },
     {
       "repo": "example-org/widgets",
@@ -50,7 +52,8 @@
       "body": "",
       "prs": [],
       "dispatch_marker_at": null,
-      "claims": []
+      "claims": [],
+      "author": null
     },
     {
       "repo": "example-org/widgets",
@@ -65,7 +68,8 @@
       "body": "",
       "prs": [],
       "dispatch_marker_at": null,
-      "claims": []
+      "claims": [],
+      "author": null
     }
   ],
   "prs": [],

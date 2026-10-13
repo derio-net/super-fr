@@ -8,7 +8,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p docs/acceptance
 cat > docs/acceptance/matrix.yaml <<'YAML'
-schema_version: 4
+schema_version: 5
 org: derio-net
 repo: toy
 rows:
@@ -16,27 +16,27 @@ rows:
     capability: "Cap"
     acceptance: "needs the released build"
     origin: ["toy:docs/superpowers/specs/2026-10-06-toy.md#R1"]
-    status: skipped
+    status: walk-owed
     verify: live
     issues: ["derio-net/toy#7"]
   - id: row-b
     capability: "Cap"
     acceptance: "also carries issue 7"
     origin: ["toy:docs/superpowers/specs/2026-10-06-toy.md#R1"]
-    status: skipped
+    status: walk-owed
     verify: live
     issues: ["derio-net/toy#7"]
 YAML
 
 walk() {  # <row> [extra...]
   local row="$1"; shift
-  run_fr out acceptance set-status --id "$row" --status skipped --notes "walked" \
+  run_fr out acceptance set-status --id "$row" --status walked --notes "walked" \
     --walk walk.log --harness claude-code --model scenario-model --strategy live "$@"
 }
 
 # A walk with no harness, model or strategy is refused and changes nothing.
 before="$(cat docs/acceptance/matrix.yaml)"
-run_fr out acceptance set-status --id row-a --status skipped --notes n --walk walk.log
+run_fr out acceptance set-status --id row-a --status walked --notes n --walk walk.log
 require_exit 2 "$out"
 [ "$before" = "$(cat docs/acceptance/matrix.yaml)" ] || fail "a refused walk rewrote the matrix"
 
@@ -59,7 +59,7 @@ mkdir -p .devcontainer
 printf 'schema_version: 2\nprofiles:\n  dev:\n    purpose: x\nforge: {type: github}\ntracking: {type: none}\n' \
   > .devcontainer/fr-profiles.yaml
 cat > docs/acceptance/matrix.yaml <<'YAML'
-schema_version: 4
+schema_version: 5
 org: derio-net
 repo: toy
 rows:
@@ -67,7 +67,7 @@ rows:
     capability: "Cap"
     acceptance: "tracked nowhere"
     origin: ["toy:docs/superpowers/specs/2026-10-06-toy.md#R1"]
-    status: skipped
+    status: walk-owed
     verify: live
     issues: ["derio-net/toy#9"]
 YAML

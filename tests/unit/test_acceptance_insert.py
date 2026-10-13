@@ -155,7 +155,7 @@ def test_scalar_continuation_starting_with_hash_stays_in_its_row() -> None:
         '    acceptance: "Operator can do X"\n'
         '    origin: ["own:docs/superpowers/specs/s.md"]\n'
         "    levels: {}\n"
-        "    status: skipped\n"
+        "    status: unwired\n"
         "    notes: 'proven live in\n"
         "      #352, not automated.'\n"
     )

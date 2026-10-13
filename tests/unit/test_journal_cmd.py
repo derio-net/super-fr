@@ -2047,7 +2047,8 @@ class TestReviewScope:
         res = self._finding(root, monkeypatch, "f1", "--review-scope", tag)
         assert res.exit_code == 0, res.output
         text = _journal_file(root, "S").read_text()
-        assert f"review_scope={tag}" in text.splitlines()[2]
+        # line 0 is the journal stamp, line 1 the title (spec 2026-10-11 §E)
+        assert f"review_scope={tag}" in text.splitlines()[3]
         assert parse_journal(text)[0].review_scope == tag
 
     @pytest.mark.parametrize("tag", ["maybe", "IN", ""])

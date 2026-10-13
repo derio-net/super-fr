@@ -25,7 +25,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, model_validator
 
-from fr.acceptance.model import Visual, Walk, check_issue_refs, check_verify
+from fr.acceptance.model import Visual, Walk, check_issue_refs, check_status, check_verify
 from fr.journal.model import FindingState, JournalKind, ReviewScope
 from fr.run.model import AnsweredBy
 from fr.workflow.artifacts import ALWAYS_RECORD_SECTIONS, record_sections
@@ -51,7 +51,7 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 8
+RECORD_SCHEMA_VERSION = 9
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
@@ -73,7 +73,11 @@ the `unconfirmed` resolution state (spec
 strategy and `scenario`/`issues`/`harnesses`/`walk` (spec
 `2026-10-06-verification-strategies-design.md` §B). Migration:
 `fr.artifacts.record_strategies`; version 7 is read through the frozen
-`fr.record.legacy.RecordV7`."""
+`fr.record.legacy.RecordV7`. Bumped 8 -> 9 because the acceptance status
+`skipped` split into `unwired`/`walk-owed`/`walked`/`manual` (spec
+`2026-10-11-debt-engine-design.md` §D, R27). Migration:
+`fr.artifacts.record_status_split`; version 8 is read through the frozen
+`fr.record.legacy.RecordV8`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -190,6 +194,7 @@ class AcceptanceItem(_Strict):
 
     @model_validator(mode="after")
     def _v8_fields_are_well_formed(self) -> AcceptanceItem:
+        check_status(self.status)
         check_verify(self.verify)
         check_issue_refs(self.issues)
         return self

@@ -17,7 +17,8 @@ versioning rule, kept:
 2. **Built in memory, written once**, via `write_text_atomic`, and only when an
    entry actually changes — and only after the result validates as v8.
 3. **The crash window.** A body that already reads as v8 under a v7 stamp is
-   left alone and the runner stamps it.
+   left alone and the runner stamps it — asked of the frozen
+   `fr.record.legacy.RecordV8` since the 8 -> 9 hop.
 """
 
 from __future__ import annotations
@@ -38,13 +39,18 @@ __all__ = ["MIGRATION_NAME", "RECORD_STRATEGIES_MIGRATION", "guard_record_v7"]
 
 
 def _is_v8(data: dict[str, Any]) -> bool:
-    from fr.record.model import RECORD_SCHEMA_VERSION, StepRecord
+    """Whether `data` already reads as version 8 — asked of the FROZEN
+    `fr.record.legacy.RecordV8` since the 8 -> 9 hop (spec
+    2026-10-11-debt-engine §D): the live model answers "is this v9?", which is
+    not this hop's question. `RecordV8` takes any `verify` string, so the v7
+    spelling is checked here."""
+    from fr.record.legacy import RecordV8Error, record_v8_from_data
 
     try:
-        StepRecord.model_validate({**data, "schema_version": RECORD_SCHEMA_VERSION})
-    except ValueError:  # pydantic's ValidationError is one
+        record = record_v8_from_data({**data, "schema_version": 8})
+    except RecordV8Error:
         return False
-    return True
+    return not any(item.verify == "post-merge" for item in record.acceptance)
 
 
 def guard_record_v7(path: Path) -> None:

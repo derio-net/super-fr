@@ -26,7 +26,32 @@ from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL, SCOPE_DIRS
 
 LEVELS: tuple[str, ...] = ("unit", "api", "int", "ui")
 
-Status = Literal["ci", "scheduled", "skipped", "not-implemented", "failing"]
+Status = Literal[
+    "ci",
+    "scheduled",
+    "unwired",
+    "walk-owed",
+    "walked",
+    "manual",
+    "not-implemented",
+    "failing",
+]
+"""A row's status (spec 2026-10-11-debt-engine §D, R5). Matrix kind 4 -> 5
+split the old `skipped` into `unwired` (a test exists but does not run in CI),
+`walk-owed` (a live or post-merge walk is owed), `walked` (proven live, dated by
+its walk) and `manual` (a process that is never automatable)."""
+
+DEBT_STATUSES: frozenset[str] = frozenset({"not-implemented", "unwired", "walk-owed", "failing"})
+"""The acceptance debt statuses (R2), defined once: every surface that counts
+acceptance debt counts these. `walked` and `manual` are listed, never debt."""
+
+LISTED_STATUSES: frozenset[str] = DEBT_STATUSES | {"walked", "manual"}
+"""What `fr debt` lists per row: the debt statuses plus `walked` and `manual`
+(listed with their counts, never debt)."""
+
+LEGACY_SKIPPED = "skipped"
+"""The matrix-v4 status `skipped`, refused by name since kind 4 -> 5
+(`fr.artifacts.matrix_status_split`)."""
 
 
 # A row's `issues` entry (spec 2026-10-06-verification-strategies R13): the
@@ -176,6 +201,17 @@ def check_verify(value: str | None) -> None:
         )
 
 
+def check_status(value: object) -> None:
+    """Shared by `Row` and `AcceptanceItem`: the v4 `skipped` is refused by
+    name, with the way forward (R8)."""
+    if value == LEGACY_SKIPPED:
+        raise ValueError(
+            f"status: {LEGACY_SKIPPED} is the matrix-v4 status — it split into unwired | "
+            "walk-owed | walked | manual; `fr migrate artifacts --yes` rewrites an existing "
+            "matrix or step record"
+        )
+
+
 class Row(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     # StrictStr: YAML scalars like `yes` / `1.0` arrive as bool/float and must
@@ -207,6 +243,12 @@ class Row(BaseModel):
     harnesses: tuple[StrictStr, ...] = ()
     walks: tuple[Walk, ...] = ()
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def _not_the_v4_status(cls, v: object) -> object:
+        check_status(v)
+        return v
+
     @field_validator("verify")
     @classmethod
     def _not_the_v3_spelling(cls, v: str | None) -> str | None:
@@ -233,6 +275,24 @@ class Row(BaseModel):
     def refs(self) -> tuple[str, ...]:
         """Every ref this row carries — origins first, then level evidence."""
         return tuple(self.origin) + tuple(x for lv in LEVELS for x in self.levels[lv])
+
+
+def latest_passing_walk_at(row: Row) -> str | None:
+    """The `at` of `row`'s latest passing walk, or None — the date a `walked`
+    row is shown with (R2). ISO timestamps sort as strings."""
+    return max((w.at for w in row.walks if w.outcome == "pass"), default=None)
+
+
+def walked_error(row: Row) -> str | None:
+    """Why `row` cannot be `walked`, or None (p1-r2): `walked` means proven by a
+    passing walk, so a `walked` row must carry one."""
+    if row.status != "walked" or latest_passing_walk_at(row) is not None:
+        return None
+    return (
+        f"row {row.id}: status walked needs a passing walk on the row — record one in the "
+        "same move (`fr acceptance set-status --walk <evidence> --harness … --model … "
+        "--strategy … --walk-outcome pass`), or use walk-owed while the walk is owed"
+    )
 
 
 class Matrix(BaseModel):

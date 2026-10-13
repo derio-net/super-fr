@@ -251,6 +251,28 @@ class RealGhClient:
         _gh.edit_issue_body(repo=repo, number=number, body=body)
 
     @_hosted
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        _gh._run_gh(
+            ["issue", "edit", str(number), "--repo", repo, "--title", title, "--body", body]
+        )
+
+    @_hosted
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        # REST works on either backend and can list oldest-first (GraphQL's
+        # `gh issue list` is newest-first, so the debt issue would fall past the cap).
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).list_open_issues_with_body(
+            repo, search=search, limit=limit
+        )
+
+    @_hosted
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        _gh._run_gh(["issue", "close", str(number), "--repo", repo, "--comment", comment])
+
+    @_hosted
     def create_issue(
         self,
         repo: str,
@@ -436,6 +458,15 @@ class RealGhClient:
 
         return RealGhRestClient(host=self._host).required_check_names(repo, base)
 
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).open_pr_in_repo(repo, branch)
+
+    @_hosted
+    def authenticated_login(self) -> str:
+        return _gh.viewer_login()
+
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         """Merge-train-safety §D: the `github-rest` backend's REST routes, on this host."""
         from fr.real_ghrestclient import RealGhRestClient
@@ -547,6 +578,10 @@ class RealGhClient:
             raise _gh.GhError(f"`gh pr create` printed no PR URL: {out.strip()!r}", stdout=out)
         url = out[: found.end()].strip().splitlines()[-1].strip()
         return {"number": int(found.group(1)), "url": url}
+
+    @_hosted
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        _gh._run_gh(["pr", "edit", str(number), "--repo", repo, "--body", body])
 
     @_hosted
     def close_pr(self, repo: str, number: int) -> None:
@@ -682,7 +717,7 @@ class RealGhClient:
         self, branch: str, *, cwd: Path, run: CommandRunner | None = None
     ) -> dict[str, Any] | None:
         result = _gh_runner(run)(
-            ["gh", "pr", "view", branch, "--json", "state,url,mergedAt"],
+            ["gh", "pr", "view", branch, "--json", "state,url,mergedAt,updatedAt"],
             cwd=cwd,
         )
         if result.returncode != 0 or not (result.stdout or "").strip():

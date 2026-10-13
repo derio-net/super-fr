@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# A recording forge double for tests/scenarios/closeout-owed.sh. It records every
+# call, one argv per line, to $FAKE_GH_LOG, keeps the one issue it was asked to
+# create in $FAKE_GH_LOG.issue, and answers the `gh` calls `fr archive`'s owed
+# filing and `fr journal resolve`'s discharge make on the default (CLI) client:
+#   gh api user --jq .login            -> the viewer's login
+#   gh issue list ... --json ...       -> the open issue it created, if any, as
+#                                         the JSON gh prints for those fields
+#   gh label create ...                -> ok, no output
+#   gh issue create ...                -> the new issue's URL, which is all
+#                                         `gh issue create` prints on stdout
+#   gh issue comment / gh issue close  -> ok, no output (the close is recorded)
+# Anything else fails loudly, so a new forge call cannot slip through unseen.
+log="${FAKE_GH_LOG:?FAKE_GH_LOG is required}"
+printf '%s\n' "$*" >> "$log"
+store="$log.issue"
+case "$1 ${2:-}" in
+  "api user") echo scenario-bot ;;
+  "issue list")
+    if [ -f "$store" ] && [ ! -f "$store.closed" ]; then
+      python3 - "$store" <<'PY'
+import json, sys
+body = open(sys.argv[1]).read()
+print(json.dumps([{"number": 1, "url": "https://github.com/example-org/widgets/issues/1",
+                   "body": body, "author": {"login": "scenario-bot"},
+                   "labels": [{"name": "fr:owed"}]}]))
+PY
+    else
+      echo '[]'
+    fi ;;
+  "label create") : ;;
+  "issue create")
+    shift 2
+    while [ $# -gt 0 ]; do
+      [ "$1" = --body ] && printf '%s' "$2" > "$store"
+      shift
+    done
+    echo "https://github.com/example-org/widgets/issues/1" ;;
+  "issue comment") : ;;
+  "issue close") : > "$store.closed" ;;
+  *) echo "fake gh: unexpected call: gh $*" >&2; exit 1 ;;
+esac

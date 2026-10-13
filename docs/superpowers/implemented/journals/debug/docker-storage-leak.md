@@ -1,3 +1,4 @@
+<!-- fr:journal-schema=2 -->
 # Journal: docker-storage-leak
 
 <!-- fr:journal kind=repro scope=debug id=178eaa209c0f created=2026-10-10T19:36:47+00:00 -->

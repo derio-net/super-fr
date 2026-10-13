@@ -35,7 +35,7 @@ from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 from urllib.parse import quote
 
 from fr import glab as _glab
-from fr.ghclient import CommandRunner, UnsupportedBatchOps, run_cli
+from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body, run_cli
 from fr.labels import LabelDef
 
 # GitLab-specific MR URL shape — deliberately NOT in the shared fr._urls
@@ -287,6 +287,93 @@ class RealGlabClient(UnsupportedBatchOps):
         self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
 
     @_hosted
+    def authenticated_login(self) -> str:
+        out = self._api("user")
+        try:
+            return str(json.loads(out)["username"])
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise _glab.GlabError(f"unreadable `glab api user` output: {exc}") from exc
+
+    @_hosted
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        _glab.edit_issue(repo=repo, number=number, title=title, body=body, host=self._host)
+
+    @_hosted
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        self._glab(["issue", "note", str(number), "--repo", repo, "--message", comment])
+        _glab.close_issue(repo=repo, number=number, host=self._host)
+
+    @_hosted
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        """Open issues via the issues API, `per_page` pages until *limit* is read."""
+        raw: list[dict[str, Any]] = []
+        page = 1
+        while len(raw) < limit:
+            per = min(100, limit - len(raw))
+            out = self._api(
+                f"projects/{quote(repo, safe='')}/issues?state=opened&order_by=created_at&sort=asc"
+                f"&per_page={per}&page={page}"
+            )
+            try:
+                got = json.loads(out) if out.strip() else []
+            except json.JSONDecodeError as exc:
+                raise _glab.GlabError(f"unreadable `glab api` issues output: {exc}") from exc
+            if not isinstance(got, list):
+                raise _glab.GlabError("unreadable `glab api` issues output: not a JSON list")
+            for i in got:
+                if isinstance(i, dict):
+                    raw.append(
+                        {
+                            "number": i.get("iid"),
+                            "title": i.get("title") or "",
+                            "body": i.get("description") or "",
+                            "labels": [str(x) for x in (i.get("labels") or [])],
+                            "author": {"login": (i.get("author") or {}).get("username", "")},
+                        }
+                    )
+            if len(got) < per:
+                break
+            page += 1
+        return filter_issues_by_body(raw, search, limit)
+
+    @_hosted
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        self._glab(["mr", "update", str(number), "--repo", repo, "--description", body])
+
+    @_hosted
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        out = self._glab(
+            ["mr", "list", "--repo", repo, "--source-branch", branch, "--output", "json"]
+        )
+        try:
+            mrs = json.loads(out) if out.strip() else []
+        except json.JSONDecodeError as exc:
+            raise _glab.GlabError(f"unreadable `glab mr list` output: {exc}") from exc
+        if not isinstance(mrs, list):
+            return None
+        for mr in mrs:
+            src = mr.get("source_project_id") if isinstance(mr, dict) else None
+            if src is not None and src == mr.get("target_project_id"):
+                return {"number": int(mr["iid"]), "url": str(mr.get("web_url") or "")}
+        return None
+
+    @_hosted
+    def create_pr(
+        self, repo: str, *, head: str, base: str, title: str, body: str, draft: bool
+    ) -> dict[str, Any]:
+        argv = ["mr", "create", "--repo", repo, "--source-branch", head, "--target-branch", base]
+        argv += ["--title", title, "--description", body, "--yes"]
+        if draft:
+            argv.append("--draft")
+        out = self._glab(argv)
+        found = re.search(r"\S+/-/merge_requests/(\d+)", out)
+        if found is None:
+            raise _glab.GlabError(f"`glab mr create` printed no MR URL: {out.strip()!r}")
+        return {"number": int(found.group(1)), "url": found.group(0)}
+
+    @_hosted
     def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
         argv = ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"]
         _glab.check_argv(argv[1:], self._host)
@@ -328,7 +415,12 @@ class RealGlabClient(UnsupportedBatchOps):
             state = "CLOSED"
         else:
             state = "OPEN"
-        return {"state": state, "url": raw.get("web_url", ""), "mergedAt": raw.get("merged_at")}
+        return {
+            "state": state,
+            "url": raw.get("web_url", ""),
+            "mergedAt": raw.get("merged_at"),
+            "updatedAt": raw.get("updated_at"),
+        }
 
     @_hosted
     def issues_enabled(self, repo: str | None = None) -> bool | None:

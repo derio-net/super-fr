@@ -1,0 +1,62 @@
+schema_version: 2
+phase:
+  number: 5
+  title: triage — debt and owed sets, the Debt panel, snapshot trend (R14–R16)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - triage-debt-panel
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/*
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/*
+  - .hermes/*
+  - tests/unit/*
+  - docs/acceptance/*
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: check sets (spec §C, R14, R16)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED in tests/unit/test_triage_debt_sets.py: an issue with either marker lands in `debt_digests` and an open `fr:owed` issue in `owed`; neither is ranked, unranked or unplaced; figures parsed from `Issue.body`, a legacy body yields None; no facts schema change.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: `is_debt_digest` / `is_owed` in triage/check.py, excluded wherever `is_awaiting_live` is.
+- number: 2
+  title: Debt panel and snapshot v2 (spec §C, R15)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED in tests/unit/test_triage_debt_panel.py: the board renders one collapsed Debt section per repo with acceptance-by-status, plan categories and owed count; trend vs previous snapshot (`not-implemented 28 → 30`); "no report" and "legacy digest — no figures" states; snapshot schema 2 stores `debt`, a v1 snapshot reads as no trend and the panel notes the split when the previous snapshot predates schema 2.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: triage/render.py panel via components.collapsed; snapshot.py schema 2 reading 1; fr-triage SKILL.md names the debt and owed sets; run both mirror syncs. Capture the panel's states (panel-with-figures, trend-vs-previous, repo-without-report, legacy-digest-without-figures) and the expand-repo-section interaction in a browser from a fixture render into a git-ignored dir, open every screenshot, and fill the record's `visual:` section.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T01:25:50+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-10-12T01:25:50+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T01:25:50+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T01:25:50+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T01:25:50+00:00'
+    note: null
+    observed_prs: []

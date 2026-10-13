@@ -380,8 +380,10 @@ no longer reads.
 Business-level acceptance tests are tracked in `docs/acceptance/matrix.yaml` —
 one row per acceptance ("operator can X"), cross-referenced against
 unit/api/int/ui verification levels and an honesty-scale status: `ci` /
-`scheduled` (automated, can't drift) → `skipped` (verified, but not in CI) →
-`not-implemented` (nothing yet) → `failing` (known red, fails CI by design).
+`scheduled` (automated, can't drift) · `walked` (proven live, dated by its walk)
+· `manual` (a process, never automatable) · and the debt: `unwired` (a test
+exists, not in CI) → `walk-owed` (a live walk is owed) → `not-implemented`
+(nothing yet) → `failing` (known red, fails CI by design).
 
 Rows are born at brainstorm time (presented with defenses in the brainstorm's
 question round), linked to plan phases via an `acceptance: [row-ids]` field (`fr plan

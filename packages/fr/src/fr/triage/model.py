@@ -56,8 +56,11 @@ from fr.triage.stage import Stage, derive_stage
 # closed-world schema-9 reader rejects; a file below 10 reads `labels` as None, which never
 # approves. 3 to 9 still load, and the first collect upgrades them. Independent of
 # JUDGEMENTS_SCHEMA.
-FACTS_SCHEMA: Literal[10] = 10
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10)
+# 11 adds per-issue `author` (debt-engine R14: only the workflow bot's or a trusted login's
+# debt digest counts): `to_json` dumps it, `null` included, which a closed-world schema-10
+# reader rejects; a file below 11 reads `author` as None, so its digests are untrusted.
+FACTS_SCHEMA: Literal[11] = 11
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11)
 # The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
 # `claim_taken` event, gh#1120;
@@ -341,6 +344,8 @@ class Issue(_Strict):
     # The claims on the issue (facts schema 7): read only for issues labelled fr:claimed or
     # fr:in-progress, from the same comment read as `dispatch_marker_at`.
     claims: list[IssueClaim] = []
+    # The login that opened the issue (facts schema 11); None when never read.
+    author: str | None = None
 
     @property
     def key(self) -> str:
@@ -556,7 +561,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10] = Field(10, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11] = Field(11, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str

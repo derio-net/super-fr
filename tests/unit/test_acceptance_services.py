@@ -62,7 +62,7 @@ class TestCiNone:
     def test_ci_status_refused_on_set_status_and_add(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        root = make_repo(tmp_path, row(id="target", status="skipped"), ci=True)
+        root = make_repo(tmp_path, row(id="target", status="unwired"), ci=True)
         (root / ".devcontainer").mkdir()
         (root / ".devcontainer" / "fr-profiles.yaml").write_text(
             PROFILES + "schema_version: 2\nci: {type: none}\n"
@@ -116,8 +116,8 @@ class TestDebtStepOnlyOnTheTrackersPlatform:
         root = _repo(tmp_path, "ci: {type: github-actions}\n")
         init(root, "derio-net", "demo", "github", ci_type="github-actions", tracking_type="github")
         text = (root / GITHUB_WF).read_text()
-        assert "Acceptance debt" in text
-        assert "Acceptance debt" in (root / ".claude/rules/acceptance-matrix.md").read_text()
+        assert "Technical debt" in text
+        assert "Technical debt" in (root / ".claude/rules/acceptance-matrix.md").read_text()
 
     @pytest.mark.parametrize(
         "ci_type, tracking, path",
@@ -133,8 +133,8 @@ class TestDebtStepOnlyOnTheTrackersPlatform:
     ) -> None:
         root = _repo(tmp_path, "")
         outcome = init(root, "derio-net", "demo", "github", ci_type=ci_type, tracking_type=tracking)
-        assert "Acceptance debt" not in (root / path).read_text()
-        assert "Acceptance debt" not in (root / ".claude/rules/acceptance-matrix.md").read_text()
+        assert "Technical debt" not in (root / path).read_text()
+        assert "Technical debt" not in (root / ".claude/rules/acceptance-matrix.md").read_text()
         assert any(n.startswith("no debt  the weekly") for n in outcome.notices)
         assert "on:" in (root / path).read_text() or "stages:" in (root / path).read_text()
 
@@ -149,7 +149,7 @@ class TestDebtStepOnlyOnTheTrackersPlatform:
             "gitlab-ci": ".gitlab-ci.yml",
             "gitea-actions": ".gitea/workflows/acceptance-report.yml",
         }
-        assert "Acceptance debt" in (root / paths[ci_type]).read_text()
+        assert "Technical debt" in (root / paths[ci_type]).read_text()
 
     def test_cli_omits_it_under_tracking_none(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -157,7 +157,7 @@ class TestDebtStepOnlyOnTheTrackersPlatform:
         root = _repo(tmp_path, "ci: {type: github-actions}\ntracking: {type: none}\n")
         result = _invoke(root, monkeypatch, "init")
         assert result.exit_code == 0, result.output
-        assert "Acceptance debt" not in (root / GITHUB_WF).read_text()
+        assert "Technical debt" not in (root / GITHUB_WF).read_text()
         assert "debt" in result.output
 
 
@@ -166,10 +166,10 @@ CI_TYPES = ("github-actions", "gitea-actions", "gitlab-ci")
 
 
 class TestGoldenRenders:
-    """Captured from origin/main's scaffold.py before the debt split (r4)."""
+    """Regenerated for the debt engine (R13): fetch-depth 0, the `debt` input, fr debt steps."""
 
     @pytest.mark.parametrize("ci_type", CI_TYPES)
-    def test_debt_on_is_byte_identical_to_the_pre_split_template(self, ci_type: str) -> None:
+    def test_debt_on_matches_the_golden(self, ci_type: str) -> None:
         from fr.acceptance.scaffold import render_workflow
 
         assert render_workflow(ci_type, debt=True) == (GOLDEN / f"{ci_type}.golden").read_text()
@@ -207,7 +207,7 @@ class TestGoldenRenders:
         root.mkdir()
         outcome = init(root, "o", "r", "github", ci_type="github-actions", tracking_type="none")
         assert outcome.notices == [
-            'no debt  the weekly "Acceptance debt" issue step is omitted from '
+            'no debt  the weekly "Technical debt" steps are omitted from '
             ".github/workflows/acceptance-report.yml — tracking is 'none', not the "
             "github-actions platform's own (github); see `fr services`"
         ]
@@ -222,7 +222,7 @@ class TestMalformedCiDeclarationRefuses:
     def test_set_status_ci_refused_and_matrix_unchanged(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, block: str
     ) -> None:
-        root = make_repo(tmp_path, row(id="target", status="skipped"), ci=True)
+        root = make_repo(tmp_path, row(id="target", status="unwired"), ci=True)
         (root / ".devcontainer").mkdir()
         (root / ".devcontainer" / "fr-profiles.yaml").write_text(
             PROFILES + "schema_version: 2\n" + block

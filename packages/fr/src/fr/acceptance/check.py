@@ -1,7 +1,7 @@
 """The acceptance gate: ref resolution, staleness guard, exit contract.
 
 Exit contract (spec §4): any `failing` row → 2; resolution / staleness /
-schema errors → 1; `skipped` / `not-implemented` rows → 0 with
+schema errors → 1; acceptance debt rows (`DEBT_STATUSES`) → 0 with
 `::warning::`-formatted annotation lines.
 """
 
@@ -79,11 +79,13 @@ def _age_key(row: Row) -> str:
 
 
 def open_rows(matrix: Matrix) -> list[Row]:
-    """The nag set: `skipped` / `not-implemented` rows, oldest origin first.
+    """The nag set: the `DEBT_STATUSES` rows, oldest origin first.
 
     The sort is stable, so rows of the same age keep their matrix order.
     """
-    opens = [r for r in matrix.rows if r.status in ("skipped", "not-implemented")]
+    from fr.acceptance.model import DEBT_STATUSES
+
+    opens = [r for r in matrix.rows if r.status in DEBT_STATUSES]
     return sorted(opens, key=_age_key)
 
 
@@ -290,6 +292,9 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
                     "run `fr acceptance report --deterministic` and commit the report set"
                 )
 
+    from fr.acceptance.model import walked_error
+
+    result.errors.extend(why for row in matrix.rows if (why := walked_error(row)) is not None)
     result.failing_ids = [r.id for r in matrix.rows if r.status == "failing"]
     result.warning_rows = open_rows(matrix)
     result.summary = (

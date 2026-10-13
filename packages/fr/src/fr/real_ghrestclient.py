@@ -40,6 +40,7 @@ from fr.ghclient import (
     HostRefusedError,
     QueueState,
     UnsupportedForgeOperation,
+    filter_issues_by_body,
     run_cli,
 )
 from fr.labels import LabelDef
@@ -852,6 +853,19 @@ class RealGhRestClient:
             return None
         return {"number": int(pulls[0]["number"]), "url": str(pulls[0].get("html_url") or "")}
 
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        """`{number, url}` of the open PR whose head *branch* lives in THIS repo,
+        None when there is none. A fork can carry the same head name (a same-owner
+        fork of another repo matches the `owner:branch` filter), so a PR whose head
+        repo differs is skipped, never reported (`fr debt archive-pr`, R12)."""
+        owner = repo.split("/", 1)[0]
+        head = urllib.parse.quote(f"{owner}:{branch}", safe=":/")
+        for pr in self._paged(f"repos/{repo}/pulls?head={head}&state=open", limit=30):
+            head_repo = str(((pr.get("head") or {}).get("repo") or {}).get("full_name") or "")
+            if head_repo.lower() == repo.lower():
+                return {"number": int(pr["number"]), "url": str(pr.get("html_url") or "")}
+        return None
+
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         """Every check on *sha* (spec §I): `commits/{sha}/check-runs?filter=latest`,
         `commits/{sha}/status`, and the Actions runs naming each run's workflow.
@@ -917,6 +931,7 @@ class RealGhRestClient:
             "state": _pr_state(chosen),
             "url": chosen.get("html_url", ""),
             "mergedAt": chosen.get("merged_at"),
+            "updatedAt": chosen.get("updated_at"),
         }
 
     # ---- GhClient: repo and files ----
@@ -998,6 +1013,9 @@ class RealGhRestClient:
 
     def viewer_login(self) -> str:
         return str(self._api("user")["login"])
+
+    def authenticated_login(self) -> str:
+        return self.viewer_login()
 
     def rate_limit(self) -> dict[str, Any]:
         return cast("dict[str, Any]", self._api("rate_limit"))
@@ -1081,6 +1099,28 @@ class RealGhRestClient:
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._api(f"repos/{repo}/issues/{number}/comments", method="POST", fields={"body": body})
 
+    def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
+        self._api(
+            f"repos/{repo}/issues/{number}", method="PATCH", fields={"title": title, "body": body}
+        )
+
+    def list_open_issues_with_body(
+        self, repo: str, *, search: tuple[str, ...], limit: int
+    ) -> list[dict[str, Any]]:
+        # Oldest first, so the long-lived debt issue is in the first page whatever
+        # the repo's backlog; a capped scan is still reported as partial.
+        pages = self._paged(
+            f"repos/{repo}/issues?state=open&sort=created&direction=asc",
+            limit=limit,
+            keep=lambda i: "pull_request" not in i,
+        )
+        raw = [_project(_issue_record(i), "number,title,body,labels,author") for i in pages]
+        return filter_issues_by_body(raw, search, limit)
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        self.comment_issue(repo, number, comment)
+        self.edit_issue_state(repo, number, state="CLOSED", reason="completed")
+
     def create_issue(self, repo: str, *, title: str, body: str, labels: frozenset[str]) -> str:
         fields: dict[str, Any] = {"title": title, "body": body}
         if labels:
@@ -1159,6 +1199,9 @@ class RealGhRestClient:
             fields={"head": head, "base": base, "title": title, "body": body, "draft": draft},
         )
         return {"number": int(made["number"]), "url": str(made["html_url"])}
+
+    def edit_pr(self, repo: str, number: int, *, body: str) -> None:
+        self._api(f"repos/{repo}/pulls/{number}", method="PATCH", fields={"body": body})
 
     def close_pr(self, repo: str, number: int) -> None:
         self._api(f"repos/{repo}/pulls/{number}", method="PATCH", fields={"state": "closed"})

@@ -42,7 +42,7 @@ rows:
     acceptance: "B"
     origin: []
     levels: {}
-    status: skipped
+    status: unwired
     notes: ""
 """
 
@@ -280,7 +280,7 @@ def test_complete_phase_warns_on_unflipped_rows(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "marked complete" in result.output
     assert "row-a" in result.output  # not-implemented → nudge
-    assert "row-b" not in result.output  # skipped is a legitimate landing
+    assert "row-b" not in result.output  # unwired is a legitimate landing
 
 
 def test_complete_phase_silent_without_acceptance(tmp_path: Path) -> None:

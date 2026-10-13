@@ -279,11 +279,11 @@ def test_failing_beats_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_warning_rows_annotate_and_exit_0(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = row(id="r1", status="skipped") + row(id="r2", status="not-implemented", unit="")
+    rows = row(id="r1", status="unwired") + row(id="r2", status="not-implemented", unit="")
     root = make_repo(tmp_path, rows)
     result = run_check(root, monkeypatch)
     assert result.exit_code == 0
-    assert "::warning title=acceptance-matrix::r1 is skipped" in result.output
+    assert "::warning title=acceptance-matrix::r1 is unwired" in result.output
     assert "::warning title=acceptance-matrix::r2 is not-implemented" in result.output
 
 

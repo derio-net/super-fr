@@ -29,7 +29,7 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
-from fr.journal.model import JournalEntry, journal_path
+from fr.journal.model import JournalEntry, journal_header, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_validator_wrapper import (
@@ -360,7 +360,7 @@ def create(
         journal_p = journal_path(repo_root, "plan", slug)
         if not journal_p.exists():
             journal_p.parent.mkdir(parents=True, exist_ok=True)
-            journal_p.write_text(f"# Journal: {slug}\n")
+            journal_p.write_text(journal_header(slug))
             written.append(journal_p)
 
     if spec_path is not None:

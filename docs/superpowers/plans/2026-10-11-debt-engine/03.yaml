@@ -1,0 +1,111 @@
+schema_version: 2
+phase:
+  number: 3
+  title: owed actions — journal kind 1→2, closeout outcomes, archive hold, owed filing,
+    discharge (R16, R17–R24)
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+  acceptance:
+  - closeout-step-outcomes
+  - owed-durable-at-archive
+  - debt-owed-discharge
+  tier: hard
+  files:
+  - packages/fr/src/fr/journal/*
+  - packages/fr/src/fr/artifacts/*
+  - packages/fr/src/fr/spec.py
+  - packages/fr/src/fr/commands/closeout_cmd.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/commands/pickup_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/archive_followups.py
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/debt/*
+  - packages/fr/src/fr/record/*
+  - docs/superpowers/journals/*
+  - docs/acceptance/*
+  - tests/unit/*
+  - tests/scenarios/closeout-owed.sh
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: The `owed` journal kind and its fold (spec §E, R20)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED in tests/unit/test_journal_owed.py: an `owed` entry parses; `open_finding_ids` ignores resolution records targeting an owed id; `open_owed_ids` reports it open, including with an `open` record carrying `filed_as=<ref>` (validated by TRACKED_BY_RE) and closed after `state=fixed`; `fr journal check` passes with an open owed entry and renders it in its own block; journal stamp 1→2 migration (stamp only) and the [1→2] hop asserted; an old-stamp journal with an owed entry is refused.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: JournalKind gains `owed`; journal `current_version` 2 with a stamp-only migration imported by fr/artifacts/__init__.py; structure validator; record kind (from phase 1, v9) accepts owed journal items; `uv run fr migrate artifacts --yes` in the worktree, commit.
+- number: 2
+  title: Test Plan steps and `fr closeout outcome` (spec §E, R17, R18)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED in tests/unit/test_closeout_outcome.py: `test_plan_steps` numbers top-level `1.`/`-`/`*` items with continuation lines, and a list-less section is one step; `fr closeout outcome --run <id> --step 1-3 --na --reason "in CI"` writes three `discovery` entries `test-plan-step-<n>`; `--ran --evidence`; `--owed --why` writes an `owed` entry with `owed_key: spec:<slug>#step<n>`; exactly-one-of flags enforced; out-of-range and already-recorded steps refused.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: `test_plan_steps` in packages/fr/src/fr/spec.py; new `closeout` typer group in commands/closeout_cmd.py registered in cli.py, writing through the journal engine.
+- number: 3
+  title: Archive hold on every mode, owed filing, manual-phase owed (spec §E, R19,
+    R21, R22)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED in tests/unit/test_archive_owed.py: `fr archive --branch` and `fr archive <plan-dir>` exit 2 naming each step lacking an outcome with its `fr closeout outcome` command; the pickup close-out brief lists the steps; open owed entries are filed as `fr:owed` issues with `<!-- fr-owed:<key> -->` even under `--no-issues`, reusing an existing issue with that marker, writing back `filed_as`; nothing filed under `tracking: none`; a held unticked `[manual]` phase writes `owed` entry `manual-phase-<n>` (key `plan:<name>#p<n>`) and files it, idempotently on re-run.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: `fr.archive.missing_outcomes` called by every archive path before moving; `archive_followups.owed_ends()` filing outside the selection; `FR_OWED` in fr/labels.py; run/closeout.py brief lists steps.
+- number: 4
+  title: Discharge and the Owed section (spec §E Discharge, R23, R24)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED in tests/unit/test_debt_owed.py: `fr journal resolve --scope spec --slug <s> --id test-plan-step-4 --state fixed --note "<evidence>"` on an owed entry (live and archived journal) closes the filed issue via the forge double with the note as comment, and prints the close command when the forge is unreachable; `fr debt` Owed lists open owed entries from live and implemented/ journals once, deduped with their fr:owed issue, and drops a discharged one.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: journal_cmd resolve accepts owed targets and closes the issue; debt engine folds owed journal entries (archived included); candidate scenario tests/scenarios/closeout-owed.sh: a close-out with a Test Plan step left unrecorded is held by archive, recorded owed, archived with its issue filed, and listed by `fr debt` (set it on closeout-step-outcomes and owed-durable-at-archive).
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-10-11T23:07:15+00:00'
+      note: null
+  completion:
+    at: '2026-10-11T23:07:15+00:00'
+    note: null
+    observed_prs: []

@@ -85,7 +85,8 @@ state:
     observed_prs: []
 """
 
-GOOD_JOURNAL = """# Journal
+GOOD_JOURNAL = f"""<!-- fr:journal-schema={ARTIFACT_KINDS["journal"].current_version} -->
+# Journal
 
 <!-- fr:journal kind=discovery scope=plan id=d-one created=2019-03-04T00:00:00 phase=1 -->
 ### d-one · discovery · A thing I found (phase 1)
