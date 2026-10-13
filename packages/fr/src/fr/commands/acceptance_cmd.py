@@ -152,10 +152,12 @@ def report_cmd(
     With no flags, renders the ad-hoc, uncommitted `report.html` (git-stamped,
     honoring --link-mode). `--out` narrows to a single explicit file."""
     from fr.acceptance.report import (
+        ci_built_reports,
         prune_stale_reports,
         render_committed_set,
         render_deterministic,
         render_report,
+        tracked_reports,
     )
 
     if link_mode not in ("github", "local"):
@@ -175,7 +177,8 @@ def report_cmd(
                     )
                 }
             else:
-                expected = render_committed_set(matrix, root)
+                ci_built = ci_built_reports(root)
+                expected = render_committed_set(matrix, root, only=tracked_reports(root, ci_built))
         except AcceptanceError as e:
             err_console.print(f"[red]error:[/red] {escape(str(e))}")
             raise typer.Exit(1) from e
@@ -186,7 +189,14 @@ def report_cmd(
             if got != want:
                 stale.append(rel)
         if not stale:
-            typer.echo(f"{', '.join(expected)} in sync with matrix.yaml")
+            line = (
+                f"{', '.join(expected)} in sync with matrix.yaml"
+                if expected
+                else "no tracked reports to check"
+            )
+            if out is None and ci_built:
+                line += f" (CI-built, skipped: {', '.join(sorted(ci_built))})"
+            typer.echo(line)
             return
         typer.echo(
             f"ERROR: stale (drifted from docs/acceptance/matrix.yaml): {', '.join(stale)} — "
@@ -793,6 +803,8 @@ def init_cmd(
         typer.echo(f"removed {rel} (superseded legacy report)")
     for rel in outcome.skipped:
         typer.echo(f"exists  {rel} (left untouched)")
+    for rel in outcome.ci_built:
+        typer.echo(f"skipped {rel} (gitignored — CI builds it)")
     for notice in outcome.notices:
         typer.echo(notice)
     # gh#775: commit every path changed here, as every fr writer does (gh#610).

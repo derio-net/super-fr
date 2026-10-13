@@ -113,12 +113,15 @@ def test_a_malformed_group_member_is_a_usage_error(
 def test_collect_reads_each_repo_in_turn_and_records_a_failed_repo_as_skipped() -> None:
     forge = _forge(failing={BETA: "HTTP 502"})
     facts = collect_facts(forge, Scope.group([BETA, ALPHA]), now=NOW)
-    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA == 8
+    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA == 9
     assert facts.scope == "example-org--alpha+other-org--beta"
     assert facts.repos == [ALPHA, BETA]
     assert [(s.repo, s.reason) for s in facts.skipped] == [(BETA, "HTTP 502")]
     assert [i.repo for i in facts.issues] == [ALPHA]
-    assert [kw["repo"] for kw in forge.called("list_issues")] == [ALPHA, BETA]
+    assert [kw["repo"] for kw in forge.called("list_issues") if kw["state"] == "open"] == [
+        ALPHA,
+        BETA,
+    ]
     assert forge.called("list_repos") == []  # a group never lists an owner
 
 
@@ -147,7 +150,7 @@ def test_facts_4_round_trips_and_schema_3_still_loads_then_is_upgraded_by_collec
     result = CliRunner().invoke(app, ["triage", "collect", "--repo", GROUP, "--dir", str(tmp_path)])
     assert result.exit_code == 0, result.output
     written = json.loads(path.read_text(encoding="utf-8"))
-    assert (written["schema"], written["kind"], written["repos"]) == (8, "group", [ALPHA, BETA])
+    assert (written["schema"], written["kind"], written["repos"]) == (9, "group", [ALPHA, BETA])
     assert load_facts(path).kind == "group"
 
 

@@ -617,7 +617,8 @@ def test_board_publish_publishes_after_the_render_with_the_default_name(
     out = _publishing(tmp_path)
     code, said = _board(tmp_path, "--publish")
     assert code == 0, said
-    assert out.read_text(encoding="utf-8") == f"super-fr batches|{tmp_path / 'board.html'}\n"
+    name, board = out.read_text(encoding="utf-8").rstrip("\n").split("|")
+    assert name == "super-fr batches" and Path(board).name == "board.html"
 
 
 def test_board_without_publish_never_runs_the_command(

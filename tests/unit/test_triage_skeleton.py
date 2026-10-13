@@ -34,9 +34,9 @@ class FixtureForge:
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         return [{"name": "super-fr", "isArchived": False}]
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+    def list_issues(self, *, repo: str, state: str, limit: int, **kw: Any) -> list[dict[str, Any]]:
         assert repo == "derio-net/super-fr"
-        return self.issues
+        return self.issues if state == "open" else []
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
         assert repo == "derio-net/super-fr"
@@ -81,7 +81,7 @@ def test_collect_writes_facts_json_from_the_forge(
     facts_path = tmp_path / "facts.json"
     assert facts_path.exists()
     facts = json.loads(facts_path.read_text(encoding="utf-8"))
-    assert facts["schema"] == 8
+    assert facts["schema"] == 9
     assert facts["scope"] == "derio-net--super-fr"
     assert facts["kind"] == "repo"
     collected = {(i["repo"], i["number"]) for i in facts["issues"]}

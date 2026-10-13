@@ -128,6 +128,17 @@ def test_an_upgraded_install_is_not_a_second_binary() -> None:
     assert "restart" in verdict.message
 
 
+def test_an_upgraded_install_in_a_cloud_session_is_silent() -> None:
+    """gh#1100: a cloud driver updates its own fr by design (R18), so every later call
+    warning "restart the session to re-pin" is noise; a second binary still refuses."""
+    here = current_identity()
+    _, _, package_dir = here.partition(" ")
+    cloud = {PIN_ENV: f"0.0.1 {package_dir}", "CLAUDE_CODE_REMOTE": "true"}
+    assert judge(cloud, identity=here, from_venv=False).action == "ok"
+    other = {PIN_ENV: OTHER, "CLAUDE_CODE_REMOTE": "true"}
+    assert judge(other, identity=here, from_venv=False).action == "refuse"
+
+
 def test_the_refusal_advises_only_what_passes() -> None:
     # Review finding 2: an absolute venv path sets no VIRTUAL_ENV, so it would
     # be refused too — the advice must not offer it.

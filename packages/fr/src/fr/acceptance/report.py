@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import html
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 from fr.acceptance.anchors import is_python, line_of, node_line
@@ -431,15 +432,52 @@ REPORT_SET: dict[str, tuple[str, str]] = {
 STALE_LEGACY_REPORTS: tuple[str, ...] = ("docs/acceptance/report.github.html",)
 
 
-def render_committed_set(matrix: Matrix, root: Path) -> dict[str, str]:
+def ci_built_reports(root: Path) -> frozenset[str]:
+    """The `REPORT_SET` paths the repo gitignores and does not track — CI builds
+    them, so no fr commit path or sync check touches them (spec 2026-10-12 R1).
+
+    One `git check-ignore` call through `fr.git.git_answer` (C locale,
+    prompt-free, time-boxed; a tracked file is never reported ignored, so
+    tracked wins). Outside a git repo, or when git fails, the empty set: the
+    old behaviour. Compute it once per operation and pass it to
+    `tracked_reports`."""
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        proc = git_answer(root, "check-ignore", "--", *REPORT_SET)
+    except GitUnavailableError:
+        return frozenset()
+    if proc.returncode not in (0, 1):
+        return frozenset()
+    return frozenset(
+        line.strip() for line in proc.stdout.splitlines() if line.strip() in REPORT_SET
+    )
+
+
+def tracked_reports(
+    root: Path, ci_built: frozenset[str] | None = None
+) -> dict[str, tuple[str, str]]:
+    """`REPORT_SET` minus `ci_built_reports(root)` — the reports fr commits and
+    keeps in sync (spec 2026-10-12 R1). Pass `ci_built` when the caller already
+    computed it, so one operation asks git once."""
+    skipped = ci_built_reports(root) if ci_built is None else ci_built
+    return {rel: spec for rel, spec in REPORT_SET.items() if rel not in skipped}
+
+
+def render_committed_set(
+    matrix: Matrix, root: Path, only: Iterable[str] | None = None
+) -> dict[str, str]:
     """`{repo-relative path: rendered}` for every committed report — one per
-    entry in `REPORT_SET`, each a deterministic render of `matrix.yaml`. All
-    live in `docs/acceptance/`, so a shared `out_dir` keeps their relative links
-    consistent. A pure matrix→content function: no filesystem writes/deletes."""
+    entry in `REPORT_SET` (or only those named in `only`), each a deterministic
+    render of `matrix.yaml`. All live in `docs/acceptance/`, so a shared
+    `out_dir` keeps their relative links consistent. A pure matrix→content
+    function: no filesystem writes/deletes."""
     out_dir = root / "docs" / "acceptance"
+    wanted = set(REPORT_SET if only is None else only)
     return {
         rel: render_deterministic(matrix, root, out_dir, "..", link_mode, fmt)
         for rel, (link_mode, fmt) in REPORT_SET.items()
+        if rel in wanted
     }
 
 

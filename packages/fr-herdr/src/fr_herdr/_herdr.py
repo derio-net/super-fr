@@ -112,3 +112,16 @@ def _error_code(detail: str) -> str | None:
     error = envelope.get("error") if isinstance(envelope, dict) else None
     code = error.get("code") if isinstance(error, dict) else None
     return str(code) if code is not None else None
+
+
+def agent_cwd(agent: dict[str, Any]) -> str | None:
+    """Where a `herdr agent list` entry works: its foreground cwd, else its pane cwd."""
+    cwd = agent.get("foreground_cwd") or agent.get("cwd")
+    return str(cwd) if cwd else None
+
+
+def agent_session(agent: dict[str, Any]) -> str | None:
+    """The harness session id of a `herdr agent list` entry, or None."""
+    session = agent.get("agent_session")
+    value = session.get("value") if isinstance(session, dict) else None
+    return str(value) if value else None

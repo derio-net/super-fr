@@ -45,10 +45,50 @@ def test_the_preflight_comes_before_the_batch() -> None:
     assert brief.index("## Before anything else") < brief.index("Batch `lifecycle`")
 
 
-def test_it_checks_fr_and_installs_super_fr_only_when_missing() -> None:
+def test_it_checks_fr_and_installs_super_fr_when_missing() -> None:
     step = _preflight(_brief("claude-cloud"))
     assert "`fr --version`" in step
-    assert "only if" in step and "super-fr" in step and "scripts/install.sh" in step
+    assert "super-fr" in step and "scripts/install.sh" in step
+
+
+def test_a_stale_fr_is_updated_before_anything_else() -> None:
+    """gh#1098: a pre-warmed spare runs the fr its setup script installed before the
+    latest release. The brief installed fr only when missing; now `fr cloud doctor`'s
+    `fr` line (installed against the latest release) decides, and a FAIL reruns the
+    setup script, which updates the existing clone and reinstalls."""
+    step = _preflight(_brief("claude-cloud"))
+    assert "`fr cloud doctor`" in step
+    assert "older than the latest release" in step
+    assert step.index("`fr cloud doctor`") < step.index("```bash")
+
+
+def test_the_batch_skill_is_required_and_its_absence_blocks() -> None:
+    """gh#1098: a worker without /fr-goal skipped spec, plan and review and shipped a PR
+    with no run. The brief requires the skill, names where the setup script installed
+    it, and ends BLOCKED when it cannot run it."""
+    step = _preflight(_brief("claude-cloud"))
+    assert "`/fr-goal`" in step
+    assert "plugins/super-fr/skills/fr-goal/SKILL.md" in step
+    assert "a PR with no run" in step
+    assert "needs_action: the `fr-goal` skill" in step
+
+
+def test_a_debug_batch_requires_fr_debugging() -> None:
+    j = Judgements.model_validate(yaml.safe_load(JUDGEMENTS))
+    batch = j.batches[0].model_copy(update={"skill": "debug"})
+    brief = render_brief(
+        batch, j, _facts(), repo=REPO, closing_refs=[], reserved_version=None,
+        runner="claude-cloud",
+    )  # fmt: skip
+    step = _preflight(brief)
+    assert "`/fr-debugging`" in step and "skills/fr-debugging/SKILL.md" in step
+
+
+def test_agents_are_checked_by_dispatchability_not_by_file() -> None:
+    """gh#1098: a worker "confirmed" the agents by listing `.claude/agents/`."""
+    step = _preflight(_brief("claude-cloud"))
+    assert "not proof" in step and ".claude/agents/" in step
+    assert "whether the super-fr hooks" in step
 
 
 def test_fr_off_path_is_found_before_it_is_called_missing() -> None:

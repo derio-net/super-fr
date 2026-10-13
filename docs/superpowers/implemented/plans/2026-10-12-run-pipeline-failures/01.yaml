@@ -1,0 +1,160 @@
+schema_version: 2
+phase:
+  number: 1
+  title: CI-built acceptance reports — ignored reports never block a commit or the
+    check (#1090)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - acceptance-ci-built-reports
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/acceptance/report.py
+  - packages/fr/src/fr/acceptance/check.py
+  - packages/fr/src/fr/acceptance/scaffold.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/artifacts/matrix_anchors.py
+  - tests/unit/test_acceptance_ci_built_reports.py
+  - tests/integration/test_acceptance_ci_built_reports.py
+  - .changes/feat-batch-run-pipeline.yaml
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: Smoke — the branch's CI and targeted test loop work
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `.changes/feat-batch-run-pipeline.yaml` with exactly
+      `bump: patch` and `summary: fr no longer fails commits or the acceptance
+      check on gitignored reports, stops owing a candidate walk a repo cannot
+      run, and keeps the first claim's identity on a re-claim`. Run
+      `uv run --no-project python scripts/check-change-fragment.py origin/main`
+      and confirm it passes. Run one existing targeted test file
+      (`uv run pytest tests/unit/test_acceptance_check.py -q --no-cov`, or the
+      nearest existing acceptance-check test file found with
+      `ls tests/unit | grep acceptance`) and confirm it is green. Commit and push;
+      the draft PR #1143's CI is the smoke.
+- number: 2
+  title: RED — ci_built_reports / tracked_reports and the check paths
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: create tests/unit/test_acceptance_ci_built_reports.py. Fixture: a
+      tmp git repo (`git init`, user config, one commit) with a minimal
+      acceptance matrix (reuse the helper existing acceptance tests use to
+      build one — grep tests/ for `matrix.yaml` fixtures). Cases:
+      (a) `.gitignore` with `docs/acceptance/report*.html` and
+      `docs/acceptance/report*.md` -> `ci_built_reports(root)` is all three
+      REPORT_SET paths and `tracked_reports(root)` is empty;
+      (b) a report that is ignored but `git add -f`-tracked is NOT CI-built;
+      (c) a non-git directory -> empty set;
+      (d) `check_matrix`/the `fr acceptance check` path reports no
+      `report drift` error when the ignored reports are absent or stale;
+      (e) with only report_linked.md ignored and report_local.html tracked but
+      stale, the check still reports drift for report_local.html only;
+      (f) `fr acceptance report --check` (CliRunner) exits 0 with ignored
+      reports absent, names the skipped CI-built ones, and still exits 3 on a
+      stale tracked one; (g) `report --check --out docs/acceptance/report_linked.md`
+      on an ignored, stale file exits 3 (explicit request is compared);
+      (h) `report --deterministic` writes all three files even when ignored.
+      Run the file, confirm the failures are the missing functions/behaviour.
+- number: 3
+  title: GREEN — helper and check paths
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/acceptance/report.py, beside REPORT_SET, add
+      `ci_built_reports(root) -> frozenset[str]` (one `git -C root check-ignore
+      --stdin` call fed REPORT_SET's paths; rc 0/1 parse stdout; any other rc,
+      FileNotFoundError or not-a-repo -> frozenset()) and
+      `tracked_reports(root) -> dict[str, tuple[str, str]]` (REPORT_SET minus
+      ci_built_reports). Docstrings cite spec 2026-10-12 R1. Use it in
+      acceptance/check.py:276 (existence trigger + comparison over tracked
+      reports only) and commands/acceptance_cmd.py report --check (whole-set
+      branch only; append "(CI-built, skipped: ...)" to the success line when
+      any were skipped; the `--out` branch unchanged). Leave
+      `--deterministic` unchanged. Run the Task 2 tests until green.
+  - id: P1.T3.S2
+    text: |-
+      REFACTOR: make `render_committed_set` accept an optional `only:
+      Iterable[str] | None = None` (default all of REPORT_SET) rather than
+      filtering its output at each caller, if that reads cleaner; otherwise
+      record a `refactor:` reason in the step record. Re-run the Task 2 tests.
+- number: 4
+  title: RED → GREEN — the commit paths
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: create tests/integration/test_acceptance_ci_built_reports.py on a
+      tmp git repo whose `.gitignore` ignores the report set, on a feature
+      branch (commit_paths refuses the default branch): (a) a step record with
+      an `acceptance:` row applied via the record engine (find the existing
+      apply_record integration test and mirror its setup) commits — the commit
+      exists and `git show --name-only HEAD` lists matrix.yaml and no
+      docs/acceptance/report_* path; (b) `fr acceptance add` (CliRunner)
+      commits likewise; (c) `fr acceptance set-status` likewise; (d) the
+      archive retarget helper in commands/archive_cmd.py (the function around
+      line 450 that calls render_committed_set) stages without error and does
+      not stage reports; (e) matrix_anchors `_report_paths` returns no ignored
+      path and `_fn` writes none; (f) `fr acceptance init` on a repo whose
+      .gitignore already ignores the reports reports them skipped and writes
+      none. Run, confirm red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: switch record/apply.py:803 (render + overlay put) to tracked
+      reports only; commands/archive_cmd.py retarget to tracked reports only
+      (renders, dirty check, writes and the `git add`); acceptance/scaffold.py
+      init loop over tracked reports, appending CI-built ones to `skipped`;
+      artifacts/matrix_anchors.py `_report_paths` and `_fn` over tracked
+      reports. Each change calls tracked_reports/ci_built_reports — never
+      `git check-ignore` directly. Run Task 2 + Task 4 tests until green, then
+      `uv run pytest tests/unit -q --no-cov -k "acceptance or matrix or archive"`.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR + gate: `uv run ruff format packages/ tests/`, `uv run ruff
+      check packages/ tests/`, `uv run mypy packages/fr/src`. Move the
+      acceptance-ci-built-reports row with `uv run fr acceptance set-status
+      --id acceptance-ci-built-reports --status ci --notes "<why>" --level
+      unit=super-fr:tests/unit/test_acceptance_ci_built_reports.py#<test name>
+      --level integration=super-fr:tests/integration/test_acceptance_ci_built_reports.py#<test name>`
+      (anchor on test NAMES). Commit, push, and record the suite evidence per
+      the brief (tests: ci or a host-visible log of the targeted run).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-11T22:40:36+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-11T22:40:36+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-11T22:40:36+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-11T22:40:36+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-11T22:40:36+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-11T22:40:36+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-10-11T22:40:36+00:00'
+      note: null
+  completion:
+    at: '2026-10-11T22:40:36+00:00'
+    note: null
+    observed_prs: []
