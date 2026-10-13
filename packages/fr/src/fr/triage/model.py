@@ -392,7 +392,7 @@ class Truncation(_Strict):
         """
         if self.source == "closed-in-progress":
             return (
-                f"the closed fr:in-progress list for {target} returned exactly its limit "
+                f"a closed fr:in-progress / fr:claimed list for {target} returned exactly its limit "
                 f"({self.limit}), so the closed-but-in-progress set may be incomplete; "
                 "no flag raises this limit"
             )
@@ -407,7 +407,7 @@ _LIST_WORDS: dict[str, str] = {
     "prs": "PR list",
     "issues": "issue list",
     "repos": "repo list",
-    "closed-in-progress": "closed fr:in-progress list",
+    "closed-in-progress": "closed fr:in-progress / fr:claimed list",
 }
 
 
@@ -542,9 +542,10 @@ InProgressState = Literal["stale", "release-pending", "held"]
 
 
 class StaleInProgress(_Strict):
-    """A CLOSED issue still labelled `fr:in-progress` (board-truth §B, R2). `stale` is
-    safe to clean; `release-pending` carries this scope's own un-released claim (the
-    next `claim sync` releases both labels); `held` carries another scope's."""
+    """A CLOSED issue still labelled `fr:in-progress` or `fr:claimed` (board-truth §B R2;
+    post-merge truth R3). `stale` is safe to clean; `release-pending` carries this scope's
+    own un-released claim (the next `claim sync --yes` or drive pass releases it and takes
+    both labels off); `held` carries another scope's."""
 
     key: str
     title: str
@@ -586,7 +587,7 @@ class Facts(_Strict):
     # visibility the forge answered (cloud-triage §B, §C): the state-repo decision and
     # the privacy guard read it; a repo missing here is read live by the guard.
     visibility: dict[str, str] = {}
-    # Closed issues still labelled `fr:in-progress` (board-truth §B, R2), schema 9.
+    # Closed issues still labelled `fr:in-progress` or `fr:claimed` (board-truth §B, R2), schema 9.
     stale_in_progress: list[StaleInProgress] = []
     # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (R4,
     # schema 9; the skew banner reads it).
