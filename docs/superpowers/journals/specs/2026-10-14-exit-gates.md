@@ -382,3 +382,6 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p2 created=2026-10-13T23:05:59+00:00 -->
 ### phase-split-2026-10-14-exit-gates-p2 · decision · ask: PR labels and fr verification set (R7, R8) are reviewable on their own over phase 1's exit
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-exit-gates-p3 created=2026-10-13T23:06:03+00:00 -->
+### phase-split-2026-10-14-exit-gates-p3 · decision · ask: deliver's leftover accounting, fr journal file and the narrowing Closes guard (R9-R12)
