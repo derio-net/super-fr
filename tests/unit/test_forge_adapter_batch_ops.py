@@ -388,13 +388,21 @@ _FORGE_CLIS = (
     "fr.triage.collect",
     "fr.isolation",
 )
-# The one call outside the seams (spec 2026-10-06-triage-batch-adopt §A): isolation
-# owns its own keys and the git calls that move them, so `batch adopt` renames a
-# branch through `fr.isolation.rename.rename_branch` and catches its error.
+# The calls outside the seams: isolation owns its own keys and the git calls that
+# move them, so `batch adopt` renames a branch through `fr.isolation.rename`
+# (spec 2026-10-06-triage-batch-adopt §A) and enters, binds and reuses a workspace
+# for a session on the default branch through `fr.isolation.adopt`, the one module
+# that owns adopt's isolation calls (spec 2026-10-11-batch-adopt-safety-2 §B).
 _ISOLATION_ALLOWED = frozenset(
     {
         "from fr.isolation.rename import rename_branch",
         "from fr.isolation.rename import IsolationError",
+        "from fr.isolation.adopt import bind_session",
+        "from fr.isolation.adopt import enter_workspace",
+        "from fr.isolation.adopt import reusable_workspace",
+        "from fr.isolation.adopt import session_worktree",
+        "from fr.isolation.adopt import workspace_containing",
+        "from fr.isolation.adopt import workspace_path",
     }
 )
 _GIT_SEAM = "packages/fr/src/fr/triage/gitseam.py"
@@ -424,18 +432,22 @@ def test_no_batch_module_reaches_a_forge_cli_or_triage_forge(path: Path) -> None
     assert [f for f in found if f not in _ISOLATION_ALLOWED] == []
 
 
-def test_the_isolation_allowance_is_the_rename_alone(tmp_path: Path) -> None:
+def test_the_isolation_allowance_is_the_rename_and_adopt_seams_alone(tmp_path: Path) -> None:
     from tests.unit.triage_fixtures import forbidden_imports
 
     plant = tmp_path / "plant.py"
     plant.write_text(
         "from fr.isolation.rename import rename_branch, IsolationError\n"
+        "from fr.isolation.adopt import bind_session, enter_workspace, reusable_workspace\n"
+        "from fr.isolation.adopt import workspace_path\n"
+        "from fr.isolation.adopt import _select_target\n"
         "from fr.isolation.types import save_state\n"
         "from fr.isolation import local\n",
         encoding="utf-8",
     )
     found = forbidden_imports(plant, "fr.triage", _FORGE_CLIS)
     assert [f for f in found if f not in _ISOLATION_ALLOWED] == [
+        "from fr.isolation.adopt import _select_target",
         "from fr.isolation.types import save_state",
         "from fr.isolation import local",
     ]

@@ -1,0 +1,43 @@
+{
+  "batch_prs": [],
+  "collected_at": "2026-10-02T12:00:00+00:00",
+  "config": {},
+  "config_ignored": {},
+  "issues": [],
+  "judged_prs": [],
+  "kind": "repo",
+  "prs": [],
+  "repos": [
+    "example-org/widgets"
+  ],
+  "schema": 9,
+  "scope": "example-org--widgets",
+  "skipped": [],
+  "stale_in_progress": [
+    {
+      "closed_at": "2026-10-01T00:00:00Z",
+      "key": "widgets#1",
+      "state": "stale",
+      "title": "issue 1",
+      "url": "https://github.com/example-org/widgets/issues/1"
+    },
+    {
+      "closed_at": "2026-10-01T00:00:00Z",
+      "key": "widgets#2",
+      "state": "release-pending",
+      "title": "issue 2",
+      "url": "https://github.com/example-org/widgets/issues/2"
+    },
+    {
+      "closed_at": "2026-10-01T00:00:00Z",
+      "key": "widgets#3",
+      "state": "held",
+      "title": "issue 3",
+      "url": "https://github.com/example-org/widgets/issues/3"
+    }
+  ],
+  "unviewed": [],
+  "viewer": "operator",
+  "visibility": {},
+  "warnings": []
+}

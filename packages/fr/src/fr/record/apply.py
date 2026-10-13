@@ -686,7 +686,7 @@ def _acceptance_writes(
         split_ref,
         walked_error,
     )
-    from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set
+    from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set, tracked_reports
 
     matrix_path = repo_root / MATRIX_REL
     text = overlay.read(matrix_path)
@@ -825,7 +825,9 @@ def _acceptance_writes(
         raise RecordRefusedError(f"the rows would leave an invalid matrix: {e}") from e
     overlay.put(matrix_path, text)
     try:
-        for rel, rendered in render_committed_set(final, repo_root).items():
+        for rel, rendered in render_committed_set(
+            final, repo_root, only=tracked_reports(repo_root)
+        ).items():
             overlay.put(repo_root / rel, rendered)
         for rel in STALE_LEGACY_REPORTS:
             if (repo_root / rel).exists():

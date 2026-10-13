@@ -2,9 +2,9 @@
 
 A debt digest is an open issue carrying the debt marker (`fr-technical-debt`, or the
 legacy `fr-acceptance-digest`) as a line of its own. Its figures are parsed from the
-body the facts already hold, at check and render time. Only facts schema 9 adds
+body the facts already hold, at check and render time. Only facts schema 10 adds
 `Issue.author`, which the trust check needs: a digest counts only from a trusted author,
-and facts written before schema 9 carry none, so theirs read as untrusted.
+and facts written before schema 10 carry none, so theirs read as untrusted.
 Issue bodies come from the forge: the numbers read here are coerced to plain ints
 and used for display only, never for any decision.
 """

@@ -138,6 +138,54 @@ def test_absent_rsync_fails(home: Path, repo: Path) -> None:
     assert [c.name for c in _check(repo, rsync=False) if not c.ok] == ["rsync"]
 
 
+def _methods(repo: Path, allowed: list[str], configured: str | None) -> list[cloud.Check]:
+    if configured:
+        (repo / ".fr").mkdir(exist_ok=True)
+        (repo / ".fr" / "triage.yaml").write_text(f"merge_method: {configured}\n")
+    return cloud.check(
+        repo_root=repo,
+        latest_release=lambda: None,
+        which=lambda cmd: "/usr/bin/rsync",
+        installed="5.17.1",
+        merge_methods=lambda: {"default": "squash", "allowed": allowed},
+    )
+
+
+def test_several_merge_methods_and_none_configured_fails(home: Path, repo: Path) -> None:
+    """gh#1100: under `forge.api: rest` the driver sees no default merge method (REST names
+    none, even where GraphQL would), so a repo allowing several with no `merge_method`
+    refuses every merge. The doctor says so before the first one."""
+    _healthy(home, repo)
+    failed = [c for c in _methods(repo, ["merge", "squash"], None) if not c.ok]
+    assert [c.name for c in failed] == ["merge_method"]
+    assert "merge_method" in failed[0].fix and ".fr/triage.yaml" in failed[0].fix
+
+
+@pytest.mark.parametrize(
+    ("allowed", "configured"), [(["merge", "squash"], "squash"), (["squash"], None)]
+)
+def test_a_configured_or_single_merge_method_passes(
+    home: Path, repo: Path, allowed: list[str], configured: str | None
+) -> None:
+    _healthy(home, repo)
+    assert all(c.ok for c in _methods(repo, allowed, configured))
+
+
+def test_a_configured_merge_method_the_repo_disallows_fails(home: Path, repo: Path) -> None:
+    _healthy(home, repo)
+    failed = [c for c in _methods(repo, ["merge"], "squash") if not c.ok]
+    assert [c.name for c in failed] == ["merge_method"]
+
+
+def test_unknown_merge_methods_are_not_a_failure(home: Path, repo: Path) -> None:
+    _healthy(home, repo)
+    checks = cloud.check(
+        repo_root=repo, latest_release=lambda: None, which=lambda cmd: "/usr/bin/rsync",
+        installed="5.17.1", merge_methods=lambda: None,
+    )  # fmt: skip
+    assert all(c.ok for c in checks)
+
+
 # --- remedy_block ------------------------------------------------------------------
 
 

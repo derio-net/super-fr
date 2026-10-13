@@ -1,0 +1,271 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Four small fixes — tracker close state, dead-binding reason, corrupt models.yaml,
+    board columns
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - tracker-done-closes-issue
+  - models-dead-reason-trimmed
+  - models-corrupt-config-reported
+  - triage-skill-board-columns
+  tier: standard
+  files:
+  - packages/fr/src/fr/tracker/github.py
+  - tests/unit/fakes.py
+  - tests/unit/test_tracker.py
+  - packages/fr/src/fr/bindings/probe.py
+  - tests/unit/test_bindings_probe*.py
+  - packages/fr/src/fr/models.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/models_cmd.py
+  - tests/unit/test_models*.py
+  - tests/unit/test_run_*.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_tripwire_triage_board_columns.py
+  - .changes/feat-batch-fr-small-fixes.yaml
+  - docs/acceptance/*
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: R1, R2 — tracker closes with CLOSED; the fake refuses any other state (spec
+    §A)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_tracker.py, extend
+      test_github_tracker_transition_to_done_closes_the_issue to assert the
+      recorded call is ("edit_issue_state", {..., "state": "CLOSED", ...}) and add
+      a test that FakeGhClient().edit_issue_state(repo, n, state="closed") raises
+      ValueError matching "unknown issue state". Run
+      `uv run pytest tests/unit/test_tracker.py -q --no-cov`; both fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: tests/unit/fakes.py FakeGhClient.edit_issue_state raises
+      ValueError(f"unknown issue state: {state!r}") unless state in
+      ("OPEN", "CLOSED") (after self._gate(), before recording the call), and
+      packages/fr/src/fr/tracker/github.py:114 passes state="CLOSED". Make the
+      fake's stored issue state consistent with what GithubTracker.observe reads
+      for a closed issue (check observe's comparison; the existing observe tests
+      must stay green). Run test_tracker.py, then grep tests/ for every
+      FakeGhClient edit_issue_state caller (`grep -rn "edit_issue_state\|state=\"closed\"" tests/`)
+      and run those files; fix any test that passed a non-OPEN/CLOSED state.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: none expected beyond the two-line change; if the fake's state
+      normalisation needed a helper, keep it in fakes.py. Re-run the touched test files.
+- number: 2
+  title: R3 — dead-binding reason trimmed of the wrapper's brackets (spec §B)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in the probe unit test file (grep tests/unit for "def test.*classify"
+      to find it), add: (a) classify over the captured
+      tests/fixtures/bindings/opencode-run-not-found.stderr gives verdict "dead",
+      hint "gpt-6.1-sol", and a detail ending in "Did you mean: gpt-6.1-sol?";
+      (b) a single stderr line shaped like the issue,
+      `cause="Cause([Fail(ProviderModelNotFoundError: Model not found: p/m. Did you mean: m2?)]))`
+      gives detail "ProviderModelNotFoundError: Model not found: p/m. Did you mean: m2?";
+      (c) a message with an inner parenthesis,
+      `ProviderModelNotFoundError: Model not found: p/foo(beta). Did you mean: m2?)])`
+      keeps "foo(beta)". Run it; (a)/(b) fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/bindings/probe.py classify: when _NOT_FOUND
+      matches, the detail is found.group(0).rstrip(")] \t"). Leave _NOT_FOUND
+      and _HINT unchanged. Run the probe tests plus
+      `uv run pytest tests/unit -q --no-cov -k "binding or probe"`.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: name the trim (a module constant `_WRAPPER_TAIL = ")] \t"` with a
+      one-line comment citing the OpenCode wrapper shape) if it reads better; re-run.
+- number: 3
+  title: R4–R6 — a corrupt models.yaml is reported, never a traceback (spec §C)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED (unit): in the models unit tests (grep tests/unit for "load_models"),
+      add: load_models on a file containing "claude-code: [unclosed" raises
+      ModelsError whose message starts with the file path and contains
+      "not valid YAML"; the existing structural ModelsError still raises.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/models.py load_models wraps yaml.safe_load in
+      `except yaml.YAMLError as exc: raise ModelsError(f"{path}: not valid YAML: {first line of str(exc)}") from exc`.
+      Run the unit tests.
+  - id: P1.T3.S3
+    text: |-
+      RED (CLI): with a CliRunner and XDG_CONFIG_HOME/HOME pointed at tmp with a
+      corrupt fr/models.yaml, and FR_HARNESS=claude-code so the notice paths
+      run, assert: (a) `fr run start` (follow the existing fixture pattern in the
+      run start CLI tests — grep tests/unit for "run\", \"start\"") exits 0, the
+      run file exists, and output contains one "warning:" line naming the
+      models.yaml path and no "Traceback"; (b) `fr run advance <id>` exits 2
+      with stderr "fr: <path>: not valid YAML…" and no traceback; (c) `fr models
+      resolve --harness claude-code --tier standard` and `fr models check`
+      exit 2 the same way; (d) `fr run resolve <id> --step <agent step> --record
+      <file>` on a `done` record exits 2, prints no traceback, the record IS
+      applied (cursor/journal moved, commit made) and the output says
+      "record applied; the advance after it was refused: fr: <path>: …";
+      (e) with no harness detected (FR_HARNESS unset, no harness env), `fr run
+      start` prints no models warning and `fr run advance` behaves as today
+      (no new load). Run; (a)–(d) fail.
+  - id: P1.T3.S4
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/run_cmd.py start, wrap the post-save
+      _orchestrator_model_notice and _binding_health calls in one
+      `try/except ModelsError as exc` that prints
+      `warning: {exc} — model bindings ignored for this notice` (yellow, escaped,
+      soft_wrap) and continues. For advance and every fr models command, catch
+      ModelsError once at the command entry (one small helper, e.g. a context
+      manager or decorator beside the command group, not per load_models call)
+      and print `fr: {exc}` to stderr, raise typer.Exit(2). For `fr run resolve
+      --record`, catch it INSIDE `_advance_after_record` (run_cmd.py ~6702), after
+      the record is applied, and print it like that function's existing
+      refusals: `record applied; the advance after it was refused: fr: {exc}`,
+      exit 2 — never at resolve's entry, which would read as "nothing applied".
+      A broken config must never be read as unbound: do not catch it inside
+      _unbound_tiers/_resolved_model, and add no load where none happens today
+      (no harness → no read). Leave triage batch dispatch/drive untouched (spec
+      Non-goals). Run the CLI tests.
+  - id: P1.T3.S5
+    text: |-
+      REFACTOR: make sure the advance-side and models-side handlers share one
+      helper if both live in fr.commands; re-run
+      `uv run pytest tests/unit -q --no-cov -k "models or run_start or run_cli"`.
+- number: 4
+  title: R7 — skill names every column, no count anywhere, tripwire reads COLUMN_TITLES
+    live (spec §D)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: create tests/unit/test_tripwire_triage_board_columns.py. It imports
+      fr.triage.kanban.COLUMN_TITLES at test time (never a copied list), reads
+      plugins/super-fr/skills/fr-triage/SKILL.md, and selects the board
+      paragraph as the line containing "`fr triage board` writes `board.html`"
+      (not by its bold lead, which another PR renames). Assert: exactly one
+      such line; every COLUMN_TITLES value is a substring of it; and no
+      `\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(lifecycle\s+)?columns\b`
+      match (case-insensitive) in it. Also assert the `fr triage board`
+      command's docstring (triage_kanban_cmd.py) matches no such count phrase.
+      Run it; it fails on "six lifecycle columns".
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in plugins/super-fr/skills/fr-triage/SKILL.md line 101 replace
+      "a live Kanban of the batches in six lifecycle columns," with
+      "a live Kanban of the batches across its columns (Proposed, Waiting, Running, PR open, Closing out, Partial, Done),"
+      — use the titles exactly as COLUMN_TITLES holds them on this branch. In
+      packages/fr/src/fr/commands/triage_kanban_cmd.py:502 change the docstring
+      to "Write board.html: one card per batch in its lifecycle column
+      (`fr.triage.kanban.COLUMN_TITLES`), with live session …" (keep the rest).
+      Run `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py` (check each script's
+      shebang/usage first) to regenerate both mirrors. Run the new tripwire plus
+      `uv run pytest tests/unit -q --no-cov -k "tripwire_opencode or tripwire_hermes or skill_validation or tool_neutrality or triage_kanban"`.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: keep the tripwire's paragraph finder and count regex as named
+      module constants with a docstring saying why (columns are moving: a
+      column-changing PR merging after this one must go red until the skill
+      follows). Re-run it.
+- number: 5
+  title: Release fragment, acceptance rows, quality gate
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Add .changes/feat-batch-fr-small-fixes.yaml with `bump: patch` and a
+      one-line summary naming the four fixes (tracker done closes, dead-binding
+      reason trimmed, corrupt models.yaml reported without a traceback,
+      fr-triage skill names the board's columns). Never touch a version surface.
+  - id: P1.T5.S2
+    text: |-
+      Move the four acceptance rows to ci with `uv run fr acceptance set-status
+      --id <row> --status ci --notes "<why>" --level unit=super-fr:<test file>#<test name>`
+      for tracker-done-closes-issue, models-dead-reason-trimmed,
+      models-corrupt-config-reported, triage-skill-board-columns (name-anchored
+      refs, never #L<n>), then `uv run fr acceptance check`.
+  - id: P1.T5.S3
+    text: |-
+      Quality gate: `uv run ruff format packages/ tests/`, `uv run ruff check
+      packages/ tests/`, the mypy command from AGENTS.md, and the targeted test
+      files touched above (never the full suite locally). Commit, push, and use
+      `tests: ci` evidence (CI on the draft PR runs the full suite).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T3.S5:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-10-12T15:43:37+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T15:43:37+00:00'
+    note: null
+    observed_prs: []

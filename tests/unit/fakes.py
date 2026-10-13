@@ -198,6 +198,8 @@ class FakeGhClient:
         reason: str | None = None,
     ) -> None:
         self._gate()
+        if state not in ("OPEN", "CLOSED"):
+            raise ValueError(f"unknown issue state: {state!r}")
         self.calls.append(
             ("edit_issue_state", {"repo": repo, "number": number, "state": state, "reason": reason})
         )

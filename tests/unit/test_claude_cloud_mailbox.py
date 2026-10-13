@@ -102,6 +102,31 @@ def test_dispatch_writes_a_pending_request_and_returns_its_pending_handle(
     assert request["prompt"] == ITEM.payload["brief"]
 
 
+def test_a_closeout_starts_on_the_default_branch_never_the_deleted_batch_branch(
+    tmp_path: Path,
+) -> None:
+    """gh#1099: the batch branch is deleted when its PR merges, so a close-out session
+    started on it fails before its first turn (`ref_not_found`). It runs `fr pickup`
+    from the base clone: it starts on the default branch the driver resolved."""
+    runner = _opened(tmp_path)
+    closeout = run_item(run_id="closeout-b1", kind="closeout", base="trunk")
+
+    runner.dispatch(closeout)
+
+    (request,) = _requests(tmp_path)
+    assert request["branch"] == "trunk"
+
+
+def test_a_closeout_with_no_resolved_base_names_no_branch(tmp_path: Path) -> None:
+    """With no `base` the request names no branch (the repo's default), never the batch's."""
+    runner = _opened(tmp_path)
+
+    runner.dispatch(run_item(run_id="closeout-b1", kind="closeout"))
+
+    (request,) = _requests(tmp_path)
+    assert request["branch"] is None
+
+
 def test_a_pending_dispatch_is_held_and_never_requested_twice(tmp_path: Path) -> None:
     runner = _opened(tmp_path)
     first = runner.dispatch(ITEM)

@@ -32,9 +32,11 @@ class _Forge:
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         return [{"name": "alpha", "isArchived": False}, {"name": "beta", "isArchived": False}]
 
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+    def list_issues(self, *, repo: str, state: str, limit: int, **kw: Any) -> list[dict[str, Any]]:
         if self.fail_with is not None and repo.endswith(("/super-fr", "/beta")):
             raise ForgeError(self.fail_with)
+        if state != "open":
+            return []  # the closed + fr:in-progress read (board-truth §B)
         return _load("super-fr-issues.json")
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
@@ -120,7 +122,7 @@ def test_org_scope_reports_a_skipped_repo_verbatim_and_still_writes(
     assert "[no access] [/red]" in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["skipped"] == [{"repo": "example-org/beta", "reason": "[no access] [/red]"}]
-    assert facts["schema"] == 9
+    assert facts["schema"] == 10
 
 
 def test_pr_limit_widens_the_window_and_a_full_list_warns(

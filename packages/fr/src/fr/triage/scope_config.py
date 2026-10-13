@@ -179,7 +179,9 @@ def default_board_name(scope: Scope) -> str:
 _PLACEHOLDER = re.compile(r"\{(board|name|scope_id)\}")
 
 
-def publish_board(scope: Scope, config: ScopeConfig, board: Path) -> str | None:
+def publish_board(
+    scope: Scope, config: ScopeConfig, board: Path, *, cwd: Path | None = None
+) -> str | None:
     """Run the scope's `publish` command for the rendered *board* (R14); None when it
     succeeded or there is none, else the cause of the failure on one line.
 
@@ -188,7 +190,8 @@ def publish_board(scope: Scope, config: ScopeConfig, board: Path) -> str | None:
     placeholder is not expanded again; other braces stay literal), so a value is never
     parsed as syntax. The command runs with the operator's full environment and with
     the scope's state directory (the board's own) as its working directory. A command
-    that does not finish in `PUBLISH_TIMEOUT` seconds is killed. A failing command
+    that does not finish in `PUBLISH_TIMEOUT` seconds is killed. *cwd* replaces that working
+    directory (the caller hands over a temporary copy, board-truth R10). A failing command
     returns its cause rather than raising; `scope_id()` and `default_board_name()` can
     raise `TriageError`, which the caller (`triage_kanban_cmd.publish`) turns into a
     warning, so publishing never changes a command's exit code."""
@@ -200,4 +203,4 @@ def publish_board(scope: Scope, config: ScopeConfig, board: Path) -> str | None:
         "scope_id": scope_id(scope),
     }
     argv = [_PLACEHOLDER.sub(lambda m: values[m.group(1)], word) for word in config.publish]
-    return run_publish(argv, board.parent, PUBLISH_TIMEOUT)
+    return run_publish(argv, cwd if cwd is not None else board.parent, PUBLISH_TIMEOUT)

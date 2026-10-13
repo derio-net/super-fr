@@ -113,12 +113,15 @@ def test_a_malformed_group_member_is_a_usage_error(
 def test_collect_reads_each_repo_in_turn_and_records_a_failed_repo_as_skipped() -> None:
     forge = _forge(failing={BETA: "HTTP 502"})
     facts = collect_facts(forge, Scope.group([BETA, ALPHA]), now=NOW)
-    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA == 9
+    assert facts.kind == "group" and facts.schema_ == FACTS_SCHEMA == 10
     assert facts.scope == "example-org--alpha+other-org--beta"
     assert facts.repos == [ALPHA, BETA]
     assert [(s.repo, s.reason) for s in facts.skipped] == [(BETA, "HTTP 502")]
     assert [i.repo for i in facts.issues] == [ALPHA]
-    assert [kw["repo"] for kw in forge.called("list_issues")] == [ALPHA, BETA]
+    assert [kw["repo"] for kw in forge.called("list_issues") if kw["state"] == "open"] == [
+        ALPHA,
+        BETA,
+    ]
     assert forge.called("list_repos") == []  # a group never lists an owner
 
 

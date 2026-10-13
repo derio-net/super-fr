@@ -407,3 +407,18 @@ def test_git_that_cannot_answer_is_a_refusal_not_a_traceback(
     assert result.exit_code == 2
     assert result.exception is None or isinstance(result.exception, SystemExit)
     assert "refused" in result.output and "git status" in result.output
+
+
+def test_p2_r7_a_default_the_repo_cannot_run_says_so_instead_of_naming_no_strategy(
+    tmp_path: Path,
+) -> None:
+    root = _repo(tmp_path, install=None)
+    (root / SPEC).write_text("# S\n\n## Verification\n\n- ok: none — covered\n")
+    _git(root, "commit", "-qam", "no strategy line", "--no-verify")
+
+    result = _walk(root)
+
+    assert result.exit_code == 2
+    assert "does not apply" in result.output and ".fr/candidate-install" in result.output
+    assert "strategy: none" in result.output
+    assert "names no strategy" not in result.output

@@ -39,8 +39,9 @@ PLUGIN_ITEM = "the super-fr plugin"
 AGENTS_ITEM = "the repo's `agents` artifact"
 FR_ITEM = "a current fr"
 RSYNC_ITEM = "rsync"
+MERGE_METHOD_ITEM = "a merge method the driver may use"
 
-CHECK_NAMES: tuple[str, ...] = ("forge.api", "plugin", "agents", "fr", "rsync")
+CHECK_NAMES: tuple[str, ...] = ("forge.api", "plugin", "agents", "fr", "rsync", "merge_method")
 
 
 @dataclass(frozen=True)
@@ -215,6 +216,57 @@ def _check_rsync(which: Callable[[str], str | None]) -> Check:
     )
 
 
+def _merge_methods(repo_root: Path | None) -> dict[str, object] | None:
+    """The repo's merge methods through the forge adapter, or `None` when there is no
+    origin or the forge cannot say: an unknown answer is never a failure."""
+    if repo_root is None:
+        return None
+    from fr.hostclient import client_for_url
+    from fr.triage.gitseam import repo_of_url
+
+    try:
+        url = subprocess.run(
+            ["git", "-C", str(repo_root), "remote", "get-url", "origin"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()  # fmt: skip
+        repo = repo_of_url(url)
+        return client_for_url(url).repo_merge_methods(repo) if repo else None
+    except Exception:  # noqa: BLE001 - doctor reports "unknown", never crashes on it
+        return None
+
+
+def _check_merge_method(repo_root: Path | None, methods: dict[str, object] | None) -> Check:
+    """The merge method the cloud driver would choose (gh#1100): REST names no default, so
+    a repo allowing several needs `merge_method` in `.fr/triage.yaml`, or every merge is
+    refused at the first one. Decided by the merge path's own `choose_method`."""
+    from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
+    from fr.triage.batch_merge import choose_method
+    from fr.triage.errors import TriageError
+
+    fix = f"set `merge_method: <merge|squash|rebase>` in {TRIAGE_CONFIG_PATH} and merge it"
+    if repo_root is None or methods is None:
+        return Check("merge_method", True, "merge methods unknown", fix, MERGE_METHOD_ITEM)
+    configured = _configured_merge_method(repo_root)
+    try:
+        method = choose_method(None, {"allowed": methods.get("allowed")}, configured=configured)
+    except TriageError as exc:
+        return Check("merge_method", False, str(exc), fix, MERGE_METHOD_ITEM)
+    return Check("merge_method", True, f"merges with {method}", fix, MERGE_METHOD_ITEM)
+
+
+def _configured_merge_method(repo_root: Path) -> str | None:
+    import yaml
+
+    from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
+
+    try:
+        data = yaml.safe_load((repo_root / TRIAGE_CONFIG_PATH).read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    value = data.get("merge_method") if isinstance(data, dict) else None
+    return str(value) if value else None
+
+
 def repo_root_of(cwd: Path | None = None) -> Path | None:
     """The git toplevel of `cwd` (default: the working directory), or `None`."""
     try:
@@ -236,14 +288,17 @@ def check(
     latest_release: Callable[[], str | None] | None = None,
     which: Callable[[str], str | None] | None = None,
     installed: str | None = None,
+    merge_methods: Callable[[], dict[str, object] | None] | None = None,
 ) -> list[Check]:
     """Every cloud prerequisite, in `CHECK_NAMES` order."""
+    methods = merge_methods() if merge_methods else _merge_methods(repo_root)
     return [
         _check_forge_api(),
         _check_plugin(),
         _check_agents(repo_root),
         _check_fr(installed or _installed_fr(), (latest_release or _latest_release)()),
         _check_rsync(which or shutil.which),
+        _check_merge_method(repo_root, methods),
     ]
 
 
@@ -253,6 +308,7 @@ __all__ = [
     "CLOUD_ENV",
     "FORGE_API_ITEM",
     "FR_ITEM",
+    "MERGE_METHOD_ITEM",
     "PLUGIN_ID",
     "PLUGIN_ITEM",
     "RSYNC_ITEM",

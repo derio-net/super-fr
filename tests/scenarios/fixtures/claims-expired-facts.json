@@ -60,5 +60,7 @@
   "judged_prs": [],
   "config": {},
   "viewer": "operator",
-  "visibility": {}
+  "visibility": {},
+  "stale_in_progress": [],
+  "config_ignored": {}
 }

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# A fake `herdr` for tests/scenarios/triage-adopt-list.sh: replays the SHAPES herdr 0.9.1
+# printed live (tests/fixtures/herdr/, labels and ids redacted), with the two agents'
+# working directories filled in from $LIST_FEAT / $LIST_MAIN. It answers no verb that writes.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+echo "$*" >> "$HERDR_FAKE_LOG"
+case "$1 $2" in
+  "agent list") sed -e "s|@FEAT@|$LIST_FEAT|g" -e "s|@MAIN@|$LIST_MAIN|g" "$here/agent-list.json" ;;
+  "tab list") cat "$here/tab-list.json" ;;
+  "workspace list") cat "$here/workspace-list.json" ;;
+  *) echo "fake herdr: unscripted call: $*" >&2; exit 64 ;;
+esac

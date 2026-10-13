@@ -1654,9 +1654,10 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     acceptance linkage check."""
     from fr.acceptance.model import AcceptanceError
     from fr.requirements import load_spec_matrix, rows_citing
+    from fr.verification.effective import effective_shape_default
     from fr.verification.model import RESERVED, StrategyError
     from fr.verification.resolve import resolve_strategy
-    from fr.verification.rows import SpecVerification, spec_section_at
+    from fr.verification.rows import SpecVerification, spec_section_at, unrunnable_strategies
     from fr.verification.spec_section import SectionError
     from fr.workflow.model import WorkflowError
     from fr.workflow.resolve import workflow_for_plan
@@ -1676,7 +1677,7 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     if section is None:
         return []
     try:
-        shape = workflow_for_plan(plan).verification
+        shape = effective_shape_default(workflow_for_plan(plan).verification, root)
     except WorkflowError:
         shape = None  # `_workflow_issues` reports the shape itself
     try:
@@ -1684,7 +1685,9 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     except AcceptanceError:
         return []  # `_acceptance_link_issues` reports an unreadable matrix
     verification = SpecVerification(root, section, shape)
-    out: list[ReviewIssue] = []
+    out: list[ReviewIssue] = [
+        issue(m) for m in unrunnable_strategies(root, section, rows_citing(matrix, spec_ref))
+    ]
     for row in rows_citing(matrix, spec_ref):
         name = verification.strategy(row)
         if name is None:
