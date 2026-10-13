@@ -6780,6 +6780,64 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: merge-train-red-recovery
+    capability: triage-batch-drive
+    acceptance: A batch PR made red by the driver's own update is updated again once
+      the base moves; a PR red at a session commit is handed back to an idle session
+      once per head; repeated passes over the same red head send nothing new; an unreachable
+      session puts it on Needs-you.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_red_decision.py#test_rule_4_the_session_status_decides
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_red_pr_is_handed_back_to_its_idle_session_once
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_red_recovery
+    status: ci
+    notes: Phase 2 shipped red_decision, the driver recovery and the board changes;
+      the scenario drives re-update, hand-back once, needs-you.
+    verify: candidate
+    scenario: tests/scenarios/merge-train-red-recovery.sh
+  - id: merge-train-queue
+    capability: triage-batch-drive
+    acceptance: Where the base branch requires a merge queue, the driver enqueues approved
+      green batch PRs instead of merging, treats queued PRs as in flight, and re-enqueues
+      or hands back an ejected PR; a repo with no queue keeps its train unchanged.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_repo_enqueues_an_approved_green_pr_and_records_it
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_pr_ejected_with_the_base_moved_is_enqueued_again
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_pr_ejected_with_the_base_unmoved_needs_you_and_is_not_enqueued_again
+      - super-fr:tests/unit/test_merge_train_queue_walk.py#test_every_approved_green_unqueued_member_is_enqueued_and_none_is_merged
+      - super-fr:tests/unit/test_merge_queue_forge.py#test_queue_state_reads_graphql
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_queue
+    status: ci
+    notes: 'Phase 3: queue mode built. Scenario holds a queue repo under forge.api rest
+      and merges when the rule is gone; the GraphQL enqueue, ejection and re-enqueue
+      path is unit-tested over fakes (no live merge queue exists to capture).'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-queue.sh
+  - id: merge-train-strict-up-to-date
+    capability: triage-batch-drive
+    acceptance: Where the base branch requires strict up-to-date status checks, the
+      train updates a behind batch PR before merging it, even when it is behind only
+      by routine commits.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge_ready.py#test_strict_checks_update_a_pr_behind_only_by_a_release_commit
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_red_recovery
+    status: ci
+    notes: 'Phase 2: strict_checks drops the routine-commit exemption; base_rules read
+      per pass; scenario phase C.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-red-recovery.sh
   - id: driver-once-dispatch-refused
     capability: triage-batch-drive
     acceptance: '`fr triage batch drive --once --yes` whose pass would dispatch refuses
@@ -8645,6 +8703,149 @@ rows:
       outcome: pass
       at: '2026-10-10T08:32:43Z'
       evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md
+  - id: merge-train-label-gate
+    capability: triage-batch-merge
+    acceptance: 'fr merges a batch PR only with a valid approved-fr label bound to its
+      head: an unlabelled green PR is held naming the label, a labelled green draft
+      is readied and merged, a session push after labelling voids the approval and removes
+      the label, and the driver''s own update-from-base keeps it.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_approval.py#test_a_chain_of_fr_updates_from_the_approved_head_stays_approved
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_unapproved_green_member_awaits_and_never_stops_the_walk
+      - super-fr:tests/unit/test_merge_train_gate.py#test_settle_voids_a_head_the_chain_does_not_reach_and_removes_the_label
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_approved_green_draft_is_readied_then_merged
+      - super-fr:tests/unit/test_merge_train_gate.py#test_an_update_is_recorded_with_the_fetched_base_and_keeps_the_approval
+      - super-fr:tests/unit/test_merge_train_commands.py#test_a_default_merge_holds_an_unlabelled_batch_and_merges_the_rest
+      - super-fr:tests/unit/test_merge_train_commands.py#test_naming_an_unapproved_batch_exits_2_naming_the_label
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_after_labelling_voids_the_approval
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: the label gate on every fr merge path. Unit: the pure verdict (test_merge_train_approval),
+      settle/walk/merge gate/update events (test_merge_train_gate), batch merge held/refused/settled
+      under --yes (test_merge_train_commands), the driver''s settle, ready-and-merge,
+      void and update (test_triage_batch_drive_cmd). Scenario: tests/scenarios/merge-train-label-gate.sh
+      drives five passes against a fake REST forge and a real bare remote.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
+  - id: approval-label-created
+    capability: triage-batch-merge
+    acceptance: fr init scaffold and the triage commands that touch a repo's PRs create
+      the approved-fr label when it is missing, warning once, and never fail on a forge
+      that cannot.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_missing_label_is_created_once_per_repo_and_said
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_forge_that_cannot_check_labels_warns_and_never_fails
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_collect_creates_the_label_on_each_collected_repo
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_init_scaffold_creates_the_label_on_a_github_origin
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_creates_the_missing_approval_label_once_and_says_so
+      - super-fr:tests/unit/test_merge_train_commands.py#test_merge_creates_the_missing_label_under_yes_only
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_each_drive_pass_checks_the_label_once_per_repo_and_creates_it
+      - super-fr:tests/unit/test_merge_train_forge_seams.py#test_rest_label_exists_from_the_captured_200_and_404
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: ensure_approval_label creates a missing approved-fr label once
+      per repo per pass or command and warns; a forge that cannot is a warning. Called
+      by collect, batch dispatch, batch merge (under --yes), every drive pass and fr
+      init scaffold on a GitHub origin. Scenario: the label-gate scenario''s first pass
+      creates it.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
+  - id: batch-merge-skip-held
+    capability: triage-batch-merge
+    acceptance: fr triage batch merge with no ids skips batches another scope holds,
+      naming each, and merges the rest; naming a held batch still refuses.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_merge_with_no_ids_skips_a_held_batch_and_merges_the_rest
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_batch_merge_skip_held
+    status: ci
+    notes: 'Phase 2: batch merge with no ids partitions held batches.'
+    verify: candidate
+    scenario: tests/scenarios/batch-merge-skip-held.sh
+  - id: approval-board-and-briefs
+    capability: triage-board
+    acceptance: The board asks the operator to label (or re-label) a green unapproved
+      batch PR, and no brief, skill, agent or rule fr ships tells a session to add the
+      approved-fr label.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_green_unlabelled_batch_pr_asks_for_the_label_draft_or_not
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_a_voided_approval_asks_for_a_re_label
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_the_kanban_card_of_an_unapproved_green_member_awaits_approval
+      - super-fr:tests/unit/test_tripwire_approval_label_prose.py#test_no_shipped_skill_agent_or_rule_asks_for_the_label
+      - super-fr:tests/unit/test_tripwire_approval_label_prose.py#test_every_brief_renderer_carries_the_line
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_merge_train_label_gate
+    status: ci
+    notes: 'phase 1: Needs you shows approve-pr (label it / re-label after a void) for
+      a green batch PR, draft or not, in place of ready-pr; the kanban shows awaiting
+      approval; every brief carries NO_APPROVAL_LINE, and the prose tripwire fails a
+      shipped skill, agent, rule or mirror asking anyone but the operator to add the
+      label. The red hand-back brief joins in its phase. Scenario: the label-gate scenario
+      renders both asks.'
+    verify: candidate
+    scenario: tests/scenarios/merge-train-label-gate.sh
+  - id: ci-merge-group-trigger
+    capability: ci
+    acceptance: super-fr's CI and acceptance workflows report ci-ok for a merge queue's
+      merge group.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_merge_group.py#test_the_workflow_triggers_on_merge_group
+    status: ci
+    notes: 'Phase 3: both workflows trigger on merge_group; change-fragment stays pull-request-only
+      and ci-ok treats its skip as a pass.'
+    verify: none
+  - id: release-pushes-as-app
+    capability: release
+    acceptance: With the app configured, super-fr's release commit and tag are pushed
+      as derio-fr-automation, CI runs on the release commit, and the follow-up release
+      run is a no-op.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: main-requires-ci-ok
+    capability: release
+    acceptance: super-fr's main requires ci-ok with up-to-date branches, blocks a behind
+      PR until it is updated, and still accepts the release bot's push through its bypass.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R18
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: main-protection-script
+    capability: release
+    acceptance: configure-main-protection.sh merges the bypass actor and the strict
+      ci-ok rule into main's ruleset without overwriting it, and refuses the rule until
+      the bypass is in place and a release was pushed by the app.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-11-merge-train-safety-design.md#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_configure_main_protection.py#test_require_adds_the_strict_ci_ok_check_and_keeps_every_other_rule
+      - super-fr:tests/unit/test_configure_main_protection.py#test_require_refuses_when_the_newest_release_was_not_pushed_by_the_app
+    status: ci
+    notes: 'configure-main-protection.sh tested with a stub gh: merge-not-overwrite
+      body, both refusals, --force, --dry-run, idempotence'
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue

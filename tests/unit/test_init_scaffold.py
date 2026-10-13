@@ -968,8 +968,11 @@ def test_github_enterprise_is_asked_as_host_owner_repo(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr import gh as _gh
+    from fr.commands import init_cmd
 
     monkeypatch.undo()
+    # The approval label's own forge calls are tested apart (merge-train-safety R4).
+    monkeypatch.setattr(init_cmd, "approval_label_target", lambda repo_root: None)
     monkeypatch.setenv("HOME", str(repo.parent / "home"))
     # gh is logged into the host (spec 2026-10-06-forge-remainder §4.E's gate).
     gh_config = repo.parent / "gh-config"

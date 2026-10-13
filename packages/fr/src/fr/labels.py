@@ -120,6 +120,15 @@ FR_AWAITING_LIVE = LabelDef(
     "Merged; a post-merge acceptance row still awaits its live walk",
 )
 
+# The operator's merge approval on a batch PR (spec 2026-10-11-merge-train-safety §A, R1):
+# every fr merge path merges only a PR carrying it at a head fr recorded. Never set by fr
+# or an agent session; fr only creates the label and removes a voided one.
+APPROVED_FR = LabelDef(
+    "approved-fr",
+    "0E8A16",
+    "Operator approval: fr may merge this PR at its approved head",
+)
+
 RUNNER_LABEL_COLOR = "1D76DB"
 
 

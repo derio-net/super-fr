@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Concatenate, Literal, ParamSpec, TypeVar, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, CommandRunner, run_cli
+from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, QueueState, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -389,7 +389,7 @@ class RealGhClient:
                 repo,
                 "--json",
                 "state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,"
-                "mergeCommit,title,body",
+                "mergeCommit,title,body,labels",
             ]
         )
         raw: dict[str, Any] = json.loads(out)
@@ -404,7 +404,24 @@ class RealGhClient:
             "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),
             "title": raw.get("title", ""),
             "body": raw.get("body", ""),
+            "labels": [lb.get("name") or "" for lb in raw.get("labels") or []],
         }
+
+    @_hosted
+    def pr_ready(self, repo: str, number: int) -> None:
+        _gh._run_gh(["pr", "ready", str(number), "--repo", repo])
+
+    @_hosted
+    def label_exists(self, repo: str, name: str) -> bool:
+        from fr.real_ghrestclient import _is_404
+
+        try:
+            _gh._run_gh(["api", f"repos/{repo}/labels/{urllib.parse.quote(name, safe='')}"])
+        except _gh.GhError as exc:
+            if _is_404(exc):
+                return False
+            raise
+        return True
 
     def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
         """Spec 2026-10-07-cloud-triage §I: the same REST routes as the
@@ -418,6 +435,12 @@ class RealGhClient:
         from fr.real_ghrestclient import RealGhRestClient
 
         return RealGhRestClient(host=self._host).required_check_names(repo, base)
+
+    def base_rules(self, repo: str, branch: str) -> BaseRules:
+        """Merge-train-safety §D: the `github-rest` backend's REST routes, on this host."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).base_rules(repo, branch)
 
     def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
         """Spec §I (p2-r7): one REST page, no file list, on this host."""
@@ -466,6 +489,43 @@ class RealGhClient:
                 head_sha,
             ]
         )
+
+    @_hosted
+    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        if method not in MERGE_METHODS:
+            raise ValueError(f"merge method must be one of {sorted(MERGE_METHODS)}, got {method!r}")
+        # `--auto` on a queue-protected base enqueues; never `--admin`.
+        _gh._run_gh(
+            ["pr", "merge", str(number), "--repo", repo, "--auto",
+             "--match-head-commit", head_sha, f"--{method}"]
+        )  # fmt: skip
+
+    @_hosted
+    def pr_queue_state(self, repo: str, number: int) -> QueueState:
+        """`gh pr view --json` exposes neither field, so GraphQL (§D)."""
+        owner, _, name = repo.partition("/")
+        query = (
+            "query($owner: String!, $name: String!, $number: Int!) {"
+            " repository(owner: $owner, name: $name) {"
+            " pullRequest(number: $number) { state merged isInMergeQueue"
+            " autoMergeRequest { enabledAt } } } }"
+        )
+        out = _gh._run_gh(
+            ["api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}",
+             "-F", f"name={name}", "-F", f"number={number}"]
+        )  # fmt: skip
+        pr = (
+            ((json.loads(out).get("data") or {}).get("repository") or {}).get("pullRequest")
+        ) or {}
+        return QueueState(
+            in_queue=bool(pr.get("isInMergeQueue")),
+            auto_merge=bool(pr.get("autoMergeRequest")),
+            open=pr.get("state") == "OPEN" and not pr.get("merged"),
+        )
+
+    @_hosted
+    def pr_dequeue(self, repo: str, number: int) -> None:
+        _gh._run_gh(["pr", "merge", str(number), "--repo", repo, "--disable-auto"])
 
     @_hosted
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:

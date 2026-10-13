@@ -133,6 +133,12 @@ class ClientForge:
     def __init__(self, client: GhClient) -> None:
         self._client = client
 
+    @property
+    def client(self) -> GhClient:
+        """The adapter itself: `fr triage collect` checks the approval label through it
+        (merge-train-safety R4); collect's own reads stay behind `Forge`."""
+        return self._client
+
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         # Archived repos included: the caller counts the raw list against its limit
         # before dropping them, or a full list with archived repos would not warn.
@@ -259,6 +265,8 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             mergeable=(r["mergeable"] or "UNKNOWN") if "mergeable" in r else None,
             merge_state=((r["mergeStateStatus"] or "UNKNOWN") if "mergeStateStatus" in r else None),
             review=r.get("reviewDecision") or None,
+            # Only an open-PR record carries labels; None is "never read" (merge-train §A).
+            labels=[lb["name"] for lb in r["labels"] or []] if "labels" in r else None,
             author=_login(r),
             cross_repo=r.get("isCrossRepository"),
         )

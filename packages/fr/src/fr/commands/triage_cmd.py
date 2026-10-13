@@ -39,6 +39,7 @@ from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.trigger import is_interactive
 from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
+from fr.triage.approval import ensure_approval_label
 from fr.triage.batch import last_dispatch, lifecycle_events
 from fr.triage.check import ClaimSets, classify, clean_label_targets
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
@@ -404,6 +405,10 @@ def _scope(repo: str | None, org: str | None) -> Scope:
     return Scope(kind="org", target=org)
 
 
+def _say_err(line: str) -> None:
+    err_console.print(line, markup=False, soft_wrap=True)
+
+
 def _report(facts: Facts) -> None:
     """Print what the forge could not give; every forge-sourced string escaped (r7)."""
     for s in facts.skipped:
@@ -451,6 +456,11 @@ def collect_command(
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
     _report(facts)
+    forge = make_forge()
+    if isinstance(forge, ClientForge):  # the label the operator approves with (R4)
+        seen: set[str] = set()
+        for name in facts.collected:
+            ensure_approval_label(forge.client, name, _say_err, seen=seen)
     n_open = sum(1 for i in facts.issues if i.state == "open")
     console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
 
@@ -960,14 +970,15 @@ def render_command(
             soft_wrap=True,
         )
     out = target_dir / "triage.html"
-    from fr.commands.triage_kanban_cmd import read_sessions  # it imports this module
+    from fr.commands.triage_kanban_cmd import local_ci_none, read_sessions  # it imports this
 
     # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
     # runner that cannot say leaves Needs you now as it was.
     noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
-        session_notes=noted, present=pages_present(target_dir, "backlog"),
+        session_notes=noted, ci_none=local_ci_none(facts),
+        present=pages_present(target_dir, "backlog"),
     )  # fmt: skip
     write_text_atomic(out, page)
     refresh_navs(target_dir, "backlog", warn=warn_nav)

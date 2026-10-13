@@ -436,3 +436,13 @@ def _no_visibility_etags_carried_between_tests() -> Iterator[None]:
     gh._VISIBILITY.clear()
     yield
     gh._VISIBILITY.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_approval_label_from_scaffold(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fr init scaffold` creates the `approved-fr` label on a GitHub origin
+    (merge-train-safety R4); a test clone pointing at a real repo must never reach
+    the forge. Its own tests replace `approval_label_target` again."""
+    from fr.commands import init_cmd
+
+    monkeypatch.setattr(init_cmd, "approval_label_target", lambda repo_root: None)

@@ -182,7 +182,7 @@ def test_needs_you_now_lists_each_kind_and_the_unplaced_issues() -> None:
     page = render(*busy())
     got = set(_needs(page))
     assert got == {
-        ("ready-pr", "b-draft"),
+        ("approve-pr", "b-draft"),
         ("failing-ci", "c-red"),
         ("stale-dispatch", "widgets#8"),
         ("blocked-batch", "d-blocked"),
@@ -199,7 +199,7 @@ def test_every_need_row_names_and_links_its_pr_issue_or_batch() -> None:
     assert len(rows) == 8
     for row in rows:
         assert re.search(r'<a href="(https://[^"]+|#batch-[a-z-]+)"', row), row
-    ready = next(r for r in rows if 'data-need="ready-pr"' in r)
+    ready = next(r for r in rows if 'data-need="approve-pr"' in r)
     assert "https://github.com/example-org/widgets/pull/11" in ready and "PR #11" in ready
     unplaced = next(r for r in rows if 'data-ref="widgets#9"' in r)
     assert "https://github.com/example-org/widgets/issues/9" in unplaced
@@ -235,14 +235,14 @@ def test_removing_the_driver_signal_removes_the_row() -> None:
 
 def test_a_foreign_pr_on_a_batch_branch_needs_the_operator() -> None:
     """gh#936: the driver reports it and never merges it; the board lists it."""
-    fork = pr(40, "feat/batch-x", cross_repo=True, is_draft=True)  # green draft: never "ready it"
+    fork = pr(40, "feat/batch-x", cross_repo=True, is_draft=True)  # green: never "label it"
     f = facts([issue(1, prs=[fork])], prs=[fork])
     jd = judgements({"widgets#1": j(1)}, [batch("x", [1], wave=1, events=[dispatch("x")])])
     rows = [r for r in needs_you(f, jd) if r.kind == "foreign-pr"]
     assert [(r.ref, r.href) for r in rows] == [("x", f"{URL}/pull/40")]
     assert "opened from a fork" in rows[0].text
     assert ("foreign-pr", "x") in _needs(render(f, jd))
-    assert not [r for r in needs_you(f, jd) if r.kind == "ready-pr"]
+    assert not [r for r in needs_you(f, jd) if r.kind == "approve-pr"]
 
 
 def _merged_by_hand(**kw: object) -> tuple[Facts, Judgements]:

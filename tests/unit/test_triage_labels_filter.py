@@ -100,7 +100,7 @@ def _doc(**extra: Any) -> dict[str, Any]:
 
 
 def test_schema_9_round_trips_stale_in_progress_and_config_ignored(tmp_path: Path) -> None:
-    assert FACTS_SCHEMA == 9 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9)
+    assert FACTS_SCHEMA == 10 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10)
     facts = Facts(
         schema=FACTS_SCHEMA,
         **_doc(),
@@ -117,7 +117,7 @@ def test_schema_9_round_trips_stale_in_progress_and_config_ignored(tmp_path: Pat
     )
     path = tmp_path / "facts.json"
     path.write_text(json.dumps(facts.to_json()), encoding="utf-8")
-    assert json.loads(path.read_text())["schema"] == 9
+    assert json.loads(path.read_text())["schema"] == 10
     assert load_facts(path) == facts
 
 

@@ -1,0 +1,124 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Red-PR recovery, strict up-to-date, and skip-held batch merge (R7, R9–R11,
+    R14)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - merge-train-red-recovery
+  - merge-train-strict-up-to-date
+  - batch-merge-skip-held
+  tier: standard
+  files:
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/triage/*
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/*
+  - tests/scenarios/*
+  - tests/fixtures/*
+  - docs/acceptance/*
+  estimate_lines: 1000
+tasks:
+- number: 1
+  title: The red decision and the red brief
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: `red_decision` (pure, batch_drive.py) table test for rules 1–4 of spec §C in order — skip on an existing RedHandbackEvent for (pr, head); reupdate on an fr-made head with a moved base and no successor update; needs_you after RED_HANDBACKS_PER_DISPATCH=2 delivered since the last dispatch (conflict hand-backs not counted); idle → handback, absent/done → needs_you, otherwise wait. `red_brief` carries the PR url, sha, failing checks, fix-and-push without force, leave draft/ready and labels alone, and NO_APPROVAL_LINE.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement both.
+- number: 2
+  title: Wire recovery into the driver and the board
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: driver tests — `_recover` runs for each stepped-over failing PR; reupdate goes through the update machinery with the green precondition waived for that call and records an UpdateEvent; handback messages `_hand_back`'s target and records RedHandbackEvent(delivered=session); needs_you records delivered=none once per (pr, head); wait says "its session is <status>: nothing sent, retried next pass" and records nothing; the warn line prints only on a pass that sends or decides something new (no in-memory `warned` dedup). Board: failing-ci suppressed under a delivered red hand-back at the current head; `red-pr` Need for delivered=none; NEED_LABELS gains red-pr.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement `_Driver._recover` beside `_conflict` in commands/triage_batch_cmd.py and the views.py changes.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: share the hand-back target resolution between `_hand_back` and `_recover`; remove `_Driver.warned` if nothing else reads it.
+- number: 3
+  title: Base rules and strict up-to-date
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: `GhClient.base_rules(repo, branch)` → BaseRules{merge_queue, strict_checks} from REST `rules/branches/{branch}` (merge_queue rule; strict required_status_checks parameter) plus `branches/{branch}/protection` required_status_checks.strict (404 → false), both GitHub backends; UnsupportedBatchOps returns (False, False). `_land` updates a PR behind only by routine commits when ctx.strict_checks is set, and keeps the exemption otherwise.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement; the driver reads base_rules once per repo per pass and batch merge once per command, storing it on MergeContext.
+- number: 4
+  title: batch merge skips held batches
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: no-ids batch merge with one held batch prints `skipped <id>: held by <scope>` and merges the rest; all held → "nothing to merge", exit 0, before the one-repo check; with ids naming a held batch still exits 2.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: partition the loop at triage_batch_cmd.py's `_refuse_held` call when batch_ids is empty (spec §E).
+- number: 5
+  title: Scenarios and acceptance
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Write tests/scenarios/merge-train-red-recovery.sh (fake forge: a PR red at an fr update head is re-updated once the base moves; a PR red at a session commit is handed back once — a scripted session stub records the message — and a second pass sends nothing; base rules carry a strict check so a routinely-behind PR is updated before it merges) and tests/scenarios/batch-merge-skip-held.sh. Move merge-train-red-recovery, merge-train-strict-up-to-date and batch-merge-skip-held with `fr acceptance set-status` (levels + scenario).
+  - id: P2.T5.S2
+    text: |-
+      Full suite after the last code commit into a host-visible log, ruff check/format, mypy; fix anything red.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-10-11T22:26:27+00:00'
+      note: null
+  completion:
+    at: '2026-10-11T22:26:27+00:00'
+    note: null
+    observed_prs: []

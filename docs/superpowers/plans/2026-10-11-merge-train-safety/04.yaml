@@ -1,0 +1,80 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Release as the app, the protection script, and the runbook (R16, R17)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - main-protection-script
+  tier: standard
+  files:
+  - .github/workflows/release.yml
+  - scripts/release.py
+  - scripts/configure-main-protection.sh
+  - tests/unit/test_release_workflow.py
+  - tests/unit/test_release_script.py
+  - tests/unit/test_configure_main_protection.py
+  - docs/merge-protection.md
+  - AGENTS.md
+  - docs/acceptance/*
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: release.yml app token with fallback
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: rewrite test_header_states_the_no_ci_property_and_the_bypass_actor to pin both modes in the header (GITHUB_TOKEN fallback: no CI on the release commit; app: CI runs and release.yml re-runs as a no-op) and add assertions for the `app-token` step (`if: vars.FR_AUTOMATION_APP_ID != ''`, actions/create-github-app-token pinned to a full commit sha, secrets.FR_AUTOMATION_APP_KEY) and the checkout/GH_TOKEN `steps.app-token.outputs.token || github.token` expression; release.py's protection-refusal message names the app and the variable.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: edit .github/workflows/release.yml and scripts/release.py accordingly (resolve the action's commit sha for a v1 release with `gh api repos/actions/create-github-app-token/git/ref/tags/<tag>`).
+- number: 2
+  title: configure-main-protection.sh
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_configure_main_protection.py runs the script with a stub `gh` on PATH (recording calls, serving a canned ruleset, installations list and actions runs): `--stage bypass` PUTs the ruleset with the Integration bypass actor merged into the existing rules (deletion/non_fast_forward kept) and sets the variable; re-running is a no-op; `--stage require` refuses without the bypass, refuses when the newest v* tag's commit has no push-event run triggered by the app, succeeds otherwise adding required_status_checks ci-ok strict; `--force` skips only the release check; `--dry-run` prints the body and writes nothing.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: write scripts/configure-main-protection.sh (set -euo pipefail, jq merge, no secrets) per spec §F.
+- number: 3
+  title: Runbook and docs
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Write docs/merge-protection.md (operator key step, both stages in order, consumer adoption, the driver's queue/strict behaviour) and update AGENTS.md "Release / version bumping" (app identity, CI now runs on an app-pushed release commit, the bypass actor). Move main-protection-script with `fr acceptance set-status` (unit ref).
+  - id: P4.T3.S2
+    text: |-
+      Full suite after the last code commit into a host-visible log, ruff check/format, mypy; fix anything red.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-10-12T00:15:50+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-10-12T00:15:50+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-10-12T00:15:50+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-10-12T00:15:50+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-10-12T00:15:50+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-10-12T00:15:50+00:00'
+      note: null
+  completion:
+    at: '2026-10-12T00:15:50+00:00'
+    note: null
+    observed_prs: []
