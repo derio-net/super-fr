@@ -7845,8 +7845,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R15
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario named at plan time; phase 1 writes it
     verify: candidate
+    scenario: tests/scenarios/triage-closed-settle.sh
   - id: triage-release-pending-true
     capability: triage-batches
     acceptance: A closed issue shown release-pending is cleared by the next claim sync
