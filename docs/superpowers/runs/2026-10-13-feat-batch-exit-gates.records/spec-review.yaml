@@ -1,0 +1,214 @@
+schema_version: 9
+run: 2026-10-13-feat-batch-exit-gates
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-1
+  title: R19 (never plan merge for a CONFLICTING PR) removes the trigger of the conflict hand-back it says is unchanged, and stops version-file auto-resolution
+  body: 'Evidence: batch_merge.py:611-634 (_update raises MergeConflictError, resolves version/lock files); triage_batch_cmd.py:4897-4900, 5046-5048.'
+  review_scope: in
+- kind: finding
+  id: sr-2
+  title: 'R1 builds the gate set from rows alone, so a DevOps gate with no row or a run-level gate: on a run with no rows can never be declared'
+  body: 'Evidence: spec R1, R5, R14.'
+  review_scope: in
+- kind: finding
+  id: sr-3
+  title: 'Release tooling cannot read an RC version once one is on main: the next final crashes, and the version-sync check reports drift'
+  body: 'Evidence: release.py:245-285, 529-533; changes.py:139-150; bump-version.py:27-101; floors.py:43-44.'
+  review_scope: in
+- kind: finding
+  id: sr-4
+  title: §G's 'nothing new merged since the newest tag → no-op' blocks the final that R20, q10 and Test Plan step 4 promise after a gate pass
+  body: 'Evidence: decisions q10, r2q3; spec R14, R20, §G, Test Plan 4.'
+  review_scope: in
+- kind: finding
+  id: sr-5
+  title: Tag channels fail on any tag whose install.sh predates R23, including the default channel right after this PR
+  body: 'Evidence: install.sh:439-447; bootstrap.sh:77-90.'
+  review_scope: in
+- kind: finding
+  id: sr-6
+  title: An RC install (X.Y.ZrcN) does not satisfy fr_version floors that name the predicted final
+  body: 'Evidence: version_floor.py:33-43; AGENTS.md floor convention.'
+  review_scope: in
+- kind: finding
+  id: sr-7
+  title: 'R10/§C misdescribe the archive filer: --issues files follow-up issues, fr:owed is the separate owed-entry path, and --no-issues still files'
+  body: 'Evidence: archive_followups.py:60, 236-271, 489-518; archive_cmd.py:405-406, 555, 578-609.'
+  review_scope: in
+- kind: finding
+  id: sr-8
+  title: The collected close-out leaves out Test Plan outcomes, so fr archive holds every plan whose spec has a Test Plan
+  body: 'Evidence: archive.py:815-844 outcome_hold; archive_cmd.py:720-722.'
+  review_scope: in
+- kind: finding
+  id: sr-9
+  title: attributed does not compare the PR head with event.archive, so a shared close-out branch is not attributed
+  body: 'Evidence: batch_drive.py:684-707, 65, 513-530.'
+  review_scope: in
+- kind: finding
+  id: sr-10
+  title: '''Existing hand-back machinery with a budget of one'' for the collected close-out PR is undefined'
+  body: 'Evidence: batch_drive.py:554-653, 1298-1337.'
+  review_scope: in
+- kind: finding
+  id: sr-11
+  title: §C's claim that 'held by a post-merge gate' is a superset of 'post-merge' is false under remaps, which weakens the existing Closes guard
+  body: 'Evidence: pr_body.py:488-522.'
+  review_scope: in
+- kind: finding
+  id: sr-12
+  title: PR label sync and gate-pass comments have no adapter method for MRs
+  body: 'Evidence: ghclient.py:185-239; real_glabclient.py:212-227; closeout.py:350-358.'
+  review_scope: in
+- kind: finding
+  id: sr-13
+  title: 'Adding gate: to StrategyManifest is not free: extra=forbid with schema Literal[1]'
+  body: 'Evidence: verification/model.py:59-73; resolve.py:1-14.'
+  review_scope: in
+- kind: finding
+  id: sr-14
+  title: The per-row gate= token makes an older fr raise SectionError on the spec
+  body: 'Evidence: spec_section.py:35-38, 109-115; registry.py:494-497.'
+  review_scope: in
+- kind: finding
+  id: sr-15
+  title: §C leaves the record-kind stamp to plan time, but the rule already decides it
+  body: 'Evidence: record/model.py:95-138; registry.py:515-546.'
+  review_scope: in
+- kind: finding
+  id: sr-16
+  title: R11/R12's 'answered by the operator' has no mechanism for a decision entry, and narrows= encoding is unspecified
+  body: 'Evidence: journal/model.py:222-226, 321-331.'
+  review_scope: in
+- kind: finding
+  id: sr-17
+  title: 'R9''s ''deferred item'' is accounted by definition; owed entries and rows tracked by issues: are not addressed'
+  body: 'Evidence: journal/model.py:122-184, 619-635.'
+  review_scope: in
+- kind: finding
+  id: sr-18
+  title: R15 does not say which Refs issues a close-out closes; issues R11 kept as Refs (narrowed) would be closed
+  body: 'Evidence: spec R11, R15, R16.'
+  review_scope: in
+- kind: finding
+  id: sr-19
+  title: R24 widens the brainstorm warning to all four row checks, but it only ran the install check; the reason-check fix changes other rows
+  body: 'Evidence: run_cmd.py:6780-6796; plan_ops.py:1677-1678; effective.py:31-40.'
+  review_scope: in
+- kind: finding
+  id: sr-20
+  title: '''held'' already names three other states in the driver, and ''gate'' already names the workflow step gate: operator'
+  body: 'Evidence: batch_drive.py:59, 557, 1211-1223; workflow/model.py:54.'
+  review_scope: in
+- kind: finding
+  id: sr-21
+  title: Background says the board does not read mergeable/mergeStateStatus, but the triage page and kanban already do, with a different conflict test
+  body: 'Evidence: render.py:609-610; kanban_render.py:235; kanban.py:177.'
+  review_scope: in
+- kind: finding
+  id: sr-22
+  title: TriageConfig.exit also moves FACTS_SCHEMA, and an older fr refuses a .fr/triage.yaml that sets it
+  body: 'Evidence: triage/model.py:39-63, 471.'
+  review_scope: in
+- kind: finding
+  id: sr-23
+  title: An operator-approved narrowing still allows Closes with no follow-up (the audit's first pattern)
+  body: 'Evidence: spec Background, R9, R11; decision q7.'
+  review_scope: in
+- kind: finding
+  id: sr-24
+  title: The new release group's migration-gate status and fr verification set's insert behaviour are unspecified
+  body: 'Evidence: trigger.py:82-94; spec R8, R21.'
+  review_scope: in
+- kind: finding
+  id: sr-25
+  title: The triage page counts mergeStateStatus BLOCKED as a conflict
+  body: 'Evidence: render.py:610. BLOCKED is branch protection, the normal state of every unapproved batch PR.'
+  review_scope: out
+- kind: review
+  id: spec-review
+  title: 'independent spec review: 25 findings (24 in, 1 out)'
+  body: 'Reviewer checked the spec against all 18 operator decisions, the codebase claims (file:line for each named helper), and internal consistency incl. the Verification section and Test Plan against the ten exit-gates-* rows. Most serious: sr-1 (R19 would kill the conflict hand-back), sr-3..sr-6 (RC versions vs release tooling, floors, bootstrap), sr-7/sr-8 (archive filer and Test Plan hold vs the collected close-out), sr-9 (attributed), sr-12 (no PR label adapter). All 24 in-scope findings fixed in the spec; sr-25 out of scope.'
+resolves:
+- id: sr-1
+  state: fixed
+  body: 'Spec rewritten: R19 now keeps the train planning the merge; only the card hint and needs_you use the conflicting() predicate.'
+- id: sr-2
+  state: fixed
+  body: 'Spec rewritten: R1 adds a run-level gate (run gate: line > remap > manifest > none) into gates; R14''s explicit pass covers a gate with no row.'
+- id: sr-3
+  state: fixed
+  body: 'Spec rewritten: New R25 + §G: final-only tag match, RC arithmetic based on the last final, write_version writes both spellings, --check normalizes.'
+- id: sr-4
+  state: fixed
+  body: 'Spec rewritten: R20 rewritten: only a second RC with nothing new is a no-op; a final is due whenever nothing waits and HEAD is an RC or fragments are pending.'
+- id: sr-5
+  state: fixed
+  body: 'Spec rewritten: R22: a tag is installable only when its install.sh carries the channel marker; default falls back to origin/main while none exists; main uses checkout -B main origin/main.'
+- id: sr-6
+  state: fixed
+  body: 'Spec rewritten: New R26: floors admit an RC of X.Y.Z wherever they admit X.Y.Z (§G version_floor.admits).'
+- id: sr-7
+  state: fixed
+  body: 'Spec rewritten: Background, R9, R10 and R15 now name file_open_ends (follow-up) and file_owed_ends (fr:owed, filed_as) correctly; the close-out''s archive still files owed entries it creates, which needs no decision.'
+- id: sr-8
+  state: fixed
+  body: 'Spec rewritten: R15 step 2 records each Test Plan step''s outcome (--ran, gate-pass comment as evidence) for a passed gated batch; a batch whose archive holds moves nothing, gets no close-out event and becomes a Needs-you row.'
+- id: sr-9
+  state: fixed
+  body: 'Spec rewritten: §D: attributed also accepts pr.head_ref == event.archive for a trusted author.'
+- id: sr-10
+  state: fixed
+  body: 'Spec rewritten: New R27 + §D step 3: closeout_handback event on each member keyed by close-out item and head, budget counted per item, detection from live checks and the conflicting() predicate; judgements schema moves.'
+- id: sr-11
+  state: fixed
+  body: 'Spec rewritten: R11/§C: keep holds_open_for_run''s test and OR in ''gated by a post-merge gate''.'
+- id: sr-12
+  state: fixed
+  body: 'Spec rewritten: R7/§B: new edit_pr_labels/comment_pr adapter methods (GitHub implemented, GitLab/Gitea raise UnsupportedForgeOperation → warning, not refusal); tracking none syncs nothing; label creation via ensure_labels.'
+- id: sr-13
+  state: fixed
+  body: 'Spec rewritten: R3/§A: gate: only at schema 2; absent = none; only live moves to schema 2; each fr reads its own wheel copy before the marketplace.'
+- id: sr-14
+  state: fixed
+  body: 'Spec rewritten: R5: gates move to `gate:` lines (`gate: <g>` and `gate: <row>=<g>`), which released parsers ignore; no spec-kind stamp move.'
+- id: sr-15
+  state: fixed
+  body: 'Spec rewritten: §C states the record kind moves 9 → 10 with migration and validator in this PR.'
+- id: sr-16
+  state: fixed
+  body: 'Spec rewritten: R12: answered_by=operator token on a decision, written only by the brainstorm record''s resolve or a transcript-verified fr journal add --answered-by operator; narrows= is comma-separated.'
+- id: sr-17
+  state: fixed
+  body: 'Spec rewritten: R9 now lists four item kinds (out-of-scope finding, owed entry, owed row, narrowing decision) with accounted predicates matching §C''s printed fixes, incl. a row''s issues:.'
+- id: sr-18
+  state: fixed
+  body: 'Spec rewritten: R15 step 4: close only issues cited by rows a passed gate gated, never an issue a narrowing decision names.'
+- id: sr-19
+  state: fixed
+  body: 'Spec rewritten: R24/§H: one row_verification_issues function called by both, widening the warning deliberately; the message warns that a new section changes other rows'' effective strategy.'
+- id: sr-20
+  state: fixed
+  body: 'Spec rewritten: Spec now says ''gated'' for a batch awaiting a post-merge gate and ''step gate'' for gate: operator (Background, R2, R6, R13, R17).'
+- id: sr-21
+  state: fixed
+  body: 'Spec rewritten: Background corrected; R19 names one conflicting() predicate in triage/mergeability.py for the card and needs_you; the page''s BLOCKED test is sr-25 (out of scope).'
+- id: sr-22
+  state: fixed
+  body: 'Spec rewritten: §A/§D: the FACTS_SCHEMA move cites both fields; minimum fr documented; this repo sets no exit: in this PR.'
+- id: sr-23
+  state: fixed
+  body: 'Spec rewritten: R9: a narrowing decision is a leftover until it carries tracked_by= (fr journal file files the follow-up), operator-answered or not; R11 still decides Closes vs Refs.'
+- id: sr-24
+  state: fixed
+  body: 'Spec rewritten: R21: release joins READ_ONLY_COMMANDS; R8: set inserts or rewrites the line and refuses a spec with no section, naming how to add one.'
+- id: sr-25
+  state: out-of-scope
+  body: Pre-existing in the triage page's open-PR row; this change does not touch render.py's conflict test and introduces its own predicate for the card and needs_you. Listed under the spec's Non-goals.
+acceptance: []
+evidence:
+  review: spec-review
+  reviewer: acc218480860de97f
