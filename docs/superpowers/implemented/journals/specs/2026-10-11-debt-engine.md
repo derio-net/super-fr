@@ -492,3 +492,8 @@ what: `debt-archive-pr-weekly` (`live`). In the same run, with at least one plan
 why: Precondition not met on 2026-10-13: run 38461331298 archive-pr step printed "No plan has been merged and unarchived for more than 14 days." and opened no PR (correct no-op). The open-then-refresh walk needs a plan merged >14 days unarchived; the weekly Monday run will exercise it.
 how: fr journal resolve --scope spec --slug 2026-10-11-debt-engine --id test-plan-step-2 --state fixed --note "<evidence>"
 owed_key: spec:2026-10-11-debt-engine#step2
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved created=2026-10-13T20:17:56+00:00 state=open resolves=test-plan-step-2 filed_as=derio-net/super-fr#1187 -->
+### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1187] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Filed at archive as derio-net/super-fr#1187; still owed until discharged.
