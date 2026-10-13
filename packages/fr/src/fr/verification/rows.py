@@ -10,8 +10,8 @@ module binds the inputs once (`SpecVerification`) and answers through
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SpecVerification",
+    "load_remap",
     "run_verification",
     "shape_default",
     "spec_section_at",
@@ -49,14 +50,36 @@ def spec_section_at(repo_root: Path, spec_rel: str | None) -> Section | None:
     return None
 
 
+def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
+    """The repo's gate remap (`.fr/triage.yaml`'s `exit: {gates: {...}}`, spec
+    2026-10-14 R4) and why it could not be read, if it could not. Lenient: an
+    unreadable or invalid file is no remap, reported by the caller."""
+    import yaml
+    from pydantic import ValidationError
+
+    from fr.triage.model import parse_triage_config
+
+    path = repo_root / ".fr" / "triage.yaml"
+    if not path.is_file():
+        return {}, None
+    try:
+        config, _ = parse_triage_config(yaml.safe_load(path.read_text()) or {})
+    except (OSError, yaml.YAMLError, ValidationError) as e:
+        return {}, f"{path.relative_to(repo_root)} is not valid triage config: {e}"
+    return (dict(config.exit.gates) if config.exit else {}), None
+
+
 @dataclass(frozen=True)
 class SpecVerification:
     """One spec's verification inputs, bound: its section (or `None`), the
-    shape's default strategy, and the repo strategies resolve against."""
+    shape's default strategy, the repo's gate remap, and the repo strategies
+    resolve against."""
 
     repo_root: Path
     section: Section | None = None
     shape_default: str | None = None
+    remap: Mapping[str, str] = field(default_factory=dict)
+    remap_problem: str | None = None
 
     def strategy(self, row: Row) -> str | None:
         return effective_strategy(row.verify, row.id, self.section, self.shape_default)
@@ -64,6 +87,42 @@ class SpecVerification:
     def is_post_merge(self, row: Row) -> bool:
         """Raises `StrategyError` when the row's strategy does not resolve."""
         return is_post_merge(self.strategy(row), self.repo_root)
+
+    def run_strategy(self) -> str | None:
+        """The run's own strategy: the section's `strategy:` line, else the
+        shape's default; `None` without a section (the world before strategies)."""
+        return effective_strategy(None, "", self.section, self.shape_default)
+
+    def _kind_gate(self, strategy: str | None) -> str:
+        """The gate of a strategy kind: the repo's remap, else the manifest's
+        `gate:`, else `none`. An unresolvable strategy is another check's to
+        report, so it has no gate here."""
+        if strategy is None or strategy == RESERVED:
+            return "none"
+        if strategy in self.remap:
+            return self.remap[strategy]
+        try:
+            return resolve_strategy(strategy, self.repo_root).gate
+        except StrategyError:
+            return "none"
+
+    def run_gate(self) -> str:
+        """The run-level gate (R1), first match wins: the section's `gate:`
+        line, the remap of the run strategy's kind, its manifest `gate:`, `none`."""
+        if self.section is not None and self.section.gate is not None:
+            return self.section.gate
+        return self._kind_gate(self.run_strategy())
+
+    def gate(self, row: Row) -> str:
+        """A row's effective gate (R5), first match wins: its `gate: <row>=`
+        line, the run-level gate (a row on the run's own strategy), the remap
+        of its kind, the manifest's `gate:`, `none`."""
+        if self.section is not None and row.id in self.section.row_gates:
+            return self.section.row_gates[row.id]
+        strategy = self.strategy(row)
+        if strategy is not None and strategy != RESERVED and strategy == self.run_strategy():
+            return self.run_gate()
+        return self._kind_gate(strategy)
 
     def reason(self, row: Row) -> str | None:
         """The section's one-line reason for `row`, when it gives one."""
@@ -76,7 +135,10 @@ def spec_verification(
 ) -> SpecVerification:
     """`SpecVerification` for the spec at `spec_rel` (`SectionError` when its
     section is malformed)."""
-    return SpecVerification(repo_root, spec_section_at(repo_root, spec_rel), shape_default)
+    remap, problem = load_remap(repo_root)
+    return SpecVerification(
+        repo_root, spec_section_at(repo_root, spec_rel), shape_default, remap, problem
+    )
 
 
 def raw_shape_default(repo_root: Path, state: RunState) -> str | None:

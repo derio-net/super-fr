@@ -95,6 +95,63 @@ def check_cmd(
         raise typer.Exit(2)
 
 
+@verification_app.command("exit")
+def exit_cmd(
+    run: str | None = typer.Option(None, "--run", help="The run whose exit to print."),
+    spec: str | None = typer.Option(
+        None, "--spec", help="A repo-relative spec path (no run: the shape default is unknown)."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Print a run's (or spec's) exit: its kinds, its gates and the gated rows
+    (spec 2026-10-14 exit-gates R1). Read-only; needs no forge."""
+    import json
+
+    from fr.acceptance.model import AcceptanceError
+    from fr.run.model import RunStateError, load_run_state
+    from fr.verification.exit import exit_for_spec, run_exit
+    from fr.verification.spec_section import SectionError
+
+    repo_root = resolve_repo_root()
+    if (run is None) == (spec is None):
+        err_console.print("[red]refused:[/red] give exactly one of --run and --spec.")
+        raise typer.Exit(2)
+    try:
+        if run is not None:
+            result = run_exit(repo_root, load_run_state(repo_root, run))
+        else:
+            assert spec is not None
+            if not (repo_root / spec).is_file():
+                raise AcceptanceError(f"no spec at {spec}")
+            result = exit_for_spec(repo_root, spec)
+    except (RunStateError, AcceptanceError, SectionError, OSError) as e:
+        err_console.print(f"[red]refused:[/red] {e}", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+    if result.remap_problem:
+        err_console.print(f"warning: {result.remap_problem} — no gate remap applied", soft_wrap=True)
+    gated_rows = [{"id": r.id, "gate": result.row_gates[r.id]} for r in result.gated_rows]
+    if as_json:
+        console.print_json(
+            json.dumps(
+                {
+                    "kinds": sorted(result.kinds),
+                    "run_gate": result.run_gate,
+                    "gates": sorted(result.gates),
+                    "gated": result.is_gated,
+                    "gated_rows": gated_rows,
+                }
+            )
+        )
+        return
+    console.print(f"kinds: {', '.join(sorted(result.kinds))}", soft_wrap=True)
+    console.print(f"run gate: {result.run_gate}")
+    console.print(f"gates: {', '.join(sorted(result.gates)) or 'none'}", soft_wrap=True)
+    for g in gated_rows:
+        console.print(f"gated: {g['id']} ({g['gate']})", soft_wrap=True)
+    console.print(f"gated: {'yes' if result.is_gated else 'no'}")
+
+
 @verification_app.command("walk")
 def walk_cmd(
     run: str = typer.Option(..., "--run", help="The run whose spec's rows are walked."),
