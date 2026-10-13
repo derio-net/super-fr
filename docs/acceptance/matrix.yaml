@@ -9139,3 +9139,115 @@ rows:
     notes: 'review p2: sources named per strategy, flag-form warning, never-raise, walk
       message'
     verify: none
+  - id: exit-gates-declared-exit
+    capability: exit-gates
+    acceptance: A run's exit — the set of verification kinds and the set of gates, from
+      the manifest's gate default, the repo's remap, and the spec's gate line or per-row
+      gate= — is computed once and printed by fr verification exit; a run is held after
+      merge iff a gate is tester or devops.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    scenario: tests/scenarios/exit-gates-declared-exit.sh
+  - id: exit-gates-set-downgrade
+    capability: exit-gates
+    acceptance: fr verification set rewrites the spec's Verification line, journals
+      the reason and re-syncs the labels; after spec-review a change that makes the
+      exit wait less is refused without a verified operator answer.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    scenario: tests/scenarios/exit-gates-set-downgrade.sh
+  - id: exit-gates-verify-without-section
+    capability: exit-gates
+    acceptance: 'A row''s own verify: on a spec with no Verification section is checked
+      like any other (unresolvable, unrunnable install, missing scenario, post-merge
+      or none without a reason).'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R24
+    levels: {}
+    status: not-implemented
+    notes: ''
+    scenario: tests/scenarios/exit-gates-verify-without-section.sh
+  - id: exit-gates-deliver-accounting
+    capability: exit-gates
+    acceptance: deliver refuses an out-of-scope finding, deferred item or owed row that
+      no post-merge gate holds and no filed issue tracks, and refuses Closes over an
+      issue a post-merge gate holds or an agent-decided narrowing names; fr journal
+      file files the issue and defers the finding in one move.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: exit-gates-board-lanes
+    capability: exit-gates
+    acceptance: The board shows Needs you · Developer, · Reviewer, · Tester and · DevOps
+      lanes read from the run cursor and the gate labels, and never shows merge ready,
+      nor merges, a CONFLICTING or DIRTY PR.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R19
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: exit-gates-install-channels
+    capability: exit-gates
+    acceptance: bootstrap.sh installs the newest release with no argument, the newest
+      RC with --version RC, an exact release or RC by number, main with --version main,
+      and installs nothing for an unknown version while listing the available ones;
+      install.sh accepts a clean checkout at a v* tag.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R22
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R23
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: exit-gates-pr-labels
+    capability: exit-gates
+    acceptance: A run's PR carries one verification:<kind> label per kind and one gate:<gate>
+      label per post-merge gate, kept in sync as the spec changes.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: exit-gates-driver-routing
+    capability: exit-gates
+    acceptance: A merged batch held by a post-merge gate is not closed out and keeps
+      its Refs issues open under its Needs-you lane until its rows are walked on main
+      or fr gate pass records the pass, which swaps the label to gate:<g>-passed.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: exit-gates-collected-closeout
+    capability: exit-gates
+    acceptance: Every landed, not-held batch of a repo closes out in one session with
+      one housekeeping PR that the driver marks ready and merges once clean, closing
+      passed batches' Refs issues; one reconcile attempt, then the operator.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R15
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: exit-gates-release-gating
+    capability: exit-gates
+    acceptance: A push to main cuts a vX.Y.Z-rc.N pre-release while any change merged
+      since the last final waits on a post-merge gate, and the final vX.Y.Z once none
+      does; fr release status lists what still waits.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R20
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R21
+    levels: {}
+    status: not-implemented
+    notes: ''

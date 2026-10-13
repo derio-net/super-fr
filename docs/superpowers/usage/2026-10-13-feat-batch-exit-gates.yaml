@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-10-13-feat-batch-exit-gates
+captures:
+- host: h-95fa37b9
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-10-13T22:50:33+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 73abb433-5601-4db7-ba08-a64b67cbfcfb
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 90
+        cache_write: 204973
+        cache_read: 7439496
+        output: 52469
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 18
+      other:
+        usd: null
+        turns: 14
+      paperwork:
+        usd: null
+        turns: 13
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 8
+        cache_write: 88918
+        cache_read: 361979
+        output: 1900
+      brainstorm:
+        usd: null
+        turns: 41
+        input: 82
+        cache_write: 116055
+        cache_read: 7077517
+        output: 50569
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 8
+          cache_write: 88918
+          cache_read: 361979
+          output: 1900
+        brainstorm:
+          usd: null
+          turns: 41
+          input: 82
+          cache_write: 116055
+          cache_read: 7077517
+          output: 50569
