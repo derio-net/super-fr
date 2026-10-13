@@ -276,3 +276,4 @@ strategy: candidate
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-10-14-merge-truth | `derio-net/super-fr` | `2026-10-14-merge-truth` | — |
