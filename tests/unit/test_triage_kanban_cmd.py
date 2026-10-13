@@ -707,3 +707,47 @@ def test_write_board_reads_the_budget_from_pacing_json_for_the_footer(tmp_path: 
     (tmp_path / "pacing.json").write_text("{not json")  # unusable: the board still renders
     path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
     assert "forge quota" not in path.read_text()
+
+
+# ------------------------------------------- post-merge truth R4, R15: the closed-set note
+
+
+def _with_closed_hit(tmp_path: Path, state: str) -> None:
+    path = tmp_path / "facts.json"
+    data = json.loads(path.read_text("utf-8"))
+    data["stale_in_progress"] = [
+        {
+            "key": "super-fr#9",
+            "title": "done",
+            "url": f"https://github.com/{REPO}/issues/9",
+            "closed_at": "2026-10-01T00:00:00Z",
+            "state": state,
+        }
+    ]
+    path.write_text(json.dumps(data), "utf-8")
+
+
+def test_rendered_board_html_carries_the_closed_set_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path, _dispatch_event("b1"))
+    _with_closed_hit(tmp_path, "release-pending")
+    _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "working"}))
+    code, out = _board(tmp_path)
+    assert code == 0, out
+    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    assert "closed issue still labelled" in page
+    assert "fr triage claim sync" in page and "fr triage batch drive" in page
+    assert "fr triage clean-labels" in page and "--yes" in page
+
+
+def test_rendered_board_html_has_no_closed_set_note_when_only_held_entries_exist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path, _dispatch_event("b1"))
+    _with_closed_hit(tmp_path, "held")
+    _use(monkeypatch, _Inspector({f"{REPO}/run/batch-b1": "working"}))
+    code, out = _board(tmp_path)
+    assert code == 0, out
+    page = (tmp_path / "board.html").read_text(encoding="utf-8")
+    assert "closed issue still labelled" not in page

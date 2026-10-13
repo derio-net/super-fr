@@ -76,14 +76,33 @@ def test_the_triage_page_folds_the_set_and_the_board_notes_the_command() -> None
     assert 'id="closed-in-progress"' not in clean
 
 
-def test_the_board_note_names_the_count_and_the_command_only_when_stale() -> None:
+def test_the_board_note_fires_on_stale_or_release_pending_and_names_the_rule() -> None:
     from fr.commands.triage_kanban_cmd import in_progress_note
 
-    f = _facts(_entry(1, "stale"), _entry(2, "stale"), _entry(3, "held"))
+    f = _facts(_entry(1, "stale"), _entry(2, "release-pending"), _entry(3, "held"))
     note = in_progress_note(f, ["--repo", REPO])
-    assert note is not None and "2" in note
-    assert "fr triage clean-labels --repo example-org/widgets" in note
+    assert note is not None and "2 closed issues" in note
+    assert "claim sync --repo example-org/widgets --yes" in note and "drive" in note
+    assert "fr triage clean-labels --repo example-org/widgets --yes" in note
+    only_pending = in_progress_note(_facts(_entry(2, "release-pending")), ["--repo", REPO])
+    assert only_pending is not None and "1 closed issue " in only_pending
     assert in_progress_note(_facts(_entry(3, "held")), ["--repo", REPO]) is None
+
+
+def test_every_surface_states_the_same_clearing_rule(tmp_path: Path) -> None:
+    from fr.triage.check import CLEARING_RULE
+    from fr.triage.render import render
+
+    f = _facts(_entry(1, "stale"), _entry(2, "release-pending"))
+    page = render(f, judgements({}))
+    assert "claim sync --yes" in page and "clean-labels --yes" in page
+    (tmp_path / "facts.json").write_text(json.dumps(f.to_json()), "utf-8")
+    out = (
+        CliRunner().invoke(app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path)]).output
+    )
+    flat = " ".join(out.split())
+    assert "claim sync --yes" in flat and "clean-labels --yes" in flat
+    assert "claim sync --yes" in CLEARING_RULE and "clean-labels --yes" in CLEARING_RULE
 
 
 # ------------------------------------------------------------- the verb

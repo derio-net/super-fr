@@ -41,7 +41,7 @@ from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
 from fr.triage.approval import ensure_approval_label
 from fr.triage.batch import last_dispatch, lifecycle_events
-from fr.triage.check import ClaimSets, classify, clean_label_targets
+from fr.triage.check import CLEARING_RULE, ClaimSets, classify, clean_label_targets
 from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
 from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
@@ -739,7 +739,7 @@ def check_command(
         console.print(f"  {escape(repo)}  {escape(', '.join(keys))}", soft_wrap=True)
     console.print(
         f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
-        "labelled fr:in-progress; stale ones: `fr triage clean-labels`"
+        f"labelled fr:in-progress or fr:claimed; {CLEARING_RULE}"
     )
     for state in ("stale", "release-pending", "held"):
         for e in (e for e in result.closed_in_progress if e.state == state):
