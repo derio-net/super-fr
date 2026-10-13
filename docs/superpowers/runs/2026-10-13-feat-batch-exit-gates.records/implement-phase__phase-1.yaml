@@ -1,0 +1,17 @@
+schema_version: 9
+run: 2026-10-13-feat-batch-exit-gates
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T4.S4, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2]
+refactor:
+  P1.T1: "Task 1 only adds a constants module and a fragment; there was nothing to clean."
+  P1.T3: "The spec_section and ExitBlock additions are each one new branch/field beside the existing ones; nothing duplicated to merge."
+  P1.T6: "Task 6 adds scenario scripts, their wiring, one prose sentence and matrix moves; nothing to clean."
+journal:
+  - kind: discovery
+    id: p1-r24-changes-existing-test
+    phase: 1
+    title: R24 makes a section-less spec with a row verify live and no reason an error
+    body: "test_plan_self_review_verification::test_a_spec_with_no_section_passes_unchanged asserted the opposite on a row with verify: live; it now uses a row with no verify: (the still-unchanged case). The brainstorm warning passes shape_default None, so it checks explicit strategies only, as before."
+evidence: {tests: ci}

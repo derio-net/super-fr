@@ -172,6 +172,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "verification-strategy-resolution",
         "shipped-verification-strategies",
         "spec-verification-section",
+        "exit-gates-declared-exit",
+        "exit-gates-verify-without-section",
         "walk-recording-prints-close",
         "awaiting-live-triage",
         "matrix-status-split",
@@ -219,6 +221,14 @@ def test_shipped_verification_strategies(installed: Path, tmp_path: Path) -> Non
 
 def test_spec_verification_section(installed: Path, tmp_path: Path) -> None:
     _scenario("spec-verification-section", installed, tmp_path)
+
+
+def test_exit_gates_declared_exit(installed: Path, tmp_path: Path) -> None:
+    _scenario("exit-gates-declared-exit", installed, tmp_path)
+
+
+def test_exit_gates_verify_without_section(installed: Path, tmp_path: Path) -> None:
+    _scenario("exit-gates-verify-without-section", installed, tmp_path)
 
 
 def test_walk_recording_prints_close(installed: Path, tmp_path: Path) -> None:
