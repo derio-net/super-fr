@@ -400,3 +400,8 @@ def held_map(facts: Facts, me: str) -> dict[str, Claim]:
             if h is not None:
                 out[issue.key] = h
     return out
+
+
+def closed_settlements(facts: Facts) -> list:
+    """Stub: closed hits to settle (implemented in the next task)."""
+    return []
