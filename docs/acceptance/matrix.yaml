@@ -7831,6 +7831,126 @@ rows:
       interactions:
       - nav-link-each-tab
     scenario: tests/scenarios/triage-nav-pages.sh
+  - id: triage-closed-issues-unclaimed
+    capability: triage-batches
+    acceptance: Every claim sync --yes and drive --yes pass releases this scope's own
+      claim on each closed in-scope issue and removes fr:in-progress and fr:claimed
+      from every closed issue no other scope's trusted claim holds (untrusted-only and
+      marker-less included); clean-labels --yes does the same; the batch board names
+      a non-empty closed set.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: triage-release-pending-true
+    capability: triage-batches
+    acceptance: A closed issue shown release-pending is cleared by the next claim sync
+      --yes or drive --yes pass, including a closed member of a still-running batch;
+      check and both pages say so.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-claim-take-recorded-first
+    capability: triage-batches
+    acceptance: fr triage claim take records the take before any forge write; a failed
+      judgements write writes nothing to the forge, and a failed forge write leaves
+      a take the next claim sync completes.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-retire-then-sync
+    capability: triage-batches
+    acceptance: After fr triage scope retire --yes, with no collect in between, fr triage
+      check shows none of the retired claims held and claim sync --yes claims the members
+      a batch owes.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: triage-archive-pr-visible
+    capability: triage-batches
+    acceptance: The drive reads live checks for an attributed archive PR the facts lack,
+      keeps a closing repo's PR list fresh, prints one reason line each pass an attributed
+      archive PR is not merged, and the board names an existing archive PR and what
+      it waits on.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R9
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-archive-pr-draft-merged
+    capability: triage-batches
+    acceptance: Under --yes the drive marks a draft attributed archive PR ready and
+      merges it once green, with no approved-fr label.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-archive-pr-conflict-handed
+    capability: triage-batches
+    acceptance: 'A conflicting archive PR is never merge-attempted: it is handed to
+      its batch''s close-out session, then listed under Needs you now as an archive
+      conflict with a recorded stop; a conflicting export PR goes straight to Needs
+      you now.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-default-branch-unknown-held
+    capability: triage-batches
+    acceptance: A drive --yes pass over a repo whose default branch cannot be resolved
+      holds that repo's merge work with one warning and finishes the pass; a clone without
+      origin/HEAD whose origin answers merges.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-waitout-no-graphql
+    capability: triage-batches
+    acceptance: The drive's lease renewal while waiting out an exhausted GraphQL window
+      spends no GraphQL.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: triage-post-merge-truth-live
+    capability: triage-batches
+    acceptance: 'After release, one drive --yes pass over derio-net/super-fr leaves
+      no closed issue labelled fr:in-progress that no other scope holds, and the conflicting
+      archive PR #1146 is handed back or under Needs you now.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin

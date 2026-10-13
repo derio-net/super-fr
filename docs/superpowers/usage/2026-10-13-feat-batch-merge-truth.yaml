@@ -1,0 +1,81 @@
+schema_version: 2
+run: 2026-10-13-feat-batch-merge-truth
+captures:
+- host: h-32a74b66
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-10-13T22:53:19+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 6216fd7d-199a-4c67-921b-94848ff77a9f
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 220
+        cache_write: 392703
+        cache_read: 9948618
+        output: 30962
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 73
+      other:
+        usd: null
+        turns: 21
+      paperwork:
+        usd: null
+        turns: 15
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 8
+        cache_write: 88342
+        cache_read: 360936
+        output: 1054
+      brainstorm:
+        usd: null
+        turns: 104
+        input: 212
+        cache_write: 304361
+        cache_read: 9587682
+        output: 29908
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 8
+          cache_write: 88342
+          cache_read: 360936
+          output: 1054
+        brainstorm:
+          usd: null
+          turns: 21
+          input: 46
+          cache_write: 61437
+          cache_read: 3042020
+          output: 28035
+      subagent:
+        brainstorm:
+          usd: null
+          turns: 83
+          input: 166
+          cache_write: 242924
+          cache_read: 6545662
+          output: 1873
+    units:
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 83
+          input: 166
+          cache_write: 242924
+          cache_read: 6545662
+          output: 1873
+    briefs:
+      a4dba3fe611bf18fb: 3018
+      a2f4ab36679719e46: 2978
