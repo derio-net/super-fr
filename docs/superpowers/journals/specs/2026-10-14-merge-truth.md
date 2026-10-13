@@ -238,3 +238,8 @@ R15: the note fires on stale or release-pending entries and names claim sync or 
 ### phase-split-2026-10-14-merge-truth-p2 · decision · ask: archive PRs (#1172, #1190.2) are an independently reviewable ask, R7-R12
 
 Phase 2 serves its own ask.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-14-merge-truth-p3 created=2026-10-13T23:05:46+00:00 -->
+### phase-split-2026-10-14-merge-truth-p3 · decision · ask: drive robustness (#1176, #1178) is an independently reviewable ask, R13-R14
+
+Phase 3 serves its own ask.
