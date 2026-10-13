@@ -9174,9 +9174,13 @@ rows:
       or none without a reason).'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R24
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_row_verification_issues.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_exit_gates_verify_without_section
+    status: ci
+    notes: row_verification_issues runs without a section
     scenario: tests/scenarios/exit-gates-verify-without-section.sh
   - id: exit-gates-deliver-accounting
     capability: exit-gates
