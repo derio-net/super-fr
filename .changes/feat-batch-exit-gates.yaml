@@ -1,0 +1,2 @@
+bump: minor
+summary: Declare each PR's exit (kinds and gates) in the spec, add schema-2 strategy gates, a repo gate remap and fr verification exit
