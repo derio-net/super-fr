@@ -1,0 +1,25 @@
+schema_version: 10
+run: 2026-10-14-feat-closed-session-batch-recovery
+workflow: fr-goal@1
+branch: feat/closed-session-batch-recovery
+started: '2026-10-14T15:57:59+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 5.27.0rc3
