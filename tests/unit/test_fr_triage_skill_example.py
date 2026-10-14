@@ -89,7 +89,7 @@ def test_the_skill_teaches_current_schema_and_batches(tmp_path: Path) -> None:
     """Review r2p-f14: agents copy the skill, so it must never say `schema: 1`,
     and its example must show a batch that loads through the real model."""
     text = SKILL.read_text()
-    assert "schema: 1" not in text
+    assert not re.search(r"schema: 1(?!\d)", text)  # `schema: 10` is not `schema: 1`
     assert re.search(rf"^schema: {JUDGEMENTS_SCHEMA}$", _example(), re.M)
     assert f"**Schema {JUDGEMENTS_SCHEMA}:**" in text
     path = tmp_path / "judgements.yaml"
