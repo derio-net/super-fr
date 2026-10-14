@@ -9254,9 +9254,17 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R13
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_exit_gates_drive.py
+      - super-fr:tests/unit/test_triage_exit_gates_facts.py
+      - super-fr:tests/unit/test_gate_cmd.py
+    status: walk-owed
+    notes: 'The gate ledger is unit-tested against a fake forge: merged-PR labels and
+      the cursor position in facts, step 2 holding a gated batch, awaiting-live and
+      gate-pass actions and their writes, the rows read on the default branch, fr gate
+      pass. A real merged PR, driver and matrix on main are still owed, so the live
+      walk stays owed; the Needs-you lane is phase 5'
   - id: exit-gates-collected-closeout
     capability: exit-gates
     acceptance: Every landed, not-held batch of a repo closes out in one session with
