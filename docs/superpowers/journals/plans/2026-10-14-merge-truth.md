@@ -352,3 +352,89 @@ a test-only task over an already-correct renewal path; nothing to clean
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 acceptance status moves only; no code
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-10-14T02:02:45+00:00 phase=3 -->
+### p3-review · review · Phase 3 review: 7 findings (6 in scope: 4 fixed, 2 refuted; 1 out of scope) (phase 3)
+
+An independent reviewer read b52a47a0~1..HEAD against R13, R14, §F and §G. Verdict: approve, nothing blocking. 291 targeted tests passed.
+It confirmed four points:
+- the raise is narrow;
+- every merge_ctx caller is guarded;
+- gh#921 behaviour is unchanged;
+- exit 3 matches pass_exit's held convention, because R13's "the pass continues" means not aborted.
+Fixes in 8ca30113, ee216f4a, bf060c04 and 5eb82641 left 671 targeted tests passing.
+
+<!-- fr:journal kind=decision scope=plan id=p3-exit-and-test-shape created=2026-10-14T02:02:45+00:00 phase=3 -->
+### p3-exit-and-test-shape · decision · Unreachable-origin pass exits 3, proven over two held merges, not a dispatch (phase 3)
+
+Plan step P3.T1.S1 said exit 0. The test asserts 3, which is correct per pass_exit: work remains and nothing acted. A same-repo dispatch cannot witness that the pass continues, because dispatch_batch fetches (read_errors=True, gh#1025) and so fails while origin is down. The test instead shows two independent approved PRs both reach 'held', the pass reaches its summary, and exactly one warning is printed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-14T02:02:45+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Unreachable-origin test proved only not-aborted, not that later work ran (phase 3)
+
+test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-14T02:02:45+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · _base_rules GitError→DefaultBranchUnknown untested; _queue_reads calls it unguarded (phase 3)
+
+triage_batch_cmd.py ~3605-3616, ~3680
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-14T02:02:45+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · Possible double warning: queue-unknown line plus _ctx_or_hold held line (phase 3)
+
+triage_batch_cmd.py ~3660-3672 vs _ctx_or_hold; the reviewer marked it unverified.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-14T02:02:45+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · Each held action prints its own outcome line beside the one warning (phase 3)
+
+_merge_batch, _archive and the other held returns.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-14T02:02:45+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · Plan said exit 0; test asserts 3; deviation and single-repo limit unrecorded (phase 3)
+
+03.yaml P3.T1.S1 vs the test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-14T02:02:45+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · wait_out test docstring overclaims REST; matrix row cites no REST proof (phase 3)
+
+test_triage_quota_loop.py; REST-ness is proven in test_gh.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-14T02:02:45+00:00 phase=3 state=open review_scope=out -->
+### p3-r7 · finding [open] (reviewer: out of scope) · MergeContext cached across passes: a later-unreachable origin is not re-fetched (phase 3)
+
+merge_ctx ~3573/3601: later passes act on stale origin refs instead of holding.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-14T02:02:45+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Unreachable-origin test proved only not-aborted, not that later work ran (phase 3)
+
+8ca30113: a second independent approved PR is also held, the pass reaches its summary, one warning is printed, and the exit is 3. A dispatch cannot witness it (see decision p3-exit-and-test-shape).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-14T02:02:45+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: _base_rules GitError→DefaultBranchUnknown untested; _queue_reads calls it unguarded (phase 3)
+
+ee216f4a: test_base_rules_names_an_unreadable_default_branch, plus a _queue_reads comment. The claim was verified: _queue_reads reads default_branch() first and holds on GitError before _base_rules runs.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-14T02:02:45+00:00 phase=3 state=refuted resolves=p3-r3 -->
+### p3-r3-resolved · finding [refuted] · resolves p3-r3: Possible double warning: queue-unknown line plus _ctx_or_hold held line (phase 3)
+
+ee216f4a adds test_no_origin_head_and_unreachable_origin_warns_once, which shows only _queue_reads' warning fires. It holds the repo before any merge_ctx/_ctx_or_hold call, so no double warning is possible on that path.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-14T02:02:45+00:00 phase=3 state=refuted resolves=p3-r4 -->
+### p3-r4-resolved · finding [refuted] · resolves p3-r4: Each held action prints its own outcome line beside the one warning (phase 3)
+
+Per-action outcome lines ('merge b1: held: …') are the driver's existing reporting convention for every held action. R13's 'one warning line' counts the warning, which the test pins at exactly one. Suppressing the outcome lines would hide which actions waited. The reviewer itself judged this acceptable.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-14T02:02:45+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: Plan said exit 0; test asserts 3; deviation and single-repo limit unrecorded (phase 3)
+
+Recorded in this record's decision p3-exit-and-test-shape (exit 3 per pass_exit; why the witness is two held merges, not a dispatch).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-14T02:02:45+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: wait_out test docstring overclaims REST; matrix row cites no REST proof (phase 3)
+
+bf060c04 tightens the docstring. 5eb82641 adds test_gh.py#TestConditionalVisibility::test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer (argv api -i repos/o/r) to row triage-waitout-no-graphql.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-14T02:02:45+00:00 phase=3 state=open resolves=p3-r7 out_of_scope=true -->
+### p3-r7-resolved · finding [out-of-scope] · resolves p3-r7: MergeContext cached across passes: a later-unreachable origin is not re-fetched (phase 3)
+
+Not caused by this change: the per-host MergeContext cache predates it, and R13 concerns a default branch that cannot be resolved, which this case still can (from the local origin/HEAD). Re-fetching per pass is a separate change.
