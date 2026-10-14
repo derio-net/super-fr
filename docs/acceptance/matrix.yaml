@@ -9163,9 +9163,16 @@ rows:
       exit wait less is refused without a verified operator answer.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_set.py
+      - super-fr:tests/unit/test_spec_section_rewrite.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_exit_gates_set_downgrade
+    status: ci
+    notes: fr verification set and the R8 downgrade guard are covered by unit tests
+      and an installed-fr scenario; the transcript-verified operator path is unit-tested
+      with a patched reader
     scenario: tests/scenarios/exit-gates-set-downgrade.sh
   - id: exit-gates-verify-without-section
     capability: exit-gates
