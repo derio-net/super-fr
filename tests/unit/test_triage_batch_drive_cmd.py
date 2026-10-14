@@ -2274,17 +2274,33 @@ def test_yes_pass_over_a_clone_without_origin_head_heals_and_merges(
 def test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes(
     tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The fetch fails with `origin/HEAD` set: the repo is held with ONE warning line,
-    the pass ends without an error, and nothing is written to it."""
+    """The fetch fails with `origin/HEAD` set: the repo is held with ONE warning line
+    for both its PRs, the pass runs through to its summary without an error, and nothing
+    is written to it."""
     import shutil
 
     origin = _git_clone(tmp_path, world, monkeypatch)
     _git(tmp_path / "gitclone", "remote", "set-head", "origin", "main")
     shutil.rmtree(origin)
     _pr_open(world, tmp_path)
+    world.issues[2] = "open"  # an independent batch, no `after` on the held one
+    world.pr(102, "feat/batch-b2", [2])
+    _state(
+        tmp_path, world,
+        _batch("b1", 1, events=_dispatch_event("b1")),
+        _batch("b2", 2, events=_dispatch_event("b2")),
+    )  # fmt: skip
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 3, out  # not an error: work remains, as for any held merge (exit 3)
     assert world.merged == []
+    # The pass went on past the held head: the LATER batch's action ran and was held
+    # too, and the pass reached its summary; a dispatch is not the probe here, because
+    # it fetches and a failed fetch is fatal to the pass by design (gh#1025).
+    assert _lines(out, "merge") == [
+        "merge b1: held: default branch unknown",
+        "merge b2: held: default branch unknown",
+    ], out
+    assert "in flight 2, merged 0, pending 0, closing 0" in out
     assert out.count(f"held: {REPO} default branch unknown (") == 1, out
 
 
