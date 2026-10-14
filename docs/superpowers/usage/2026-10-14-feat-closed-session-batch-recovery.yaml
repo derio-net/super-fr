@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-10-14-feat-closed-session-batch-recovery
+captures:
+- host: h-42b4c3f9
+  harness: opencode
+  mode: devcontainer
+  captured_at: '2026-10-14T17:53:59+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+    role: main
+    models:
+      gpt-6.1-sol:
+        input: 642268
+        cache_write: 0
+        cache_read: 9917952
+        output: 18932
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 14
+      other:
+        usd: null
+        turns: 80
+      paperwork:
+        usd: null
+        turns: 7
+    steps:
+      (outside run):
+        usd: null
+        turns: 68
+        input: 144254
+        cache_write: 0
+        cache_read: 5014656
+        output: 7988
+      brainstorm:
+        usd: null
+        turns: 30
+        input: 498014
+        cache_write: 0
+        cache_read: 4903296
+        output: 10944
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 68
+          input: 144254
+          cache_write: 0
+          cache_read: 5014656
+          output: 7988
+        brainstorm:
+          usd: null
+          turns: 30
+          input: 498014
+          cache_write: 0
+          cache_read: 4903296
+          output: 10944

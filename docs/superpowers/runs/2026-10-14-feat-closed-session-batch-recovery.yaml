@@ -3,11 +3,14 @@ run: 2026-10-14-feat-closed-session-batch-recovery
 workflow: fr-goal@1
 branch: feat/closed-session-batch-recovery
 started: '2026-10-14T15:57:59+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-14T15:58:52+00:00'
+    state: done
+    at: '2026-10-14T17:53:58+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md
   spec-review:
     state: pending
   plan:
