@@ -186,3 +186,9 @@ gate: tester
 | Name | Repo | Plan | Depends on |
 | --- | --- | --- | --- |
 | closed-session-batch-recovery | derio-net/super-fr | 2026-10-14-closed-session-batch-recovery | — |
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-10-14-closed-session-batch-recovery | `derio-net/super-fr` | `2026-10-14-closed-session-batch-recovery` | — |
