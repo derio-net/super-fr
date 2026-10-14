@@ -527,6 +527,104 @@ def resolve(
             _close_owed_issue(root, filed, note, owed_key(target))
 
 
+@journal_app.command("file")
+def file_cmd(
+    scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
+    slug: str | None = typer.Option(None, "--slug", help="Journal slug."),
+    plan_dir: str | None = typer.Option(
+        None, "--plan-dir", help="--scope plan: the plan folder (its name is the slug)."
+    ),
+    ids: list[str] = typer.Option(
+        ...,
+        "--id",
+        help="An entry to file (repeatable): a finding, an owed action, or a narrowing decision.",
+    ),
+) -> None:
+    """File leftovers as issues before `deliver` (spec 2026-10-14 exit-gates R10).
+
+    An out-of-scope finding or a narrowing decision is filed with the label
+    `follow-up` and recorded as deferred to that issue (`tracked_by=`); an owed
+    action with `fr:owed`, recorded as `filed_as=`. Through the archive's own
+    filers, so an issue already filed for the entry is reused. Every id is
+    checked before the forge is called; one that cannot be filed refuses them
+    all and nothing is written."""
+    from fr import archive_followups as af
+    from fr.journal import file as jf
+    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+
+    _validate_scope(scope)
+    if scope == "plan" and (slug is not None or plan_dir is not None):
+        slug, _ = _resolve_slug_and_plan_dir(slug, plan_dir)
+    if not slug:
+        err_console.print("[red]give --slug (or --plan-dir with --scope plan)[/red]")
+        raise typer.Exit(2)
+    root = resolve_repo_root()
+    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    try:
+        entries = _load(path)
+    except JournalParseError as e:
+        err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    plan = jf.plan_filing(entries, ids)
+    if plan.refusals:
+        err_console.print(
+            "refused, nothing filed: " + "; ".join(plan.refusals), markup=False, soft_wrap=True
+        )
+        raise typer.Exit(2)
+    try:
+        require_tracker(root)
+    except (TrackerRequiredError, ServicesError) as e:
+        err_console.print(
+            f"refused, nothing filed: {e} Under `tracking: none` a leftover stays recorded "
+            "in the journal and the PR body; `deliver` does not ask for it.",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    repo, why = af.owed_identity(root)
+    if repo is None:
+        err_console.print(f"refused, nothing filed: {why}", markup=False, soft_wrap=True)
+        raise typer.Exit(2)
+    gh = _make_gh_client()
+    filed: dict[str, list[jf.Filing]] = {"findings": [], "narrowings": [], "owed": []}
+    errors: list[str] = []
+    open_ends = [
+        (bucket, jf.open_end(scope, slug, path, e))
+        for bucket, group in (("findings", plan.findings), ("narrowings", plan.narrowings))
+        for e in group
+    ]
+    by_id = {e.id: e for e in entries}
+    for (bucket, _end), done in zip(
+        open_ends, af.file_open_ends(root, [end for _, end in open_ends], gh, repo), strict=True
+    ):
+        if done.url is None:
+            errors.append(f"{done.end.id}: {done.error}")
+        else:
+            filed[bucket].append(jf.Filing(by_id[done.end.id], done.url))
+    owed = [jf.owed_end(scope, slug, path, e) for e in plan.owed]
+    for result in af.file_owed_ends(root, owed, gh, repo):
+        if result.ref is None:
+            errors.append(f"{result.end.id}: {result.error}")
+        else:
+            filed["owed"].append(jf.Filing(by_id[result.end.id], result.ref))
+    if any(filed.values()):
+        _apply(
+            root,
+            jf.filing_record(entries, **filed),
+            scope=scope,
+            slug=slug,
+            path=path,
+            message=f"chore(fr): journal {scope}/{slug} — file "
+            + ", ".join(f.entry.id for group in filed.values() for f in group),
+        )
+    for group in filed.values():
+        for f in group:
+            typer.echo(f"{f.entry.id} → filed as {_shown(f.ref)}")
+    if errors:
+        err_console.print("could not file: " + "; ".join(errors), markup=False, soft_wrap=True)
+        raise typer.Exit(1)
+
+
 def _make_gh_client() -> GhClient:
     """Factory seam — tests monkeypatch it (the archive command's own shape)."""
     from fr.hostclient import client_for

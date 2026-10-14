@@ -78,8 +78,9 @@ strategy and `scenario`/`issues`/`harnesses`/`walk` (spec
 `2026-10-11-debt-engine-design.md` §D, R27). Migration:
 `fr.artifacts.record_status_split`; version 8 is read through the frozen
 `fr.record.legacy.RecordV8`. Bumped 9 -> 10 for `JournalItem.gate` and
-`JournalItem.narrows`, a decision's Owner gate (spec
-`2026-10-14-exit-gates-design.md` §C, R12). Migration:
+`JournalItem.narrows`, a decision's Owner gate, and `JournalItem.filed_as`,
+`fr journal file`'s record (spec `2026-10-14-exit-gates-design.md` §C, R10,
+R12). Migration:
 `fr.artifacts.record_exit_gates`, stamp only — nothing is removed or moved."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
@@ -148,6 +149,9 @@ class JournalItem(_Strict):
     """A `decision`'s owning gate role (spec 2026-10-14 exit-gates R12)."""
     narrows: tuple[StrictStr, ...] = ()
     """The issues a `decision` narrows (R12); `JournalEntry` checks each ref."""
+    filed_as: StrictStr | None = None
+    """On an `open` record resolving an `owed` entry: the issue `fr journal file`
+    filed it as (spec 2026-10-14 R10). Still owed until discharged."""
 
 
 class Resolution(_Strict):

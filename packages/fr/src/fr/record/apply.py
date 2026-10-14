@@ -344,12 +344,14 @@ def _journal_writes(
         if advisory is not None:
             notices.append(advisory)
 
-    def finding(fid: str, *, discharge: bool = False) -> JournalEntry:
+    def finding(fid: str, *, discharge: bool = False, files: bool = False) -> JournalEntry:
         hit = next((e for e in [*existing, *new] if e.id == fid), None)
         if hit is None:
             raise RecordRefusedError(f"no journal entry {fid!r} in {path.name} — nothing resolved")
         if hit.kind == "owed" and discharge and ctx.discharges_owed:
             return hit  # discharging an owed action (spec 2026-10-11 §E, R24)
+        if hit.kind == "owed" and files:
+            return hit  # `fr journal file` records where it went (2026-10-14 R10)
         if hit.kind == "owed":
             raise RecordRefusedError(
                 f"entry {fid!r} is an owed action — discharge it with `fr journal resolve "
@@ -380,7 +382,7 @@ def _journal_writes(
             item.state if item.state is not None else ("open" if item.kind == "finding" else None)
         )
         if item.resolves is not None:
-            finding(item.resolves)
+            finding(item.resolves, files=item.filed_as is not None)
         try:
             entry = JournalEntry(
                 kind=item.kind,
@@ -403,6 +405,7 @@ def _journal_writes(
                 tracked_by=item.tracked_by,
                 out_of_scope=item.out_of_scope,
                 input=item.input,
+                filed_as=item.filed_as,
                 gate=item.gate,
                 narrows=item.narrows,
             )
