@@ -244,9 +244,19 @@ def reconstruct(d: Descriptor) -> str:
     )
 
 
+# The wave driver's two hand-back briefs (a batch PR's, an archive PR's), spelled
+# here because fr-herdr never imports `fr.triage` (test_import_direction.py).
+HANDBACK_PREFIXES = ("Merge conflict on batch ", "Archive PR conflict on batch ")
+
+
+def is_handback(text: str) -> bool:
+    """Whether *text* is one of the wave driver's conflict hand-back briefs."""
+    return text.startswith(HANDBACK_PREFIXES)
+
+
 def handback(d: Descriptor, text: str) -> Descriptor:
-    """Save the engine's existing six-step brief under the ORIGINAL item identity."""
+    """Save the engine's existing hand-back brief under the ORIGINAL item identity."""
     match = re.search(r"\bhead ([0-9a-f]+), conflicts with", text)
-    if text.startswith("Merge conflict on batch ") and match:
+    if is_handback(text) and match:
         return d.model_copy(update={"conflict_head": match[1], "conflict_brief": text})
     return d

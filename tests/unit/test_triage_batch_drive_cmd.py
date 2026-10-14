@@ -5057,6 +5057,23 @@ def test_archive_conflict_messages_an_idle_closeout_session(
     assert len(messenger.messages) == 1 and len(_archive_conflicts(tmp_path)) == 1
 
 
+def test_archive_conflict_brief_enters_isolation_on_the_archive_branch() -> None:
+    """p2-r1: a fresh session starts in the driver's base clone, so step 1 enters the
+    archive branch's workspace as `conflict_brief` does, never `git switch` there."""
+    from fr.triage.batch_dispatch import archive_conflict_brief
+    from fr.triage.model import Batch
+
+    batch = Batch.model_validate({"id": "b1", "title": "Fix it", "ids": ["super-fr#1"]})
+    text = archive_conflict_brief(
+        batch, pr=201, head="sha-201", branch="chore/archive-p1", base="origin/main"
+    )
+    assert text.startswith("Archive PR conflict on batch b1 ")
+    step1 = next(line for line in text.splitlines() if line.startswith("1. "))
+    assert "`fr isolation up --branch chore/archive-p1`" in step1
+    assert "git switch" not in text
+    assert "at head sha-201, conflicts with" in text
+
+
 @pytest.mark.parametrize("status", ["working", "blocked"])
 def test_archive_conflict_waits_while_the_closeout_session_works(
     tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,

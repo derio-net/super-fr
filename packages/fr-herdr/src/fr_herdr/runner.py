@@ -247,7 +247,7 @@ class HerdrRunner:
                                     or fresh[0].get("interactive_ready") is not True
                                 ):
                                     raise HerdrError("managed message target is not idle and ready")
-                                if text.startswith("Merge conflict on batch "):
+                                if managed.is_handback(text):
                                     managed.save(managed.handback(d, text))
                                 _run_herdr(["agent", "prompt", agent_name(item.id), text])
                                 return

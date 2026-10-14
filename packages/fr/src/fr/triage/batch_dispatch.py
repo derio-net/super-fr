@@ -275,9 +275,12 @@ def archive_conflict_brief(batch: Batch, *, pr: int, head: str, branch: str, bas
             f"Archive PR conflict on batch {batch.id} ({batch.title}): archive PR #{pr} on "
             f"{branch}, at head {head}, conflicts with {base}, so the wave driver will not "
             "merge it.",
-            f"1. Work on {branch} itself: `git fetch origin && git switch {branch}`.",
-            f"2. `git merge {base}` into {branch} and resolve the conflicts. Do not rebase "
-            "and do not force-push.",
+            f"1. Enter the archive branch's workspace first: `fr isolation up --branch "
+            f"{branch}`. {branch} is checked out there, not in the clone you may have "
+            "started in; on an existing workspace the command resumes it. Every later step "
+            "runs in the workspace.",
+            f"2. `git fetch origin && git merge {base}` into {branch} and resolve the "
+            "conflicts. Do not rebase and do not force-push.",
             f"3. Commit the merge and `git push origin {branch}`. The driver merges the "
             "archive PR once it is mergeable and its checks are green.",
             NO_APPROVAL_LINE,
