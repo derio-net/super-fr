@@ -6,7 +6,8 @@ tags) that a `gate:tester` or `gate:devops` label still holds, with its owed row
 through the forge adapter. `scripts/release.py` does its own forge read (it holds the
 release token) and hands the facts to `--from-json FILE`, which never reaches a forge:
 fr decides credential-free, through the same `release_status` the forge path calls. It
-touches no registered artifact, so `release` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS`; a forge read that fails exits 1, never an
+touches no registered artifact, so `release` is in
+`fr.artifacts.trigger.READ_ONLY_COMMANDS`; a forge read that fails exits 1, never an
 empty list, because "nothing waits" would cut a final.
 """
 
