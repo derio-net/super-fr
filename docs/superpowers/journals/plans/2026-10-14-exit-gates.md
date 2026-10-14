@@ -280,3 +280,53 @@ unchanged, nothing written; test_p2_r12_a_no_op_writes_nothing. (90ee2beb, CI gr
 ### p2-r13-resolved · finding [fixed] · resolves p2-r13: set_cmd prints spec_rel with Rich markup (phase 2)
 
 markup=False; test_p2_r13_the_success_line_is_printed_literally. (90ee2beb, CI green)
+
+<!-- fr:journal kind=decision scope=plan id=p3-narrowing-filing created=2026-10-14T03:23:35+00:00 phase=3 -->
+### p3-narrowing-filing · decision · Filing a narrowing decision appends a decision with the same narrows= and tracked_by= (phase 3)
+
+The journal is append-only and a decision has no resolution record, so `fr journal file` appends `<id>-filed`: a decision carrying the original's `narrows=` (and `gate=`) plus `tracked_by=<issue>`. A narrowing decision is a decision with `narrows=` and no `tracked_by=`; it is accounted when a later decision with the same narrows set carries `tracked_by=` (fr.journal.file.narrowing_accounted). R11's operator check reads only narrowing decisions, never the filing.
+
+<!-- fr:journal kind=decision scope=plan id=p3-brainstorm-operator-decisions created=2026-10-14T03:23:35+00:00 phase=3 -->
+### p3-brainstorm-operator-decisions · decision · The brainstorm record writes answered_by=operator on its decisions when its gate is cleared by asking (phase 3)
+
+apply_record marks a record operator_decisions when its step clears an operator gate, it is not no_questions, and evidence.answered_by is not agent. Its decisions with no answered_by are written answered_by=operator and skip the transcript check (the gate's own question-round check verifies it; a refusal restores every byte). An item saying agent is kept. Elsewhere a decision claiming operator is verified against the transcript since the journal's last entry (an empty journal: the whole session).
+
+<!-- fr:journal kind=decision scope=plan id=p3-leftover-rules created=2026-10-14T03:23:35+00:00 phase=3 -->
+### p3-leftover-rules · decision · Leftovers gate runs before the PR body; tracking none keeps only the gate route for rows; a walked gated row may close (phase 3)
+
+`_deliver_leftovers_gate` runs before `_deliver_pr_gate`, so the body renders with the deferrals already recorded. An unreadable exit judges no row there (the label sync refuses it). Under tracking none the journal kinds are not leftovers and an owed row's only fix is `fr verification set --gate`. A gated row stops holding its issue once walk-verified (R14's rows-walked pass), as a post-merge row already did.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-journal-item-filed-as created=2026-10-14T03:23:35+00:00 phase=3 -->
+### p3-journal-item-filed-as · discovery · JournalItem also gained filed_as, inside the same record 9 -> 10 hop (phase 3)
+
+`fr journal file` writes through the record engine, and an owed entry's filing record carries filed_as=, which no record field expressed. JournalItem.filed_as rides the same kind-10 bump; the engine accepts a `resolves` naming an owed entry only when filed_as is set (discharge stays `fr journal resolve`'s).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-deliver-fixtures-account created=2026-10-14T03:23:35+00:00 phase=3 -->
+### p3-deliver-fixtures-account · discovery · Deliver test fixtures now account for their leftovers (phase 3)
+
+The shared `_at_deliver` fixture defers its out-of-scope finding to an issue and gives the seeded unwired row an issue (account_seeded_row); the fr-goal shape walk does the same before deliver. tests/integration/test_exit_gates_deliver.py keeps the unaccounted path end to end.
+
+<!-- fr:journal kind=finding scope=plan id=p3-older-fr-refuses-decision-tokens created=2026-10-14T03:23:35+00:00 phase=3 state=open review_scope=in -->
+### p3-older-fr-refuses-decision-tokens · finding [open] (reviewer: in scope) · A released fr refuses answered_by= and tracked_by= on a decision, so spec §C's "an older fr ignores them" holds only for gate= and narrows= (phase 3)
+
+parse_journal reads tokens by name, so an unknown token (gate=, narrows=) is ignored by fr <= 5.26. But answered_by= and tracked_by= are tokens it already knows and validates: its JournalEntry refuses answered_by off a resolution record and tracked_by off an open one, so a journal holding an operator-answered or filed narrowing decision is a parse error for an older fr. Built as the spec and the brief name the tokens; the journal stamp was not moved. Options: move the journal kind (migration), or spell the decision tokens differently.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-14T03:23:35+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+Three header tokens beside the existing ones, one projection helper each; the serializer's tuple join is the only new branch, so nothing duplicated to merge.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-14T03:23:35+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+A stamp-only hop guarding with the live model (a superset of v9), three optional JournalItem fields and one context flag in the engine; nothing to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-14T03:23:35+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+fr/journal/file.py only plans and builds one record over the archive's two filers and the record engine; no filer or journal fold was copied.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t5 created=2026-10-14T03:23:35+00:00 phase=3 -->
+### no-refactor-p3-t5 · discovery · no-refactor-because P3.T5 (phase 3)
+
+Prose, mirrors, a re-rendered explainer and one matrix move; nothing to clean.
