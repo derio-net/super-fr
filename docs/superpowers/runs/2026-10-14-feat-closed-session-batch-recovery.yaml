@@ -3,7 +3,7 @@ run: 2026-10-14-feat-closed-session-batch-recovery
 workflow: fr-goal@1
 branch: feat/closed-session-batch-recovery
 started: '2026-10-14T15:57:59+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -87,7 +87,10 @@ steps:
           visual: none
           findings: recovery-pane-roster-capture-required,p1-r1,p1-r2,p1-r3,p1-r4
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-14T20:43:29+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
 fr_version: 5.27.0rc3
