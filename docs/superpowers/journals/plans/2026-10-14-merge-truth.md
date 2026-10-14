@@ -149,3 +149,63 @@ Not caused by this change: scope retire has always released claims on open issue
 ### p1-r8-resolved · finding [out-of-scope] · resolves p1-r8: A closed issue with an own un-released marker but no label is never settled (phase 1)
 
 Not caused by this change: the closed set is keyed on the two labels by spec §A. An unlabelled closed issue with a stale marker misleads no surface.
+
+<!-- fr:journal kind=decision scope=plan id=p2-live-checks-in-archive-prs created=2026-10-14T01:07:35+00:00 phase=2 -->
+### p2-live-checks-in-archive-prs · decision · Head-found archive PR checks are read in _archive_prs, not inside _live_head_prs (phase 2)
+
+The plan put the pr_checks_verdict call inside _live_head_prs. That helper also serves the export reuse read and close-out adoption, which never use checks, so reading checks there would add two forge reads per PR to paths that ignore them. _archive_prs calls pr_checks_verdict for an OPEN head-found PR absent from path 1, which is exactly R7's set.
+
+<!-- fr:journal kind=decision scope=plan id=p2-card-archive-wait-hint created=2026-10-14T01:07:35+00:00 phase=2 -->
+### p2-card-archive-wait-hint · decision · The card names its archive PR through a new _archive_wait hint, ahead of the fallback (phase 2)
+
+idle_session returns None whenever an attributed archive PR exists, so _idle_hint can never see one; R10's "names the PR and its wait" is a separate hint, _archive_wait, placed after the idle hint and before the driver's action phrase: "archive PR #N: checks pending|failing", "ready to merge" or "conflicts with the default branch". _idle_hint is unchanged; with linked PRs now read, its "no archive PR" only shows when there truly is none.
+
+<!-- fr:journal kind=decision scope=plan id=p2-held-archive-conflict-is-blocked created=2026-10-14T01:07:35+00:00 phase=2 -->
+### p2-held-archive-conflict-is-blocked · decision · A held archive conflict plans a blocked action, so the loop can stop on it (phase 2)
+
+Once a held archive_conflict event names the PR's head, the pure pass emits Action("blocked", "archive PR #N (...) conflicts and its hand-backs are spent; resolve it") and counts the batch blocked, not closing. Otherwise a looping drive would wait on it forever; now it ends with "only blocked batches remain". The pass that first decides held still emits archive-conflict, and the command writes the held event and the stop.
+
+<!-- fr:journal kind=decision scope=plan id=p2-export-conflict-action created=2026-10-14T01:07:35+00:00 phase=2 -->
+### p2-export-conflict-action · decision · A conflicting export PR plans an archive-conflict action carrying its wave (phase 2)
+
+_export_row returns Action("archive-conflict", repo, ..., wave=w), counted blocked; _act routes a wave-carrying archive-conflict to _export_conflict, which calls record_stop keyed export:<repo>. needs_you takes an optional stops mapping (render and fr triage render pass load_stops) and lists an export:<repo> conflict stop as an archive-conflict Need. Its href is None because a stop does not carry the PR URL.
+
+<!-- fr:journal kind=decision scope=plan id=p2-archive-conflict-fresh-payload-kind created=2026-10-14T01:07:35+00:00 phase=2 -->
+### p2-archive-conflict-fresh-payload-kind · decision · A fresh archive-conflict session is dispatched with payload kind "conflict" (phase 2)
+
+fr-herdr's managed descriptor role is Literal batch|conflict|closeout, read from payload["kind"]. The archive-conflict item (id <repo>/run/archive-conflict-<batch>-<n>) is a conflict session on the archive PR's branch, so it uses kind "conflict" and branch = the archive PR's head branch, carried on the new Action.branch field. The runner is the close-out event's runner, or the batch's launch runner when the close-out was done by hand.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-skill-schema-1-substring created=2026-10-14T01:07:35+00:00 phase=2 -->
+### p2-skill-schema-1-substring · discovery · test_fr_triage_skill_example's "schema: 1" check was a substring test that schema 10 trips (phase 2)
+
+The test asserted that "schema: 1" never appears in the skill, which "schema: 10" now contains. It now matches r"schema: 1\b". The three future-schema refusal tests moved from 10 to 11. AGENTS.md's batch paragraph still said schemas 1–8; it now says 1–10.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-14T01:07:35+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+pr_checks_verdict was extracted from live_checks as the change itself; nothing else duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-14T01:07:35+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+closing_repos is one helper used by live_repos and the pacing caller; plan_pass grew by one set union per branch
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-14T01:07:35+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+the waiting line reuses ARCHIVE_WAIT in drive, views and kanban; no duplication left
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-10-14T01:07:35+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+one Action flag and one pr_ready call; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-10-14T01:07:35+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+archive_conflict_decision mirrors conflict_decision but counts another event against another boundary; folding them would couple the two counters the spec keeps apart
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t7 created=2026-10-14T01:07:35+00:00 phase=2 -->
+### no-refactor-p2-t7 · discovery · no-refactor-because P2.T7 (phase 2)
+
+acceptance status moves only; no code

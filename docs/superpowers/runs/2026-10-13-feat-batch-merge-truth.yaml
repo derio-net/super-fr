@@ -88,7 +88,7 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T00:34:05+00:00'
           agent: a5ae9332f6249e9f2
@@ -98,6 +98,10 @@ steps:
           tier: hard
           bound: opus
           session: 6216fd7d-199a-4c67-921b-94848ff77a9f
+          returned: '2026-10-14T01:07:36+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   deliver:
