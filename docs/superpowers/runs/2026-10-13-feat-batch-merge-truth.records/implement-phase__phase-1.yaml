@@ -1,0 +1,67 @@
+schema_version: 9
+run: 2026-10-13-feat-batch-merge-truth
+step: implement-phase
+item: phase/1
+outcome: done
+ticks:
+  - P1.T1.S1
+  - P1.T1.S2
+  - P1.T2.S1
+  - P1.T2.S2
+  - P1.T2.S3
+  - P1.T3.S1
+  - P1.T3.S2
+  - P1.T3.S3
+  - P1.T4.S1
+  - P1.T4.S2
+  - P1.T4.S3
+  - P1.T5.S1
+  - P1.T5.S2
+  - P1.T5.S3
+  - P1.T6.S1
+  - P1.T6.S2
+  - P1.T6.S3
+  - P1.T7.S1
+  - P1.T7.S2
+  - P1.T7.S3
+  - P1.T8.S1
+  - P1.T8.S2
+  - P1.T8.S3
+  - P1.T9.S1
+  - P1.T9.S2
+  - P1.T10.S1
+refactor:
+  P1.T1: "skeleton task: a change fragment and a stub; nothing to clean"
+  P1.T3: "release() rewrites its marker in one edit line; settle_closed's differs (labels, state check), so no shared helper is worth extracting"
+  P1.T4: "plan_sync/execute grew by one branch each; ClaimOp.label is the only shared bit and was added with the change"
+  P1.T5: "the settle path reuses claim_sync.execute and _claim_write; the repo-of-op lookup was extracted as _op_repo/read_repo in the same change"
+  P1.T7: "the withdraw path is its own helper (_withdraw_take) from the start; nothing duplicated"
+  P1.T8: "one helper (_forget_claims) added; nothing to clean"
+  P1.T9: "scenario scripts and the shared fake gh; nothing to clean"
+journal:
+  - kind: decision
+    id: p1-settle-drops-release-op
+    title: A settle op replaces the release op for the same key
+    body: "plan_sync drops the owed release for a key that also has a settle target (a closed member of a releasing batch): settle releases the own marker and unlabels in one pass, and carries the batch so claims_released is still recorded. Otherwise the pass would edit the same issue twice."
+    phase: 1
+  - kind: decision
+    id: p1-settle-closed-needs-now
+    title: settle_closed takes now= beside the planned arguments
+    body: "The plan's signature (client, repo, number, me, trusted) has no clock; the released marker form needs one, so settle_closed(client, repo, number, *, me, now, trusted) is keyword-only. A label-only settle (no own marker) returns the new Done action 'unlabelled', distinct from 'none' (left alone)."
+    phase: 1
+  - kind: decision
+    id: p1-carried-settle-waits
+    title: Settle of a carried repo waits, by the key's repo
+    body: "settle is in _LIVE_READ_ACTIONS and read_repo() resolves it by env.owner_repo(key) because a settle may name no batch; a skipped repo's settles are not planned (unread filter, same key repo). facts.json is host-local (not a REF_FILES entry), so retire writes it with write_text_atomic and no state-ref publication is needed."
+    phase: 1
+  - kind: discovery
+    id: p1-fake-forge-closed-filter
+    title: FakeForge now filters the closed read by label
+    body: "tests/unit/triage_fixtures.py FakeForge.list_issues returned the closed set regardless of the label filter; with two label reads it now filters (gh ANDs labels, one per read), so the single-label tests keep their meaning."
+    phase: 1
+  - kind: discovery
+    id: p1-idle-guard-flake-under-load
+    title: test_run_idle_guard hang test fails under the full parallel suite only
+    body: "Full suite: 12309 passed, 118 skipped, 1 failed (tests/integration/test_run_idle_guard.py::test_fails_open_when_fr_hangs_and_does_not_hang_with_it). The file passes alone (52 passed); the test is wall-clock bound and touches nothing this phase changed."
+    phase: 1
+evidence: {tests: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/6216fd7d-199a-4c67-921b-94848ff77a9f/scratchpad/p1-full-suite.log}
