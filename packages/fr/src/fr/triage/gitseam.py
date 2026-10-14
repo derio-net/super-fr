@@ -8,8 +8,9 @@ while this one module keeps it (review r2p-f11).
 
 What this module may run is closed: `git`, plus the commands a repo
 declares in its own `.fr/triage.yaml` (`version.set`, `version.relock`, run in a
-scratch worktree, and `post_merge`, run by the wave driver in the clone itself) and
-the scope's `publish` argument list (`run_publish`, triage-claims R14).
+scratch worktree, and `post_merge`, run by the wave driver in the clone itself),
+the scope's `publish` argument list (`run_publish`, triage-claims R14), and this
+`fr` itself (`Worktree.run_fr`: the collected close-out's own verbs, exit-gates §E).
 It never runs a forge CLI: every forge
 operation goes through the `GhClient` adapter (§3.J), and
 `tests/unit/test_forge_adapter_batch_ops.py` pins that this file names none.
@@ -23,6 +24,7 @@ import re
 import shlex
 import stat
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -51,11 +53,13 @@ def _run(
     timeout: float | None = None,
     env: dict[str, str] | None = None,
     stdin: str | None = None,
+    coded: bool = False,
 ) -> Any:
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
     `GitError` with the command's own words. *env* is laid over the process environment;
-    *stdin* is fed to the command (text mode only)."""
+    *stdin* is fed to the command (text mode only). *coded*: any return code is an answer,
+    `(code, stdout + stderr)`, never a raise (text mode only)."""
     full_env = {**os.environ, **env} if env else None
     try:
         result = subprocess.run(
@@ -72,6 +76,8 @@ def _run(
         raise GitError(f"`{shlex.join(argv)}` timed out after {timeout:g}s in {cwd}") from exc
     except OSError as exc:
         raise GitError(f"cannot run {argv[0]}: {exc}") from exc
+    if coded:
+        return result.returncode, f"{result.stdout or ''}{result.stderr or ''}"
     if result.returncode not in ok:
         err, out = result.stderr, result.stdout
         words = (err.decode("utf-8", "replace") if isinstance(err, bytes) else err).strip()
@@ -617,6 +623,17 @@ class Checkout:
         out = git(["diff", "--name-only", "--no-renames", "-z", f"{ref}...{head}"], self.path)
         return frozenset(p for p in out.split("\0") if p)
 
+    def changed_status(self, ref: str, head: str) -> frozenset[str]:
+        """What *head* changed since it forked from *ref*, as `<status>\t<path>` (A, M, D;
+        renames split into a D and an A): the collected close-out's recorded file set."""
+        out = git(["diff", "--name-status", "--no-renames", "-z", f"{ref}...{head}"], self.path)
+        parts = [p for p in out.split("\0") if p]
+        return frozenset(f"{parts[i][0]}\t{parts[i + 1]}" for i in range(0, len(parts) - 1, 2))
+
+    def commits_since(self, ref: str, head: str) -> tuple[str, ...]:
+        """The commits on *ref*..*head*, newest first."""
+        return tuple(git(["rev-list", f"{ref}..{head}"], self.path).split())
+
     # ------------------------------------------------------ the wave driver
 
     def fast_forward(self, *, switch: bool = False) -> None:
@@ -679,6 +696,27 @@ class Checkout:
     def exists_at(self, ref: str, path: str) -> bool:
         return git_ok(["cat-file", "-e", f"{ref}:{path}"], self.path)
 
+    def reach_commit(self, sha: str, branch: str) -> bool:
+        """Whether this clone has commit *sha*, fetching origin's *branch* once when it
+        does not (a PR head the clone never saw). A failed fetch is no commit."""
+        if not sha:
+            return False
+        if has_commit(self.path, sha):
+            return True
+        try:
+            fetch_ref(self.path, "origin", f"refs/heads/{branch}")
+        except GitError:
+            return False
+        return has_commit(self.path, sha)
+
+    def list_dir(self, ref: str, directory: str) -> list[str]:
+        """The names of the entries directly under *directory* at *ref*; empty when it
+        is absent there."""
+        if not self.exists_at(ref, directory):
+            return []
+        out = git_bytes(["ls-tree", "-z", "--name-only", f"{ref}:{directory}"], self.path)
+        return sorted(os.fsdecode(n) for n in out.split(b"\0") if n)
+
     def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
         """Write *paths* (files or directories) as they are at *ref* into *dest*, a
         fresh git repo with this clone's origin, so a reader that resolves a repo's
@@ -686,15 +724,22 @@ class Checkout:
         rg-5). Nothing in this clone changes."""
         git(["init", "--quiet", str(dest)], self.path)
         git(["remote", "add", "origin", self.origin_url()], dest)
-        # `-z`: names unquoted, so a non-ASCII path is copied, not skipped as unknown.
-        listed = git_bytes(["ls-tree", "-r", "-z", "--name-only", ref, "--", *paths], self.path)
-        for name in (os.fsdecode(n) for n in listed.split(b"\0") if n):
+        # `-z`: names unquoted, so a non-ASCII path is copied, not skipped as unknown. The
+        # mode is kept: an executable at *ref* (a repo's `.fr/candidate-install`) is
+        # executable in the copy, so a reader that asks whether it can run it is answered
+        # as on the branch (p4-r7).
+        listed = git_bytes(["ls-tree", "-r", "-z", ref, "--", *paths], self.path)
+        for record in (r for r in listed.split(b"\0") if r):
+            meta, _, raw = record.partition(b"\t")
+            name = os.fsdecode(raw)
             content = self.show_bytes(ref, name)  # any file, binary included (gh#889)
             if content is None:
                 continue
             target = dest / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
+            if meta.split(b" ")[0] == b"100755":
+                target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).
@@ -845,6 +890,42 @@ class Worktree:
             )
             out.update(line for line in os.fsdecode(raw).splitlines() if line)
         return tuple(sorted(out))
+
+    # ------------------------------------ the collected close-out (exit-gates §E)
+
+    def head(self) -> str:
+        return git(["rev-parse", "HEAD"], self.path).strip()
+
+    def start_branch(self, branch: str) -> None:
+        """Put this worktree on a local *branch* at its HEAD (replacing a stale one of that
+        name), so the close-out's own verbs commit on a branch, never a detached HEAD."""
+        git(["switch", "--quiet", "-C", branch], self.path)
+
+    def run_fr(self, args: list[str]) -> tuple[int, str]:
+        """Run THIS `fr` (`python -m fr` of the running interpreter, never one found on
+        PATH) with *args* in this worktree: `(exit code, its words)`. The collected
+        close-out's verbs: verify-merge, closeout outcome, archive. An argument list,
+        never a shell string."""
+        code, out = _run([sys.executable, "-m", "fr", *args], self.path, coded=True)
+        return int(code), str(out)
+
+    def reset_hard(self, sha: str) -> None:
+        """Back to *sha*, every change and untracked file since gone: a held batch moves
+        nothing (R15)."""
+        git(["reset", "--hard", "--quiet", sha], self.path)
+        git(["clean", "-fdq"], self.path)
+
+    def squash_all(self, base: str, message: str) -> str | None:
+        """Everything since *base* (commits, staged and unstaged changes, new files) as ONE
+        commit on *base*; the new head, or None when nothing changed. `--all` is right
+        here, unlike `commit_all`: the worktree is fresh and only fr's own verbs wrote in
+        it, and an archive's moves are new files."""
+        git(["add", "--all"], self.path)
+        git(["reset", "--soft", "--quiet", base], self.path)
+        if git_ok(["diff", "--cached", "--quiet"], self.path):
+            return None
+        git(["commit", "--no-verify", "--quiet", "-m", message], self.path)
+        return self.head()
 
     def push(self, branch: str, *, force: bool = False) -> None:
         """Push HEAD to *branch*; *force* overwrites it, for a branch fr owns (the

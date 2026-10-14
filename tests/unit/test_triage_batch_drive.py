@@ -327,9 +327,7 @@ def test_one_closeout_per_merged_batch_once_released() -> None:
     b = _merged("x", 1)
     got = drive_pass(_snap([b], {"x": "merged"}, released=frozenset({"x"}), merged_at={"x": NOW}))
     (action,) = got.actions
-    assert (action.kind, action.batch, action.recorded, action.post_merge) == (
-        "closeout", "x", False, True,
-    )  # fmt: skip
+    assert (action.kind, action.batch, action.recorded) == ("closeout", "x", False)
     assert got.summary.closing == 1
 
 
@@ -374,9 +372,13 @@ def test_an_existing_closeout_tab_is_recorded_not_redispatched() -> None:
 
 def test_post_merge_is_owed_only_until_its_event_exists() -> None:
     event = {"kind": "post_merge", "at": "2026-10-02T11:00:00Z"}
+    owed = drive_pass(_snap([_merged("x", 1)], {"x": "merged"}, released=frozenset({"x"}),
+                            post_merge_repos=frozenset({REPO})))  # fmt: skip
+    assert _kinds(owed.actions) == [("post-merge", "x"), ("closeout", "x")]
     b = _merged("x", 1, events=[event])
-    (action,) = drive_pass(_snap([b], {"x": "merged"}, released=frozenset({"x"}))).actions
-    assert action.post_merge is False
+    done = drive_pass(_snap([b], {"x": "merged"}, released=frozenset({"x"}),
+                            post_merge_repos=frozenset({REPO})))  # fmt: skip
+    assert _kinds(done.actions) == [("closeout", "x")]
 
 
 def test_an_archived_batch_is_not_closed_out() -> None:

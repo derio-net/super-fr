@@ -60,9 +60,9 @@ def test_schema_2_lists_each_batch_with_its_member_count(tmp_path: Path) -> None
 
 
 def test_schema_11_is_refused_naming_the_schema(tmp_path: Path) -> None:
-    code, out = _list(tmp_path, "schema: 11\n" + _JUDGED)
+    code, out = _list(tmp_path, "schema: 12\n" + _JUDGED)
     assert code == 2, out
-    assert "unsupported schema 11" in " ".join(out.split())
+    assert "unsupported schema 12" in " ".join(out.split())
 
 
 def test_schema_1_carrying_batches_is_refused(tmp_path: Path) -> None:

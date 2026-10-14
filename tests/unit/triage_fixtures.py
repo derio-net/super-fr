@@ -102,7 +102,10 @@ class FakeForge:
         visibility: dict[str, str] | None = None,
         closed_in_progress: dict[str, list[dict[str, Any]]] | None = None,
         closed_listing_failing: dict[str, str] | None = None,
+        pr_labels: dict[tuple[str, int], list[str]] | None = None,
     ) -> None:
+        # (repo, number) -> the labels a merged batch PR carries (exit-gates §D Facts)
+        self.merged_labels = pr_labels or {}
         self.closed_in_progress = closed_in_progress or {}
         self.closed_listing_failing = closed_listing_failing or {}
         self.issues = issues
@@ -193,6 +196,10 @@ class FakeForge:
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))
         return self.head_prs.get((repo, branch), [])
+
+    def pr_labels(self, *, repo: str, number: int) -> list[str]:
+        self.calls.append(("pr_labels", {"repo": repo, "number": number}))
+        return list(self.merged_labels.get((repo, number), []))
 
     def viewer_login(self) -> str:
         self.calls.append(("viewer_login", {}))

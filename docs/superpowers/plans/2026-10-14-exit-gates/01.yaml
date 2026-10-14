@@ -1,0 +1,172 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Exit model — gate vocabulary, manifest schema 2, spec gate lines, repo remap,
+    fr verification exit,
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - exit-gates-declared-exit
+  - exit-gates-verify-without-section
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/gates.py
+  - packages/fr/src/fr/verification/*.py
+  - packages/fr/src/fr/verification/data/*.yaml
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/verification_cmd.py
+  - plugins/super-fr/verifications/live.yaml
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - .opencode/skills/fr-brainstorming/SKILL.md
+  - .hermes/skills/fr/fr-brainstorming/SKILL.md
+  - docs/verification-strategies.md
+  - tests/scenarios/exit-gates-declared-exit.sh
+  - tests/scenarios/exit-gates-verify-without-section.sh
+  - tests/integration/test_scenarios.py
+  - tests/unit/test_verification_*.py
+  - tests/unit/test_exit_gates_*.py
+  - tests/unit/test_plan_self_review*.py
+  - docs/acceptance/*
+  - .changes/feat-batch-exit-gates.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — the skeleton's trivial test runs green in CI
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_exit_gates_smoke.py asserting `import fr.gates` exposes GATES == {developer, reviewer, tester, devops, owner, security} and POST_MERGE_GATES == {tester, devops}; run `uv run pytest tests/unit/test_exit_gates_smoke.py -q --no-cov` and see it fail (ModuleNotFoundError).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/gates.py (Gate Literal, GATES, POST_MERGE_GATES, docstring citing spec 2026-10-14 R2); add .changes/feat-batch-exit-gates.yaml (`bump: minor`, one-line summary); rerun the test green; push so CI runs on the draft PR.
+- number: 2
+  title: Manifest gate at schema 2 (R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests in tests/unit/test_verification_model.py — a schema-1 manifest with `gate:` is refused with a message naming schema 2; a schema-2 manifest with `gate: tester` parses; absent gate reads `none`; the shipped `live` resolves with gate tester and the other shipped strategies with none.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: StrategyManifest accepts `schema: 1 | 2` and `gate: Literal['none','tester','devops'] = 'none'`, gate only at 2 (model validator); plugins/super-fr/verifications/live.yaml → schema 2 + gate: tester; regenerate the wheel copy the way test_tripwire_shipped_verifications.py expects; run that tripwire and the model tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep the schema rule in one validator; document `gate:`/schema 2 in docs/verification-strategies.md.
+- number: 3
+  title: Spec gate lines and repo remap (R4, R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: spec_section tests — `gate: tester` sets Section.gate; `gate: row-a=devops` sets Section.row_gates['row-a']; a malformed or unknown-gate `gate:` line raises SectionError naming the line; a second run-level gate line and a duplicate row gate are errors; a section whose only grammar line is a gate line still parses. TriageConfig tests: `exit: {gates: {candidate: tester}}` parses; an unknown gate is refused.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: extend spec_section.py (Section.gate, Section.row_gates, _GATE_LINE regex, _is_grammar includes gate lines) and triage/model.py (ExitBlock, TriageConfig.exit: ExitBlock | None = None); tests green.
+- number: 4
+  title: run_exit and fr verification exit (R1, R5, R6)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_verification_exit.py — fixture repo with matrix rows citing a spec: run_gate follows section gate > remap(run kind) > manifest > none; a row's gate follows row line > run gate (row on run strategy) > remap > manifest > none; kinds include `none` for a row with no strategy; gates include the run gate with no rows; is_gated true iff tester/devops in gates; rank orders post-merge > pre-merge operator > pre-merge agent > none.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/verification/exit.py — Exit dataclass (kinds, run_gate, gates, gated_rows, rank), run_exit(repo_root, state), exit_for_spec(repo_root, spec_rel, shape_default); SpecVerification.gate(row)/run_gate() in rows.py reading the remap from .fr/triage.yaml (lenient: unreadable config → no remap, reported by the caller).
+  - id: P1.T4.S3
+    text: |-
+      GREEN: `fr verification exit --run <id> | --spec <path> [--json]` in commands/verification_cmd.py printing kinds, gates, gated rows; read-only; CLI test via CliRunner.
+  - id: P1.T4.S4
+    text: |-
+      REFACTOR: one resolution path for gate order (no duplicate in exit.py and rows.py).
+- number: 5
+  title: '#1155 — row_verification_issues runs with or without a section (R24)'
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests — a section-less spec whose cited row has verify: live and no reason is flagged by `fr plan self-review` with the message asking for a ## Verification section and warning that other rows then take the section's strategy:; an unresolvable verify:, an unrunnable install and a missing scenario are each flagged; a section-less spec with no row verify: passes unchanged; the brainstorm-resolve warning prints all four kinds.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: rows.py row_verification_issues(repo_root, section|None, rows, shape_default) absorbing plan_ops._verification_issues' per-row loop; unrunnable_strategies takes Section | None; plan_ops and run_cmd._unrunnable_spec_warnings call it and drop their early returns.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: remove the now-dead loop in plan_ops; keep section-only checks there.
+- number: 6
+  title: Scenarios and matrix
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Write tests/scenarios/exit-gates-declared-exit.sh and exit-gates-verify-without-section.sh (source _common.sh, build a fixture spec+matrix, drive `fr verification exit` / `fr plan self-review`, assert with expect_grep); wire them into tests/integration/test_scenarios.py like the existing ones; run that test green.
+  - id: P1.T6.S2
+    text: |-
+      Update fr-brainstorming SKILL.md §1 so the verification question also settles the gate (`gate:` line), keeping the 120-line cap; run scripts/sync-opencode.py and scripts/sync-hermes.py; move rows exit-gates-declared-exit and exit-gates-verify-without-section to ci via `fr acceptance set-status --level unit=… --level integration=…`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T4.S4:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-10-13T23:42:29+00:00'
+      note: null
+  completion:
+    at: '2026-10-13T23:42:29+00:00'
+    note: null
+    observed_prs: []

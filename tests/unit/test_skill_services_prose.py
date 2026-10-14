@@ -20,12 +20,13 @@ def test_fr_goal_branches_on_services() -> None:
 
 
 def test_fr_goal_never_asks_to_file_under_tracking_none() -> None:
-    """R6: no skill tells an agent to file an issue — the PR body's
-    'which out-of-scope findings to file' and review-phase's `deferred`
-    branch too."""
+    """R6: no skill tells an agent to file an issue — the PR body's list of
+    what `fr journal file` filed (exit-gates R10), `deliver`'s leftovers and
+    review-phase's `deferred` branch too."""
     t = _t("fr-goal")
     assert "says `tracking none` → there is no issue to cite: it stays out-of-scope" in t
-    assert "which out-of-scope findings to file (none under `tracking none`" in t
+    assert "the issues `fr journal file` filed (none under `tracking none`" in t
+    assert "under `tracking none` only the gate applies" in t
 
 
 def test_fr_acceptance_local_suite_is_the_gate() -> None:

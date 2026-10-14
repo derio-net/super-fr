@@ -30,7 +30,9 @@ def _row(rid: str, *, verify: str | None = None, issues: tuple[str, ...] = (), w
         capability="c",
         acceptance=f"{rid} works",
         origin=(f"{SPEC_REF}#R1",),
-        status="not-implemented",
+        # Not an owed status: an owed row's `issues:` is its tracking issue, held
+        # open on its own (exit-gates p3-r5) — these tests isolate `holds_open`.
+        status="ci",
         verify=verify,
         issues=issues,
         walks=walks,
@@ -308,6 +310,7 @@ def test_a_walk_verified_row_lets_the_close_through(tmp_path: Path) -> None:
             {
                 "id": "after",
                 "verify": "live",
+                "status": "walked",
                 "issues": ["o/proj#7"],
                 "walks": [
                     {

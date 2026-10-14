@@ -790,6 +790,16 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
 
     subprocess.run(["git", "-C", str(root), "add", plan_rel], check=True)
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "plan"], check=True)
+    # The seeded `unwired` row cites the spec: `deliver` asks where its rest is
+    # tracked (exit-gates R9), so it carries an issue.
+    tracked = _fr(
+        root,
+        [
+            *("acceptance", "set-status", "--id", "req-r1", "--status", "unwired"),
+            *("--issue", "t/t#1", "--notes", "the rest is tracked in t/t#1"),
+        ],
+    )
+    assert tracked.exit_code == 0, tracked.output
     assert (
         _fr(
             root,

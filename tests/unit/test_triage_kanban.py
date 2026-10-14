@@ -64,9 +64,10 @@ def _merged_issues() -> list[dict[str, Any]]:
 # ------------------------------------------------------------------ columns (R2)
 
 
-def test_the_columns_are_seven_in_r2_order() -> None:
+def test_the_columns_are_in_r17_order() -> None:
     assert COLUMNS == (
-        "proposed", "waiting", "running", "pr-open", "closing-out", "partial", "done"
+        "proposed", "waiting", "running", "needs-developer", "pr-open", "needs-reviewer",
+        "needs-tester", "needs-devops", "closing-out", "partial", "done",
     )  # fmt: skip
     assert set(get_args(kanban.Column)) == set(COLUMNS)
 
@@ -401,14 +402,14 @@ def test_first_actions_keeps_the_first_action_per_batch() -> None:
     got = first_actions(f, jd)
     assert got["e-next"].kind == "dispatch"
     assert got["c-red"].kind == "warn"
-    assert got["a-merged"].kind == "closeout"
+    assert got["a-merged"].kind == "post-merge"  # its post_merge comes first (p4-r2)
     assert "b-draft" not in got
 
 
 # ------------------------------------------------------------------ cards and board
 
 
-def test_the_board_has_seven_columns_with_counts_in_order() -> None:
+def test_the_board_has_every_column_with_counts_in_order() -> None:
     f, jd = busy()
     board = build_board(f, jd, {})
     assert [c.key for c in board.columns] == list(COLUMNS)
@@ -417,7 +418,11 @@ def test_the_board_has_seven_columns_with_counts_in_order() -> None:
         "proposed": 1,
         "waiting": 1,
         "running": 0,
+        "needs-developer": 0,
         "pr-open": 2,
+        "needs-reviewer": 0,
+        "needs-tester": 0,
+        "needs-devops": 0,
         "closing-out": 1,
         "partial": 0,
         "done": 1,
@@ -852,7 +857,7 @@ def _closing_archive(
                issue(2, prs=[archive])])  # fmt: skip
     batches = [batch("m", [1], events=[dispatch("m"), closeout, *(events or [])])]
     judged = {k: j(1) for k in ("widgets#1", "widgets#2")}
-    return f, judgements(judged, batches, schema=10)  # archive_conflict events: schema 10
+    return f, judgements(judged, batches, schema=11)  # archive_conflict events: schema 11
 
 
 def test_a_refused_archive_merge_shows_its_stop_on_the_card() -> None:

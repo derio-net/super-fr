@@ -18,10 +18,15 @@ from __future__ import annotations
 
 import io
 import re
+import sys
 import tokenize
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from versions import Version  # noqa: E402
 
 # The upper bound is either a literal version, or NOT one: a derived ceiling,
 # `f">=4.20.0,<{CEILING_VERSION}"`. Python 3.11 hands the tokenizer that whole
@@ -41,7 +46,9 @@ class Floor:
 
 
 def parse_version(version: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in version.split("."))
+    """A sort key: `X.Y.Z` or an RC of it in either spelling (`versions.Version.key`), an
+    RC above the final before it and below its own; index 0 is the major."""
+    return Version.parse(version).key
 
 
 def is_floor_path(rel: str) -> bool:

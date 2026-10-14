@@ -42,11 +42,21 @@ from fr.hostclient import client_for_backend
 from fr.triage.approval import ensure_approval_label
 from fr.triage.batch import last_dispatch, lifecycle_events
 from fr.triage.check import CLEARING_RULE, ClaimSets, classify, clean_label_targets
-from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
+from fr.triage.collect import (
+    PR_LIMIT,
+    ClientForge,
+    CollectStats,
+    Forge,
+    collect_facts_counted,
+)
 from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
+from fr.triage.merge_stops import load_stops
 from fr.triage.model import (
+    Batch,
+    CloseoutEvent,
+    CursorReader,
     Facts,
     Judgements,
     Scope,
@@ -474,6 +484,7 @@ def collect_into(
     settle: bool = False,
     only: Iterable[str] | None = None,
     after_write: Callable[[Facts, frozenset[str]], None] | None = None,
+    cursor_at: CursorReader | None = None,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
@@ -493,6 +504,10 @@ def collect_into(
     is written, never before, with the repos this collect actually carried: the drive
     stores the probes' ETags there, so they always describe facts already on disk (R11),
     and takes that one carried set for its snapshot too (p2-r5).
+
+    Every batch not yet finished (no close-out recorded archived) is a gate-ledger branch
+    (exit-gates §D Facts): its merged PR's labels are read, and its open PR's run cursor
+    position is read through *cursor_at* (the drive's `gitseam` reader; None reads none).
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
@@ -512,6 +527,7 @@ def collect_into(
         and events[-1].kind != "cancel"
         and (event := last_dispatch(b)) is not None
     ]
+    ledger = ledger_branches(loaded.batches if loaded else [])
     previous = _previous_facts(target_dir / "facts.json", scope)
     facts, stats = collect_facts_counted(
         make_forge(),
@@ -524,6 +540,9 @@ def collect_into(
         carried=[i for i in previous.issues if i.state == "closed"] if previous and carry else (),
         only=only,  # None: the full collect, *previous* unused
         previous=previous,
+        ledger_branches=ledger,
+        cursor_at=cursor_at,
+        known_labels=known_settled_labels(previous),
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
@@ -537,6 +556,46 @@ def collect_into(
     elif load_durable(target_dir).state_repo is None:
         err_console.print(f"warning: {NO_STATE_REPO}", markup=False, soft_wrap=True)
     return facts, out, stats
+
+
+def ledger_branches(batches: Iterable[Batch]) -> list[tuple[str, str, datetime]]:
+    """The gate-ledger branches (exit-gates §D Facts, p4-r7): `(repo name, branch,
+    dispatched at)` of each dispatched, uncancelled batch with no close-out event. A
+    close-out is started only once no gate holds the batch, so its labels are settled."""
+    return [
+        entry
+        for b in batches
+        if not any(isinstance(e, CloseoutEvent) for e in b.events)
+        for entry in _dispatched_branch(b)
+    ]
+
+
+def known_settled_labels(previous: Facts | None) -> dict[tuple[str, int], list[str]]:
+    """Merged PRs whose labels the previous facts read with no gate held (none, or every
+    one passed), by (repo, number) (p4-r7): a pass label is never taken back, so they are
+    carried rather than read again."""
+    from fr.labels import held_gates
+    from fr.triage.collect import linked_prs_all
+
+    if previous is None:
+        return {}
+    every = [*linked_prs_all(previous.issues), *previous.prs, *previous.batch_prs,
+             *previous.judged_prs]  # fmt: skip
+    return {
+        (p.repo, p.number): list(p.labels)
+        for p in every
+        if p.state == "MERGED" and p.labels is not None and not held_gates(p.labels)
+    }
+
+
+def _dispatched_branch(batch: Batch) -> list[tuple[str, str, datetime]]:
+    """`(repo name, branch, dispatched at)` of *batch*'s last dispatch, unless it was
+    cancelled since; empty otherwise."""
+    events = lifecycle_events(batch)
+    event = last_dispatch(batch)
+    if not events or events[-1].kind == "cancel" or event is None:
+        return []
+    return [(batch.repo_name, event.branch, event.at)]
 
 
 NO_STATE_REPO = (
@@ -1000,15 +1059,14 @@ def render_command(
         )
     out = target_dir / "triage.html"
     from fr.commands.triage_kanban_cmd import local_ci_none, read_sessions  # it imports this
-    from fr.triage.merge_stops import load_stops
 
     # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
     # runner that cannot say leaves Needs you now as it was.
     noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
-        session_notes=noted, ci_none=local_ci_none(facts),
-        present=pages_present(target_dir, "backlog"), stops=load_stops(target_dir),
+        session_notes=noted, ci_none=local_ci_none(facts), stops=load_stops(target_dir),
+        present=pages_present(target_dir, "backlog"),
     )  # fmt: skip
     write_text_atomic(out, page)
     refresh_navs(target_dir, "backlog", warn=warn_nav)

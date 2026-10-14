@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
@@ -185,6 +186,59 @@ def plan_label(slug: str) -> LabelDef:
 def phase_label(n: int) -> LabelDef:
     """Return the LabelDef for `phase:<n>`."""
     return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
+
+
+# Exit labels (spec 2026-10-14 exit-gates R7): what a run's PR is verified by and
+# which post-merge gate holds it. `gate:<g>-passed` is the driver's/`fr gate
+# pass`'s to write, so a sync never removes one.
+VERIFICATION_PREFIX = "verification:"
+GATE_PREFIX = "gate:"
+PASSED_SUFFIX = "-passed"
+VERIFICATION_LABEL_COLOR = "1D76DB"
+GATE_LABEL_COLOR = "D93F0B"
+GATE_PASSED_LABEL_COLOR = "0E8A16"
+
+
+def verification_label(kind: str) -> LabelDef:
+    """`verification:<kind>` — one kind of the run's exit."""
+    return LabelDef(
+        _bounded_label_name(VERIFICATION_PREFIX, kind),
+        VERIFICATION_LABEL_COLOR,
+        f"Verified by {kind}",
+    )
+
+
+def gate_label(gate: str, *, passed: bool = False) -> LabelDef:
+    """`gate:<gate>` (held) or `gate:<gate>-passed` (the gate passed)."""
+    if passed:
+        return LabelDef(
+            f"{GATE_PREFIX}{gate}{PASSED_SUFFIX}",
+            GATE_PASSED_LABEL_COLOR,
+            f"The {gate} gate passed",
+        )
+    return LabelDef(f"{GATE_PREFIX}{gate}", GATE_LABEL_COLOR, f"Held by the {gate} gate")
+
+
+def held_gates(labels: Iterable[str]) -> frozenset[str]:
+    """The post-merge gates a PR's *labels* hold unpassed: `gate:<g>` with no
+    `gate:<g>-passed` beside it (exit-gates R13, R14)."""
+    from fr.gates import POST_MERGE_GATES
+
+    names = set(labels)
+    return frozenset(
+        g
+        for g in POST_MERGE_GATES
+        if gate_label(g).name in names and gate_label(g, passed=True).name not in names
+    )
+
+
+def passed_gates(labels: Iterable[str]) -> frozenset[str]:
+    """The post-merge gates a PR's *labels* record as passed (`gate:<g>-passed`): the
+    gates whose rows the collected close-out records and whose issues it closes (R15)."""
+    from fr.gates import POST_MERGE_GATES
+
+    names = set(labels)
+    return frozenset(g for g in POST_MERGE_GATES if gate_label(g, passed=True).name in names)
 
 
 # Role-name → LabelDef map. Keys are the lifecycle slot names (snake_case);

@@ -33,6 +33,22 @@ clone under `~/.cache/fr/src` and re-running updates it.
 curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
 ```
 
+Pick a channel with `--version` (every other flag still reaches `install.sh`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash -s -- --version RC
+```
+
+| `--version` | Installs |
+|---|---|
+| *(none)* | the newest release `vX.Y.Z` (`origin/main` if none is installable yet) |
+| `RC` | the newest release candidate `vX.Y.Z-rc.N` |
+| `X.Y.Z` / `X.Y.Z-RC` / `X.Y.Z-rc.N` | that release / the newest RC of it / exactly that RC |
+| `main` | `origin/main`, the development channel |
+
+An unknown version, or a tag that predates channels, installs nothing and lists
+the installable ones.
+
 Prefer to read it first?
 
 ```bash

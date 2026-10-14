@@ -46,14 +46,15 @@ def _record_file(root: Path, text: str, stem: str = "implement-phase__phase-1") 
     return path
 
 
-def test_the_record_kind_is_at_version_nine() -> None:
-    assert RECORD_SCHEMA_VERSION == 9
-    assert artifact_kind("record").current_version == 9
+def test_the_record_kind_is_at_version_nine_or_later() -> None:
+    assert RECORD_SCHEMA_VERSION >= 9
+    assert artifact_kind("record").current_version == RECORD_SCHEMA_VERSION
 
 
-def test_the_chain_from_one_reaches_nine_hop_by_hop() -> None:
+def test_the_chain_from_one_passes_nine_hop_by_hop() -> None:
+    # 9 -> 10 follows; test_migration_record_exit_gates pins the whole chain.
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4, 5, 6, 7, 8, 9]
+    assert [s.to_version for s in chain][:8] == [2, 3, 4, 5, 6, 7, 8, 9]
 
 
 @pytest.mark.parametrize(
@@ -79,7 +80,7 @@ def test_a_v8_skipped_entry_moves_by_the_r6_rule(
 
     assert report.ok, report.failed
     record = load_record(path)
-    assert record.schema_version == 9
+    assert record.schema_version == RECORD_SCHEMA_VERSION
     assert record.acceptance[0].status == want
 
 
@@ -127,12 +128,13 @@ def test_a_wholly_v9_body_under_a_v8_stamp_is_only_stamped(tmp_path: Path) -> No
     report = run_migrations(root, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == body.replace("schema_version: 8", "schema_version: 9")
+    stamp = f"schema_version: {RECORD_SCHEMA_VERSION}"
+    assert path.read_text() == body.replace("schema_version: 8", stamp)
 
 
 def test_a_v9_record_saying_skipped_is_refused_by_name() -> None:
     with pytest.raises(RecordError, match="fr migrate artifacts --yes"):
-        parse_record(_v8().replace("schema_version: 8", "schema_version: 9"))
+        parse_record(_v8().replace("schema_version: 8", f"schema_version: {RECORD_SCHEMA_VERSION}"))
 
 
 def test_the_frozen_v8_reader_reads_a_v8_record() -> None:

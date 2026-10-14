@@ -726,7 +726,7 @@ def test_held_archive_conflict_is_an_archive_conflict_need() -> None:
     f = facts([issue(1, state="closed", prs=[merged])], prs=[archive])
     jd = judgements({"widgets#1": j(1)},
                     [batch("m", [1], wave=1, events=[dispatch("m"), closeout, held])],
-                    schema=10)  # fmt: skip
+                    schema=11)  # fmt: skip
     rows = needs_you(f, jd)
     (need,) = [r for r in rows if r.kind == "archive-conflict"]
     assert need.ref == "m" and "PR #30" in need.text and need.href == f"{URL}/pull/30"

@@ -100,3 +100,8 @@ Resolving symlinks is deliberate: the printed command must be an absolute path v
 ### p1-r8-resolved · finding [out-of-scope] · resolves p1-r8: guard_write mid-pass VisibilityUnreadable still ends a looping driver (phase 1)
 
 Not caused by this change and inert in the driver: spec-review showed guard_write returns early for the driver's event-only writes (added_keys empty), so no driver pass reaches it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved-2 created=2026-10-11T22:34:38+00:00 state=open resolves=p1-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1145 -->
+### p1-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1145] · resolves p1-r8: guard_write mid-pass VisibilityUnreadable still ends a looping driver
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1145.

@@ -1012,8 +1012,20 @@ findings, unfinished manual work, operator-driven Test Plan, and remaining
 acceptance debt — and, because the run's record is committed on the same branch,
 the sequence of steps that produced all of it. Findings come from both journals,
 the specification's and the plan's, and the out-of-scope ones get a section of
-their own that asks you which to file; you answer when you merge, and nothing
-waits on it. The agent then stops. Merge remains the operator's decision.</p>
+their own, each naming the issue it was filed as. The agent then stops. Merge
+remains the operator's decision.</p>
+<p>Filing happens before that description exists, because a finding nobody filed
+is a finding nobody will see again. <code>deliver</code> refuses while the run leaves
+anything <strong>unaccounted</strong>: an out-of-scope finding, an action the journal says
+you owe, a promise in the acceptance matrix that is still owed but neither
+waits for a post-merge gate nor names the issue that tracks it, or a decision
+that narrows an issue — this change does part of #n, not all of it. Each is
+printed with the command that accounts for it. <code>fr journal file</code> files a
+finding, an owed action or a narrowing as an issue, through the same filer the
+archive uses, and records where it went; a promise is gated
+(<code>fr verification set --gate</code>) or given its issue (<code>fr acceptance set-status
+--issue</code>). A repository that declares no issue tracker keeps its leftovers in
+the journal and the description, as before; only the gate route applies there.</p>
 <p>You do not assemble that description, and neither does the agent. Resolving
 <code>deliver</code> makes <code>fr</code> render it — <code>pr-body.md</code> beside the step's record: the
 findings from both journals, the out-of-scope ones under their own heading (or
@@ -1041,9 +1053,12 @@ reason, and keeps nagging you after merge rather than blocking delivery. One mor
 rule protects it: if that promise belongs to a GitHub issue, the pull request must
 say <code>Refs #n</code>, not <code>Closes #n</code>. Merging would otherwise close the issue on
 evidence nobody has seen yet, and <code>deliver</code> refuses a description that does. The
-issue is closed later, by you, when you record a passing walk
-(<code>fr acceptance set-status --walk</code>), which prints the close command rather than
-running it.</p>
+same holds for a promise a post-merge gate (<code>tester</code> or <code>devops</code>) is waiting on,
+whatever its strategy, and for an issue a decision narrowed unless you answered
+that decision yourself: the agent cannot close the rest of your issue by
+deciding it does not matter. The issue is closed later, by you, when you record
+a passing walk (<code>fr acceptance set-status --walk</code>), which prints the close
+command rather than running it.</p>
 <p>Two of those sections deserve a word. The first is the <strong>proportionality
 report</strong> from <code>fr plan proportionality</code>: new files nothing refers to, files
 changed that no phase said it would touch, the diff's size against the

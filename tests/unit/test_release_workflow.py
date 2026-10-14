@@ -50,8 +50,25 @@ def test_runs_one_at_a_time_and_is_never_cancelled() -> None:
     assert _workflow()["concurrency"] == {"group": "release", "cancel-in-progress": False}
 
 
-def test_permissions_are_contents_and_issues_write() -> None:
-    assert _workflow()["permissions"] == {"contents": "write", "issues": "write"}
+def test_permissions_are_contents_and_issues_write_and_pull_requests_read() -> None:
+    """`pull-requests: read` is for `fr release status` (exit-gates R21), which reads the
+    merged PRs' gate labels with the workflow token, never the app's."""
+    assert _workflow()["permissions"] == {
+        "contents": "write",
+        "issues": "write",
+        "pull-requests": "read",
+    }
+
+
+def test_runs_daily_so_a_final_follows_the_last_gate_pass() -> None:
+    """Exit-gates R20: a gate passes with no push to main, so a daily run cuts the final."""
+    (entry,) = _on()["schedule"]
+    assert re.fullmatch(r"\d+ \d+ \* \* \*", entry["cron"])
+
+
+def test_release_status_reads_the_forge_with_the_workflow_token() -> None:
+    run = next(s for s in _steps() if "scripts/release.py" in str(s.get("run", "")))
+    assert run["env"]["FR_RELEASE_STATUS_TOKEN"] == "${{ github.token }}"
 
 
 def test_checks_out_full_history_and_runs_release_py_with_a_token() -> None:
@@ -125,3 +142,10 @@ def test_the_release_job_has_a_budget_for_the_full_suite() -> None:
 
 def test_auto_tag_workflow_is_gone() -> None:
     assert not (REPO / ".github" / "workflows" / "auto-tag.yml").exists()
+
+
+def test_p7_r4_header_says_the_status_token_is_the_write_capable_workflow_token() -> None:
+    header = " ".join(WORKFLOW.read_text().split("\non:", 1)[0].replace("#", " ").split())
+    assert "FR_RELEASE_STATUS_TOKEN is the workflow's github.token" in header
+    assert "contents and issues write" in header
+    assert "never fr or repo code" in header

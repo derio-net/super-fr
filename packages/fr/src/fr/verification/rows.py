@@ -10,8 +10,8 @@ module binds the inputs once (`SpecVerification`) and answers through
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SpecVerification",
+    "load_remap",
+    "remap_key_problems",
+    "row_verification_issues",
     "run_verification",
     "shape_default",
     "spec_section_at",
@@ -49,14 +52,36 @@ def spec_section_at(repo_root: Path, spec_rel: str | None) -> Section | None:
     return None
 
 
+def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
+    """The repo's gate remap (`.fr/triage.yaml`'s `exit: {gates: {...}}`, spec
+    2026-10-14 R4) and why it could not be read, if it could not. Lenient: an
+    unreadable or invalid file is no remap, reported by the caller."""
+    import yaml
+    from pydantic import ValidationError
+
+    from fr.triage.model import parse_triage_config
+
+    path = repo_root / ".fr" / "triage.yaml"
+    if not path.is_file():
+        return {}, None
+    try:
+        config, _ = parse_triage_config(yaml.safe_load(path.read_text()) or {})
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError) as e:
+        return {}, f"{path.relative_to(repo_root)} is not valid triage config: {e}"
+    return (dict(config.exit.gates) if config.exit else {}), None
+
+
 @dataclass(frozen=True)
 class SpecVerification:
     """One spec's verification inputs, bound: its section (or `None`), the
-    shape's default strategy, and the repo strategies resolve against."""
+    shape's default strategy, the repo's gate remap, and the repo strategies
+    resolve against."""
 
     repo_root: Path
     section: Section | None = None
     shape_default: str | None = None
+    remap: Mapping[str, str] = field(default_factory=dict)
+    remap_problem: str | None = None
 
     def strategy(self, row: Row) -> str | None:
         return effective_strategy(row.verify, row.id, self.section, self.shape_default)
@@ -64,6 +89,42 @@ class SpecVerification:
     def is_post_merge(self, row: Row) -> bool:
         """Raises `StrategyError` when the row's strategy does not resolve."""
         return is_post_merge(self.strategy(row), self.repo_root)
+
+    def run_strategy(self) -> str | None:
+        """The run's own strategy: the section's `strategy:` line, else the
+        shape's default; `None` without a section (the world before strategies)."""
+        return effective_strategy(None, "", self.section, self.shape_default)
+
+    def _kind_gate(self, strategy: str | None) -> str:
+        """The gate of a strategy kind: the repo's remap, else the manifest's
+        `gate:`, else `none`. An unresolvable strategy is another check's to
+        report, so it has no gate here."""
+        if strategy is None or strategy == RESERVED:
+            return "none"
+        if strategy in self.remap:
+            return self.remap[strategy]
+        try:
+            return resolve_strategy(strategy, self.repo_root).gate
+        except StrategyError:
+            return "none"
+
+    def run_gate(self) -> str:
+        """The run-level gate (R1), first match wins: the section's `gate:`
+        line, the remap of the run strategy's kind, its manifest `gate:`, `none`."""
+        if self.section is not None and self.section.gate is not None:
+            return self.section.gate
+        return self._kind_gate(self.run_strategy())
+
+    def gate(self, row: Row) -> str:
+        """A row's effective gate (R5), first match wins: its `gate: <row>=`
+        line, the run-level gate (a row on the run's own strategy), the remap
+        of its kind, the manifest's `gate:`, `none`."""
+        if self.section is not None and row.id in self.section.row_gates:
+            return self.section.row_gates[row.id]
+        strategy = self.strategy(row)
+        if strategy is not None and strategy != RESERVED and strategy == self.run_strategy():
+            return self.run_gate()
+        return self._kind_gate(strategy)
 
     def reason(self, row: Row) -> str | None:
         """The section's one-line reason for `row`, when it gives one."""
@@ -76,7 +137,10 @@ def spec_verification(
 ) -> SpecVerification:
     """`SpecVerification` for the spec at `spec_rel` (`SectionError` when its
     section is malformed)."""
-    return SpecVerification(repo_root, spec_section_at(repo_root, spec_rel), shape_default)
+    remap, problem = load_remap(repo_root)
+    return SpecVerification(
+        repo_root, spec_section_at(repo_root, spec_rel), shape_default, remap, problem
+    )
 
 
 def raw_shape_default(repo_root: Path, state: RunState) -> str | None:
@@ -110,7 +174,9 @@ def run_verification(repo_root: Path, state: RunState) -> tuple[str | None, Spec
     return spec_rel, spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
 
 
-def unrunnable_strategies(repo_root: Path, section: Section, rows: Sequence[Row]) -> list[str]:
+def unrunnable_strategies(
+    repo_root: Path, section: Section | None, rows: Sequence[Row]
+) -> list[str]:
     """One message per distinct strategy the spec names EXPLICITLY — the
     section's `strategy:`, a per-row line, or a `verify:` of one of `rows` —
     that resolves and whose install program the repo cannot run (spec
@@ -122,9 +188,10 @@ def unrunnable_strategies(repo_root: Path, section: Section, rows: Sequence[Row]
         if name and name != RESERVED and (kind, where) not in sources.setdefault(name, []):
             sources[name].append((kind, where))
 
-    add(section.strategy, "section", "the section's `strategy:` line")
-    for rid, line in section.rows.items():
-        add(line.strategy, "line", f"the `- {rid}:` line")
+    if section is not None:
+        add(section.strategy, "section", "the section's `strategy:` line")
+        for rid, line in section.rows.items():
+            add(line.strategy, "line", f"the `- {rid}:` line")
     for r in rows:
         add(r.verify, "verify", f"row `{r.id}`'s own `verify:`")
     out: list[str] = []
@@ -152,4 +219,110 @@ def unrunnable_strategies(repo_root: Path, section: Section, rows: Sequence[Row]
             f"{problem} (named by {where}). Either say it does not need it — "
             f"{', or '.join(fixes)} — or add the executable"
         )
+    return out
+
+
+def section_grammar_issues(section: Section | None, rows: Sequence[Row]) -> list[str]:
+    """Section lines that read differently across fr versions or name nothing
+    (exit-gates review p1-r1, p1-r3): a `gate: <row>=` / `- <row>:` line naming
+    a row no matrix row citing the spec has, and a section of `gate:` lines
+    alone (it exists for this fr, not for a released one)."""
+    if section is None:
+        return []
+    out: list[str] = []
+    known = sorted(r.id for r in rows)
+    named = [*section.row_gates, *(rid for rid in section.rows if rid not in section.row_gates)]
+    for rid in named:
+        if rid not in known:
+            where = "`gate: {0}=`" if rid in section.row_gates else "`- {0}:`"
+            out.append(
+                f"the section's {where.format(rid)} line names row `{rid}`, which no matrix "
+                "row citing the spec has (it would be silently ignored); rows citing the "
+                f"spec: {', '.join(known) or 'none'}"
+            )
+    if (
+        (section.gate is not None or section.row_gates)
+        and section.strategy is None
+        and not section.rows
+    ):
+        out.append(
+            "the section has `gate:` lines but no `strategy:` line and no row line, so a "
+            "released fr does not read it as a section at all — add `strategy: <name|none>` "
+            "(or `- <row-id>: <strategy|none> — <reason>` lines) so every fr reads it the same way"
+        )
+    return out
+
+
+def remap_key_problems(remap: Mapping[str, str], repo_root: Path) -> list[str]:
+    """One message per `.fr/triage.yaml` `exit.gates` key that can never match:
+    `none`, or a name that resolves to no strategy (exit-gates review p1-r7)."""
+    out: list[str] = []
+    for key in remap:
+        if key == RESERVED:
+            out.append(f"`exit.gates` key `{key}` is ignored: `none` has no gate to remap")
+            continue
+        try:
+            resolve_strategy(key, repo_root)
+        except StrategyError:
+            out.append(f"`exit.gates` key `{key}` names no strategy, so it is ignored")
+    return out
+
+
+def row_verification_issues(
+    repo_root: Path,
+    section: Section | None,
+    rows: Sequence[Row],
+    shape_default: str | None,
+) -> list[str]:
+    """Every per-row verification problem of the rows citing a spec (spec
+    2026-10-14 exit-gates R24, gh#1155), with or without a `## Verification`
+    section — without one, only a row's own `verify:` counts:
+
+    - the strategy does not resolve;
+    - the repo cannot run its install;
+    - an agent-driven pre-merge row has no `scenario:`;
+    - a post-merge or `none` row has no reason.
+
+    Both `fr plan self-review` (errors) and the brainstorm warning (advisory)
+    call it; neither re-derives a check."""
+    verification = SpecVerification(repo_root, section, shape_default)
+    out = section_grammar_issues(section, rows)
+    out += unrunnable_strategies(repo_root, section, rows)
+
+    def reason_fix(row_id: str, name: str, why: str) -> str:
+        if section is not None:
+            return f"add `- {row_id}: {name} — <{why}>`"
+        return (
+            f"add a `## Verification` section with `- {row_id}: {name} — <{why}>` "
+            "(every other row citing the spec then takes the section's `strategy:`, "
+            "or the shape default when it has no `strategy:` line)"
+        )
+
+    for row in rows:
+        name = verification.strategy(row)
+        if name is None:
+            continue
+        if name == RESERVED:
+            if not verification.reason(row):
+                out.append(
+                    f"row `{row.id}` is `none` with no reason — "
+                    + reason_fix(row.id, "none", "what verifies it instead")
+                )
+            continue
+        try:
+            manifest = resolve_strategy(name, repo_root)
+        except StrategyError as e:
+            out.append(f"row `{row.id}`: {e}")
+            continue
+        if manifest.when == "post-merge" and not verification.reason(row):
+            out.append(
+                f"row `{row.id}` is post-merge (`{name}`) with no reason — "
+                + reason_fix(row.id, name, "why no pre-merge strategy applies")
+            )
+        if manifest.when == "pre-merge" and manifest.driver == "agent" and not row.scenario:
+            out.append(
+                f"row `{row.id}` is walked by an agent before merge (`{name}`) but names "
+                "no `scenario` — set one with `fr acceptance set-status "
+                f"--id {row.id} ... --scenario <path>`"
+            )
     return out

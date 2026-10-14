@@ -26,6 +26,7 @@ from fr.commands.archive_cmd import archive_command
 from fr.commands.closeout_cmd import closeout_app
 from fr.commands.cloud_cmd import cloud_app
 from fr.commands.debt_cmd import debt_app
+from fr.commands.gate_cmd import gate_app
 from fr.commands.harness_cmd import harness_app
 from fr.commands.hermes_cmd import hermes_app
 from fr.commands.init_cmd import init_app
@@ -35,6 +36,7 @@ from fr.commands.migrate_cmd import migrate_app
 from fr.commands.models_cmd import models_app
 from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
+from fr.commands.release_cmd import release_app
 from fr.commands.repair_cmd import repair_command
 from fr.commands.repos_cmd import repos_app
 from fr.commands.run_cmd import run_app
@@ -89,6 +91,8 @@ app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
 app.add_typer(debt_app, name="debt")
+app.add_typer(gate_app, name="gate")
+app.add_typer(release_app, name="release")
 app.add_typer(closeout_app, name="closeout")
 app.command(name="skills")(skills_command)
 app.command(name="services", help="Read-only: the resolved forge / ci / tracking services.")(

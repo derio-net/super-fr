@@ -1,0 +1,99 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Collected close-out — fr triage batch closeout, one per repo, close-out hand-back
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - exit-gates-collected-closeout
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/batch_closeout.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_triage_*.py
+  - tests/fixtures/triage/*
+  - docs/acceptance/*
+  estimate_lines: 1000
+tasks:
+- number: 1
+  title: The closeout engine and verb (R15, R16)
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: tests with fake gitseam/forge — without --yes the plan lists each batch's steps; with --yes, per batch: verify-merge, Test Plan outcomes recorded --ran with the gate-pass comment URL for a passed gated batch, `fr archive --branch <b> --no-issues`, closing only issues cited by rows a passed gate gated (never a narrows= issue) and removing fr:awaiting-live; a batch whose archive holds is named, moves nothing and gets no close-out event; one commit, one branch chore/closeout-<date>-<n>, one PR; every recorded close-out event's archive names that branch.
+  - id: P6.T1.S2
+    text: |-
+      GREEN: triage/batch_closeout.py engine + `fr triage batch closeout [<id>...] [--yes]` in triage_batch_cmd.py.
+- number: 2
+  title: Driver plans one collected close-out per repo; attributed by event.archive
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      RED: drive_pass tests — with three landed non-gated batches in one repo one closeout action is planned covering all three; none while a previous collected close-out's PR is open; attributed accepts pr.head_ref == event.archive for a trusted author, including a batch with no run; a held-archive batch yields a Need.
+  - id: P6.T2.S2
+    text: |-
+      GREEN: drive_pass step 2 aggregation; closeout work item id closeout-<date>-<n> briefed to run the verb; attributed change.
+- number: 3
+  title: Ready, merge and the one hand-back (R15, R27)
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED: tests — step 3 marks a collected close-out PR ready and merges it when MERGEABLE and green; a conflicting (conflicting predicate) or red one plans one closeout-handback per close-out item recording a closeout_handback event on each member keyed by item and head; a second failure at a later head is a closeout-stuck Need; judgements schema moves and older schemas still load.
+  - id: P6.T3.S2
+    text: |-
+      GREEN: CloseoutHandbackEvent, judgements schema bump, action kinds and phrases, executor prompting the runner session; views need.
+  - id: P6.T3.S3
+    text: |-
+      REFACTOR: hand-back budget counting shared with conflict_decision where the shapes allow, without changing its per-dispatch semantics.
+- number: 4
+  title: Prose and matrix
+  steps:
+  - id: P6.T4.S1
+    text: |-
+      fr-triage SKILL.md: batch closeout and gate pass; sync mirrors; record exit-gates-collected-closeout's unit levels (stays live-owed).
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+    P6.T3.S2:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+    P6.T3.S3:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+    P6.T4.S1:
+      state: x
+      ticked_at: '2026-10-14T08:00:04+00:00'
+      note: null
+  completion:
+    at: '2026-10-14T08:00:04+00:00'
+    note: null
+    observed_prs: []

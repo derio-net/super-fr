@@ -165,7 +165,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-    engine-appended `events` (fr reads schemas 1–10 and writes 10, see
+    engine-appended `events` (fr reads schemas 1–11 and writes 11, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -192,8 +192,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     schema 3 adds `wave`/`after` per batch and the `post_merge`/`closeout`
     events; schema 7 adds audited `replacement` attempt/success/failure events
     that never change dispatch age or lifecycle; 8 adds `claim_taken`, which makes a
-    taken member's claim owed (gh#1120); 9 the merge-train events; current writers
-    stamp 10 (read 1–10), adding `archive_conflict` (merge-truth R12).
+    taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
+    (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); current writers
+    stamp 11 (read 1–11), adding `archive_conflict` (merge-truth R12).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
@@ -555,6 +556,37 @@ be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting th
 variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
 every release fails (release.py reports that refusal
 by name, never as a lost race).
+
+**Release gating** (spec `2026-10-14-exit-gates` R20, R21, R25, R26). Before it
+cuts anything, `release.py` reads every PR merged since the last final tag, with
+its labels, through `gh` (the workflow token, `FR_RELEASE_STATUS_TOKEN`), and asks
+`fr release status --from-json <facts> --json`, run with **no forge credential**
+in its environment, which of those PRs merged since the last **final** tag
+(`vX.Y.Z` exactly; an RC tag never counts) still carry `gate:tester` or
+`gate:devops` without the `-passed` label. While any do, a run cuts a release
+candidate instead: `release: vX.Y.Z-rc.N`, tagged and published as a GitHub
+pre-release, **consuming no fragment**, or nothing at all when nothing has
+merged since the newest RC tag. Once nothing waits, the final `X.Y.Z` consumes
+the fragments. `release.yml` also runs daily, because a gate passes with no push to main.
+The read is cross-checked against the code: every PR `git log <last final>..HEAD`
+names (`(#N)` or `Merge pull request #N`, the release bot's own commits skipped)
+must be in it. A failed read, a read at its 1000 cap, a PR the read misses, or a
+failed `fr` decision makes the gate state **unknown**, which cuts an RC, never a
+final and never a refusal (nothing when nothing merged since the newest RC). So a
+token that cannot read labels means **RCs only** until it is fixed; `--version`
+stays the explicit override for a final. A computed version at or below HEAD's
+releases nothing (a removed fragment never moves the version backwards), and an
+untagged RC at HEAD (a failed tag push) is tagged on the next run.
+`FR_RELEASE_STATUS_TOKEN` is the workflow's `github.token`, so it also carries
+the job's contents and issues write; it reaches only the `gh` read, never `fr`
+or repo code. Exactly these calls authenticate: the `gh` read, the `gh release`
+and `gh issue` writes, and the two pushes. The bump, `uv lock --check`, the
+migration, the staged suite, `fr`'s decision and every other git command run
+credential-free.
+An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
+`X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one
+parser every script reads both spellings through. `fr_version` floors admit an RC of the
+final they name (`fr.version_floor.admits`).
 
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible
 workflow additions (new subcommand/skill/mandatory behavior) — e.g. the

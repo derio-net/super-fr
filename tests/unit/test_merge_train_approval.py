@@ -75,8 +75,8 @@ def test_a_pull_request_never_read_for_labels_carries_none() -> None:
 
 
 def test_facts_schema_is_10_and_reads_3_to_10() -> None:
-    assert FACTS_SCHEMA == 11
-    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11)
+    assert FACTS_SCHEMA == 12
+    assert FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 
 
 def test_a_schema_8_facts_file_reads_labels_as_none(tmp_path: Path) -> None:
@@ -110,8 +110,8 @@ def test_a_schema_8_facts_file_reads_labels_as_none(tmp_path: Path) -> None:
 
 
 def test_judgements_schema_is_9_and_reads_1_to_9() -> None:
-    assert JUDGEMENTS_SCHEMA == 10
-    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    assert JUDGEMENTS_SCHEMA == 11
+    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
     assert SCHEMA_9_EVENTS == {"update", "approval", "red_handback", "enqueue"}
 
 

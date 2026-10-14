@@ -14,7 +14,7 @@ from collections.abc import Iterable, Mapping
 
 from fr.journal.model import JournalEntry, journal_stamp_as_utc
 
-__all__ = ["OperatorClaimRefusedError", "verify_operator_claim"]
+__all__ = ["OperatorClaimRefusedError", "verify_operator_answer", "verify_operator_claim"]
 
 
 class OperatorClaimRefusedError(Exception):
@@ -39,10 +39,6 @@ def verify_operator_claim(
     session; Hermes has no question tool fr can read, so there it is always
     advisory.
     """
-    from fr.harness.detect import detect_harness
-    from fr.harness.model import HarnessError
-    from fr.run.telemetry import operator_answered_since
-
     env = os.environ if env is None else env
     since = next(
         (
@@ -52,12 +48,32 @@ def verify_operator_claim(
         ),
         None,
     )
-    observed = operator_answered_since(env, journal_stamp_as_utc(since)) if since else None
+    return verify_operator_answer(
+        finding_id, since, journal_stamp_as_utc(since) if since else None, env
+    )
+
+
+def verify_operator_answer(
+    subject: str,
+    since: str | None,
+    since_utc: str | None,
+    env: Mapping[str, str] | None = None,
+) -> str | None:
+    """The check under every operator claim: did the operator ANSWER a question in
+    this session at or after `since_utc` (shown to the reader as `since`)?
+    `subject` names the claim in the messages. Outcomes as `verify_operator_claim`;
+    no `since_utc` is "not observable"."""
+    from fr.harness.detect import detect_harness
+    from fr.harness.model import HarnessError
+    from fr.run.telemetry import operator_answered_since
+
+    env = os.environ if env is None else env
+    observed = operator_answered_since(env, since_utc) if since_utc else None
     if observed is True:
         return None
     if observed is False:
         raise OperatorClaimRefusedError(
-            f"{finding_id}: no answered question in this session's transcript since "
+            f"{subject}: no answered question in this session's transcript since "
             f"{since} — `answered_by: operator` is a claim fr can check here, and it does "
             "not hold. Ask the operator with your harness's question tool, then resolve "
             "again."
@@ -68,7 +84,7 @@ def verify_operator_claim(
         raise OperatorClaimRefusedError(str(e)) from e
     if harness == "claude-code":
         return (
-            f"{finding_id}: could not verify `answered_by: operator` — the session "
+            f"{subject}: could not verify `answered_by: operator` — the session "
             "transcript is not readable here; recorded unverified."
         )
     if harness == "opencode":
@@ -88,6 +104,6 @@ def verify_operator_claim(
         cell = row.harnesses.get(harness) if harness is not None else None
         why = (cell.scope_note if cell else None) or "fr cannot read an operator answer here"
     return (
-        f"{finding_id}: `answered_by: operator` recorded as stated — advisory on "
+        f"{subject}: `answered_by: operator` recorded as stated — advisory on "
         f"{harness or 'an unrecognised harness'}: {why}"
     )

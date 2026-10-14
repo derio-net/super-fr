@@ -406,7 +406,12 @@ if [ "$missing_registration" -ne 0 ]; then
   exit 1
 fi
 
-# Preflight: PLUGIN_ROOT must be a clean checkout of main, in sync with origin.
+# fr-install-channels: 1
+# (The marker above tells scripts/bootstrap.sh --version that a tag's install.sh
+# accepts a clean, detached checkout of a v* tag; older tags refuse it.)
+#
+# Preflight: PLUGIN_ROOT must be a clean checkout of main, in sync with origin,
+# or a clean, detached HEAD exactly at a v* release/RC tag (--version channels).
 # This script clobbers $MARKETPLACE_DIR with PLUGIN_ROOT's contents, so anything
 # uncommitted, unpushed, or off-main gets baked into the cache. Past incidents
 # (cache stuck with a transient "Status: Not Started" revert that broke every
@@ -437,6 +442,19 @@ report_preflight_failure() {
 }
 
 CURRENT_BRANCH="$(git -C "$PLUGIN_ROOT" symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")"
+CHANNEL_TAG=""
+if [ "$CURRENT_BRANCH" = "DETACHED" ]; then
+  CHANNEL_TAG="$(git -C "$PLUGIN_ROOT" tag --points-at HEAD 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' | sort -V | tail -n 1 || true)"
+fi
+
+if [ -n "$CHANNEL_TAG" ]; then
+  # Tagged checkout: no branch or origin/main sync to check, only cleanliness.
+  if [ -n "$(git -C "$PLUGIN_ROOT" status --porcelain)" ]; then
+    report_preflight_failure \
+      "Working tree has uncommitted or untracked files." \
+      "git -C $PLUGIN_ROOT status   # then commit, stash --include-untracked, or clean"
+  fi
+else
 if [ "$CURRENT_BRANCH" != "main" ]; then
   report_preflight_failure \
     "Current branch is '$CURRENT_BRANCH', expected 'main'." \
@@ -474,6 +492,7 @@ else
     fi
   fi
 fi
+fi
 
 if [ "$PREFLIGHT_FAILED" -ne 0 ]; then
   echo "" >&2
@@ -482,7 +501,13 @@ if [ "$PREFLIGHT_FAILED" -ne 0 ]; then
   echo "uncommitted ends up baked into the cache." >&2
   exit 1
 fi
-echo "  OK: on main, clean, in sync with origin/main"
+if [ -n "$CHANNEL_TAG" ]; then
+  echo "  OK: detached at $CHANNEL_TAG, clean"
+  echo "Channel: $CHANNEL_TAG"
+else
+  echo "  OK: on main, clean, in sync with origin/main"
+  echo "Channel: main"
+fi
 fi  # end VK_INSTALL_SKIP_PREFLIGHT guard
 
 # VK MCP binary is optional — warn but continue if missing.

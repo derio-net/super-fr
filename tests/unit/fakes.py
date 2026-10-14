@@ -47,6 +47,8 @@ class FakeGhClient:
         self.repo_labels: dict[str, set[str]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.label_checks: list[tuple[str, str]] = []
+        # (repo, pr) -> labels `edit_pr_labels` leaves on the PR (exit-gates R7).
+        self.pr_labels: dict[tuple[str, int], set[str]] = {}
         self.labels_missing: set[str] = set()
         self.attempted_mutations: int = 0
         self._next_issue_number: dict[str, int] = {}
@@ -191,6 +193,20 @@ class FakeGhClient:
         )
         i = self.issues[(repo, number)]
         i.labels = (i.labels | set(add)) - set(remove)
+
+    def edit_pr_labels(
+        self, repo: str, pr: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        self._gate()
+        self.calls.append(
+            ("edit_pr_labels", {"repo": repo, "pr": pr, "add": add, "remove": remove})
+        )
+        labels = self.pr_labels.setdefault((repo, pr), set())
+        self.pr_labels[(repo, pr)] = (labels | set(add)) - set(remove)
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self._gate()
+        self.calls.append(("comment_pr", {"repo": repo, "pr": pr, "body": body}))
 
     def edit_issue_state(
         self,

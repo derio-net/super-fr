@@ -230,6 +230,23 @@ def _home_off_the_operators_machine(
 
 
 @pytest.fixture(autouse=True)
+def _no_live_exit_label_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test labels a real PR (exit-gates R7): `sync_exit_labels` reaches its forge
+    through `fr.verification.labels.client_for`, here a forge that cannot label a PR (a
+    warning, as on GitLab). Tests of the sync install their own fake client."""
+    from fr.ghclient import UnsupportedBatchOps
+    from fr.verification import labels
+
+    class _NoLabels(UnsupportedBatchOps):
+        backend = "test"
+
+        def ensure_labels(self, repo: str, labels: list) -> None:
+            raise self._unsupported("ensure_labels")
+
+    monkeypatch.setattr(labels, "client_for", lambda _root: _NoLabels())
+
+
+@pytest.fixture(autouse=True)
 def _wide_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COLUMNS", WIDE_TERMINAL_COLUMNS)
 

@@ -1,0 +1,133 @@
+schema_version: 2
+phase:
+  number: 2
+  title: PR labels and fr verification set — adapter PR methods, label sync, downgrade
+    guard
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - exit-gates-set-downgrade
+  - exit-gates-pr-labels
+  tier: standard
+  files:
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/hostclient.py
+  - packages/fr/src/fr/verification/labels.py
+  - packages/fr/src/fr/verification/spec_section.py
+  - packages/fr/src/fr/commands/verification_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/skills/fr-goal/SKILL.md
+  - .hermes/skills/fr/fr-goal/SKILL.md
+  - tests/scenarios/exit-gates-set-downgrade.sh
+  - tests/integration/test_scenarios.py
+  - tests/unit/test_*client*.py
+  - tests/unit/test_exit_gates_*.py
+  - docs/acceptance/*
+  estimate_lines: 800
+tasks:
+- number: 1
+  title: PR-level label and comment adapter methods (R7)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: client tests — GhClient protocol has edit_pr_labels(repo, pr, add, remove) and comment_pr(repo, pr, body); the gh and REST GitHub clients call the issue endpoints for the PR number; glab and tea raise UnsupportedForgeOperation; fakes used by tests implement both.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add the methods to the protocol and every concrete client and test fake.
+- number: 2
+  title: Label families and sync_exit_labels (R7)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests — verification_label('candidate') == 'verification:candidate', gate_label('tester') / gate_label('tester', passed=True) == 'gate:tester' / 'gate:tester-passed'; sync_exit_labels adds missing, removes stale verification:*/gate:* (never a -passed label), ensures labels first, is a no-op under tracking none, returns a warning on UnsupportedForgeOperation.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: labels.py families; packages/fr/src/fr/verification/labels.py sync_exit_labels(repo_root, state, pr) over run_exit.
+- number: 3
+  title: Sync points — brainstorm/spec-review warn, deliver refuses on GitHub (R7)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: run_cmd tests with a fake forge — resolving spec-review with an emitted pr syncs and only warns on failure; deliver refuses (exit 2, prints the retry command) when GitHub sync fails, warns when the forge is unsupported, syncs nothing under tracking none.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: call sync_exit_labels at those resolve points; deliver gate refusal.
+- number: 4
+  title: fr verification set and the downgrade guard (R8)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests — set inserts or rewrites the strategy:, row bullet or gate: line leaving every other byte identical; journals decision exit-change-<n> with the reason; commits; re-syncs labels; refuses a spec with no section naming how to add one; after spec-review done, removing a post-merge gate or lowering a kind's rank is refused without --answered-by operator and allowed with a transcript-verified one; before spec-review no guard.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: `fr verification set` in verification_cmd.py; a spec_section line-rewrite helper; guard comparing run_exit before/after, using the transcript verifier journal resolve --answered-by uses.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR: share the line-rewrite helper with nothing else duplicated; keep the command thin over an engine function.
+- number: 5
+  title: Scenario, prose, matrix
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Write tests/scenarios/exit-gates-set-downgrade.sh (fixture run cursor past spec-review, drive `fr verification set`, assert the rewrite and the refusal; no forge — label sync is skipped under tracking none) and wire it into test_scenarios.py.
+  - id: P2.T5.S2
+    text: |-
+      fr-goal SKILL.md §1/§8: the gate answer and the PR labels (stay within the 120-line cap); sync both mirrors; move exit-gates-set-downgrade to ci and record exit-gates-pr-labels' unit/integration levels (it stays live-owed) via fr acceptance set-status.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-10-14T01:10:19+00:00'
+      note: null
+  completion:
+    at: '2026-10-14T01:10:19+00:00'
+    note: null
+    observed_prs: []

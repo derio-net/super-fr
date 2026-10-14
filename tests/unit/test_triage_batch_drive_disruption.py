@@ -53,7 +53,8 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 — fixtures
     world_fixture,
 )
 
-CLOSEOUT_ITEM = f"{REPO}/run/closeout-b1"
+CLOSEOUT_ITEM = f"{REPO}/run/closeout-b1"  # a per-batch close-out, recorded before R15
+COLLECTED_ITEM = f"{REPO}/run/closeout-2026-10-02-1"
 
 
 # ------------------------------------------------- gh#883: one close-out, ever
@@ -78,10 +79,9 @@ def test_the_closeout_is_recorded_before_its_tab_starts(
     runner.dispatch = _dispatch  # type: ignore[method-assign]
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert seen == [["dispatch", "closeout"]]
-    assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
-    closeout = load_judgements(tmp_path / "judgements.yaml").batches[0].events[-1]
-    assert closeout.handle == "w2:p1K"  # type: ignore[union-attr]  # the runner's, once known
+    assert seen == [["dispatch"]]  # the start marker, not a member's event (R15, p6-r1)
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert marker.handle == "w2:p1K"  # the runner's, once known
 
 
 def test_a_restart_after_the_closeout_tab_ended_starts_no_second_closeout(
@@ -162,9 +162,10 @@ def test_a_closeout_the_runner_fails_to_start_does_not_end_the_loop_and_is_repor
     result = _drive_named(tmp_path, "--yes")
     assert isinstance(result.exception, _StopError), result.output
     assert result.output.count("agent_pane_busy") == 1
-    assert tries == [CLOSEOUT_ITEM] * 3
-    assert [i.id for i in runner.dispatched] == [CLOSEOUT_ITEM]
-    assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
+    assert tries == [COLLECTED_ITEM] * 3
+    assert [i.id for i in runner.dispatched] == [COLLECTED_ITEM]
+    assert [c.item for c in load_judgements(tmp_path / "judgements.yaml").closeouts] == [
+        COLLECTED_ITEM]  # each failed start took its marker back  # fmt: skip
 
 
 def test_a_batch_the_runner_fails_to_dispatch_does_not_end_the_loop_and_is_reported_once(
