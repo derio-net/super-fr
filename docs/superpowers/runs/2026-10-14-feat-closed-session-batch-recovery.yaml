@@ -92,5 +92,12 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: pending
+    state: running
+    at: '2026-10-14T20:43:30+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-14T20:43:30+00:00'
+          harness: opencode
+          session: ses_ec52e48a3ffeYuGgSUiT9iZD10
 fr_version: 5.27.0rc3
