@@ -65,12 +65,14 @@ class Section:
     row_gates: dict[str, str] = field(default_factory=dict)
 
 
-def _section_lines(text: str) -> list[tuple[int, str]] | None:
-    """`(line number, line)` of the section body, or `None` without a section.
+def _section_span(text: str) -> tuple[int, list[tuple[int, str]]] | None:
+    """`(heading line number, [(line number, line)])` of the section, or `None`
+    without a section.
 
     Fenced code is skipped, so a spec that QUOTES the grammar in a code block
     (as the design spec does) is not mistaken for carrying the section.
     """
+    heading = 0
     body: list[tuple[int, str]] | None = None
     fenced = False
     for n, line in enumerate(text.splitlines(), start=1):
@@ -81,12 +83,18 @@ def _section_lines(text: str) -> list[tuple[int, str]] | None:
             continue
         if body is None:
             if _HEADING.match(line):
-                body = []
+                heading, body = n, []
         elif _ANY_H2.match(line):
             break
         else:
             body.append((n, line))
-    return body
+    return None if body is None else (heading, body)
+
+
+def _section_lines(text: str) -> list[tuple[int, str]] | None:
+    """`(line number, line)` of the section body, or `None` without a section."""
+    span = _section_span(text)
+    return None if span is None else span[1]
 
 
 def _is_grammar(line: str) -> bool:
@@ -145,3 +153,130 @@ def parse_section(text: str) -> Section | None:
                 raise SectionError(f"line {n}: row {m['row']!r} appears more than once")
             rows[m["row"]] = RowLine(m["strategy"], m["reason"])
     return Section(strategy=strategy, rows=rows, gate=gate, row_gates=row_gates)
+
+
+_NO_SECTION = (
+    "the spec has no `## Verification` section: add one — a `## Verification` heading, "
+    "then `strategy: <name>` (and `- <row-id>: <strategy|none> — <reason>` lines, or "
+    "`gate: <gate>`) — and run this again"
+)
+
+
+def _eol(line: str) -> str:
+    return "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+
+
+def _replace(lines: list[str], n: int, content: str) -> None:
+    lines[n - 1] = content + _eol(lines[n - 1])
+
+
+def _insert(lines: list[str], at: int, content: str, eol: str) -> None:
+    """Put `content` as the line at index `at`, giving a last line that lacked a
+    line ending one first."""
+    if at > 0 and not _eol(lines[at - 1]):
+        lines[at - 1] += eol
+        lines.insert(at, content)
+    else:
+        lines.insert(at, content + eol)
+
+
+def _set_line(text: str, kind: str, row: str | None, content: str) -> str:
+    """Rewrite the section's one `kind` line (`strategy` | `gate` | `bullet`, for
+    `row` where it has one) to `content`, or insert it beside its kind."""
+    span = _section_span(text)
+    if span is None:
+        raise SectionError(_NO_SECTION)
+    heading, body = span
+    lines = text.splitlines(keepends=True)
+    eol = _eol(lines[heading - 1]) or "\n"
+    stripped = [(n, raw.strip()) for n, raw in body]
+
+    def gate_row(line: str) -> str | None:
+        m = _GATE_LINE.match(line) if line.startswith("gate:") else None
+        return m["row"] if m is not None else None
+
+    def is_gate(line: str) -> bool:
+        return line.startswith("gate:") and _GATE_LINE.match(line) is not None
+
+    def bullet_row(line: str) -> str | None:
+        m = _ROW_LINE.match(line)
+        return m["row"] if m is not None else None
+
+    if kind == "strategy":
+        hit = next((n for n, ln in stripped if ln.startswith("strategy:")), None)
+    elif kind == "gate":
+        hit = next(
+            (n for n, ln in stripped if is_gate(ln) and gate_row(ln) == row),
+            None,
+        )
+    else:
+        hit = next((n for n, ln in stripped if bullet_row(ln) == row), None)
+    if hit is not None:
+        _replace(lines, hit, content)
+        return "".join(lines)
+
+    def last(pred: object) -> int | None:
+        found = [n for n, ln in stripped if pred(ln)]  # type: ignore[operator]
+        return found[-1] if found else None
+
+    first_grammar = next((n for n, ln in stripped if _is_grammar(ln)), None)
+    after: int | None  # insert after this line number; None = before the first grammar line
+    if kind == "strategy":
+        after = None
+    elif kind == "gate" and row is None:
+        after = last(lambda ln: ln.startswith("strategy:"))
+    elif kind == "gate":
+        after = last(is_gate) or last(lambda ln: ln.startswith("strategy:"))
+    else:
+        after = last(lambda ln: bullet_row(ln) is not None) or last(_is_grammar)
+    if after is not None:
+        _insert(lines, after, content, eol)
+    elif first_grammar is not None:
+        _insert(lines, first_grammar - 1, content, eol)
+    else:
+        at = heading  # after the heading and the blank lines that follow it
+        while at < len(lines) and not lines[at].strip():
+            at += 1
+        nxt_is_h2 = at < len(lines) and _ANY_H2.match(lines[at]) is not None
+        _insert(lines, at, content, eol)
+        if at + 1 < len(lines) and lines[at + 1].strip() and not nxt_is_h2:
+            lines.insert(at + 1, eol)  # keep the prose a paragraph apart
+    return "".join(lines)
+
+
+def rewrite_section(
+    text: str,
+    *,
+    strategy: str | None = None,
+    row: str | None = None,
+    gate: str | None = None,
+    reason: str | None = None,
+) -> str:
+    """`text` with the section's matching grammar line inserted or rewritten and
+    every other byte kept (`fr verification set`, spec 2026-10-14 R8).
+
+    Without `row`: `strategy` sets the `strategy:` line and `gate` the run-level
+    `gate:` line. With `row`: `strategy` sets that row's bullet (`reason` after
+    the em dash) and `gate` its `gate: <row>=` line. `SectionError` for no
+    section, a name outside the grammar, or a reason that is not one line."""
+    if strategy is not None and re.fullmatch(_NAME, strategy) is None:
+        raise SectionError(f"strategy {strategy!r} is not a strategy name (lowercase, dashes)")
+    if gate is not None and gate not in GATE_NAMES:
+        raise SectionError(f"gate {gate!r} is not one of {sorted(GATE_NAMES)}")
+    if row is not None and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", row) is None:
+        raise SectionError(f"{row!r} is not a row id")
+    if reason is not None and (not reason.strip() or "\n" in reason or "\r" in reason):
+        raise SectionError("the reason must be one non-empty line")
+    out = text
+    if strategy is not None:
+        if row is None:
+            out = _set_line(out, "strategy", None, f"strategy: {strategy}")
+        else:
+            tail = f" — {reason.strip()}" if reason else ""
+            out = _set_line(out, "bullet", row, f"- {row}: {strategy}{tail}")
+    if gate is not None:
+        content = f"gate: {gate}" if row is None else f"gate: {row}={gate}"
+        out = _set_line(out, "gate", row, content)
+    if out == text and _section_span(text) is None:
+        raise SectionError(_NO_SECTION)
+    return out
