@@ -20,10 +20,14 @@ refused rather than guessed at.
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-BUMPS = ("patch", "minor", "major")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from versions import BUMPS, Version  # noqa: E402
+
 KEYS = ("bump", "summary")
 CHANGES_DIR = ".changes"
 README = "README.md"
@@ -137,17 +141,12 @@ def aggregate(fragments: list[Fragment]) -> str | None:
 
 
 def bumped(version: str, bump: str | None) -> str:
-    """`version` moved by `bump` (None leaves it as is)."""
-    if bump is None:
-        return version
-    major, minor, patch = (int(p) for p in version.split("."))
-    if bump == "major":
-        return f"{major + 1}.0.0"
-    if bump == "minor":
-        return f"{major}.{minor + 1}.0"
-    if bump == "patch":
-        return f"{major}.{minor}.{patch + 1}"
-    raise ValueError(f"unknown bump {bump!r}")
+    """`version` moved by `bump` (None leaves a final as is), in semver spelling.
+
+    An RC (`X.Y.Z-rc.N` or `X.Y.ZrcN`) is based on the last final it implies, never
+    int-split: a bump it already carries lands on its final X.Y.Z (`versions.Version`).
+    """
+    return Version.parse(version).bumped(bump).semver
 
 
 def load_pending(repo: Path) -> list[Fragment]:
