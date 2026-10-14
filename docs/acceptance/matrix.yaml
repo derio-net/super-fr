@@ -7851,12 +7851,13 @@ rows:
       - super-fr:tests/unit/test_triage_clean_labels.py#test_clean_labels_removes_both_labels_and_no_longer_skips_fr_claimed
       - super-fr:tests/unit/test_triage_batch_drive.py#test_drive_pass_emits_settle_actions_after_releases
       - super-fr:tests/unit/test_triage_kanban_cmd.py#test_rendered_board_html_carries_the_closed_set_note
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_yes_pass_settles_a_closed_hit_no_batch_holds
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_yes_pass_leaves_a_closed_hit_of_a_skipped_repo_alone
       int:
       - super-fr:tests/integration/test_scenarios.py#test_triage_closed_settle
     status: ci
-    notes: 'phase 1: collect reads both labels, settle_closed + claim sync/drive settle
-      ops, clean-labels removes both, board note rendered; scenario drives the installed
-      fr against a fake REST forge'
+    notes: 'phase 1 review p1-r5/r6: a drive --once --yes pass settles a closed hit
+      no batch holds, and leaves a skipped repo''s alone'
     verify: candidate
     scenario: tests/scenarios/triage-closed-settle.sh
   - id: triage-release-pending-true
