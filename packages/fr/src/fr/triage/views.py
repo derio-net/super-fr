@@ -58,6 +58,9 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.lanes import lane_of, live_stops
+from fr.triage.merge_stops import MergeStop
+from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     Batch,
     Facts,
@@ -188,6 +191,10 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "session-blocked": "Session blocked",
+    "needs-developer": "Needs you · Developer",
+    "needs-reviewer": "Needs you · Reviewer",
+    "needs-tester": "Needs you · Tester",
+    "needs-devops": "Needs you · DevOps",
 }
 
 
@@ -226,6 +233,7 @@ def needs_you(
     session_notes: Mapping[str, str] | None = None,
     *,
     ci_none: Collection[str] = (),
+    stops: Mapping[str, MergeStop] | None = None,
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
@@ -330,6 +338,19 @@ def needs_you(
                  "hand-backs are spent: resolve it, or dispatch or cancel the batch",
                  f"#batch-{b.id}")
         )  # fmt: skip
+
+    # The four Needs-you lanes (exit-gates R17): one Need per card the board puts in one,
+    # from the same `lane_of`, so "Needs you now" and the columns agree.
+    held_stops = live_stops(judgements.batches, facts, stops or {})
+    for b in judgements.batches:
+        placed = lane_of(b, facts, held_stops.get(b.id))
+        if placed is None:
+            continue
+        lane_pr = batch_pr(b, facts)
+        text = f"batch {b.id}: {placed.reason}"
+        if lane_pr is not None and conflicting(lane_pr.mergeable, lane_pr.merge_state):
+            text += f" (PR #{lane_pr.number} is also conflicting)"
+        out.append(Need(placed.lane, b.id, text, f"#batch-{b.id}"))
 
     for s in stale_dispatches(facts):
         out.append(

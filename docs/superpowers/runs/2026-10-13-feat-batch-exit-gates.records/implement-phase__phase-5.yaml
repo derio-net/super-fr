@@ -1,0 +1,15 @@
+schema_version: 10
+run: 2026-10-13-feat-batch-exit-gates
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T1.S2, P5.T2.S1, P5.T2.S2, P5.T2.S3, P5.T3.S1]
+refactor:
+  P5.T1: "mergeability.py is one two-line predicate and one string; the hint call site is a single branch in _card, nothing to clean"
+  P5.T3: "prose and a matrix status move only; lane logic was already one function (P5.T2.S3)"
+journal:
+  - {kind: discovery, id: p5-1107-salvage, phase: 5, title: "#1107 read: nothing salvaged", body: "PR 1107 (batch-sweep-status-lanes) derives human lanes from a run cursor at the PR head too, but it is a parallel design (its own matrix row, gitseam reader, scenario) written against session-status-era kanban code. Phase 4 already put cursor_position/read_cursor (fr/triage/cursor.py, facts schema 12) in place, so nothing was copied; lane_of reads PullRequest.cursor. #1107 can be closed once this ships (spec F)."}
+  - {kind: decision, id: p5-ledger-unknown-lane, phase: 5, title: "A landed batch with an unread gate ledger sits in Needs you · Developer", body: "Not Done and not Closing out, so an operator sees it: lane_of puts a landed, not closed-out batch whose merged-PR labels collect could not read in needs-developer, reason saying which gate holds it is unknown and the next collect retries. The card leaves the lane when a collect reads the labels."}
+  - {kind: decision, id: p5-lane-one-function, phase: 5, title: "lane_of (triage/lanes.py) is the one lane function", body: "column_of and needs_you both call it, from facts alone (cursor, approval_verdict on the PR labels and events, a live merge stop, held_gates on the merged PR labels). live_stops moved there from kanban to avoid a kanban/views cycle. needs_you gained an optional stops argument; render.py's caller passes none, so a recorded merge stop lane shows on the board only."}
+resolves: []
+evidence: {tests: ci}
