@@ -7945,9 +7945,14 @@ rows:
       merges it once green, with no approved-fr label.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_green_draft_archive_pr_gets_an_archive_action_flagged_draft
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_of_a_draft_calls_pr_ready_before_pr_merge_and_says_so
+    status: ci
+    notes: 'merge-truth phase 2: a green draft archive PR gets an archive action flagged
+      draft, and --yes calls pr_ready before pr_merge with no approved-fr read or label
+      (R11)'
     verify: none
   - id: triage-archive-pr-conflict-handed
     capability: triage-batches
