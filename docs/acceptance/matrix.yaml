@@ -9198,9 +9198,16 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R9
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_deliver_leftovers.py#test_each_kind_of_leftover_is_listed_with_its_fix
+      - super-fr:tests/unit/test_journal_file.py#test_an_out_of_scope_finding_is_filed_with_follow_up_and_deferred
+      - super-fr:tests/unit/test_deliver_leftovers.py#test_a_close_over_a_gated_rows_issue_is_refused_even_when_pre_merge
+      int:
+      - super-fr:tests/integration/test_exit_gates_deliver.py#test_deliver_refuses_leftovers_then_passes_after_journal_file
+    status: ci
+    notes: deliver's leftovers gate, fr journal file and the widened Closes guard are
+      covered by CI unit tests and a full deliver resolve against a stubbed forge
   - id: exit-gates-board-lanes
     capability: exit-gates
     acceptance: The board shows Needs you · Developer, · Reviewer, · Tester and · DevOps
