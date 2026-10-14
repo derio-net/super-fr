@@ -21,7 +21,7 @@ from typing import Literal, Protocol
 
 from fr.triage.batch import batch_pr, batch_repo, derive_batch_stage
 from fr.triage.batch_dispatch import LIVE_STAGES
-from fr.triage.batch_drive import ARCHIVE_PREFIXES
+from fr.triage.batch_drive import ARCHIVE_PREFIXES, closeout_event
 from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Judgements
 from fr.triage.pacing_state import PacingState
@@ -72,12 +72,26 @@ def _live_heads(facts: Facts, judgements: Judgements) -> dict[str, list[str]]:
     return heads
 
 
-def live_repos(facts: Facts | None, judgements: Judgements | None) -> set[str]:
-    """The repos an essential-only pass reads (R7): those of batches in `LIVE_STAGES`,
-    and those with an open close-out or archive PR."""
+def closing_repos(facts: Facts | None, judgements: Judgements | None) -> set[str]:
+    """The repos of batches whose close-out has started and is not archived (merge-truth
+    R8): read every pass, so an archive PR opened since the last full collect is seen."""
     if facts is None or judgements is None:
         return set()
-    return set(_live_heads(facts, judgements))
+    out: set[str] = set()
+    for batch in judgements.batches:
+        event = closeout_event(batch)
+        repo = batch_repo(batch, facts)
+        if event is not None and event.archived is None and repo is not None:
+            out.add(repo)
+    return out
+
+
+def live_repos(facts: Facts | None, judgements: Judgements | None) -> set[str]:
+    """The repos an essential-only pass reads (R7): those of batches in `LIVE_STAGES`,
+    those with an open close-out or archive PR, and the closing ones (merge-truth R8)."""
+    if facts is None or judgements is None:
+        return set()
+    return set(_live_heads(facts, judgements)) | closing_repos(facts, judgements)
 
 
 def probe_set(
@@ -198,8 +212,11 @@ def plan_pass(
     pending: Pending,
     probes: int,
     full: bool | None = None,
+    closing: set[str] | frozenset[str] = frozenset(),
 ) -> PassPlan:
-    """The pass's kind and the repos it reads (R7, R9-R11)."""
+    """The pass's kind and the repos it reads (R7, R9-R11). The *closing* repos
+    (`closing_repos`) are read on every pass, whatever its kind: a would-be quiet pass
+    with any becomes a partial one that reads only them (merge-truth R8)."""
     every = frozenset(repos)
     if state.summary is None:
         # The last pass never planned (it failed after its collect, p2-r1): its ETags may be
@@ -207,16 +224,19 @@ def plan_pass(
         changed = set(every)
     due = full_due(state, now) if full is None else full
     kind = pass_kind(state, now, changed, digest, below_floor=below_floor)
+    reading = frozenset(closing) & every
+    if kind == "quiet" and reading:
+        kind = "partial"
     held: str | None = None
     if kind == "quiet":
         only: frozenset[str] | None = frozenset()
     elif kind == "essential":
-        only = frozenset(live if due else changed & live) & every
+        only = (frozenset(live if due else changed & live) | reading) & every
         held = QUOTA_HOLD
     elif kind == "full":
         only = None
     else:
-        only = frozenset(changed) & every
+        only = (frozenset(changed) | reading) & every
     if only is not None and kind != "quiet" and only >= every:
         only = None
     carried = every - only if only is not None else frozenset()

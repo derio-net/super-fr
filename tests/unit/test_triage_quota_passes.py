@@ -360,3 +360,35 @@ def test_a_carried_repo_s_batch_claims_its_members_before_it_dispatches(
     assert len(runner.dispatched) == 1, out
     assert "claim super-fr#2 (b2): posted" in out, out
     assert out.index("claim super-fr#2") < out.index("dispatch b2")
+
+
+# ------------------------------------------- close-outs read every pass (merge-truth R8)
+
+
+@pytest.mark.parametrize("archived", [False, True])
+def test_a_recorded_closeout_not_archived_turns_a_quiet_pass_into_a_read_of_its_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: Any, monkeypatch: Any,
+    archived: bool,
+) -> None:  # fmt: skip
+    """merge-truth R8: the pacing caller takes `closing` from the judgements: a batch
+    with a close-out event and no `archived` keeps its repo read, so an archive PR
+    opened since the last full collect is seen. Once archived, the pass is quiet."""
+    world.issues[1] = "closed"
+    world.pr(101, "feat/batch-b1", [1], state="MERGED", merged_at=NOW.isoformat())
+    archived_at = ", archived: 7" if archived else ""
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        f"run: r1, archive: chore/archive-p1{archived_at}}}\n"
+    )
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    rig = Rig(monkeypatch, world, Meter())
+    _settled(tmp_path, rig)
+
+    code, out = rig.drive(tmp_path)
+
+    if archived:
+        assert rig.collects == [], out
+        assert "quiet:" in out, out
+    else:
+        assert rig.collects == [None], out  # the scope's one repo: read whole
+        assert "quiet:" not in out, out
