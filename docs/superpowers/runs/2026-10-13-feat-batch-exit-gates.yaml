@@ -149,7 +149,7 @@ steps:
           visual: none
           findings: p3-older-fr-refuses-decision-tokens,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9,p3-r10
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T04:19:34+00:00'
           agent: afe253efea2a7911f
@@ -159,6 +159,11 @@ steps:
           tier: hard
           bound: opus
           session: 73abb433-5601-4db7-ba08-a64b67cbfcfb
+          returned: '2026-10-14T05:10:25+00:00'
+          outcome: done
+        evidence:
+          tests: ci:4372aa9e1c7347938e146befafe07b2ad89b71ec+7a6ae37a284aaf67258b9b4c5c633377c15323f9;tree=deb190503daedd2c03e38faefc0b78275f91ee48498f424c60d03c9b90f9faf5
+          visual: none
   journal-check:
     state: pending
   deliver:

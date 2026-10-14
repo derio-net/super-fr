@@ -440,3 +440,43 @@ Pre-existing in the shared operator-claim verifier used by fr journal resolve --
 ### p3-older-fr-refuses-decision-tokens-resolved · finding [fixed] · resolves p3-older-fr-refuses-decision-tokens: A released fr refuses answered_by= and tracked_by= on a decision, so spec §C's "an older fr ignores them" holds only for gate= and narrows= (phase 3)
 
 Same defect as p3-r1, fixed by the decided_by=/remainder_tracked_by= tokens (73cb6792).
+
+<!-- fr:journal kind=decision scope=plan id=p4-gated-never-keeps-a-drive-alive created=2026-10-14T05:10:19+00:00 phase=4 -->
+### p4-gated-never-keeps-a-drive-alive · decision · A gated batch counts in Summary.gated and never keeps a drive alive (phase 4)
+
+A post-merge gate waits on a person (a walk, or `fr gate pass`), possibly for days, so a gated landed batch is neither closing nor blocked: `Summary.gated` counts it, the summary line says `gated N`, and `done` ignores it, as a batch awaiting its live walk already was (AWAITING_LIVE_HOLD). The rows-walked pass is detected by the next drive pass that runs; a loop does not poll for it.
+
+<!-- fr:journal kind=decision scope=plan id=p4-ledger-rows-in-a-worktree created=2026-10-14T05:10:19+00:00 phase=4 -->
+### p4-ledger-rows-in-a-worktree · decision · The gated rows are read in a detached worktree of origin/<default>, cached per tip (phase 4)
+
+`fr.triage.ledger.gated_rows_at` adds a detached worktree at the default branch's tip through `Checkout.add_worktree`, runs `run_exit` there and removes it. Not `snapshot_paths`: it drops file modes, and the exit's shape default is filtered by whether `.fr/candidate-install` is executable, so a snapshot could compute a different exit than the PR's tree. Which gates hold the batch is never recomputed (the merged PR's labels say it, `held_gates`); only which rows each gate gates, their `walked` status and their issues come from the tree. The driver caches rows per (repo, tip sha, branch). A run-level gate with no row is never passed by the driver.
+
+<!-- fr:journal kind=decision scope=plan id=p4-cursor-position-raw created=2026-10-14T05:10:19+00:00 phase=4 -->
+### p4-cursor-position-raw · decision · The cursor position is read from the raw cursor YAML at the PR head, per head sha (phase 4)
+
+`fr.triage.cursor.cursor_position` reads a raw mapping (a cursor at a PR head may be written by an older or newer fr than the reader): deliver done, else the cursor step `blocked` (its gate), else a `manual` unit that is all that is left of the cursor step, else `none`. `read_cursor` reaches the head through `Checkout.reach_commit` (fetching origin's branch once) and `Checkout.list_dir`/`show`. Only an OPEN PR of an unfinished batch gets one; the driver caches it per (repo, head sha). Plain `fr triage collect` passes no reader, so its facts carry no cursor; the drive's do.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-merged-label-reads created=2026-10-14T05:10:19+00:00 phase=4 -->
+### p4-merged-label-reads · discovery · The gate ledger costs one PR view per merged PR of an unfinished batch per collect (phase 4)
+
+No list read carries a merged PR's labels, so collect reads them with one `pr_view` (`Forge.pr_labels`) per merged PR on a ledger branch: every dispatched, uncancelled batch without a close-out recorded archived. A finished batch costs nothing. A failed read leaves `labels` None (unread), which no reader takes as ungated evidence.
+
+<!-- fr:journal kind=finding scope=plan id=p4-gated-post-merge-delayed created=2026-10-14T05:10:19+00:00 phase=4 state=open review_scope=out -->
+### p4-gated-post-merge-delayed · finding [open] (reviewer: out of scope) · A gated batch's post_merge waits for its gate, yet the tester walks the merged build (phase 4)
+
+The driver runs a repo's `post_merge` (e.g. `./scripts/install.sh`) only inside the close-out action. R13 skips the close-out of a gated batch, so the driver no longer installs a gated merge until its gate passes, while R14's walk is of exactly that merged build. The board's post-merge need now skips a gated batch (is_gated), so it does not report this either. Phase 6 restructures close-out (collected close-out, R15); running post_merge for a landed gated batch apart from its close-out belongs there or in its own issue.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-10-14T05:10:19+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+The ledger reads are one helper (_ledger_reads) applied once to every PR list collect builds; the cursor reader is one pure function plus one gitseam-only reader, and the schema pins moved with sed; nothing duplicated to merge.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-10-14T05:10:19+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+gate_cmd is one command over pass_gate, the helper the driver's gate-pass executor already calls, so the swap and comment exist once; nothing to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t4 created=2026-10-14T05:10:19+00:00 phase=4 -->
+### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
+
+One fr acceptance set-status call; nothing to clean.
