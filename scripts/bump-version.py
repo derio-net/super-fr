@@ -13,6 +13,7 @@ Usage:
     scripts/bump-version.py minor        # 2.1.7 -> 2.2.0
     scripts/bump-version.py major        # 2.1.7 -> 3.0.0
     scripts/bump-version.py 2.3.1        # set explicitly
+    scripts/bump-version.py 2.4.0-rc.1   # a release candidate (2.4.0rc1 on Python surfaces)
     scripts/bump-version.py --check      # verify the whole set agrees; exit 1 on drift
 """
 
@@ -24,13 +25,12 @@ import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
-
 # The surface list lives in one module (spec 2026-09-26-version-bump-churn
 # §3.B); every reader — this script, the change-fragment gate, release.py —
 # imports it so there is exactly one list.
 sys.path.insert(0, str(REPO / "scripts"))
-from version_surfaces import Surface, version_surfaces, write_version  # noqa: E402
+from version_surfaces import Surface, spelling, version_surfaces, write_version  # noqa: E402
+from versions import BUMPS, Version  # noqa: E402
 
 
 def root_version() -> str:
@@ -47,11 +47,20 @@ def _label(surface: Surface) -> str:
 
 
 def check() -> int:
-    versions = {_label(s): s.value for s in version_surfaces(REPO)}
+    """Every surface carries the root's version in its own spelling (R25): PEP 440 on
+    the Python surfaces, semver on the rest. An unparseable value is drift."""
+    surfaces = version_surfaces(REPO)
+    versions = {_label(s): s.value for s in surfaces}
     width = max(len(k) for k in versions)
     for k, v in versions.items():
         print(f"{k:<{width}}  {v}")
-    if len(set(versions.values())) == 1:
+    root = next(s.value for s in surfaces if s.file == "pyproject.toml")
+    try:
+        drift = [s for s in surfaces if s.value != spelling(s.file, root)]
+    except ValueError as exc:
+        print(f"DRIFT — the root version is unreadable: {exc}")
+        return 1
+    if not drift:
         print("ok — versions agree")
         return 0
     print("DRIFT — run `scripts/bump-version.py <patch|minor|major|X.Y.Z>` to resync")
@@ -59,22 +68,20 @@ def check() -> int:
 
 
 def compute_new(old: str, arg: str) -> str:
-    if SEMVER_RE.match(arg):
-        return arg
-    maj, mi, pa = (int(x) for x in old.split("."))
-    if arg == "major":
-        return f"{maj + 1}.0.0"
-    if arg == "minor":
-        return f"{maj}.{mi + 1}.0"
-    if arg == "patch":
-        return f"{maj}.{mi}.{pa + 1}"
-    sys.exit(f"error: expected patch|minor|major|X.Y.Z, got {arg!r}")
+    """The new version, semver-spelled: *arg* itself when it is a version (either RC
+    spelling), else *old* moved by the bump; an RC moves from the last final it implies."""
+    if arg in BUMPS:
+        return Version.parse(old).bumped(arg).semver
+    try:
+        return Version.parse(arg).semver
+    except ValueError:
+        sys.exit(f"error: expected patch|minor|major|X.Y.Z|X.Y.Z-rc.N, got {arg!r}")
 
 
 def bump(arg: str) -> int:
     old = root_version()
     new = compute_new(old, arg)
-    if new == old:
+    if Version.parse(new) == Version.parse(old):
         print(f"already at {new}, nothing to do")
         return 0
 
@@ -85,8 +92,10 @@ def bump(arg: str) -> int:
     print("running `uv sync`...")
     subprocess.run(["uv", "sync"], check=True, cwd=REPO)
 
-    # Verify the entry point reports the new number. The script name is
-    # `vk` until the Phase 3 rebrand flips it to `fr`; probe both.
+    # Verify the entry point reports the new number, which Python spells PEP 440
+    # (`X.Y.ZrcN` for an RC). The script name is `vk` until the Phase 3 rebrand
+    # flips it to `fr`; probe both.
+    expected = Version.parse(new).pep440
     for cli in ("fr", "vk"):
         result = subprocess.run(
             ["uv", "run", cli, "--version"],
@@ -97,8 +106,8 @@ def bump(arg: str) -> int:
         if result.returncode == 0:
             reported = result.stdout.strip()
             print(f"`{cli} --version` -> {reported}")
-            if new not in reported:
-                sys.exit(f"error: {cli} --version output {reported!r} doesn't contain {new!r}")
+            if expected not in reported.split():  # a token: 5.27.0 is not in 5.27.0rc1
+                sys.exit(f"error: {cli} --version output {reported!r} doesn't contain {expected!r}")
             return 0
     sys.exit("error: neither `fr` nor `vk` entry point responded to --version")
 

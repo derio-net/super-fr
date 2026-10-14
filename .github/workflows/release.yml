@@ -7,6 +7,23 @@ name: Release
 # Idempotent: with no fragments and the version already tagged it is a no-op,
 # and a rerun reads its notes from the release commit's body.
 #
+# Release gating (spec 2026-10-14-exit-gates R20, R21): while a PR merged since
+# the last final tag still carries an unpassed post-merge gate label
+# (`fr release status --from-json`), a run cuts a release candidate instead,
+# `release: vX.Y.Z-rc.N`, tagged and published as a GitHub pre-release and
+# consuming no fragment; the final follows once nothing waits. A gate passes
+# with no push to main, so the workflow also runs daily (and `fr gate pass`
+# prints the dispatch). release.py reads the merged PRs and their labels with
+# `gh` and the workflow token (`pull-requests: read`), never the app's, and fr
+# decides from those facts with no credential in its environment. When what
+# waits is unknown (a failed or capped read, or a PR the git log names that the
+# read misses), the run cuts an RC, never a final.
+# FR_RELEASE_STATUS_TOKEN is the workflow's github.token, so it also carries
+# this job's contents and issues write. It reaches only that one gh read, never
+# fr or repo code: the bump, the lock check, the migration, the staged suite and
+# fr's decision all run with every token stripped. The token-holding calls are
+# the gh read, the gh release and issue writes, and the pushes.
+#
 # Two modes, by the repo variable FR_AUTOMATION_APP_ID (spec
 # 2026-10-11-merge-train-safety §F). Unset: the push uses the GITHUB_TOKEN, and
 # a push made with the GITHUB_TOKEN triggers no workflow, so no CI runs on the
@@ -36,6 +53,8 @@ name: Release
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 6 * * *" # daily: the final follows the last gate pass with no push
   workflow_dispatch:
     inputs:
       version:
@@ -46,6 +65,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: read
 
 # The pre-push suite release.py runs is the only test a release gets; it runs
 # on the requires-python floor, like CI (#940).
@@ -84,6 +104,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
+          FR_RELEASE_STATUS_TOKEN: ${{ github.token }}
         run: |
           if [ -n "${RELEASE_VERSION}" ]; then
             uv run --no-project python scripts/release.py --version "${RELEASE_VERSION}"

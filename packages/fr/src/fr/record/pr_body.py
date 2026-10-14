@@ -32,15 +32,20 @@ if TYPE_CHECKING:
     from fr.acceptance.model import Matrix, Row
     from fr.run.cost import PhaseRow, Summary
     from fr.run.model import RunState
+    from fr.verification.exit import Exit
     from fr.verification.model import StrategyManifest
     from fr.verification.rows import SpecVerification
 
 __all__ = [
+    "OWED_ROW_STATUSES",
     "PR_BODY_NAME",
     "REQUIRED_SECTIONS",
+    "Leftover",
     "PrematureClose",
+    "UnreadableJournalError",
     "closing_refs",
     "holds_open_for_run",
+    "issue_refs",
     "missing_sections",
     "normalize_issue_ref",
     "pre_merge_owed_lines",
@@ -49,7 +54,9 @@ __all__ = [
     "referenced_refs",
     "render_out_of_scope",
     "render_pr_body",
+    "run_narrowings",
     "shared_closing_keywords",
+    "unaccounted",
     "walk_command",
 ]
 
@@ -271,14 +278,30 @@ def normalize_issue_ref(ref: str, identity: tuple[str, str]) -> str | None:
     return None
 
 
+def issue_refs(text: str, identity: tuple[str, str]) -> set[str]:
+    """Every issue reference in `text`, as `normalize_issue_ref` spells it —
+    extracted with the PR-body parser's own regex, so `#1` is never read out of
+    `#12` and a bare `#n` is `identity`'s (spec 2026-10-14 R12, review p3-r2)."""
+    found: set[str] = set()
+    for match in _ISSUE_REF_GITHUB.finditer(text):
+        ref = normalize_issue_ref(match.group(0), identity)
+        if ref is not None:
+            found.add(ref)
+    return found
+
+
 @dataclass(frozen=True)
 class PrematureClose:
-    """A closing line whose issue a not-yet-verified post-merge row still holds
-    open (R15)."""
+    """A closing line whose issue is still held open (R15; exit-gates R11): by a
+    row — post-merge and not walk-verified, or gated by a post-merge gate — or by
+    a narrowing decision the operator did not answer."""
 
     line: str
     ref: str
     rows: tuple[str, ...]
+    decisions: tuple[str, ...] = ()
+    tracks: tuple[str, ...] = ()
+    """Owed rows whose `issues:` names it — the issue tracks their rest (p3-r5)."""
 
     @property
     def fix(self) -> str:
@@ -290,27 +313,189 @@ def premature_closes(
     matrix: Matrix,
     identity: tuple[str, str],
     holds_open: Callable[[Row], bool],
+    *,
+    exit: Exit | None = None,
+    narrowings: Sequence[JournalEntry] = (),
 ) -> list[PrematureClose]:
-    """Each closing-keyword line of `live_body` whose issue a row of `matrix`
-    cites while `holds_open(row)` — i.e. it is post-merge and not walk-verified.
+    """Each closing-keyword line of `live_body` whose issue is held open:
+
+    - a row of `matrix` cites it while `holds_open(row)` — it is post-merge and
+      not walk-verified (spec §D, R15) — or while `exit` gates the row with a
+      post-merge gate (exit-gates R11), whatever its strategy, until a walk
+      verifies it (a walked row is how its gate passes, R14);
+    - a narrowing decision in `narrowings` names it and does not carry
+      `decided_by=operator` (R11, R12);
+    - it is the `issues:` ref of an owed row (`OWED_ROW_STATUSES`): the issue
+      tracks what the row still owes (review p3-r5).
+
     Merging such a PR would close an issue its promise has not been verified
-    for; `Refs <ref>` mentions it without closing (spec §D, R15)."""
+    for; `Refs <ref>` mentions it without closing."""
+    from fr.acceptance.walks import walk_verified
+    from fr.gates import POST_MERGE_GATES
+
+    def gated(row: Row) -> bool:
+        return (
+            exit is not None
+            and exit.row_gates.get(row.id) in POST_MERGE_GATES
+            and not walk_verified(row)
+        )
+
+    def key(issue: str) -> str:
+        return normalize_issue_ref(issue, identity) or issue.lower()
+
     holding: dict[str, list[str]] = {}
+    tracking: dict[str, list[str]] = {}
     for row in matrix.rows:
         for issue in row.issues:
-            if holds_open(row):
-                key = normalize_issue_ref(issue, identity) or issue.lower()
-                holding.setdefault(key, []).append(row.id)
+            if holds_open(row) or gated(row):
+                holding.setdefault(key(issue), []).append(row.id)
+            elif row.status in OWED_ROW_STATUSES:
+                tracking.setdefault(key(issue), []).append(row.id)
+    narrowed: dict[str, list[str]] = {}
+    for decision in narrowings:
+        if decision.decided_by == "operator":
+            continue
+        for issue in decision.narrows:
+            narrowed.setdefault(key(issue), []).append(decision.id)
     out: list[PrematureClose] = []
     for line, _keyword, written in closing_refs(live_body, as_github=True):
         ref = normalize_issue_ref(written, identity)
-        if ref is not None and ref in holding:
-            out.append(PrematureClose(line, ref, tuple(holding[ref])))
+        if ref is not None and (ref in holding or ref in narrowed or ref in tracking):
+            out.append(
+                PrematureClose(
+                    line,
+                    ref,
+                    tuple(holding.get(ref, ())),
+                    tuple(narrowed.get(ref, ())),
+                    tuple(tracking.get(ref, ())),
+                )
+            )
     return out
 
 
-def _journals(repo_root: Path, state: RunState) -> list[tuple[str, list[JournalEntry]]]:
-    out: list[tuple[str, list[JournalEntry]]] = []
+# --- leftovers (exit-gates R9) ---------------------------------------------------
+
+OWED_ROW_STATUSES = ("not-implemented", "unwired", "walk-owed")
+"""The statuses that make a row citing the run's spec an owed row (R9)."""
+
+
+@dataclass(frozen=True)
+class Leftover:
+    """One thing a run leaves behind that `deliver` will not ship unaccounted
+    (R9): its kind, its id, a line naming it, and the command(s) that account
+    for it."""
+
+    kind: str  # finding | owed | row | narrowing
+    id: str
+    what: str
+    fix: str
+
+    def line(self) -> str:
+        return f"{self.kind} {self.id} — {self.what}\n    fix: {self.fix}"
+
+
+def run_narrowings(repo_root: Path, state: RunState) -> list[JournalEntry]:
+    """Every narrowing decision of the run's spec and plan journals (R12)."""
+    from fr.journal.file import narrowing_decisions
+
+    return [
+        d
+        for _s, _slug, entries in _journals(repo_root, state, strict=True)
+        for d in narrowing_decisions(entries)
+    ]
+
+
+def _has_tracker(repo_root: Path) -> bool:
+    """`False` only when the repo declares `tracking: none`; an unreadable
+    declaration counts as a tracker (fail closed: more is asked, not less)."""
+    from fr.services import TrackerRequiredError, require_tracker
+
+    try:
+        require_tracker(repo_root)
+    except TrackerRequiredError:
+        return False
+    except Exception:  # noqa: BLE001 — ServicesError and friends
+        return True
+    return True
+
+
+def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Leftover]:
+    """R9's unaccounted leftovers, in journal then matrix order. Each kind has
+    its own accounting rule:
+
+    - an out-of-scope finding in either journal → deferred `--tracked-by`;
+    - an `owed` journal entry → `filed_as`;
+    - an owed row citing the spec (`OWED_ROW_STATUSES`) → gated by a post-merge
+      gate of this run, or carrying `issues:`;
+    - a narrowing decision → a later decision filing it (`remainder_tracked_by=`).
+
+    Raises `UnreadableJournalError` when either journal does not parse.
+
+    Under `tracking: none` only the gate route applies: the journal kinds stay
+    recorded in the journal and the PR body, and a row's only fix is its gate.
+    `exit` is `None` when it cannot be read; no row is then judged here (the
+    label sync refuses an unreadable exit)."""
+    from fr.gates import POST_MERGE_GATES
+    from fr.journal.file import narrowing_accounted, narrowing_decisions
+    from fr.journal.model import open_owed_ids, owed_filed_as
+
+    tracker = _has_tracker(repo_root)
+    out: list[Leftover] = []
+    if tracker:
+        for scope, slug, entries in _journals(repo_root, state, strict=True):
+
+            def file(eid: str, scope: str = scope, slug: str = slug) -> str:
+                return f"fr journal file --scope {scope} --slug {slug} --id {eid}"
+
+            states = effective_finding_states(entries)
+            for e in entries:
+                if (
+                    e.kind == "finding"
+                    and e.resolves is None
+                    and states.get(e.id) == "out-of-scope"
+                ):
+                    out.append(Leftover("finding", e.id, f"out of scope: {e.title}", file(e.id)))
+            filed = owed_filed_as(entries)
+            for oid in open_owed_ids(entries):
+                if oid not in filed:
+                    title = next(e.title for e in entries if e.id == oid)
+                    out.append(Leftover("owed", oid, f"owed, not filed: {title}", file(oid)))
+            for d in narrowing_decisions(entries):
+                if narrowing_accounted(entries, d) is None:
+                    narrows = ", ".join(d.narrows)
+                    out.append(Leftover("narrowing", d.id, f"narrows {narrows}", file(d.id)))
+    for row in exit.rows if exit is not None else ():
+        if row.status not in OWED_ROW_STATUSES:
+            continue
+        if exit is not None and exit.row_gates.get(row.id) in POST_MERGE_GATES:
+            continue
+        if tracker and row.issues:
+            continue
+        gate = (
+            f"fr verification set --run {state.run} --row {row.id} --gate tester "
+            '--reason "<why it waits for a live walk>"'
+        )
+        issue = (
+            f"fr acceptance set-status --id {row.id} --status {row.status} "
+            '--issue <owner/repo#n> --notes "<where the rest is tracked>"'
+        )
+        fix = f"{gate}  — or —  {issue}" if tracker else gate
+        out.append(Leftover("row", row.id, f"{row.status}, neither gated nor tracked", fix))
+    return out
+
+
+class UnreadableJournalError(Exception):
+    """A journal a `deliver` gate must read does not parse (review p3-r4): the
+    gate refuses, naming it, rather than judge a run with a journal dropped."""
+
+
+def _journals(
+    repo_root: Path, state: RunState, *, strict: bool = False
+) -> list[tuple[str, str, list[JournalEntry]]]:
+    """`(scope, slug, entries)` of the run's spec and plan journals. A journal
+    that does not parse is skipped by the render (fail open) and raises
+    `UnreadableJournalError` when `strict` — what every gate passes."""
+    out: list[tuple[str, str, list[JournalEntry]]] = []
     emitted: dict[str, str] = {}
     for record in state.steps.values():
         emitted.update(record.emitted or {})
@@ -324,8 +509,11 @@ def _journals(repo_root: Path, state: RunState) -> list[tuple[str, list[JournalE
         if not path.is_file():
             continue
         try:
-            out.append((scope, parse_journal(path.read_text())))
-        except JournalParseError:
+            out.append((scope, slug, parse_journal(path.read_text())))
+        except JournalParseError as e:
+            if strict:
+                rel = path.relative_to(repo_root) if path.is_relative_to(repo_root) else path
+                raise UnreadableJournalError(f"{rel} does not parse: {e}") from e
             continue
     return out
 
@@ -339,7 +527,7 @@ def _finding_line(scope: str, entry: JournalEntry, state: str, where: str | None
 def _findings(repo_root: Path, state: RunState) -> tuple[list[str], list[str]]:
     inside: list[str] = []
     outside: list[str] = []
-    for scope, entries in _journals(repo_root, state):
+    for scope, _slug, entries in _journals(repo_root, state):
         states = effective_finding_states(entries)
         tracked = {e.resolves: e.tracked_by for e in entries if e.resolves and e.tracked_by}
         for e in entries:

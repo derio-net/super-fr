@@ -43,7 +43,9 @@ from fr.triage.batch_drive import (
 )
 from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
-from fr.triage.merge_stops import MergeStop, live_stop
+from fr.triage.lanes import lane_of, live_stops
+from fr.triage.merge_stops import MergeStop
+from fr.triage.mergeability import CONFLICT_HINT, conflicting
 from fr.triage.model import (
     Batch,
     CancelEvent,
@@ -60,13 +62,31 @@ from fr.triage.views import drive_snapshot
 BoardStatus = Literal["working", "blocked", "idle", "done", "unknown", "absent"]
 """One session's live state as the board shows it; `absent` when the runner holds none."""
 
-Column = Literal["proposed", "waiting", "running", "pr-open", "closing-out", "partial", "done"]
+Column = Literal[
+    "proposed",
+    "waiting",
+    "running",
+    "needs-developer",
+    "pr-open",
+    "needs-reviewer",
+    "needs-tester",
+    "needs-devops",
+    "closing-out",
+    "partial",
+    "done",
+]
 
 COLUMN_TITLES: Mapping[Column, str] = {
     "proposed": "Proposed",
     "waiting": "Waiting",
     "running": "Running",
+    # The four Needs-you lanes (exit-gates R17): decided from the run cursor and the gate
+    # labels (`lanes.lane_of`), never from session status.
+    "needs-developer": "Needs you · Developer",
     "pr-open": "PR open",
+    "needs-reviewer": "Needs you · Reviewer",
+    "needs-tester": "Needs you · Tester",
+    "needs-devops": "Needs you · DevOps",
     "closing-out": "Closing out",
     # A merged batch with a member still open, owed its close-out (gh#985): the driver
     # still acts on it, so it is not Done until that close-out is archived.
@@ -109,6 +129,20 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "claim": "claims owed; the drive writes them",
     "refresh": "claims due a refresh",
     "release": "claims to release",
+    # The gate ledger (exit-gates R13, R14): a gated batch's first pass and its pass.
+    "awaiting-live": "gated: its issues to label fr:awaiting-live",
+    "gate-pass": "gate's rows walked; the drive passes it",
+    "ledger-unread": "gate labels unread; close-out waits",
+    "post-merge": "post_merge due",
+    "closeout-held": "close-out held: retry it by name",
+    "closeout-handback": "close-out PR handed back",
+    "closeout-stuck": "close-out PR stuck",
+    "closeout-unrecorded": "close-out pushed, nothing recorded",
+    "closeout-reopened": "close-out PR reopened: needs approval",
+    "closeout-merged": "close-out PR merged",
+    "closeout-pr-closed": "close-out PR closed unmerged",
+    "closeout-needs-review": "close-out PR needs review",
+    "closeout-abandoned": "close-out ended with no PR",
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason
@@ -286,11 +320,17 @@ class Board:
 # ------------------------------------------------------------------ columns
 
 
-def column_of(batch: Batch, facts: Facts, batches: Sequence[Batch]) -> Column:
-    """R2's table, from `derive_batch_stage`, `dependency_state` and `closeout_state`."""
+def column_of(
+    batch: Batch, facts: Facts, batches: Sequence[Batch], *, stop: MergeStop | None = None
+) -> Column:
+    """R2's table, from `derive_batch_stage`, `dependency_state` and `closeout_state`; a
+    batch `lane_of` places is in that Needs-you lane instead (exit-gates R17). *stop* is
+    the batch's live merge stop."""
     if not batch.events:
         waiting = any(dependency_state(d, batches, facts) != "satisfied" for d in batch.after)
         return "waiting" if waiting else "proposed"
+    if (lane := lane_of(batch, facts, stop)) is not None:
+        return lane.lane
     stage = derive_batch_stage(batch, facts)
     if stage in _COLUMN_OF_STAGE:
         return _COLUMN_OF_STAGE[stage]
@@ -404,6 +444,11 @@ def fallback_hint(
 # -------------------------------------------------------------------- cards
 
 
+def _conflicting(batch: Batch, facts: Facts) -> bool:
+    pr = batch_pr(batch, facts)
+    return pr is not None and conflicting(pr.mergeable, pr.merge_state)
+
+
 def _members(batch: Batch, facts: Facts) -> tuple[Member, ...]:
     found = {i.key: i for i in facts.issues}
     out = []
@@ -476,7 +521,9 @@ def _card(
     awaiting: frozenset[str] = frozenset(),
     queued: frozenset[str] = frozenset(),
 ) -> Card:
-    column = column_of(batch, facts, batches)
+    stop = stops.get(batch.id)
+    lane = lane_of(batch, facts, stop)
+    column = column_of(batch, facts, batches, stop=stop)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
     repo = batch_repo(batch, facts)
     dispatch, closeout = last_dispatch(batch), closeout_event(batch)
@@ -487,14 +534,28 @@ def _card(
     if closeout is not None and closeout.runner != "hand":
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
-    stop = stops.get(batch.id)
     idle = _idle_of(batch, facts, repo, status, closeout_status, now)
-    needs_you = "blocked" in (status, closeout_status) or stop is not None or idle is not None
+    first = actions.get(batch.id)
+    red = (
+        (_red_phrase(batch, first) or action_phrase(first))
+        if first and first.kind == "warn"
+        else None
+    )
+    needs_you = (
+        "blocked" in (status, closeout_status)
+        or stop is not None
+        or lane is not None
+        or idle is not None
+    )
     if "blocked" in (status, closeout_status):
         # A runner that says why (`SessionNotes`, cloud-triage R15) adds its words.
         keys = (batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id)) if repo else ()
         said = [n for key in keys if (n := (notes or {}).get(key))]
         hint = f"{NEEDS_YOU}: {'; '.join(said)}" if said else NEEDS_YOU
+    elif lane is not None and not (lane.lane == "needs-reviewer" and red is not None):
+        hint = f"needs you: {lane.reason}"  # p5-r5: the column's own reason, always
+    elif lane is not None:
+        hint = red or ""  # p5-r4: a red delivered PR is not one to approve
     elif stop is not None:
         hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
     elif idle is not None:
@@ -505,6 +566,8 @@ def _card(
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
         hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
+        if actions[batch.id].kind in ("merge", "enqueue") and _conflicting(batch, facts):
+            hint = CONFLICT_HINT  # R19: the train still plans it; the card never says ready
     elif batch.id in queued:
         hint = HINT_IN_MERGE_QUEUE
     elif batch.id in awaiting:
@@ -573,19 +636,6 @@ def _own_expiries(facts: Facts, me: str, now: datetime) -> dict[str, ClaimExpiry
     return {b: ClaimExpiry(at, expired=at <= now) for b, at in earliest.items()}
 
 
-def live_stops(
-    batches: Sequence[Batch], facts: Facts, stops: Mapping[str, MergeStop]
-) -> dict[str, MergeStop]:
-    """The recorded stops that still hold: the batch's PR is open, at the stopped head."""
-    out: dict[str, MergeStop] = {}
-    for b in batches:
-        pr = batch_pr(b, facts)
-        if pr is not None and pr.state == "OPEN":
-            if (stop := live_stop(stops.get(b.id), pr.head_oid)) is not None:
-                out[b.id] = stop
-    return out
-
-
 def build_board(
     facts: Facts,
     judgements: Judgements,
@@ -597,7 +647,7 @@ def build_board(
     notes: Mapping[str, str] | None = None,
     ci_none: Collection[str] = (),
 ) -> Board:
-    """One card per batch in seven columns, sorted by wave (none last) then id (R2).
+    """One card per batch in eleven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
     batch's PR is open at the head it was recorded at. *now* is the wall clock (passed in):
     with it a card whose session sat idle past the repo's `idle_session_minutes` with no PR is

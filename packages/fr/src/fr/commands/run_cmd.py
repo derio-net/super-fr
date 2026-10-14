@@ -1281,6 +1281,40 @@ def _flush_gate_decisions(repo_root: Path) -> None:
         _note_record_write(repo_root, target)
 
 
+def observed_gate_rounds(record: StepRecord) -> list[Round] | None:
+    """The answered question rounds since this gate blocked (`record.at`), or
+    `None` where fr cannot read them — THE observation `_gate_provenance` and
+    `derive_gate_answer` share, so the two cannot disagree."""
+    from fr.run.telemetry import answered_rounds_since
+
+    return answered_rounds_since(os.environ, record.at) if record.at else None
+
+
+@dataclass(frozen=True)
+class GateAnswer:
+    """Who answered an operator gate, as `_gate_provenance` derives it (spec
+    2026-10-14 R12): `who` is `operator`, `agent` or `None` (a gate it refuses);
+    `observed` says the transcript was read; `rounds` are the answered rounds."""
+
+    who: str | None
+    observed: bool
+    rounds: tuple[Round, ...] = ()
+
+
+def derive_gate_answer(
+    record: StepRecord, *, no_questions: bool, claimed: str | None
+) -> GateAnswer:
+    """The answer `_gate_provenance` records, without its refusals or writes:
+    `--no-questions` → agent; answered rounds observed → operator; observed and
+    none → `None` (the gate refuses); not observable → the claim, unverified."""
+    if no_questions:
+        return GateAnswer("agent", observed=False)
+    rounds = observed_gate_rounds(record)
+    if rounds is None:
+        return GateAnswer(claimed if claimed in ("operator", "agent") else None, observed=False)
+    return GateAnswer("operator" if rounds else None, observed=True, rounds=tuple(rounds))
+
+
 def _gate_provenance(
     repo_root: Path,
     step_id: str,
@@ -1317,8 +1351,6 @@ def _gate_provenance(
     verified or claimed `rounds: 2` appends `gate-question-rounds-<step>` to
     the same spec journal the bypass writes to.
     """
-    from fr.run.telemetry import answered_rounds_since
-
     if no_questions and not (reason and reason.strip()):
         err_console.print(
             f'[red]{step_id}: --no-questions needs --reason "…" — clearing an operator '
@@ -1351,7 +1383,7 @@ def _gate_provenance(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    rounds = answered_rounds_since(os.environ, record.at) if record.at else None
+    rounds = observed_gate_rounds(record)
     observed = None if rounds is None else bool(rounds)
     if observed is True and not no_questions:
         assert rounds is not None
@@ -6088,7 +6120,7 @@ def resolve_cmd(
         for pair in emitted:
             name, _, value = pair.partition("=")
             if name == "spec" and value:
-                _print_unrunnable_warnings(resolve_repo_root(), _repo_relative(value))
+                _print_unrunnable_warnings(resolve_repo_root(), _repo_relative(value), run_id)
 
 
 def _repo_relative(value: str) -> str:
@@ -6100,8 +6132,14 @@ def _repo_relative(value: str) -> str:
         return value
 
 
-def _print_unrunnable_warnings(repo_root: Path, spec_rel: str) -> None:
-    for message in _unrunnable_spec_warnings(repo_root, spec_rel):
+def _print_unrunnable_warnings(repo_root: Path, spec_rel: str, run_id: str | None = None) -> None:
+    state = None
+    if run_id is not None:
+        try:
+            state = load_run_state(repo_root, run_id)
+        except Exception:  # noqa: BLE001
+            state = None  # advisory: no state means no shape default
+    for message in _unrunnable_spec_warnings(repo_root, spec_rel, state):
         err_console.print(f"warning: {message}", markup=False, soft_wrap=True)
 
 
@@ -6135,6 +6173,102 @@ def _questions_from_flags(
             f"--question-rounds {rounds}: {detail}", style="red", markup=False, soft_wrap=True
         )
         raise typer.Exit(2) from e
+
+
+def _spec_review_ids(repo_root: Path, state: RunState) -> tuple[str, ...]:
+    from fr.verification.baseline import spec_review_steps
+
+    return spec_review_steps(repo_root, state)
+
+
+def _warn_label_sync(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R7: a spec-bearing step resolved, so bring the run's PR labels to its
+    exit (the PR is found by the run's branch). Advisory: a run with no PR yet is
+    silent, any failure a warning — `deliver` is the one place the labels are required."""
+    from fr.verification import labels as _labels
+
+    try:
+        outcome = _labels.sync_exit_labels(repo_root, state, None)
+    except _labels.PrNotFound:
+        return
+    except Exception as e:  # noqa: BLE001 — advisory, after the step already resolved
+        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        return
+    if outcome.warning:
+        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
+
+
+def _queue_exit_baseline(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R8: the spec-reviewing step is resolving `done`, so journal the run's
+    exit as the baseline `deliver` holds later lowerings against. Once per run; a spec
+    whose exit cannot be read gets none (and so no check)."""
+    from fr.requirements import run_spec
+    from fr.verification.baseline import BASELINE_ID, baseline_body, spec_entries
+    from fr.verification.exit import run_exit
+
+    spec_rel = run_spec(state)
+    if spec_rel is None:
+        return
+    try:
+        if any(e.id == BASELINE_ID for e in spec_entries(repo_root, spec_rel)):
+            return
+        body = baseline_body(run_exit(repo_root, state))
+    except Exception:  # noqa: BLE001 — advisory: an unreadable exit leaves no baseline
+        return
+    _queue_gate_decision(
+        repo_root, spec_rel, BASELINE_ID, title="exit when spec-review resolved", body=body
+    )
+
+
+def _deliver_exit_guard(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R8: `deliver` refuses an exit lowered since the baseline that no
+    operator-answered `exit-change-*` decision covers (a hand edit of the spec)."""
+    from fr.verification.baseline import unaccounted_lowerings
+
+    try:
+        lowered = unaccounted_lowerings(repo_root, state)
+    except Exception:  # noqa: BLE001 — an unreadable exit is the label sync's to report
+        return
+    if lowered:
+        err_console.print(
+            "refused: the spec's verification exit waits for less than when spec-review "
+            "resolved, and no operator-answered `fr verification set` covers it: "
+            + "; ".join(lowered)
+            + ". Restore it, or have the operator answer it with `fr verification set "
+            "... --answered-by operator`",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
+def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id: str) -> None:
+    """Exit-gates R7: `deliver` refuses a PR whose `verification:`/`gate:` labels it could
+    not sync (printing the retry) — a failed write, no open PR, an unreadable exit — and
+    only warns where there is no forge to ask or it cannot label a PR."""
+    from fr.verification import labels as _labels
+
+    def refuse(why: str) -> typer.Exit:
+        err_console.print(
+            f"refused: could not sync the PR's verification/gate labels: {why}. Fix that, then "
+            f"resolve again (`{_resolve_hint(run_id, 'deliver', None)}`, with your --record "
+            "if you resolve through one)",
+            markup=False,
+            soft_wrap=True,
+        )
+        return typer.Exit(2)
+
+    try:
+        outcome = _labels.sync_exit_labels(repo_root, state, pr)
+    except _labels.ForgeUndeterminable as e:
+        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        return
+    except _labels.LabelSyncError as e:
+        raise refuse(str(e)) from e
+    if outcome.unknown:
+        raise refuse(outcome.warning or "the exit cannot be read")
+    if outcome.warning:
+        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
 
 
 def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
@@ -6221,24 +6355,35 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     """R15: a live PR body that closes, fixes or resolves an issue a post-merge,
     not-walk-verified row cites would close it on merge, before the promise it
     carries has been verified. Printed with the `Refs <ref>` that mentions it
-    without closing; exit 2. A repo whose matrix cites no issue is never asked
-    (the reference's repo identity needs a remote or matrix keys)."""
+    without closing; exit 2. Exit-gates R11 widens it: a row gated by a post-merge
+    gate holds its issues too, and so does a narrowing decision the operator did
+    not answer. A repo whose matrix cites no issue and whose journals narrow none
+    is never asked (the reference's repo identity needs a remote or matrix keys)."""
     from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
     from fr.commands.acceptance_cmd import MATRIX_REL
-    from fr.record.pr_body import holds_open_for_run, premature_closes
+    from fr.record.pr_body import (
+        PrematureClose,
+        holds_open_for_run,
+        premature_closes,
+        run_narrowings,
+    )
     from fr.requirements import load_spec_matrix, run_spec
+    from fr.verification.exit import run_exit
 
     path = repo_root / MATRIX_REL
-    if not path.is_file():
-        return
+    narrowings = _gate_journals(lambda: run_narrowings(repo_root, state))
     try:
-        matrix = load_matrix(path)
-        if not any(row.issues for row in matrix.rows):
+        matrix = load_matrix(path) if path.is_file() else Matrix()
+        if not any(row.issues for row in matrix.rows) and not narrowings:
             return
         identity = resolve_identity(matrix, repo_root)
         spec_rel = run_spec(state)
-        spec_ref = load_spec_matrix(repo_root, spec_rel)[1] if spec_rel is not None else None
+        spec_ref = (
+            load_spec_matrix(repo_root, spec_rel)[1]
+            if spec_rel is not None and path.is_file()
+            else None
+        )
     except AcceptanceError as e:
         err_console.print(
             f"[red]refused: cannot check the PR body's closing keywords against the "
@@ -6246,20 +6391,92 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
+    try:
+        exit_ = run_exit(repo_root, state)
+    except Exception:  # noqa: BLE001 — an unreadable exit is the label sync's to refuse
+        exit_ = None
     found = premature_closes(
-        live, matrix, identity, holds_open_for_run(repo_root, state, matrix, spec_ref)
+        live,
+        matrix,
+        identity,
+        holds_open_for_run(repo_root, state, matrix, spec_ref),
+        exit=exit_,
+        narrowings=narrowings,
     )
     if not found:
         return
+
+    def why(p: PrematureClose) -> str:
+        held = []
+        if p.rows:
+            held.append(
+                f"row {', '.join(p.rows)} still holds open (post-merge or gated by a "
+                "post-merge gate, and not yet walk-verified)"
+            )
+        if p.decisions:
+            held.append(
+                f"decision {', '.join(p.decisions)} narrows it and the operator did not "
+                "answer it (`decided_by=operator`)"
+            )
+        if p.tracks:
+            held.append(
+                f"owed row {', '.join(p.tracks)} names it as the issue tracking what it still owes"
+            )
+        return " and ".join(held)
+
     lines = "\n".join(
-        f"  {p.line!r} closes {p.ref}, which row {', '.join(p.rows)} still holds open "
-        f"(post-merge, not yet walk-verified) — write instead: {p.fix}"
-        for p in found
+        f"  {p.line!r} closes {p.ref}, which {why(p)} — write instead: {p.fix}" for p in found
     )
     err_console.print(
         "refused: the PR body closes an issue whose promise is not verified until after "
-        "merge. Mention it without closing (`Refs <ref>`); the close command is printed "
-        f"when the walk is recorded (`fr acceptance set-status --walk`):\n{lines}",
+        "merge, or that a decision narrowed. Mention it without closing (`Refs <ref>`); "
+        "the close command is printed when the walk is recorded (`fr acceptance "
+        f"set-status --walk`):\n{lines}",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
+_T_JOURNALS = TypeVar("_T_JOURNALS")
+
+
+def _gate_journals(read: Callable[[], _T_JOURNALS]) -> _T_JOURNALS:
+    """Run a `deliver` gate's journal read; a journal that does not parse
+    refuses, naming it (review p3-r4) — never a gate judging a run with one
+    of its journals silently dropped."""
+    from fr.record.pr_body import UnreadableJournalError
+
+    try:
+        return read()
+    except UnreadableJournalError as e:
+        err_console.print(
+            f"refused: {e}. Fix the journal (a hand edit, most likely), then resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+
+
+def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R9: `deliver` refuses while the run leaves anything unaccounted
+    — an out-of-scope finding, an owed entry, an owed row citing the spec, a
+    narrowing decision — printing each with the command that accounts for it.
+    An unreadable exit judges no row here; the label sync refuses it."""
+    from fr.record.pr_body import unaccounted
+    from fr.verification.exit import run_exit
+
+    try:
+        exit_ = run_exit(repo_root, state)
+    except Exception:  # noqa: BLE001 — the label sync refuses an unreadable exit
+        exit_ = None
+    leftovers = _gate_journals(lambda: unaccounted(repo_root, state, exit_))
+    if not leftovers:
+        return
+    lines = "\n".join(f"  {left.line()}" for left in leftovers)
+    err_console.print(
+        "refused: the run leaves work unaccounted for. File each leftover, gate it, or "
+        f"track it, then resolve again:\n{lines}",
         markup=False,
         soft_wrap=True,
     )
@@ -6551,7 +6768,10 @@ def _resolve_body(
         # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
+        _deliver_leftovers_gate(repo_root, state)
         _deliver_pr_gate(repo_root, state, pr)
+        _deliver_exit_guard(repo_root, state)
+        _deliver_label_sync(repo_root, state, pr, run_id)
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first
         # `pr`-less resolve exists to fetch, and before the gate's queued
@@ -6560,6 +6780,8 @@ def _resolve_body(
     if rebind is not None and state_value == "done":
         state, manifest = _rebound(state, rebind, step_id), rebind
         console.print(f"{step_id}: run rebound onto {state.workflow}", soft_wrap=True)
+    if state_value == "done" and step_id in _spec_review_ids(repo_root, state):
+        _queue_exit_baseline(repo_root, state)
     new_state = _complete_step(
         state,
         manifest,
@@ -6575,6 +6797,8 @@ def _resolve_body(
     _flush_gate_decisions(repo_root)
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
+    if state_value == "done" and step_id in ("brainstorm", *_spec_review_ids(repo_root, new_state)):
+        _warn_label_sync(repo_root, new_state)
     if step_id == "deliver" and state_value == "done":
         # spec 2026-09-25 §5.B.3: the usage capture rides this commit
         _capture_usage(repo_root, new_state, "deliver")
@@ -6768,7 +6992,7 @@ def _resolve_with_record(
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
     if record.outcome == "done" and record.emitted.get("spec"):
-        _print_unrunnable_warnings(repo_root, record.emitted["spec"])
+        _print_unrunnable_warnings(repo_root, record.emitted["spec"], run_id)
     typer.echo(outcome.line)
     # deliver's closeout handoff is NOT printed here: the body prints it into
     # the held stdout, and `resolve_in_process` replays it among the notices
@@ -6777,19 +7001,21 @@ def _resolve_with_record(
         _advance_after_record(repo_root, run_id)
 
 
-def _unrunnable_spec_warnings(repo_root: Path, spec_rel: str) -> list[str]:
-    """R5: the explicit strategies of the spec a record just emitted that the
-    repo cannot run. A missing or malformed section, or an unreadable matrix,
-    says nothing here — `fr plan self-review` reports those."""
+def _unrunnable_spec_warnings(
+    repo_root: Path, spec_rel: str, state: RunState | None = None
+) -> list[str]:
+    """R5 + R24: every per-row verification problem of the spec a record just
+    emitted (`row_verification_issues`), with or without a section. A malformed
+    section or an unreadable matrix says nothing here — `fr plan self-review`
+    reports those."""
     from fr.requirements import load_spec_matrix, rows_citing
-    from fr.verification.rows import spec_section_at, unrunnable_strategies
+    from fr.verification.rows import row_verification_issues, shape_default, spec_section_at
 
     try:
         section = spec_section_at(repo_root, spec_rel)
-        if section is None:
-            return []
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-        return unrunnable_strategies(repo_root, section, rows_citing(matrix, spec_ref))
+        shape = shape_default(repo_root, state) if state is not None else None
+        return row_verification_issues(repo_root, section, rows_citing(matrix, spec_ref), shape)
     except Exception:  # noqa: BLE001
         # Advisory, and it runs after the resolve already committed: nothing
         # it hits (a non-UTF-8 spec, a malformed matrix, ...) may fail the step.

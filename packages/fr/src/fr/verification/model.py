@@ -21,9 +21,10 @@ import shlex
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-SUPPORTED_SCHEMA = 1
+SUPPORTED_SCHEMAS = (1, 2)
+"""Schema 2 adds `gate:` (spec 2026-10-14 exit-gates R3); schema 1 stays valid."""
 
 PLACEHOLDERS = frozenset(
     {"repo", "worktree", "prefix", "bin", "fixture", "client", "scenario", "source"}
@@ -62,7 +63,7 @@ class StrategyManifest(BaseModel):
     verification: str
     # Wire key `schema:`; see `fr.workflow.model.WorkflowManifest` for why the
     # Python name differs.
-    schema_version: Literal[1] = Field(alias="schema")
+    schema_version: Literal[1, 2] = Field(alias="schema")
     description: str = ""
     when: Literal["pre-merge", "post-merge"]
     driver: Literal["agent", "operator"]
@@ -70,6 +71,15 @@ class StrategyManifest(BaseModel):
     scenario: tuple[str, ...] | None = None
     source: Literal["worktree", "prerelease", "none"] = "none"
     notes: str = ""
+    # The strategy's default gate (spec 2026-10-14 R3) — schema 2 only.
+    gate: Literal["none", "tester", "devops"] = "none"
+
+    @model_validator(mode="after")
+    def _gate_needs_schema_2(self) -> StrategyManifest:
+        # The ONE schema rule: `gate:` exists only from schema 2 on.
+        if "gate" in self.model_fields_set and self.schema_version < 2:
+            raise ValueError("`gate:` needs `schema: 2` (schema 1 manifests carry no gate)")
+        return self
 
     def used_placeholders(self) -> set[str]:
         """Every `{name}` the install and scenario templates interpolate."""
@@ -114,9 +124,10 @@ def parse_strategy(text: str, source: str) -> StrategyManifest:
         raise StrategyError(f"{source}: strategy manifest must be a YAML mapping")
 
     schema = raw.get("schema")
-    if schema != SUPPORTED_SCHEMA:
+    if schema not in SUPPORTED_SCHEMAS:
         raise StrategyError(
-            f"{source}: unsupported schema: {schema!r} (fr supports schema: {SUPPORTED_SCHEMA})"
+            f"{source}: unsupported schema: {schema!r} "
+            f"(fr supports schema: {' or '.join(map(str, SUPPORTED_SCHEMAS))})"
         )
 
     try:

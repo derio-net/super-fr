@@ -1,0 +1,77 @@
+schema_version: 2
+phase:
+  number: 8
+  title: Install channels — bootstrap.sh --version, install.sh accepts a tagged checkout
+  tag: agentic
+  depends_on:
+  - 7
+  tracking_issue: null
+  acceptance:
+  - exit-gates-install-channels
+  tier: standard
+  files:
+  - scripts/bootstrap.sh
+  - scripts/install.sh
+  - README.md
+  - tests/integration/test_bootstrap*.py
+  - tests/unit/test_install_sh.py
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: install.sh tagged-checkout preflight and marker (R23)
+  steps:
+  - id: P8.T1.S1
+    text: |-
+      RED: test — install.sh carries `# fr-install-channels: 1`; its preflight passes on a clean detached HEAD at a v* tag and on main in sync, refuses a dirty tag checkout and a non-tag detached HEAD; it prints the channel installed.
+  - id: P8.T1.S2
+    text: |-
+      GREEN: preflight branch (git describe --exact-match --tags HEAD matching ^v[0-9], clean tree) and the marker.
+- number: 2
+  title: bootstrap.sh --version (R22)
+  steps:
+  - id: P8.T2.S1
+    text: |-
+      RED: integration tests against a fixture remote (FR_SRC_REMOTE) holding v1.0.0 (no marker), v1.1.0, v1.2.0-rc.1, v1.2.0-rc.2 with a stub install.sh — no argument installs v1.1.0; RC installs v1.2.0-rc.2; 1.2.0-RC installs v1.2.0-rc.2; 1.2.0-rc.1 exactly that; 1.1.0 that; 1.0.0 refused as uninstallable listing the installable ones; 9.9.9 refused, nothing installed; main runs checkout -B main origin/main; with no marked final tag, no argument installs origin/main and says so; other flags reach install.sh.
+  - id: P8.T2.S2
+    text: |-
+      GREEN: bootstrap.sh argument parsing, tag resolution via git ls-remote --tags, marker check via git show <tag>:scripts/install.sh, checkout, exec.
+  - id: P8.T2.S3
+    text: |-
+      REFACTOR: keep the prereq preflight block identical between the two scripts (existing guard).
+- number: 3
+  title: README and matrix
+  steps:
+  - id: P8.T3.S1
+    text: |-
+      README: document bootstrap.sh --version channels; move exit-gates-install-channels to ci.
+state:
+  steps:
+    P8.T1.S1:
+      state: x
+      ticked_at: '2026-10-14T10:53:27+00:00'
+      note: null
+    P8.T1.S2:
+      state: x
+      ticked_at: '2026-10-14T10:53:27+00:00'
+      note: null
+    P8.T2.S1:
+      state: x
+      ticked_at: '2026-10-14T10:53:27+00:00'
+      note: null
+    P8.T2.S2:
+      state: x
+      ticked_at: '2026-10-14T10:53:27+00:00'
+      note: null
+    P8.T2.S3:
+      state: x
+      ticked_at: '2026-10-14T10:53:27+00:00'
+      note: null
+    P8.T3.S1:
+      state: x
+      ticked_at: '2026-10-14T10:53:27+00:00'
+      note: null
+  completion:
+    at: '2026-10-14T10:53:27+00:00'
+    note: null
+    observed_prs: []

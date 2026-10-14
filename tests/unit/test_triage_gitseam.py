@@ -526,3 +526,63 @@ def test_head_branch_reads_this_worktree_and_none_when_detached(tmp_path: Path) 
     assert checkout.head_branch() == "main"
     _git(linked, "checkout", "--quiet", "--detach")
     assert Checkout(linked).head_branch() is None
+
+
+# ------------------------------------- the collected close-out (exit-gates §E)
+
+
+def test_a_closeout_worktree_squashes_every_change_into_one_commit(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    wt = checkout.add_worktree(tmp_path / "closeout", "HEAD")
+    wt.start_branch("chore/closeout-2026-10-14-1")
+    base = wt.head()
+    (wt.path / "a.txt").write_text("a2\n")
+    _git(wt.path, "commit", "--quiet", "-am", "an outcome commits on its own")
+    (wt.path / "moved.txt").write_text("archived\n")  # untracked: the archive's own output
+
+    head = wt.squash_all(base, "chore: collected close-out")
+
+    assert head is not None and _git(wt.path, "rev-list", "--count", f"{base}..HEAD").strip() == "1"
+    assert sorted(_git(wt.path, "show", "--name-only", "--format=", "HEAD").split()) == [
+        "a.txt", "moved.txt"]  # fmt: skip
+    assert wt.squash_all(wt.head(), "again") is None  # nothing changed since
+
+
+def test_reset_hard_drops_a_held_batchs_commits_and_files(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    wt = checkout.add_worktree(tmp_path / "closeout", "HEAD")
+    start = wt.head()
+    (wt.path / "a.txt").write_text("changed\n")
+    (wt.path / "stray.txt").write_text("left by a held archive\n")
+    _git(wt.path, "commit", "--quiet", "-am", "held")
+
+    wt.reset_hard(start)
+
+    assert wt.head() == start and not (wt.path / "stray.txt").exists()
+    assert (wt.path / "a.txt").read_text() == "a\n"
+
+
+def test_run_fr_runs_this_fr_and_returns_its_exit_code(tmp_path: Path) -> None:
+    checkout = _repo(tmp_path)
+    wt = checkout.add_worktree(tmp_path / "closeout", "HEAD")
+    code, out = wt.run_fr(["--version"])
+    assert code == 0 and out.strip()
+    code, out = wt.run_fr(["no-such-verb"])
+    assert code == 2 and out
+
+
+def test_changed_status_splits_renames_and_commits_since_lists_the_head_alone(
+    tmp_path: Path,
+) -> None:
+    """The collected close-out's anchor (exit-gates R15, p6b-r1): a move out of a live
+    directory reads as a D and an A, never a rename the allowlist could misjudge."""
+    checkout = _repo(tmp_path)
+    wt = checkout.add_worktree(tmp_path / "closeout", "HEAD")
+    base = wt.head()
+    (wt.path / "docs").mkdir()
+    _git(wt.path, "mv", "a.txt", "docs/a.txt")
+    _git(wt.path, "commit", "--quiet", "-m", "archive")
+    head = wt.head()
+
+    assert checkout.changed_status(base, head) == {"D\ta.txt", "A\tdocs/a.txt"}
+    assert checkout.commits_since(base, head) == (head,)

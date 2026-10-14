@@ -28,6 +28,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from versions import Version  # noqa: E402
+
 ROOT_PYPROJECT = "pyproject.toml"
 MARKETPLACE_JSON = ".claude-plugin/marketplace.json"
 OPENCODE_PACKAGE_JSON = "packages/fr-opencode-plugin/package.json"
@@ -177,8 +181,21 @@ def _set_project_version(text: str, new: str, path: Path) -> str:
     return out
 
 
+def is_python_surface(file: str) -> bool:
+    """A surface Python tooling reads (`pyproject.toml`, `uv.lock`): PEP 440 spelling."""
+    return file == UV_LOCK or file.endswith(".toml")
+
+
+def spelling(file: str, version: str) -> str:
+    """*version* as surface *file* spells it: PEP 440 (`X.Y.ZrcN`) on a Python surface,
+    semver (`X.Y.Z-rc.N`) on the rest; a final reads the same on both (R25)."""
+    v = Version.parse(version)
+    return v.pep440 if is_python_surface(file) else v.semver
+
+
 def write_version(repo: Path, new: str) -> list[str]:
-    """Write `new` to every surface; return the repo-relative files touched.
+    """Write `new` (either spelling) to every surface, each in its own spelling; return
+    the repo-relative files touched.
 
     Every pyproject rewrite is computed before any file is written, so a
     refusal there leaves the tree untouched (the JSON and uv.lock writes that
@@ -190,15 +207,15 @@ def write_version(repo: Path, new: str) -> list[str]:
         if surface.file not in files:
             files.append(surface.file)
     tomls = {
-        f: _set_project_version((repo / f).read_text(), new, repo / f)
+        f: _set_project_version((repo / f).read_text(), spelling(f, new), repo / f)
         for f in files
         if f != UV_LOCK and f.endswith(".toml")
     }
     for f in files:
         if f == UV_LOCK:
-            _write_lock_versions(repo, new)
+            _write_lock_versions(repo, spelling(f, new))
         elif f in tomls:
             (repo / f).write_text(tomls[f])
         else:
-            _write_json_version(repo, f, new)
+            _write_json_version(repo, f, spelling(f, new))
     return files

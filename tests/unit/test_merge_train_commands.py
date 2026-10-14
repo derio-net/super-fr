@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fr.triage.model import load_judgements
+from fr.triage.model import JUDGEMENTS_SCHEMA, load_judgements
 
 from tests.unit.test_triage_batch_merge import _merge, _setup
 
@@ -75,7 +75,8 @@ def test_merge_settles_approvals_only_under_yes(
     assert "approval of PR #1001 recorded at head-one" in out
     (approval,) = _events(tmp_path, "one")
     assert (approval["kind"], approval["pr"], approval["head"]) == ("approval", 1001, "head-one")
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 9
+    # the write restamps the file at the writer schema
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == JUDGEMENTS_SCHEMA
 
 
 def test_a_session_push_after_approval_voids_it_and_removes_the_label(

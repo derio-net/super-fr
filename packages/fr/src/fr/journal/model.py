@@ -23,6 +23,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
+from fr.gates import GATES
 from fr.run.model import AnsweredBy
 
 JournalKind = Literal[
@@ -148,6 +149,22 @@ class JournalEntry(BaseModel):
     # filed as at archive (spec 2026-10-11-debt-engine §E). Still owed — the
     # fold reads it as open. Header token `filed_as=`, appended last.
     filed_as: str | None = None
+    # The OWNER GATE on a `decision` (spec 2026-10-14 exit-gates R12): the role
+    # that owns it (`gate=`) and the issues it narrows (`narrows=`, comma-
+    # separated). With `decided_by=operator` the decision is the operator's;
+    # without it, the agent's. A decision carrying `remainder_tracked_by=`
+    # FILES the remainder of the narrowing with the same `narrows=` set (`fr
+    # journal file`). Header tokens, serialized only when set, read by name.
+    #
+    # Why not `answered_by=` / `tracked_by=` (review p3-r1): a released fr
+    # (<= 5.26) already KNOWS those two tokens and its validator refuses them
+    # off a resolution record, so a decision carrying them would make the whole
+    # journal unparseable to it. Token names no released fr knows are skipped
+    # by its named projection, so the journal stamp does not move.
+    gate: str | None = None
+    narrows: tuple[str, ...] = ()
+    decided_by: AnsweredBy | None = None
+    remainder_tracked_by: str | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -170,6 +187,43 @@ class JournalEntry(BaseModel):
                 raise ValueError(
                     f"entry `{self.id}` cannot resolve itself — a resolution record is a "
                     "SEPARATE entry naming the finding it closes"
+                )
+        if self.gate is not None or self.narrows:
+            if self.kind != "decision":
+                raise ValueError(
+                    "`gate` and `narrows` are only valid on a `decision` — they record "
+                    "who owns it and which issues it narrows"
+                )
+            if self.gate is not None and self.gate not in GATES:
+                raise ValueError(
+                    f"`gate` must be one of {', '.join(sorted(GATES))}, got {self.gate!r}"
+                )
+            for ref in self.narrows:
+                if not (ref.isascii() and ref.isprintable() and TRACKED_BY_RE.match(ref)):
+                    raise ValueError(
+                        "`narrows` must name issues — `#N`, `owner/repo#N` or an http(s) "
+                        f"URL — got {ref!r}"
+                    )
+        if (self.decided_by is not None or self.remainder_tracked_by is not None) and (
+            self.kind != "decision"
+        ):
+            raise ValueError(
+                "`decided_by` and `remainder_tracked_by` are only valid on a `decision`"
+            )
+        if self.remainder_tracked_by is not None:
+            if not self.narrows:
+                raise ValueError(
+                    "`remainder_tracked_by` is only valid on a `decision` carrying "
+                    "`narrows`: it says where the rest of the narrowed issues went"
+                )
+            if not (
+                self.remainder_tracked_by.isascii()
+                and self.remainder_tracked_by.isprintable()
+                and TRACKED_BY_RE.match(self.remainder_tracked_by)
+            ):
+                raise ValueError(
+                    "`remainder_tracked_by` must name an issue — `#N`, `owner/repo#N` or "
+                    f"an http(s) URL — got {self.remainder_tracked_by!r}"
                 )
         if self.tracked_by is not None:
             if self.resolves is None or self.state != "open":
@@ -289,6 +343,10 @@ _HEADER_FIELDS = (
     "answered_by",
     "input",
     "filed_as",
+    "gate",
+    "narrows",
+    "decided_by",
+    "remainder_tracked_by",
 )
 
 
@@ -297,6 +355,8 @@ def serialize_entry(entry: JournalEntry) -> str:
     parts: list[str] = []
     for field in _HEADER_FIELDS:
         value = getattr(entry, field)
+        if isinstance(value, tuple):  # `narrows`: comma-separated, only when set
+            value = ",".join(value) or None
         # `False` is the default of a boolean token: omitting it keeps every
         # entry that does not set it byte-identical to what an older fr wrote.
         if value is None or value is False:
@@ -305,7 +365,9 @@ def serialize_entry(entry: JournalEntry) -> str:
     header = _DELIM_PREFIX + " ".join(parts) + _DELIM_SUFFIX
     phase_bit = f" (phase {entry.phase})" if entry.phase is not None else ""
     state_bit = f" [{entry.state}]" if entry.state is not None else ""
-    if entry.tracked_by is not None:
+    if entry.remainder_tracked_by is not None:
+        state_bit = f" [filed → {entry.remainder_tracked_by}]"
+    elif entry.tracked_by is not None:
         state_bit = f" [deferred → {entry.tracked_by}]"
     elif entry.filed_as is not None:
         state_bit = f" [filed → {entry.filed_as}]"
@@ -392,6 +454,10 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 answered_by=_answered_by_token(fields.get("answered_by")),
                 input=fields.get("input") == "true",
                 filed_as=fields.get("filed_as"),
+                gate=_gate_token(fields.get("gate")),
+                narrows=_narrows_token(fields.get("narrows")),
+                decided_by=_answered_by_token(fields.get("decided_by")),
+                remainder_tracked_by=fields.get("remainder_tracked_by"),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -416,6 +482,20 @@ def _phase_token(value: str | None) -> int | None:
     if not value.isdigit():
         raise ValueError(f"`phase` must be a phase number, got {value!r}")
     return int(value)
+
+
+def _narrows_token(value: str | None) -> tuple[str, ...]:
+    """`narrows=a,b` as a tuple; an empty value is no narrowing. A ref that is
+    not an issue reference is a parse error naming the entry: `narrows` feeds a
+    refusal (R11), so dropping it would fail open."""
+    return tuple(ref for ref in (value or "").split(",") if ref)
+
+
+def _gate_token(value: str | None) -> str | None:
+    """A `gate=` role this fr does not know (a newer vocabulary) reads as ABSENT,
+    as `review_scope=` does: the token is a record, and one unknown role must not
+    make the whole journal unparseable."""
+    return value if value in GATES else None
 
 
 def _validation_text(e: ValueError) -> str:

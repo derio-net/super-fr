@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -59,9 +59,16 @@ from fr.triage.stage import Stage, derive_stage
 # 11 adds per-issue `author` (debt-engine R14: only the workflow bot's or a trusted login's
 # debt digest counts): `to_json` dumps it, `null` included, which a closed-world schema-10
 # reader rejects; a file below 11 reads `author` as None, so its digests are untrusted.
-FACTS_SCHEMA: Literal[11] = 11
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11)
-# The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
+# 12 adds (2026-10-14-exit-gates §D Facts) the labels of each unfinished batch's MERGED PR
+# (the gate ledger: `PullRequest.labels`, until now open PRs only), the run cursor's
+# position at an open batch PR's head (`PullRequest.cursor`, read through `gitseam`), and
+# per-config `TriageConfig.exit` (R4): `to_json` dumps `cursor` and `exit`, `null`
+# included, which a closed-world schema-11 reader rejects; a file below 12 reads both as
+# None, so no batch reads as gated and no cursor position is known.
+FACTS_SCHEMA: Literal[12] = 12
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+# The version this fr WRITES: every engine write stamps 10 (the `closeout_handback` event,
+# 2026-10-14-exit-gates R27; 9 was the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
 # `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
@@ -70,8 +77,8 @@ FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11)
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[9] = 9
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+JUDGEMENTS_SCHEMA: Literal[10] = 10
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -279,6 +286,26 @@ class _Strict(BaseModel):
 # ---------------------------------------------------------------- facts.json
 
 
+CursorKind = Literal["gate", "deliver-done", "manual", "none"]
+
+
+class CursorPosition(_Strict):
+    """Where a batch's run stands at its PR's head (exit-gates R17, R18): blocked on the
+    step gate of `step` (`gate`), `deliver` done (`deliver-done`), a `tag: manual` unit
+    of `step` next (`manual`, `unit` names it), or none of those (`none`)."""
+
+    run: str
+    step: str
+    kind: CursorKind
+    unit: str | None = None
+
+
+CursorReader = Callable[["PullRequest"], CursorPosition | None]
+"""The run cursor's position at an open batch PR's head (exit-gates R18): built by the
+command layer over a `gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect`
+itself starts no process."""
+
+
 class PullRequest(_Strict):
     repo: str  # OWNER/REPO the PR lives in — not necessarily the issue's
     number: int
@@ -303,9 +330,14 @@ class PullRequest(_Strict):
     mergeable: str | None = None
     merge_state: str | None = None
     review: str | None = None
-    # Open PRs only, like `checks`: the PR's label names, `None` when never read, which
-    # never approves (2026-10-11-merge-train-safety §A). Facts schema 9.
+    # The PR's label names, `None` when never read, which never approves
+    # (2026-10-11-merge-train-safety §A, facts schema 10). Read for open PRs, and from
+    # schema 12 for an unfinished batch's MERGED PR too: its `gate:*` labels are the gate
+    # ledger (2026-10-14-exit-gates R13, R14).
     labels: list[str] | None = None
+    # The run cursor's position at this PR's head (exit-gates R18, facts schema 12): an
+    # open batch PR only; None when never read or no cursor names the PR's branch.
+    cursor: CursorPosition | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""
@@ -468,6 +500,15 @@ class ExportConfig(_Strict):
         return norm
 
 
+class ExitBlock(_Strict):
+    """`.fr/triage.yaml`'s `exit:` (spec 2026-10-14 exit-gates R4): the repo's
+    remap of a strategy kind's gate. It holds whatever the kind's `when` is."""
+
+    gates: dict[
+        str, Literal["none", "developer", "reviewer", "tester", "devops", "owner", "security"]
+    ] = {}
+
+
 class TriageConfig(_Strict):
     """`.fr/triage.yaml` of one repo, read at its default branch (spec §3.I).
 
@@ -501,6 +542,8 @@ class TriageConfig(_Strict):
     # §A): REST has no `viewerDefaultMergeMethod`, so a repo allowing several methods needs
     # this, or `--method`, to merge. The forge's own default still wins where it names one.
     merge_method: Literal["merge", "squash", "rebase"] | None = None
+    # The repo's remap of each strategy kind's gate (spec 2026-10-14 exit-gates R4).
+    exit: ExitBlock | None = None
 
 
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:
@@ -561,7 +604,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11] = Field(11, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11, 12] = Field(12, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -863,6 +906,66 @@ class EnqueueEvent(_Strict):
     detail: str = ""
 
 
+class CloseoutHandbackEvent(_Strict):
+    """The driver handed collected close-out *item*'s PR #*pr* back at *head* to its
+    session (exit-gates R15, R27): a conflict or failing checks, named in *reason*.
+    Recorded on EACH member batch; the budget of one is counted per *item*, across its
+    members. `delivered`: `session`, the prompt was sent; `none`, no session could take
+    it, so the operator owns it. Needs judgements schema 10. Written by the engine only."""
+
+    kind: Literal["closeout_handback"]
+    at: AwareDatetime
+    item: str = Field(min_length=1)
+    pr: int
+    head: str = Field(min_length=1)
+    reason: str = ""
+    delivered: RedDelivery = "session"
+
+
+class CloseoutHoldEvent(_Strict):
+    """`fr triage batch closeout` held this batch out of collected close-out *item*: a
+    step failed (verify-merge, an outcome, the archive) or the batch could not be read,
+    as *reason* says (exit-gates R15). Durable: the driver never collects the batch again
+    until an explicit `fr triage batch closeout <id>` names it. Needs judgements schema
+    10. Written by the engine only."""
+
+    kind: Literal["closeout_hold"]
+    at: AwareDatetime
+    item: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+class CollectedCloseout(_Strict):
+    """One collected close-out (exit-gates R15, §D): the driver's start marker for work
+    item *item* on *branch*, recorded before its session starts (gh#883), and what became
+    of its PR. Which batches it closed out is the verb's to record (their `closeout`
+    events name *branch*), never this marker's: *planned* is only what the session was
+    briefed with. `closed`: the PR was closed unmerged, or the verb opened none, so the
+    close-out ended without an archive. Needs judgements schema 10. Engine-written."""
+
+    repo: str
+    item: str = Field(min_length=1)
+    branch: str = Field(min_length=1)
+    at: AwareDatetime
+    runner: str = "hand"
+    handle: str = ""
+    planned: list[str] = []
+    pr: int | None = None
+    merged: bool = False
+    closed: bool = False
+    # What the verb, on the operator's host, recorded after its push: the ONLY things the
+    # driver merges without `approved-fr` (the trust anchor, R15). `head` the pushed SHA,
+    # `members` the batches the PR carries, `files` its exact diff against the default
+    # branch as `<status>\t<path>` (renames split into D and A), `closes` the issues its
+    # body closes. None/empty until recorded.
+    head: str | None = None
+    members: list[str] = []
+    files: list[str] = []
+    closes: list[str] = []
+    # The heads its PR was handed back at (R27): the budget is the item's, members or not.
+    handed: list[str] = []
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -873,6 +976,8 @@ SCHEMA_8_EVENTS = frozenset({"claim_taken"})
 """The event kinds only a schema 8 `judgements.yaml` may carry (gh#1120)."""
 SCHEMA_9_EVENTS = frozenset({"update", "approval", "red_handback", "enqueue"})
 """The event kinds only a schema 9 `judgements.yaml` may carry (merge-train-safety §B)."""
+SCHEMA_10_EVENTS = frozenset({"closeout_handback", "closeout_hold"})
+"""The event kinds only a schema 10 `judgements.yaml` may carry (exit-gates R27)."""
 
 # Every schema-gated event kind, with the judgements schema it first appears in: the one
 # table `Judgements` refuses a too-low stamp from.
@@ -883,6 +988,7 @@ _EVENT_SCHEMAS: tuple[tuple[int, frozenset[str]], ...] = (
     (7, frozenset({"replacement"})),
     (8, SCHEMA_8_EVENTS),
     (9, SCHEMA_9_EVENTS),
+    (10, SCHEMA_10_EVENTS),
 )
 
 
@@ -898,7 +1004,9 @@ BatchEvent = Annotated[
     | UpdateEvent
     | ApprovalEvent
     | RedHandbackEvent
-    | EnqueueEvent,
+    | EnqueueEvent
+    | CloseoutHandbackEvent
+    | CloseoutHoldEvent,
     Field(discriminator="kind"),
 ]
 
@@ -1006,7 +1114,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -1014,6 +1122,7 @@ class Judgements(_Strict):
     batches: list[Batch] = []
     features: list[Feature] = []  # ranked groups (wave-driver R9); any schema
     exports: list[Export] = []  # the driver's per-wave state exports; schema 4
+    closeouts: list[CollectedCloseout] = []  # collected close-out start markers; schema 10
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -1099,6 +1208,10 @@ class Judgements(_Strict):
         if self.schema_ < 3 and any(b.wave is not None or b.after for b in self.batches):
             raise ValueError(
                 f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
+            )
+        if self.closeouts and self.schema_ < 10:
+            raise ValueError(
+                f"`closeouts:` needs schema 10, but this file is stamped schema {self.schema_}"
             )
         if self.exports and self.schema_ < 4:
             raise ValueError(

@@ -15,14 +15,16 @@ testable. `tests/unit/test_triage_batch_drive.py` pins that.
 
 from __future__ import annotations
 
+import re
 import shlex
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from fr.ghclient import QueueState
+from fr.labels import held_gates
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
@@ -30,17 +32,23 @@ from fr.triage.batch import (
     ForeignPr,
     QueueEntry,
     batch_item_id,
+    batch_pr,
     last_dispatch,
     recorded_branch,
 )
 from fr.triage.claims import Claim, held_line, held_members
+from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     Batch,
     CloseoutEvent,
+    CloseoutHandbackEvent,
+    CloseoutHoldEvent,
+    CollectedCloseout,
     ConflictEvent,
     DispatchEvent,
     EnqueueEvent,
     Export,
+    Facts,
     RedHandbackEvent,
     UpdateEvent,
 )
@@ -95,6 +103,19 @@ ActionKind = Literal[
     "export-reconcile",
     "export-closed",
     "enqueue",
+    "awaiting-live",
+    "gate-pass",
+    "ledger-unread",
+    "post-merge",
+    "closeout-held",
+    "closeout-handback",
+    "closeout-stuck",
+    "closeout-unrecorded",
+    "closeout-reopened",
+    "closeout-merged",
+    "closeout-pr-closed",
+    "closeout-needs-review",
+    "closeout-abandoned",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -125,6 +146,96 @@ class LivePr:
     # The branch the PR merges into, as the forge says now; "" when not read. An export
     # PR is reused or merged only into the default branch (p4-r15).
     base: str = ""
+    # GitHub's `mergeable` and `mergeStateStatus`, "" when not read: a collected
+    # close-out's PR merges only once `MERGEABLE` (exit-gates R15).
+    mergeable: str = ""
+    merge_state: str = ""
+
+
+@dataclass(frozen=True)
+class GatedRow:
+    """A matrix row a post-merge gate gates, as the default branch reads it (exit-gates
+    R13, R14): whether it reads `walked` there, and the issues (`owner/repo#n`) it cites."""
+
+    id: str
+    gate: str
+    walked: bool
+    issues: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GateLedger:
+    """A landed batch's merged PR as the gate ledger (R14): its number and labels, and the
+    rows its post-merge gates gate. `rows` is None when they were not read (the board,
+    which reads no clone; an unreadable default branch): no label and no pass is planned
+    from an unknown."""
+
+    pr: int
+    labels: frozenset[str]
+    rows: tuple[GatedRow, ...] | None = None
+    # The run-level gate, and whether any row inherits it (p4-r3): a run gate no row
+    # inherits is never passed by walked rows, only by `fr gate pass`.
+    run_gate: str = "none"
+    run_gate_inherited: bool = False
+
+
+def is_gated(batch: Batch, snap: Snapshot) -> bool:
+    """R13: *batch* landed and its merged PR holds an unpassed post-merge gate. The one
+    predicate the driver's step 2 and the board's views read; labels never read are no
+    evidence, so such a batch is not gated."""
+    ledger = snap.ledgers.get(batch.id)
+    return (
+        snap.stages.get(batch.id) in LANDED
+        and ledger is not None
+        and bool(held_gates(ledger.labels))
+    )
+
+
+def fact_ledgers(
+    batches: Iterable[Batch], facts: Facts, stages: Mapping[str, str]
+) -> dict[str, GateLedger]:
+    """Each landed batch's merged PR as the facts read it (labels only: rows need the
+    default branch). A PR whose labels were never read (facts before 12) has no ledger."""
+    out: dict[str, GateLedger] = {}
+    for b in batches:
+        if stages.get(b.id) not in LANDED:
+            continue
+        pr = batch_pr(b, facts)
+        if pr is not None and pr.state == "MERGED" and pr.labels is not None:
+            out[b.id] = GateLedger(pr=pr.number, labels=frozenset(pr.labels))
+    return out
+
+
+def fact_ledger_unknown(
+    batches: Iterable[Batch], facts: Facts, stages: Mapping[str, str]
+) -> frozenset[str]:
+    """The landed batches with no close-out event whose merged PR's labels collect could
+    not read (p4-r1): from facts 12 on, every such PR is read, so None is a failed read.
+    Unknown is not ungated: step 2 holds their close-out. A file below 12 never read them,
+    and is upgraded by the next collect."""
+    if facts.schema_ < 12:
+        return frozenset()
+    out: set[str] = set()
+    for b in batches:
+        if stages.get(b.id) not in LANDED or closeout_event(b) is not None:
+            continue
+        pr = batch_pr(b, facts)
+        if pr is not None and pr.state == "MERGED" and pr.labels is None:
+            out.add(b.id)
+    return frozenset(out)
+
+
+def awaiting_unlabelled(facts: Facts) -> frozenset[str]:
+    """The open issues (`owner/repo#n`) in *facts* not labelled `fr:awaiting-live`: the
+    only ones a gated batch's first pass labels (R13). An issue outside the facts is not
+    known open, so it is never labelled."""
+    from fr.labels import FR_AWAITING_LIVE
+
+    return frozenset(
+        f"{i.repo}#{i.number}"
+        for i in facts.issues
+        if i.state == "open" and FR_AWAITING_LIVE.name not in i.labels
+    )
 
 
 @dataclass(frozen=True)
@@ -243,6 +354,31 @@ class Snapshot:
     # floor"); None dispatches as usual. Each dispatch it stops is a `held` action counted
     # pending, never `Summary.held`: the budget recovers, so the drive is not stalled.
     dispatch_held: str | None = None
+    # The gate ledger (exit-gates R13, R14): batch id -> its merged PR's labels and gated
+    # rows, from facts (the labels) and the default branch (the rows, driver only); and
+    # the issues (`owner/repo#n`) that are open in facts without `fr:awaiting-live`.
+    ledgers: Mapping[str, GateLedger] = field(default_factory=dict)
+    awaiting_unlabelled: frozenset[str] = frozenset()
+    # Landed batches whose merged PR's labels could not be read (p4-r1): never closed out
+    # until the ledger is known.
+    ledger_unknown: frozenset[str] = frozenset()
+    # The repos whose `post_merge` this driver runs (p4-r2): a landed batch of one gets a
+    # `post-merge` action at merge, gated or not, before any close-out of it.
+    post_merge_repos: frozenset[str] = frozenset()
+    # Collected close-outs (exit-gates R15, §D): the start markers from the judgements,
+    # and, driver only, what the driver itself reads for each unfinished one, by item:
+    # its PR on its branch; its own git diff (`<status>\t<path>`) and commits from the
+    # default branch to the RECORDED head (None: unreadable); the issues its PR body
+    # closes; the issues the members' narrowing decisions name now (None: unreadable);
+    # whether its branch is pushed; and the PR now open again on a closed marker's branch.
+    closeouts: tuple[CollectedCloseout, ...] = ()
+    collected_prs: Mapping[str, LivePr] = field(default_factory=dict)
+    collected_diff: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
+    collected_commits: Mapping[str, tuple[str, ...] | None] = field(default_factory=dict)
+    collected_body_closes: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    collected_narrowed: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
+    collected_pushed: frozenset[str] = frozenset()
+    collected_reopened: Mapping[str, LivePr] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -253,18 +389,23 @@ class Action:
     pr: int | None = None
     head: str = ""
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
-    post_merge: bool = False  # closeout: run the repo's post_merge first
     train: str = ""  # merge: the repo whose train this candidate belongs to
     archived: int | None = None  # adopt: the close-out event's `archived`
-    items: tuple[str, ...] = ()  # close: the item ids whose sessions to close
+    # close: the item ids whose sessions to close; closeout, archive, closeout-handback,
+    # closeout-stuck of a collected close-out: its member batch ids
+    items: tuple[str, ...] = ()
     # export*, and a warn about one: the wave key (`batch` is then the repo); the
     # highest wave the export PR covers, which names its branch
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
-    key: str = ""  # claim, refresh, release: the issue key
+    # claim, refresh, release: the issue key; a collected close-out's actions: its name,
+    # `closeout-<date>-<n>`
+    key: str = ""
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
+    gate: str = ""  # gate-pass: the post-merge gate whose rows all read walked
+    draft: bool = False  # archive of a collected close-out: its PR is a draft, ready it first
 
 
 @dataclass(frozen=True)
@@ -278,6 +419,9 @@ class Summary:
     blocked: int = 0
     queued: int = 0  # merge-train members not attempted this pass (the head excluded)
     held: int = 0  # batches another scope's claim holds: waiting on that scope, not the operator
+    # Landed batches a post-merge gate holds (R13): waiting on a person's walk or pass, so,
+    # like a batch awaiting its live walk, never work that keeps a drive alive.
+    gated: int = 0
 
     @property
     def idle(self) -> bool:
@@ -389,7 +533,7 @@ def idle_session(
         if event.archived is not None or any(attributed(p, batch, event) for p in archives):
             return None
         since = event.at
-        item = closeout_item_id(repo, batch.id)
+        item = event_item_id(repo, batch.id, event)
     else:
         dispatch = last_dispatch(batch)
         if dispatch is None or stage != "dispatched":
@@ -467,7 +611,7 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
     the batch would read `closing` forever. Said once; the operator decides."""
     if snap.now - event.at < STALE_CLOSEOUT:
         return None
-    item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+    item = event_item_id(snap.repos.get(batch.id, ""), batch.id, event)
     if item in snap.existing:
         return None
     key = f"stale-closeout\0{batch.id}\0{event.at.isoformat()}"
@@ -501,6 +645,103 @@ def closeout_item_id(repo: str, batch_id: str) -> str:
     Spelled here like `batch_item_id`: `fr.triage` never imports `fr_dispatch`.
     """
     return f"{repo}/run/closeout-{batch_id}"
+
+
+COLLECTED_PREFIX = "chore/closeout-"
+_COLLECTED = re.compile(r"^chore/closeout-(\d{4}-\d{2}-\d{2})-(\d+)$")
+
+
+def collected_branch(day: date, n: int) -> str:
+    """`chore/closeout-<YYYY-MM-DD>-<n>`: the head of one collected close-out."""
+    return f"{COLLECTED_PREFIX}{day.isoformat()}-{n}"
+
+
+def collected_name(branch: str) -> str | None:
+    """`closeout-<YYYY-MM-DD>-<n>` for a collected close-out's branch, the name of its
+    work item; None for any other head (a per-batch close-out's)."""
+    return branch.removeprefix("chore/") if _COLLECTED.match(branch) else None
+
+
+def next_collected(branches: Iterable[str], day: date) -> int:
+    """The first number after every collected close-out of *day* in *branches*."""
+    used = [
+        int(m.group(2))
+        for b in branches
+        if (m := _COLLECTED.match(b)) is not None and m.group(1) == day.isoformat()
+    ]
+    return max(used, default=0) + 1
+
+
+def collected_item_id(repo: str, name: str) -> str:
+    """`<OWNER>/<REPO>/run/closeout-<date>-<n>`: unit `run`, one per collected close-out."""
+    return f"{repo}/run/{name}"
+
+
+def event_item_id(repo: str, batch_id: str, event: CloseoutEvent) -> str:
+    """The work item a batch's close-out event started: the collected close-out's when its
+    `archive` is a collected branch (R15), else the batch's own."""
+    name = collected_name(event.archive or "")
+    return collected_item_id(repo, name) if name else closeout_item_id(repo, batch_id)
+
+
+def marker_of(branch: str, closeouts: Iterable[CollectedCloseout]) -> CollectedCloseout | None:
+    """The start marker of the collected close-out on *branch*, if one was recorded."""
+    return next((c for c in closeouts if c.branch == branch), None)
+
+
+def closeout_of(batch: Batch, closeouts: Iterable[CollectedCloseout]) -> CloseoutEvent | None:
+    """The batch's close-out, as owed-ness reads it: its latest `closeout` event, unless
+    that event names a collected close-out whose PR was closed unmerged (R15, p6-r5):
+    then the batch is owed a close-out again."""
+    event = closeout_event(batch)
+    if event is None or collected_name(event.archive or "") is None:
+        return event
+    marker = marker_of(event.archive or "", closeouts)
+    return None if marker is not None and marker.closed and not marker.merged else event
+
+
+def closeout_hold(batch: Batch) -> CloseoutHoldEvent | None:
+    """The batch's `closeout_hold` since its last dispatch with no close-out after it (R15):
+    the driver never collects it again; only `fr triage batch closeout <id>` retries it."""
+    for event in reversed(batch.events):
+        if isinstance(event, (DispatchEvent, CloseoutEvent)):
+            return None
+        if isinstance(event, CloseoutHoldEvent):
+            return event
+    return None
+
+
+def collected_used(repo: str, batches: Iterable[Batch],
+                   closeouts: Iterable[CollectedCloseout]) -> list[str]:  # fmt: skip
+    """Every collected branch *repo* has used: its markers' and its events' archives."""
+    out = [c.branch for c in closeouts if c.repo == repo]
+    out += [e.archive for b in batches for e in b.events
+            if isinstance(e, CloseoutEvent) and e.archive]  # fmt: skip
+    return out
+
+
+def collected_candidate(
+    repo: str,
+    batches: Iterable[Batch],
+    repos: Mapping[str, str],
+    closeouts: Iterable[CollectedCloseout],
+    day: date,
+) -> tuple[str, str]:
+    """`(name, item id)` of *repo*'s next collected close-out on *day*."""
+    used = collected_used(repo, (b for b in batches if repos.get(b.id) == repo), closeouts)
+    name = str(collected_name(collected_branch(day, next_collected(used, day))))
+    return name, collected_item_id(repo, name)
+
+
+def next_collected_item(repo: str, snap: Snapshot) -> tuple[str, str]:
+    """`collected_candidate` on the pass's day."""
+    return collected_candidate(repo, snap.batches, snap.repos, snap.closeouts, snap.now.date())
+
+
+def _collected_under_way(repo: str, snap: Snapshot) -> bool:
+    """R15: a collected close-out of *repo* was started (its marker) and has not ended
+    (merged, or closed with no archive): the next one waits for it."""
+    return any(c.repo == repo and not c.merged and not c.closed for c in snap.closeouts)
 
 
 def wave_group(prefix: str, wave: int | None) -> str:
@@ -554,6 +795,23 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
 HANDBACKS_PER_DISPATCH = 2
 """R22: hand-backs a batch gets per dispatch; the next conflict is held."""
 
+
+def handbacks_since(
+    events: Sequence[object], counted: Callable[[object], bool], *, reset: bool = True
+) -> int:
+    """The hand-back budget's one count: the events *counted* accepts, newest first, back
+    to the batch's latest `dispatch` (*reset*), or all of them. Conflict (R22) and red
+    (R10) hand-backs count per dispatch here; a collected close-out's (R27) counts per
+    close-out item across its members, which no single batch's dispatch resets, so it
+    counts distinct heads instead (`closeout_handback_decision`)."""
+    n = 0
+    for event in reversed(events):
+        if reset and isinstance(event, DispatchEvent):
+            break
+        n += counted(event)
+    return n
+
+
 ConflictKind = Literal["skip", "wait-behind", "held", "handback"]
 
 
@@ -587,12 +845,9 @@ def conflict_decision(
     for batch_id, theirs in earlier_in_pass:
         if mine.intersection(theirs):
             return ConflictDecision("wait-behind", behind=batch_id)
-    handed = 0
-    for event in reversed(events):
-        if isinstance(event, DispatchEvent):
-            break
-        if isinstance(event, ConflictEvent) and event.delivered != "held":
-            handed += 1
+    handed = handbacks_since(
+        events, lambda e: isinstance(e, ConflictEvent) and e.delivered != "held"
+    )
     if handed >= HANDBACKS_PER_DISPATCH:
         return ConflictDecision("held")
     return ConflictDecision("handback")
@@ -640,12 +895,9 @@ def red_decision(
         and not any(e.head_before == head for e in updates)
     ):
         return "reupdate"
-    handed = 0
-    for event in reversed(events):
-        if isinstance(event, DispatchEvent):
-            break
-        if isinstance(event, RedHandbackEvent) and event.delivered == "session":
-            handed += 1
+    handed = handbacks_since(
+        events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
+    )
     if handed >= RED_HANDBACKS_PER_DISPATCH:
         return "needs_you"
     if status == "idle":
@@ -667,18 +919,175 @@ def held_conflict(batch: Batch) -> ConflictEvent | None:
 def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
     """How many fresh conflict sessions the batch started: all of them (the next one's
     number), or only since its latest dispatch (whether one is the message target)."""
-    count = 0
-    for event in reversed(batch.events):
-        if since_dispatch and isinstance(event, DispatchEvent):
-            break
-        if isinstance(event, ConflictEvent) and event.delivered == "fresh":
-            count += 1
-    return count
+    return handbacks_since(
+        batch.events,
+        lambda e: isinstance(e, ConflictEvent) and e.delivered == "fresh",
+        reset=since_dispatch,
+    )
 
 
 def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
     """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
     return f"{repo}/run/conflict-{batch_id}-{n}"
+
+
+# ------------------------------------------- collected close-out hand-back (R27)
+
+CLOSEOUT_HANDBACKS = 1
+"""R27: hand-backs a collected close-out gets, counted per close-out item across its
+members; apart from conflict and red hand-backs, which count per batch dispatch."""
+
+CloseoutDecisionKind = Literal["skip", "handback", "stuck"]
+
+
+def closeout_handback_decision(
+    events: Iterable[object], item: str, head: str, handed: Iterable[str] = ()
+) -> CloseoutDecisionKind:
+    """What the driver does with collected close-out *item*'s PR failing at *head*, from
+    every member's events (R27): `skip`, its session was handed it at this head already;
+    `stuck`, no session could take the hand-back at this head, or the one hand-back went
+    out at an earlier head (a second failure); else `handback`."""
+    mine = [e for e in events if isinstance(e, CloseoutHandbackEvent) and e.item == item]
+    here = [e for e in mine if e.head == head]
+    if here:
+        return "stuck" if all(e.delivered == "none" for e in here) else "skip"
+    heads = {e.head for e in mine} | set(handed)  # the marker's own count (p6b-r10)
+    if head in heads:
+        return "skip"
+    return "stuck" if len(heads) >= CLOSEOUT_HANDBACKS else "handback"
+
+
+ARCHIVE_DIRS = ("plans", "specs", "journals", "runs", "usage")
+MATRIX_FILES = frozenset({
+    "docs/acceptance/matrix.yaml", "docs/acceptance/report_local.html",
+    "docs/acceptance/report_linked.html", "docs/acceptance/report_linked.md",
+})  # fmt: skip
+
+
+def archive_allowed(entry: str) -> bool:
+    """Whether one `<status>\t<path>` change is what an archive makes (R15's auto-merge
+    allowlist): anything under `docs/superpowers/implemented/`, a deletion out of a live
+    artifact directory, or the acceptance matrix and its three reports. Never a workflow
+    or verification manifest, nor anything else."""
+    status, _, path = entry.partition("\t")
+    if not path or ".." in PurePosixPath(path).parts:
+        return False
+    if path.startswith("docs/superpowers/implemented/") or path in MATRIX_FILES:
+        return True
+    return status == "D" and path.startswith(tuple(f"docs/superpowers/{d}/" for d in ARCHIVE_DIRS))
+
+
+def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> list[str]:
+    """Why the driver may NOT merge *marker*'s PR without `approved-fr` (R15's trust
+    anchor); [] only when every condition holds: the PR head is the head the verb
+    recorded; the driver's own diff to it is exactly the recorded file set and every
+    path is an archive's; the only commit past the base is that head; the PR is the
+    repo's own by an allowed author; and its body closes exactly the recorded issues,
+    less any a narrowing decision names now. Each unknown is a reason."""
+    why: list[str] = []
+    if not marker.head:
+        return ["the verb recorded no head for it"]
+    if pr.head != marker.head:
+        why.append(f"its head {pr.head[:12] or 'unknown'} is not the recorded {marker.head[:12]}")
+    if not pr.trusted:
+        why.append("it is not the repo's own PR by an allowed author")
+    diff = snap.collected_diff.get(marker.item)
+    if diff is None:
+        why.append("its diff could not be read")
+    else:
+        if diff != frozenset(marker.files):
+            why.append("its diff is not the recorded file set")
+        if outside := sorted(e.partition("\t")[2] for e in diff if not archive_allowed(e)):
+            why.append(f"it changes {', '.join(outside[:5])}, which no archive changes")
+    commits = snap.collected_commits.get(marker.item)
+    if commits is None or tuple(commits) != (marker.head,):
+        why.append("its commits past the base are not the one the verb pushed")
+    narrowed = snap.collected_narrowed.get(marker.item)
+    if narrowed is None:
+        why.append("its members' narrowing decisions could not be read")
+    else:
+        owner = marker.repo.lower()
+        want = {c for c in marker.closes if c.lower().startswith(owner + "#")}
+        want = {c for c in want if c.lower() not in narrowed}
+        if snap.collected_body_closes.get(marker.item, frozenset()) != want:
+            why.append("its body's Closes lines are not the recorded issues")
+    return why
+
+
+def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action | None, str]:
+    """§D step 3 for one unfinished collected close-out, keyed on its start marker, and how
+    the summary counts it (`closing` | `blocked` | ""). Membership is what the verb
+    recorded on the marker, never a PR body. Its PR is merged with no approval only when
+    `review_reasons` is empty, at the recorded head; a conflict or failing checks go back
+    ONCE to its session (R27); a PR closed unmerged ends the close-out (p6-r5)."""
+    repo = marker.repo
+    known = {b.id for b in snap.batches}
+    members = tuple(b for b in marker.members if b in known)
+    first = (members or tuple(b for b in marker.planned if b in known) or ("",))[0]
+    pr = snap.collected_prs.get(marker.item)
+    if not first:
+        return None, ""
+    if pr is None:
+        pushed = marker.item in snap.collected_pushed
+        live = marker.item in snap.existing
+        stale = snap.now - marker.at >= STALE_CLOSEOUT
+        if pushed and not live and stale:
+            return Action("closeout-unrecorded", first, f"{marker.branch} is pushed with no PR "
+                          f"the verb recorded: re-run `fr triage batch closeout --branch "
+                          f"{marker.branch} --yes`", key=marker.item), "blocked"  # fmt: skip
+        if not live and not pushed and marker.item in snap.closeout_probed and stale:
+            return Action("closeout-abandoned", first, f"{marker.item} ended with no PR on "
+                          f"{marker.branch}; its batches are owed a close-out again",
+                          key=marker.item), "closing"  # fmt: skip
+        return None, "closing"
+    if pr.state == "CLOSED":
+        return Action("closeout-pr-closed", first, f"close-out PR #{pr.number} on "
+                      f"{marker.branch} was closed unmerged; its batches are owed a close-out "
+                      "again", pr=pr.number, items=members, key=marker.item), "closing"  # fmt: skip
+    if not marker.head:
+        return Action("closeout-unrecorded", first, f"PR #{pr.number} on {marker.branch} has no "
+                      "head, members or files the verb recorded; re-run `fr triage batch "
+                      f"closeout --branch {marker.branch} --yes` to record them", pr=pr.number,
+                      key=marker.item), "blocked"  # fmt: skip
+    if pr.state == "MERGED":
+        return Action("closeout-merged", first, f"close-out PR #{pr.number} merged",
+                      pr=pr.number, items=members, key=marker.item), "closing"  # fmt: skip
+    default = snap.default_branch.get(repo, "")
+    if not default:
+        return None, "closing"  # the default branch unknown: wait
+    if wrong := _wrong_base(pr, default):
+        return Action("blocked", first, f"close-out PR #{pr.number} ({pr.head_ref}) {wrong}; it "
+                      "is never merged", pr=pr.number, items=members), "blocked"  # fmt: skip
+    conflict = conflicting(pr.mergeable, pr.merge_state)
+    if pr.checks == "failing" or conflict:
+        what = (
+            "conflicts with its base"
+            if conflict
+            else f"has failing checks: {', '.join(pr.failing) or 'unknown'}"
+        )
+        events = [e for b in snap.batches if b.id in members for e in b.events]
+        decision = closeout_handback_decision(events, marker.item, pr.head, marker.handed)
+        if decision == "skip":
+            return None, "closing"  # its session has it at this head
+        checks = ("merge conflict",) if conflict else pr.failing
+        if decision == "stuck":
+            return Action("closeout-stuck", first, f"close-out PR #{pr.number} {what} at "
+                          f"{pr.head[:12]}, and its one hand-back is spent: fix it on "
+                          f"{pr.head_ref}", pr=pr.number, head=pr.head, items=members,
+                          key=marker.item, checks=checks), "blocked"  # fmt: skip
+        return Action("closeout-handback", first, f"close-out PR #{pr.number} {what}; hand "
+                      f"it back to {marker.item}", pr=pr.number, head=pr.head, items=members,
+                      key=marker.item, checks=checks), "closing"  # fmt: skip
+    if why := review_reasons(marker, pr, snap):
+        return Action("closeout-needs-review", first, f"close-out PR #{pr.number} is never "
+                      f"merged without approved-fr: {'; '.join(why)}", pr=pr.number,
+                      items=members, key=marker.item), "blocked"  # fmt: skip
+    if pr.checks == "green" and pr.mergeable == "MERGEABLE":
+        return Action("archive", first, f"PR #{pr.number} ({pr.head_ref}) for "
+                      f"{', '.join(members)} at {marker.head[:12]}", pr=pr.number,
+                      head=marker.head, items=members, draft=pr.draft,
+                      key=marker.item), "closing"  # fmt: skip
+    return None, "closing"
 
 
 def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
@@ -689,9 +1098,13 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     `chore/closeout-*` head (`chore/archive-<plan>`, `chore/closeout-<run-id>`) must
     also change the batch's run file or its plan journal (review rg-12). Neither
     attributes a PR that is not `trusted`: a fork or a foreign author can choose
-    both the head name and the files (gh#936)."""
+    both the head name and the files (gh#936). A trusted PR on the event's own collected
+    `archive` head (`chore/closeout-<date>-<n>`, a name only that close-out produces) is
+    the batch's: its one PR names every member, a batch with no run included (§D)."""
     if not pr.trusted:
         return False
+    if collected_name(event.archive or "") is not None and pr.head_ref == event.archive:
+        return True  # a collected close-out's shared head names every member (§D)
     branch = recorded_branch(batch)
     if pr.head_ref == f"chore/closeout-{branch.replace('/', '-')}":
         return True
@@ -1199,6 +1612,35 @@ def _claim_actions(snap: Snapshot) -> list[Action]:
     return out
 
 
+def _gate_actions(batch: Batch, snap: Snapshot, labelled: set[str]) -> list[Action]:
+    """R13, R14 for one gated batch: `fr:awaiting-live` on each open issue its held gates'
+    rows cite that lacks it (once per issue per pass), then a `gate-pass` for each held
+    gate whose rows ALL read walked. A gate with no row (a run-level gate) passes only
+    explicitly, through `fr gate pass`; rows never read plan nothing."""
+    ledger = snap.ledgers[batch.id]
+    if ledger.rows is None:
+        return []
+    out: list[Action] = []
+    held = held_gates(ledger.labels)
+    rows = [r for r in ledger.rows if r.gate in held]
+    for ref in sorted({i for r in rows for i in r.issues}):
+        if ref in snap.awaiting_unlabelled and ref not in labelled:
+            labelled.add(ref)
+            out.append(Action("awaiting-live", batch.id, f"label {ref} fr:awaiting-live",
+                              pr=ledger.pr, key=ref))  # fmt: skip
+    for gate in sorted(held):
+        if gate == ledger.run_gate and not ledger.run_gate_inherited:
+            continue  # p4-r3: no row stands for the run gate, so no walk passes it
+        mine = [r for r in rows if r.gate == gate]
+        if mine and all(r.walked for r in mine):
+            ids = ", ".join(r.id for r in mine)
+            why = f"every row the {gate} gate gates reads walked ({ids})"
+            out.append(
+                Action("gate-pass", batch.id, f"PR #{ledger.pr}: {why}", pr=ledger.pr, gate=gate)
+            )
+    return out
+
+
 def drive_pass(snap: Snapshot) -> Pass:
     """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
     then report duplicate candidates of newly finished waves — in that order, so a slot a
@@ -1252,11 +1694,13 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 2. Close out. Recording a close-out that has already finished starts nothing and
     # writes nothing to the forge, so it reads every landed batch, selected or not
     # (gh#990); starting one, or recording one under way, follows the selection.
-    closing = 0
+    closing = gated = closeouts_held = 0
+    collecting: dict[str, list[str]] = {}  # repo -> the batches its collected close-out takes
+    labelled: set[str] = set()  # issues an awaiting-live action already names this pass
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in merging or batch.id in held_ids:
             continue
-        if closeout_event(batch) is not None:
+        if closeout_of(batch, snap.closeouts) is not None:
             continue
         driven_now = snap.selected is None or batch.id in snap.selected
         if batch.id in snap.unverified:
@@ -1275,32 +1719,90 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue
         if not driven_now:
             continue
+        due = closeout_due(
+            released=batch.id in snap.released,
+            merged_at=snap.merged_at.get(batch.id),
+            now=snap.now,
+        )
+        owed = not any(e.kind == "post_merge" for e in batch.events)
+        item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+        if (
+            due
+            and hand is None
+            and owed
+            and item not in snap.existing  # a live close-out tab ran it before it started
+            and snap.repos.get(batch.id) in snap.post_merge_repos
+        ):
+            # p4-r2: at merge (once its release commit landed, or the fallback), gated or
+            # not, and always ahead of the batch's close-out, which never runs it itself.
+            actions.append(Action("post-merge", batch.id, "run the repo's post_merge"))
+        if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
+            closing += 1
+            actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
+                                  "read, so whether a gate holds it is unknown; no close-out "
+                                  "until they are"))  # fmt: skip
+            continue
+        if is_gated(batch, snap):  # R13: held by a post-merge gate, never closed out
+            gated += 1
+            actions.extend(_gate_actions(batch, snap, labelled))
+            continue
         closing += 1
         if hand is not None:
             actions.append(Action("adopt", batch.id,
                                   f"close-out PR #{hand.number} ({hand.head_ref}) is open",
                                   pr=hand.number))  # fmt: skip
             continue
-        due = closeout_due(
-            released=batch.id in snap.released,
-            merged_at=snap.merged_at.get(batch.id),
-            now=snap.now,
-        )
         if not due:
             continue
-        item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
-        owed = not any(e.kind == "post_merge" for e in batch.events)
-        if item in snap.existing:
+        if item in snap.existing:  # a per-batch close-out started before R15: recorded
             actions.append(Action("closeout", batch.id, f"record the live {item}", recorded=True))
-        else:
-            actions.append(Action("closeout", batch.id, f"start {item}", post_merge=owed))
+            continue
+        if (hold := closeout_hold(batch)) is not None:  # R15: held by the verb; the operator's
+            closing -= 1
+            closeouts_held += 1
+            actions.append(Action("closeout-held", batch.id, f"{hold.reason}; fix it, then "
+                                  f"retry: fr triage batch closeout {batch.id} --yes",
+                                  key=hold.item))  # fmt: skip
+            continue
+        collecting.setdefault(snap.repos.get(batch.id, ""), []).append(batch.id)
+    # R15: at most one collected close-out per repo, and none while one is under way.
+    for repo in sorted(collecting):
+        name, item_id = next_collected_item(repo, snap)
+        if _collected_under_way(repo, snap) or item_id in snap.existing:
+            continue  # one at a time; a live session of this item is not started twice
+        taking = tuple(collecting[repo])
+        actions.append(
+            Action("closeout", taking[0], f"start {collected_item_id(repo, name)} for "
+                   f"{', '.join(taking)}", items=taking, key=name)
+        )  # fmt: skip
 
     # 3. Archive.
     archives_blocked = 0
+    for marker in snap.closeouts:  # R15: one step per collected close-out, never per member
+        reopened = snap.collected_reopened.get(marker.item)
+        if marker.closed and reopened is not None:  # p6b-r10: never merged by the driver
+            key = f"reopened\0{marker.item}\0{reopened.number}"
+            if key not in snap.warned:
+                said = (f"close-out PR #{reopened.number} was closed and reopened: the driver "
+                        "never merges it; it needs approved-fr like any PR")  # fmt: skip
+                actions.append(Action("closeout-reopened", (marker.planned or [""])[0], said,
+                                      pr=reopened.number, key=marker.item, head=key))  # fmt: skip
+            continue
+        if marker.merged or marker.closed:
+            continue
+        step, count = _collected_step(marker, snap)
+        if step is not None:
+            actions.append(step)
+        if count == "blocked":
+            archives_blocked += 1
+        elif count == "closing":
+            closing += 1
     for batch in chosen:
         event = closeout_event(batch)
         if event is None or stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
+        if collected_name(event.archive or "") is not None:
+            continue  # its collected close-out's marker plans for it, above
         archives = snap.archives.get(snap.repos.get(batch.id, ""), ())
         mine = [p for p in archives if attributed(p, batch, event)]
         if is_finished(batch, stages[batch.id], archives):
@@ -1355,7 +1857,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending, blocked = 0, exports_blocked + archives_blocked
+    pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue
@@ -1435,6 +1937,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             blocked=blocked,
             queued=sum(len(t.queued) for t in trains),
             held=len(held_by),
+            gated=gated,
         ),
         trains=tuple(trains),
         held_by=tuple(held_by),
@@ -1465,7 +1968,8 @@ def summary_line(summary: Summary) -> str:
         line += f", queued {summary.queued}"
     if summary.blocked:
         line += f", blocked {summary.blocked}"
-    return line + (f", held {summary.held}" if summary.held else "")
+    line += f", held {summary.held}" if summary.held else ""
+    return line + (f", gated {summary.gated}" if summary.gated else "")
 
 
 def train_line(train: Train) -> str:

@@ -48,6 +48,8 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     drive_pass,
     enqueue_refusals,
+    fact_ledger_unknown,
+    fact_ledgers,
     held_conflict,
     last_enqueue,
 )
@@ -56,8 +58,12 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.lanes import lane_of, live_stops
+from fr.triage.merge_stops import MergeStop
+from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     Batch,
+    CloseoutHandbackEvent,
     Facts,
     Judgement,
     Judgements,
@@ -142,6 +148,12 @@ def drive_snapshot(
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
         approvals=fact_approvals(queue),
         queue_inferred=True,
+        ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)
+        ledger_unknown=fact_ledger_unknown(batches, facts, stages),
+        post_merge_repos=frozenset(
+            r for r in set(repos.values()) if facts.config_for(r).post_merge
+        ),
+        closeouts=tuple(judgements.closeouts),  # the driver's and the board's one source
     )
 
 
@@ -161,6 +173,12 @@ def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
 @dataclass(frozen=True)
 class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
+    # | needs-developer | needs-reviewer | needs-tester | needs-devops (the board's lanes)
+    # | ledger-unread (a landed batch whose gate labels could not be read)
+    # | closeout-held (a landed batch the close-out verb held, exit-gates R15)
+    # | closeout-pr-closed | closeout-needs-review | closeout-unrecorded | closeout-reopened
+    #   (a collected close-out PR the driver will not merge unasked, R15)
+    # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
@@ -181,6 +199,17 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "session-blocked": "Session blocked",
+    "ledger-unread": "Gate labels unread",
+    "closeout-held": "Close-out held: Test Plan outcome owed",
+    "closeout-stuck": "Close-out PR stuck",
+    "closeout-pr-closed": "Close-out PR closed unmerged",
+    "closeout-needs-review": "Close-out PR needs review",
+    "closeout-unrecorded": "Close-out pushed with nothing recorded",
+    "closeout-reopened": "Close-out PR reopened",
+    "needs-developer": "Needs you · Developer",
+    "needs-reviewer": "Needs you · Reviewer",
+    "needs-tester": "Needs you · Tester",
+    "needs-devops": "Needs you · DevOps",
 }
 
 
@@ -219,6 +248,7 @@ def needs_you(
     session_notes: Mapping[str, str] | None = None,
     *,
     ci_none: Collection[str] = (),
+    stops: Mapping[str, MergeStop] | None = None,
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
@@ -284,6 +314,29 @@ def needs_you(
                 f.pr for f in snap.foreign.get(action.batch, ()) if f.pr.number == action.pr
             )
             out.append(Need("foreign-pr", action.batch, action.detail, found_pr.url))
+    stuck: set[str] = set()  # one row per collected close-out, not per member
+    for action in plan.actions:
+        if action.kind == "closeout-held":
+            out.append(Need("closeout-held", action.batch, f"batch {action.batch}: "
+                            f"{action.detail}", f"#batch-{action.batch}"))  # fmt: skip
+        elif action.kind in ("closeout-pr-closed", "closeout-needs-review",
+                             "closeout-unrecorded", "closeout-reopened"):  # fmt: skip
+            out.append(Need(action.kind, action.batch, action.detail, f"#batch-{action.batch}"))
+        elif action.kind == "closeout-stuck" and action.key not in stuck:
+            stuck.add(action.key)
+            out.append(Need("closeout-stuck", action.batch, action.detail,
+                            f"#batch-{action.batch}"))  # fmt: skip
+    for b in judgements.batches:  # R27, from the events: no session could take it
+        event = closeout_event(b)
+        if event is None or event.archived is not None:
+            continue
+        for e in b.events:
+            if isinstance(e, CloseoutHandbackEvent) and e.delivered == "none":
+                if e.item not in stuck:
+                    stuck.add(e.item)
+                    text = (f"close-out PR #{e.pr} ({e.reason}) was handed back with no "
+                            f"session to take it: fix it on {event.archive}")  # fmt: skip
+                    out.append(Need("closeout-stuck", b.id, text, f"#batch-{b.id}"))
     for action in plan.actions:
         if action.kind == "blocked":
             out.append(
@@ -323,6 +376,26 @@ def needs_you(
                  "hand-backs are spent: resolve it, or dispatch or cancel the batch",
                  f"#batch-{b.id}")
         )  # fmt: skip
+
+    # The four Needs-you lanes (exit-gates R17): one Need per card the board puts in one,
+    # from the same `lane_of`, so "Needs you now" and the columns agree.
+    held_stops = live_stops(judgements.batches, facts, stops or {})
+    has_row = {n.ref for n in out if n.kind in ("approve-pr", "failing-ci", "red-pr")}  # p5-r3
+    for b in judgements.batches:
+        if b.id in snap.ledger_unknown:  # p5-r2: not a lane; the close-out waits on it
+            out.append(
+                Need("ledger-unread", b.id,
+                     f"batch {b.id}: its merged PR's gate labels could not be read, so the "
+                     "close-out waits; the next collect retries", f"#batch-{b.id}")
+            )  # fmt: skip
+        placed = lane_of(b, facts, held_stops.get(b.id))
+        if placed is None or (placed.lane == "needs-reviewer" and b.id in has_row):
+            continue
+        lane_pr = batch_pr(b, facts)
+        text = f"batch {b.id}: {placed.reason}"
+        if lane_pr is not None and conflicting(lane_pr.mergeable, lane_pr.merge_state):
+            text += f" (PR #{lane_pr.number} is also conflicting)"
+        out.append(Need(placed.lane, b.id, text, f"#batch-{b.id}"))
 
     for s in stale_dispatches(facts):
         out.append(

@@ -632,9 +632,13 @@ class Round:
 
     `question_texts` holds every `questions[].question` and `header` of its
     calls, in order — where an `a 2nd round may follow` announcement is looked for.
+    `answer_texts` holds the operator's answers where the reader can see them
+    (Claude Code's `toolUseResult.answers`; empty elsewhere) — what a narrowing
+    decision's refs are looked for in (spec 2026-10-14 R12, review p3-r2).
     """
 
     question_texts: tuple[str, ...]
+    answer_texts: tuple[str, ...] = ()
 
 
 def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | None:
@@ -691,6 +695,7 @@ def answered_rounds_in(transcript: Path, start: _dt.datetime) -> list[Round] | N
         question_tool=QUESTION_TOOL,
         neutral=ROUND_NEUTRAL_TOOLS,
         answered=lambda: _answered_ids(records),
+        answers=lambda: _answer_texts(records),
     )
 
 
@@ -706,6 +711,7 @@ def question_rounds(
     question_tool: str,
     neutral: frozenset[str],
     answered: Callable[[], set[str]],
+    answers: Callable[[], Mapping[str, list[str]]] | None = None,
 ) -> list[Round]:
     """THE round rule (spec 2026-09-26 §3.C), shared by the Claude Code and
     OpenCode readers so the two cannot drift: consecutive `question_tool` calls
@@ -728,8 +734,14 @@ def question_rounds(
     if not groups:
         return []
     done = answered()
+    said = answers() if answers is not None else {}
     return [
-        Round(question_texts=tuple(texts)) for ids, texts in groups if any(i in done for i in ids)
+        Round(
+            question_texts=tuple(texts),
+            answer_texts=tuple(a for i in ids for a in said.get(i, ())),
+        )
+        for ids, texts in groups
+        if any(i in done for i in ids)
     ]
 
 
@@ -745,6 +757,28 @@ def _question_texts(tool_input: object) -> list[str]:
             if isinstance(value, str):
                 texts.append(value)
     return texts
+
+
+def _answer_texts(records: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """tool_use id -> the strings of its `toolUseResult.answers` map (keys and
+    values: a key is the question, a value the operator's answer)."""
+    found: dict[str, list[str]] = {}
+    for record in records:
+        result = record.get("toolUseResult") if record.get("type") == "user" else None
+        answers = result.get("answers") if isinstance(result, Mapping) else None
+        if not isinstance(answers, Mapping) or not answers:
+            continue
+        texts = [str(x) for pair in answers.items() for x in pair if isinstance(x, str)]
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and isinstance(block.get("tool_use_id"), str)
+            ):
+                found.setdefault(block["tool_use_id"], []).extend(texts)
+    return found
 
 
 def _answered_ids(records: list[dict[str, Any]]) -> set[str]:

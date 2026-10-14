@@ -175,3 +175,62 @@ def test_every_shape_check_sees_a_repo_authored_strategy(tmp_path: Path) -> None
 
     assert [i for i in _workflow_issues(repo) if "staging" in str(i)] == []
     assert check_workflow(parse_manifest(_shape("verification: staging\n")), None) != []
+
+
+# --- fr verification exit (spec 2026-10-14 exit-gates R1, R5, R6) ---------------
+
+
+def _exit_repo(tmp_path: Path) -> Path:
+    from tests.unit.requirements_support import row, write_matrix
+
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/spec.md").write_text(
+        "# Spec\n\n## Verification\n\nstrategy: candidate\ngate: r-live=devops\n"
+        "- r-live: live — needs the release\n- r-other: none — covered\n"
+    )
+    write_matrix(
+        tmp_path,
+        [row("docs/spec.md", rid="r-live"), row("docs/spec.md", rid="r-other")],
+    )
+    return tmp_path
+
+
+def test_exit_by_spec_prints_kinds_gates_and_gated_rows(tmp_path: Path) -> None:
+    repo = _exit_repo(tmp_path)
+
+    result = _invoke(repo, ["verification", "exit", "--spec", "docs/spec.md"])
+
+    assert result.exit_code == 0, result.output
+    assert "kinds: candidate, live, none" in result.output
+    assert "gates: devops" in result.output
+    assert "gated: r-live (devops)" in result.output
+    assert "gated: yes" in result.output
+
+
+def test_exit_json_is_machine_readable(tmp_path: Path) -> None:
+    import json
+
+    result = _invoke(
+        _exit_repo(tmp_path), ["verification", "exit", "--spec", "docs/spec.md", "--json"]
+    )
+
+    data = json.loads(result.stdout)
+    assert data["kinds"] == ["candidate", "live", "none"]
+    assert data["gates"] == ["devops"]
+    assert data["gated"] is True
+    assert data["gated_rows"] == [{"id": "r-live", "gate": "devops"}]
+
+
+def test_exit_needs_exactly_one_of_run_and_spec(tmp_path: Path) -> None:
+    repo = _exit_repo(tmp_path)
+
+    assert _invoke(repo, ["verification", "exit"]).exit_code == 2
+    both = _invoke(repo, ["verification", "exit", "--run", "r", "--spec", "docs/spec.md"])
+    assert both.exit_code == 2
+
+
+def test_exit_refuses_a_missing_spec_without_a_traceback(tmp_path: Path) -> None:
+    result = _invoke(_exit_repo(tmp_path), ["verification", "exit", "--spec", "docs/none.md"])
+
+    assert result.exit_code == 2
+    assert "Traceback" not in result.output

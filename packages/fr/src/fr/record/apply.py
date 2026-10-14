@@ -48,6 +48,7 @@ from fr.journal.model import (
     JournalParseError,
     appended_journal_text,
     journal_path,
+    journal_stamp_as_utc,
     owed_key,
     parse_journal,
     resolution_entry,
@@ -55,6 +56,10 @@ from fr.journal.model import (
 )
 from fr.record.model import StepRecord, allowed_sections, present_sections
 from fr.workflow.artifacts import journal_scope
+
+_SESSION_START = "1970-01-01T00:00:00+00:00"
+"""The window a decision's operator claim opens on an empty journal: any answer
+in this session counts (spec 2026-10-14 R12)."""
 
 if TYPE_CHECKING:
     from fr.artifacts.commit import CommitOutcome
@@ -168,6 +173,16 @@ class _Context:
     discharges_owed: bool = False
     """Only `fr journal resolve` discharges an owed entry: it closes the issue
     the entry was filed as, which a step record's `resolves:` never does."""
+    gate_answer: Any = None
+    """When this record clears an operator gate (the brainstorm record): who the
+    gate's DERIVED provenance says answered it (`run_cmd.derive_gate_answer`,
+    the same derivation `_gate_provenance` records), with the answered rounds
+    it read. Its decisions are stamped `decided_by=operator` from it (spec
+    2026-10-14 R12; reviews p3-r2, p3-r3) — see `_stamped_decider`."""
+    identity: tuple[str, str] | None = None
+    """The repo's `(org, repo)` — the Closes guard's — that a bare `#n` in a
+    narrowing or a round names; `None` when it cannot be resolved, and then no
+    narrowing is stamped."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -216,6 +231,15 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
             slug = spec_journal_slug(Path(spec_rel).stem)
     phase = run_cmd._item_phase(record.item) if record.item else None
     emits_ticks = "plan:ticks" in owner_emits
+    current = state.steps.get(record.step)
+    gate_answer = (
+        run_cmd.derive_gate_answer(
+            current, no_questions=record.no_questions, claimed=record.evidence.get("answered_by")
+        )
+        if current is not None
+        and run_cmd._clears_gate(step, current, "done" if record.outcome == "done" else "failed")
+        else None
+    )
     context = _Context(
         scope=scope,
         slug=slug,
@@ -224,8 +248,72 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         phase=phase,
         completes_phase=emits_ticks and record.outcome == "done" and phase is not None,
         emits_ticks=emits_ticks,
+        gate_answer=gate_answer,
+        identity=_repo_identity(repo_root) if gate_answer is not None else None,
     )
     return context, state
+
+
+def _repo_identity(repo_root: Path) -> tuple[str, str] | None:
+    """The `(org, repo)` the Closes guard resolves (`resolve_identity` over the
+    matrix, else the origin remote), or `None` when it cannot be resolved."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
+    from fr.commands.acceptance_cmd import MATRIX_REL
+
+    try:
+        path = repo_root / MATRIX_REL
+        return resolve_identity(load_matrix(path) if path.is_file() else Matrix(), repo_root)
+    except (AcceptanceError, OSError):
+        return None
+
+
+_UNVERIFIED_NOTE = (
+    "_`decided_by=operator` recorded unverified: the gate could not read who answered it._"
+)
+
+
+def _round_names_every_ref(
+    texts: list[str], narrows: tuple[str, ...], identity: tuple[str, str] | None
+) -> bool:
+    """Do the answered rounds name EVERY narrowed issue? Both sides are reduced
+    to `owner/repo#n` by the Closes guard's own normalizer, and the rounds' refs
+    are extracted with the PR-body parser's regex — never a substring test — so
+    `#1` never matches `#12`, and another repo's `#n` only that repo (review
+    p3-r2, its security addendum). An unknown identity, or a narrowed ref that
+    does not normalize, matches nothing."""
+    from fr.record.pr_body import issue_refs, normalize_issue_ref
+
+    if identity is None:
+        return False
+    named: set[str] = set()
+    for text in texts:
+        named |= issue_refs(text, identity)
+    wanted = [normalize_issue_ref(ref, identity) for ref in narrows]
+    return all(ref is not None and ref in named for ref in wanted)
+
+
+def _stamped_decider(ctx: _Context, narrows: tuple[str, ...]) -> tuple[str | None, str | None]:
+    """`(decided_by, note)` for a decision the gate record did not attribute
+    itself (spec 2026-10-14 R12). From the gate's DERIVED answer, never the claim
+    alone (p3-r3):
+
+    - observed, operator: an ordinary decision is the operator's; a NARROWING one
+      only when every narrowed ref appears in an answered round's question or
+      answer text (p3-r2) — otherwise it stays the agent's, and `fr journal add …
+      --answered-by operator` (verified) is the later route;
+    - unobserved, claimed operator: never a narrowing; an ordinary decision is
+      stamped with a recorded unverified note;
+    - anything else (agent, a refused gate, no gate): nobody's stamp."""
+    answer = ctx.gate_answer
+    if answer is None or answer.who != "operator":
+        return None, None
+    if not answer.observed:
+        return (None, None) if narrows else ("operator", _UNVERIFIED_NOTE)
+    texts = [t for r in answer.rounds for t in (*r.question_texts, *r.answer_texts)]
+    if not narrows or _round_names_every_ref(texts, narrows, ctx.identity):
+        return "operator", None
+    return None, None
 
 
 # --- journal ------------------------------------------------------------------
@@ -281,6 +369,7 @@ def _journal_writes(
     existing = _load_entries(overlay.read(path), path)
     taken = {e.id for e in existing}
     new: list[JournalEntry] = []
+    stamped: set[str] = set()  # decisions the gate attributed, verified by the gate
     stamp = _stamp()
 
     def add(entry: JournalEntry) -> None:
@@ -299,23 +388,41 @@ def _journal_writes(
     def _verify(entry: JournalEntry) -> None:
         # p3-r1: every path that writes an operator claim checks it here, the
         # verbs and a whole step's record alike.
-        if entry.answered_by != "operator" or entry.resolves is None:
+        if entry.answered_by != "operator" and entry.decided_by != "operator":
             return
-        from fr.journal.operator import OperatorClaimRefusedError, verify_operator_claim
+        if entry.resolves is None and (entry.kind != "decision" or entry.id in stamped):
+            return  # the brainstorm gate attributed it from its own rounds (R12)
+        from fr.journal.operator import (
+            OperatorClaimRefusedError,
+            verify_operator_answer,
+            verify_operator_claim,
+        )
 
         try:
-            advisory = verify_operator_claim([*existing, *new], entry.resolves)
+            if entry.resolves is not None:
+                advisory = verify_operator_claim([*existing, *new], entry.resolves)
+            else:
+                # A decision answers what was asked since the journal last moved;
+                # an empty journal opens the window at the session's start.
+                prior = [*existing, *new]
+                since = prior[-1].created if prior else None
+                since_utc = journal_stamp_as_utc(since) if since else _SESSION_START
+                advisory = verify_operator_answer(
+                    f"decision {entry.id}", since or "the session's start", since_utc
+                )
         except OperatorClaimRefusedError as e:
             raise RecordRefusedError(str(e)) from e
         if advisory is not None:
             notices.append(advisory)
 
-    def finding(fid: str, *, discharge: bool = False) -> JournalEntry:
+    def finding(fid: str, *, discharge: bool = False, files: bool = False) -> JournalEntry:
         hit = next((e for e in [*existing, *new] if e.id == fid), None)
         if hit is None:
             raise RecordRefusedError(f"no journal entry {fid!r} in {path.name} — nothing resolved")
         if hit.kind == "owed" and discharge and ctx.discharges_owed:
             return hit  # discharging an owed action (spec 2026-10-11 §E, R24)
+        if hit.kind == "owed" and files:
+            return hit  # `fr journal file` records where it went (2026-10-14 R10)
         if hit.kind == "owed":
             raise RecordRefusedError(
                 f"entry {fid!r} is an owed action — discharge it with `fr journal resolve "
@@ -346,7 +453,17 @@ def _journal_writes(
             item.state if item.state is not None else ("open" if item.kind == "finding" else None)
         )
         if item.resolves is not None:
-            finding(item.resolves)
+            finding(item.resolves, files=item.filed_as is not None)
+        # A decision's provenance and remainder ride decision-only tokens no
+        # released fr knows (review p3-r1); the record keeps its field names.
+        decision = item.kind == "decision"
+        decided_by: str | None = item.answered_by if decision else None
+        note: str | None = None
+        if decision and decided_by is None:
+            decided_by, note = _stamped_decider(ctx, item.narrows)
+            if decided_by is not None:
+                stamped.add(eid)
+        body = f"{item.body.rstrip()}\n\n{note}".lstrip() if note else item.body
         try:
             entry = JournalEntry(
                 kind=item.kind,
@@ -355,14 +472,19 @@ def _journal_writes(
                 created=stamp,
                 phase=phase,
                 title=item.title,
-                body=item.body,
+                body=body,
                 state=state,
                 resolves=item.resolves,
                 review_scope=item.review_scope,
-                answered_by=item.answered_by,
-                tracked_by=item.tracked_by,
+                answered_by=None if decision else item.answered_by,
+                tracked_by=None if decision else item.tracked_by,
                 out_of_scope=item.out_of_scope,
                 input=item.input,
+                filed_as=item.filed_as,
+                gate=item.gate,
+                narrows=item.narrows,
+                decided_by=decided_by,  # type: ignore[arg-type]
+                remainder_tracked_by=item.tracked_by if decision else None,
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e

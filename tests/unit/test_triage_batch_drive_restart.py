@@ -98,7 +98,7 @@ def test_two_closeouts_in_one_pass_restart_once_after_both_started(
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert len(rrunner.dispatched) == 2
+    assert len(rrunner.dispatched) == 1  # one collected close-out takes both (R15)
     assert rrunner.restarts == [()]
     last_dispatch = max(i for i, c in enumerate(rrunner.calls) if c == "dispatch")
     assert rrunner.calls.index("restart_idle") > last_dispatch
@@ -157,7 +157,7 @@ def test_a_runner_that_cannot_restart_is_reported_once_and_closeouts_still_start
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert len(runner.dispatched) == 2
+    assert len(runner.dispatched) == 1  # one collected close-out takes both (R15)
     assert out.count("cannot restart sessions") == 1
 
 
@@ -181,7 +181,7 @@ def test_a_runner_that_refuses_preflight_is_reported_and_not_restarted(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert rrunner.restarts == []
-    assert len(rrunner.dispatched) == 2
+    assert len(rrunner.dispatched) == 1  # one collected close-out takes both (R15)
     assert out.count("cannot restart sessions: no herdr") == 1
     assert probes and all(i.id.startswith(f"{REPO}/run/closeout-") for i in probes)
     assert all(str(i.payload["group"]).endswith("-wave-1") for i in probes)
@@ -197,7 +197,7 @@ def test_a_restart_that_raises_is_reported_and_the_exit_code_is_unaffected(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert "herdr gone" in out
-    assert len(rrunner.dispatched) == 2
+    assert len(rrunner.dispatched) == 1  # one collected close-out takes both (R15)
 
 
 def test_the_restart_happens_before_the_exec_restart(
@@ -241,7 +241,7 @@ def test_a_runner_that_cannot_restart_is_reported_once_across_passes(
     driver.run_pass()
     seen = capsys.readouterr()
     assert (seen.out + seen.err).count("cannot restart sessions") == 1
-    assert len(runner.dispatched) == 2
+    assert len(runner.dispatched) == 1  # one collected close-out takes both (R15)
 
 
 def test_a_refusal_is_reported_once_across_passes(
@@ -295,20 +295,13 @@ def test_a_post_merge_that_is_not_owed_never_restarts(
 def test_a_pass_that_aborts_after_a_post_merge_still_restarts_once(
     tmp_path: Path, world: World, checkout: DriveCheckout, rrunner: RestartingRunner
 ) -> None:
-    # p2-r1: b1's post_merge succeeds and its close-out starts; b2's runner then refuses
-    # the close-out (`_fail`), aborting the pass. The restart is owed and must still run.
+    # p2-r1: both post_merges succeed; the runner then refuses the collected close-out
+    # (`_fail`), aborting the pass. The restart is owed and must still run.
     _opted_in(world)
     _two_merged(world, tmp_path)
     checkout.released = True
-    seen = {"n": 0}
-    real = rrunner.can_dispatch
-
-    def _can(item: Any) -> bool:
-        seen["n"] += 1
-        return real(item) if seen["n"] == 1 else False
-
-    rrunner.can_dispatch = _can  # type: ignore[method-assign]
+    rrunner.can_dispatch = lambda item: False  # type: ignore[method-assign]
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code != 0, out
-    assert len(rrunner.dispatched) == 1
+    assert rrunner.dispatched == []
     assert rrunner.restarts == [()]

@@ -42,6 +42,7 @@ REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 DISPATCHED = "2026-10-01T10:00:00Z"
 LAUNCH = "{runner: fake, harness: claude, model: claude-opus-5-5}"
+COLLECTED = f"{REPO}/run/closeout-2026-10-02-1"  # the pass's one collected close-out (R15)
 
 
 # ------------------------------------------------------------------ fakes
@@ -143,7 +144,9 @@ class World:
         view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
         merge = p.get("merge_commit", f"merge-{number}")
         return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge,
-                "labels": list(p["labels"])}  # fmt: skip
+                "labels": list(p["labels"]), "mergeable": p.get("mergeable", ""),
+                "body": p.get("body", ""),
+                "merge_state": p.get("merge_state", "")}  # fmt: skip
 
     def pr_ready(self, repo: str, number: int) -> None:
         self.calls.append(f"pr_ready {number}")
@@ -217,7 +220,8 @@ class World:
         if self.refuse_create:
             raise GhError(self.refuse_create, returncode=1)
         number = max([*self.prs, 199]) + 1
-        self.pr(number, head, [], head_oid=self.head_of(head), files=list(self.create_files))
+        self.pr(number, head, [], head_oid=self.head_of(head), files=list(self.create_files),
+                body=body)  # fmt: skip
         return number
 
     def closing_ref(self, repo: str, number: int) -> str:
@@ -294,6 +298,8 @@ class DriveCheckout:
         self.release_probes: list[str] = []
         self.added: dict[str, tuple[str, ...]] = {}  # merge commit -> paths it added
         self.live: set[str] = set()  # paths still on origin/main
+        self.status: dict[str, frozenset[str]] = {}  # head -> its `<status>\t<path>` diff
+        self.commits: dict[str, tuple[str, ...]] = {}  # head -> commits past the base
 
     def origin_repo(self) -> str | None:
         return REPO
@@ -314,6 +320,20 @@ class DriveCheckout:
 
     def remote_branch_exists(self, branch: str) -> bool:
         return False
+
+    def changed_status(self, ref: str, head: str) -> frozenset[str]:
+        return self.status.get(head, frozenset())
+
+    def commits_since(self, ref: str, head: str) -> tuple[str, ...]:
+        return self.commits.get(head, (head,))
+
+    def reach_commit(self, sha: str, branch: str) -> bool:
+        return bool(sha)
+
+    def list_dir(self, ref: str, directory: str) -> list[str]:
+        prefix = directory.rstrip("/") + "/"
+        return sorted({f.removeprefix(prefix).split("/")[0] for (at, f) in self.files
+                       if at == ref and f.startswith(prefix)})  # fmt: skip
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return descendant not in self.behind
@@ -884,22 +904,20 @@ def test_post_merge_then_one_closeout_through_the_runner(
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert checkout.forwarded == 1
+    assert checkout.forwarded == 2  # post_merge's (p4-r2), then the close-out's
     assert checkout.commands == [["./scripts/install.sh"]]
     (item,) = runner.dispatched
-    assert item.id == f"{REPO}/run/closeout-b1"
+    assert item.id == COLLECTED
     assert item.unit == "run" and item.payload["kind"] == "closeout"
-    assert "fr pickup --run 2026-10-01-b1" in item.payload["brief"]
+    branch = "chore/closeout-2026-10-02-1"
+    assert f"fr triage batch closeout b1 --branch {branch} --yes --repo {REPO}" in (
+        item.payload["brief"])  # fmt: skip
     assert item.payload["model"] == "claude-opus-5-5"
     assert item.payload["checkout"] == str(checkout.path)
-    assert _events(tmp_path, "b1") == ["dispatch", "post_merge", "closeout"]
-    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
-    closeout = batch.events[-1]
-    assert closeout.run == "2026-10-01-b1"  # type: ignore[union-attr]
-    assert closeout.archive == "chore/archive-2026-10-01-b1"  # type: ignore[union-attr]
-    assert _lines(out, "closeout") == [
-        f"closeout b1: started {REPO}/run/closeout-b1 (fr pickup --run 2026-10-01-b1)"
-    ]
+    assert _events(tmp_path, "b1") == ["dispatch", "post_merge"]  # members: the verb's (R15)
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert (marker.item, marker.branch, marker.planned) == (COLLECTED, branch, ["b1"])
+    assert _lines(out, "closeout") == [f"closeout b1: started {COLLECTED} for b1"]
     # a second pass starts nothing
     code, _ = _drive(tmp_path, "--once", "--yes")
     assert len(runner.dispatched) == 1 and checkout.commands == [["./scripts/install.sh"]]
@@ -926,7 +944,8 @@ def test_batches_closed_out_by_hand_are_not_closed_out_again(
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-owed"]
+    assert [i.id for i in runner.dispatched] == [COLLECTED]
+    assert "closeout owed --branch" in runner.dispatched[0].payload["brief"]
     assert "m101" not in checkout.release_probes  # an archived batch probes no release
 
 
@@ -940,7 +959,7 @@ def test_a_named_batch_already_archived_by_hand_is_not_closed_out(
     checkout.released = True
     checkout.live.add(journal)  # not archived yet: the close-out is owed
     code, out = _drive(tmp_path, "--once", "b1")
-    assert _lines(out, "closeout") == [f"closeout b1: start {REPO}/run/closeout-b1"], out
+    assert _lines(out, "closeout") == [f"closeout b1: start {COLLECTED} for b1"], out
     checkout.live.discard(journal)  # archived by hand
     code, out = _drive(tmp_path, "--once", "--yes", "b1")
     assert code == 0, out
@@ -1047,7 +1066,7 @@ def test_a_closed_hand_closeout_pr_leaves_the_closeout_owed(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert _lines(out, "adopt") == []
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+    assert [i.id for i in runner.dispatched] == [COLLECTED]
 
 
 def test_a_forks_pr_on_the_closeout_head_is_never_adopted(
@@ -1065,7 +1084,7 @@ def test_a_forks_pr_on_the_closeout_head_is_never_adopted(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert _lines(out, "adopt") == []
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+    assert [i.id for i in runner.dispatched] == [COLLECTED]
 
 
 def test_plan_mode_reports_an_adoption_and_writes_nothing(
@@ -1089,7 +1108,9 @@ def test_a_debug_batch_is_closed_out_with_branch(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     (item,) = runner.dispatched
-    assert "fr pickup --branch fix/batch-b1" in item.payload["brief"]
+    assert "fr triage batch closeout b1 --branch" in item.payload["brief"]  # no run: still one
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert marker.planned == ["b1"] and marker.branch == "chore/closeout-2026-10-02-1"
     assert checkout.commands == []  # no post_merge configured: nothing runs
 
 
@@ -1113,8 +1134,11 @@ def test_a_failing_post_merge_holds_the_closeout_every_pass(
     for _ in range(2):
         code, out = _drive(tmp_path, "--once", "--yes")
         assert code == 3, out
+        assert _lines(out, "post-merge") == [
+            "post-merge b1: post_merge failed, close-out held: install.sh: exit 1"
+        ]
         assert _lines(out, "closeout") == [
-            "closeout b1: post_merge failed, close-out held: install.sh: exit 1"
+            "closeout b1: close-out held: b1 (its post_merge has not succeeded)"
         ]
     assert runner.dispatched == []
     assert _events(tmp_path, "b1") == ["dispatch"]
@@ -1884,7 +1908,7 @@ def test_closeout_and_batch_dispatch_resolve_the_same_model(
     assert code == 0, out
     models_by_item = {i.id: i.payload["model"] for i in runner.dispatched}
     assert models_by_item == {
-        f"{REPO}/run/closeout-b1": "repo-model",
+        COLLECTED: "repo-model",
         f"{REPO}/run/batch-b2": "repo-model",
     }
 
@@ -3513,7 +3537,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 9
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 10
 
 
 @pytest.mark.parametrize("status", ["idle", "absent", "working"])

@@ -25,12 +25,13 @@ from pydantic import ValidationError
 from fr import real_ghclient
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
-from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
+from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, held_gates
 from fr.triage.claims import read_claims, to_issue_claim
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.model import (
     BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
+    CursorReader,
     Facts,
     InProgressState,
     Issue,
@@ -95,6 +96,8 @@ class Forge(Protocol):
     def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]: ...
 
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]: ...
+
+    def pr_labels(self, *, repo: str, number: int) -> list[str]: ...
 
     def viewer_login(self) -> str: ...
 
@@ -186,6 +189,12 @@ class ClientForge:
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         with _forge_errors():
             return self._client.list_prs_by_head(repo, branch)
+
+    def pr_labels(self, *, repo: str, number: int) -> list[str]:
+        """A PR's label names, read fresh: a merged batch PR's are its gate ledger
+        (exit-gates R14), which no list read carries."""
+        with _forge_errors():
+            return [str(n) for n in self._client.pr_view(repo, number).get("labels") or [] if n]
 
     def viewer_login(self) -> str:
         with _forge_errors():
@@ -498,6 +507,9 @@ def collect_facts(
     issue_limit: int = ISSUE_LIMIT,
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
+    ledger_branches: Iterable[tuple[str, str, datetime]] = (),
+    cursor_at: CursorReader | None = None,
+    known_labels: Mapping[tuple[str, int], list[str]] | None = None,
 ) -> Facts:
     """`collect_facts_counted` without a carried set: every not-open judged key is viewed."""
     return collect_facts_counted(
@@ -510,6 +522,9 @@ def collect_facts(
         issue_limit=issue_limit,
         pr_limit=pr_limit,
         repo_limit=repo_limit,
+        ledger_branches=ledger_branches,
+        cursor_at=cursor_at,
+        known_labels=known_labels,
     )[0]
 
 
@@ -548,6 +563,9 @@ def collect_facts_counted(
     carried: Iterable[Issue] = (),
     only: Iterable[str] | None = None,
     previous: Facts | None = None,
+    ledger_branches: Iterable[tuple[str, str, datetime]] = (),
+    cursor_at: CursorReader | None = None,
+    known_labels: Mapping[tuple[str, int], list[str]] | None = None,
 ) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
@@ -582,6 +600,13 @@ def collect_facts_counted(
     links whose PR lives in a carried repo, so a cross-repo link survives whichever side
     was read. A repo *previous* skipped is read regardless: it has nothing to carry.
     *only* None (or no *previous*) is the full collect, unchanged.
+
+    *ledger_branches* are `(repo name, branch, dispatched at)` of the batches not yet
+    finished (exit-gates §D Facts): each one's MERGED PR has its labels read once (the
+    gate ledger, which no list read carries), and each one's OPEN PR gets the run
+    cursor's position at its head from *cursor_at* (the command layer's `gitseam`
+    reader; None reads no cursor). A carried repo is not read for either. A merged PR in
+    *known_labels* (the previous facts read it with no gate held) is not read again.
     """
     keep = _carry_set(only, previous)
     if keep and previous is not None:
@@ -746,6 +771,15 @@ def collect_facts_counted(
         batch_prs += [p for p in prior.batch_prs if p.repo in keep]
     in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
     judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
+    every = [*linked_prs_all(out), *unlinked, *batch_prs, *judged_prs]
+    ledger = _ledger_reads(forge, every, ledger_branches, collected, cursor_at, known_labels or {})
+    if ledger:
+        out = [i.model_copy(update={"prs": [ledger.get((p.repo, p.number), p) for p in i.prs]})
+               for i in out]  # fmt: skip
+        unlinked, batch_prs, judged_prs = (
+            [ledger.get((p.repo, p.number), p) for p in group]
+            for group in (unlinked, batch_prs, judged_prs)
+        )
     facts = Facts(
         schema=FACTS_SCHEMA,
         scope=scope.name,
@@ -770,6 +804,41 @@ def collect_facts_counted(
     return facts, CollectStats(
         viewed=viewed, carried=carried_n, ignored=ignored, carried_repos=keep
     )
+
+
+def _ledger_reads(
+    forge: Forge,
+    prs: Iterable[PullRequest],
+    branches: Iterable[tuple[str, str, datetime]],
+    collected: Sequence[str],
+    cursor_at: CursorReader | None,
+    known: Mapping[tuple[str, int], list[str]],
+) -> dict[tuple[str, int], PullRequest]:
+    """(repo, number) -> the PR with its gate-ledger labels (merged) or its cursor
+    position (open), for every PR of a *branches* entry this pass read (§D Facts). One
+    label read per merged PR; a failed read leaves `labels` unread (None), never empty."""
+    by_name = {repo.split("/", 1)[1].lower(): repo for repo in collected}
+    wanted = {(by_name[n.lower()], b, at) for n, b, at in branches if n.lower() in by_name}
+    out: dict[tuple[str, int], PullRequest] = {}
+    for pr in prs:
+        key = (pr.repo, pr.number)
+        if key in out or not any(
+            pr.repo == r and pr.head_ref == b and _created_since(pr, at) for r, b, at in wanted
+        ):
+            continue
+        if pr.state == "MERGED" and key in known and not held_gates(known[key]):
+            # settled (no gate held, or every one passed): never read again (p4-r7)
+            out[key] = pr.model_copy(update={"labels": list(known[key])})
+        elif pr.state == "MERGED":
+            try:
+                out[key] = pr.model_copy(
+                    update={"labels": forge.pr_labels(repo=pr.repo, number=pr.number)}
+                )
+            except ForgeError as exc:
+                print(f"fr triage: {pr.repo}#{pr.number}: labels not read: {exc}", file=sys.stderr)
+        elif pr.state == "OPEN" and cursor_at is not None:
+            out[key] = pr.model_copy(update={"cursor": cursor_at(pr)})
+    return out
 
 
 def _carry_set(only: Iterable[str] | None, previous: Facts | None) -> frozenset[str]:

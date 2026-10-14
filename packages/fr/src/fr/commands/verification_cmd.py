@@ -24,6 +24,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr.commands.common import resolve_repo_root
 from fr.verification.check import check_strategy
@@ -93,6 +94,124 @@ def check_cmd(
 
     if had_errors:
         raise typer.Exit(2)
+
+
+@verification_app.command("exit")
+def exit_cmd(
+    run: str | None = typer.Option(None, "--run", help="The run whose exit to print."),
+    spec: str | None = typer.Option(
+        None, "--spec", help="A repo-relative spec path (no run: the shape default is unknown)."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print JSON."),
+) -> None:
+    """Print a run's (or spec's) exit: its kinds, its gates and the gated rows
+    (spec 2026-10-14 exit-gates R1). Read-only; needs no forge."""
+    import json
+
+    from fr.acceptance.model import AcceptanceError
+    from fr.run.model import RunStateError, load_run_state
+    from fr.verification.exit import exit_for_spec, run_exit
+    from fr.verification.spec_section import SectionError
+
+    repo_root = resolve_repo_root()
+    if (run is None) == (spec is None):
+        err_console.print("[red]refused:[/red] give exactly one of --run and --spec.")
+        raise typer.Exit(2)
+    try:
+        if run is not None:
+            result = run_exit(repo_root, load_run_state(repo_root, run))
+        else:
+            assert spec is not None
+            if not (repo_root / spec).is_file():
+                raise AcceptanceError(f"no spec at {spec}")
+            result = exit_for_spec(repo_root, spec)
+    except (RunStateError, AcceptanceError, SectionError, OSError) as e:
+        err_console.print(f"[red]refused:[/red] {escape(str(e))}", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+    if result.remap_problem:
+        err_console.print(
+            f"warning: {result.remap_problem} — no gate remap applied", soft_wrap=True
+        )
+    gated_rows = [{"id": r.id, "gate": result.row_gates[r.id]} for r in result.gated_rows]
+    if as_json:
+        console.print_json(
+            json.dumps(
+                {
+                    "kinds": sorted(result.kinds),
+                    "run_gate": result.run_gate,
+                    "gates": sorted(result.gates),
+                    "gated": result.is_gated,
+                    "gated_rows": gated_rows,
+                    "remap_problem": result.remap_problem,
+                }
+            )
+        )
+        return
+    console.print(f"kinds: {', '.join(sorted(result.kinds))}", soft_wrap=True)
+    console.print(f"run gate: {result.run_gate}")
+    console.print(f"gates: {', '.join(sorted(result.gates)) or 'none'}", soft_wrap=True)
+    for g in gated_rows:
+        console.print(f"gated: {g['id']} ({g['gate']})", soft_wrap=True)
+    console.print(f"gated: {'yes' if result.is_gated else 'no'}")
+
+
+@verification_app.command("set")
+def set_cmd(
+    run: str = typer.Option(..., "--run", help="The run whose spec's Verification to change."),
+    strategy: str | None = typer.Option(
+        None, "--strategy", help="The strategy (or `none`) to set; optional with --gate."
+    ),
+    reason: str = typer.Option(..., "--reason", help="Why; journalled as a spec decision."),
+    row: str | None = typer.Option(None, "--row", help="Set this row's line (default: the run's)."),
+    gate: str | None = typer.Option(None, "--gate", help="Also set the gate (or `none`)."),
+    answered_by: str | None = typer.Option(
+        None,
+        "--answered-by",
+        help="operator | agent. After spec-review, a change that makes the exit wait less "
+        "needs `operator`; on Claude Code the claim is verified against the session transcript.",
+    ),
+) -> None:
+    """Insert or rewrite one `strategy:`, row bullet or `gate:` line of the spec's
+    `## Verification`, journal why, commit and re-sync the PR labels (spec
+    2026-10-14 exit-gates R8)."""
+    from fr.verification import labels as _labels
+    from fr.verification.set import SetRefusedError, exit_change
+
+    if answered_by not in (None, "operator", "agent"):
+        err_console.print("refused: --answered-by must be operator or agent", markup=False)
+        raise typer.Exit(2)
+    repo_root = resolve_repo_root()
+    try:
+        result = exit_change(
+            repo_root,
+            run,
+            row=row,
+            strategy=strategy,
+            gate=gate,
+            reason=reason,
+            answered_by=answered_by,
+        )
+    except SetRefusedError as e:
+        err_console.print(f"refused: {e} — nothing changed", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
+    for notice in result.notices:
+        err_console.print(notice, markup=False, soft_wrap=True)
+    if result.decision_id is None:
+        console.print(f"{result.spec_rel}: unchanged", soft_wrap=True, markup=False)
+        return
+    console.print(f"{result.decision_id}: {result.spec_rel} updated", soft_wrap=True, markup=False)
+    try:
+        from fr.run.model import load_run_state
+
+        outcome = _labels.sync_exit_labels(repo_root, load_run_state(repo_root, run), None)
+    except _labels.PrNotFound:
+        return
+    except Exception as e:  # noqa: BLE001 — advisory: the change is already committed
+        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        return
+    if outcome.warning:
+        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
 
 
 @verification_app.command("walk")

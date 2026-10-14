@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import importlib.metadata
 
-from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.specifiers import InvalidSpecifier, Specifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 
@@ -40,7 +40,24 @@ def admits(constraint: str | SpecifierSet, version: str | Version) -> bool:
     either default can be installed; asking explicitly makes the answer one.
     """
     spec = constraint if isinstance(constraint, SpecifierSet) else SpecifierSet(constraint)
-    return spec.contains(version, prereleases=True)
+    v = version if isinstance(version, Version) else Version(str(version))
+    if v.pre is None or v.pre[0] != "rc" or v.dev is not None or v.post is not None:
+        return spec.contains(v, prereleases=True)
+    # R26 (spec 2026-10-14-exit-gates): an RC of X.Y.Z passes wherever X.Y.Z does, so a
+    # release candidate never refuses artifacts written for the final it precedes. Only
+    # a specifier naming exactly X.Y.Z judges the final; every other one (a floor naming
+    # another release, a ceiling) still compares the RC itself, by PEP 440.
+    final = Version(v.base_version)
+    return all(s.contains(final if _names(s, final) else v, prereleases=True) for s in spec)
+
+
+def _names(spec: Specifier, version: Version) -> bool:
+    """Does *spec* name exactly *version* (a final; a wildcard names nothing)?"""
+    try:
+        named = Version(spec.version)
+    except InvalidVersion:
+        return False
+    return not named.is_prerelease and named == version
 
 
 CEILING_VERSION = ceiling_for(importlib.metadata.version("fr"))

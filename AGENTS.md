@@ -555,6 +555,37 @@ variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, o
 every release fails (release.py reports that refusal
 by name, never as a lost race).
 
+**Release gating** (spec `2026-10-14-exit-gates` R20, R21, R25, R26). Before it
+cuts anything, `release.py` reads every PR merged since the last final tag, with
+its labels, through `gh` (the workflow token, `FR_RELEASE_STATUS_TOKEN`), and asks
+`fr release status --from-json <facts> --json`, run with **no forge credential**
+in its environment, which of those PRs merged since the last **final** tag
+(`vX.Y.Z` exactly; an RC tag never counts) still carry `gate:tester` or
+`gate:devops` without the `-passed` label. While any do, a run cuts a release
+candidate instead: `release: vX.Y.Z-rc.N`, tagged and published as a GitHub
+pre-release, **consuming no fragment**, or nothing at all when nothing has
+merged since the newest RC tag. Once nothing waits, the final `X.Y.Z` consumes
+the fragments. `release.yml` also runs daily, because a gate passes with no push to main.
+The read is cross-checked against the code: every PR `git log <last final>..HEAD`
+names (`(#N)` or `Merge pull request #N`, the release bot's own commits skipped)
+must be in it. A failed read, a read at its 1000 cap, a PR the read misses, or a
+failed `fr` decision makes the gate state **unknown**, which cuts an RC, never a
+final and never a refusal (nothing when nothing merged since the newest RC). So a
+token that cannot read labels means **RCs only** until it is fixed; `--version`
+stays the explicit override for a final. A computed version at or below HEAD's
+releases nothing (a removed fragment never moves the version backwards), and an
+untagged RC at HEAD (a failed tag push) is tagged on the next run.
+`FR_RELEASE_STATUS_TOKEN` is the workflow's `github.token`, so it also carries
+the job's contents and issues write; it reaches only the `gh` read, never `fr`
+or repo code. Exactly these calls authenticate: the `gh` read, the `gh release`
+and `gh issue` writes, and the two pushes. The bump, `uv lock --check`, the
+migration, the staged suite, `fr`'s decision and every other git command run
+credential-free.
+An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
+`X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one
+parser every script reads both spellings through. `fr_version` floors admit an RC of the
+final they name (`fr.version_floor.admits`).
+
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible
 workflow additions (new subcommand/skill/mandatory behavior) — e.g. the
 OpenCode-support release. Major = breaking CLI/plan-schema changes (e.g.

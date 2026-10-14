@@ -58,11 +58,13 @@ def test_a_board_with_no_batches_says_so() -> None:
 
 def test_seven_columns_with_their_counts_in_order() -> None:
     page = _page()
-    heads = re.findall(r'<h2>(\w[\w ]*) <span class="count">(\d+)</span></h2>', page)
+    heads = re.findall(r'<h2>(\w[\w ·]*) <span class="count">(\d+)</span></h2>', page)
     # The fixture's partial batch is owed its close-out: Partial, not Done (gh#985).
     assert heads == [
         ("Proposed", "2"), ("Waiting", "2"), ("Running", "3"),
-        ("PR open", "3"), ("Closing out", "3"), ("Partial", "1"), ("Done", "3"),
+        ("Needs you · Developer", "0"), ("PR open", "3"), ("Needs you · Reviewer", "0"),
+        ("Needs you · Tester", "0"), ("Needs you · DevOps", "0"),
+        ("Closing out", "3"), ("Partial", "1"), ("Done", "3"),
     ]  # fmt: skip
 
 
