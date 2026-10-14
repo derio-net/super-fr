@@ -775,3 +775,213 @@ step 2's aggregation is one loop plus one per-repo planning block reusing next_c
 ### no-refactor-p6-t4 · discovery · no-refactor-because P6.T4 (phase 6)
 
 prose, mirrors and a matrix status move only
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · undeclared holds taken back and re-collected every pass, no Needs-you row (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · take-back last-event-only and skipped on fail/crash; leftover event marks a held batch archived (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r3 · finding [open] (reviewer: in scope) · closeout-held only in the driver Snapshot; board disagrees (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r4 · finding [open] (reviewer: in scope) · one unreadable member fails the whole verb (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r5 · finding [open] (reviewer: in scope) · collected PR closed unmerged wedges the repo (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r6 · finding [open] (reviewer: in scope) · auto-merge with no file allowlist after a code-fixing hand-back (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r7 · finding [open] (reviewer: in scope) · verify-merge exit 2 tolerance too broad (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r8 · finding [open] (reviewer: in scope) · issues closed at PR open, not merge (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6-r9 · finding [open] (reviewer: in scope) · re-run on a pushed branch fails non-ff with no recovery (phase 6)
+
+Reviewer A tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r1 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r1 · finding [open] (reviewer: in scope) · review-free allowlist admitted workflows/verifications (code execution) and acceptance status (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r2 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r2 · finding [open] (reviewer: in scope) · fabricated green CI with no check results (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r3 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r3 · finding [open] (reviewer: in scope) · forge file list truncated, rename-blind, unbound to the merge head (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r4 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r4 · finding [open] (reviewer: in scope) · membership and Closes from the editable PR body (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r5 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r5 · finding [open] (reviewer: in scope) · resume trusted a fork PR on the branch name (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r6 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r6 · finding [open] (reviewer: in scope) · a failed hand run leaves an open marker that wedges the repo (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r7 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r7 · finding [open] (reviewer: in scope) · named or hand run while a close-out is in flight collides (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r8 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r8 · finding [open] (reviewer: in scope) · --branch not validated (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r9 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r9 · finding [open] (reviewer: in scope) · transient read error became a durable hold (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r10 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=in -->
+### p6b-r10 · finding [open] (reviewer: in scope) · unbounded hand-backs with no members; reopened PR never re-observed (phase 6)
+
+Reviewer B (security re-review of c818f3ba..a692922a) tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r11 created=2026-10-14T09:22:53+00:00 phase=6 state=open review_scope=out -->
+### p6b-r11 · finding [open] (reviewer: out of scope) · main has no required review or checks, so the auto-merge guards are the only barrier once approved-fr is bypassed (phase 6)
+
+Reviewer B tag: out (repo ruleset predates this change).
+
+<!-- fr:journal kind=review scope=plan id=p6-review-1 created=2026-10-14T09:22:53+00:00 phase=6 -->
+### p6-review-1 · review · phase 6 independent review: 9 findings (9 in, 0 out) (phase 6)
+
+Reviewer A read 97f2e29d..c818f3ba against R15, R16, R27, §D, §E; found holds/membership driven by guesses and take-back (p6-r1..r4), wedges and an unguarded no-approval merge. All 9 fixed by the a692922a redesign.
+
+<!-- fr:journal kind=review scope=plan id=p6-review-2 created=2026-10-14T09:22:53+00:00 phase=6 -->
+### p6-review-2 · review · phase 6 focused security re-review: 11 findings (10 in, 1 out) (phase 6)
+
+Reviewer B read the fix range c818f3ba..a692922a on the security review's flags; confirmed the allowlist admitted executable config (p6b-r1, critical), fabricated green (p6b-r2), forge-file-list and PR-body trust (p6b-r3..r5). Fixed in aec72e4f by a verb-recorded trust anchor; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: undeclared holds taken back and re-collected every pass, no Needs-you row (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: take-back last-event-only and skipped on fail/crash; leftover event marks a held batch archived (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r3 -->
+### p6-r3-resolved · finding [fixed] · resolves p6-r3: closeout-held only in the driver Snapshot; board disagrees (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r4 -->
+### p6-r4-resolved · finding [fixed] · resolves p6-r4: one unreadable member fails the whole verb (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r5 -->
+### p6-r5-resolved · finding [fixed] · resolves p6-r5: collected PR closed unmerged wedges the repo (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r6 -->
+### p6-r6-resolved · finding [fixed] · resolves p6-r6: auto-merge with no file allowlist after a code-fixing hand-back (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r7 -->
+### p6-r7-resolved · finding [fixed] · resolves p6-r7: verify-merge exit 2 tolerance too broad (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r8 -->
+### p6-r8-resolved · finding [fixed] · resolves p6-r8: issues closed at PR open, not merge (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6-r9 -->
+### p6-r9-resolved · finding [fixed] · resolves p6-r9: re-run on a pushed branch fails non-ff with no recovery (phase 6)
+
+a692922a (redesign: start marker, durable closeout_hold, Closes at merge, docs-only merge, verify-merge --default-branch, resume/refuse), hardened by aec72e4f; tests in test_triage_collected_closeout_drive.py / test_triage_batch_closeout*.py named p6_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r1-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r1 -->
+### p6b-r1-resolved · finding [fixed] · resolves p6b-r1: review-free allowlist admitted workflows/verifications (code execution) and acceptance status (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r2-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r2 -->
+### p6b-r2-resolved · finding [fixed] · resolves p6b-r2: fabricated green CI with no check results (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r3-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r3 -->
+### p6b-r3-resolved · finding [fixed] · resolves p6b-r3: forge file list truncated, rename-blind, unbound to the merge head (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r4-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r4 -->
+### p6b-r4-resolved · finding [fixed] · resolves p6b-r4: membership and Closes from the editable PR body (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r5-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r5 -->
+### p6b-r5-resolved · finding [fixed] · resolves p6b-r5: resume trusted a fork PR on the branch name (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r6-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r6 -->
+### p6b-r6-resolved · finding [fixed] · resolves p6b-r6: a failed hand run leaves an open marker that wedges the repo (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r7-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r7 -->
+### p6b-r7-resolved · finding [fixed] · resolves p6b-r7: named or hand run while a close-out is in flight collides (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r8-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r8 -->
+### p6b-r8-resolved · finding [fixed] · resolves p6b-r8: --branch not validated (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r9-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r9 -->
+### p6b-r9-resolved · finding [fixed] · resolves p6b-r9: transient read error became a durable hold (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r10-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=fixed resolves=p6b-r10 -->
+### p6b-r10-resolved · finding [fixed] · resolves p6b-r10: unbounded hand-backs with no members; reopened PR never re-observed (phase 6)
+
+aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git diff within the archive allowlist, trusted same-repo commits, recorded Closes; tests named p6b_r*; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r11-resolved created=2026-10-14T09:22:53+00:00 phase=6 state=open resolves=p6b-r11 out_of_scope=true -->
+### p6b-r11-resolved · finding [out-of-scope] · resolves p6b-r11: main has no required review or checks, so the auto-merge guards are the only barrier once approved-fr is bypassed (phase 6)
+
+The repo's ruleset (docs/merge-protection.md, configure-main-protection.sh stages) predates this change; raised to the operator in the PR body.
