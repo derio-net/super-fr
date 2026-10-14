@@ -67,6 +67,7 @@ class World:
         self.labels_defined: set[str] = {"approved-fr"}
         self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
         self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
+        self.skipped: list[Any] = []  # repos collect did not read
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -110,6 +111,7 @@ class World:
             prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
             stale_in_progress=self.stale_in_progress,
+            skipped=self.skipped,
             viewer="operator",
         )
 
@@ -4870,3 +4872,48 @@ def test_a_yes_pass_settles_a_closed_hit_no_batch_holds(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert _lines(out, "settle") == ["settle super-fr#1: unlabelled"]
     assert "label 1" in world.calls
+
+
+def test_a_yes_pass_leaves_a_closed_hit_of_a_skipped_repo_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r6: the carried-repo filter holds at pass level, not only in `read_repo`."""
+    from fr.triage.model import Skipped, StaleInProgress
+
+    world.issues[1] = "closed"
+    world.stale_in_progress = [
+        StaleInProgress(key="super-fr#1", title="t", url="https://example.com/1", state="stale")
+    ]
+    world.skipped = [Skipped(repo=REPO, reason="collect could not read it")]
+    _state(tmp_path, world)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "settle") == []
+    assert "label 1" not in world.calls
+
+
+def test_a_yes_pass_clears_a_release_pending_member(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r5: a closed member whose own marker stands (release-pending) is settled by
+    `--once --yes`: its marker is released and its labels removed."""
+    from fr.triage.claims import Marker, parse_marker, render_marker
+    from fr.triage.model import Scope, StaleInProgress
+    from fr.triage.scope_config import scope_id
+
+    me = scope_id(Scope(kind="repo", target=REPO))
+    marker = Marker(signer=me, batch="b1", claimed=NOW, heartbeat=NOW, expires=NOW + timedelta(1))
+    world.comments[1] = [
+        {"author": "operator", "body": render_marker(marker), "created_at": NOW.isoformat(), "id": 7}
+    ]
+    world.issues[1] = "closed"
+    world.stale_in_progress = [
+        StaleInProgress(
+            key="super-fr#1", title="t", url="https://example.com/1", state="release-pending"
+        )
+    ]
+    _state(tmp_path, world)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "settle") == ["settle super-fr#1: released"]
+    assert "label 1" in world.calls
+    released = parse_marker(world.comments[1][0]["body"])
+    assert released is not None and released.released is not None
