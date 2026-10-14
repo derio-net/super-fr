@@ -5839,11 +5839,12 @@ class _Driver:
         triage batch closeout`. Each member's close-out event (`archive` the shared branch)
         is recorded before the tab starts (gh#883) and taken back if it cannot start."""
         members: list[Batch] = []
-        skipped: list[str] = []
+        skipped: list[str] = []  # post_merge not yet run: a close-out hold, retried next pass
+        foreign: list[str] = []  # another driver's runner: its close-out is not this driver's
         for bid in action.items:
             b = _find(judgements.batches, bid)
             if self.adapter.refusal(b) is not None:
-                skipped.append(f"{bid} (left to the driver of runner {b.launch.runner})")
+                foreign.append(f"left to the driver of runner {b.launch.runner} ({bid})")
             elif (
                 self.adapter.kind == "host"
                 and facts.config_for(repo).post_merge
@@ -5852,8 +5853,9 @@ class _Driver:
                 skipped.append(f"{bid} (its post_merge has not succeeded)")
             else:
                 members.append(b)
-        if not members:
-            return f"close-out held: {'; '.join(skipped)}", False
+        if not members:  # cloud-triage §E, p4-r10: a foreign batch is not a hold
+            parts = ([f"close-out held: {'; '.join(skipped)}"] if skipped else []) + foreign
+            return "; ".join(parts), False
         checkout = self.checkout(repo)
         try:
             checkout.fast_forward(switch=self.adapter.owns_checkout)
@@ -5904,7 +5906,8 @@ class _Driver:
                 known = _replace(known, mine.model_copy(update={"events": [*mine.events[:-1],
                                                                            last]}))  # fmt: skip
             _write(self.target, known, facts, read=recorded, read_errors=True)
-        left = f"; not now: {'; '.join(skipped)}" if skipped else ""
+        later = [*(f"{s}" for s in skipped), *foreign]
+        left = f"; not now: {'; '.join(later)}" if later else ""
         return f"started {item.id} for {', '.join(b.id for b in members)}{left}", True
 
     def _closeout_hand_back(
