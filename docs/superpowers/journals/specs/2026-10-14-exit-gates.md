@@ -417,3 +417,8 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 ### decision-token-names · decision · Decision tokens are decided_by= and remainder_tracked_by=: released fr refuses answered_by/tracked_by on a decision
 
 Review p3-r1: fr <= 5.26 knows answered_by= and tracked_by= and its validator refuses them off a resolution record, so a decision carrying them made the journal unparseable to it. Decision-only tokens no released fr knows are skipped by its named projection, so the journal stamp stays put; answered_by/tracked_by stay resolution-only. Spec R9, R10, R12 and §C amended.
+
+<!-- fr:journal kind=decision scope=spec id=p6-review-closeout-record created=2026-10-14T08:19:32+00:00 -->
+### p6-review-closeout-record · decision · Collected close-out membership and holds are the verb's durable record; the driver records only a start marker
+
+Phase 6 review (p6-r1..r9): R15/§D/§E amended. The driver records a start marker (judgements closeouts:) before the session; the verb records each member's closeout event after its PR opens and a durable closeout_hold for each batch it held (unreadable members included); a crash after push is reconciled from the PR's member block; a PR closed unmerged ends the close-out and its batches are owed again; auto-merge only for docs/superpowers and docs/acceptance paths; issues close at merge via Closes lines; verify-merge gets --default-branch and only the unresolvable-ref exit 2 is tolerated; a re-run on an existing PR resumes or refuses by name.
