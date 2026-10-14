@@ -1,0 +1,56 @@
+schema_version: 10
+run: 2026-10-14-feat-closed-session-batch-recovery
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    phase: 1
+    state: open
+    review_scope: in
+    title: "Pending recovery activation permits managed restart"
+    body: "In scope: recovery.py:413-425 saves the target descriptor active before final intent save. Failure leaves descriptor active while pending recovery remains; opencode.py restart eligibility checks only descriptor. Add unresolved/unreadable recovery-intent admission guard and regression that no restart input occurs after activation-write failure."
+  - kind: finding
+    id: p1-r2
+    phase: 1
+    state: open
+    review_scope: in
+    title: "Recovery accepts cursors that fr cannot read"
+    body: "In scope: managed.py:268-297 validates only selected fields and accepts missing workflow/started or future schema. Installed fixture triage-closed-recovery.py:125-128 uses such a cursor. Validate with supported read-only parse_run_state, without migration/writes; use valid fixtures and test zero allocation on malformed/future schemas."
+  - kind: finding
+    id: p1-r3
+    phase: 1
+    state: open
+    review_scope: in
+    title: "Malformed agent names can certify source absence"
+    body: "In scope: recovery.py:42-45 validates pane/tab identities but not optional name used by absent/discovery comparisons. Reject present non-string names as unknown observation, preserve valid unnamed rows, and test preview/act/repair perform no input/allocation."
+  - kind: review
+    id: phase1-review
+    phase: 1
+    title: "Independent phase-1 code review"
+    body: "Reviewed origin/main...HEAD against spec, phase plan and journal. Initial review raised three in-scope findings; re-review raised one regression, all four now independently verified fixed. Final review of 04b8acab confirms usable run/cursor/steps admission after supported schema parsing, unknown cursor-step refusal, and finished final-step compatibility. Pending-intent restart admission and malformed-name refusal remain present. No new directly introduced defects. Executor suite claims were not used as substitute for review. Actual-client walk remains operator-owned post-merge Tester evidence. #1216 excluded."
+  - kind: finding
+    id: p1-r4
+    phase: 1
+    state: open
+    review_scope: in
+    title: "Parser substitution removed nonempty recovery cursor guards"
+    body: "In scope: cc7386fd removed explicit usable run/cursor/steps checks while parse_run_state permits blank strings and empty steps. Restore recovery-specific usability guards after supported parsing, with preview/act zero-allocation regressions and finished-final-step compatibility."
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: "cc7386fd adds managed.restart_admission checking source/item pending or unreadable intent before restart input; startup readiness bypass is explicit. Reviewer verified managed.py:303–319 and regression cases for failed activation and unreadable intent."
+  - id: p1-r2
+    state: fixed
+    body: "cc7386fd uses parse_run_state without migration/writes and valid RunState installed fixtures. Missing fields, invalid metadata and future-schema cursor tests refuse allocation and preserve bytes; independently verified."
+  - id: p1-r3
+    state: fixed
+    body: "cc7386fd rejects present non-string agent names before absence/discovery, keeps legitimate unnamed rows, and tests preview/act/repair without effects; independently verified."
+  - id: p1-r4
+    state: fixed
+    body: "04b8acab adds validate_run_id plus nonblank/unpadded cursor, nonempty steps and cursor membership checks after parse_run_state; tests reject invalid identities and retain finished deliver cursor HOLD. Reviewer independently verified managed.py:282–292 and tests:594–646."
+evidence:
+  review: phase1-review
+  reviewer: ses_ec3f38899ffeDvvAyhmxZ7QQwj
+  model: openai/gpt-6.1-sol
