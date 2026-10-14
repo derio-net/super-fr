@@ -9278,9 +9278,18 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R15
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_closeout.py
+      - super-fr:tests/unit/test_triage_batch_closeout_cmd.py
+      - super-fr:tests/unit/test_triage_collected_closeout_drive.py
+    status: walk-owed
+    notes: 'The collected close-out is unit-tested against a fake worktree and forge:
+      the engine''s per-batch steps, holds and one PR (test_triage_batch_closeout),
+      the verb (test_triage_batch_closeout_cmd), and the driver''s one-per-repo plan,
+      shared-head attribution, ready-and-merge and single hand-back (test_triage_collected_closeout_drive).
+      Live walk owed: one close-out over a real merged queue with a real housekeeping
+      PR (Test Plan step 3).'
   - id: exit-gates-release-gating
     capability: exit-gates
     acceptance: A push to main cuts a vX.Y.Z-rc.N pre-release while any change merged
