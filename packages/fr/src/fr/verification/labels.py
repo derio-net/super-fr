@@ -29,13 +29,17 @@ from fr.labels import (
 if TYPE_CHECKING:
     from fr.run.model import RunState
 
-__all__ = ["LabelSyncError", "SyncOutcome", "desired_labels", "sync_exit_labels"]
+__all__ = ["LabelSyncError", "PrNotFound", "SyncOutcome", "desired_labels", "sync_exit_labels"]
 
 _PR_URL = re.compile(r"^https?://[^/]+/(?P<repo>.+?)/(?:-/merge_requests|pulls?)/(?P<n>\d+)")
 
 
 class LabelSyncError(Exception):
     """The PR's labels could not be synced (a forge refusal or an unreadable remap)."""
+
+
+class PrNotFound(LabelSyncError):  # noqa: N818 — a kind of sync failure, not a fault
+    """The run has no PR to label (yet): not a failure for a caller that syncs early."""
 
 
 @dataclass(frozen=True)
@@ -67,12 +71,12 @@ def _target(repo_root: Path, state: RunState, pr: str | None, client: GhClient) 
         return m["repo"], int(m["n"])
     slug = origin_slug(repo_root)
     if slug is None:
-        raise LabelSyncError("cannot tell which repository the PR is in (no `origin` remote)")
+        raise PrNotFound("no `origin` remote, so no PR to label")
     if ref.isdigit():
         return slug, int(ref)
     found = client.open_pr_for_head(slug, state.branch)
     if found is None:
-        raise LabelSyncError(f"no open PR for branch {state.branch!r} in {slug}")
+        raise PrNotFound(f"no open PR for branch {state.branch!r} in {slug}")
     return slug, int(found["number"])
 
 

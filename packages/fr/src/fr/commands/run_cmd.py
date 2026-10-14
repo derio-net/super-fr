@@ -6143,6 +6143,43 @@ def _questions_from_flags(
         raise typer.Exit(2) from e
 
 
+def _warn_label_sync(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R7: a spec-bearing step resolved, so bring the run's PR labels to
+    its exit. Advisory: a run with no PR yet is silent, any failure a warning —
+    `deliver` is the one place the labels are required."""
+    from fr.verification import labels as _labels
+
+    try:
+        outcome = _labels.sync_exit_labels(repo_root, state, None)
+    except _labels.PrNotFound:
+        return
+    except Exception as e:  # noqa: BLE001 — advisory, after the step already resolved
+        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        return
+    if outcome.warning:
+        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
+
+
+def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id: str) -> None:
+    """Exit-gates R7: `deliver` refuses a PR whose `verification:`/`gate:` labels it could
+    not sync (printing the retry), and only warns on a forge that cannot label a PR."""
+    from fr.verification import labels as _labels
+
+    try:
+        outcome = _labels.sync_exit_labels(repo_root, state, pr)
+    except _labels.LabelSyncError as e:
+        err_console.print(
+            f"refused: could not sync the PR's verification/gate labels: {e}. Fix that, then "
+            f"resolve again (`{_resolve_hint(run_id, 'deliver', None)}`, with your --record "
+            "if you resolve through one)",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    if outcome.warning:
+        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
+
+
 def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     """Render the PR body fr owns, then refuse `deliver` until the LIVE PR
     carries every required section (spec 2026-09-25 §5.C.4). The render is
@@ -6558,6 +6595,7 @@ def _resolve_body(
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
         _deliver_pr_gate(repo_root, state, pr)
+        _deliver_label_sync(repo_root, state, pr, run_id)
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first
         # `pr`-less resolve exists to fetch, and before the gate's queued
@@ -6581,6 +6619,8 @@ def _resolve_body(
     _flush_gate_decisions(repo_root)
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
+    if step_id in ("brainstorm", "spec-review") and state_value == "done":
+        _warn_label_sync(repo_root, new_state)
     if step_id == "deliver" and state_value == "done":
         # spec 2026-09-25 §5.B.3: the usage capture rides this commit
         _capture_usage(repo_root, new_state, "deliver")
