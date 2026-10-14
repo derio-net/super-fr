@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record.model import RECORD_SCHEMA_VERSION, JournalItem, parse_record
@@ -101,6 +102,7 @@ def _brainstorm(tmp_path: Path, evidence: dict[str, str] | None, **extra: object
         "emitted": {"spec": spec_rel},
         "journal": [
             {"kind": "decision", "id": "narrow-1", "title": "ships half", "narrows": ["#1"]},
+            {"kind": "decision", "id": "plain-1", "title": "kept it flat"},
             {"kind": "decision", "id": "own-1", "title": "the agent's", "answered_by": "agent"},
         ],
         **extra,
@@ -114,19 +116,85 @@ def _brainstorm(tmp_path: Path, evidence: dict[str, str] | None, **extra: object
     return {e.id: e for e in parse_journal(journal.read_text())}
 
 
-def test_the_brainstorm_resolve_writes_answered_by_operator_on_its_decisions(
-    tmp_path: Path,
+def _answered(tmp_path: Path, monkeypatch, *, question: str, answer: str | None = None) -> None:
+    """An observable Claude Code session with one answered round, after the gate."""
+    from tests.unit.transcript_sessions import ORCHESTRATOR, question_rows, records, write_session
+
+    rows = question_rows(
+        "2099-01-01T00:00:00.000Z", tool_use_id="toolu_q1", first_question=question
+    )
+    if answer is not None:
+        rows[1]["toolUseResult"]["answers"] = {question: answer}
+    write_session(tmp_path / "projects", session_id="s-q", rows=[*records(ORCHESTRATOR), *rows])
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-q")
+
+
+def test_an_observed_operator_gate_stamps_its_ordinary_decisions(
+    tmp_path: Path, monkeypatch
 ) -> None:
+    _answered(tmp_path, monkeypatch, question="Should the parser stay flat?")
+    entries = _brainstorm(tmp_path, None)
+    assert entries["plain-1"].decided_by == "operator"
+    assert entries["own-1"].decided_by == "agent"  # an explicit `agent` is kept
+    for e in entries.values():
+        assert e.answered_by is None  # never the released fr's resolution-only token
+
+
+def test_p3_r2_a_narrowing_no_answered_round_names_stays_the_agents(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _answered(tmp_path, monkeypatch, question="Should the parser stay flat?")
+    entries = _brainstorm(tmp_path, None)
+    assert entries["narrow-1"].decided_by is None
+
+
+@pytest.mark.parametrize("where", ["question", "answer"])
+def test_p3_r2_a_narrowing_an_answered_round_names_is_the_operators(
+    tmp_path: Path, monkeypatch, where: str
+) -> None:
+    if where == "question":
+        _answered(tmp_path, monkeypatch, question="Ship only half of #1 here?")
+    else:
+        _answered(tmp_path, monkeypatch, question="How much ships?", answer="Half; #1's rest later")
+    entries = _brainstorm(tmp_path, None)
+    assert entries["narrow-1"].decided_by == "operator"
+
+
+def test_p3_r3_an_unobserved_gate_never_stamps_a_narrowing_and_notes_the_rest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.delenv("FR_HARNESS", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
     entries = _brainstorm(tmp_path, {"answered_by": "operator"})
-    assert entries["narrow-1"].answered_by == "operator"
-    assert entries["own-1"].answered_by == "agent"  # an explicit `agent` is kept
+    assert entries["narrow-1"].decided_by is None
+    assert entries["plain-1"].decided_by == "operator"
+    assert "recorded unverified" in entries["plain-1"].body
+
+
+def test_p3_r3_an_unobserved_gate_claimed_by_the_agent_stamps_nothing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.delenv("FR_HARNESS", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+    entries = _brainstorm(tmp_path, {"answered_by": "agent"})
+    assert entries["plain-1"].decided_by is None and entries["narrow-1"].decided_by is None
 
 
 def test_a_brainstorm_cleared_without_asking_writes_no_operator_answer(tmp_path: Path) -> None:
     entries = _brainstorm(
         tmp_path, None, no_questions=True, reason="the request decided everything"
     )
-    assert entries["narrow-1"].answered_by is None
+    assert entries["narrow-1"].decided_by is None
+    assert entries["plain-1"].decided_by is None
+
+
+def test_p3_r8_the_migration_names_every_field_it_adds() -> None:
+    from fr.artifacts.record_exit_gates import RECORD_EXIT_GATES_MIGRATION
+
+    for field in ("gate", "narrows", "filed_as"):
+        assert field in RECORD_EXIT_GATES_MIGRATION.description
 
 
 def test_the_validator_accepts_both_fields(tmp_path: Path) -> None:

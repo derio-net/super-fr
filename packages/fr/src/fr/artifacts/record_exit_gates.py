@@ -1,10 +1,11 @@
 """The `record` kind's 9 -> 10 migration (spec `2026-10-14-exit-gates-design.md`
 §C, R12).
 
-`JournalItem.gate` and `JournalItem.narrows` — a decision's Owner gate — land on
+`JournalItem.gate` and `JournalItem.narrows` — a decision's Owner gate — and
+`JournalItem.filed_as` — where `fr journal file` filed an owed entry (R10) — land on
 an `extra="forbid"` model that released fr versions read, so an older fr raises
 on a record carrying them: a shape change under
-`.claude/rules/artifact-versioning.md`. Both are optional and absent by default,
+`.claude/rules/artifact-versioning.md`. All three are optional and absent by default,
 which is what every v9 record already means, so this rewrites no body; the
 runner writes the stamp once `fn` returns.
 
@@ -63,7 +64,9 @@ RECORD_EXIT_GATES_MIGRATION = SchemaMigration(
     from_version=9,
     to_version=10,
     fn=guard_v9_record,
-    description="record: add `JournalItem.gate`/`narrows` — stamp only, no body change",
+    description=(
+        "record: add `JournalItem.gate`/`narrows`/`filed_as` — stamp only, no body change"
+    ),
 )
 
 MIGRATIONS.register(RECORD_EXIT_GATES_MIGRATION)

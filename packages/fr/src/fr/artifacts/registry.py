@@ -543,7 +543,8 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `skipped` split (spec `2026-10-11-debt-engine-design` §D, R27),
             # migration `fr.artifacts.record_status_split`, read through the
             # frozen `fr.record.legacy.RecordV8`; 9 -> 10 for `JournalItem.gate`/
-            # `narrows` (spec `2026-10-14-exit-gates-design` §C, R12), migration
+            # `narrows`/`filed_as` (spec `2026-10-14-exit-gates-design` §C, R10,
+            # R12), migration
             # `fr.artifacts.record_exit_gates`, stamp only.
             current_version=10,
             locator="docs/superpowers/runs/*.records/*.yaml",

@@ -131,3 +131,39 @@ def test_deliver_refuses_leftovers_then_passes_after_journal_file(
 
     assert out.exit_code == 0, out.output
     assert load_run_state(root, RUN).steps["deliver"].state == "done"
+
+
+def test_p3_r9_under_tracking_none_an_unfiled_out_of_scope_finding_delivers_and_is_listed(
+    tmp_path: Path, live: dict[str, str]
+) -> None:
+    """No tracker: nothing can be filed, so the out-of-scope finding is no
+    leftover — it rides in the PR body's out-of-scope section, as before."""
+    root = _at_deliver_with_leftovers(tmp_path)
+    (root / ".devcontainer").mkdir(exist_ok=True)
+    (root / ".devcontainer/fr-profiles.yaml").write_text(
+        "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
+    )
+    # The seeded row is not owed here; the leftover under test is the finding alone.
+    row = fr(
+        root,
+        [
+            *("acceptance", "set-status", "--id", SEEDED_ROW, "--status", "manual"),
+            *("--notes", "an operator process, never automated"),
+        ],
+    )
+    assert row.exit_code == 0, row.output
+    commit_all(root, "tracking none")
+    (root / "suite.log").write_text("n passed\n")
+
+    live["body"] = "not yet"
+    _rec, out = _deliver(root)  # renders the body: the live one is not it
+    assert "unaccounted" not in out.output, out.output
+    body = _body(root).read_text()
+    out_of_scope = body.split("## Out-of-scope findings")[1].split("## ")[0]
+    assert "p1-f2" in out_of_scope
+    live["body"] = body
+
+    _rec, out = _deliver(root)
+
+    assert out.exit_code == 0, out.output
+    assert load_run_state(root, RUN).steps["deliver"].state == "done"

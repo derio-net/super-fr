@@ -42,6 +42,7 @@ __all__ = [
     "REQUIRED_SECTIONS",
     "Leftover",
     "PrematureClose",
+    "UnreadableJournalError",
     "closing_refs",
     "holds_open_for_run",
     "missing_sections",
@@ -286,6 +287,8 @@ class PrematureClose:
     ref: str
     rows: tuple[str, ...]
     decisions: tuple[str, ...] = ()
+    tracks: tuple[str, ...] = ()
+    """Owed rows whose `issues:` names it — the issue tracks their rest (p3-r5)."""
 
     @property
     def fix(self) -> str:
@@ -308,7 +311,9 @@ def premature_closes(
       post-merge gate (exit-gates R11), whatever its strategy, until a walk
       verifies it (a walked row is how its gate passes, R14);
     - a narrowing decision in `narrowings` names it and does not carry
-      `answered_by=operator` (R11, R12).
+      `decided_by=operator` (R11, R12);
+    - it is the `issues:` ref of an owed row (`OWED_ROW_STATUSES`): the issue
+      tracks what the row still owes (review p3-r5).
 
     Merging such a PR would close an issue its promise has not been verified
     for; `Refs <ref>` mentions it without closing."""
@@ -322,25 +327,36 @@ def premature_closes(
             and not walk_verified(row)
         )
 
+    def key(issue: str) -> str:
+        return normalize_issue_ref(issue, identity) or issue.lower()
+
     holding: dict[str, list[str]] = {}
+    tracking: dict[str, list[str]] = {}
     for row in matrix.rows:
         for issue in row.issues:
             if holds_open(row) or gated(row):
-                key = normalize_issue_ref(issue, identity) or issue.lower()
-                holding.setdefault(key, []).append(row.id)
+                holding.setdefault(key(issue), []).append(row.id)
+            elif row.status in OWED_ROW_STATUSES:
+                tracking.setdefault(key(issue), []).append(row.id)
     narrowed: dict[str, list[str]] = {}
     for decision in narrowings:
-        if decision.answered_by == "operator":
+        if decision.decided_by == "operator":
             continue
         for issue in decision.narrows:
-            key = normalize_issue_ref(issue, identity) or issue.lower()
-            narrowed.setdefault(key, []).append(decision.id)
+            narrowed.setdefault(key(issue), []).append(decision.id)
     out: list[PrematureClose] = []
     for line, _keyword, written in closing_refs(live_body, as_github=True):
         ref = normalize_issue_ref(written, identity)
-        if ref is not None and (ref in holding or ref in narrowed):
-            rows = tuple(holding.get(ref, ()))
-            out.append(PrematureClose(line, ref, rows, tuple(narrowed.get(ref, ()))))
+        if ref is not None and (ref in holding or ref in narrowed or ref in tracking):
+            out.append(
+                PrematureClose(
+                    line,
+                    ref,
+                    tuple(holding.get(ref, ())),
+                    tuple(narrowed.get(ref, ())),
+                    tuple(tracking.get(ref, ())),
+                )
+            )
     return out
 
 
@@ -371,7 +387,7 @@ def run_narrowings(repo_root: Path, state: RunState) -> list[JournalEntry]:
 
     return [
         d
-        for _s, _slug, entries in _journals(repo_root, state)
+        for _s, _slug, entries in _journals(repo_root, state, strict=True)
         for d in narrowing_decisions(entries)
     ]
 
@@ -398,7 +414,9 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
     - an `owed` journal entry → `filed_as`;
     - an owed row citing the spec (`OWED_ROW_STATUSES`) → gated by a post-merge
       gate of this run, or carrying `issues:`;
-    - a narrowing decision → a later decision filing it (`tracked_by=`).
+    - a narrowing decision → a later decision filing it (`remainder_tracked_by=`).
+
+    Raises `UnreadableJournalError` when either journal does not parse.
 
     Under `tracking: none` only the gate route applies: the journal kinds stay
     recorded in the journal and the PR body, and a row's only fix is its gate.
@@ -411,7 +429,7 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
     tracker = _has_tracker(repo_root)
     out: list[Leftover] = []
     if tracker:
-        for scope, slug, entries in _journals(repo_root, state):
+        for scope, slug, entries in _journals(repo_root, state, strict=True):
 
             def file(eid: str, scope: str = scope, slug: str = slug) -> str:
                 return f"fr journal file --scope {scope} --slug {slug} --id {eid}"
@@ -453,8 +471,17 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
     return out
 
 
-def _journals(repo_root: Path, state: RunState) -> list[tuple[str, str, list[JournalEntry]]]:
-    """`(scope, slug, entries)` of the run's spec and plan journals that read."""
+class UnreadableJournalError(Exception):
+    """A journal a `deliver` gate must read does not parse (review p3-r4): the
+    gate refuses, naming it, rather than judge a run with a journal dropped."""
+
+
+def _journals(
+    repo_root: Path, state: RunState, *, strict: bool = False
+) -> list[tuple[str, str, list[JournalEntry]]]:
+    """`(scope, slug, entries)` of the run's spec and plan journals. A journal
+    that does not parse is skipped by the render (fail open) and raises
+    `UnreadableJournalError` when `strict` — what every gate passes."""
     out: list[tuple[str, str, list[JournalEntry]]] = []
     emitted: dict[str, str] = {}
     for record in state.steps.values():
@@ -470,7 +497,10 @@ def _journals(repo_root: Path, state: RunState) -> list[tuple[str, str, list[Jou
             continue
         try:
             out.append((scope, slug, parse_journal(path.read_text())))
-        except JournalParseError:
+        except JournalParseError as e:
+            if strict:
+                rel = path.relative_to(repo_root) if path.is_relative_to(repo_root) else path
+                raise UnreadableJournalError(f"{rel} does not parse: {e}") from e
             continue
     return out
 

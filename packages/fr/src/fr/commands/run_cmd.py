@@ -1281,6 +1281,40 @@ def _flush_gate_decisions(repo_root: Path) -> None:
         _note_record_write(repo_root, target)
 
 
+def observed_gate_rounds(record: StepRecord) -> list[Round] | None:
+    """The answered question rounds since this gate blocked (`record.at`), or
+    `None` where fr cannot read them — THE observation `_gate_provenance` and
+    `derive_gate_answer` share, so the two cannot disagree."""
+    from fr.run.telemetry import answered_rounds_since
+
+    return answered_rounds_since(os.environ, record.at) if record.at else None
+
+
+@dataclass(frozen=True)
+class GateAnswer:
+    """Who answered an operator gate, as `_gate_provenance` derives it (spec
+    2026-10-14 R12): `who` is `operator`, `agent` or `None` (a gate it refuses);
+    `observed` says the transcript was read; `rounds` are the answered rounds."""
+
+    who: str | None
+    observed: bool
+    rounds: tuple[Round, ...] = ()
+
+
+def derive_gate_answer(
+    record: StepRecord, *, no_questions: bool, claimed: str | None
+) -> GateAnswer:
+    """The answer `_gate_provenance` records, without its refusals or writes:
+    `--no-questions` → agent; answered rounds observed → operator; observed and
+    none → `None` (the gate refuses); not observable → the claim, unverified."""
+    if no_questions:
+        return GateAnswer("agent", observed=False)
+    rounds = observed_gate_rounds(record)
+    if rounds is None:
+        return GateAnswer(claimed if claimed in ("operator", "agent") else None, observed=False)
+    return GateAnswer("operator" if rounds else None, observed=True, rounds=tuple(rounds))
+
+
 def _gate_provenance(
     repo_root: Path,
     step_id: str,
@@ -1317,8 +1351,6 @@ def _gate_provenance(
     verified or claimed `rounds: 2` appends `gate-question-rounds-<step>` to
     the same spec journal the bypass writes to.
     """
-    from fr.run.telemetry import answered_rounds_since
-
     if no_questions and not (reason and reason.strip()):
         err_console.print(
             f'[red]{step_id}: --no-questions needs --reason "…" — clearing an operator '
@@ -1351,7 +1383,7 @@ def _gate_provenance(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    rounds = answered_rounds_since(os.environ, record.at) if record.at else None
+    rounds = observed_gate_rounds(record)
     observed = None if rounds is None else bool(rounds)
     if observed is True and not no_questions:
         assert rounds is not None
@@ -6340,7 +6372,7 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     from fr.verification.exit import run_exit
 
     path = repo_root / MATRIX_REL
-    narrowings = run_narrowings(repo_root, state)
+    narrowings = _gate_journals(lambda: run_narrowings(repo_root, state))
     try:
         matrix = load_matrix(path) if path.is_file() else Matrix()
         if not any(row.issues for row in matrix.rows) and not narrowings:
@@ -6384,7 +6416,11 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
         if p.decisions:
             held.append(
                 f"decision {', '.join(p.decisions)} narrows it and the operator did not "
-                "answer it (`answered_by=operator`)"
+                "answer it (`decided_by=operator`)"
+            )
+        if p.tracks:
+            held.append(
+                f"owed row {', '.join(p.tracks)} names it as the issue tracking what it still owes"
             )
         return " and ".join(held)
 
@@ -6402,6 +6438,26 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     raise typer.Exit(2)
 
 
+_T_JOURNALS = TypeVar("_T_JOURNALS")
+
+
+def _gate_journals(read: Callable[[], _T_JOURNALS]) -> _T_JOURNALS:
+    """Run a `deliver` gate's journal read; a journal that does not parse
+    refuses, naming it (review p3-r4) — never a gate judging a run with one
+    of its journals silently dropped."""
+    from fr.record.pr_body import UnreadableJournalError
+
+    try:
+        return read()
+    except UnreadableJournalError as e:
+        err_console.print(
+            f"refused: {e}. Fix the journal (a hand edit, most likely), then resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+
+
 def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
     """Exit-gates R9: `deliver` refuses while the run leaves anything unaccounted
     — an out-of-scope finding, an owed entry, an owed row citing the spec, a
@@ -6414,7 +6470,7 @@ def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
         exit_ = run_exit(repo_root, state)
     except Exception:  # noqa: BLE001 — the label sync refuses an unreadable exit
         exit_ = None
-    leftovers = unaccounted(repo_root, state, exit_)
+    leftovers = _gate_journals(lambda: unaccounted(repo_root, state, exit_))
     if not leftovers:
         return
     lines = "\n".join(f"  {left.line()}" for left in leftovers)

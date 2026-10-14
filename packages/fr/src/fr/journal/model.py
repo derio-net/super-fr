@@ -151,12 +151,20 @@ class JournalEntry(BaseModel):
     filed_as: str | None = None
     # The OWNER GATE on a `decision` (spec 2026-10-14 exit-gates R12): the role
     # that owns it (`gate=`) and the issues it narrows (`narrows=`, comma-
-    # separated). With `answered_by=operator` the decision is the operator's;
-    # without it, the agent's. A decision carrying `tracked_by=` FILES the
-    # remainder of the narrowing with the same `narrows=` set (`fr journal
-    # file`). Header tokens, serialized only when set, read by name.
+    # separated). With `decided_by=operator` the decision is the operator's;
+    # without it, the agent's. A decision carrying `remainder_tracked_by=`
+    # FILES the remainder of the narrowing with the same `narrows=` set (`fr
+    # journal file`). Header tokens, serialized only when set, read by name.
+    #
+    # Why not `answered_by=` / `tracked_by=` (review p3-r1): a released fr
+    # (<= 5.26) already KNOWS those two tokens and its validator refuses them
+    # off a resolution record, so a decision carrying them would make the whole
+    # journal unparseable to it. Token names no released fr knows are skipped
+    # by its named projection, so the journal stamp does not move.
     gate: str | None = None
     narrows: tuple[str, ...] = ()
+    decided_by: AnsweredBy | None = None
+    remainder_tracked_by: str | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -196,13 +204,32 @@ class JournalEntry(BaseModel):
                         "`narrows` must name issues — `#N`, `owner/repo#N` or an http(s) "
                         f"URL — got {ref!r}"
                     )
-        filing = self.kind == "decision" and bool(self.narrows)
+        if (self.decided_by is not None or self.remainder_tracked_by is not None) and (
+            self.kind != "decision"
+        ):
+            raise ValueError(
+                "`decided_by` and `remainder_tracked_by` are only valid on a `decision`"
+            )
+        if self.remainder_tracked_by is not None:
+            if not self.narrows:
+                raise ValueError(
+                    "`remainder_tracked_by` is only valid on a `decision` carrying "
+                    "`narrows`: it says where the rest of the narrowed issues went"
+                )
+            if not (
+                self.remainder_tracked_by.isascii()
+                and self.remainder_tracked_by.isprintable()
+                and TRACKED_BY_RE.match(self.remainder_tracked_by)
+            ):
+                raise ValueError(
+                    "`remainder_tracked_by` must name an issue — `#N`, `owner/repo#N` or "
+                    f"an http(s) URL — got {self.remainder_tracked_by!r}"
+                )
         if self.tracked_by is not None:
-            if not filing and (self.resolves is None or self.state != "open"):
+            if self.resolves is None or self.state != "open":
                 raise ValueError(
                     "`tracked_by` is only valid on an `open` resolution record (a "
-                    "deferral): it says the finding is still real, and where it went "
-                    "— or on a `decision` carrying `narrows` (where the rest went)"
+                    "deferral): it says the finding is still real, and where it went"
                 )
             if not TRACKED_BY_RE.match(self.tracked_by):
                 raise ValueError(
@@ -246,10 +273,10 @@ class JournalEntry(BaseModel):
                 "`review_scope` is only valid on a `finding` entry that is not a "
                 "resolution record — it is the reviewer's tag on what it raised"
             )
-        if self.answered_by is not None and self.resolves is None and self.kind != "decision":
+        if self.answered_by is not None and self.resolves is None:
             raise ValueError(
                 "`answered_by` is only valid on a resolution record — it says who "
-                "authorized moving the finding it names — or on a `decision`"
+                "authorized moving the finding it names"
             )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
@@ -318,6 +345,8 @@ _HEADER_FIELDS = (
     "filed_as",
     "gate",
     "narrows",
+    "decided_by",
+    "remainder_tracked_by",
 )
 
 
@@ -336,8 +365,8 @@ def serialize_entry(entry: JournalEntry) -> str:
     header = _DELIM_PREFIX + " ".join(parts) + _DELIM_SUFFIX
     phase_bit = f" (phase {entry.phase})" if entry.phase is not None else ""
     state_bit = f" [{entry.state}]" if entry.state is not None else ""
-    if entry.tracked_by is not None and entry.kind == "decision":
-        state_bit = f" [filed → {entry.tracked_by}]"
+    if entry.remainder_tracked_by is not None:
+        state_bit = f" [filed → {entry.remainder_tracked_by}]"
     elif entry.tracked_by is not None:
         state_bit = f" [deferred → {entry.tracked_by}]"
     elif entry.filed_as is not None:
@@ -427,6 +456,8 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 filed_as=fields.get("filed_as"),
                 gate=_gate_token(fields.get("gate")),
                 narrows=_narrows_token(fields.get("narrows")),
+                decided_by=_answered_by_token(fields.get("decided_by")),
+                remainder_tracked_by=fields.get("remainder_tracked_by"),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")

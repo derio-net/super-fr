@@ -6,10 +6,10 @@ filed through the archive's existing filers in `fr.archive_followups` — never 
 second copy of them — so filing moves from close-out to `deliver` without
 changing what an issue looks like:
 
-- an out-of-scope (or still open) finding: `file_open_ends`, label `follow-up`,
+- an out-of-scope finding: `file_open_ends`, label `follow-up`,
   then a `deferred --tracked-by <issue>` resolution record;
 - a narrowing decision (R12, a `decision` carrying `narrows=`): the same filer,
-  then a decision carrying the same `narrows=` and `tracked_by=<issue>`;
+  then a decision carrying the same `narrows=` and `remainder_tracked_by=<issue>`;
 - an `owed` entry: `file_owed_ends`, label `fr:owed`, then an `open` record
   carrying `filed_as=<issue>`.
 
@@ -46,17 +46,17 @@ __all__ = [
     "plan_filing",
 ]
 
-_FILEABLE_FINDING = ("open", "out-of-scope")
-
 
 def narrowing_decisions(entries: list[JournalEntry]) -> list[JournalEntry]:
     """The narrowing decisions of a journal (R12): a `decision` carrying
-    `narrows=` that is not itself a filing (one carrying `tracked_by=`)."""
-    return [e for e in entries if e.kind == "decision" and e.narrows and e.tracked_by is None]
+    `narrows=` that is not itself a filing (one carrying `remainder_tracked_by=`)."""
+    return [
+        e for e in entries if e.kind == "decision" and e.narrows and e.remainder_tracked_by is None
+    ]
 
 
 def narrowing_accounted(entries: list[JournalEntry], decision: JournalEntry) -> str | None:
-    """Where `decision`'s remainder went (R9): the `tracked_by` of the LAST later
+    """Where `decision`'s remainder went (R9): the `remainder_tracked_by` of the LAST later
     decision filing the same `narrows=` set, else `None`."""
     seen = False
     found: str | None = None
@@ -67,10 +67,10 @@ def narrowing_accounted(entries: list[JournalEntry], decision: JournalEntry) -> 
         if (
             seen
             and e.kind == "decision"
-            and e.tracked_by is not None
+            and e.remainder_tracked_by is not None
             and set(e.narrows) == set(decision.narrows)
         ):
-            found = e.tracked_by
+            found = e.remainder_tracked_by
     return found
 
 
@@ -86,7 +86,8 @@ class Plan:
 
 def plan_filing(entries: list[JournalEntry], ids: list[str]) -> Plan:
     """Resolve `ids` against a journal's entries. An id is fileable when it names
-    a finding whose effective state is open or out-of-scope, an `owed` entry still
+    a finding whose effective state is out-of-scope (review p3-r6: an in-scope
+    open finding is this change's to fix, never to file), an `owed` entry still
     owed and not yet filed, or a narrowing decision not yet filed; anything else
     is refused with the reason."""
     states = effective_finding_states(entries)
@@ -103,8 +104,13 @@ def plan_filing(entries: list[JournalEntry], ids: list[str]) -> Plan:
             refusals.append(f"{eid}: no entry with that id in this journal")
         elif entry.kind == "finding" and entry.resolves is None:
             state = states.get(eid, entry.state or "open")
-            if state in _FILEABLE_FINDING:
+            if state == "out-of-scope":
                 findings.append(entry)
+            elif state == "open":
+                refusals.append(
+                    f"{eid}: the finding is open and in scope — fix it, or record it out "
+                    "of scope with a reason (`fr journal resolve --state out-of-scope`)"
+                )
             else:
                 refusals.append(f"{eid}: the finding is {state}, so there is nothing to file")
         elif entry.kind == "owed":

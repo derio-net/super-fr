@@ -130,7 +130,7 @@ def test_accounted_leftovers_are_not_listed(tmp_path: Path) -> None:
         kind="finding", scope="spec", id="o1-resolved", created=STAMP, title="resolves o1",
         state="open", resolves="o1", filed_as="o/proj#11",
     )  # fmt: skip
-    files = _narrowing("d1-filed", tracked_by="o/proj#12")
+    files = _narrowing("d1-filed", remainder_tracked_by="o/proj#12")
     _journal(root, f1, oos, deferred, _owed(), filed, _narrowing(), files)
     _commit(root)
 
@@ -180,13 +180,13 @@ def test_the_deliver_gate_refuses_printing_every_leftover_and_its_fix(
 # --- R11: premature_closes ---------------------------------------------------------
 
 
-def _row(rid: str, *, verify: str | None, issues: tuple[str, ...]) -> Row:
+def _row(rid: str, *, verify: str | None, issues: tuple[str, ...], status: str = "ci") -> Row:
     return Row(
         id=rid,
         capability="c",
         acceptance=f"{rid} works",
         origin=(f"{SPEC_REF}#R1",),
-        status="not-implemented",
+        status=status,
         verify=verify,
         issues=issues,
     )
@@ -234,12 +234,60 @@ def test_a_narrowing_the_operator_did_not_answer_holds_its_issue_open() -> None:
         Matrix(),
         IDENTITY,
         _never,
-        narrowings=(_narrowing(), _narrowing("d2", answered_by="operator").model_copy(
+        narrowings=(_narrowing(), _narrowing("d2", decided_by="operator").model_copy(
             update={"narrows": ("#5",)}
         )),
     )  # fmt: skip
 
     assert [(p.ref, p.decisions, p.fix) for p in found] == [("o/proj#4", ("d1",), "Refs o/proj#4")]
+
+
+# --- review p3-r5: an owed row's tracking issue ---------------------------------------
+
+
+@pytest.mark.parametrize("status", ["not-implemented", "unwired", "walk-owed"])
+def test_p3_r5_a_close_over_an_owed_rows_tracking_issue_is_refused(status: str) -> None:
+    matrix = Matrix(rows=(_row("owed", verify="candidate", issues=("o/proj#9",), status=status),))
+
+    found = premature_closes("Closes #9\n", matrix, IDENTITY, _never)
+
+    assert [(p.ref, p.tracks, p.fix) for p in found] == [("o/proj#9", ("owed",), "Refs o/proj#9")]
+
+
+def test_p3_r5_a_finished_rows_issue_may_close() -> None:
+    matrix = Matrix(rows=(_row("done", verify="candidate", issues=("o/proj#9",)),))
+    assert premature_closes("Closes #9\n", matrix, IDENTITY, _never) == []
+
+
+# --- review p3-r4: a journal that does not parse ------------------------------------
+
+
+@pytest.mark.parametrize("gate", ["leftovers", "closes"])
+def test_p3_r4_an_unparseable_journal_refuses_the_deliver_gates_naming_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], gate: str
+) -> None:
+    from fr.commands import run_cmd
+
+    root = _repo(tmp_path, rows={})
+    _rows(root, [{"id": "r", "status": "ci", "issues": ["o/proj#1"]}])
+    path = journal_path(root, "spec", "s")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Journal: s\n<!-- fr:journal kind=finding scope=spec id=f1 created=x -->\n"
+        "### f1 · finding · no state\n"
+    )
+    _commit(root)
+    state = load_run_state(root, RUN)
+
+    with pytest.raises(Exit) as exc:
+        if gate == "leftovers":
+            run_cmd._deliver_leftovers_gate(root, state)
+        else:
+            run_cmd._refuse_premature_closes(root, state, "Closes #4\n")
+
+    assert exc.value.exit_code == 2
+    err = capsys.readouterr().err.replace("\n", " ")
+    assert "docs/superpowers/journals/specs/s.md" in err and "does not parse" in err
 
 
 def test_the_gate_refuses_a_gated_row_close_under_a_remap_to_pre_merge(

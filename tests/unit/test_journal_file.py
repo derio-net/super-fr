@@ -61,6 +61,10 @@ def _entries() -> list[JournalEntry]:
         JournalEntry(
             kind="finding", scope="spec", id="f2", created=stamp, title="fixed", state="fixed",
         ),
+        JournalEntry(
+            kind="finding", scope="spec", id="f3", created=stamp, title="this change's bug",
+            state="open", review_scope="in",
+        ),
     ]  # fmt: skip
 
 
@@ -146,7 +150,9 @@ def test_a_narrowing_decision_is_filed_and_records_tracked_by(
     decision = next(e for e in entries if e.id == "d1")
     assert narrowing_accounted(entries, decision) == f"https://github.com/{OWN}/issues/1"
     filed = entries[-1]
-    assert filed.kind == "decision" and filed.narrows == ("#4",) and filed.answered_by is None
+    assert filed.kind == "decision" and filed.narrows == ("#4",) and filed.decided_by is None
+    assert filed.remainder_tracked_by == f"https://github.com/{OWN}/issues/1"
+    assert filed.tracked_by is None  # never the released fr's resolution-only token
 
 
 def test_all_three_in_one_call_commit_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -168,6 +174,8 @@ def test_all_three_in_one_call_commit_once(tmp_path: Path, monkeypatch: pytest.M
         (["x1"], "only a finding"),
         (["f2"], "nothing to file"),
         (["f1", "nope"], "no entry"),
+        # review p3-r6: an in-scope open finding is fixed, never filed
+        (["f3"], "fix it, or record it out of scope"),
     ],
 )
 def test_an_unfileable_id_is_refused_and_nothing_is_filed_or_written(

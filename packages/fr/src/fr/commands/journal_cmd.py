@@ -281,7 +281,9 @@ def add(
             state=state,  # type: ignore[arg-type]
             resolves=resolves,
             review_scope=review_scope,  # type: ignore[arg-type]
-            answered_by=answered_by,  # type: ignore[arg-type]
+            # A decision's `--answered-by` is its `decided_by=` token (p3-r1).
+            answered_by=None if kind == "decision" else answered_by,  # type: ignore[arg-type]
+            decided_by=answered_by if kind == "decision" else None,  # type: ignore[arg-type]
             input=is_input,
             gate=gate,
             narrows=narrowed,

@@ -173,11 +173,12 @@ class _Context:
     discharges_owed: bool = False
     """Only `fr journal resolve` discharges an owed entry: it closes the issue
     the entry was filed as, which a step record's `resolves:` never does."""
-    operator_decisions: bool = False
-    """This record clears an operator gate by asking (the brainstorm record): its
-    resolve verifies the question rounds, so its decisions are the operator's
-    answers and are written `answered_by=operator` (spec 2026-10-14 R12) unless
-    an item says `agent`. A refused gate restores every byte written here."""
+    gate_answer: Any = None
+    """When this record clears an operator gate (the brainstorm record): who the
+    gate's DERIVED provenance says answered it (`run_cmd.derive_gate_answer`,
+    the same derivation `_gate_provenance` records), with the answered rounds
+    it read. Its decisions are stamped `decided_by=operator` from it (spec
+    2026-10-14 R12; reviews p3-r2, p3-r3) — see `_stamped_decider`."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -227,11 +228,13 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
     phase = run_cmd._item_phase(record.item) if record.item else None
     emits_ticks = "plan:ticks" in owner_emits
     current = state.steps.get(record.step)
-    asked = (
-        current is not None
+    gate_answer = (
+        run_cmd.derive_gate_answer(
+            current, no_questions=record.no_questions, claimed=record.evidence.get("answered_by")
+        )
+        if current is not None
         and run_cmd._clears_gate(step, current, "done" if record.outcome == "done" else "failed")
-        and not record.no_questions
-        and record.evidence.get("answered_by") != "agent"
+        else None
     )
     context = _Context(
         scope=scope,
@@ -241,9 +244,47 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         phase=phase,
         completes_phase=emits_ticks and record.outcome == "done" and phase is not None,
         emits_ticks=emits_ticks,
-        operator_decisions=asked,
+        gate_answer=gate_answer,
     )
     return context, state
+
+
+_UNVERIFIED_NOTE = (
+    "_`decided_by=operator` recorded unverified: the gate could not read who answered it._"
+)
+
+
+def _mentions(text: str, ref: str) -> bool:
+    """Does `text` name the issue `ref` — the ref as written, or its `#n`?"""
+    import re
+
+    number = ref.rsplit("#", 1)[-1] if "#" in ref else ref.rstrip("/").rsplit("/", 1)[-1]
+    if ref in text:
+        return True
+    return number.isdigit() and re.search(rf"(?<![\w/])#{number}(?!\d)", text) is not None
+
+
+def _stamped_decider(ctx: _Context, narrows: tuple[str, ...]) -> tuple[str | None, str | None]:
+    """`(decided_by, note)` for a decision the gate record did not attribute
+    itself (spec 2026-10-14 R12). From the gate's DERIVED answer, never the claim
+    alone (p3-r3):
+
+    - observed, operator: an ordinary decision is the operator's; a NARROWING one
+      only when every narrowed ref appears in an answered round's question or
+      answer text (p3-r2) — otherwise it stays the agent's, and `fr journal add …
+      --answered-by operator` (verified) is the later route;
+    - unobserved, claimed operator: never a narrowing; an ordinary decision is
+      stamped with a recorded unverified note;
+    - anything else (agent, a refused gate, no gate): nobody's stamp."""
+    answer = ctx.gate_answer
+    if answer is None or answer.who != "operator":
+        return None, None
+    if not answer.observed:
+        return (None, None) if narrows else ("operator", _UNVERIFIED_NOTE)
+    texts = [t for r in answer.rounds for t in (*r.question_texts, *r.answer_texts)]
+    if all(any(_mentions(t, ref) for t in texts) for ref in narrows):
+        return "operator", None
+    return None, None
 
 
 # --- journal ------------------------------------------------------------------
@@ -299,6 +340,7 @@ def _journal_writes(
     existing = _load_entries(overlay.read(path), path)
     taken = {e.id for e in existing}
     new: list[JournalEntry] = []
+    stamped: set[str] = set()  # decisions the gate attributed, verified by the gate
     stamp = _stamp()
 
     def add(entry: JournalEntry) -> None:
@@ -317,10 +359,10 @@ def _journal_writes(
     def _verify(entry: JournalEntry) -> None:
         # p3-r1: every path that writes an operator claim checks it here, the
         # verbs and a whole step's record alike.
-        if entry.answered_by != "operator":
+        if entry.answered_by != "operator" and entry.decided_by != "operator":
             return
-        if entry.resolves is None and (entry.kind != "decision" or ctx.operator_decisions):
-            return  # the brainstorm gate verifies its own question rounds (R12)
+        if entry.resolves is None and (entry.kind != "decision" or entry.id in stamped):
+            return  # the brainstorm gate attributed it from its own rounds (R12)
         from fr.journal.operator import (
             OperatorClaimRefusedError,
             verify_operator_answer,
@@ -383,6 +425,16 @@ def _journal_writes(
         )
         if item.resolves is not None:
             finding(item.resolves, files=item.filed_as is not None)
+        # A decision's provenance and remainder ride decision-only tokens no
+        # released fr knows (review p3-r1); the record keeps its field names.
+        decision = item.kind == "decision"
+        decided_by: str | None = item.answered_by if decision else None
+        note: str | None = None
+        if decision and decided_by is None:
+            decided_by, note = _stamped_decider(ctx, item.narrows)
+            if decided_by is not None:
+                stamped.add(eid)
+        body = f"{item.body.rstrip()}\n\n{note}".lstrip() if note else item.body
         try:
             entry = JournalEntry(
                 kind=item.kind,
@@ -391,23 +443,19 @@ def _journal_writes(
                 created=stamp,
                 phase=phase,
                 title=item.title,
-                body=item.body,
+                body=body,
                 state=state,
                 resolves=item.resolves,
                 review_scope=item.review_scope,
-                answered_by=(
-                    "operator"
-                    if item.kind == "decision"
-                    and item.answered_by is None
-                    and ctx.operator_decisions
-                    else item.answered_by
-                ),
-                tracked_by=item.tracked_by,
+                answered_by=None if decision else item.answered_by,
+                tracked_by=None if decision else item.tracked_by,
                 out_of_scope=item.out_of_scope,
                 input=item.input,
                 filed_as=item.filed_as,
                 gate=item.gate,
                 narrows=item.narrows,
+                decided_by=decided_by,  # type: ignore[arg-type]
+                remainder_tracked_by=item.tracked_by if decision else None,
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e
