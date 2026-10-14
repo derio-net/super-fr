@@ -3,6 +3,16 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/bootstrap.sh | bash
 #   curl -fsSL .../scripts/bootstrap.sh | bash -s -- --uninstall   # forward flags
+#   curl -fsSL .../scripts/bootstrap.sh | bash -s -- --version RC  # pick a channel
+#
+# --version (spec 2026-10-14-exit-gates R22; every other flag goes to install.sh):
+#   (none)      newest installable vX.Y.Z; with none yet, origin/main, saying so
+#   RC          newest installable vX.Y.Z-rc.N (numeric order)
+#   X.Y.Z       that release          X.Y.Z-RC   newest vX.Y.Z-rc.*
+#   X.Y.Z-rc.N  exactly that RC       main       origin/main (development)
+# A tag is installable only if its scripts/install.sh carries the comment
+# "# fr-install-channels: 1"; an unknown or uninstallable version lists the
+# installable ones and installs nothing.
 #
 # This is a thin source-manager: it clones (or updates) super-fr into a managed
 # cache dir, then exec's the canonical scripts/install.sh — which stays the
@@ -74,17 +84,95 @@ require_prereqs() {
 # here too so a missing one fails before the clone, not after it.
 require_prereqs git uv jq rsync
 
+VERSION=""
+HAVE_VERSION=0
+ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --version)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        echo "ERROR: --version needs a value (RC, X.Y.Z, X.Y.Z-RC, X.Y.Z-rc.N or main)." >&2
+        exit 1
+      fi
+      VERSION="$2"; HAVE_VERSION=1; shift 2 ;;
+    --version=*) VERSION="${1#--version=}"; HAVE_VERSION=1; shift ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+
 if [ -d "$SRC/.git" ]; then
   echo "Updating super-fr source at $SRC ..."
-  git -C "$SRC" fetch --quiet origin main
-  git -C "$SRC" reset --hard origin/main
+  git -C "$SRC" fetch --quiet --tags --force origin main </dev/null
 else
   echo "Cloning super-fr into $SRC ..."
   mkdir -p "$(dirname "$SRC")"
   # install.sh's preflight requires HEAD == main; clone main explicitly so a
   # fork/mirror with a different default branch fails here, not opaquely later.
-  git clone --branch main "$REMOTE" "$SRC"
+  git clone --quiet --branch main "$REMOTE" "$SRC" </dev/null
 fi
 
+# Release and RC tags, one per line, versions only (no leading v). The per-branch
+# pre-merge tags rc/<branch>/<sha> never match and are not channels.
+channel_tags() {
+  git -C "$SRC" ls-remote --tags origin </dev/null | sed -n 's|.*refs/tags/\(v[0-9][0-9.]*\(-rc\.[0-9]*\)\{0,1\}\)$|\1|p' |
+    grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' | sort -u
+}
+# Installable = the tag's install.sh carries the channel marker.
+installable_tags() {
+  local t content
+  while IFS= read -r t; do
+    content="$(git -C "$SRC" show "refs/tags/$t:scripts/install.sh" 2>/dev/null </dev/null)" || continue
+    printf '%s\n' "$content" | grep -qx '# fr-install-channels: 1' && echo "$t"
+  done < <(channel_tags)
+}
+# Numeric version order (rc.10 > rc.9): sort on X.Y.Z[.N] fields, never lexically.
+sort_versions() {
+  sed -e 's/^v//' -e 's/-rc\./ /' | awk '{ n = split($1, v, "."); printf "%d %d %d %d %s\n", v[1], v[2], v[3], ($2 == "" ? 0 : $2), $0 }' |
+    sort -k1,1n -k2,2n -k3,3n -k4,4n | cut -d' ' -f5- | sed -e 's/^\([0-9][0-9.]*\) \(.*\)$/v\1-rc.\2/' -e 't' -e 's/^\([0-9][0-9.]*\)$/v\1/'
+}
+
+refuse() {
+  local all
+  echo "ERROR: $1" >&2
+  all="$(installable_tags | sort_versions)"
+  if [ -n "$all" ]; then
+    echo "Installable versions:" >&2
+    printf '  %s\n' "$all" >&2
+  else
+    echo "No installable versions exist yet; use --version main." >&2
+  fi
+  exit 1
+}
+
+TAG=""
+WANT="$(printf '%s' "$VERSION" | sed -e 's/^v//' | tr '[:upper:]' '[:lower:]')"
+if [ "$HAVE_VERSION" = 1 ] && [ "$WANT" = main ]; then
+  TAG=main
+elif [ "$HAVE_VERSION" = 0 ]; then
+  TAG="$(installable_tags | grep -v -- '-rc\.' | sort_versions | tail -n 1 || true)"
+  [ -n "$TAG" ] || TAG=main_fallback
+else
+  AVAILABLE="$(installable_tags)"
+  case "$WANT" in
+    rc) CAND="$(printf '%s\n' "$AVAILABLE" | grep -- '-rc\.' | sort_versions | tail -n 1 || true)" ;;
+    *-rc) CAND="$(printf '%s\n' "$AVAILABLE" | grep -F "v${WANT%-rc}-rc." | sort_versions | tail -n 1 || true)" ;;
+    *) CAND="$(printf '%s\n' "$AVAILABLE" | grep -Fx "v$WANT" || true)" ;;
+  esac
+  [ -n "$CAND" ] || refuse "version '$VERSION' is not installable (unknown, missing, or its tag predates install channels)."
+  TAG="$CAND"
+fi
+
+case "$TAG" in
+  main | main_fallback)
+    if [ "$TAG" = main_fallback ]; then
+      echo "No installable release yet; installing origin/main."
+    fi
+    git -C "$SRC" checkout -q -f -B main origin/main </dev/null
+    echo "Channel: main" ;;
+  *)
+    git -C "$SRC" checkout -q -f --detach "refs/tags/$TAG" </dev/null
+    echo "Channel: $TAG" ;;
+esac
+
 echo "Running installer ..."
-exec "$SRC/scripts/install.sh" "$@"
+exec "$SRC/scripts/install.sh" "${ARGS[@]+"${ARGS[@]}"}"
