@@ -298,9 +298,10 @@ def _ledger_repo(tmp_path: Path, *, walked: bool) -> Any:
         live["walks"] = [{"strategy": "live", "harness": "claude-code", "model": "m",
                           "outcome": "pass", "at": "2026-10-02", "evidence": "log"}]  # fmt: skip
     write_matrix(clone, [live, row(spec, rid="r-other")])
+    brainstorm = StepRecord(state="done", emitted={"spec": spec})
     state = RunState(run="r1", workflow="fr-goal@1", branch="feat/batch-b1",
                      started="2026-10-01T00:00:00Z", cursor="deliver",
-                     steps={"brainstorm": StepRecord(state="done", emitted={"spec": spec})})  # fmt: skip
+                     steps={"brainstorm": brainstorm})  # fmt: skip
     path = run_path(clone, "r1")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(dump_run_state(state))
