@@ -985,3 +985,48 @@ aec72e4f: trust anchor — auto-merge only at the verb-recorded head, own git di
 ### p6b-r11-resolved · finding [out-of-scope] · resolves p6b-r11: main has no required review or checks, so the auto-merge guards are the only barrier once approved-fr is bypassed (phase 6)
 
 The repo's ruleset (docs/merge-protection.md, configure-main-protection.sh stages) predates this change; raised to the operator in the PR body.
+
+<!-- fr:journal kind=decision scope=plan id=p7-release-status-window created=2026-10-14T10:05:58+00:00 phase=7 -->
+### p7-release-status-window · decision · fr release status counts PRs merged after the last final tag's commit time, and fails closed on a forge error (phase 7)
+
+"Merged since the last final tag" is `mergedAt` later than the tag's commit time (`git log -1 --format=%cI`), from one bulk merged-PR list; only those PRs get a `pr_view` for their labels. The tag is the highest `^v\d+\.\d+\.\d+$` among the checkout's tags. A forge failure exits 1 (and in `release.py` a failed `gh` read or `--from-json` decision refuses), because an empty `waiting` would cut a final. Owed rows come from `fr.triage.ledger.gated_rows_at` on `origin/<default>` (HEAD when unresolvable); an unreadable exit reports `owed_rows: null`, never "none owed", and never changes whether the PR waits (the labels decide).
+
+<!-- fr:journal kind=decision scope=plan id=p7-release-forge-split created=2026-10-14T10:05:58+00:00 phase=7 -->
+### p7-release-forge-split · decision · release.py reads the forge itself; fr decides from its facts with no credential (phase 7)
+
+A security review flagged the first design: `release.py` ran `uv run fr release status --json` with the release workflow's write-capable token in its environment, executing the repo's own fr package with a credential the staged suite is denied for exactly that reason (`_credential_free_env`). Now `release.py` does the one credentialed read itself (`Commands.gh_read`: `gh pr list --state merged --search merged:>=<last final tag time> --json number,title,url,mergedAt,headRefName,labels --limit 1000`; a read that hits the limit refuses as possibly truncated), writes those facts to a temp file, and runs `fr release status --from-json <file> --json` (`Commands.decide`) with `_credential_free_env()` plus an empty `GH_CONFIG_DIR`, so no token and no stored gh login is readable. In that mode fr never builds a forge client; the owed rows are read from local git at HEAD. Both modes call the one pure `fr.release_status.release_status`, so they cannot disagree (pinned by a test). Every other git command in release.py now runs credential-free too; only the two pushes authenticate. Spec R21 and §G are amended to match.
+
+<!-- fr:journal kind=decision scope=plan id=p7-rc-bump-rule created=2026-10-14T10:05:58+00:00 phase=7 -->
+### p7-rc-bump-rule · decision · An RC of X.Y.Z bumps from the last final it implies, read from its own shape (phase 7)
+
+`Version.bumped` on an RC: X.0.0 implies a major, X.Y.0 a minor, else a patch. A bump no bigger than that lands on the final X.Y.Z; a bigger one moves X.Y.Z by it, which equals moving the last final by it. So `changes.bumped` (and so check-change-fragment's predicted floor at an RC head) needs no tag read and never int-splits the RC string. `release.compute` itself bases the target on the last final TAG plus the pending bump.
+
+<!-- fr:journal kind=decision scope=plan id=p7-status-workflow-token created=2026-10-14T10:05:58+00:00 phase=7 -->
+### p7-status-workflow-token · decision · release.yml reads what waits with the workflow token (pull-requests read), never the app's (phase 7)
+
+Reading merged PRs needs pull-requests read. The app token is minted with contents and issues write only, and asking it for more fails the mint when the installation lacks the permission, which would stop every release. So the workflow gains `pull-requests: read` and passes `FR_RELEASE_STATUS_TOKEN: ${{ github.token }}`, which `_run_gh_read` puts in GH_TOKEN for the merged-PR `gh` read alone; every credential-free env strips it.
+
+<!-- fr:journal kind=decision scope=plan id=p7-no-fragment-no-rc created=2026-10-14T10:05:58+00:00 phase=7 -->
+### p7-no-fragment-no-rc · decision · With no pending fragment on a final head nothing is released and what waits is never asked (phase 7)
+
+An RC previews the final the pending fragments make. With none pending and HEAD a final, there is nothing to preview or finalize, so compute returns before calling `fr release status`, which also keeps the forge read off every no-op push. `--version` stays an ungated final.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-release-notes-by-subject created=2026-10-14T10:05:58+00:00 phase=7 -->
+### p7-release-notes-by-subject · discovery · release_notes now finds its commit by exact subject; -S<version> cannot see an RC to final commit (phase 7)
+
+`git log -S5.27.0` finds commits that change the COUNT of `5.27.0`, and `5.27.0rc1` -> `5.27.0` changes no count, so the final's own commit was invisible and the lookup landed on the RC's (whose subject did not match, so the notes were empty). It now lists `--fixed-strings --grep` matches and keeps the one whose subject is exactly `release: v<semver>`.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t1 created=2026-10-14T10:05:58+00:00 phase=7 -->
+### no-refactor-p7-t1 · discovery · no-refactor-because P7.T1 (phase 7)
+
+fr.release_status is one pure engine over a two-method forge protocol and an owed-rows callable; the command reuses gate_cmd.resolve_target and the ledger's gated_rows_at rather than a second reader, so nothing was duplicated to merge.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t2 created=2026-10-14T10:05:58+00:00 phase=7 -->
+### no-refactor-p7-t2 · discovery · no-refactor-because P7.T2 (phase 7)
+
+The RC parsing went straight into one shared value (scripts/versions.py Version) that bump-version, version_surfaces, changes and floors call; version_floor.admits is one added branch; nothing left to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t4 created=2026-10-14T10:05:58+00:00 phase=7 -->
+### no-refactor-p7-t4 · discovery · no-refactor-because P7.T4 (phase 7)
+
+One fr acceptance set-status call; nothing to clean.

@@ -239,7 +239,7 @@ steps:
           visual: none
           findings: p6-r1,p6-r2,p6-r3,p6-r4,p6-r5,p6-r6,p6-r7,p6-r8,p6-r9,p6b-r1,p6b-r2,p6b-r3,p6b-r4,p6b-r5,p6b-r6,p6b-r7,p6b-r8,p6b-r9,p6b-r10,p6b-r11
       phase/7/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T09:22:56+00:00'
           agent: a017b2a06c766d113
@@ -249,6 +249,11 @@ steps:
           tier: hard
           bound: opus
           session: 73abb433-5601-4db7-ba08-a64b67cbfcfb
+          returned: '2026-10-14T10:06:04+00:00'
+          outcome: done
+        evidence:
+          tests: ci:e4736094faaac640ea562f9e06d8ee18047afdc2+7a6ae37a284aaf67258b9b4c5c633377c15323f9;tree=27d4d3d88574ab6b97e3e19da43f07128a8e3a1d61930ceb59d0dec6e5a0b37b
+          visual: none
   journal-check:
     state: pending
   deliver:
