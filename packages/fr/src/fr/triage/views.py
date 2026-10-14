@@ -49,6 +49,7 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     drive_pass,
     enqueue_refusals,
+    held_archive_conflict,
     held_conflict,
     last_enqueue,
 )
@@ -57,6 +58,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.merge_stops import MergeStop
 from fr.triage.model import (
     Batch,
     Facts,
@@ -163,6 +165,7 @@ def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
 class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
+    # | archive-conflict
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -181,6 +184,7 @@ NEED_LABELS = {
     "stale-dispatch": "Stale dispatch",
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
+    "archive-conflict": "Archive PR conflict",
     "session-blocked": "Session blocked",
 }
 
@@ -220,10 +224,13 @@ def needs_you(
     session_notes: Mapping[str, str] | None = None,
     *,
     ci_none: Collection[str] = (),
+    stops: Mapping[str, MergeStop] | None = None,
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
-    (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is."""
+    (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is.
+    *stops* are the driver's recorded merge stops (`merge_stops.load_stops`): a
+    conflicting export PR's, keyed `export:<repo>`, is a row (merge-truth R12)."""
     snap = drive_snapshot(facts, judgements, ci_none=ci_none)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
@@ -327,6 +334,8 @@ def needs_you(
                  f"#batch-{b.id}")
         )  # fmt: skip
 
+    out.extend(archive_conflict_needs(facts, judgements, snap.repos, stops or {}))
+
     for s in stale_dispatches(facts):
         out.append(
             Need("stale-dispatch", s.key,
@@ -349,6 +358,42 @@ def needs_you(
                     Need("session-blocked", b.id, f"batch {b.id}'s {what} is blocked: {note}",
                          f"#batch-{b.id}")
                 )  # fmt: skip
+    return out
+
+
+def archive_conflict_needs(
+    facts: Facts,
+    judgements: Judgements,
+    repos: Mapping[str, str],
+    stops: Mapping[str, MergeStop],
+) -> list[Need]:
+    """merge-truth R12: an archive PR whose hand-backs are spent (a held `archive_conflict`
+    event whose head is still the PR's, as far as the facts show it), and an export PR
+    the driver stopped on for a conflict. Never a `failing-ci` or `merge-conflict` row."""
+    out: list[Need] = []
+    known = {(p.repo, p.number): p for p in (*facts.prs, *(q for i in facts.issues for q in i.prs))}
+    for b in judgements.batches:
+        held = held_archive_conflict(b)
+        repo = repos.get(b.id)
+        if held is None or repo is None:
+            continue
+        found = known.get((repo, held.pr))
+        if found is not None and (found.state != "OPEN" or found.head_oid != held.head):
+            continue  # merged, closed, or a new head: no longer this conflict
+        out.append(
+            Need("archive-conflict", b.id,
+                 f"batch {b.id}'s archive PR #{held.pr} conflicts at {held.head[:12]}, and its "
+                 "hand-backs are spent: merge the default branch into it",
+                 found.url if found is not None else f"#batch-{b.id}")
+        )  # fmt: skip
+    for key, stop in sorted(stops.items()):
+        if key.startswith("export:") and "conflicts" in stop.reason:
+            repo = key.removeprefix("export:")
+            out.append(
+                Need("archive-conflict", repo,
+                     f"{repo}'s {stop.reason} with the default branch: merge it in, or "
+                     "close the PR", None)
+            )  # fmt: skip
     return out
 
 

@@ -564,6 +564,32 @@ def test_green_draft_archive_pr_gets_an_archive_action_flagged_draft() -> None:
     assert (action.kind, action.draft) == ("archive", False)
 
 
+def test_conflicting_archive_pr_gets_archive_conflict_never_archive() -> None:
+    """merge-truth R12: the forge reports it conflicting, so it is handed back, never
+    merged, and gets no waiting line."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), mergeable="CONFLICTING")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    (action,) = got.actions
+    assert (action.kind, action.pr, action.head, action.branch) == (
+        "archive-conflict", 7, "h7", "chore/archive-p")  # fmt: skip
+    assert got.summary.closing == 1 and got.summary.blocked == 0
+
+
+def test_a_held_archive_conflict_counts_as_blocked() -> None:
+    from fr.triage.model import ArchiveConflictEvent
+
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    held = ArchiveConflictEvent(kind="archive_conflict", at=NOW, head="h7", pr=7,
+                                delivered="held")  # fmt: skip
+    b = b.model_copy(update={"events": [*b.events, held]})
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), mergeable="CONFLICTING")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    (action,) = got.actions
+    assert action.kind == "blocked" and "PR #7" in action.detail and "spent" in action.detail
+    assert got.summary.closing == 0 and got.summary.blocked == 1
+
+
 def test_an_unattributed_archive_pr_is_never_merged() -> None:
     b = _closed("x", 1, archive="chore/archive-p")
     other = _archive(8, "chore/archive-someone-else", files=("docs/a.md",))

@@ -1000,6 +1000,7 @@ def render_command(
         )
     out = target_dir / "triage.html"
     from fr.commands.triage_kanban_cmd import local_ci_none, read_sessions  # it imports this
+    from fr.triage.merge_stops import load_stops
 
     # A blocked session's own note, from a runner that gives one (cloud-triage R15); a
     # runner that cannot say leaves Needs you now as it was.
@@ -1007,7 +1008,7 @@ def render_command(
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
         session_notes=noted, ci_none=local_ci_none(facts),
-        present=pages_present(target_dir, "backlog"),
+        present=pages_present(target_dir, "backlog"), stops=load_stops(target_dir),
     )  # fmt: skip
     write_text_atomic(out, page)
     refresh_navs(target_dir, "backlog", warn=warn_nav)

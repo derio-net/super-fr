@@ -33,6 +33,7 @@ from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     ARCHIVE_WAIT,
     AWAITING_LIVE_HOLD,
+    CONFLICTING,
     Action,
     IdleSession,
     LivePr,
@@ -115,6 +116,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "refresh": "claims due a refresh",
     "release": "claims to release",
     "settle": "closed issues to settle",
+    "archive-conflict": "archive PR conflicts; handed to its close-out",
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason
@@ -161,6 +163,7 @@ def _archive_prs(batch_repo_: str, facts: Facts) -> list[LivePr]:
             number=p.number, state=p.state, draft=p.is_draft, head=p.head_oid,
             checks=verdict, failing=failing, head_ref=p.head_ref, files=tuple(p.files),
             trusted=distrust(p.author, p.cross_repo, allowed) is None,
+            mergeable=p.mergeable or "",
         )  # fmt: skip
     return list(out.values())
 
@@ -173,7 +176,12 @@ def _archive_wait(batch: Batch, archives: Sequence[LivePr]) -> str | None:
         return None
     for p in archives:
         if p.state == "OPEN" and attributed(p, batch, event):
-            wait = "ready to merge" if p.checks == "green" else f"checks {p.checks}"
+            if p.mergeable == CONFLICTING:
+                wait = "conflicts with the default branch"
+            elif p.checks == "green":
+                wait = "ready to merge"
+            else:
+                wait = f"checks {p.checks}"
             return f"{ARCHIVE_WAIT} #{p.number}: {wait}"
     return None
 

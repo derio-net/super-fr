@@ -788,6 +788,7 @@ def test_an_idle_session_is_never_a_failing_ci_need() -> None:
     [
         ({"pass": 0, "fail": 0, "pending": 2}, "checks pending"),
         ({"pass": 1, "fail": 1, "pending": 0}, "checks failing"),
+        ({"pass": 1, "fail": 0, "pending": 0}, "ready to merge"),
     ],
 )
 def test_card_names_an_existing_linked_archive_pr_and_its_wait(
@@ -822,3 +823,17 @@ def test_a_linked_archive_pr_from_a_foreign_author_is_not_the_cards() -> None:
         bid="m",
     )  # fmt: skip
     assert "#30" not in card.hint and "no archive PR" in card.hint
+
+
+def test_the_card_says_a_conflicting_archive_pr_conflicts() -> None:
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 mergeable="CONFLICTING")  # fmt: skip
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), closeout])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+         issue(2, prs=[archive])],
+        {},
+        bid="m",
+    )  # fmt: skip
+    assert card.hint == "archive PR #30: conflicts with the default branch"

@@ -145,6 +145,7 @@ from fr.triage.batch_dispatch import (
     LIVE_STAGES,
     NO_APPROVAL_LINE,
     TRIAGE_CONFIG_PATH,
+    archive_conflict_brief,
     check_config_fresh,
     conflict_brief,
     dispatch_comment,
@@ -167,6 +168,8 @@ from fr.triage.batch_drive import (
     Snapshot,
     Summary,
     action_line,
+    archive_conflict_decision,
+    archive_conflict_item_id,
     attributed,
     checks_verdict,
     closeout_brief,
@@ -232,6 +235,7 @@ from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     ApprovalEvent,
+    ArchiveConflictEvent,
     Batch,
     BatchEvent,
     CancelEvent,
@@ -3247,6 +3251,13 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
     return out
 
 
+def _viewed(pr: LivePr, view: Mapping[str, Any]) -> LivePr:
+    """*pr* with the base and `mergeable` a fresh `pr_view` read reports."""
+    return replace(
+        pr, base=str(view.get("base_ref") or ""), mergeable=str(view.get("mergeable") or "")
+    )
+
+
 class _MergeOutcome(NamedTuple):
     """What `_Driver._merge_batch` did: the outcome line, whether it acted, the
     in-flight count, and whether it stops the repo's train (`_stops_train`)."""
@@ -3946,6 +3957,7 @@ class _Driver:
                     draft=bool(view.get("draft")),
                     head=str(view.get("head_oid") or ""),
                     base=str(view.get("base_ref") or ""),  # p4-r15
+                    mergeable=str(view.get("mergeable") or ""),  # merge-truth R12
                     files=self._export_files(repo, done.head or ""),
                 )
                 if pick.state == "OPEN":
@@ -4094,9 +4106,10 @@ class _Driver:
                     out[found.number] = found
         # The base, read fresh as the export reads it (p4-r15): an archive PR is merged
         # only into the default branch (gh#1004). Only an open one this batch owns can
-        # be merged, so only those cost a read.
+        # be merged, so only those cost a read; the same read says whether it conflicts
+        # (merge-truth R12).
         return [
-            replace(p, base=str(client.pr_view(repo, p.number).get("base_ref") or ""))
+            _viewed(p, client.pr_view(repo, p.number))
             if p.state == "OPEN" and attributed(p, batch, event)
             else p
             for p in out.values()
@@ -4609,6 +4622,8 @@ class _Driver:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
         if action.kind == "dedupe":  # names no batch: a report, never a forge write (sr-1)
             return action.detail, False, in_flight
+        if action.kind == "archive-conflict" and action.wave is not None:
+            return self._export_conflict(action), False, in_flight  # no session owns it
         if action.kind in EXPORT_KINDS:
             refusals, failures = self._export_refusals, self._export_failures
             line = self._export_act(action, facts)
@@ -4664,6 +4679,9 @@ class _Driver:
             return outcome, did, in_flight
         if action.kind == "archive":
             line, did = self._archive(action, facts, judgements, batch, repo)
+            return line, did, in_flight
+        if action.kind == "archive-conflict":
+            line, did = self._archive_conflict(action, facts, judgements, batch, repo)
             return line, did, in_flight
         if action.kind == "adopt":
             started = closeout_event(batch)
@@ -5273,8 +5291,6 @@ class _Driver:
     ) -> tuple[str, bool]:
         """Deliver the brief: to the target's idle session, else nothing while it is
         working or blocked, else to a fresh conflict session (R20, R23)."""
-        from fr_dispatch.protocols import SessionInspector, SessionMessenger
-
         last = last_dispatch(batch)
         name, target, launch = self._hand_back_target(facts, batch, repo)
         branch = last.branch if last else batch_branch(batch)
@@ -5288,28 +5304,20 @@ class _Driver:
                 "that runner's driver",
                 False,
             )
-        runner = self.runner(name)
-        if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
-            try:
-                status = runner.session_statuses([target]).get(target.id, "unknown")
-                if status == "idle":
-                    runner.message(target, brief)
-            except Exception as exc_:  # noqa: BLE001 - retried next pass, never the drive's end
-                return (
-                    f"{stopped}; hand-back to {target.id} failed, retried next pass: {exc_}",
-                    False,
-                )
-            if status == "idle":
-                event = self._conflict_event(exc, batch, "session", target.id)
-                self._append(judgements, facts, batch, event)
-                if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
-                    return f"{stopped}; handed-back (pending) to its session {target.id}", True
-                return f"{stopped}; handed back to its session {target.id}", True
-            if status not in ("absent", "done"):
-                return (
-                    f"{stopped}; its session is {status}: nothing sent, retried next pass",
-                    False,
-                )
+        status, failure = self._offer(name, target, brief)
+        if status == "failed":
+            return (
+                f"{stopped}; hand-back to {target.id} failed, retried next pass: {failure}",
+                False,
+            )
+        if status == "idle":
+            event = self._conflict_event(exc, batch, "session", target.id)
+            self._append(judgements, facts, batch, event)
+            if isinstance(self.runner(name), Mailbox):  # sent once the agent records it (§F)
+                return f"{stopped}; handed-back (pending) to its session {target.id}", True
+            return f"{stopped}; handed back to its session {target.id}", True
+        if status not in (None, "absent", "done"):
+            return f"{stopped}; its session is {status}: nothing sent, retried next pass", False
         return self._fresh_conflict(
             exc, stopped, judgements, facts, batch, repo, brief=brief, name=name, launch=launch,
             branch=branch,
@@ -5352,6 +5360,34 @@ class _Driver:
             },
             tracking=None,
         )
+        handle, live = self._start_fresh(name, item)
+        self._append(judgements, facts, batch, self._conflict_event(exc, batch, "fresh", handle))
+        if live:
+            return f"{stopped}; recorded the live {item.id}", True
+        return f"{stopped}; handed back to a fresh session {item.id}", True
+
+    def _offer(self, name: str, target: Any, brief: str) -> tuple[str | None, str]:
+        """The hand-back's session step, shared by batch-PR and archive conflicts: the
+        target's status, messaging it the brief when it is idle. None: the runner can
+        neither tell nor take a message (a fresh session follows, as on `absent`);
+        `failed` with the error: retried next pass, never the drive's end."""
+        from fr_dispatch.protocols import SessionInspector, SessionMessenger
+
+        runner = self.runner(name)
+        if not (isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector)):
+            return None, ""
+        try:
+            status = runner.session_statuses([target]).get(target.id, "unknown")
+            if status == "idle":
+                runner.message(target, brief)
+        except Exception as exc:  # noqa: BLE001 - retried next pass, never the drive's end
+            return "failed", str(exc)
+        return status, ""
+
+    def _start_fresh(self, name: str, item: Any) -> tuple[str, bool]:
+        """Start *item* through runner *name*, the way a close-out is started: its
+        handle, and whether it was live already (a pass killed before its event), in
+        which case it is only recorded. A runner that refuses ends the pass."""
         runner = self.runner(name)
         if not runner.can_dispatch(item):
             _fail(f"runner `{name}` does not take run-unit work")
@@ -5359,17 +5395,12 @@ class _Driver:
         if refusal:
             _fail(f"runner `{name}` refused: {refusal}")
         if item.id in runner.existing_dispatches([item]):
-            self._append(
-                judgements, facts, batch, self._conflict_event(exc, batch, "fresh", item.id)
-            )
-            return f"{stopped}; recorded the live {item.id}", True
+            return item.id, True
         try:
             handle = runner.dispatch(item)
         except Exception as err:  # the runner's own failure: nothing is written
             _fail(f"runner `{name}` failed to dispatch {item.id}: {err}", code=1)
-        event = self._conflict_event(exc, batch, "fresh", handle or item.id)
-        self._append(judgements, facts, batch, event)
-        return f"{stopped}; handed back to a fresh session {item.id}", True
+        return handle or item.id, False
 
     def _close_out(
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
@@ -5498,6 +5529,8 @@ class _Driver:
             # As a refused batch-PR merge (rg-4): reported in full once per batch, head
             # and reason, merged again on a later pass; `--once` exits 1 (gh#921).
             self.failed_write = True
+            stamp = datetime.now(UTC).isoformat(timespec="seconds")
+            record_stop(self.target, batch.id, MergeStop(action.head, str(exc), stamp))
             key = f"archive\0{batch.id}\0{action.head}\0{exc}"
             if key in self.reported:
                 return f"stopped again at {action.head[:12]} (reported above)", False
@@ -5511,8 +5544,119 @@ class _Driver:
                 judgements, facts, batch,
                 event.model_copy(update={"at": _now_after(batch), "archived": action.pr}),
             )  # fmt: skip
+        clear_stop(self.target, batch.id)  # a stop recorded on it is over (R12)
         readied = "marked ready, " if action.draft else ""
         return f"{readied}merged archive PR #{action.pr}", True
+
+    # ------------------------------------- archive conflicts (merge-truth R12, §E)
+
+    def _archive_conflict(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """A conflicting archive PR is never merged: handed to the close-out once per
+        head, at most twice per close-out, then held for the operator with a stop."""
+        assert action.pr is not None
+        decision = archive_conflict_decision(batch.events, action.head)
+        if decision == "skip":
+            return f"archive PR #{action.pr} at {action.head[:12]} was handed back already", False
+        if decision == "held":
+            self._append(
+                judgements, facts, batch, self._archive_conflict_event(action, batch, "held")
+            )
+            stamp = datetime.now(UTC).isoformat(timespec="seconds")
+            reason = f"archive PR #{action.pr} conflicts"
+            record_stop(self.target, batch.id, MergeStop(action.head, reason, stamp))
+            return f"{reason} and its hand-backs are spent: held for the operator", True
+        return self._hand_back_archive(action, facts, judgements, batch, repo)
+
+    @staticmethod
+    def _archive_conflict_event(
+        action: Action, batch: Batch, delivered: str, handle: str | None = None
+    ) -> ArchiveConflictEvent:
+        assert action.pr is not None
+        return ArchiveConflictEvent(
+            kind="archive_conflict", at=_now_after(batch), head=action.head, pr=action.pr,
+            delivered=delivered, handle=handle,  # type: ignore[arg-type]
+        )  # fmt: skip
+
+    def _hand_back_archive(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """Deliver the brief to the close-out: its idle session, else nothing while it is
+        working or blocked, else a fresh archive-conflict session (R12)."""
+        from fr_dispatch.work_item import WorkItem
+
+        assert action.pr is not None
+        event = closeout_event(batch)
+        launch = self._launch(facts, batch, repo)
+        name = str(event.runner if event is not None and event.runner != "hand" else launch.runner)
+        brief = archive_conflict_brief(
+            batch, pr=action.pr, head=action.head, branch=action.branch,
+            base=self.merge_ctx(facts, repo).main,
+        )  # fmt: skip
+        if not self.adapter.carries(name):
+            return (
+                f"its close-out runs on {name}, which this driver lacks: left to that "
+                "runner's driver",
+                False,
+            )
+        target = WorkItem(
+            id=closeout_item_id(repo, batch.id), unit="run", workflow=batch_workflow(batch),
+            repo=repo, parent=None, inputs=(), payload={"group": self.group_of(batch)},
+            tracking=None,
+        )  # fmt: skip
+        status, failure = self._offer(name, target, brief)
+        if status == "failed":
+            return f"hand-back to {target.id} failed, retried next pass: {failure}", False
+        if status == "idle":
+            self._append(
+                judgements, facts, batch,
+                self._archive_conflict_event(action, batch, "session", target.id),
+            )  # fmt: skip
+            if isinstance(self.runner(name), Mailbox):  # sent once the agent records it (§F)
+                return f"handed-back (pending) to its close-out session {target.id}", True
+            return f"handed back to its close-out session {target.id}", True
+        if status not in (None, "absent", "done"):
+            return f"its close-out session is {status}: nothing sent, retried next pass", False
+        fresh = sum(
+            1 for e in batch.events
+            if isinstance(e, ArchiveConflictEvent) and e.delivered == "fresh"
+        )  # fmt: skip
+        item = WorkItem(
+            id=archive_conflict_item_id(repo, batch.id, fresh + 1),
+            unit="run",
+            workflow=batch_workflow(batch),
+            repo=repo,
+            parent=None,
+            inputs=(),
+            payload={
+                "kind": "conflict",
+                "brief": brief,
+                "harness": launch.harness,
+                "model": launch.model,
+                "branch": action.branch,
+                "issues": list(batch.ids),
+                "checkout": str(self.checkout(repo).main_worktree()),
+                "group": self.group_of(batch),
+            },
+            tracking=None,
+        )
+        handle, live = self._start_fresh(name, item)
+        self._append(
+            judgements, facts, batch,
+            self._archive_conflict_event(action, batch, "fresh", handle),
+        )  # fmt: skip
+        if live:
+            return f"recorded the live {item.id}", True
+        return f"handed back to a fresh session {item.id}", True
+
+    def _export_conflict(self, action: Action) -> str:
+        """A conflicting export PR: no session owns it, so it goes straight to the
+        operator with a stop keyed `export:<repo>` (R12)."""
+        stamp = datetime.now(UTC).isoformat(timespec="seconds")
+        reason = f"export PR #{action.pr} conflicts"
+        record_stop(self.target, f"export:{action.batch}", MergeStop(action.head, reason, stamp))
+        return action.detail
 
     # ------------------------------------------------------- state export (R13)
 
@@ -5672,12 +5816,15 @@ class _Driver:
                 wave, f"export PR #{action.pr}: the forge refused the merge: {exc}"
             )
         self._mark(repo, action.pr, merged=True)
+        clear_stop(self.target, f"export:{repo}")  # a conflict stop on it is over (R12)
         return f"merged export PR #{action.pr} at {action.head[:12]}"
 
 
 # The actions a pass plans only from what it read live this pass (R10): a carried repo's
 # batches get none of them.
-_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt", "settle"})
+_LIVE_READ_ACTIONS = frozenset(
+    {"merge", "update", "closeout", "archive", "archive-conflict", "adopt", "settle"}
+)
 
 
 def _op_repo(env: ClaimEnv, op: ClaimOp, repos: Mapping[str, str]) -> str | None:

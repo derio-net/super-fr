@@ -709,3 +709,26 @@ def test_archive_warn_is_not_a_failing_ci_need(monkeypatch: object) -> None:
     rows = needs_you(f, jd)
     assert not [r for r in rows if r.ref == "a-merged" and r.kind == "failing-ci"]
     assert {r.ref for r in rows if r.kind == "failing-ci"} == {"c-red"}
+
+
+def test_held_archive_conflict_is_an_archive_conflict_need() -> None:
+    """merge-truth R12: a held `archive_conflict` whose head is still the archive PR's is
+    the operator's: an `archive-conflict` Need, never `failing-ci` or `merge-conflict`.
+    Once the head moves, it is not."""
+    merged = pr(10, "feat/batch-m", state="MERGED", merged_at="2026-10-01T09:00:00Z")
+    archive = pr(30, "chore/archive-m", files=["docs/superpowers/runs/r-m.yaml"])
+    closeout = {"kind": "closeout", "at": "2026-10-01T10:00:00Z", "runner": "fake",
+                "handle": "c", "run": "r-m", "archive": "chore/archive-m"}  # fmt: skip
+    held = {"kind": "archive_conflict", "at": "2026-10-01T11:00:00Z", "head": "sha-30",
+            "pr": 30, "delivered": "held"}  # fmt: skip
+    f = facts([issue(1, state="closed", prs=[merged])], prs=[archive])
+    jd = judgements({"widgets#1": j(1)},
+                    [batch("m", [1], wave=1, events=[dispatch("m"), closeout, held])],
+                    schema=10)  # fmt: skip
+    rows = needs_you(f, jd)
+    (need,) = [r for r in rows if r.kind == "archive-conflict"]
+    assert need.ref == "m" and "PR #30" in need.text and need.href == f"{URL}/pull/30"
+    assert not [r for r in rows if r.kind in ("failing-ci", "merge-conflict")]
+    moved = facts([issue(1, state="closed", prs=[merged])],
+                  prs=[{**archive, "head_oid": "sha-new"}])  # fmt: skip
+    assert not [r for r in needs_you(moved, jd) if r.kind == "archive-conflict"]

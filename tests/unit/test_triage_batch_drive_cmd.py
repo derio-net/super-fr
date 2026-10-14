@@ -5007,3 +5007,159 @@ def test_a_yes_pass_clears_a_release_pending_member(
     assert "label 1" in world.calls
     released = parse_marker(world.comments[1][0]["body"])
     assert released is not None and released.released is not None
+
+
+# ---------------------- conflicting archive and export PRs (merge-truth R12, §E)
+
+CLOSEOUT_B1 = f"{REPO}/run/closeout-b1"
+
+
+def _archive_conflict_yaml(head: str, delivered: str, minute: int) -> str:
+    return (
+        f"      - {{kind: archive_conflict, at: '2026-10-02T11:59:{minute:02d}Z', head: {head}, "
+        f"pr: 201, delivered: {delivered}}}\n"
+    )
+
+
+def _conflicting_archive(world: World, tmp_path: Path, events: str = "") -> None:
+    """b1 closing (run r1), its archive PR #201 green and conflicting at sha-201."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"],
+             mergeable="CONFLICTING")  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1 + events))
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8").replace("schema: 3\n", "schema: 10\n"), "utf-8")
+
+
+def _archive_conflicts(tmp_path: Path) -> list[Any]:
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    return [e for e in batch.events if e.kind == "archive_conflict"]
+
+
+def test_archive_conflict_messages_an_idle_closeout_session(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _conflicting_archive(world, tmp_path)
+    messenger.status[CLOSEOUT_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")], out
+    ((target, text),) = messenger.messages
+    assert target == CLOSEOUT_B1
+    assert "PR #201" in text and "chore/archive-p1" in text and "sha-201" in text
+    assert "main" in text and "push" in text
+    (event,) = _archive_conflicts(tmp_path)
+    assert (event.head, event.pr, event.delivered, event.handle) == (
+        "sha-201", 201, "session", CLOSEOUT_B1)  # fmt: skip
+    assert _lines(out, "archive-conflict") == [
+        f"archive-conflict b1: handed back to its close-out session {CLOSEOUT_B1}"
+    ], out
+    _drive(tmp_path, "--once", "--yes")  # the same head is never handed back twice
+    assert len(messenger.messages) == 1 and len(_archive_conflicts(tmp_path)) == 1
+
+
+@pytest.mark.parametrize("status", ["working", "blocked"])
+def test_archive_conflict_waits_while_the_closeout_session_works(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    status: str,
+) -> None:  # fmt: skip
+    _conflicting_archive(world, tmp_path)
+    messenger.status[CLOSEOUT_B1] = status
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and messenger.dispatched == [], out
+    assert _archive_conflicts(tmp_path) == []
+    assert "nothing sent, retried next pass" in out
+
+
+@pytest.mark.parametrize("status", ["done", "absent"])
+def test_archive_conflict_starts_a_fresh_item_when_the_closeout_is_done(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    status: str,
+) -> None:  # fmt: skip
+    _conflicting_archive(world, tmp_path)
+    messenger.status[CLOSEOUT_B1] = status
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (item,) = messenger.dispatched
+    assert item.id == f"{REPO}/run/archive-conflict-b1-1", out
+    assert item.unit == "run" and item.payload["branch"] == "chore/archive-p1"
+    assert "PR #201" in item.payload["brief"] and "sha-201" in item.payload["brief"]
+    (event,) = _archive_conflicts(tmp_path)
+    assert event.delivered == "fresh" and messenger.messages == []
+
+
+def test_archive_conflict_held_records_a_stop_and_raises_the_need(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    earlier = _archive_conflict_yaml("sha-a", "session", 1) + _archive_conflict_yaml(
+        "sha-b", "fresh", 2
+    )
+    _conflicting_archive(world, tmp_path, earlier)
+    messenger.status[CLOSEOUT_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and messenger.dispatched == [], out
+    held = _archive_conflicts(tmp_path)[-1]
+    assert (held.head, held.delivered, held.handle) == ("sha-201", "held", None)
+    stop = load_stops(tmp_path)["b1"]
+    assert (stop.head, stop.reason) == ("sha-201", "archive PR #201 conflicts")
+    facts = load_facts(tmp_path / "facts.json")
+    rows = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    (need,) = [r for r in rows if r.kind == "archive-conflict"]
+    assert need.ref == "b1" and "PR #201" in need.text
+    assert not [r for r in rows if r.kind in ("failing-ci", "merge-conflict")]
+    code, out = _drive(tmp_path, "--yes")  # the loop ends on it: only the operator can act
+    assert code == 3 and "only blocked batches remain (b1)" in out, out
+
+
+def test_merged_archive_pr_clears_its_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    from fr.triage.merge_stops import MergeStop, record_stop
+
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    record_stop(tmp_path, "b1", MergeStop("sha-old", "archive PR #201 conflicts", "t"))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert [m[0] for m in world.merged] == [201], out
+    assert "b1" not in load_stops(tmp_path)
+
+
+def test_forge_refused_archive_merge_records_a_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    world.refuse_merge = "protected branch"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 1 and world.merged == [], out
+    stop = load_stops(tmp_path)["b1"]
+    assert stop.head == "sha-201" and "protected branch" in stop.reason
+
+
+def test_conflicting_export_pr_goes_straight_to_needs_you_with_stop_key_export_repo(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    sha = _export_pr(world, git_checkout.path, mergeable="CONFLICTING")
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert world.merged == [], out
+    assert _exports(state) == [("1", 40, False)]
+    stop = load_stops(state)[f"export:{REPO}"]
+    assert (stop.head, stop.reason) == (sha, "export PR #40 conflicts")
+    facts = load_facts(state / "facts.json")
+    rows = needs_you(facts, load_judgements(state / "judgements.yaml"), stops=load_stops(state))
+    (need,) = [r for r in rows if r.kind == "archive-conflict"]
+    assert need.ref == REPO and "export PR #40" in need.text
+    # once the export PR merges, its stop clears
+    world.prs[40]["mergeable"] = "MERGEABLE"
+    code, out = _export_drive(state, "--once", "--yes")
+    assert world.merged == [(40, sha, "squash")], out
+    assert f"export:{REPO}" not in load_stops(state)
