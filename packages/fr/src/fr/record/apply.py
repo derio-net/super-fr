@@ -48,6 +48,7 @@ from fr.journal.model import (
     JournalParseError,
     appended_journal_text,
     journal_path,
+    journal_stamp_as_utc,
     owed_key,
     parse_journal,
     resolution_entry,
@@ -55,6 +56,10 @@ from fr.journal.model import (
 )
 from fr.record.model import StepRecord, allowed_sections, present_sections
 from fr.workflow.artifacts import journal_scope
+
+_SESSION_START = "1970-01-01T00:00:00+00:00"
+"""The window a decision's operator claim opens on an empty journal: any answer
+in this session counts (spec 2026-10-14 R12)."""
 
 if TYPE_CHECKING:
     from fr.artifacts.commit import CommitOutcome
@@ -168,6 +173,11 @@ class _Context:
     discharges_owed: bool = False
     """Only `fr journal resolve` discharges an owed entry: it closes the issue
     the entry was filed as, which a step record's `resolves:` never does."""
+    operator_decisions: bool = False
+    """This record clears an operator gate by asking (the brainstorm record): its
+    resolve verifies the question rounds, so its decisions are the operator's
+    answers and are written `answered_by=operator` (spec 2026-10-14 R12) unless
+    an item says `agent`. A refused gate restores every byte written here."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -216,6 +226,13 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
             slug = spec_journal_slug(Path(spec_rel).stem)
     phase = run_cmd._item_phase(record.item) if record.item else None
     emits_ticks = "plan:ticks" in owner_emits
+    current = state.steps.get(record.step)
+    asked = (
+        current is not None
+        and run_cmd._clears_gate(step, current, "done" if record.outcome == "done" else "failed")
+        and not record.no_questions
+        and record.evidence.get("answered_by") != "agent"
+    )
     context = _Context(
         scope=scope,
         slug=slug,
@@ -224,6 +241,7 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         phase=phase,
         completes_phase=emits_ticks and record.outcome == "done" and phase is not None,
         emits_ticks=emits_ticks,
+        operator_decisions=asked,
     )
     return context, state
 
@@ -299,12 +317,28 @@ def _journal_writes(
     def _verify(entry: JournalEntry) -> None:
         # p3-r1: every path that writes an operator claim checks it here, the
         # verbs and a whole step's record alike.
-        if entry.answered_by != "operator" or entry.resolves is None:
+        if entry.answered_by != "operator":
             return
-        from fr.journal.operator import OperatorClaimRefusedError, verify_operator_claim
+        if entry.resolves is None and (entry.kind != "decision" or ctx.operator_decisions):
+            return  # the brainstorm gate verifies its own question rounds (R12)
+        from fr.journal.operator import (
+            OperatorClaimRefusedError,
+            verify_operator_answer,
+            verify_operator_claim,
+        )
 
         try:
-            advisory = verify_operator_claim([*existing, *new], entry.resolves)
+            if entry.resolves is not None:
+                advisory = verify_operator_claim([*existing, *new], entry.resolves)
+            else:
+                # A decision answers what was asked since the journal last moved;
+                # an empty journal opens the window at the session's start.
+                prior = [*existing, *new]
+                since = prior[-1].created if prior else None
+                since_utc = journal_stamp_as_utc(since) if since else _SESSION_START
+                advisory = verify_operator_answer(
+                    f"decision {entry.id}", since or "the session's start", since_utc
+                )
         except OperatorClaimRefusedError as e:
             raise RecordRefusedError(str(e)) from e
         if advisory is not None:
@@ -359,10 +393,18 @@ def _journal_writes(
                 state=state,
                 resolves=item.resolves,
                 review_scope=item.review_scope,
-                answered_by=item.answered_by,
+                answered_by=(
+                    "operator"
+                    if item.kind == "decision"
+                    and item.answered_by is None
+                    and ctx.operator_decisions
+                    else item.answered_by
+                ),
                 tracked_by=item.tracked_by,
                 out_of_scope=item.out_of_scope,
                 input=item.input,
+                gate=item.gate,
+                narrows=item.narrows,
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e

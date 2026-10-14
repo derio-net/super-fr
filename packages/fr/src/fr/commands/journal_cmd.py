@@ -199,13 +199,30 @@ def add(
         "renders as reclassified.",
     ),
     answered_by: str | None = typer.Option(
-        None, "--answered-by", help="--resolves only: " + _ANSWERED_BY_HELP
+        None,
+        "--answered-by",
+        help="--resolves or --kind decision: "
+        + _ANSWERED_BY_HELP
+        + " On a decision, `operator` says the operator answered it (verified the same way).",
     ),
     is_input: bool = typer.Option(
         False,
         "--input",
         help="--scope spec --kind discovery only: this entry is the operator's brief, "
         "verbatim after third-party redaction, stored for the record at brainstorm.",
+    ),
+    gate: str | None = typer.Option(
+        None,
+        "--gate",
+        help="--kind decision only: the gate role that owns it "
+        "(developer|reviewer|tester|devops|owner|security).",
+    ),
+    narrows: str | None = typer.Option(
+        None,
+        "--narrows",
+        help="--kind decision only: the issues it narrows, comma-separated "
+        "(#N, owner/repo#N or an http(s) URL). `deliver` refuses `Closes` over one "
+        "unless the operator answered the decision.",
     ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
@@ -251,6 +268,7 @@ def add(
         entry_id or hashlib.sha1(f"{kind}|{scope}|{slug}|{title}|{body}".encode()).hexdigest()[:12]
     )
 
+    narrowed = tuple(ref.strip() for ref in (narrows or "").split(",") if ref.strip())
     try:
         entry = JournalEntry(
             kind=kind,  # type: ignore[arg-type]
@@ -265,6 +283,8 @@ def add(
             review_scope=review_scope,  # type: ignore[arg-type]
             answered_by=answered_by,  # type: ignore[arg-type]
             input=is_input,
+            gate=gate,
+            narrows=narrowed,
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {escape(str(e))}")
@@ -310,6 +330,8 @@ def add(
             "resolves": resolves,
             "answered_by": answered_by,
             "input": is_input,
+            "gate": gate,
+            "narrows": narrowed,
         }
     )
     _apply(

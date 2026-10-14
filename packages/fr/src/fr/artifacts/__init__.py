@@ -60,6 +60,7 @@ from fr.artifacts import record_shape as _record_shape  # noqa: F401  (isort: sk
 from fr.artifacts import record_contract as _record_contract  # noqa: F401  (isort: skip)
 from fr.artifacts import record_strategies as _record_strategies  # noqa: F401  (isort: skip)
 from fr.artifacts import record_status_split as _record_status_split  # noqa: F401  (isort: skip)
+from fr.artifacts import record_exit_gates as _record_exit_gates  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_verify as _matrix_verify  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_visual as _matrix_visual  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_strategies as _matrix_strategies  # noqa: F401  (isort: skip)
