@@ -1190,3 +1190,28 @@ test_preflight_on_main_in_sync_prints_channel_main, test_a_forwarded_argument_wi
 ### p8-r6-resolved · finding [out-of-scope] · resolves p8-r6: untracked files in the managed cache survive a channel switch, so preflight refuses until a manual clean (phase 8)
 
 Pre-existing: the managed cache never removed untracked files; a git clean before checkout is a separate design call.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved-2 created=2026-10-14T11:14:32+00:00 phase=3 state=open resolves=p3-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1198 -->
+### p3-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1198] · resolves p3-r10: verify_operator_answer opens its window at 1970 on an empty journal and accepts any answer since the journal last moved (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1198.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r11-resolved-2 created=2026-10-14T11:14:32+00:00 phase=5 state=open resolves=p5-r11 tracked_by=https://github.com/derio-net/super-fr/issues/1199 -->
+### p5-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1199] · resolves p5-r11: a run blocked on a gate before its batch PR exists cannot reach Needs you · Developer (phase 5)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1199.
+
+<!-- fr:journal kind=finding scope=plan id=p6b-r11-resolved-2 created=2026-10-14T11:14:32+00:00 phase=6 state=open resolves=p6b-r11 tracked_by=https://github.com/derio-net/super-fr/issues/1200 -->
+### p6b-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1200] · resolves p6b-r11: main has no required review or checks, so the auto-merge guards are the only barrier once approved-fr is bypassed (phase 6)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1200.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8-resolved-2 created=2026-10-14T11:14:32+00:00 phase=7 state=open resolves=p7-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1201 -->
+### p7-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1201] · resolves p7-r8: fr.cloud._version_tuple cannot parse X.Y.ZrcN; the cloud doctor's fr-version check reports ok on an RC install (phase 7)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1201.
+
+<!-- fr:journal kind=finding scope=plan id=p8-r6-resolved-2 created=2026-10-14T11:14:32+00:00 phase=8 state=open resolves=p8-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1202 -->
+### p8-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1202] · resolves p8-r6: untracked files in the managed cache survive a channel switch, so preflight refuses until a manual clean (phase 8)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1202.
