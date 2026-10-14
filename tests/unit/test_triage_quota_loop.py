@@ -675,9 +675,10 @@ def test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """merge-truth R14 (gh#1178): the real `_Driver`, waiting out an exhausted GraphQL
-    window past its lease's renewal point. The renewal's visibility read is the REST
-    `repo_visibility`; the visibility client has no GraphQL method (an AttributeError if
-    asked) and nothing reaches the forge, yet the lease is renewed."""
+    window past its lease's renewal point. Proves the renewal's visibility read goes
+    through `repo_visibility` (the visibility client has no GraphQL method, an
+    AttributeError if asked) and the lease is renewed. That `repo_visibility` is a REST
+    `repos/<o>/<r>` call is proven in `tests/unit/test_gh.py`, not here."""
     state = _leased_cloud_state(tmp_path, world)
     driver = triage_batch_cmd.build_driver(
         SCOPE, state, batch_ids=None, checkout=None, max_inflight=3, yes=True,
