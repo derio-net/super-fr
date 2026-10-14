@@ -92,12 +92,21 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: running
-    at: '2026-10-14T20:43:30+00:00'
+    state: done
+    at: '2026-10-14T21:04:28+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1217
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-10-14T20:43:30+00:00'
           harness: opencode
           session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T21:04:12+00:00'
+          outcome: done
+        evidence:
+          tests: ci:3f1c2e998c5fae333ce0f4554371adc34b2741a2+4085926fb7bc1908a2268ddffb08c0616ede5e47;tree=4ee6d416b80cbbfbe5393f0ebe8101a6482edde7d158d9758b002b32879192a9
+          walk: 20261014T205930Z.log@aa61fa707c83
+          proportionality: 4085926fb7bc1908a2268ddffb08c0616ede5e47:ef61771c16cdf87ef857bf58c0caabe3b62852330896a7ac4fb050be4712e0ba
+          visual: none
 fr_version: 5.27.0rc3
