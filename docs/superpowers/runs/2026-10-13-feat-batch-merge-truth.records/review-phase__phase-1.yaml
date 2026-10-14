@@ -1,0 +1,37 @@
+schema_version: 9
+run: 2026-10-13-feat-batch-merge-truth
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: review
+    id: p1-review
+    phase: 1
+    title: "Phase 1 review: 8 findings (6 in scope, all fixed; 2 out of scope)"
+    body: |
+      An independent reviewer read 23cd1092~1..e430d2ea against spec R1–R6, R15 and §A–§C. Verdict: ready with fixes. No Critical or Important findings. The targeted suites (685 tests) passed.
+      Both executor deviations were judged justified: settle_closed takes a keyword-only now=, and the scenarios sit at level int.
+      The in-scope findings p1-r1..r6 were each verified and fixed test-first, in a3eceb3e, 0ab0fa9c, 5dc09501, 2ec7afef, 312e8619, 8414408a and 7495d3c7. Afterwards, 525 targeted tests passed.
+      The orchestrator re-ran p1-r2's tests against the pre-fix writer, and both failed.
+      p1-r7 and p1-r8 are out of scope.
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "settle on a non-GitHub repo raises UnsupportedForgeOperation; claim sync and every drive pass exit 2", body: "claim_sync.execute settle branch and triage_batch_cmd._claim_write. Settle ops were planned for glab/tea repos, whose list_issue_comments is unsupported."}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "settle_closed reads view_issue twice and always edits labels", body: "claim_writes.settle_closed: one avoidable read per settle (~206 on the first live pass), and a label edit even when no release label is present."}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "plan_sync settle attributes a member to the first batch containing the key", body: "claim_sync.py settle planning: the first match may be an archived or cancelled batch, so claims_released lands on the wrong batch."}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "scope retire clobbers a concurrent facts.json and skips _forget_claims on the unsupported-forge exit", body: "triage_claim_cmd scope retire writes back facts loaded at start, and _fail on UnsupportedForgeOperation runs before _forget_claims."}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: in, title: "Acceptance rows do not cite --yes tests proving clearing", body: "triage-release-pending-true cited no test of a --yes pass clearing a release-pending member. triage-closed-issues-unclaimed cited only the pure drive_pass test."}
+  - {kind: finding, id: p1-r6, phase: 1, review_scope: in, title: "Carried-repo settle filter tested only via the read_repo helper", body: "There was no pass-level test that a carried or skipped repo's settle is withheld."}
+  - {kind: finding, id: p1-r7, phase: 1, review_scope: out, title: "Closed issues held by a retired scope are never settled", body: "Retire handles open issues only, which predates this change. R6 concerns open members."}
+  - {kind: finding, id: p1-r8, phase: 1, review_scope: out, title: "A closed issue with an own un-released marker but no label is never settled", body: "Spec §A keys the closed set on the two labels by design. Such an issue shows nothing false on any surface."}
+resolves:
+  - {id: p1-r1, state: fixed, body: "a3eceb3e: plan_sync plans no settle for a repo whose client is UnsupportedBatchOps. Both claim sync and the drive plan through it. Test test_triage_claim_sync.py::test_sync_plans_no_settle_on_a_non_github_repo."}
+  - {id: p1-r2, state: fixed, body: "0ab0fa9c: settle_closed takes the labels from its first read and skips the edit and re-read when no release label is present. Tests test_settle_closed_views_the_issue_once_and_edits_labels_once and test_settle_closed_with_no_release_label_edits_no_label_and_still_releases both fail on the pre-fix writer."}
+  - {id: p1-r3, state: fixed, body: "5dc09501: the settle batch is the owing one (owed_claims, then owed_releases, then the first match). Test test_a_settle_serves_the_batch_that_owes_the_key_not_the_first_listing_it."}
+  - {id: p1-r4, state: fixed, body: "2ec7afef: _forget_claims reloads facts.json before rewriting, and retire forgets the released claims before the unsupported-forge exit. Tests test_scope_retire_does_not_clobber_facts_a_collect_rewrote_meanwhile and test_scope_retire_forgets_the_released_claims_before_an_unsupported_forge_exit."}
+  - {id: p1-r5, state: fixed, body: "312e8619 adds test_a_yes_pass_clears_a_release_pending_member, and 8414408a/7495d3c7 add the --yes refs to both rows. fr acceptance check reports 521 rows OK."}
+  - {id: p1-r6, state: fixed, body: "312e8619: test_a_yes_pass_leaves_a_closed_hit_of_a_skipped_repo_alone runs a pass and asserts no settle line and no label edit."}
+  - {id: p1-r7, state: out-of-scope, body: "Not caused by this change: scope retire has always released claims on open issues only. A retired scope's claims on closed issues predate this batch."}
+  - {id: p1-r8, state: out-of-scope, body: "Not caused by this change: the closed set is keyed on the two labels by spec §A. An unlabelled closed issue with a stale marker misleads no surface."}
+evidence:
+  review: p1-review
+  reviewer: ae1c5895d63c11c0c
+  model: claude-opus-5-5
