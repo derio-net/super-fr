@@ -9230,9 +9230,15 @@ rows:
       label per post-merge gate, kept in sync as the spec changes.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_exit_label_sync.py
+      - super-fr:tests/unit/test_exit_label_sync_points.py
+      - super-fr:tests/unit/test_exit_pr_adapter.py
+    status: walk-owed
+    notes: Label families, the PR adapter methods and the sync points are unit-tested
+      against a fake forge; only a real forge shows the labels a real run's PR carries,
+      so the live walk stays owed
   - id: exit-gates-driver-routing
     capability: exit-gates
     acceptance: A merged batch held by a post-merge gate is not closed out and keeps
