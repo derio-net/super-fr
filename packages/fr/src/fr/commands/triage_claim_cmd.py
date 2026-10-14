@@ -41,7 +41,14 @@ from fr.triage.check import claim_sets
 from fr.triage.claim_sync import ClaimEnv, SyncResult, execute, plan_sync, record_releases
 from fr.triage.claims import SCOPE_ID_PATTERN, Claim, expired, from_issue_claim, holder, stale
 from fr.triage.errors import TriageError
-from fr.triage.model import Batch, ClaimTakenEvent, Facts, load_judgements, normalize_key
+from fr.triage.model import (
+    Batch,
+    ClaimTakenEvent,
+    Facts,
+    load_facts,
+    load_judgements,
+    normalize_key,
+)
 from fr.triage.scope_config import default_board_name, load_scope_config, scope_id
 
 scope_app = typer.Typer(name="scope", help="This triage scope's identity and config.")
@@ -422,6 +429,7 @@ def scope_retire_command(
                 allow="any" if force else "stale",
             )
         except UnsupportedForgeOperation as exc:
+            _forget_claims(target, signer, released)  # those already released stay so
             _fail(str(exc))
         except cw.ClaimError as exc:
             failed.append(f"{k}: {exc}")
@@ -431,7 +439,7 @@ def scope_retire_command(
             continue
         released.add(k)
         console.print(f"released {k}", markup=False)
-    _forget_claims(target, facts, signer, released)
+    _forget_claims(target, signer, released)
     if failed:
         _fail("these were not released; re-run to complete: " + "; ".join(failed), code=1)
     console.print(
@@ -440,12 +448,18 @@ def scope_retire_command(
     )
 
 
-def _forget_claims(target: Path, facts: Facts, signer: str, keys: set[str]) -> None:
+def _forget_claims(target: Path, signer: str, keys: set[str]) -> None:
     """Drop *signer*'s claims on *keys* from the stored facts (post-merge truth R6): facts
     record only un-released claims, so this is what a fresh collect would write, and the
     next `check` and `claim sync` read the retired scope as gone with no collect between.
-    `facts.json` is host-local state (never a state-ref file), written atomically."""
+    The facts are re-read here, not taken from the command's start: a collect that ran
+    meanwhile is not undone. `facts.json` is host-local state (never a state-ref file),
+    written atomically; an unreadable one is left alone."""
     if not keys:
+        return
+    try:
+        facts = load_facts(target / "facts.json")
+    except TriageError:
         return
     issues = [
         i.model_copy(update={"claims": [c for c in i.claims if c.signer != signer]})

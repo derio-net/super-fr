@@ -608,3 +608,48 @@ def test_scope_retire_yes_removes_the_signers_claims_from_facts(
     assert all(h["key"] != "super-fr#7" for h in json.loads(out)["held_elsewhere"])
     code, out = _run(tmp_path, "claim", "sync")
     assert "claim super-fr#7 for revive" in out and "held super-fr#7" not in out
+
+
+def test_scope_retire_does_not_clobber_facts_a_collect_rewrote_meanwhile(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    """p1-r4a: the rewrite starts from facts.json as it is then, not as the command loaded."""
+    tmp_path, client = world
+    real = client.edit_issue_comment
+
+    def edit(repo: str, comment_id: int, body: str) -> None:
+        facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+        facts["collected_at"] = "2026-10-14T11:59:00+00:00"  # a concurrent collect
+        (tmp_path / "facts.json").write_text(json.dumps(facts), "utf-8")
+        real(repo, comment_id, body)
+
+    client.edit_issue_comment = edit  # type: ignore[method-assign]
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    assert facts["collected_at"] == "2026-10-14T11:59:00+00:00"
+    assert next(i for i in facts["issues"] if i["number"] == 7)["claims"] == []
+
+
+def test_scope_retire_forgets_the_released_claims_before_an_unsupported_forge_exit(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    """p1-r4b: #8 was released, then #9 hit an unsupported op: facts must not still show #8."""
+    from fr.ghclient import UnsupportedForgeOperation
+
+    tmp_path, client = world
+    real = client.edit_issue_comment
+    seen: list[int] = []
+
+    def edit(repo: str, comment_id: int, body: str) -> None:
+        if seen:
+            raise UnsupportedForgeOperation("edit_issue_comment", "glab")
+        seen.append(comment_id)
+        real(repo, comment_id, body)
+
+    client.edit_issue_comment = edit  # type: ignore[method-assign]
+    code, out = _run(tmp_path, "scope", "retire", ZOMBIE, "--force", "--yes")
+    assert code == 2, out
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    by = {i["number"]: i["claims"] for i in facts["issues"]}
+    assert by[8] == [] and by[9] != []
