@@ -9560,9 +9560,16 @@ rows:
       and explicit repair records truthful session ownership.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_herdr_closed_recovery.py::test_uncertain_allocation_discovered_without_reallocation
+      - super-fr:tests/unit/test_herdr_closed_recovery.py::test_effect_and_checkpoint_failures_preserve_pending_no_replay
+      - super-fr:tests/unit/test_herdr_closed_recovery.py::test_activation_write_failure_repair_is_input_free
+      int:
+      - super-fr:tests/integration/test_scenarios.py::test_triage_closed_recovery
+    status: ci
+    notes: Allocation/checkpoint fault injection plus installed batch outcome-write
+      failure prove same-attempt discovery and input-free repair without false ownership.
     verify: candidate
     scenario: tests/scenarios/triage-closed-recovery.sh
   - id: triage-closed-recovery-live
