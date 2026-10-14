@@ -1,0 +1,88 @@
+schema_version: 10
+run: 2026-10-13-feat-batch-exit-gates
+step: review-phase
+item: phase/7
+outcome: done
+journal:
+- kind: finding
+  id: p7-r1
+  phase: 7
+  title: untagged RC at HEAD recomputes the same RC; every later run refuses
+  body: 'Reviewer tag: in.'
+  review_scope: in
+- kind: finding
+  id: p7-r2
+  phase: 7
+  title: merged-PR read trusts the eventually consistent search index; no --base main
+  body: 'Reviewer tag: in.'
+  review_scope: in
+- kind: finding
+  id: p7-r3
+  phase: 7
+  title: bump and lock-check inherit write tokens while the spec claims otherwise
+  body: 'Reviewer tag: in.'
+  review_scope: in
+- kind: finding
+  id: p7-r4
+  phase: 7
+  title: FR_RELEASE_STATUS_TOKEN described as read-only but is the write-capable github.token
+  body: 'Reviewer tag: in.'
+  review_scope: in
+- kind: finding
+  id: p7-r5
+  phase: 7
+  title: failed or capped gate read blocks RCs too
+  body: 'Reviewer tag: in.'
+  review_scope: in
+- kind: finding
+  id: p7-r6
+  phase: 7
+  title: removed major fragment moves the version backwards
+  body: 'Reviewer tag: in.'
+  review_scope: in
+- kind: finding
+  id: p7-r7
+  phase: 7
+  title: human fr release status truncates silently and reads unfetched tags
+  body: 'Reviewer tag: in.'
+  review_scope: in
+- kind: finding
+  id: p7-r8
+  phase: 7
+  title: fr.cloud._version_tuple cannot parse X.Y.ZrcN; the cloud doctor's fr-version check reports ok on an RC install
+  body: 'Reviewer tag: out.'
+  review_scope: out
+- kind: review
+  id: p7-review-1
+  phase: 7
+  title: 'phase 7 independent review: 8 findings (7 in, 1 out)'
+  body: Dispatched reviewer read 55036128..11ca630e against R20, R21, R25, R26 and AGENTS.md's release flow, ran probes with the World fixture; confirmed one Version object, credential-free fr decision, no RC loop, narrow floor admission; reproduced the untagged-RC wedge (p7-r1) and found the search-index gap (p7-r2). All 7 in-scope fixed in 4fdf1676; CI green.
+resolves:
+- id: p7-r1
+  state: fixed
+  body: test_p7_r1_an_untagged_rc_at_head_is_tagged_with_no_new_commit (4fdf1676, CI green)
+- id: p7-r2
+  state: fixed
+  body: cross-checked against git log PR numbers, --base main; test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_final (4fdf1676, CI green)
+- id: p7-r3
+  state: fixed
+  body: credential-free; test_p7_r3_bump_and_lock_check_run_with_no_forge_token (4fdf1676, CI green)
+- id: p7-r4
+  state: fixed
+  body: wording fixed in release.yml and AGENTS.md; test_p7_r4_header_says_the_status_token_is_the_write_capable_workflow_token (4fdf1676, CI green)
+- id: p7-r5
+  state: fixed
+  body: unknown gate state cuts an RC naming the reason; test_p7_r5_a_failed_forge_read_cuts_an_rc_naming_the_reason (4fdf1676, CI green)
+- id: p7-r6
+  state: fixed
+  body: target <= head refused; test_p7_r6_a_removed_major_fragment_never_moves_the_version_backwards (4fdf1676, CI green)
+- id: p7-r7
+  state: fixed
+  body: warns at limit, fetches tags; test_p7_r7_a_read_at_its_limit_warns_and_an_unfetched_tag_is_said (4fdf1676, CI green)
+- id: p7-r8
+  state: out-of-scope
+  body: fr cloud doctor's version parser predates RC versions and degrades to ok, harmless; not part of the release tooling R25 names.
+evidence:
+  review: p7-review-1
+  reviewer: a11345b884ad79a49
+  model: claude-opus-5-5
