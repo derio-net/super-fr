@@ -135,6 +135,9 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
     `gate` was added by 2026-10-14 exit-gates phase 4 (§D): `fr gate pass` writes only
     to the forge (a merged PR's labels and a comment, with `--yes`); the gate ledger is
     the PR's labels, so it touches no registered artifact.
+
+    `release` was added by 2026-10-14 exit-gates phase 7 (R21): `fr release status` reads
+    tags and the forge and writes nothing; `release.py` runs it on the default branch.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
@@ -152,6 +155,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "cloud",
             "debt",
             "gate",
+            "release",
         }
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
@@ -171,6 +175,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "cloud",
         "debt",
         "gate",
+        "release",
         "FR_SKIP_MIGRATION=1",
     )
 
