@@ -118,3 +118,48 @@ Parent supplied read-only real captured global pane/tab rosters and shell observ
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 Verification-only task; no new implementation to refactor. Shared roster, submission and HOLD policies were factored in tasks 1–5.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-14T20:43:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · Pending recovery activation permits managed restart (phase 1)
+
+In scope: recovery.py:413-425 saves the target descriptor active before final intent save. Failure leaves descriptor active while pending recovery remains; opencode.py restart eligibility checks only descriptor. Add unresolved/unreadable recovery-intent admission guard and regression that no restart input occurs after activation-write failure.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-14T20:43:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · Recovery accepts cursors that fr cannot read (phase 1)
+
+In scope: managed.py:268-297 validates only selected fields and accepts missing workflow/started or future schema. Installed fixture triage-closed-recovery.py:125-128 uses such a cursor. Validate with supported read-only parse_run_state, without migration/writes; use valid fixtures and test zero allocation on malformed/future schemas.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-14T20:43:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · Malformed agent names can certify source absence (phase 1)
+
+In scope: recovery.py:42-45 validates pane/tab identities but not optional name used by absent/discovery comparisons. Reject present non-string names as unknown observation, preserve valid unnamed rows, and test preview/act/repair perform no input/allocation.
+
+<!-- fr:journal kind=review scope=plan id=phase1-review created=2026-10-14T20:43:26+00:00 phase=1 -->
+### phase1-review · review · Independent phase-1 code review (phase 1)
+
+Reviewed origin/main...HEAD against spec, phase plan and journal. Initial review raised three in-scope findings; re-review raised one regression, all four now independently verified fixed. Final review of 04b8acab confirms usable run/cursor/steps admission after supported schema parsing, unknown cursor-step refusal, and finished final-step compatibility. Pending-intent restart admission and malformed-name refusal remain present. No new directly introduced defects. Executor suite claims were not used as substitute for review. Actual-client walk remains operator-owned post-merge Tester evidence. #1216 excluded.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-10-14T20:43:26+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · Parser substitution removed nonempty recovery cursor guards (phase 1)
+
+In scope: cc7386fd removed explicit usable run/cursor/steps checks while parse_run_state permits blank strings and empty steps. Restore recovery-specific usability guards after supported parsing, with preview/act zero-allocation regressions and finished-final-step compatibility.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-14T20:43:26+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: Pending recovery activation permits managed restart (phase 1)
+
+cc7386fd adds managed.restart_admission checking source/item pending or unreadable intent before restart input; startup readiness bypass is explicit. Reviewer verified managed.py:303–319 and regression cases for failed activation and unreadable intent.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-14T20:43:26+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: Recovery accepts cursors that fr cannot read (phase 1)
+
+cc7386fd uses parse_run_state without migration/writes and valid RunState installed fixtures. Missing fields, invalid metadata and future-schema cursor tests refuse allocation and preserve bytes; independently verified.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-14T20:43:26+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: Malformed agent names can certify source absence (phase 1)
+
+cc7386fd rejects present non-string agent names before absence/discovery, keeps legitimate unnamed rows, and tests preview/act/repair without effects; independently verified.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-10-14T20:43:26+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: Parser substitution removed nonempty recovery cursor guards (phase 1)
+
+04b8acab adds validate_run_id plus nonblank/unpadded cursor, nonempty steps and cursor membership checks after parse_run_state; tests reject invalid identities and retain finished deliver cursor HOLD. Reviewer independently verified managed.py:282–292 and tests:594–646.

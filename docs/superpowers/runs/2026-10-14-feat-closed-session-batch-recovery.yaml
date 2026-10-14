@@ -3,7 +3,7 @@ run: 2026-10-14-feat-closed-session-batch-recovery
 workflow: fr-goal@1
 branch: feat/closed-session-batch-recovery
 started: '2026-10-14T15:57:59+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -50,8 +50,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-10-14T20:13:11+00:00'
+    state: done
+    at: '2026-10-14T20:43:27+00:00'
     members:
     - implement-phase
     - review-phase
@@ -73,11 +73,19 @@ steps:
           tests: closed-session-batch-recovery-full-84eeab81.log@dd8ab06465fb;tree=85f9bd344425c1dd1f805ceda3e73a7984d17f32c2eb9cb4d530363f4c0031ca
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T20:13:11+00:00'
           harness: opencode
+          model: openai/gpt-6.1-sol
           session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T20:43:27+00:00'
+          outcome: done
+        evidence:
+          review: phase1-review
+          reviewer: ses_ec3f38899ffeDvvAyhmxZ7QQwj
+          visual: none
+          findings: recovery-pane-roster-capture-required,p1-r1,p1-r2,p1-r3,p1-r4
   journal-check:
     state: pending
   deliver:
