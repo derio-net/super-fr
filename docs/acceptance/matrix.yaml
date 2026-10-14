@@ -9148,6 +9148,10 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R1
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_verification_exit.py
@@ -9198,6 +9202,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R9
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_deliver_leftovers.py#test_each_kind_of_leftover_is_listed_with_its_fix
@@ -9216,6 +9222,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R17
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R19
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R18
     levels:
       unit:
       - super-fr:tests/unit/test_triage_board_lanes.py#test_a_cursor_blocked_on_a_step_gate_is_needs_developer
@@ -9282,6 +9289,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R15
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R27
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_closeout.py
@@ -9302,6 +9310,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R20
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R21
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R25
+    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R26
     levels:
       unit:
       - super-fr:tests/unit/test_release_status.py
