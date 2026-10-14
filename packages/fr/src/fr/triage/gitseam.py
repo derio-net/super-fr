@@ -679,6 +679,27 @@ class Checkout:
     def exists_at(self, ref: str, path: str) -> bool:
         return git_ok(["cat-file", "-e", f"{ref}:{path}"], self.path)
 
+    def reach_commit(self, sha: str, branch: str) -> bool:
+        """Whether this clone has commit *sha*, fetching origin's *branch* once when it
+        does not (a PR head the clone never saw). A failed fetch is no commit."""
+        if not sha:
+            return False
+        if has_commit(self.path, sha):
+            return True
+        try:
+            fetch_ref(self.path, "origin", f"refs/heads/{branch}")
+        except GitError:
+            return False
+        return has_commit(self.path, sha)
+
+    def list_dir(self, ref: str, directory: str) -> list[str]:
+        """The names of the entries directly under *directory* at *ref*; empty when it
+        is absent there."""
+        if not self.exists_at(ref, directory):
+            return []
+        out = git_bytes(["ls-tree", "-z", "--name-only", f"{ref}:{directory}"], self.path)
+        return sorted(os.fsdecode(n) for n in out.split(b"\0") if n)
+
     def snapshot_paths(self, ref: str, paths: tuple[str, ...], dest: Path) -> None:
         """Write *paths* (files or directories) as they are at *ref* into *dest*, a
         fresh git repo with this clone's origin, so a reader that resolves a repo's

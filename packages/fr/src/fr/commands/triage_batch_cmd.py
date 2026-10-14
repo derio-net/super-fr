@@ -221,6 +221,7 @@ from fr.triage.claim_sync import (
 )
 from fr.triage.claims import Claim, expired, held_line, held_map, held_members, taken_keys
 from fr.triage.claims import stale as claim_stale
+from fr.triage.cursor import read_cursor
 from fr.triage.dedupe import candidates
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
@@ -237,6 +238,8 @@ from fr.triage.model import (
     ClaimsReleasedEvent,
     CloseoutEvent,
     ConflictEvent,
+    CursorPosition,
+    CursorReader,
     DispatchEvent,
     EnqueueEvent,
     Export,
@@ -2946,6 +2949,7 @@ def recollect(
     *,
     only: frozenset[str] | None = None,
     after_write: Callable[[Facts, frozenset[str]], None] | None = None,
+    cursor_at: CursorReader | None = None,
 ) -> Mapping[str, tuple[str, ...]]:
     """Re-collect facts.json through the `Forge` seam, as `fr triage collect` does:
     every stage is derived from facts, so each pass starts here (wave-driver §B).
@@ -2958,12 +2962,15 @@ def recollect(
 
     A paced pass (spec 2026-10-12-quota-pacing R10, R11) reads *only* those repos,
     carrying the rest, and stores its probes' ETags in *after_write*, once facts.json is
-    written. Without either, the collect is exactly the unpaced one."""
+    written. Without either, the collect is exactly the unpaced one. *cursor_at* reads
+    the run cursor's position at each open batch PR's head (exit-gates R18)."""
     paced: dict[str, Any] = (
         {"only": only, "after_write": after_write}
         if only is not None or after_write is not None
         else {}
     )
+    if cursor_at is not None:  # the drive's own `gitseam` reader (exit-gates R18)
+        paced["cursor_at"] = cursor_at
     try:
         facts, _, stats = collect_into(scope, target, carry=True, **paced)
     except TriageError as exc:  # ForgeError included
@@ -3362,8 +3369,24 @@ class _Driver:
         # quiet, partial or essential-only; `pace` is this pass's verdict.
         self.pacer: Pacer | None = None
         self.pace: Pace | None = None
+        # (repo, head sha) -> the run cursor's position there: a commit never changes, so
+        # each open batch PR head is read once per process (exit-gates R18)
+        self._cursors: dict[tuple[str, str], CursorPosition | None] = {}
 
     # -------------------------------------------------------------- reaching out
+
+    def cursor_at(self, pr: PullRequest) -> CursorPosition | None:
+        """The run cursor's position at open batch PR *pr*'s head, read through the repo's
+        clone (`gitseam`); None with no clone, or one that cannot reach the head."""
+        key = (pr.repo, pr.head_oid)
+        if key not in self._cursors:
+            if self.path_of(pr.repo) is None or not pr.head_oid:
+                return None
+            try:
+                self._cursors[key] = read_cursor(self._reader(pr.repo), pr)
+            except TriageError:
+                return None  # unknown this pass; read again next pass
+        return self._cursors[key]
 
     def client(self, facts: Facts, repo: str) -> GhClient:
         if repo not in self._clients:
@@ -4380,8 +4403,9 @@ class _Driver:
         # The repos the collect actually carried (p2-r5): one value for the ETags it
         # promotes and the snapshot's live reads, so the two cannot drift.
         collected_carried: list[frozenset[str]] = []
+        reader: CursorReader = self.cursor_at
         if paced is None:
-            ignored = recollect(self.scope, self.target) or {}
+            ignored = recollect(self.scope, self.target, cursor_at=reader) or {}
         else:
             pacer = self.pacer
             assert pacer is not None
@@ -4391,7 +4415,8 @@ class _Driver:
                 pacer.after_collect(paced, facts, carried)
 
             ignored = recollect(
-                self.scope, self.target, only=paced.only, after_write=after_write
+                self.scope, self.target, only=paced.only, after_write=after_write,
+                cursor_at=reader,
             ) or {}  # fmt: skip
         for repo, keys in sorted(ignored.items()):
             self._report_once(

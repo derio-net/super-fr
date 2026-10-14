@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -59,8 +59,14 @@ from fr.triage.stage import Stage, derive_stage
 # 11 adds per-issue `author` (debt-engine R14: only the workflow bot's or a trusted login's
 # debt digest counts): `to_json` dumps it, `null` included, which a closed-world schema-10
 # reader rejects; a file below 11 reads `author` as None, so its digests are untrusted.
-FACTS_SCHEMA: Literal[11] = 11
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11)
+# 12 adds (2026-10-14-exit-gates §D Facts) the labels of each unfinished batch's MERGED PR
+# (the gate ledger: `PullRequest.labels`, until now open PRs only), the run cursor's
+# position at an open batch PR's head (`PullRequest.cursor`, read through `gitseam`), and
+# per-config `TriageConfig.exit` (R4): `to_json` dumps `cursor` and `exit`, `null`
+# included, which a closed-world schema-11 reader rejects; a file below 12 reads both as
+# None, so no batch reads as gated and no cursor position is known.
+FACTS_SCHEMA: Literal[12] = 12
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 # The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
 # `claim_taken` event, gh#1120;
@@ -279,6 +285,26 @@ class _Strict(BaseModel):
 # ---------------------------------------------------------------- facts.json
 
 
+CursorKind = Literal["gate", "deliver-done", "manual", "none"]
+
+
+class CursorPosition(_Strict):
+    """Where a batch's run stands at its PR's head (exit-gates R17, R18): blocked on the
+    step gate of `step` (`gate`), `deliver` done (`deliver-done`), a `tag: manual` unit
+    of `step` next (`manual`, `unit` names it), or none of those (`none`)."""
+
+    run: str
+    step: str
+    kind: CursorKind
+    unit: str | None = None
+
+
+CursorReader = Callable[["PullRequest"], CursorPosition | None]
+"""The run cursor's position at an open batch PR's head (exit-gates R18): built by the
+command layer over a `gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect`
+itself starts no process."""
+
+
 class PullRequest(_Strict):
     repo: str  # OWNER/REPO the PR lives in — not necessarily the issue's
     number: int
@@ -303,9 +329,14 @@ class PullRequest(_Strict):
     mergeable: str | None = None
     merge_state: str | None = None
     review: str | None = None
-    # Open PRs only, like `checks`: the PR's label names, `None` when never read, which
-    # never approves (2026-10-11-merge-train-safety §A). Facts schema 9.
+    # The PR's label names, `None` when never read, which never approves
+    # (2026-10-11-merge-train-safety §A, facts schema 10). Read for open PRs, and from
+    # schema 12 for an unfinished batch's MERGED PR too: its `gate:*` labels are the gate
+    # ledger (2026-10-14-exit-gates R13, R14).
     labels: list[str] | None = None
+    # The run cursor's position at this PR's head (exit-gates R18, facts schema 12): an
+    # open batch PR only; None when never read or no cursor names the PR's branch.
+    cursor: CursorPosition | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""
@@ -572,7 +603,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11] = Field(11, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11, 12] = Field(12, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str

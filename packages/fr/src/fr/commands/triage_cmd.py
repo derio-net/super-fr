@@ -42,11 +42,20 @@ from fr.hostclient import client_for_backend
 from fr.triage.approval import ensure_approval_label
 from fr.triage.batch import last_dispatch, lifecycle_events
 from fr.triage.check import ClaimSets, classify, clean_label_targets
-from fr.triage.collect import PR_LIMIT, ClientForge, CollectStats, Forge, collect_facts_counted
+from fr.triage.collect import (
+    PR_LIMIT,
+    ClientForge,
+    CollectStats,
+    Forge,
+    collect_facts_counted,
+)
 from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
 from fr.triage.model import (
+    Batch,
+    CloseoutEvent,
+    CursorReader,
     Facts,
     Judgements,
     Scope,
@@ -474,6 +483,7 @@ def collect_into(
     settle: bool = False,
     only: Iterable[str] | None = None,
     after_write: Callable[[Facts, frozenset[str]], None] | None = None,
+    cursor_at: CursorReader | None = None,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
@@ -493,6 +503,10 @@ def collect_into(
     is written, never before, with the repos this collect actually carried: the drive
     stores the probes' ETags there, so they always describe facts already on disk (R11),
     and takes that one carried set for its snapshot too (p2-r5).
+
+    Every batch not yet finished (no close-out recorded archived) is a gate-ledger branch
+    (exit-gates §D Facts): its merged PR's labels are read, and its open PR's run cursor
+    position is read through *cursor_at* (the drive's `gitseam` reader; None reads none).
     """
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
@@ -512,6 +526,12 @@ def collect_into(
         and events[-1].kind != "cancel"
         and (event := last_dispatch(b)) is not None
     ]
+    ledger = [
+        (repo_name, branch, at)
+        for b in (loaded.batches if loaded else [])
+        if not any(isinstance(e, CloseoutEvent) and e.archived is not None for e in b.events)
+        for repo_name, branch, at in _dispatched_branch(b)
+    ]
     previous = _previous_facts(target_dir / "facts.json", scope)
     facts, stats = collect_facts_counted(
         make_forge(),
@@ -524,6 +544,8 @@ def collect_into(
         carried=[i for i in previous.issues if i.state == "closed"] if previous and carry else (),
         only=only,  # None: the full collect, *previous* unused
         previous=previous,
+        ledger_branches=ledger,
+        cursor_at=cursor_at,
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
@@ -537,6 +559,16 @@ def collect_into(
     elif load_durable(target_dir).state_repo is None:
         err_console.print(f"warning: {NO_STATE_REPO}", markup=False, soft_wrap=True)
     return facts, out, stats
+
+
+def _dispatched_branch(batch: Batch) -> list[tuple[str, str, datetime]]:
+    """`(repo name, branch, dispatched at)` of *batch*'s last dispatch, unless it was
+    cancelled since; empty otherwise."""
+    events = lifecycle_events(batch)
+    event = last_dispatch(batch)
+    if not events or events[-1].kind == "cancel" or event is None:
+        return []
+    return [(batch.repo_name, event.branch, event.at)]
 
 
 NO_STATE_REPO = (
