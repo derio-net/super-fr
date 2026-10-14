@@ -837,3 +837,47 @@ def test_the_card_says_a_conflicting_archive_pr_conflicts() -> None:
         bid="m",
     )  # fmt: skip
     assert card.hint == "archive PR #30: conflicts with the default branch"
+
+
+# ------------------- archive stops, keyed apart from the batch PR's (merge-truth R12)
+
+
+def _closing_archive(
+    events: list[dict[str, Any]] | None = None, **archive_kw: Any
+) -> tuple[Facts, Judgements]:
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 **archive_kw)  # fmt: skip
+    f = facts([issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+               issue(2, prs=[archive])])  # fmt: skip
+    batches = [batch("m", [1], events=[dispatch("m"), closeout, *(events or [])])]
+    judged = {k: j(1) for k in ("widgets#1", "widgets#2")}
+    return f, judgements(judged, batches, schema=10)  # archive_conflict events: schema 10
+
+
+def test_a_refused_archive_merge_shows_its_stop_on_the_card() -> None:
+    """p2-r2: the batch PR is MERGED while it closes, so an archive stop is checked
+    against the archive PR's head, under its own key, never the batch PR's."""
+    from fr.triage.merge_stops import archive_stop_key
+
+    f, jd = _closing_archive()
+    stops = {archive_stop_key("m"): MergeStop("sha-30", "protected branch", "t")}
+    card = build_board(f, jd, {}, stops=stops).card("m")
+    assert card.hint == "needs you: merge stopped: protected branch"
+    assert card.needs_you
+    moved = {archive_stop_key("m"): MergeStop("sha-older", "protected branch", "t")}
+    card = build_board(f, jd, {}, stops=moved).card("m")
+    assert (card.hint, card.needs_you) == ("archive PR #30: ready to merge", False)
+
+
+def test_a_held_archive_conflict_card_needs_you() -> None:
+    from fr.triage.merge_stops import archive_stop_key
+
+    held = {"kind": "archive_conflict", "at": "2026-10-01T14:00:00Z", "head": "sha-30",
+            "pr": 30, "delivered": "held"}  # fmt: skip
+    f, jd = _closing_archive([held], mergeable="CONFLICTING")
+    stops = {archive_stop_key("m"): MergeStop("sha-30", "archive PR #30 conflicts", "t")}
+    card = build_board(f, jd, {}, stops=stops).card("m")
+    assert card.needs_you and card.hint == "needs you: merge stopped: archive PR #30 conflicts"
+    # the held event alone (no stop on this host) still asks for the operator
+    assert build_board(f, jd, {}).card("m").needs_you

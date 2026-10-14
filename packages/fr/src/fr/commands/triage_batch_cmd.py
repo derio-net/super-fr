@@ -232,7 +232,13 @@ from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.lease import acquire, load_lease, mark_pass, release
-from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
+from fr.triage.merge_stops import (
+    MergeStop,
+    archive_stop_key,
+    clear_stop,
+    export_stop_key,
+    record_stop,
+)
 from fr.triage.model import (
     ApprovalEvent,
     ArchiveConflictEvent,
@@ -5530,7 +5536,8 @@ class _Driver:
             # and reason, merged again on a later pass; `--once` exits 1 (gh#921).
             self.failed_write = True
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
-            record_stop(self.target, batch.id, MergeStop(action.head, str(exc), stamp))
+            stop = MergeStop(action.head, str(exc), stamp)
+            record_stop(self.target, archive_stop_key(batch.id), stop)
             key = f"archive\0{batch.id}\0{action.head}\0{exc}"
             if key in self.reported:
                 return f"stopped again at {action.head[:12]} (reported above)", False
@@ -5544,7 +5551,7 @@ class _Driver:
                 judgements, facts, batch,
                 event.model_copy(update={"at": _now_after(batch), "archived": action.pr}),
             )  # fmt: skip
-        clear_stop(self.target, batch.id)  # a stop recorded on it is over (R12)
+        clear_stop(self.target, archive_stop_key(batch.id))  # its stop is over (R12)
         readied = "marked ready, " if action.draft else ""
         return f"{readied}merged archive PR #{action.pr}", True
 
@@ -5565,7 +5572,8 @@ class _Driver:
             )
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
             reason = f"archive PR #{action.pr} conflicts"
-            record_stop(self.target, batch.id, MergeStop(action.head, reason, stamp))
+            stop = MergeStop(action.head, reason, stamp)
+            record_stop(self.target, archive_stop_key(batch.id), stop)
             return f"{reason} and its hand-backs are spent: held for the operator", True
         return self._hand_back_archive(action, facts, judgements, batch, repo)
 

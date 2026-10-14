@@ -5118,8 +5118,9 @@ def test_archive_conflict_held_records_a_stop_and_raises_the_need(
     assert messenger.messages == [] and messenger.dispatched == [], out
     held = _archive_conflicts(tmp_path)[-1]
     assert (held.head, held.delivered, held.handle) == ("sha-201", "held", None)
-    stop = load_stops(tmp_path)["b1"]
+    stop = load_stops(tmp_path)["archive:b1"]
     assert (stop.head, stop.reason) == ("sha-201", "archive PR #201 conflicts")
+    assert "b1" not in load_stops(tmp_path)  # never the batch PR's key (p2-r2)
     facts = load_facts(tmp_path / "facts.json")
     rows = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
     (need,) = [r for r in rows if r.kind == "archive-conflict"]
@@ -5137,10 +5138,10 @@ def test_merged_archive_pr_clears_its_stop(
     _closing(world, tmp_path)
     world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
     _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
-    record_stop(tmp_path, "b1", MergeStop("sha-old", "archive PR #201 conflicts", "t"))
+    record_stop(tmp_path, "archive:b1", MergeStop("sha-old", "archive PR #201 conflicts", "t"))
     code, out = _drive(tmp_path, "--once", "--yes")
     assert [m[0] for m in world.merged] == [201], out
-    assert "b1" not in load_stops(tmp_path)
+    assert "archive:b1" not in load_stops(tmp_path)
 
 
 def test_forge_refused_archive_merge_records_a_stop(
@@ -5152,7 +5153,7 @@ def test_forge_refused_archive_merge_records_a_stop(
     world.refuse_merge = "protected branch"
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 1 and world.merged == [], out
-    stop = load_stops(tmp_path)["b1"]
+    stop = load_stops(tmp_path)["archive:b1"]
     assert stop.head == "sha-201" and "protected branch" in stop.reason
 
 

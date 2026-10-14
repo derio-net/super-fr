@@ -45,11 +45,12 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     default_selection,
     drive_pass,
+    held_archive_conflict,
     idle_session,
 )
 from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
-from fr.triage.merge_stops import MergeStop, live_stop
+from fr.triage.merge_stops import MergeStop, archive_stop_key, live_stop
 from fr.triage.model import (
     Batch,
     CancelEvent,
@@ -119,6 +120,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "archive-conflict": "archive PR conflicts; handed to its close-out",
 }
 NEEDS_YOU = "needs you: session blocked"
+NEEDS_YOU_ARCHIVE_HELD = "needs you: archive conflict, hand-backs spent"  # merge-truth R12
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason
 # R6's per-column fallbacks.
 HINT_QUEUED = "queued"
@@ -168,22 +170,36 @@ def _archive_prs(batch_repo_: str, facts: Facts) -> list[LivePr]:
     return list(out.values())
 
 
-def _archive_wait(batch: Batch, archives: Sequence[LivePr]) -> str | None:
-    """The card's line for a close-out with an attributed open archive PR (merge-truth
-    R10): the PR and what it waits on. None when it has none."""
+def _open_archive(batch: Batch, archives: Sequence[LivePr]) -> LivePr | None:
+    """The batch's attributed open archive PR while it closes out (merge-truth R10)."""
     event = closeout_event(batch)
     if event is None or event.archived is not None:
         return None
-    for p in archives:
-        if p.state == "OPEN" and attributed(p, batch, event):
-            if p.mergeable == CONFLICTING:
-                wait = "conflicts with the default branch"
-            elif p.checks == "green":
-                wait = "ready to merge"
-            else:
-                wait = f"checks {p.checks}"
-            return f"{ARCHIVE_WAIT} #{p.number}: {wait}"
-    return None
+    return next((p for p in archives if p.state == "OPEN" and attributed(p, batch, event)), None)
+
+
+def _archive_wait(batch: Batch, archives: Sequence[LivePr]) -> str | None:
+    """The card's line for a close-out with an attributed open archive PR (merge-truth
+    R10): the PR and what it waits on. None when it has none."""
+    p = _open_archive(batch, archives)
+    if p is None:
+        return None
+    if p.mergeable == CONFLICTING:
+        wait = "conflicts with the default branch"
+    elif p.checks == "green":
+        wait = "ready to merge"
+    else:
+        wait = f"checks {p.checks}"
+    return f"{ARCHIVE_WAIT} #{p.number}: {wait}"
+
+
+def _held_archive(batch: Batch, archives: Sequence[LivePr]) -> str | None:
+    """A held archive conflict (merge-truth R12) still at the open archive PR's head:
+    the card's needs-you line, else None."""
+    held, p = held_archive_conflict(batch), _open_archive(batch, archives)
+    if held is None or p is None or p.number != held.pr or p.head != held.head:
+        return None
+    return f"{NEEDS_YOU_ARCHIVE_HELD} (archive PR #{held.pr})"
 
 
 # ---------------------------------------------------------------- the model
@@ -519,10 +535,16 @@ def _card(
     if closeout is not None and closeout.runner != "hand":
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
-    stop = stops.get(batch.id)
+    stop = stops.get(batch.id) or stops.get(archive_stop_key(batch.id))
     archives = _archive_prs(repo, facts) if repo else []
     idle = _idle_of(batch, facts, repo, status, closeout_status, now, archives)
-    needs_you = "blocked" in (status, closeout_status) or stop is not None or idle is not None
+    held_archive = _held_archive(batch, archives)
+    needs_you = (
+        "blocked" in (status, closeout_status)
+        or stop is not None
+        or idle is not None
+        or held_archive is not None
+    )
     if "blocked" in (status, closeout_status):
         # A runner that says why (`SessionNotes`, cloud-triage R15) adds its words.
         keys = (batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id)) if repo else ()
@@ -530,6 +552,8 @@ def _card(
         hint = f"{NEEDS_YOU}: {'; '.join(said)}" if said else NEEDS_YOU
     elif stop is not None:
         hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
+    elif held_archive is not None:
+        hint = held_archive
     elif idle is not None:
         hint = _idle_hint(idle, facts.collected_at)
     elif (wait := _archive_wait(batch, archives)) is not None:
@@ -611,13 +635,20 @@ def _own_expiries(facts: Facts, me: str, now: datetime) -> dict[str, ClaimExpiry
 def live_stops(
     batches: Sequence[Batch], facts: Facts, stops: Mapping[str, MergeStop]
 ) -> dict[str, MergeStop]:
-    """The recorded stops that still hold: the batch's PR is open, at the stopped head."""
+    """The recorded stops that still hold: the batch's PR is open, at the stopped head;
+    an archive stop (`archive:<batch>`, merge-truth R12) while the batch's attributed
+    archive PR is open at its head."""
     out: dict[str, MergeStop] = {}
     for b in batches:
         pr = batch_pr(b, facts)
         if pr is not None and pr.state == "OPEN":
             if (stop := live_stop(stops.get(b.id), pr.head_oid)) is not None:
                 out[b.id] = stop
+        key = archive_stop_key(b.id)
+        if key in stops and (repo := batch_repo(b, facts)):
+            archive = _open_archive(b, _archive_prs(repo, facts))
+            if archive is not None and (stop := live_stop(stops[key], archive.head)):
+                out[key] = stop
     return out
 
 

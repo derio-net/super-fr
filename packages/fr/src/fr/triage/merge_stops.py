@@ -35,8 +35,20 @@ class MergeStop:
     at: str  # ISO 8601, when the driver stopped
 
 
+def archive_stop_key(batch_id: str) -> str:
+    """A batch's archive-PR stop (merge-truth R12), keyed apart from its batch PR's: the
+    batch PR is merged by the time its archive PR is, so the two never share a head."""
+    return f"archive:{batch_id}"
+
+
+def export_stop_key(repo: str) -> str:
+    """A repo's state-export PR stop (merge-truth R12)."""
+    return f"export:{repo}"
+
+
 def load_stops(target: Path) -> dict[str, MergeStop]:
-    """The recorded stops by batch id; empty when there is no readable record."""
+    """The recorded stops by key (a batch id, `archive:<batch>`, `export:<repo>`); empty
+    when there is no readable record."""
     try:
         data = json.loads((target / MERGE_STOPS_FILE).read_text(encoding="utf-8"))
         if data.get("schema") != _SCHEMA:
