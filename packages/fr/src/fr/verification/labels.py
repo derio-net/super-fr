@@ -93,16 +93,24 @@ def sync_exit_labels(
     forge failure, a PR it cannot find, or an unreadable remap raises
     `LabelSyncError`, so a caller that must not proceed on stale labels refuses.
     """
+    from fr.acceptance.model import AcceptanceError
     from fr.services.model import ServicesError
     from fr.services.resolve import resolve_tracking
     from fr.verification.exit import run_exit
+    from fr.verification.spec_section import SectionError
 
     try:
         if resolve_tracking(repo_root, lenient=True).type == "none":
             return SyncOutcome(synced=False)
     except ServicesError:
         pass
-    exit_ = run_exit(repo_root, state)
+    try:
+        exit_ = run_exit(repo_root, state)
+    except (SectionError, AcceptanceError, OSError, ValueError) as e:
+        # Not a forge failure: the section or matrix is `fr plan self-review`'s to report.
+        return SyncOutcome(
+            synced=False, warning=f"PR labels not synced: the exit cannot be read: {e}"
+        )
     if exit_.remap_problem:
         raise LabelSyncError(
             f"the gate remap is unreadable, so the exit is not known: {exit_.remap_problem}"

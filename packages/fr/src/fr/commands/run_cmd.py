@@ -6143,14 +6143,25 @@ def _questions_from_flags(
         raise typer.Exit(2) from e
 
 
+def _emitted_pr(state: RunState) -> str | None:
+    """The PR a step of the run emitted, if any."""
+    return next(
+        (r.emitted["pr"] for r in state.steps.values() if r.emitted and "pr" in r.emitted), None
+    )
+
+
 def _warn_label_sync(repo_root: Path, state: RunState) -> None:
-    """Exit-gates R7: a spec-bearing step resolved, so bring the run's PR labels to
-    its exit. Advisory: a run with no PR yet is silent, any failure a warning —
-    `deliver` is the one place the labels are required."""
+    """Exit-gates R7: a spec-bearing step resolved, so bring the PR labels to the run's
+    exit — only when the run already has a known PR (an emitted `pr`); otherwise nothing
+    happens and nothing is printed. Advisory: any failure is a warning, `deliver` is the
+    one place the labels are required."""
     from fr.verification import labels as _labels
 
+    pr = _emitted_pr(state)
+    if pr is None:
+        return
     try:
-        outcome = _labels.sync_exit_labels(repo_root, state, None)
+        outcome = _labels.sync_exit_labels(repo_root, state, pr)
     except _labels.PrNotFound:
         return
     except Exception as e:  # noqa: BLE001 — advisory, after the step already resolved
@@ -6167,6 +6178,9 @@ def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id
 
     try:
         outcome = _labels.sync_exit_labels(repo_root, state, pr)
+    except _labels.PrNotFound as e:  # the forge cannot be determined: as an unsupported forge
+        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        return
     except _labels.LabelSyncError as e:
         err_console.print(
             f"refused: could not sync the PR's verification/gate labels: {e}. Fix that, then "

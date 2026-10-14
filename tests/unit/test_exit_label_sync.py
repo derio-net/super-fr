@@ -132,3 +132,10 @@ def test_an_unreadable_remap_refuses_naming_the_problem(tmp_path: Path) -> None:
     root = _repo(tmp_path, "strategy: live", remap="exit: [unclosed\n")
     with pytest.raises(LabelSyncError, match="not valid triage config"):
         sync_exit_labels(root, _state(), URL, client=_fake([]))
+
+
+def test_an_unreadable_exit_is_a_warning_not_a_refusal(tmp_path: Path) -> None:
+    root = _repo(tmp_path, "strategy: live")
+    (root / SPEC).write_bytes(b"# Spec\n\n## Verification\n\nstrategy: live\n\xff\xfe\n")
+    out = sync_exit_labels(root, _state(), URL, client=_fake([]))
+    assert not out.synced and out.warning and "cannot be read" in out.warning
