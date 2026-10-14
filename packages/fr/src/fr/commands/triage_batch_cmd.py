@@ -95,7 +95,7 @@ from fr.isolation.adopt import (
     workspace_path,
 )
 from fr.isolation.rename import IsolationError, rename_branch
-from fr.labels import APPROVED_FR, FR_IN_PROGRESS
+from fr.labels import APPROVED_FR, FR_AWAITING_LIVE, FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
@@ -130,6 +130,7 @@ from fr.triage.batch import (
     mixed_themes,
     parse_refs,
     pr_open_queue,
+    recorded_branch,
     resolve_launch,
     resolve_ref,
     save_batches,
@@ -162,12 +163,15 @@ from fr.triage.batch_drive import (
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
+    GatedRow,
+    GateLedger,
     IdleSession,
     LivePr,
     Snapshot,
     Summary,
     action_line,
     attributed,
+    awaiting_unlabelled,
     checks_verdict,
     closeout_brief,
     closeout_due,
@@ -180,9 +184,11 @@ from fr.triage.batch_drive import (
     export_branch,
     export_target,
     export_wave_of,
+    fact_ledgers,
     find_run,
     finished_waves,
     fresh_conflicts,
+    held_gates,
     housekeeping_branch,
     idle_session,
     is_archived,
@@ -229,6 +235,7 @@ from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.lease import acquire, load_lease, mark_pass, release
+from fr.triage.ledger import gated_rows_at
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     ApprovalEvent,
@@ -263,6 +270,7 @@ from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
+from fr.verification.labels import pass_gate
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
@@ -3372,6 +3380,9 @@ class _Driver:
         # (repo, head sha) -> the run cursor's position there: a commit never changes, so
         # each open batch PR head is read once per process (exit-gates R18)
         self._cursors: dict[tuple[str, str], CursorPosition | None] = {}
+        # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
+        # move only when the default branch does
+        self._ledger_rows: dict[tuple[str, str, str], tuple[GatedRow, ...]] = {}
 
     # -------------------------------------------------------------- reaching out
 
@@ -3795,6 +3806,7 @@ class _Driver:
             existing |= stale_live
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
         idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
+        ledgers = self._ledgers(facts, judgements, stages, repos, ids, {*unread, *carried})
         return Snapshot(
             approvals=approvals,
             batches=tuple(judgements.batches),
@@ -3832,9 +3844,61 @@ class _Driver:
             export_refused=export_refused,
             awaiting=frozenset(b.id for b in judgements.batches if batch_awaits_live(b, facts)),
             refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
+            ledgers=ledgers,
+            awaiting_unlabelled=awaiting_unlabelled(facts),
             **queue_reads,
             **claim_plan,
         )
+
+    def _ledgers(
+        self,
+        facts: Facts,
+        judgements: Judgements,
+        stages: Mapping[str, str],
+        repos: Mapping[str, str],
+        selected: set[str],
+        unread: set[str],
+    ) -> dict[str, GateLedger]:
+        """The gate ledger of every landed batch (exit-gates R13, R14): the merged PR's
+        labels from facts and, for a selected batch a post-merge gate holds, the rows it
+        gates on the default branch. Rows that cannot be read stay unknown (None)."""
+        ledgers = fact_ledgers(judgements.batches, facts, stages)
+        for batch in judgements.batches:
+            ledger = ledgers.get(batch.id)
+            repo = repos.get(batch.id)
+            if (
+                ledger is None
+                or repo is None
+                or repo in unread
+                or batch.id not in selected
+                or closeout_event(batch) is not None
+                or not held_gates(ledger.labels)
+            ):
+                continue
+            rows = self._gated_rows(repo, batch)
+            if rows is not None:
+                ledgers[batch.id] = replace(ledger, rows=rows)
+        return ledgers
+
+    def _gated_rows(self, repo: str, batch: Batch) -> tuple[GatedRow, ...] | None:
+        """*batch*'s gated rows on `origin/<default>` (R14's rows-walked check reads that
+        branch's matrix); None, reported once, when the clone cannot say."""
+        branch = recorded_branch(batch)
+        try:
+            checkout = self._reader(repo)
+            checkout.fetch()
+            tip = f"origin/{checkout.default_branch()}"
+            key = (repo, checkout.rev_parse(tip), branch)
+            if key not in self._ledger_rows:
+                self._ledger_rows[key] = gated_rows_at(checkout, tip, branch)
+            return self._ledger_rows[key]
+        except TriageError as exc:
+            self._report_once(
+                f"ledger\0{batch.id}\0{exc}",
+                f"cannot read the rows {batch.id}'s gates hold on {repo}'s default branch "
+                f"({exc}); no fr:awaiting-live label and no gate pass is planned for it",
+            )
+            return None
 
     def _claim_plan(
         self,
@@ -4659,6 +4723,12 @@ class _Driver:
             return action.detail, False, in_flight
         if action.kind == "close":
             return self._close_sessions(action), False, in_flight  # never `acted`
+        if action.kind == "awaiting-live":
+            line, did = self._label_awaiting(action, facts)
+            return line, did, in_flight
+        if action.kind == "gate-pass":
+            line, did = self._pass_gate(action, facts, repo)
+            return line, did, in_flight
         if action.kind == "merge":
             behind = self._stopped.get(action.train)
             if behind is not None:  # an earlier head of this train did not merge (R3)
@@ -4728,6 +4798,32 @@ class _Driver:
             True,
             in_flight + 1,
         )
+
+    def _label_awaiting(self, action: Action, facts: Facts) -> tuple[str, bool]:
+        """R13: label an issue a gated row cites `fr:awaiting-live`, through the adapter. A
+        failed write is reported, makes `--once` exit 1, and is planned again next pass."""
+        repo, _, number = action.key.rpartition("#")
+        try:
+            client = self.client(facts, repo)
+            client.ensure_labels(repo, [FR_AWAITING_LIVE])
+            client.edit_issue_labels(
+                repo, int(number), add=frozenset({FR_AWAITING_LIVE.name}), remove=frozenset()
+            )
+        except _GATE_WRITE_FAILURES as exc:
+            self.failed_write = True
+            return f"label failed, retried next pass: {exc}", False
+        return f"labelled {action.key} {FR_AWAITING_LIVE.name}", True
+
+    def _pass_gate(self, action: Action, facts: Facts, repo: str) -> tuple[str, bool]:
+        """R14's rows-walked route: swap the merged PR's gate label and comment why."""
+        assert action.pr is not None
+        why = action.detail.partition(": ")[2] or action.detail
+        try:
+            pass_gate(self.client(facts, repo), repo, action.pr, action.gate, why=why)
+        except _GATE_WRITE_FAILURES as exc:
+            self.failed_write = True
+            return f"gate pass failed, retried next pass: {exc}", False
+        return f"PR #{action.pr}: gate:{action.gate} -> gate:{action.gate}-passed", True
 
     def _claim_write(self, action: Action) -> tuple[str, bool]:
         """Execute one claim, refresh or release through `claim_sync.execute` (R3, R8,
@@ -5687,6 +5783,10 @@ class _Driver:
 
 # The actions a pass plans only from what it read live this pass (R10): a carried repo's
 # batches get none of them.
+_GATE_WRITE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
+"""What a gate-ledger write (`awaiting-live`, `gate-pass`) may fail with: reported and
+planned again next pass, never fatal to the pass."""
+
 _LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt"})
 
 

@@ -109,6 +109,9 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "claim": "claims owed; the drive writes them",
     "refresh": "claims due a refresh",
     "release": "claims to release",
+    # The gate ledger (exit-gates R13, R14): a gated batch's first pass and its pass.
+    "awaiting-live": "gated: its issues to label fr:awaiting-live",
+    "gate-pass": "gate's rows walked; the drive passes it",
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason

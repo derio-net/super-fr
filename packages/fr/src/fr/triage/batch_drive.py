@@ -22,7 +22,9 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+from fr.gates import POST_MERGE_GATES
 from fr.ghclient import QueueState
+from fr.labels import gate_label
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
@@ -30,6 +32,7 @@ from fr.triage.batch import (
     ForeignPr,
     QueueEntry,
     batch_item_id,
+    batch_pr,
     last_dispatch,
     recorded_branch,
 )
@@ -41,6 +44,7 @@ from fr.triage.model import (
     DispatchEvent,
     EnqueueEvent,
     Export,
+    Facts,
     RedHandbackEvent,
     UpdateEvent,
 )
@@ -95,6 +99,8 @@ ActionKind = Literal[
     "export-reconcile",
     "export-closed",
     "enqueue",
+    "awaiting-live",
+    "gate-pass",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -125,6 +131,80 @@ class LivePr:
     # The branch the PR merges into, as the forge says now; "" when not read. An export
     # PR is reused or merged only into the default branch (p4-r15).
     base: str = ""
+
+
+@dataclass(frozen=True)
+class GatedRow:
+    """A matrix row a post-merge gate gates, as the default branch reads it (exit-gates
+    R13, R14): whether it reads `walked` there, and the issues (`owner/repo#n`) it cites."""
+
+    id: str
+    gate: str
+    walked: bool
+    issues: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GateLedger:
+    """A landed batch's merged PR as the gate ledger (R14): its number and labels, and the
+    rows its post-merge gates gate. `rows` is None when they were not read (the board,
+    which reads no clone; an unreadable default branch): no label and no pass is planned
+    from an unknown."""
+
+    pr: int
+    labels: frozenset[str]
+    rows: tuple[GatedRow, ...] | None = None
+
+
+def held_gates(labels: Iterable[str]) -> frozenset[str]:
+    """The post-merge gates a PR's *labels* hold unpassed: `gate:<g>` with no
+    `gate:<g>-passed` beside it."""
+    names = set(labels)
+    return frozenset(
+        g
+        for g in POST_MERGE_GATES
+        if gate_label(g).name in names and gate_label(g, passed=True).name not in names
+    )
+
+
+def is_gated(batch: Batch, snap: Snapshot) -> bool:
+    """R13: *batch* landed and its merged PR holds an unpassed post-merge gate. The one
+    predicate the driver's step 2 and the board's views read; labels never read are no
+    evidence, so such a batch is not gated."""
+    ledger = snap.ledgers.get(batch.id)
+    return (
+        snap.stages.get(batch.id) in LANDED
+        and ledger is not None
+        and bool(held_gates(ledger.labels))
+    )
+
+
+def fact_ledgers(
+    batches: Iterable[Batch], facts: Facts, stages: Mapping[str, str]
+) -> dict[str, GateLedger]:
+    """Each landed batch's merged PR as the facts read it (labels only: rows need the
+    default branch). A PR whose labels were never read (facts before 12) has no ledger."""
+    out: dict[str, GateLedger] = {}
+    for b in batches:
+        if stages.get(b.id) not in LANDED:
+            continue
+        pr = batch_pr(b, facts)
+        if pr is not None and pr.state == "MERGED" and pr.labels is not None:
+            out[b.id] = GateLedger(pr=pr.number, labels=frozenset(pr.labels))
+    return out
+
+
+def awaiting_unlabelled(facts: Facts) -> frozenset[str]:
+    """The open issues (`owner/repo#n`) in *facts* not labelled `fr:awaiting-live`: the
+    only ones a gated batch's first pass labels (R13). An issue outside the facts is not
+    known open, so it is never labelled."""
+    from fr.labels import FR_AWAITING_LIVE
+
+    return frozenset(
+        f"{i.repo}#{i.number}"
+        for i in facts.issues
+        if i.state == "open" and FR_AWAITING_LIVE.name not in i.labels
+    )
 
 
 @dataclass(frozen=True)
@@ -243,6 +323,11 @@ class Snapshot:
     # floor"); None dispatches as usual. Each dispatch it stops is a `held` action counted
     # pending, never `Summary.held`: the budget recovers, so the drive is not stalled.
     dispatch_held: str | None = None
+    # The gate ledger (exit-gates R13, R14): batch id -> its merged PR's labels and gated
+    # rows, from facts (the labels) and the default branch (the rows, driver only); and
+    # the issues (`owner/repo#n`) that are open in facts without `fr:awaiting-live`.
+    ledgers: Mapping[str, GateLedger] = field(default_factory=dict)
+    awaiting_unlabelled: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -265,6 +350,7 @@ class Action:
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
+    gate: str = ""  # gate-pass: the post-merge gate whose rows all read walked
 
 
 @dataclass(frozen=True)
@@ -278,6 +364,9 @@ class Summary:
     blocked: int = 0
     queued: int = 0  # merge-train members not attempted this pass (the head excluded)
     held: int = 0  # batches another scope's claim holds: waiting on that scope, not the operator
+    # Landed batches a post-merge gate holds (R13): waiting on a person's walk or pass, so,
+    # like a batch awaiting its live walk, never work that keeps a drive alive.
+    gated: int = 0
 
     @property
     def idle(self) -> bool:
@@ -1199,6 +1288,33 @@ def _claim_actions(snap: Snapshot) -> list[Action]:
     return out
 
 
+def _gate_actions(batch: Batch, snap: Snapshot, labelled: set[str]) -> list[Action]:
+    """R13, R14 for one gated batch: `fr:awaiting-live` on each open issue its held gates'
+    rows cite that lacks it (once per issue per pass), then a `gate-pass` for each held
+    gate whose rows ALL read walked. A gate with no row (a run-level gate) passes only
+    explicitly, through `fr gate pass`; rows never read plan nothing."""
+    ledger = snap.ledgers[batch.id]
+    if ledger.rows is None:
+        return []
+    out: list[Action] = []
+    held = held_gates(ledger.labels)
+    rows = [r for r in ledger.rows if r.gate in held]
+    for ref in sorted({i for r in rows for i in r.issues}):
+        if ref in snap.awaiting_unlabelled and ref not in labelled:
+            labelled.add(ref)
+            out.append(Action("awaiting-live", batch.id, f"label {ref} fr:awaiting-live",
+                              pr=ledger.pr, key=ref))  # fmt: skip
+    for gate in sorted(held):
+        mine = [r for r in rows if r.gate == gate]
+        if mine and all(r.walked for r in mine):
+            ids = ", ".join(r.id for r in mine)
+            why = f"every row the {gate} gate gates reads walked ({ids})"
+            out.append(
+                Action("gate-pass", batch.id, f"PR #{ledger.pr}: {why}", pr=ledger.pr, gate=gate)
+            )
+    return out
+
+
 def drive_pass(snap: Snapshot) -> Pass:
     """One pass: report foreign PRs, merge, close out, archive, dispatch, close sessions,
     then report duplicate candidates of newly finished waves — in that order, so a slot a
@@ -1252,7 +1368,8 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 2. Close out. Recording a close-out that has already finished starts nothing and
     # writes nothing to the forge, so it reads every landed batch, selected or not
     # (gh#990); starting one, or recording one under way, follows the selection.
-    closing = 0
+    closing = gated = 0
+    labelled: set[str] = set()  # issues an awaiting-live action already names this pass
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in merging or batch.id in held_ids:
             continue
@@ -1274,6 +1391,10 @@ def drive_pass(snap: Snapshot) -> Pass:
                                   pr=hand.number, archived=hand.number))  # fmt: skip
             continue
         if not driven_now:
+            continue
+        if is_gated(batch, snap):  # R13: held by a post-merge gate, never closed out
+            gated += 1
+            actions.extend(_gate_actions(batch, snap, labelled))
             continue
         closing += 1
         if hand is not None:
@@ -1435,6 +1556,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             blocked=blocked,
             queued=sum(len(t.queued) for t in trains),
             held=len(held_by),
+            gated=gated,
         ),
         trains=tuple(trains),
         held_by=tuple(held_by),
@@ -1465,7 +1587,8 @@ def summary_line(summary: Summary) -> str:
         line += f", queued {summary.queued}"
     if summary.blocked:
         line += f", blocked {summary.blocked}"
-    return line + (f", held {summary.held}" if summary.held else "")
+    line += f", held {summary.held}" if summary.held else ""
+    return line + (f", gated {summary.gated}" if summary.gated else "")
 
 
 def train_line(train: Train) -> str:

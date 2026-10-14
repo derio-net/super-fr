@@ -34,7 +34,10 @@ __all__ = [
     "LabelSyncError",
     "PrNotFound",
     "SyncOutcome",
+    "GATE_PASS_MARKER",
     "desired_labels",
+    "gate_pass_comment",
+    "pass_gate",
     "sync_exit_labels",
 ]
 
@@ -153,3 +156,25 @@ def sync_exit_labels(
     except _FORGE_FAILURES as e:
         raise LabelSyncError(str(e)) from e
     return SyncOutcome(synced=True, added=tuple(sorted(add)), removed=tuple(sorted(remove)))
+
+
+GATE_PASS_MARKER = "<!-- fr:gate-pass "
+"""How a gate-pass comment begins (`<!-- fr:gate-pass <gate> -->`): the collected
+close-out reads it back as the evidence of the pass (exit-gates R15 step 2)."""
+
+
+def gate_pass_comment(gate: str, why: str) -> str:
+    """The PR comment that records what passed *gate* (R14)."""
+    return f"{GATE_PASS_MARKER}{gate} -->\nThe **{gate}** gate passed: {why}"
+
+
+def pass_gate(client: GhClient, repo: str, pr: int, gate: str, *, why: str) -> None:
+    """R14, both routes: swap PR *pr*'s `gate:<gate>` for `gate:<gate>-passed` and comment
+    what passed it. The merged PR's labels are the gate ledger, so a pass needs no commit.
+    Forge failures propagate: the caller decides what one means."""
+    passed = gate_label(gate, passed=True)
+    client.ensure_labels(repo, [passed])
+    client.edit_pr_labels(
+        repo, pr, add=frozenset({passed.name}), remove=frozenset({gate_label(gate).name})
+    )
+    client.comment_pr(repo, pr, gate_pass_comment(gate, why))
