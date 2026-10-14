@@ -41,3 +41,22 @@ On partial failure inspect the surviving source/target/shell; `replace <id>
 --repair --reason <inspection> --yes` reconciles both stores without exit, launch
 or duplicate prompt. Target kind/model alone never proves uncertain submission.
 Details and the disposable operator walk: `docs/herdr-control-sessions.md`.
+
+For a **positively absent** control pane, `batch replace <id> --recover --harness
+opencode --model provider/model --reason <why>` previews a fresh herdr-allocated
+pane. Explicit `--yes` acts; same-model recovery is allowed. Select the exact
+scope/state (`--repo` or `--org`, optional `--dir`) and primary `--checkout`.
+Original dispatch/history and existing workspace/run/dirty work stay intact.
+Global pane/tab/agent observations refuse surviving/reused/ambiguous ownership.
+Server/item/source-keyed durable intent precedes allocation; uncertain allocation
+is discovered by explicit `--repair`, never allocated again automatically.
+Successful effective ownership includes actual new pane and fresh session id.
+
+Recovered OpenCode starts with `--auto` in acknowledge/report-only **HOLD**.
+HOLD precedes conflicts and all cursor continuation, survives managed restart,
+and needs a separate operator instruction to release work. No gate is answered
+and no running unit is claimed/abandoned automatically. Repair launches/sends
+nothing and requires persisted uptake plus matching session identity to certify
+success. The disposable actual-client walk is **post-merge Tester, walk-owed**;
+automated fake-backed scenarios are not a live pass. See the control-session guide
+for refusal, checkpoint and inspection details.

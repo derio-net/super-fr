@@ -155,6 +155,8 @@ def eligible(
     ):
         raise managed.ManagedError("live identity/status/readiness mismatch")
     proc = process(observe(["pane", "process-info", "--pane", d.pane]))
+    if d.recovery_hold and proc and "--auto" not in proc.get("argv", []):
+        raise managed.ManagedError("recovered OpenCode is not autonomous (--auto missing)")
     if (
         not proc
         or not proc.get("pid")

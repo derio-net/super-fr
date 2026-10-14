@@ -125,6 +125,7 @@ from fr.triage.batch import (
     dependency_state,
     derive_batch_stage,
     distrust,
+    effective_handle,
     foreign_batch_prs,
     last_dispatch,
     lifecycle_events,
@@ -1425,11 +1426,13 @@ def _replacement_transaction(
     reason: str,
     yes: bool,
     repair: bool,
+    recover: bool = False,
+    driver_lock_target: Path | None = None,
 ) -> None:
     if importlib.util.find_spec("fr_dispatch") is None:
         _fail(DISPATCH_INSTALL_HINT)
     from fr_dispatch.launch import validate_model
-    from fr_dispatch.protocols import ReplacementRequest, SessionReplacer
+    from fr_dispatch.protocols import ReplacementRequest, ReplacementResult, SessionReplacer
 
     path = target / "judgements.yaml"
     j = load_judgements(path)
@@ -1441,8 +1444,10 @@ def _replacement_transaction(
     if repo is None:
         _fail("batch repo is absent from scope facts")
     checkout = _open_checkout(checkout_path, repo)
-    audits = [e for e in batch.events if isinstance(e, ReplacementEvent)]
+    dispatch_index = batch.events.index(original)
+    audits = [e for e in batch.events[dispatch_index + 1 :] if isinstance(e, ReplacementEvent)]
     latest = audits[-1] if audits else None
+    source_pane = effective_handle(batch) or original.handle
     if original.runner != "herdr":
         _fail("replacement requires the original herdr runner")
     runner = load_runner(original.runner)
@@ -1452,7 +1457,7 @@ def _replacement_transaction(
     if repair:
         if harness is not None or model is not None:
             _fail("--repair uses the persisted target; do not supply --harness/--model")
-        pending = runner.replacement_pending(batch_item_id(repo, batch.id), original.handle)
+        pending = runner.replacement_pending(batch_item_id(repo, batch.id), source_pane)
         if pending and (latest is None or pending.attempt != latest.attempt):
             if pending.branch != original.branch or pending.checkout != str(
                 checkout.main_worktree()
@@ -1466,7 +1471,10 @@ def _replacement_transaction(
             old, new, attempt = latest.old, latest.new, latest.attempt
         else:
             _fail("no replacement attempt or pending descriptor to repair")
+        recover = pending.recover if pending else bool(latest and latest.recover)
     else:
+        if runner.replacement_pending(batch_item_id(repo, batch.id), source_pane):
+            _fail("pending replacement; use --repair --reason <inspection> --yes")
         if latest and latest.result != "success" and not latest.reconciled:
             _fail("unreconciled replacement; use --repair --reason <inspection> --yes")
         old = resolve_launch(
@@ -1480,7 +1488,7 @@ def _replacement_transaction(
                 "model": model if model is not None else old.model,
             }
         )
-        if new == old:
+        if new == old and not recover:
             _fail("replacement is a no-op")
         attempt = uuid.uuid4().hex
     if original.runner != "herdr" or old.runner != "herdr" or new.runner != "herdr":
@@ -1488,10 +1496,11 @@ def _replacement_transaction(
     if new.harness not in {"claude", "opencode"} or not new.model or not new.model.strip():
         _fail("unsupported harness or empty model")
     validate_model(str(new.harness), new.model)
+    source_pane = pending.pane if pending else latest.pane if repair and latest else source_pane
     op = runner.replacement_session(
         ReplacementRequest(
             batch_item_id(repo, batch.id),
-            original.handle,
+            source_pane,
             latest.name if repair and latest else pending.name if pending else "",
             original.branch,
             str(checkout.main_worktree()),
@@ -1500,6 +1509,12 @@ def _replacement_transaction(
             str(new.harness),
             str(new.model),
             attempt,
+            recover=recover,
+            target_pane=pending.target_pane
+            if pending
+            else latest.target_pane
+            if repair and latest
+            else None,
         )
     )
     repair_line = (
@@ -1507,7 +1522,15 @@ def _replacement_transaction(
         f"--dir {shlex.quote(str(target))} "
         f"--checkout {shlex.quote(str(checkout.path))} --repo {repo}"
     )
-    with op.ownership() if yes else nullcontext():
+    # Serialise recovery against a newly starting local driver as well as scope/panes.
+    with (
+        drive_lock(driver_lock_target or target) if recover and yes else nullcontext(),
+        op.ownership() if yes else nullcontext(),
+    ):
+        if recover:
+            lease = load_lease(target)
+            if lease and not lease.expired(datetime.now(UTC)):
+                _fail(f"recovery refused: live scope driver lease ({lease.holder})")
         _replacement_live_gate(
             batch, facts, repo, make_client(f"https://{_host_of(facts, repo)}/{repo}")
         )
@@ -1520,11 +1543,22 @@ def _replacement_transaction(
         else:
             op.inspect()
         console.print(
-            f"{'repair' if repair else 'replace'} batch {batch.id}: "
+            f"{'repair' if repair else 'recover' if recover else 'replace'} batch {batch.id}: "
             f"{old.harness}/{old.model} → {new.harness}/{new.model}; "
-            f"pane {original.handle}; branch {original.branch}",
+            f"pane {source_pane}; branch {original.branch}",
             markup=False,
         )
+        if recover:
+            console.print(
+                "fresh pane; HOLD: acknowledge/report only; separate operator release required",
+                markup=False,
+            )
+            console.print(
+                f"item {batch_item_id(repo, batch.id)}; name {op.name}; "
+                f"existing workspace {getattr(op, 'workspace', 'inspect branch workspace')}; "
+                f"dirty work preserved: {getattr(op, 'dirty', 'inspect')}; repair: {repair_line}",
+                markup=False,
+            )
         if not yes:
             console.print("nothing written or sent; re-run with --yes", markup=False)
             return
@@ -1540,22 +1574,27 @@ def _replacement_transaction(
             j = save_batches(path, _replace(j.batches, changed), read=j.batches)
             batch = _find(j.batches, batch.id)
 
-        def audit(result: str, detail: str = "", reconciled: bool = False) -> ReplacementEvent:
+        outcome: ReplacementResult | None = None
+
+        def audit(status: str, detail: str = "", reconciled: bool = False) -> ReplacementEvent:
             return ReplacementEvent.model_validate(
                 {
                     "kind": "replacement",
                     "at": _now_after(batch),
                     "attempt": attempt,
-                    "result": result,
+                    "result": status,
                     "reason": reason,
                     "old": old,
                     "new": new,
-                    "handle": original.handle,
-                    "pane": original.handle,
+                    "handle": source_pane,
+                    "pane": source_pane,
                     "name": op.name,
                     "branch": original.branch,
                     "detail": detail,
                     "reconciled": reconciled,
+                    "recover": recover,
+                    "target_pane": outcome.pane if outcome else getattr(op, "target_pane", None),
+                    "session": outcome.session if outcome else None,
                 }
             )
 
@@ -1567,6 +1606,7 @@ def _replacement_transaction(
                 op.prepare()
                 write(audit("attempt"))
                 result = op.execute()
+            outcome = result
             if not (
                 repair
                 and latest
@@ -1583,6 +1623,7 @@ def _replacement_transaction(
         except Exception as exc:  # noqa: BLE001 - pending stores remain the reconciliation point
             _fail(
                 f"replacement metadata/operation failure: {exc}; inspect source/target/shell; "
+                f"{getattr(op, 'failure_context', 'inspect persisted checkpoints')}; "
                 f"repair: {repair_line}",
                 code=1,
             )
@@ -1602,6 +1643,7 @@ def batch_replace_command(
     harness: Annotated[str | None, typer.Option("--harness")] = None,
     model: Annotated[str | None, typer.Option("--model")] = None,
     repair: Annotated[bool, typer.Option("--repair")] = False,
+    recover: Annotated[bool, typer.Option("--recover")] = False,
     yes: Annotated[bool, typer.Option("--yes")] = False,
     checkout_path: CheckoutOpt = None,
     repo: RepoOpt = None,
@@ -1610,6 +1652,11 @@ def batch_replace_command(
     workspace: WorkspaceOpt = None,
 ) -> None:
     """Replace a managed batch harness/model in place, or reconcile without replay."""
+    if recover and (repair or harness != "opencode" or not model):
+        _fail(
+            "--recover requires explicit --harness opencode --model provider/model "
+            "and cannot use --repair"
+        )
     if (
         not reason.strip()
         or (harness is not None and not harness.strip())
@@ -1618,6 +1665,15 @@ def batch_replace_command(
         _fail("--reason, --harness and --model cannot be empty")
     scope = _scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace, sync=False, prepare=False)
+    if recover:
+        from fr.triage.drive_lock import live_driver
+
+        held = live_driver(drive_lock_dir(scope, dir_override))
+        if held:
+            _fail(f"recovery refused: running scope driver ({held})")
+        lease = load_lease(target)
+        if lease and not lease.expired(datetime.now(UTC)):
+            _fail(f"recovery refused: live scope driver lease ({lease.holder})")
     try:
         with replacement_scope_lock(target) if yes else nullcontext():
             finish = None
@@ -1636,6 +1692,8 @@ def batch_replace_command(
                     reason=reason,
                     yes=yes,
                     repair=repair,
+                    recover=recover,
+                    driver_lock_target=drive_lock_dir(scope, dir_override),
                 )
             finally:
                 if finish is not None:

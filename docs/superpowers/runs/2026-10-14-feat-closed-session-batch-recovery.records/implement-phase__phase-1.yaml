@@ -3,8 +3,9 @@ run: 2026-10-14-feat-closed-session-batch-recovery
 step: implement-phase
 item: phase/1
 outcome: blocked
-ticks: []
-refactor: {}
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1]
+refactor:
+  P1.T6: Verification-only task; no new implementation to refactor. Shared roster, submission and HOLD policies were factored in tasks 1–5.
 journal:
   - kind: discovery
     id: recovery-python314-ready
@@ -43,5 +44,64 @@ journal:
       Provisional source/schema/API edits and red tests were removed so no incomplete
       --recover surface remains. No step is ticked; all six tasks remain owed.
       No acceptance status, real batch, driver, pane, or PR state was changed.
-resolves: []
+  - kind: discovery
+    id: recovery-transaction-and-explainers
+    phase: 1
+    title: Recovery is an optional replacement mode, with one submission primitive and HOLD policy
+    body: |
+      Recovery shares replacement's target launch/single submission checkpoint primitive,
+      not runner.dispatch. Strict global pane/tab/agent joins include allocated shells;
+      source-keyed intent precedes allocation and repairs never replay inputs. Scope,
+      local driver admission and both pane locks span the durable transaction. Schema 12
+      writes recovery ownership/session metadata while reading judgements 1–12.
+      Successful effective ownership is folded only after the latest original dispatch.
+      Managed HOLD reconstruction precedes conflict/delivered/unfinished continuation.
+      Fake-backed candidate tests are not a client-live pass; the disposable live walk
+      remains owed post-merge at Tester. No real org batches or loops were touched.
+      Published docs/explainers/*.md contain no batch replace/herdr/closed-session
+      surface; their generic goal/review explanations are unchanged. No explainer
+      regeneration is needed. Operator guide, package README, AGENTS and canonical
+      fr-triage guidance were updated; both mirrors regenerated. #1216 stays out of scope.
+  - kind: discovery
+    id: recovery-quality-gates
+    phase: 1
+    title: Targeted committed-tree preparation gates pass
+    body: |
+      Ruff format/check passed. Mypy passed for fr, fr-dispatch and fr-herdr (322
+      source files). Recovery/replacement/managed/restart/import tests passed (254).
+      Installed scenarios, schema neighbours and both mirror/tool-neutrality guards
+      passed together (674). Acceptance check passed (535 rows); the phase's status
+      transitions and named test evidence are carried in this record for the parent
+      resolve, not hand-edited into the matrix. Original schema-11 writer/future-schema
+      expectations were updated coherently to writer 12 and unsupported 13.
+resolves:
+  - id: recovery-pane-roster-capture-required
+    state: fixed
+    body: Parent supplied read-only real captured global pane/tab rosters and shell observations. Discovery uses the pane-list/tab-list join, never an invented tab-get pane field. Container tests need no real herdr installation.
 evidence: {}
+acceptance:
+  - id: triage-closed-recovery
+    status: ci
+    notes: Installed fake-backed CLI/runner/persistence scenario preserves dispatch/work and establishes fresh held ownership; not a native client walk.
+    levels:
+      unit: [tests/unit/test_triage_closed_recovery.py::test_recovery_success_preserves_lifecycle_and_changes_owner, tests/unit/test_herdr_closed_recovery.py::test_allocation_intent_and_single_input]
+      integration: [tests/integration/test_scenarios.py::test_triage_closed_recovery]
+  - id: triage-closed-recovery-refusals
+    status: ci
+    notes: Captured global roster-derived variants and disposable CLI state prove read-only preview and unsafe/unknown ownership refusal.
+    levels:
+      unit: [tests/unit/test_triage_closed_recovery.py::test_recovery_preview, tests/unit/test_triage_closed_recovery.py::test_live_scope_driver_refuses_before_effects, tests/unit/test_herdr_closed_recovery.py::test_unknown_rosters_refuse, tests/unit/test_herdr_closed_recovery.py::test_survivors_reused_panes_and_incomplete_join_refuse]
+      integration: [tests/integration/test_scenarios.py::test_triage_closed_recovery]
+  - id: triage-closed-recovery-repair
+    status: ci
+    notes: Allocation/checkpoint fault injection plus installed batch outcome-write failure prove same-attempt discovery and input-free repair without false ownership.
+    levels:
+      unit: [tests/unit/test_herdr_closed_recovery.py::test_uncertain_allocation_discovered_without_reallocation, tests/unit/test_herdr_closed_recovery.py::test_effect_and_checkpoint_failures_preserve_pending_no_replay, tests/unit/test_herdr_closed_recovery.py::test_activation_write_failure_repair_is_input_free]
+      integration: [tests/integration/test_scenarios.py::test_triage_closed_recovery]
+  - id: triage-closed-recovery-live
+    status: walk-owed
+    verify: live
+    scenario: tests/scenarios/herdr-closed-recovery-live.sh
+    notes: Operator-owned disposable actual-client recovery/HOLD walk is owed post-merge at Tester; automated instruction tests do not certify a live pass.
+    levels:
+      integration: [tests/integration/test_scenarios.py::test_herdr_closed_recovery_live_instructions]

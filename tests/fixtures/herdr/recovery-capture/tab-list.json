@@ -1,0 +1,19 @@
+{
+  "id":"cli:tab:list",
+  "result":{"tabs":[
+    {"agent_status":"done","focused":false,"label":"fixture-coordinator","number":16,"pane_count":1,"tab_id":"w9:tG","workspace_id":"w9"},
+    {"agent_status":"working","focused":false,"label":"fixture-owner","number":32,"pane_count":1,"tab_id":"w9:t0","workspace_id":"w9"},
+    {"agent_status":"done","focused":false,"label":"fixture-peer-a","number":33,"pane_count":1,"tab_id":"w9:t11","workspace_id":"w9"},
+    {"agent_status":"done","focused":false,"label":"fixture-peer-b","number":34,"pane_count":1,"tab_id":"w9:t12","workspace_id":"w9"},
+    {"agent_status":"unknown","focused":false,"label":"fixture-console","number":3,"pane_count":1,"tab_id":"wV:t3","workspace_id":"wV"},
+    {"agent_status":"idle","focused":false,"label":"fixture-session-1","number":16,"pane_count":1,"tab_id":"wV:tG","workspace_id":"wV"},
+    {"agent_status":"unknown","focused":false,"label":"fixture-split-1","number":17,"pane_count":2,"tab_id":"wV:tH","workspace_id":"wV"},
+    {"agent_status":"idle","focused":true,"label":"fixture-split-2","number":18,"pane_count":2,"tab_id":"wV:tJ","workspace_id":"wV"},
+    {"agent_status":"idle","focused":false,"label":"fixture-session-2","number":19,"pane_count":1,"tab_id":"wV:tK","workspace_id":"wV"},
+    {"agent_status":"idle","focused":false,"label":"fixture-session-3","number":21,"pane_count":1,"tab_id":"wV:tN","workspace_id":"wV"},
+    {"agent_status":"idle","focused":false,"label":"fixture-session-4","number":23,"pane_count":1,"tab_id":"wV:tQ","workspace_id":"wV"},
+    {"agent_status":"idle","focused":false,"label":"fixture-session-5","number":24,"pane_count":1,"tab_id":"wV:tR","workspace_id":"wV"},
+    {"agent_status":"unknown","focused":false,"label":"fixture-shell","number":1,"pane_count":1,"tab_id":"w1T:t1","workspace_id":"w1T"},
+    {"agent_status":"working","focused":false,"label":"fixture-session-6","number":1,"pane_count":1,"tab_id":"w1V:t1","workspace_id":"w1V"}
+  ],"type":"tab_list"}
+}
