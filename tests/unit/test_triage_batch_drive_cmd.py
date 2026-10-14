@@ -2304,6 +2304,48 @@ def test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes(
     assert out.count(f"held: {REPO} default branch unknown (") == 1, out
 
 
+def test_no_origin_head_and_unreachable_origin_warns_once(
+    tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No `origin/HEAD` and an unreachable origin: `_queue_reads` holds the repo first, so
+    `_ctx_or_hold` is never reached for it: one warning line (R13), not one per reader."""
+    import shutil
+
+    shutil.rmtree(_git_clone(tmp_path, world, monkeypatch))
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+    said = [x for x in out.splitlines() if "default branch" in x and "warning:" in x]
+    assert len(said) == 1, said
+
+
+def test_base_rules_names_an_unreadable_default_branch(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R13: `_base_rules` turns the clone's `GitError` into `DefaultBranchUnknown`, not a
+    generic forge-read failure (which would end the pass)."""
+    from fr.triage.gitseam import GitError
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+
+    class _NoHead:
+        def default_branch(self) -> str:
+            raise GitError("no origin/HEAD")
+
+    class _Client:
+        def base_rules(self, repo: str, branch: str) -> BaseRules:
+            raise AssertionError("the rules are never asked for an unknown branch")
+
+    monkeypatch.setattr(driver, "_reader", lambda repo: _NoHead())
+    monkeypatch.setattr(driver, "client", lambda facts, repo: _Client())
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown, match="default branch unknown"):
+        driver._base_rules(world.facts(), REPO)
+
+
 def test_merge_methods_read_failure_still_fails_the_pass(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,

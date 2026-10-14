@@ -3677,6 +3677,8 @@ class _Driver:
                     "its batches are held",
                 )
                 continue
+            # `_base_rules` cannot raise `DefaultBranchUnknown` here: the read above just
+            # named the default branch, and a `GitError` on it held the repo and continued.
             if not self._base_rules(facts, repo).merge_queue:
                 continue
             queued.add(repo)
