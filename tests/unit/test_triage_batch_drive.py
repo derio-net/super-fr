@@ -513,7 +513,7 @@ def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
     assert (action.kind, action.pr, action.head) == ("archive", 7, "h7")
 
 
-@pytest.mark.parametrize("kw", [dict(draft=True), dict(checks="pending"), dict(checks="failing")])
+@pytest.mark.parametrize("kw", [dict(checks="pending"), dict(checks="failing")])
 def test_an_archive_pr_not_ready_and_green_waits(kw: dict[str, Any]) -> None:
     b = _closed("x", 1, archive="chore/archive-p", run="r-x")
     pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), **kw)
@@ -549,6 +549,19 @@ def test_wrong_base_gets_only_the_blocked_line_no_warn() -> None:
     pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), base="release")
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
     assert [a.kind for a in got.actions] == ["blocked"]
+
+
+def test_green_draft_archive_pr_gets_an_archive_action_flagged_draft() -> None:
+    """merge-truth R11: a close-out session that left its archive PR a draft no longer
+    strands it: the driver marks it ready, then merges it."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), draft=True)
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    (action,) = got.actions
+    assert (action.kind, action.pr, action.draft) == ("archive", 7, True)
+    plain = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",))
+    (action,) = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (plain,)})).actions
+    assert (action.kind, action.draft) == ("archive", False)
 
 
 def test_an_unattributed_archive_pr_is_never_merged() -> None:

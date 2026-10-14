@@ -1356,6 +1356,34 @@ def test_linked_archive_pr_in_issue_prs_gets_the_facts_verdict(
     assert [m[0] for m in world.merged] == [201], out
 
 
+def test_archive_of_a_draft_calls_pr_ready_before_pr_merge_and_says_so(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """merge-truth R11: under --yes a green draft archive PR is marked ready, then
+    merged, and the line says so. No `approved-fr` label is read or written."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"],
+             draft=True, labels=[])  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    world.calls.clear()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    acts = [c for c in world.calls if c.startswith(("pr_ready", "pr_merge"))]
+    assert acts == ["pr_ready 201", "pr_merge 201"], world.calls
+    assert _lines(out, "archive") == ["archive b1: marked ready, merged archive PR #201"]
+    assert not [c for c in world.calls if "approved-fr" in c or c.startswith("label ")]
+
+
+def test_plan_mode_never_marks_a_draft_archive_ready(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"], draft=True)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once")
+    assert not [c for c in world.calls if c.startswith(("pr_ready", "pr_merge"))], out
+
+
 # ------------------------------------------------- the board, every pass (R11)
 
 

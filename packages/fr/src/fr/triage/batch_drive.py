@@ -273,6 +273,7 @@ class Action:
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
+    draft: bool = False  # archive: the PR is a draft, marked ready first (merge-truth R11)
 
 
 @dataclass(frozen=True)
@@ -1325,7 +1326,8 @@ def drive_pass(snap: Snapshot) -> Pass:
             stale = _stale_closeout(batch, event, snap)
             if stale is not None:
                 actions.append(stale)
-        ready = [p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"]
+        # A draft is ready too (merge-truth R11): the archive marks it ready, then merges.
+        ready = [p for p in mine if p.state == "OPEN" and p.checks == "green"]
         default = snap.default_branch.get(snap.repos.get(batch.id, ""), "")
         good = next((p for p in ready if default and not _wrong_base(p, default)), None)
         if good is None and ready and default:
@@ -1343,7 +1345,7 @@ def drive_pass(snap: Snapshot) -> Pass:
         if good is not None:
             actions.append(
                 Action("archive", batch.id, f"PR #{good.number} ({good.head_ref})",
-                       pr=good.number, head=good.head)
+                       pr=good.number, head=good.head, draft=good.draft)
             )  # fmt: skip
         # merge-truth R9: every other attributed open one is named with what it waits on,
         # every pass (no head, so never deduplicated). A status line, never a Need.

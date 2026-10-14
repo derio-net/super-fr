@@ -5489,6 +5489,8 @@ class _Driver:
         ctx = self.merge_ctx(facts, repo)
         assert action.pr is not None
         try:
+            if action.draft:  # merge-truth R11: as the train readies an approved draft
+                ctx.client.pr_ready(repo, action.pr)
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -5509,7 +5511,8 @@ class _Driver:
                 judgements, facts, batch,
                 event.model_copy(update={"at": _now_after(batch), "archived": action.pr}),
             )  # fmt: skip
-        return f"merged archive PR #{action.pr}", True
+        readied = "marked ready, " if action.draft else ""
+        return f"{readied}merged archive PR #{action.pr}", True
 
     # ------------------------------------------------------- state export (R13)
 
