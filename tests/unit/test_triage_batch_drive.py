@@ -522,6 +522,35 @@ def test_an_archive_pr_not_ready_and_green_waits(kw: dict[str, Any]) -> None:
     assert got.summary.closing == 1
 
 
+def _archive_lines(got: Any) -> list[tuple[str, str, str]]:
+    return [(a.kind, a.batch, a.detail) for a in got.actions]
+
+
+def test_attributed_archive_pr_with_pending_checks_gets_one_waiting_warn() -> None:
+    """merge-truth R9: an attributed open archive PR the drive does not merge is named,
+    with why, every pass (no head: never deduplicated)."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), checks="pending")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    assert _archive_lines(got) == [("warn", "x", "archive PR #7: checks pending")]
+    assert got.actions[0].head == "" and got.summary.closing == 1
+    assert action_line(got.actions[0]) == "warn x: archive PR #7: checks pending"
+
+
+def test_failing_checks_waiting_warn() -> None:
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), checks="failing")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    assert _archive_lines(got) == [("warn", "x", "archive PR #7: checks failing")]
+
+
+def test_wrong_base_gets_only_the_blocked_line_no_warn() -> None:
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), base="release")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    assert [a.kind for a in got.actions] == ["blocked"]
+
+
 def test_an_unattributed_archive_pr_is_never_merged() -> None:
     b = _closed("x", 1, archive="chore/archive-p")
     other = _archive(8, "chore/archive-someone-else", files=("docs/a.md",))

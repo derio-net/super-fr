@@ -35,6 +35,7 @@ from fr.triage.batch import (
     pr_open_queue,
 )
 from fr.triage.batch_drive import (
+    ARCHIVE_WAIT,
     AWAITING_LIVE_HOLD,
     CLOSEOUT_FALLBACK,
     DEFAULT_MAX_INFLIGHT,
@@ -258,6 +259,8 @@ def needs_you(
     out.extend(queue_needs(snap))
     for action in plan.actions:
         if action.kind == "warn" and not action.ejected:
+            if action.detail.startswith(ARCHIVE_WAIT):
+                continue  # an archive PR's waiting line (merge-truth R9), never a Need
             failing_pr = batch_pr(by_id[action.batch], facts)
             url = failing_pr.url if failing_pr else None
             # R11: a red hand-back delivered at this head means its session has it in hand,

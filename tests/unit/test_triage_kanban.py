@@ -778,3 +778,47 @@ def test_an_idle_session_is_never_a_failing_ci_need() -> None:
     )  # fmt: skip
     assert drive_snapshot(f, jd).idle == ()
     assert [n for n in needs_you(f, jd) if n.kind == "failing-ci"] == []
+
+
+# ------------------------- the card names its archive PR (merge-truth R10)
+
+
+@pytest.mark.parametrize(
+    ("checks", "wait"),
+    [
+        ({"pass": 0, "fail": 0, "pending": 2}, "checks pending"),
+        ({"pass": 1, "fail": 1, "pending": 0}, "checks failing"),
+    ],
+)
+def test_card_names_an_existing_linked_archive_pr_and_its_wait(
+    checks: dict[str, int], wait: str
+) -> None:
+    """An archive PR that closes an issue lives in `issue.prs` only. The card reads it,
+    by the trust rule attribution uses, names it and what it waits on, and never says
+    "no archive PR", even with the close-out session idle."""
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 checks=checks)  # fmt: skip
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), closeout])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+         issue(2, prs=[archive])],
+        {closeout_item_id(REPO, "m"): "idle"},
+        bid="m",
+    )  # fmt: skip
+    assert "no archive PR" not in card.hint
+    assert card.hint == f"archive PR #30: {wait}"
+
+
+def test_a_linked_archive_pr_from_a_foreign_author_is_not_the_cards() -> None:
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 author="mallory")  # fmt: skip
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), closeout])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+         issue(2, prs=[archive])],
+        {closeout_item_id(REPO, "m"): "idle"},
+        bid="m",
+    )  # fmt: skip
+    assert "#30" not in card.hint and "no archive PR" in card.hint

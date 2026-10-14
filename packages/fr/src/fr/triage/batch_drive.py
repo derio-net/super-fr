@@ -101,6 +101,10 @@ EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
 )
 
+ARCHIVE_WAIT = "archive PR"
+"""How an archive PR's waiting line starts (merge-truth R9): `views.needs_you` reads a warn
+that starts so as a status line, never a `failing-ci` Need."""
+
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
 no PR to name: every reader only asks whether `archived` is set (gh#900)."""
@@ -1341,6 +1345,14 @@ def drive_pass(snap: Snapshot) -> Pass:
                 Action("archive", batch.id, f"PR #{good.number} ({good.head_ref})",
                        pr=good.number, head=good.head)
             )  # fmt: skip
+        # merge-truth R9: every other attributed open one is named with what it waits on,
+        # every pass (no head, so never deduplicated). A status line, never a Need.
+        for p in mine:
+            if p.state == "OPEN" and p.checks != "green":
+                actions.append(
+                    Action("warn", batch.id, f"{ARCHIVE_WAIT} #{p.number}: checks {p.checks}",
+                           pr=p.number)
+                )  # fmt: skip
 
     # 3a. Report idle sessions (driver-sessions R7). A warn never moves the summary.
     actions.extend(_idle_actions(snap, chosen))

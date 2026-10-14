@@ -19,22 +19,27 @@ from typing import Literal
 from fr.triage.batch import (
     BatchStage,
     DependencyState,
+    allowed_authors,
     batch_item_id,
     batch_pr,
     batch_repo,
     closeout_state,
     dependency_state,
     derive_batch_stage,
+    distrust,
     last_dispatch,
 )
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
+    ARCHIVE_WAIT,
     AWAITING_LIVE_HOLD,
     Action,
     IdleSession,
     LivePr,
     Pass,
     Snapshot,
+    attributed,
+    checks_verdict,
     closeout_event,
     closeout_item_id,
     default_selection,
@@ -141,20 +146,36 @@ def _idle_hint(idle: IdleSession, collected_at: str) -> str:
 
 
 def _archive_prs(batch_repo_: str, facts: Facts) -> list[LivePr]:
-    """The collected archive PRs of *batch_repo_*, as the driver's attribution reads them."""
-    return [
-        LivePr(
-            number=p.number,
-            state=p.state,
-            draft=p.is_draft,
-            head=p.head_oid,
-            head_ref=p.head_ref,
-            files=tuple(p.files),
-            trusted=not p.cross_repo,
+    """The collected archive PRs of *batch_repo_*, unlinked and linked to an issue
+    (merge-truth R10), as the driver's attribution reads them: trusted by the rule
+    `attributed()` applies (gh#936), checks by the facts' verdict."""
+    allowed = allowed_authors(batch_repo_, facts)
+    out: dict[int, LivePr] = {}
+    for p in (*facts.prs, *(q for issue in facts.issues for q in issue.prs)):
+        if p.repo != batch_repo_ or not p.head_ref.startswith(ARCHIVE_PREFIXES):
+            continue
+        if p.number in out:
+            continue
+        verdict, failing = checks_verdict([], p.checks or {}, ci_none=False)
+        out[p.number] = LivePr(
+            number=p.number, state=p.state, draft=p.is_draft, head=p.head_oid,
+            checks=verdict, failing=failing, head_ref=p.head_ref, files=tuple(p.files),
+            trusted=distrust(p.author, p.cross_repo, allowed) is None,
         )  # fmt: skip
-        for p in facts.prs
-        if p.repo == batch_repo_ and p.head_ref.startswith(ARCHIVE_PREFIXES)
-    ]
+    return list(out.values())
+
+
+def _archive_wait(batch: Batch, archives: Sequence[LivePr]) -> str | None:
+    """The card's line for a close-out with an attributed open archive PR (merge-truth
+    R10): the PR and what it waits on. None when it has none."""
+    event = closeout_event(batch)
+    if event is None or event.archived is not None:
+        return None
+    for p in archives:
+        if p.state == "OPEN" and attributed(p, batch, event):
+            wait = "ready to merge" if p.checks == "green" else f"checks {p.checks}"
+            return f"{ARCHIVE_WAIT} #{p.number}: {wait}"
+    return None
 
 
 # ---------------------------------------------------------------- the model
@@ -358,6 +379,8 @@ def action_phrase(action: Action) -> str:
         return f"held: {action.detail}"
     if action.kind == "enqueue":
         return f"enqueue PR #{action.pr}"
+    if action.kind == "warn" and action.detail.startswith(ARCHIVE_WAIT):
+        return action.detail  # an archive PR's waiting line, never "CI failing" (R9)
     return _ACTION_PHRASES[action.kind]
 
 
@@ -446,6 +469,7 @@ def _idle_of(
     status: BoardStatus | None,
     closeout_status: BoardStatus | None,
     now: datetime | None,
+    archives: Sequence[LivePr],
 ) -> IdleSession | None:
     """The batch's idle session by `idle_session`, the driver's own rule, judged at *now*
     (the wall clock: session status is live). None without a clock or a repo."""
@@ -453,7 +477,6 @@ def _idle_of(
         return None
     threshold = facts.config_for(repo).idle_session_minutes
     stage = derive_batch_stage(batch, facts)
-    archives = _archive_prs(repo, facts)
     return idle_session(
         batch, repo=repo, closeout=False, status=status, stage=stage,
         archives=archives, now=now, threshold=threshold,
@@ -489,7 +512,8 @@ def _card(
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
     stop = stops.get(batch.id)
-    idle = _idle_of(batch, facts, repo, status, closeout_status, now)
+    archives = _archive_prs(repo, facts) if repo else []
+    idle = _idle_of(batch, facts, repo, status, closeout_status, now, archives)
     needs_you = "blocked" in (status, closeout_status) or stop is not None or idle is not None
     if "blocked" in (status, closeout_status):
         # A runner that says why (`SessionNotes`, cloud-triage R15) adds its words.
@@ -500,6 +524,8 @@ def _card(
         hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
     elif idle is not None:
         hint = _idle_hint(idle, facts.collected_at)
+    elif (wait := _archive_wait(batch, archives)) is not None:
+        hint = wait
     elif held := [d for d in batch.after if d in stops]:
         # The pass plans this batch's dispatch on the dependency merging first; a
         # stopped merge never lands, so it waits on it as the driver does ("held").

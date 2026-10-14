@@ -684,3 +684,28 @@ def test_the_wave_table_stacks_into_labelled_cards_at_phone_width() -> None:
     assert cells[:8] == ["Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage"]
     page = render(f, jd)
     assert re.search(r"@media \(max-width: 480px\) \{[^}]*table\.grid\.stack", page)
+
+
+# --------------------------------------- archive PR lines are not Needs (merge-truth R9)
+
+
+def test_archive_warn_is_not_a_failing_ci_need(monkeypatch: object) -> None:
+    """A warn whose text starts `archive PR` is a status line the drive prints, never
+    a `failing-ci` Need: the batch PR it would look up is merged, not failing."""
+    from dataclasses import replace
+
+    from fr.triage import views
+    from fr.triage.batch_drive import Action
+
+    f, jd = busy()
+    real = views.drive_pass
+
+    def _with_archive_warn(snap: object) -> object:
+        plan = real(snap)  # type: ignore[arg-type]
+        warn = Action("warn", "a-merged", "archive PR #77: checks pending")
+        return replace(plan, actions=(*plan.actions, warn))
+
+    monkeypatch.setattr(views, "drive_pass", _with_archive_warn)  # type: ignore[attr-defined]
+    rows = needs_you(f, jd)
+    assert not [r for r in rows if r.ref == "a-merged" and r.kind == "failing-ci"]
+    assert {r.ref for r in rows if r.kind == "failing-ci"} == {"c-red"}
