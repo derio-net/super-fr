@@ -432,3 +432,35 @@ Security re-review p6b-r1..r10 (r11 out of scope). The verb, on the operator's h
 ### sr-25-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1197] · resolves sr-25: The triage page counts mergeStateStatus BLOCKED as a conflict
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1197.
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-10-14T11:58:40+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: **Labels.** Open a batch whose spec says `strategy: candidate` and `gate: tester`. Its PR carries `verification:candidate` and `gate:tester`. `fr verification set --gate none` without `--answered-by operator` after spec-review is refused.
+why: needs a NEW batch whose spec declares strategy: candidate + gate: tester; none dispatched yet. (#1195 itself was labelled verification:candidate/live/none + gate:tester on merge.)
+how: fr journal resolve --scope spec --slug 2026-10-14-exit-gates --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-14-exit-gates#step1
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-2 created=2026-10-14T11:58:43+00:00 -->
+### test-plan-step-2 · owed · Test Plan step 2 owed
+
+what: **Routing.** Merge that batch. It shows under Needs you · Tester. It is not closed out, and its `Refs` issue stays open with `fr:awaiting-live`. Walk its row with `set-status --walk` and merge that. The next drive pass swaps the label to `gate:tester-passed`.
+why: depends on step 1: a gated batch must merge and be walked before the drive pass can swap gate:tester -> gate:tester-passed
+how: fr journal resolve --scope spec --slug 2026-10-14-exit-gates --id test-plan-step-2 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-14-exit-gates#step2
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-3 created=2026-10-14T11:58:46+00:00 -->
+### test-plan-step-3 · owed · Test Plan step 3 owed
+
+what: **Collected close-out.** With two or more batches landed and not gated, one collected close-out opens ONE housekeeping PR. The driver marks it ready and merges it once clean. It records the passed batch's Test Plan outcomes and closes that batch's `Refs` issue.
+why: needs two or more landed, ungated batches under the wave driver; not yet available
+how: fr journal resolve --scope spec --slug 2026-10-14-exit-gates --id test-plan-step-3 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-14-exit-gates#step3
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-4 created=2026-10-14T11:58:49+00:00 -->
+### test-plan-step-4 · owed · Test Plan step 4 owed
+
+what: **Release.** While step 2's PR is unpassed, a push to `main` cuts `vX.Y.Z-rc.N` as a pre-release. After the pass, the next run cuts the final `vX.Y.Z`. `bootstrap.sh --version RC` installs the RC, and with no argument it installs the final.
+why: release run 38557522803 chose 5.27.0-rc.1 correctly but the staged suite refused it (3 tests assume final-only versions); nothing pushed/tagged. Tracked by #1203
+how: fr journal resolve --scope spec --slug 2026-10-14-exit-gates --id test-plan-step-4 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-14-exit-gates#step4
