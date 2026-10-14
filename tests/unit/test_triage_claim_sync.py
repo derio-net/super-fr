@@ -129,6 +129,21 @@ def test_a_settle_serves_the_batch_that_owes_the_key_not_the_first_listing_it(
     assert ("super-fr#10", "mine") in settles
 
 
+def test_sync_plans_no_settle_on_a_non_github_repo(me: str, tmp_path: Path) -> None:
+    """p1-r1: settle is GitHub-only, so a glab/tea repo plans none and `claim sync` and the
+    drive never hit UnsupportedForgeOperation on it."""
+    from fr.ghclient import UnsupportedBatchOps
+
+    env = cs.ClaimEnv(
+        me=me,
+        config=ScopeConfig(),
+        facts=_facts(me),
+        client_for=lambda r: UnsupportedBatchOps(),  # type: ignore[arg-type,return-value]
+    )
+    plan = cs.plan_sync(env, _batches(tmp_path), NOW)
+    assert [o for o in plan.ops if o.kind == "settle"] == []
+
+
 def test_sync_never_refreshes_a_member_facts_show_closed(me: str, tmp_path: Path) -> None:
     plan = cs.plan_sync(_env(me, _facts(me)), _batches(tmp_path), NOW)
     assert [o.kind for o in plan.ops if o.key == "super-fr#10"] == ["settle"]

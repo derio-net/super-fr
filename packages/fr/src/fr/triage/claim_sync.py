@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from functools import cached_property
 from typing import Literal
 
-from fr.ghclient import GhClient
+from fr.ghclient import GhClient, UnsupportedBatchOps
 from fr.hostclient import FORGE_ERRORS
 from fr.triage import claim_writes as cw
 from fr.triage.batch import BatchStage, claim_authors, closeout_state, derive_batch_stage
@@ -165,6 +165,9 @@ def plan_sync(env: ClaimEnv, batches: Sequence[Batch], now: datetime) -> SyncPla
     for key, bid in [*owed_claims(batches, stages, archived), *releases]:
         serving.setdefault(key, bid)
     for key, _ in settles:
+        repo = env.owner_repo(key)
+        if repo is not None and isinstance(env.client(repo), UnsupportedBatchOps):
+            continue  # settle is GitHub-only, as clean-labels is (p1-r1)
         member_of = serving.get(key) or next((b.id for b in batches if key in b.ids), None)
         plan.ops.append(ClaimOp("settle", key, member_of))
     return plan
