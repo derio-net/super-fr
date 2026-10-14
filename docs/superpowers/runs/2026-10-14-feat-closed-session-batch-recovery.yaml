@@ -3,7 +3,7 @@ run: 2026-10-14-feat-closed-session-batch-recovery
 workflow: fr-goal@1
 branch: feat/closed-session-batch-recovery
 started: '2026-10-14T15:57:59+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,24 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md
   spec-review:
-    state: running
-    at: '2026-10-14T17:54:02+00:00'
+    state: done
+    at: '2026-10-14T18:00:51+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-10-14T17:54:02+00:00'
+          agent: ses_ec472fd02ffeXvPxnWq8wkk72A
           agent_type: super-fr:fr-spec-reviewer
           harness: opencode
           tier: hard
           bound: openai/gpt-6.1-sol
           session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T18:00:51+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ses_ec472fd02ffeXvPxnWq8wkk72A
+          findings: s1
   plan:
     state: pending
   plan-review:
