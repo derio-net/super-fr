@@ -1215,3 +1215,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1201.
 ### p8-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1202] · resolves p8-r6: untracked files in the managed cache survive a channel switch, so preflight refuses until a manual clean (phase 8)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1202.
+
+<!-- fr:journal kind=finding scope=plan id=p4-gated-post-merge-delayed-resolved-2 created=2026-10-14T11:15:14+00:00 state=fixed resolves=p4-gated-post-merge-delayed answered_by=operator -->
+### p4-gated-post-merge-delayed-resolved-2 · finding [fixed] · resolves p4-gated-post-merge-delayed: A gated batch's post_merge waits for its gate, yet the tester walks the merged build
+
+Fixed as p4-r2 in 9b543573 (post_merge runs at merge for every landed batch); operator authorized recording it fixed.
