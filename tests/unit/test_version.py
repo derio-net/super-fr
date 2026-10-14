@@ -1,3 +1,5 @@
+import re
+
 from fr import __version__
 
 
@@ -6,9 +8,9 @@ def test_version_is_string():
 
 
 def test_version_is_semver():
-    parts = __version__.split(".")
-    assert len(parts) == 3
-    assert all(part.isdigit() for part in parts)
+    # A final `X.Y.Z`, or the PEP 440 spelling of a release candidate (`X.Y.ZrcN`):
+    # the release stages an RC tree and runs this suite on it (spec 2026-10-14-exit-gates R25).
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:rc[1-9]\d*)?", __version__), __version__
 
 
 def test_version_value():

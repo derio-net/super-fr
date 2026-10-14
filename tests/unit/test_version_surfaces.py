@@ -83,10 +83,16 @@ def test_one_uv_lock_entry_per_workspace_member() -> None:
 
 
 def test_every_surface_value_equals_the_root_version() -> None:
+    # One version, in each surface's own spelling: a release candidate is `X.Y.ZrcN` on
+    # the Python surfaces and `X.Y.Z-rc.N` on the rest (spec 2026-10-14-exit-gates R25),
+    # and the release runs this suite on a staged RC tree. A final reads the same on all.
     root = _root_version()
     surfaces = vs.version_surfaces(REPO)
     assert surfaces
-    assert {s.value for s in surfaces} == {root}
+    assert {vs.Version.parse(s.value) for s in surfaces} == {vs.Version.parse(root)}
+    assert {(s.file, s.value) for s in surfaces} == {
+        (s.file, vs.spelling(s.file, root)) for s in surfaces
+    }
 
 
 def test_surface_is_a_frozen_file_locator_value_record() -> None:
