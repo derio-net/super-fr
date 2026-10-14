@@ -57,7 +57,7 @@ steps:
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T18:03:16+00:00'
           agent: ses_ec4699655ffeL3SP68hI3rHTR8
@@ -67,6 +67,11 @@ steps:
           tier: hard
           bound: openai/gpt-6.1-sol
           session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T20:13:10+00:00'
+          outcome: done
+        evidence:
+          tests: closed-session-batch-recovery-full-84eeab81.log@dd8ab06465fb;tree=85f9bd344425c1dd1f805ceda3e73a7984d17f32c2eb9cb4d530363f4c0031ca
+          visual: none
   journal-check:
     state: pending
   deliver:
