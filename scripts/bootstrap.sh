@@ -17,8 +17,9 @@
 # This is a thin source-manager: it clones (or updates) super-fr into a managed
 # cache dir, then exec's the canonical scripts/install.sh — which stays the
 # single source of truth for what "install" actually does. Re-running self-heals
-# (fetch + reset --hard origin/main), so the one-liner doubles as an updater and
-# the operator never manually clones.
+# (fetch, then check out the chosen channel: the newest release by default, or
+# what --version names; main is `checkout -B main origin/main`), so the
+# one-liner doubles as an updater and the operator never manually clones.
 #
 # Prefer-not-to-pipe-curl-into-bash alternative:
 #   curl -fsSL .../scripts/bootstrap.sh -o bootstrap.sh
@@ -106,8 +107,8 @@ if [ -d "$SRC/.git" ]; then
 else
   echo "Cloning super-fr into $SRC ..."
   mkdir -p "$(dirname "$SRC")"
-  # install.sh's preflight requires HEAD == main; clone main explicitly so a
-  # fork/mirror with a different default branch fails here, not opaquely later.
+  # Clone main explicitly so a fork/mirror with a different default branch fails
+  # here, not opaquely later; the channel (a tag or main) is checked out below.
   git clone --quiet --branch main "$REMOTE" "$SRC" </dev/null
 fi
 
@@ -122,12 +123,16 @@ installable_tags() {
   local t content
   while IFS= read -r t; do
     content="$(git -C "$SRC" show "refs/tags/$t:scripts/install.sh" 2>/dev/null </dev/null)" || continue
-    printf '%s\n' "$content" | grep -qx '# fr-install-channels: 1' && echo "$t"
+    if printf '%s\n' "$content" | grep -qx '# fr-install-channels: 1'; then
+      echo "$t"
+    fi
   done < <(channel_tags)
+  return 0
 }
-# Numeric version order (rc.10 > rc.9): sort on X.Y.Z[.N] fields, never lexically.
+# Numeric version order (rc.10 > rc.9, and vX.Y.Z above its own RCs): sort on
+# X.Y.Z[.N] fields, never lexically; a final's N is a large sentinel.
 sort_versions() {
-  sed -e 's/^v//' -e 's/-rc\./ /' | awk '{ n = split($1, v, "."); printf "%d %d %d %d %s\n", v[1], v[2], v[3], ($2 == "" ? 0 : $2), $0 }' |
+  sed -e 's/^v//' -e 's/-rc\./ /' | awk '{ n = split($1, v, "."); printf "%d %d %d %d %s\n", v[1], v[2], v[3], ($2 == "" ? 999999999 : $2), $0 }' |
     sort -k1,1n -k2,2n -k3,3n -k4,4n | cut -d' ' -f5- | sed -e 's/^\([0-9][0-9.]*\) \(.*\)$/v\1-rc.\2/' -e 't' -e 's/^\([0-9][0-9.]*\)$/v\1/'
 }
 

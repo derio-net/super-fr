@@ -121,6 +121,10 @@ def _fixture_remote(tmp_path: Path) -> Path:
     commit("v1.2.0-rc.2", marked=True)
     commit("v1.2.0-rc.10", marked=True)
     commit("v1.2.0-rc.9", marked=True)
+    # Unmarked and lexically last, as this repo's real v5.9.4 is (p8-r1).
+    commit("v1.9.0", marked=False)
+    commit("v0.9.0", marked=False)
+    commit("v1.2.0", marked=True)
     commit("rc/some-branch/abc1234", marked=True)  # per-branch tag, never a channel
     commit(None, marked=True)  # main moves past every tag
     return origin
@@ -170,7 +174,7 @@ def _installed(res: subprocess.CompletedProcess[str]) -> str | None:
 def test_no_argument_installs_the_newest_installable_final(tmp_path: Path) -> None:
     res, _ = _bootstrap(tmp_path, _fixture_remote(tmp_path))
     assert res.returncode == 0, res.stderr
-    assert _installed(res) == "v1.1.0"
+    assert _installed(res) == "v1.2.0"
 
 
 def test_rc_installs_the_newest_rc_numerically(tmp_path: Path) -> None:
@@ -191,6 +195,8 @@ def test_exact_rc_and_exact_release(tmp_path: Path) -> None:
     assert _installed(res) == "v1.2.0-rc.1", res.stderr
     res, _ = _bootstrap(tmp_path, origin, "--version", "1.1.0")
     assert _installed(res) == "v1.1.0", res.stderr
+    res, _ = _bootstrap(tmp_path, origin, "--version", "1.2.0")
+    assert _installed(res) == "v1.2.0", res.stderr
 
 
 def test_an_unmarked_tag_is_refused_listing_the_installable_ones(tmp_path: Path) -> None:
@@ -199,6 +205,20 @@ def test_an_unmarked_tag_is_refused_listing_the_installable_ones(tmp_path: Path)
     assert not marker.exists()
     assert "v1.1.0" in res.stderr and "v1.2.0-rc.2" in res.stderr
     assert "v1.0.0" not in res.stderr.replace("1.0.0 is not installable", "")
+    assert "v1.9.0" not in res.stderr and "v0.9.0" not in res.stderr
+
+
+def test_the_refusal_lists_installable_tags_in_version_order(tmp_path: Path) -> None:
+    res, _ = _bootstrap(tmp_path, _fixture_remote(tmp_path), "--version", "9.9.9")
+    listed = [ln.strip() for ln in res.stderr.splitlines() if ln.strip().startswith("v")]
+    assert listed == [
+        "v1.1.0",
+        "v1.2.0-rc.1",
+        "v1.2.0-rc.2",
+        "v1.2.0-rc.9",
+        "v1.2.0-rc.10",
+        "v1.2.0",
+    ], res.stderr
 
 
 def test_an_unknown_version_installs_nothing(tmp_path: Path) -> None:
@@ -254,3 +274,42 @@ def test_works_piped_from_curl(tmp_path: Path) -> None:
     res, _ = _bootstrap(tmp_path, _fixture_remote(tmp_path), "--version", "RC", piped=True)
     assert res.returncode == 0, res.stderr
     assert _installed(res) == "v1.2.0-rc.10"
+
+
+def test_a_forwarded_argument_with_spaces_stays_one_argument(tmp_path: Path) -> None:
+    origin = _fixture_remote(tmp_path)
+    for piped in (False, True):
+        res, marker = _bootstrap(
+            tmp_path, origin, "--note", "a b  c", "--version", "1.1.0", piped=piped
+        )
+        assert res.returncode == 0, res.stderr
+        assert marker.read_text().splitlines() == ["--note", "a b  c"]
+
+
+# ── install.sh preflight edges (p8-r4, p8-r5) ─────────────────────────
+
+
+def test_preflight_refuses_a_loose_v_tag(tmp_path: Path) -> None:
+    repo = _install_checkout(tmp_path)
+    _git(repo, "tag", "v5-hotfix")
+    _git(repo, "checkout", "-q", "--detach", "v5-hotfix")
+    res = _run_install(tmp_path, repo)
+    assert res.returncode != 0
+    assert "Preflight failed" in res.stderr
+    assert "Channel:" not in res.stdout
+
+
+def test_preflight_accepts_an_rc_tag(tmp_path: Path) -> None:
+    repo = _install_checkout(tmp_path)
+    _git(repo, "tag", "v1.2.0-rc.3")
+    _git(repo, "checkout", "-q", "--detach", "v1.2.0-rc.3")
+    res = _run_install(tmp_path, repo)
+    assert "Channel: v1.2.0-rc.3" in res.stdout, res.stdout + res.stderr
+
+
+def test_preflight_on_main_in_sync_prints_channel_main(tmp_path: Path) -> None:
+    upstream = _install_checkout(tmp_path)
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "-q", "--branch", "main", f"file://{upstream}", str(clone))
+    res = _run_install(tmp_path, clone)
+    assert "Channel: main" in res.stdout, res.stdout + res.stderr

@@ -444,7 +444,7 @@ report_preflight_failure() {
 CURRENT_BRANCH="$(git -C "$PLUGIN_ROOT" symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")"
 CHANNEL_TAG=""
 if [ "$CURRENT_BRANCH" = "DETACHED" ]; then
-  CHANNEL_TAG="$(git -C "$PLUGIN_ROOT" tag --points-at HEAD 2>/dev/null | grep -E '^v[0-9]' | sort -V | tail -n 1 || true)"
+  CHANNEL_TAG="$(git -C "$PLUGIN_ROOT" tag --points-at HEAD 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' | sort -V | tail -n 1 || true)"
 fi
 
 if [ -n "$CHANNEL_TAG" ]; then
