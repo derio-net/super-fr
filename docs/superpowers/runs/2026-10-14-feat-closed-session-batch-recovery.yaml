@@ -3,7 +3,7 @@ run: 2026-10-14-feat-closed-session-batch-recovery
 workflow: fr-goal@1
 branch: feat/closed-session-batch-recovery
 started: '2026-10-14T15:57:59+00:00'
-cursor: plan
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -31,14 +31,18 @@ steps:
           reviewer: ses_ec472fd02ffeXvPxnWq8wkk72A
           findings: s1
   plan:
-    state: running
-    at: '2026-10-14T18:00:53+00:00'
+    state: done
+    at: '2026-10-14T18:03:10+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-10-14-closed-session-batch-recovery
     units:
       step/plan:
         attempts:
         - dispatched: '2026-10-14T18:00:53+00:00'
           harness: opencode
           session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T18:03:10+00:00'
+          outcome: done
   plan-review:
     state: pending
   implement:
