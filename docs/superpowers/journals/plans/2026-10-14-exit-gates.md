@@ -145,3 +145,138 @@ Two small helpers beside _deliver_pr_gate, each calling the one sync function; n
 ### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
 
 A scenario script, its wiring, two prose sentences and two matrix moves; nothing to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · early label sync never fires: _emitted_pr finds only deliver's pr; tests monkeypatched it (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · guard/early sync keyed on literal step id spec-review; fr-goal-light's spec-plan-review leaves the R8 guard off (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · hand-editing ## Verification after spec-review lowers the exit unchecked (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · operator-answer window is since spec-review done (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · unverified advisory not persisted in the exit-change decision (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · unreadable exit only warns at deliver (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · deliver warns on any PrNotFound incl. GitHub no-open-PR (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · post-merge gate swapped for another is not a lowering (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · set accepts an unresolvable strategy (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r10 · finding [open] (reviewer: in scope) · row change overwrites rationale; gate-only set inexpressible (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r11 · finding [open] (reviewer: in scope) · labels created before the forge is known to support them (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r12 · finding [open] (reviewer: in scope) · a no-op set still journals and commits (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r13 created=2026-10-14T01:56:03+00:00 phase=2 state=open review_scope=in -->
+### p2-r13 · finding [open] (reviewer: in scope) · set_cmd prints spec_rel with Rich markup (phase 2)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-10-14T01:56:03+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 independent review: 13 findings (13 in, 0 out) (phase 2)
+
+Dispatched reviewer read 5dddc4d2..b07f6097 against R7, R8, §B, §I (fr-goal), ruled on four named concerns (hand-edit bypass: confirmed p2-r3; answer window: confirmed p2-r4; fail-open: kept per R8, advisory persisted p2-r5; unreadable exit at deliver: p2-r6), checked the last three tests fail on old code. Verdict: with fixes. All 13 verified and fixed with tests in 90ee2beb; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: early label sync never fires: _emitted_pr finds only deliver's pr; tests monkeypatched it (phase 2)
+
+branch lookup restored at brainstorm/spec-review; test_p2_r1_the_early_sync_finds_the_pr_by_the_branch (no _emitted_pr patch). (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: guard/early sync keyed on literal step id spec-review; fr-goal-light's spec-plan-review leaves the R8 guard off (phase 2)
+
+spec-reviewing step derived from the manifest's fr-spec-reviewer agent with literal fallback; test_p2_r2_the_guard_applies_on_fr_goal_light. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: hand-editing ## Verification after spec-review lowers the exit unchecked (phase 2)
+
+spec-review resolve journals an exit-baseline decision; deliver refuses a lowering not covered by an operator-answered exit-change decision (fr/verification/baseline.py); test_p2_r3_deliver_refuses_a_lowering_nothing_accounts_for. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: operator-answer window is since spec-review done (phase 2)
+
+window opens at the later of the review and the latest exit-change decision; test_p2_r4_the_answer_window_opens_at_the_later_of_review_and_last_change. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: unverified advisory not persisted in the exit-change decision (phase 2)
+
+advisory appended to the decision body; test_p2_r5_an_unverified_claim_is_marked_in_the_decision. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: unreadable exit only warns at deliver (phase 2)
+
+SyncOutcome.unknown refuses deliver, warns early; test_p2_r6_an_unreadable_exit_refuses_deliver_and_only_warns_early. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: deliver warns on any PrNotFound incl. GitHub no-open-PR (phase 2)
+
+no open PR refuses at deliver; only an undeterminable forge (no origin) warns; test_p2_r7_no_open_pr_refuses_deliver_but_an_unknown_forge_only_warns. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: post-merge gate swapped for another is not a lowering (phase 2)
+
+a swap needs the operator; test_p2_r8_replacing_one_post_merge_gate_with_another_needs_the_operator. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: set accepts an unresolvable strategy (phase 2)
+
+refused before any write; test_p2_r9_an_unknown_strategy_is_refused_before_anything_is_written. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r10 -->
+### p2-r10-resolved · finding [fixed] · resolves p2-r10: row change overwrites rationale; gate-only set inexpressible (phase 2)
+
+--strategy optional with --gate, rationale kept; test_p2_r10_a_gate_only_change_keeps_the_strategy_and_a_row_keeps_its_rationale. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r11 -->
+### p2-r11-resolved · finding [fixed] · resolves p2-r11: labels created before the forge is known to support them (phase 2)
+
+PR probed before ensure_labels; test_p2_r11_an_unsupported_forge_creates_no_labels. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r12 -->
+### p2-r12-resolved · finding [fixed] · resolves p2-r12: a no-op set still journals and commits (phase 2)
+
+unchanged, nothing written; test_p2_r12_a_no_op_writes_nothing. (90ee2beb, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r13-resolved created=2026-10-14T01:56:03+00:00 phase=2 state=fixed resolves=p2-r13 -->
+### p2-r13-resolved · finding [fixed] · resolves p2-r13: set_cmd prints spec_rel with Rich markup (phase 2)
+
+markup=False; test_p2_r13_the_success_line_is_printed_literally. (90ee2beb, CI green)
