@@ -438,3 +438,23 @@ bf060c04 tightens the docstring. 5eb82641 adds test_gh.py#TestConditionalVisibil
 ### p3-r7-resolved · finding [out-of-scope] · resolves p3-r7: MergeContext cached across passes: a later-unreachable origin is not re-fetched (phase 3)
 
 Not caused by this change: the per-host MergeContext cache predates it, and R13 concerns a default branch that cannot be resolved, which this case still can (from the local origin/HEAD). Re-fetching per pass is a separate change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved-2 created=2026-10-14T13:15:02+00:00 state=open resolves=p1-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1210 -->
+### p1-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1210] · resolves p1-r7: Closed issues held by a retired scope are never settled
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1210.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved-2 created=2026-10-14T13:15:02+00:00 state=open resolves=p1-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1211 -->
+### p1-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1211] · resolves p1-r8: A closed issue with an own un-released marker but no label is never settled
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1211.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved-2 created=2026-10-14T13:15:02+00:00 state=open resolves=p2-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1212 -->
+### p2-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1212] · resolves p2-r10: A conflict at an unchanged head after a finished hand-back is skipped forever
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1212.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved-2 created=2026-10-14T13:15:03+00:00 state=open resolves=p3-r7 tracked_by=https://github.com/derio-net/super-fr/issues/1213 -->
+### p3-r7-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1213] · resolves p3-r7: MergeContext cached across passes: a later-unreachable origin is not re-fetched
+
+Filed at archive as https://github.com/derio-net/super-fr/issues/1213.

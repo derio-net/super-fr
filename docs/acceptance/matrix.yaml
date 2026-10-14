@@ -7839,10 +7839,10 @@ rows:
       marker-less included); clean-labels --yes does the same; the batch board names
       a non-empty closed set.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R15
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claim_sync.py#test_sync_yes_settles_and_records_claims_released_for_members
@@ -7866,7 +7866,7 @@ rows:
       --yes or drive --yes pass, including a closed member of a still-running batch;
       check and both pages say so.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claim_sync.py#test_sync_never_refreshes_a_member_facts_show_closed
@@ -7885,7 +7885,7 @@ rows:
       judgements write writes nothing to the forge, a forge refusal withdraws the recorded
       take, and a failed forge write leaves a take the next claim sync completes.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claim_cmd.py#test_take_writes_nothing_to_the_forge_when_the_judgements_write_fails
@@ -7902,7 +7902,7 @@ rows:
       check shows none of the retired claims held and claim sync --yes claims the members
       a batch owes.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_triage_claim_cmd.py#test_scope_retire_yes_removes_the_signers_claims_from_facts
@@ -7920,10 +7920,10 @@ rows:
       archive PR is not merged, and the board names an existing archive PR and what
       it waits on.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_head_found_open_archive_pr_gets_live_checks_not_pending
@@ -7944,7 +7944,7 @@ rows:
     acceptance: Under --yes the drive marks a draft attributed archive PR ready and
       merges it once green, with no approved-fr label.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_green_draft_archive_pr_gets_an_archive_action_flagged_draft
@@ -7961,7 +7961,7 @@ rows:
       conflict with a recorded stop; a conflicting export PR goes straight to Needs
       you now.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_conflicting_archive_pr_gets_archive_conflict_never_archive
@@ -7989,7 +7989,7 @@ rows:
       holds that repo's merge work with one warning and finishes the pass; a clone without
       origin/HEAD whose origin answers merges.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes
@@ -8004,7 +8004,7 @@ rows:
     acceptance: The drive's lease renewal while waiting out an exhausted GraphQL window
       spends no GraphQL.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_triage_quota_loop.py#test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window
@@ -8019,9 +8019,9 @@ rows:
       no closed issue labelled fr:in-progress that no other scope holds, and the conflicting
       archive PR #1146 is handed back or under Needs you now.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R12
     levels: {}
     status: not-implemented
     notes: ''
