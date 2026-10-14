@@ -9580,9 +9580,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R8
     levels:
       int:
-      - super-fr:tests/integration/test_scenarios.py::test_herdr_closed_recovery_live_instructions
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_closed_recovery_live_instructions
     status: walk-owed
-    notes: Operator-owned disposable actual-client recovery/HOLD walk is owed post-merge
-      at Tester; automated instruction tests do not certify a live pass.
+    notes: Disposable actual-client walk remains owed post-merge at Tester; the named
+      instruction test is not live evidence.
     verify: live
     scenario: tests/scenarios/herdr-closed-recovery-live.sh
