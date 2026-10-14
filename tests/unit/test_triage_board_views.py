@@ -10,6 +10,7 @@ handling is asserted from its source, because no browser runs in CI.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from fr.triage.batch_drive import drive_pass
 from fr.triage.model import Facts, Judgements
@@ -23,6 +24,7 @@ from fr.triage.views import (
 )
 
 from tests.unit.triage_board_fixtures import (
+    REPO,
     URL,
     batch,
     busy,
@@ -732,3 +734,29 @@ def test_held_archive_conflict_is_an_archive_conflict_need() -> None:
     moved = facts([issue(1, state="closed", prs=[merged])],
                   prs=[{**archive, "head_oid": "sha-new"}])  # fmt: skip
     assert not [r for r in needs_you(moved, jd) if r.kind == "archive-conflict"]
+
+
+def test_an_export_conflict_need_holds_only_while_its_pr_is_open_at_the_stop_head() -> None:
+    """p2-r3: an `export:<repo>` stop is a Need only while the recorded export PR is
+    unmerged, unclosed and at the stopped head; a stale stop is no row."""
+    from fr.triage.merge_stops import MergeStop
+
+    stop = {f"export:{REPO}": MergeStop("sha-40", "export PR #40 conflicts", "t")}
+    f = facts([issue(1)])
+
+    def _jd(**export: Any) -> Any:
+        row = {"wave": "1", "repo": REPO, "at": "2026-10-01T13:00:00Z", "pr": 40,
+               "head": "sha-40", **export}  # fmt: skip
+        return judgements({"widgets#1": j(1)}, [], schema=10, exports=[row])
+
+    def _rows(jd: Any, fx: Any = f) -> list[Any]:
+        return [r for r in needs_you(fx, jd, stops=stop) if r.kind == "archive-conflict"]
+
+    (need,) = _rows(_jd())
+    assert need.ref == REPO and "export PR #40" in need.text
+    assert _rows(_jd(merged=True)) == []
+    assert _rows(_jd(closed=True)) == []
+    assert _rows(_jd(head="sha-new")) == []
+    assert _rows(judgements({"widgets#1": j(1)}, [], schema=10)) == []  # nothing recorded
+    shown = facts([issue(1)], prs=[pr(40, "fr-triage/export", state="MERGED", head_oid="sha-40")])
+    assert _rows(_jd(), shown) == []  # the facts show it merged

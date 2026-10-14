@@ -5181,3 +5181,22 @@ def test_conflicting_export_pr_goes_straight_to_needs_you_with_stop_key_export_r
     code, out = _export_drive(state, "--once", "--yes")
     assert world.merged == [(40, sha, "squash")], out
     assert f"export:{REPO}" not in load_stops(state)
+
+
+@pytest.mark.parametrize(("state_", "line"), [
+    ("MERGED", "recorded export PR #40 as merged"),
+    ("CLOSED", "recorded export PR #40 as closed"),
+])  # fmt: skip
+def test_an_export_pr_merged_or_closed_by_hand_clears_its_conflict_stop(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, state_: str, line: str
+) -> None:
+    """p2-r3: the export conflict's stop is over once the PR is merged by hand
+    (export-reconcile) or closed (export-closed), not only when the driver merges it."""
+    sha = _export_pr(world, git_checkout.path, mergeable="CONFLICTING")
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+    _export_drive(state, "--once", "--yes")
+    assert f"export:{REPO}" in load_stops(state)
+    world.prs[40]["state"] = state_
+    code, out = _export_drive(state, "--once", "--yes")
+    assert line in out, out
+    assert f"export:{REPO}" not in load_stops(state)

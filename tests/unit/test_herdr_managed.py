@@ -146,7 +146,8 @@ def test_live_conflict_reads_the_forge_adapter(descriptor, monkeypatch, state, m
 
 
 @pytest.mark.parametrize(
-    "prefix", ["Merge conflict on batch b1 (t): PR #1", "Archive PR conflict on batch b1 (t): PR #2"]
+    "prefix",
+    ["Merge conflict on batch b1 (t): PR #1", "Archive PR conflict on batch b1 (t): PR #2"],
 )
 def test_handback_recognises_batch_and_archive_conflict_briefs(descriptor, prefix):
     """p2-r1: a managed archive-conflict session saves its head and brief too, so a

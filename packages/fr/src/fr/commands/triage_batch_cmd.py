@@ -5663,7 +5663,9 @@ class _Driver:
         operator with a stop keyed `export:<repo>` (R12)."""
         stamp = datetime.now(UTC).isoformat(timespec="seconds")
         reason = f"export PR #{action.pr} conflicts"
-        record_stop(self.target, f"export:{action.batch}", MergeStop(action.head, reason, stamp))
+        record_stop(
+            self.target, export_stop_key(action.batch), MergeStop(action.head, reason, stamp)
+        )
         return action.detail
 
     # ------------------------------------------------------- state export (R13)
@@ -5675,10 +5677,12 @@ class _Driver:
         if action.kind == "export-reconcile":  # merged outside the driver (p4-r1)
             assert action.pr is not None
             self._mark(action.batch, action.pr, merged=True)
+            clear_stop(self.target, export_stop_key(action.batch))  # its stop is over (R12)
             return f"recorded export PR #{action.pr} as merged"
         if action.kind == "export-closed":  # closed unmerged: said once (p4-r6)
             assert action.pr is not None
             self._mark(action.batch, action.pr, closed=True)
+            clear_stop(self.target, export_stop_key(action.batch))  # its stop is over (R12)
             err_console.print(f"[yellow]warning:[/yellow] {escape(action.detail)}", soft_wrap=True)
             return f"recorded export PR #{action.pr} as closed; its waves are owed again"
         return self._export_merge(action, facts, action.batch, action.wave)
@@ -5824,7 +5828,7 @@ class _Driver:
                 wave, f"export PR #{action.pr}: the forge refused the merge: {exc}"
             )
         self._mark(repo, action.pr, merged=True)
-        clear_stop(self.target, f"export:{repo}")  # a conflict stop on it is over (R12)
+        clear_stop(self.target, export_stop_key(repo))  # a conflict stop on it is over (R12)
         return f"merged export PR #{action.pr} at {action.head[:12]}"
 
 

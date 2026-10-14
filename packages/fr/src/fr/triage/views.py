@@ -64,6 +64,7 @@ from fr.triage.model import (
     Facts,
     Judgement,
     Judgements,
+    PullRequest,
     RedHandbackEvent,
     Severity,
 )
@@ -389,12 +390,33 @@ def archive_conflict_needs(
     for key, stop in sorted(stops.items()):
         if key.startswith("export:") and "conflicts" in stop.reason:
             repo = key.removeprefix("export:")
+            if not _export_stop_live(repo, stop, facts, judgements, known):
+                continue  # merged, closed, or a new head: no longer this conflict
             out.append(
                 Need("archive-conflict", repo,
                      f"{repo}'s {stop.reason} with the default branch: merge it in, or "
                      "close the PR", None)
             )  # fmt: skip
     return out
+
+
+def _export_stop_live(
+    repo: str,
+    stop: MergeStop,
+    facts: Facts,
+    judgements: Judgements,
+    known: Mapping[tuple[str, int], PullRequest],
+) -> bool:
+    """An export conflict stop holds while *repo*'s recorded export PR is unmerged and
+    unclosed at the stopped head, and the facts (when they carry it) show it open at
+    that head (p2-r3)."""
+    for e in judgements.exports:
+        if e.repo != repo or e.pr is None or e.merged or e.closed or e.head != stop.head:
+            continue
+        found = known.get((repo, e.pr))
+        if found is None or (found.state == "OPEN" and found.head_oid == stop.head):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------- next up
