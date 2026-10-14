@@ -2220,15 +2220,6 @@ def test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop(
 # ------------------------------------- default branch unknown (merge-truth R13, gh#1176)
 
 
-def _git(cwd: Path, *args: str) -> None:
-    import subprocess
-
-    subprocess.run(
-        ["git", "-c", "user.email=t@example.com", "-c", "user.name=t", *args],
-        cwd=cwd, check=True, capture_output=True,
-    )  # fmt: skip
-
-
 class GitHeadCheckout(DriveCheckout):
     """DriveCheckout whose fetch and default branch are a REAL clone's: a git fixture."""
 
@@ -2249,6 +2240,10 @@ def _git_clone(tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch) ->
     origin, clone = tmp_path / "origin.git", tmp_path / "gitclone"
     _git(tmp_path, "init", "--bare", "-b", "main", str(origin))
     _git(tmp_path, "clone", "-q", str(origin), str(clone))
+    # The clone's own identity: a CI runner has no global one to borrow, and the
+    # module's `_git` passes none (as `git_checkout_fixture` does).
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(clone, "config", k, v)
     (clone / "f").write_text("x")
     _git(clone, "add", "f")
     _git(clone, "commit", "-qm", "init")
