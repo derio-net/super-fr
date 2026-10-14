@@ -9541,9 +9541,17 @@ rows:
       state and sessions untouched.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_closed_recovery.py::test_recovery_preview
+      - super-fr:tests/unit/test_triage_closed_recovery.py::test_live_scope_driver_refuses_before_effects
+      - super-fr:tests/unit/test_herdr_closed_recovery.py::test_unknown_rosters_refuse
+      - super-fr:tests/unit/test_herdr_closed_recovery.py::test_survivors_reused_panes_and_incomplete_join_refuse
+      int:
+      - super-fr:tests/integration/test_scenarios.py::test_triage_closed_recovery
+    status: ci
+    notes: Captured global roster-derived variants and disposable CLI state prove read-only
+      preview and unsafe/unknown ownership refusal.
     verify: candidate
     scenario: tests/scenarios/triage-closed-recovery.sh
   - id: triage-closed-recovery-repair
