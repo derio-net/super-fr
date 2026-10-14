@@ -7971,11 +7971,17 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_conflict_held_records_a_stop_and_raises_the_need
       - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_conflicting_export_pr_goes_straight_to_needs_you_with_stop_key_export_repo
       - super-fr:tests/unit/test_triage_board_views.py#test_held_archive_conflict_is_an_archive_conflict_need
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_conflict_waits_while_the_closeout_session_works
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_merged_archive_pr_clears_its_stop
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_forge_refused_archive_merge_records_a_stop
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_an_export_pr_merged_or_closed_by_hand_clears_its_conflict_stop
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_refused_archive_merge_shows_its_stop_on_the_card
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_held_archive_conflict_card_needs_you
+      - super-fr:tests/unit/test_triage_board_views.py#test_an_export_conflict_need_holds_only_while_its_pr_is_open_at_the_stop_head
     status: ci
-    notes: 'merge-truth phase 2: a conflicting archive PR is never merged; it is handed
-      to the close-out (idle message, wait while working, fresh session when done),
-      held as an archive-conflict Need with a recorded stop after two hand-backs; a
-      conflicting export PR stops straight away; a merge clears the stop (R12)'
+    notes: 'Review p2-r7: also cites the wait-while-working, archive-stop clear/record
+      tests, the board''s archive-stop and held-conflict card tests (p2-r2) and the
+      export-stop clear and liveness tests (p2-r3).'
     verify: none
   - id: triage-default-branch-unknown-held
     capability: triage-batches
