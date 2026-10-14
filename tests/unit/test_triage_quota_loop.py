@@ -29,6 +29,7 @@ from fr.triage.lease import (
 )
 from fr.triage.model import Facts, Skipped
 from fr.triage.pacing_state import PacingState
+from fr.triage.quota import Pace
 from typer.testing import CliRunner
 
 from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
@@ -661,6 +662,48 @@ def test_a_pacer_built_on_the_real_wiring_counts_its_reads_on_the_forge(
 
     assert pace.kind == "run" and forge.rate_limit_calls == 1
     assert forge.calls == [], "the read is counted apart from every other forge call"
+
+
+def test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    clock: list[Any],
+    remote: Path,
+    visibility: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """merge-truth R14 (gh#1178): the real `_Driver`, waiting out an exhausted GraphQL
+    window past its lease's renewal point. Proves the renewal's visibility read goes
+    through `repo_visibility` (the visibility client has no GraphQL method, an
+    AttributeError if asked) and the lease is renewed. That `repo_visibility` is a REST
+    `repos/<o>/<r>` call is proven in `tests/unit/test_gh.py`, not here."""
+    state = _leased_cloud_state(tmp_path, world)
+    driver = triage_batch_cmd.build_driver(
+        SCOPE, state, batch_ids=None, checkout=None, max_inflight=3, yes=True,
+        lease=triage_batch_cmd.LeaseTerms(driver_identity("host", HOST_ID), timedelta(minutes=30)),
+    )  # fmt: skip
+    driver.take_lease()
+    first = load_lease(state)
+    assert first is not None
+    reads_before, calls_before = len(visibility.asked), len(world.calls)
+    waited: list[float] = []
+
+    def nap(seconds: float) -> None:
+        waited.append(seconds)
+        clock[0] += timedelta(seconds=seconds)
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", nap)
+    pace = Pace("wait", until=NOW + timedelta(minutes=70), why="exhausted")
+
+    triage_batch_cmd.wait_out(driver, pace)
+
+    renewed = load_lease(state)
+    assert renewed is not None and renewed.expires > first.expires, "the lease was renewed"
+    assert len(visibility.asked) > reads_before, "the renewal read visibility, over REST"
+    assert len(world.calls) == calls_before, "and spent no GraphQL: the forge was not touched"
+    assert sum(waited) == 70 * 60
 
 
 @pytest.mark.parametrize("where", ["take_lease", "save_pass"])

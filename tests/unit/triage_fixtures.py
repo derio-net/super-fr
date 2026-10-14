@@ -154,7 +154,14 @@ class FakeForge:
         if state == "closed":  # the closed + fr:in-progress read (board-truth §B)
             if repo in self.closed_listing_failing:
                 raise ForgeError(self.closed_listing_failing[repo])
-            return self.closed_in_progress.get(repo, [])
+            hits = self.closed_in_progress.get(repo, [])
+            if labels is None:
+                return hits
+            return [
+                h
+                for h in hits
+                if set(labels) <= {lb["name"] if isinstance(lb, dict) else lb for lb in h["labels"]}
+            ]
         if repo in self.failing:
             raise ForgeError(self.failing[repo])
         return self.issues[repo]

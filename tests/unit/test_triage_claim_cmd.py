@@ -489,3 +489,167 @@ def test_no_wave_keeps_a_taken_members_claim(
     code, out = _run(tmp_path, "batch", "edit", "revive", "--no-wave")
     assert code == 0, out
     assert "release super-fr#6" not in out
+
+
+# ------------------------------------------- post-merge truth R5: take records first
+
+
+def _revive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: NOW)
+    code, out = _run(tmp_path, "batch", "create", "revive", "--title", "t", "--issue", "super-fr#6")
+    assert code == 0, out
+
+
+def _take(tmp_path: Path) -> tuple[int, str]:
+    return _run(tmp_path, "claim", "take", "super-fr#6", "--batch", "revive", "--yes")
+
+
+def _kinds(tmp_path: Path) -> list[str]:
+    return [e.kind for e in _batch(tmp_path, "revive").events]
+
+
+def test_take_writes_nothing_to_the_forge_when_the_judgements_write_fails(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.errors import TriageError
+
+    tmp_path, client = world
+    _revive(tmp_path, monkeypatch)
+
+    def boom(*a: Any, **kw: Any) -> None:
+        raise TriageError("disk full")
+
+    monkeypatch.setattr(triage_batch_cmd, "_save", boom)
+    code, out = _take(tmp_path)
+    assert code == 2 and "disk full" in out
+    assert _writes(client) == []
+    assert "claim_taken" not in _kinds(tmp_path)
+
+
+def test_take_refused_by_the_forge_withdraws_the_recorded_event(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmp_path, client = world
+    _revive(tmp_path, monkeypatch)
+    # facts show the holder expired; the forge, re-read at write time, shows it refreshed
+    client.issue_comments[(REPO, 6)] = [
+        _comment(_marker(OLD, "dead", at=LONG_AGO, expires=FAR), 6, LONG_AGO)
+    ]
+    code, out = _take(tmp_path)
+    assert code == 2 and "live" in out
+    assert "claim_taken" not in _kinds(tmp_path)
+
+
+def test_take_held_withdraws_the_recorded_event(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.claims import Claim
+
+    tmp_path, _ = world
+    _revive(tmp_path, monkeypatch)
+    rival = Claim(
+        signer=OLD, batch="dead", claimed=LONG_AGO, heartbeat=LONG_AGO, expires=FAR,
+        comment_id=6, created_at=LONG_AGO,
+    )  # fmt: skip
+    monkeypatch.setattr(
+        triage_claim_cmd.cw, "take", lambda *a, **kw: triage_claim_cmd.cw.Held(rival)
+    )
+    code, out = _take(tmp_path)
+    assert code == 2 and OLD in out
+    assert "claim_taken" not in _kinds(tmp_path)
+
+
+def test_take_transport_failure_keeps_the_event_and_next_sync_claims_the_member(
+    world: tuple[Path, FakeGhClient], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gh import GhError
+
+    tmp_path, client = world
+
+    _revive(tmp_path, monkeypatch)
+
+    def flaky(*a: Any, **kw: Any) -> None:
+        raise GhError("HTTP 502")
+
+    monkeypatch.setattr(triage_claim_cmd.cw, "take", flaky)
+    code, out = _take(tmp_path)
+    assert code == 2 and "claim sync --yes" in " ".join(out.split())
+    assert "claim_taken" in _kinds(tmp_path)
+    # the forge released the rival before the transport failed; the next collect shows no claim
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    six = next(i for i in facts["issues"] if i["number"] == 6)
+    six["claims"] = []
+    (tmp_path / "facts.json").write_text(json.dumps(facts), "utf-8")
+    code, out = _run(tmp_path, "claim", "sync")
+    assert code == 0, out
+    assert "claim super-fr#6 for revive" in out and "release super-fr#6" not in out
+
+
+# ------------------------------------------- post-merge truth R6: retire then sync
+
+
+def test_scope_retire_yes_removes_the_signers_claims_from_facts(
+    world: tuple[Path, FakeGhClient], me: str
+) -> None:
+    tmp_path, client = world
+    text = (tmp_path / "judgements.yaml").read_text("utf-8")
+    text += '  - {id: revive, title: revive, ids: ["super-fr#7"], wave: 1}\n'
+    (tmp_path / "judgements.yaml").write_text(text, "utf-8")
+    code, out = _run(tmp_path, "claim", "sync")
+    assert "held super-fr#7" in out and "claim super-fr#7" not in out
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    assert "fr triage collect" not in out and "claim sync --yes" in out
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    seven = next(i for i in facts["issues"] if i["number"] == 7)
+    assert seven["claims"] == []
+    assert any(i["claims"] for i in facts["issues"] if i["number"] != 7)  # the rest stand
+    code, out = _run(tmp_path, "check", "--json")
+    assert all(h["key"] != "super-fr#7" for h in json.loads(out)["held_elsewhere"])
+    code, out = _run(tmp_path, "claim", "sync")
+    assert "claim super-fr#7 for revive" in out and "held super-fr#7" not in out
+
+
+def test_scope_retire_does_not_clobber_facts_a_collect_rewrote_meanwhile(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    """p1-r4a: the rewrite starts from facts.json as it is then, not as the command loaded."""
+    tmp_path, client = world
+    real = client.edit_issue_comment
+
+    def edit(repo: str, comment_id: int, body: str) -> None:
+        facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+        facts["collected_at"] = "2026-10-14T11:59:00+00:00"  # a concurrent collect
+        (tmp_path / "facts.json").write_text(json.dumps(facts), "utf-8")
+        real(repo, comment_id, body)
+
+    client.edit_issue_comment = edit  # type: ignore[method-assign]
+    code, out = _run(tmp_path, "scope", "retire", DEAD, "--yes")
+    assert code == 0, out
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    assert facts["collected_at"] == "2026-10-14T11:59:00+00:00"
+    assert next(i for i in facts["issues"] if i["number"] == 7)["claims"] == []
+
+
+def test_scope_retire_forgets_the_released_claims_before_an_unsupported_forge_exit(
+    world: tuple[Path, FakeGhClient],
+) -> None:
+    """p1-r4b: #8 was released, then #9 hit an unsupported op: facts must not still show #8."""
+    from fr.ghclient import UnsupportedForgeOperation
+
+    tmp_path, client = world
+    real = client.edit_issue_comment
+    seen: list[int] = []
+
+    def edit(repo: str, comment_id: int, body: str) -> None:
+        if seen:
+            raise UnsupportedForgeOperation("edit_issue_comment", "glab")
+        seen.append(comment_id)
+        real(repo, comment_id, body)
+
+    client.edit_issue_comment = edit  # type: ignore[method-assign]
+    code, out = _run(tmp_path, "scope", "retire", ZOMBIE, "--force", "--yes")
+    assert code == 2, out
+    facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+    by = {i["number"]: i["claims"] for i in facts["issues"]}
+    assert by[8] == [] and by[9] != []

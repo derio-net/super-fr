@@ -41,9 +41,10 @@ class Held:
 
 @dataclass(frozen=True)
 class Done:
-    """What was written: a new marker, an in-place rewrite, a refresh or a release."""
+    """What was written: a new marker, an in-place rewrite, a refresh, a release, or (a
+    settled closed issue with no marker of ours) labels removed alone."""
 
-    action: Literal["posted", "rewritten", "refreshed", "released", "none"]
+    action: Literal["posted", "rewritten", "refreshed", "released", "unlabelled", "none"]
     comment_id: int | None = None
 
 
@@ -74,13 +75,18 @@ def _remove_label(
     number: int,
     trusted: Collection[str],
     labels: frozenset[str] = frozenset({FR_CLAIMED.name}),
+    *,
+    seen: Collection[str] | None = None,
 ) -> None:
     """Remove *labels*, then re-read: a claim that landed after the caller's read gets
     back every label that was on the issue before the removal, in one edit (p1-r5,
-    p1-r1: a label that was never there is not invented)."""
+    p1-r1: a label that was never there is not invented). *seen* is the label set the
+    caller just read, so the issue is not viewed a second time."""
     present = labels
     if labels - {FR_CLAIMED.name}:
-        present = labels & set(client.view_issue(repo, number).get("labels") or [])
+        if seen is None:
+            seen = client.view_issue(repo, number).get("labels") or []
+        present = labels & set(seen)
     client.edit_issue_labels(repo, number, add=frozenset(), remove=labels)
     _, claims = _read(client, repo, number, trusted)
     if claims:
@@ -247,6 +253,36 @@ def release(
             RELEASE_LABELS if unlabel else frozenset({FR_CLAIMED.name}),
         )
     return Done("released", target.comment_id)
+
+
+def settle_closed(
+    client: GhClient,
+    repo: str,
+    number: int,
+    *,
+    me: str,
+    now: datetime,
+    trusted: Collection[str],
+) -> Outcome:
+    """Settle a closed issue (post-merge truth R1-R3): release this scope's own un-released
+    marker, if one stands, and remove `fr:claimed` and `fr:in-progress` in one edit.
+
+    Re-reads the issue and its comments first and writes nothing (`Done("none")`) when it
+    reopened or a trusted, un-released claim of another scope stands. `_remove_label`
+    keeps the restore race: a claim that lands during the edit gets its labels back."""
+    view = client.view_issue(repo, number)
+    if str(view.get("state") or "").upper() != "CLOSED":
+        return Done("none")
+    labels = set(view.get("labels") or [])
+    _, claims = _read(client, repo, number, trusted)
+    if any(c.signer != me for c in claims):
+        return Done("none")
+    own = _own(claims, me)
+    if own is not None:
+        client.edit_issue_comment(repo, own.comment_id, _released(own.marker, now))
+    if labels & RELEASE_LABELS:  # nothing to remove: no edit, no re-read (p1-r2)
+        _remove_label(client, repo, number, trusted, RELEASE_LABELS, seen=labels)
+    return Done("released", own.comment_id) if own is not None else Done("unlabelled")
 
 
 Allow = Literal["expired", "stale", "any"]

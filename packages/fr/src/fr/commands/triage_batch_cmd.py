@@ -148,6 +148,7 @@ from fr.triage.batch_dispatch import (
     LIVE_STAGES,
     NO_APPROVAL_LINE,
     TRIAGE_CONFIG_PATH,
+    archive_conflict_brief,
     check_config_fresh,
     conflict_brief,
     dispatch_comment,
@@ -165,12 +166,15 @@ from fr.triage.batch_drive import (
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
+    ChecksVerdict,
     GateLedger,
     IdleSession,
     LivePr,
     Snapshot,
     Summary,
     action_line,
+    archive_conflict_decision,
+    archive_conflict_item_id,
     attributed,
     awaiting_unlabelled,
     checks_verdict,
@@ -219,6 +223,7 @@ from fr.triage.batch_merge import (
     describe,
     merge_ready,
     plan_queue,
+    pr_checks_verdict,
     run_queue,
     update_failing,
 )
@@ -243,9 +248,16 @@ from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.lease import acquire, load_lease, mark_pass, release
 from fr.triage.ledger import LedgerRead, closeout_read, gated_rows_at
-from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
+from fr.triage.merge_stops import (
+    MergeStop,
+    archive_stop_key,
+    clear_stop,
+    export_stop_key,
+    record_stop,
+)
 from fr.triage.model import (
     ApprovalEvent,
+    ArchiveConflictEvent,
     Batch,
     BatchEvent,
     CancelEvent,
@@ -254,6 +266,7 @@ from fr.triage.model import (
     CloseoutHandbackEvent,
     CloseoutHoldEvent,
     CollectedCloseout,
+    ConflictDelivery,
     ConflictEvent,
     CursorPosition,
     CursorReader,
@@ -406,7 +419,7 @@ def _settle_claims(env: ClaimEnv, ops: list[ClaimOp], *, yes: bool) -> SyncResul
         if op.kind == "claim":
             console.print(f"  claim {op.key} for {op.batch}", markup=False)
         else:
-            console.print(f"  {op.kind} {op.key} ({op.batch})", markup=False)
+            console.print(f"  {op.kind} {op.label}", markup=False)
     if not yes:
         console.print(
             "claims not written; `fr triage claim sync --yes` writes them (or re-run with --yes)",
@@ -1113,12 +1126,20 @@ def _reservation(
         _fail(str(exc))
 
 
-def _fresh_config(checkout: Checkout, facts: Facts, owner_repo: str) -> str:
+def _fresh_config(
+    checkout: Checkout, facts: Facts, owner_repo: str, *, hold_unknown: bool = False
+) -> str:
     """Fetch, then hold the §3.I rule: the collected `.fr/triage.yaml` must be the
     one on `origin/<default>` now. Returns that ref. The read ignores a top-level
-    key this `fr` does not know (R4)."""
-    checkout.fetch()
-    default = f"origin/{checkout.default_branch()}"
+    key this `fr` does not know (R4). *hold_unknown*: a failed fetch or default-branch
+    read raises `DefaultBranchUnknown` (the merge path's, R13) rather than a `GitError`."""
+    try:
+        checkout.fetch()
+        default = f"origin/{checkout.default_branch()}"
+    except GitError as exc:
+        if not hold_unknown:
+            raise
+        raise DefaultBranchUnknown(owner_repo, exc) from exc
     ignored = check_config_fresh(
         facts.config.get(owner_repo),
         checkout.show(default, TRIAGE_CONFIG_PATH),
@@ -3250,6 +3271,18 @@ class ForgeReadError(Exception):
         self.code = code
 
 
+class DefaultBranchUnknown(ForgeReadError):  # noqa: N818 - the spec's name (R13)
+    """*repo*'s clone cannot name its default branch because origin cannot answer: the
+    fetch, or `checkout.default_branch()`, failed (merge-truth R13, gh#1176). Raised
+    ONLY by those two reads in `merge_ctx` and `_base_rules`; every other
+    `ForgeReadError` (a merge-methods or config read) behaves as before (gh#921). Each
+    caller catches this type alone, holds the repo for the pass and goes on."""
+
+    def __init__(self, repo: str, cause: object) -> None:
+        super().__init__(f"{repo} default branch unknown ({cause})", code=2)
+        self.repo = repo
+
+
 def recollect(
     scope: Scope,
     target: Path,
@@ -3549,7 +3582,7 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
                 state=str(rec.get("state", "")).upper(),
                 draft=bool(rec.get("isDraft")),
                 head=str(rec.get("headRefOid") or ""),
-                checks="pending",  # an open one's checks come from the facts' record
+                checks="pending",  # the archive step reads an open one's (merge-truth R7)
                 head_ref=str(rec.get("headRefName") or head),
                 files=tuple(
                     str(f.get("path") if isinstance(f, dict) else f) for f in rec.get("files") or ()
@@ -3558,6 +3591,55 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
             )
         )
     return out
+
+
+def _judge(
+    client: GhClient,
+    repo: str,
+    pr: LivePr,
+    counts: Mapping[str, int] | None,
+    ci_none: bool,
+    head: str | None = None,
+) -> tuple[ChecksVerdict, tuple[str, ...]]:
+    """*pr*'s checks verdict, read now: the collected counts stand in for every check
+    only while the PR is still at the head they were collected for (*head*, read
+    fresh); otherwise every check is read live."""
+    if counts is not None and (head is None or head == pr.head):
+        return checks_verdict(client.pr_required_checks(repo, pr.number), counts, ci_none=ci_none)
+    return pr_checks_verdict(client, repo, pr.number, ci_none=ci_none)
+
+
+def _pinned(
+    client: GhClient,
+    repo: str,
+    pr: LivePr,
+    counts: Mapping[str, int] | None,
+    *,
+    ci_none: bool,
+) -> LivePr:
+    """*pr* as the archive step may merge it (p2-r6, security): the head is read, then
+    the checks, then the head again, so the verdict is for the head the merge is pinned
+    to. A head that moved between the two reads is `pending` this pass, never green; the
+    base and `mergeable` are the second read's, for the head it reports."""
+    before = client.pr_view(repo, pr.number)
+    head = str(before.get("head_oid") or pr.head)
+    verdict, failing = _judge(client, repo, pr, counts, ci_none, head)
+    after = client.pr_view(repo, pr.number)
+    if str(after.get("head_oid") or head) != head:
+        verdict, failing = "pending", ()
+    return replace(_viewed(pr, after), head=head, checks=verdict, failing=failing)
+
+
+def _viewed(pr: LivePr, view: Mapping[str, Any]) -> LivePr:
+    """*pr* with the base, head and `mergeable` a fresh `pr_view` read reports: the
+    verdict and the head it describes come from the same read (p2-r6)."""
+    return replace(
+        pr,
+        base=str(view.get("base_ref") or ""),
+        head=str(view.get("head_oid") or pr.head),
+        mergeable=str(view.get("mergeable") or ""),
+        merge_state=str(view.get("merge_state") or ""),
+    )
 
 
 class _MergeOutcome(NamedTuple):
@@ -3632,6 +3714,7 @@ class _Driver:
         self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
         self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
         self._rules: dict[str, BaseRules] = {}  # per pass: repo -> its base branch's rules
+        self._unknown_said: set[str] = set()  # per pass: repos whose hold was said (R13)
         self._unlanded: set[str] = set()  # per pass: planned merges that did not land
         self._held = 0  # per pass: planned dispatches that did not start
         self._stopped: dict[str, str] = {}  # per pass: repo -> batch that stopped its train
@@ -3825,8 +3908,8 @@ class _Driver:
         if repo not in self._merge:
             client, checkout = self.client(facts, repo), self.checkout(repo)
             try:
-                _fresh_config(checkout, facts, repo)
-            except TriageError as exc:  # a fetch, or main's config moved under the pass
+                _fresh_config(checkout, facts, repo, hold_unknown=True)
+            except TriageError as exc:  # main's config moved under the pass
                 raise ForgeReadError(str(exc), code=2) from exc
             try:
                 method = choose_method(
@@ -3861,9 +3944,24 @@ class _Driver:
                 self._rules[repo] = self.client(facts, repo).base_rules(
                     repo, self._reader(repo).default_branch()
                 )
+            except GitError as exc:  # R13: origin cannot name it
+                raise DefaultBranchUnknown(repo, exc) from exc
             except FORGE_ERRORS as exc:
                 raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return self._rules[repo]
+
+    def _ctx_or_hold(self, facts: Facts, repo: str) -> MergeContext | None:
+        """`merge_ctx`, or None with *repo* held for the pass (R13): the one catch-and-say
+        every merge-path caller shares. Only `DefaultBranchUnknown` is held."""
+        try:
+            return self.merge_ctx(facts, repo)
+        except DefaultBranchUnknown as exc:
+            if repo not in self._unknown_said:
+                self._unknown_said.add(repo)
+                err_console.print(
+                    f"[yellow]warning:[/yellow] held: {escape(str(exc))}", soft_wrap=True
+                )
+            return None
 
     def _queue_reads(
         self,
@@ -3914,6 +4012,8 @@ class _Driver:
                     "its batches are held",
                 )
                 continue
+            # `_base_rules` cannot raise `DefaultBranchUnknown` here: the read above just
+            # named the default branch, and a `GitError` on it held the repo and continued.
             if not self._base_rules(facts, repo).merge_queue:
                 continue
             queued.add(repo)
@@ -4371,16 +4471,15 @@ class _Driver:
         plan = plan_sync(env, judgements.batches, now)
 
         def blind(op: ClaimOp) -> bool:
-            """A refresh of a member facts cannot see (closed: collect reads no closed
-            issue's comments): a read that writes only when the marker is due, so it is
-            made with --yes and never announced in a plan."""
-            issue = env.issue(op.key)
-            return op.kind == "refresh" and (issue is None or issue.state != "open")
+            """A refresh of a member facts cannot see (unviewed, or its repo skipped): a
+            read that writes only when the marker is due, so it is made with --yes and
+            never announced in a plan."""
+            return op.kind == "refresh" and env.issue(op.key) is None
 
         def owed(kind: str) -> tuple[tuple[str, str], ...]:
             return tuple(
-                (op.key, op.batch) for op in plan.ops
-                if op.kind == kind and repos.get(op.batch) not in unread
+                (op.key, op.batch or "") for op in plan.ops
+                if op.kind == kind and _op_repo(env, op, repos) not in unread
                 and (self.yes or not blind(op))
             )  # fmt: skip
 
@@ -4391,6 +4490,7 @@ class _Driver:
             "claims_owed": owed("claim"),
             "refresh_owed": owed("refresh"),
             "releases_owed": owed("release"),
+            "settles_owed": owed("settle"),
         }
 
     def _default_branch(self, repo: str) -> str:
@@ -4486,6 +4586,7 @@ class _Driver:
                     draft=bool(view.get("draft")),
                     head=str(view.get("head_oid") or ""),
                     base=str(view.get("base_ref") or ""),  # p4-r15
+                    mergeable=str(view.get("mergeable") or ""),  # merge-truth R12
                     files=self._export_files(repo, done.head or ""),
                 )
                 if pick.state == "OPEN":
@@ -4601,25 +4702,29 @@ class _Driver:
         self, facts: Facts, repo: str, batch: Batch, event: CloseoutEvent
     ) -> list[LivePr]:
         """Archive PR candidates: the open `chore/*` PRs collect read (with files and
-        checks), plus any PR on the close-out's own heads, merged ones included."""
+        checks), unlinked or linked to an issue (merge-truth R7), plus any PR on the
+        close-out's own heads, merged ones included. A head-found open PR the facts do
+        not hold has its checks read live, never assumed pending (R7). An open one this
+        batch owns, the only kind the archive step merges, is judged between two fresh
+        reads of its head (`_pinned`)."""
         client = self.client(facts, repo)
         allowed = allowed_authors(repo, facts)
+        ci_none = self._ci_none(repo)
         out: dict[int, LivePr] = {}
-        for pr in facts.prs:
+        counts: dict[int, Mapping[str, int]] = {}  # the collected checks, at the facts' head
+        linked = [p for issue in facts.issues for p in issue.prs]
+        for pr in (*facts.prs, *linked):
             if (
                 pr.repo != repo
                 or pr.state != "OPEN"
                 or not pr.head_ref.startswith(ARCHIVE_PREFIXES)
+                or pr.number in out
             ):
                 continue
-            verdict, failing = checks_verdict(
-                client.pr_required_checks(repo, pr.number),
-                pr.checks or {},
-                ci_none=self._ci_none(repo),
-            )
+            counts[pr.number] = pr.checks or {}
             out[pr.number] = LivePr(
                 number=pr.number, state="OPEN", draft=pr.is_draft, head=pr.head_oid,
-                checks=verdict, failing=failing, head_ref=pr.head_ref, files=tuple(pr.files),
+                checks="pending", head_ref=pr.head_ref, files=tuple(pr.files),
                 trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
             )  # fmt: skip
         heads = {_closeout_head(batch)}
@@ -4628,26 +4733,16 @@ class _Driver:
             for found in _live_head_prs(client, repo, head, allowed):
                 if found.state != "OPEN" or found.number not in out:
                     out[found.number] = found
-        # The base, read fresh as the export reads it (p4-r15): an archive PR is merged
-        # only into the default branch (gh#1004). Only an open one this batch owns can
-        # be merged, so only those cost a read.
-        return [
-            self._viewed(client, repo, p) if p.state == "OPEN" and attributed(p, batch, event)
-            else p
-            for p in out.values()
-        ]  # fmt: skip
-
-    @staticmethod
-    def _viewed(client: GhClient, repo: str, pr: LivePr) -> LivePr:
-        """*pr* with its base and mergeability read now: a collected close-out's PR merges
-        only once `MERGEABLE`, and a conflict is handed back (exit-gates R15, R27)."""
-        view = client.pr_view(repo, pr.number)
-        return replace(
-            pr,
-            base=str(view.get("base_ref") or ""),
-            mergeable=str(view.get("mergeable") or ""),
-            merge_state=str(view.get("merge_state") or ""),
-        )
+        judged: list[LivePr] = []
+        for p in out.values():
+            if p.state != "OPEN":
+                judged.append(p)
+            elif attributed(p, batch, event):
+                judged.append(_pinned(client, repo, p, counts.get(p.number), ci_none=ci_none))
+            else:  # never merged by this step: its verdict is only reported
+                verdict, failing = _judge(client, repo, p, counts.get(p.number), ci_none)
+                judged.append(replace(p, checks=verdict, failing=failing))
+        return judged
 
     def _existing(
         self, facts: Facts, closing: list[Batch], repos: dict[str, str], *, soft: bool = False
@@ -4984,6 +5079,7 @@ class _Driver:
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._fetched = set()
         self._rules = {}
+        self._unknown_said = set()
         self._clone_unread = {}
         self._restart = {}
         self._stopped, self._queued, self._conflicts = {}, 0, {}
@@ -5013,7 +5109,8 @@ class _Driver:
         if carried:  # nothing was read live for them: no merge, close-out or archive (R10)
             plan = replace(plan, actions=tuple(
                 a for a in plan.actions
-                if not (a.kind in _LIVE_READ_ACTIONS and snap.repos.get(a.batch) in carried)
+                if not (a.kind in _LIVE_READ_ACTIONS
+                        and read_repo(a, snap.repos, self._claims) in carried)
             ))  # fmt: skip
         if self.single_pass is not None:
             self.planned_dispatch = any(a.kind == "dispatch" for a in plan.actions)
@@ -5038,7 +5135,7 @@ class _Driver:
                     action = replace(action, kind="warn")
                 if (
                     outcome
-                    or action.kind not in ("close", "claim", "refresh", "release")
+                    or action.kind not in ("close", "claim", "refresh", "release", "settle")
                     and not (action.kind == "warn" and action.red)
                 ):
                     # a close reported already stays quiet, as does a claim write that wrote
@@ -5158,6 +5255,8 @@ class _Driver:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
         if action.kind == "dedupe":  # names no batch: a report, never a forge write (sr-1)
             return action.detail, False, in_flight
+        if action.kind == "export-conflict":
+            return self._export_conflict(action), False, in_flight  # no session owns it
         if action.kind in EXPORT_KINDS:
             refusals, failures = self._export_refusals, self._export_failures
             line = self._export_act(action, facts)
@@ -5178,7 +5277,7 @@ class _Driver:
         if action.kind in ("blocked", "held", "ledger-unread", "closeout-held", "closeout-stuck",
                            "closeout-needs-review", "closeout-unrecorded"):  # fmt: skip
             return action.detail, False, in_flight
-        if action.kind in ("claim", "refresh", "release"):
+        if action.kind in ("claim", "refresh", "release", "settle"):
             if action.kind == "claim" and action.batch in self._held_now:
                 return "", False, in_flight  # one claim was lost: the batch's rest wait (R6)
             line, did = self._claim_write(action)
@@ -5234,6 +5333,9 @@ class _Driver:
             return outcome, did, in_flight
         if action.kind == "archive":
             line, did = self._archive(action, facts, judgements, batch, repo)
+            return line, did, in_flight
+        if action.kind == "archive-conflict":
+            line, did = self._archive_conflict(action, facts, judgements, batch, repo)
             return line, did, in_flight
         if action.kind == "adopt":
             started = closeout_event(batch)
@@ -5317,7 +5419,7 @@ class _Driver:
         R10). A claim that turned out held (R4) stops the pass acting on its batch; a
         failed write is reported, makes `--once` exit 1, and is retried next pass."""
         assert self._claims is not None
-        op = ClaimOp(action.kind, action.key, action.batch)  # type: ignore[arg-type]
+        op = ClaimOp(action.kind, action.key, action.batch or None)  # type: ignore[arg-type]
         try:
             result = execute(self._claims, [op], _now())
         except UnsupportedForgeOperation as exc:
@@ -5437,7 +5539,7 @@ class _Driver:
     def _record_released(self, facts: Facts) -> None:
         """One `claims_released` event per batch released this pass, after its releases,
         through the one judgements writer, so the next pass owes nothing (R10)."""
-        if not any(op.kind == "release" for op, _ in self._claim_done.done):
+        if not any(op.kind in ("release", "settle") for op, _ in self._claim_done.done):
             return
         batches = load_judgements(self.target / "judgements.yaml").batches
         recorded = record_releases(batches, self._claim_done, _now())
@@ -5460,7 +5562,10 @@ class _Driver:
         repo: str,
         in_flight: int,
     ) -> _MergeOutcome:
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13: the repo is held for the pass
+            self._unlanded.add(batch.id)
+            return _MergeOutcome("held: default branch unknown", False, in_flight, False)
         entries = [
             e
             for e in pr_open_queue(judgements.batches, facts, judgements.issues)
@@ -5550,7 +5655,9 @@ class _Driver:
         never strands). A refusal is a held line and a `refused` event: the walk retries once
         more at the same head, then asks the operator (`enqueue-refused`)."""
         assert action.pr is not None
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown", False
         entries = [
             e
             for e in pr_open_queue(judgements.batches, facts, judgements.issues)
@@ -5690,7 +5797,9 @@ class _Driver:
             for e in batch.events
         ):
             return "", False  # rule 1, decided with no I/O: a hand-back covers this head
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "", False
         events = [*batch.events, *ctx.recorded.get(batch.id, [])]
         try:
             ctx.checkout.fetch()
@@ -5869,14 +5978,15 @@ class _Driver:
     ) -> tuple[str, bool]:
         """Deliver the brief: to the target's idle session, else nothing while it is
         working or blocked, else to a fresh conflict session (R20, R23)."""
-        from fr_dispatch.protocols import SessionInspector, SessionMessenger
-
         last = last_dispatch(batch)
         name, target, launch = self._hand_back_target(facts, batch, repo)
         branch = last.branch if last else batch_branch(batch)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return f"{stopped}; held: default branch unknown", False
         brief = conflict_brief(
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
-            base=self.merge_ctx(facts, repo).main, mirrors=facts.config_for(repo).mirrors,
+            base=ctx.main, mirrors=facts.config_for(repo).mirrors,
         )  # fmt: skip
         if not self.adapter.carries(name):  # p4-o2: another driver's session
             return (
@@ -5884,28 +5994,20 @@ class _Driver:
                 "that runner's driver",
                 False,
             )
-        runner = self.runner(name)
-        if isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector):
-            try:
-                status = runner.session_statuses([target]).get(target.id, "unknown")
-                if status == "idle":
-                    runner.message(target, brief)
-            except Exception as exc_:  # noqa: BLE001 - retried next pass, never the drive's end
-                return (
-                    f"{stopped}; hand-back to {target.id} failed, retried next pass: {exc_}",
-                    False,
-                )
-            if status == "idle":
-                event = self._conflict_event(exc, batch, "session", target.id)
-                self._append(judgements, facts, batch, event)
-                if isinstance(runner, Mailbox):  # sent once the agent records it (§F)
-                    return f"{stopped}; handed-back (pending) to its session {target.id}", True
-                return f"{stopped}; handed back to its session {target.id}", True
-            if status not in ("absent", "done"):
-                return (
-                    f"{stopped}; its session is {status}: nothing sent, retried next pass",
-                    False,
-                )
+        status, failure = self._offer(name, target, brief)
+        if status == "failed":
+            return (
+                f"{stopped}; hand-back to {target.id} failed, retried next pass: {failure}",
+                False,
+            )
+        if status == "idle":
+            event = self._conflict_event(exc, batch, "session", target.id)
+            self._append(judgements, facts, batch, event)
+            if isinstance(self.runner(name), Mailbox):  # sent once the agent records it (§F)
+                return f"{stopped}; handed-back (pending) to its session {target.id}", True
+            return f"{stopped}; handed back to its session {target.id}", True
+        if status not in (None, "absent", "done"):
+            return f"{stopped}; its session is {status}: nothing sent, retried next pass", False
         return self._fresh_conflict(
             exc, stopped, judgements, facts, batch, repo, brief=brief, name=name, launch=launch,
             branch=branch,
@@ -5948,6 +6050,34 @@ class _Driver:
             },
             tracking=None,
         )
+        handle, live = self._start_fresh(name, item)
+        self._append(judgements, facts, batch, self._conflict_event(exc, batch, "fresh", handle))
+        if live:
+            return f"{stopped}; recorded the live {item.id}", True
+        return f"{stopped}; handed back to a fresh session {item.id}", True
+
+    def _offer(self, name: str, target: Any, brief: str) -> tuple[str | None, str]:
+        """The hand-back's session step, shared by batch-PR and archive conflicts: the
+        target's status, messaging it the brief when it is idle. None: the runner can
+        neither tell nor take a message (a fresh session follows, as on `absent`);
+        `failed` with the error: retried next pass, never the drive's end."""
+        from fr_dispatch.protocols import SessionInspector, SessionMessenger
+
+        runner = self.runner(name)
+        if not (isinstance(runner, SessionMessenger) and isinstance(runner, SessionInspector)):
+            return None, ""
+        try:
+            status = runner.session_statuses([target]).get(target.id, "unknown")
+            if status == "idle":
+                runner.message(target, brief)
+        except Exception as exc:  # noqa: BLE001 - retried next pass, never the drive's end
+            return "failed", str(exc)
+        return status, ""
+
+    def _start_fresh(self, name: str, item: Any) -> tuple[str, bool]:
+        """Start *item* through runner *name*, the way a close-out is started: its
+        handle, and whether it was live already (a pass killed before its event), in
+        which case it is only recorded. A runner that refuses ends the pass."""
         runner = self.runner(name)
         if not runner.can_dispatch(item):
             _fail(f"runner `{name}` does not take run-unit work")
@@ -5955,17 +6085,12 @@ class _Driver:
         if refusal:
             _fail(f"runner `{name}` refused: {refusal}")
         if item.id in runner.existing_dispatches([item]):
-            self._append(
-                judgements, facts, batch, self._conflict_event(exc, batch, "fresh", item.id)
-            )
-            return f"{stopped}; recorded the live {item.id}", True
+            return item.id, True
         try:
             handle = runner.dispatch(item)
         except Exception as err:  # the runner's own failure: nothing is written
             _fail(f"runner `{name}` failed to dispatch {item.id}: {err}", code=1)
-        event = self._conflict_event(exc, batch, "fresh", handle or item.id)
-        self._append(judgements, facts, batch, event)
-        return f"{stopped}; handed back to a fresh session {item.id}", True
+        return handle or item.id, False
 
     def _post_merge(
         self, facts: Facts, judgements: Judgements, batch: Batch, repo: str
@@ -6282,11 +6407,16 @@ class _Driver:
     def _archive(
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
     ) -> tuple[str, bool]:
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown", False
         assert action.pr is not None
+        step = "refused the merge"
         try:
-            if action.draft:  # a collected close-out's PR is readied once clean (R15)
+            if action.draft:  # merge-truth R11; a collected close-out's PR the same (R15)
+                step = "refused to mark it ready"
                 ctx.client.pr_ready(repo, action.pr)
+                step = "refused the merge"
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -6294,11 +6424,14 @@ class _Driver:
             # As a refused batch-PR merge (rg-4): reported in full once per batch, head
             # and reason, merged again on a later pass; `--once` exits 1 (gh#921).
             self.failed_write = True
+            stamp = datetime.now(UTC).isoformat(timespec="seconds")
+            stop = MergeStop(action.head, str(exc), stamp)
+            record_stop(self.target, archive_stop_key(batch.id), stop)
             key = f"archive\0{batch.id}\0{action.head}\0{exc}"
             if key in self.reported:
                 return f"stopped again at {action.head[:12]} (reported above)", False
             self.reported.add(key)
-            return f"stopped: archive PR #{action.pr}: the forge refused the merge: {exc}", False
+            return f"stopped: archive PR #{action.pr}: the forge {step}: {exc}", False
         # Record it: a PR attributed by its files alone is not found again once it
         # left the open-PR list, and the batch would read as closing forever (rg-6). A
         # collected close-out's PR is recorded on every member (R15).
@@ -6313,7 +6446,124 @@ class _Driver:
         _write(self.target, written, facts, read=judgements.batches, read_errors=True)
         if action.key:  # a collected close-out's PR (R15)
             self._collected_merged(action, facts, repo)
-        return f"merged archive PR #{action.pr}", True
+        clear_stop(self.target, archive_stop_key(batch.id))  # its stop is over (R12)
+        readied = "marked ready, " if action.draft else ""
+        return f"{readied}merged archive PR #{action.pr}", True
+
+    # ------------------------------------- archive conflicts (merge-truth R12, §E)
+
+    def _archive_conflict(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """A conflicting archive PR is never merged: handed to the close-out once per
+        head, at most twice per close-out, then held for the operator with a stop."""
+        assert action.pr is not None
+        decision = archive_conflict_decision(batch.events, action.head)
+        if decision == "skip":
+            return f"archive PR #{action.pr} at {action.head[:12]} was handed back already", False
+        if decision == "held":
+            self._append(
+                judgements, facts, batch, self._archive_conflict_event(action, batch, "held")
+            )
+            stamp = datetime.now(UTC).isoformat(timespec="seconds")
+            reason = f"archive PR #{action.pr} conflicts"
+            stop = MergeStop(action.head, reason, stamp)
+            record_stop(self.target, archive_stop_key(batch.id), stop)
+            return f"{reason} and its hand-backs are spent: held for the operator", True
+        return self._hand_back_archive(action, facts, judgements, batch, repo)
+
+    @staticmethod
+    def _archive_conflict_event(
+        action: Action, batch: Batch, delivered: ConflictDelivery, handle: str | None = None
+    ) -> ArchiveConflictEvent:
+        assert action.pr is not None
+        return ArchiveConflictEvent(
+            kind="archive_conflict", at=_now_after(batch), head=action.head, pr=action.pr,
+            delivered=delivered, handle=handle,
+        )  # fmt: skip
+
+    def _hand_back_archive(
+        self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """Deliver the brief to the close-out: its idle session, else nothing while it is
+        working or blocked, else a fresh archive-conflict session (R12)."""
+        from fr_dispatch.work_item import WorkItem
+
+        assert action.pr is not None
+        event = closeout_event(batch)
+        launch = self._launch(facts, batch, repo)
+        name = str(event.runner if event is not None and event.runner != "hand" else launch.runner)
+        if not self.adapter.carries(name):  # before the brief: it reads the merge context
+            return (
+                f"its close-out runs on {name}, which this driver lacks: left to that "
+                "runner's driver",
+                False,
+            )
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown", False
+        brief = archive_conflict_brief(
+            batch, pr=action.pr, head=action.head, branch=action.branch, base=ctx.main,
+        )  # fmt: skip
+        target = WorkItem(
+            id=closeout_item_id(repo, batch.id), unit="run", workflow=batch_workflow(batch),
+            repo=repo, parent=None, inputs=(), payload={"group": self.group_of(batch)},
+            tracking=None,
+        )  # fmt: skip
+        status, failure = self._offer(name, target, brief)
+        if status == "failed":
+            return f"hand-back to {target.id} failed, retried next pass: {failure}", False
+        if status == "idle":
+            self._append(
+                judgements, facts, batch,
+                self._archive_conflict_event(action, batch, "session", target.id),
+            )  # fmt: skip
+            if isinstance(self.runner(name), Mailbox):  # sent once the agent records it (§F)
+                return f"handed-back (pending) to its close-out session {target.id}", True
+            return f"handed back to its close-out session {target.id}", True
+        if status not in (None, "absent", "done"):
+            return f"its close-out session is {status}: nothing sent, retried next pass", False
+        fresh = sum(
+            1 for e in batch.events
+            if isinstance(e, ArchiveConflictEvent) and e.delivered == "fresh"
+        )  # fmt: skip
+        item = WorkItem(
+            id=archive_conflict_item_id(repo, batch.id, fresh + 1),
+            unit="run",
+            workflow=batch_workflow(batch),
+            repo=repo,
+            parent=None,
+            inputs=(),
+            payload={
+                "kind": "conflict",
+                "brief": brief,
+                "harness": launch.harness,
+                "model": launch.model,
+                "branch": action.branch,
+                "issues": list(batch.ids),
+                "checkout": str(self.checkout(repo).main_worktree()),
+                "group": self.group_of(batch),
+            },
+            tracking=None,
+        )
+        handle, live = self._start_fresh(name, item)
+        self._append(
+            judgements, facts, batch,
+            self._archive_conflict_event(action, batch, "fresh", handle),
+        )  # fmt: skip
+        if live:
+            return f"recorded the live {item.id}", True
+        return f"handed back to a fresh session {item.id}", True
+
+    def _export_conflict(self, action: Action) -> str:
+        """A conflicting export PR: no session owns it, so it goes straight to the
+        operator with a stop keyed `export:<repo>` (R12)."""
+        stamp = datetime.now(UTC).isoformat(timespec="seconds")
+        reason = f"export PR #{action.pr} conflicts"
+        record_stop(
+            self.target, export_stop_key(action.batch), MergeStop(action.head, reason, stamp)
+        )
+        return action.detail
 
     # ------------------------------------------------------- state export (R13)
 
@@ -6324,10 +6574,12 @@ class _Driver:
         if action.kind == "export-reconcile":  # merged outside the driver (p4-r1)
             assert action.pr is not None
             self._mark(action.batch, action.pr, merged=True)
+            clear_stop(self.target, export_stop_key(action.batch))  # its stop is over (R12)
             return f"recorded export PR #{action.pr} as merged"
         if action.kind == "export-closed":  # closed unmerged: said once (p4-r6)
             assert action.pr is not None
             self._mark(action.batch, action.pr, closed=True)
+            clear_stop(self.target, export_stop_key(action.batch))  # its stop is over (R12)
             err_console.print(f"[yellow]warning:[/yellow] {escape(action.detail)}", soft_wrap=True)
             return f"recorded export PR #{action.pr} as closed; its waves are owed again"
         return self._export_merge(action, facts, action.batch, action.wave)
@@ -6462,7 +6714,9 @@ class _Driver:
         from the export record and only when the live head equals it), never the live
         one: nobody reviews this PR, so a commit someone else pushed to its branch must
         not reach the default branch (p4-sec-unpinned-merge). Then record it merged."""
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown"
         assert action.pr is not None
         try:
             if action.draft:  # a collected close-out's PR is readied once clean (R15)
@@ -6475,6 +6729,7 @@ class _Driver:
                 wave, f"export PR #{action.pr}: the forge refused the merge: {exc}"
             )
         self._mark(repo, action.pr, merged=True)
+        clear_stop(self.target, export_stop_key(repo))  # a conflict stop on it is over (R12)
         return f"merged export PR #{action.pr} at {action.head[:12]}"
 
 
@@ -6484,7 +6739,25 @@ _GATE_WRITE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedF
 """What a gate-ledger write (`awaiting-live`, `gate-pass`) may fail with: reported and
 planned again next pass, never fatal to the pass."""
 
-_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt", "post-merge"})
+_LIVE_READ_ACTIONS = frozenset(
+    {"merge", "update", "closeout", "archive", "archive-conflict", "adopt", "settle", "post-merge"}
+)
+
+
+def _op_repo(env: ClaimEnv, op: ClaimOp, repos: Mapping[str, str]) -> str | None:
+    """The repo *op* writes in: a settle's is its key's (it may hold no batch), any other
+    op's is its batch's."""
+    if op.kind == "settle":
+        return env.owner_repo(op.key)
+    return repos.get(op.batch or "")
+
+
+def read_repo(action: Action, repos: Mapping[str, str], env: ClaimEnv | None) -> str | None:
+    """The repo a live-read *action* reads, to hold it back when that repo was carried: its
+    batch's, or for a settle (which may name no batch) its key's."""
+    if action.kind == "settle":
+        return env.owner_repo(action.key) if env is not None else None
+    return repos.get(action.batch)
 
 
 def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:

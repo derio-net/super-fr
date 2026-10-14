@@ -41,7 +41,7 @@ from fr.ghclient import GhClient
 from fr.hostclient import client_for_backend
 from fr.triage.approval import ensure_approval_label
 from fr.triage.batch import last_dispatch, lifecycle_events
-from fr.triage.check import ClaimSets, classify, clean_label_targets
+from fr.triage.check import CLEARING_RULE, ClaimSets, classify, clean_label_targets
 from fr.triage.collect import (
     PR_LIMIT,
     ClientForge,
@@ -798,7 +798,7 @@ def check_command(
         console.print(f"  {escape(repo)}  {escape(', '.join(keys))}", soft_wrap=True)
     console.print(
         f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
-        "labelled fr:in-progress; stale ones: `fr triage clean-labels`"
+        f"labelled fr:in-progress or fr:claimed; {CLEARING_RULE}"
     )
     for state in ("stale", "release-pending", "held"):
         for e in (e for e in result.closed_in_progress if e.state == state):
@@ -918,33 +918,39 @@ def clean_labels_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Remove `fr:in-progress` from closed issues that still carry it (board-truth R3).
+    """Remove `fr:in-progress` and `fr:claimed` from closed issues that still carry them
+    (board-truth R3; post-merge truth R2).
 
     Targets are the facts' `stale` closed-but-in-progress entries (`check` lists them);
-    release-pending and held ones are never touched. With --yes each target is re-read
-    first and skipped if it is open again or now carries `fr:claimed`. Dry-run without
-    --yes. A per-issue failure is reported and the rest continue; the exit is then 1."""
+    release-pending and held ones are never touched here (the next `claim sync --yes` or
+    drive pass settles the former). With --yes each target is re-read first and left alone
+    if it is open again or another scope's claim now stands; otherwise both labels come
+    off in one edit. Dry-run without --yes. A per-issue failure is reported and the rest
+    continue; the exit is then 1."""
+    from datetime import UTC, datetime
+
     from fr.commands import triage_batch_cmd
     from fr.commands.triage_kanban_cmd import _fail
     from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS
     from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
+    from fr.triage import claim_writes as cw
 
     scope = _scope(repo, org)
-    _, facts, _ = _load_state(scope, dir_override, workspace)
+    target, facts, _ = _load_state(scope, dir_override, workspace)
     targets = clean_label_targets(facts)
     if not targets:
         console.print("nothing to clean", markup=False)
         return
+    both = f"{FR_CLAIMED.name} and {FR_IN_PROGRESS.name}"
     if not yes:
         for t in targets:
             console.print(
-                f"would remove {FR_IN_PROGRESS.name} from {t.key}  {t.title}",
-                markup=False,
-                soft_wrap=True,
+                f"would remove {both} from {t.key}  {t.title}", markup=False, soft_wrap=True
             )
         console.print("nothing written; re-run with --yes to write", markup=False)
         return
+    env = triage_batch_cmd.claim_env(target, facts)
     failed = 0
     for t in targets:
         parts = urlparse(t.url)
@@ -954,16 +960,21 @@ def clean_labels_command(
             client = triage_batch_cmd.make_client(f"https://{parts.hostname}/{owner_repo}")
             if isinstance(client, UnsupportedBatchOps):  # glab/tea: GitHub-only (§3.J)
                 raise UnsupportedForgeOperation("clean-labels", client.backend)
-            now = client.view_issue(owner_repo, number)
-            if str(now.get("state", "")).upper() == "OPEN":
-                console.print(f"skipped {t.key}: open again", markup=False)
-            elif FR_CLAIMED.name in (now.get("labels") or []):
-                console.print(f"skipped {t.key}: now carries {FR_CLAIMED.name}", markup=False)
-            else:
-                client.edit_issue_labels(
-                    owner_repo, number, add=frozenset(), remove=frozenset({FR_IN_PROGRESS.name})
+            out = cw.settle_closed(
+                client,
+                owner_repo,
+                number,
+                me=env.me,
+                now=datetime.now(UTC),
+                trusted=env.trusted(owner_repo),
+            )
+            if out == cw.Done("none"):
+                console.print(
+                    f"skipped {t.key}: open again, or another scope's claim now stands",
+                    markup=False,
                 )
-                console.print(f"removed {FR_IN_PROGRESS.name} from {t.key}", markup=False)
+            else:
+                console.print(f"removed {both} from {t.key}", markup=False)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
         except FORGE_ERRORS as exc:

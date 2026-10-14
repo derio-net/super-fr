@@ -267,6 +267,27 @@ def conflict_brief(
     )
 
 
+def archive_conflict_brief(batch: Batch, *, pr: int, head: str, branch: str, base: str) -> str:
+    """The archive-conflict hand-back brief (spec 2026-10-14-merge-truth §E, R12): the
+    batch's archive PR, its head and branch, and how to make it mergeable again."""
+    return "\n".join(
+        [
+            f"Archive PR conflict on batch {batch.id} ({batch.title}): archive PR #{pr} on "
+            f"{branch}, at head {head}, conflicts with {base}, so the wave driver will not "
+            "merge it.",
+            f"1. Enter the archive branch's workspace first: `fr isolation up --branch "
+            f"{branch}`. {branch} is checked out there, not in the clone you may have "
+            "started in; on an existing workspace the command resumes it. Every later step "
+            "runs in the workspace.",
+            f"2. `git fetch origin && git merge {base}` into {branch} and resolve the "
+            "conflicts. Do not rebase and do not force-push.",
+            f"3. Commit the merge and `git push origin {branch}`. The driver merges the "
+            "archive PR once it is mergeable and its checks are green.",
+            NO_APPROVAL_LINE,
+        ]
+    )
+
+
 def dispatch_comment(batch: Batch, item_id: str, key: str) -> str:
     """Member *key*'s comment (§3.E): marker first, then plain words naming the
     other members. No handle, no host, no local detail."""

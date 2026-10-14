@@ -187,8 +187,11 @@ def test_opencode_refuses_an_unqualified_model_before_opening_a_tab(herdr: _Herd
 
 
 @pytest.mark.parametrize("status", ["idle", "done"])
+@pytest.mark.parametrize(
+    "prefix", ["Merge conflict on batch lifecycle: PR #1", "Archive PR conflict on batch b1: PR #2"]
+)
 def test_original_opencode_batch_message_persists_conflict_identity(
-    herdr: _Herdr, status: str
+    herdr: _Herdr, status: str, prefix: str
 ) -> None:
     from fr_herdr import managed
 
@@ -210,7 +213,7 @@ def test_original_opencode_batch_message_persists_conflict_identity(
             ]
         }
     }
-    brief = "Merge conflict on batch lifecycle: PR #1, at head abc, conflicts with main. six steps"
+    brief = f"{prefix}, at head abc, conflicts with main. six steps"
     HerdrRunner.from_env().message(item, brief)
     d = managed.load(pane)
     assert d.item == item.id and d.role == "batch"

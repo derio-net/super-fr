@@ -58,6 +58,7 @@ class World:
         self.all_checks: dict[int, dict[str, int]] = {}
         self.merged: list[tuple[int, str, str]] = []
         self.refuse_merge: str | None = None
+        self.refuse_ready: str | None = None
         self.refuse_create: str | None = None
         self.create_files: list[str] = []  # what a PR pr_create opens changes
         self.head_of: Any = lambda branch: "sha-created"  # the head a pushed branch has
@@ -67,6 +68,9 @@ class World:
         self.titles: dict[int, str] = {}
         self.labels_defined: set[str] = {"approved-fr"}
         self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
+        self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
+        self.skipped: list[Any] = []  # repos collect did not read
+        self.hidden: set[int] = set()  # PRs opened after the facts' collect (merge-truth R7)
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -88,7 +92,8 @@ class World:
 
     def facts(self) -> Facts:
         prs = {n: self._pr(n) for n in self.prs}
-        linked = {i: [prs[n] for n, p in self.prs.items() if i in p["closes"]] for i in self.issues}
+        seen = {n: p for n, p in self.prs.items() if n not in self.hidden}
+        linked = {i: [prs[n] for n, p in seen.items() if i in p["closes"]] for i in self.issues}
         return Facts(
             schema=3,
             scope="derio-net--super-fr",
@@ -107,8 +112,10 @@ class World:
                 )
                 for i, s in self.issues.items()
             ],  # fmt: skip
-            prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
+            prs=[prs[n] for n, p in seen.items() if not p["closes"] and p["state"] == "OPEN"],
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
+            stale_in_progress=self.stale_in_progress,
+            skipped=self.skipped,
             viewer="operator",
         )
 
@@ -144,12 +151,14 @@ class World:
         view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
         merge = p.get("merge_commit", f"merge-{number}")
         return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge,
-                "labels": list(p["labels"]), "mergeable": p.get("mergeable", ""),
+                "labels": list(p["labels"]), "mergeable": p.get("mergeable", "MERGEABLE"),
                 "body": p.get("body", ""),
                 "merge_state": p.get("merge_state", "")}  # fmt: skip
 
     def pr_ready(self, repo: str, number: int) -> None:
         self.calls.append(f"pr_ready {number}")
+        if self.refuse_ready:
+            raise GhError(self.refuse_ready, returncode=1)
         self.prs[number]["draft"] = False
 
     def label_exists(self, repo: str, name: str) -> bool:
@@ -1319,6 +1328,106 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_reported_and_never_m
     assert [m[0] for m in world.merged] == [201]
 
 
+_CLOSEOUT_R1 = (
+    "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+    "run: r1, archive: chore/archive-p1}\n"
+)
+
+
+def _closing(world: World, tmp_path: Path, events: str = "") -> None:
+    """b1 merged, its close-out started (run r1, archive head chore/archive-p1)."""
+    _merged(world, tmp_path, events=_CLOSEOUT_R1 + events)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1 + events))
+
+
+def test_head_found_open_archive_pr_gets_live_checks_not_pending(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """merge-truth R7: an archive PR opened after the last full collect is found by
+    its head alone. Its checks are read live, never assumed `pending`."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    world.hidden.add(201)
+    world.checks[201] = [{"name": "test", "bucket": "pass"}]
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201], out
+    assert _lines(out, "archive") == ["archive b1: merged archive PR #201"]
+
+
+def test_head_found_open_archive_pr_with_red_live_checks_is_not_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    world.hidden.add(201)
+    world.checks[201] = [{"name": "test", "bucket": "fail"}]
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [], out
+
+
+def test_linked_archive_pr_in_issue_prs_gets_the_facts_verdict(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """merge-truth R7: an archive PR that closes an issue sits in `issue.prs`, never
+    `facts.prs`. Path 1 scans both, so a head the close-out did not name is found."""
+    _closing(world, tmp_path)
+    world.issues[9] = "open"
+    world.pr(201, "chore/closeout-r1", [9], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201], out
+
+
+def test_archive_of_a_draft_calls_pr_ready_before_pr_merge_and_says_so(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """merge-truth R11: under --yes a green draft archive PR is marked ready, then
+    merged, and the line says so. No `approved-fr` label is read or written."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"],
+             draft=True, labels=[])  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    world.calls.clear()
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    acts = [c for c in world.calls if c.startswith(("pr_ready", "pr_merge"))]
+    assert acts == ["pr_ready 201", "pr_merge 201"], world.calls
+    assert _lines(out, "archive") == ["archive b1: marked ready, merged archive PR #201"]
+    assert not [c for c in world.calls if "approved-fr" in c or c.startswith("label ")]
+
+
+def test_a_refused_ready_on_a_draft_archive_is_worded_as_the_ready_step(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p2-r9: the forge refusing `pr_ready` is not a refused merge: the line names the
+    ready step, and nothing is merged."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"],
+             draft=True, labels=[])  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    world.refuse_ready = "not permitted"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 1 and world.merged == [], out
+    (line,) = _lines(out, "archive")
+    assert "refused to mark it ready: not permitted" in line, line
+    assert "refused the merge" not in line
+    assert "not permitted" in load_stops(tmp_path)["archive:b1"].reason
+
+
+def test_plan_mode_never_marks_a_draft_archive_ready(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"], draft=True)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once")
+    assert not [c for c in world.calls if c.startswith(("pr_ready", "pr_merge"))], out
+
+
 # ------------------------------------------------- the board, every pass (R11)
 
 
@@ -2129,6 +2238,148 @@ def test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop(
     assert isinstance(result.exception, _StopError), result.output
     assert result.output.count("unexpected EOF") == 1
     assert world.merged == [(101, "sha-101", "squash")]
+
+
+# ------------------------------------- default branch unknown (merge-truth R13, gh#1176)
+
+
+class GitHeadCheckout(DriveCheckout):
+    """DriveCheckout whose fetch and default branch are a REAL clone's: a git fixture."""
+
+    def __init__(self, path: Path, world: World, real: Checkout) -> None:
+        super().__init__(path, world)
+        self.real = real
+
+    def default_branch(self) -> str:
+        return self.real.default_branch()
+
+    def fetch(self) -> None:
+        self.real.fetch()
+
+
+def _git_clone(tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """origin (bare, on main) and a clone of it with `origin/HEAD` removed, as a cloud
+    session's clone has none. Returns the origin."""
+    origin, clone = tmp_path / "origin.git", tmp_path / "gitclone"
+    _git(tmp_path, "init", "--bare", "-b", "main", str(origin))
+    _git(tmp_path, "clone", "-q", str(origin), str(clone))
+    # The clone's own identity: a CI runner has no global one to borrow, and the
+    # module's `_git` passes none (as `git_checkout_fixture` does).
+    for k, v in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        _git(clone, "config", k, v)
+    (clone / "f").write_text("x")
+    _git(clone, "add", "f")
+    _git(clone, "commit", "-qm", "init")
+    _git(clone, "push", "-q", "origin", "HEAD:main")
+    _git(clone, "remote", "set-head", "origin", "--auto")
+    _git(clone, "remote", "set-head", "origin", "-d")
+    fake = GitHeadCheckout(clone, world, Checkout.at(clone))
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    return origin
+
+
+def test_yes_pass_over_a_clone_without_origin_head_heals_and_merges(
+    tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _git_clone(tmp_path, world, monkeypatch)
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+    assert "default branch unknown" not in out
+
+
+def test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes(
+    tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fetch fails with `origin/HEAD` set: the repo is held with ONE warning line
+    for both its PRs, the pass runs through to its summary without an error, and nothing
+    is written to it."""
+    import shutil
+
+    origin = _git_clone(tmp_path, world, monkeypatch)
+    _git(tmp_path / "gitclone", "remote", "set-head", "origin", "main")
+    shutil.rmtree(origin)
+    _pr_open(world, tmp_path)
+    world.issues[2] = "open"  # an independent batch, no `after` on the held one
+    world.pr(102, "feat/batch-b2", [2])
+    _state(
+        tmp_path, world,
+        _batch("b1", 1, events=_dispatch_event("b1")),
+        _batch("b2", 2, events=_dispatch_event("b2")),
+    )  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out  # not an error: work remains, as for any held merge (exit 3)
+    assert world.merged == []
+    # The pass went on past the held head: the LATER batch's action ran and was held
+    # too, and the pass reached its summary; a dispatch is not the probe here, because
+    # it fetches and a failed fetch is fatal to the pass by design (gh#1025).
+    assert _lines(out, "merge") == [
+        "merge b1: held: default branch unknown",
+        "merge b2: held: default branch unknown",
+    ], out
+    assert "in flight 2, merged 0, pending 0, closing 0" in out
+    assert out.count(f"held: {REPO} default branch unknown (") == 1, out
+
+
+def test_no_origin_head_and_unreachable_origin_warns_once(
+    tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No `origin/HEAD` and an unreachable origin: `_queue_reads` holds the repo first, so
+    `_ctx_or_hold` is never reached for it: one warning line (R13), not one per reader."""
+    import shutil
+
+    shutil.rmtree(_git_clone(tmp_path, world, monkeypatch))
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out
+    assert world.merged == []
+    said = [x for x in out.splitlines() if "default branch" in x and "warning:" in x]
+    assert len(said) == 1, said
+
+
+def test_base_rules_names_an_unreadable_default_branch(
+    tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R13: `_base_rules` turns the clone's `GitError` into `DefaultBranchUnknown`, not a
+    generic forge-read failure (which would end the pass)."""
+    from fr.triage.gitseam import GitError
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+
+    class _NoHead:
+        def default_branch(self) -> str:
+            raise GitError("no origin/HEAD")
+
+    class _Client:
+        def base_rules(self, repo: str, branch: str) -> BaseRules:
+            raise AssertionError("the rules are never asked for an unknown branch")
+
+    monkeypatch.setattr(driver, "_reader", lambda repo: _NoHead())
+    monkeypatch.setattr(driver, "client", lambda facts, repo: _Client())
+    with pytest.raises(triage_batch_cmd.DefaultBranchUnknown, match="default branch unknown"):
+        driver._base_rules(world.facts(), REPO)
+
+
+def test_merge_methods_read_failure_still_fails_the_pass(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """The unchanged gh#921 behaviour: only the default-branch read is held; any other
+    forge read failure in the merge context still ends a `--once` pass non-zero."""
+    _pr_open(world, tmp_path)
+
+    def _methods(repo: str) -> dict[str, Any]:
+        raise GhError(EOF_MSG, returncode=1)
+
+    monkeypatch.setattr(world, "repo_merge_methods", _methods)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code != 0, out
+    assert "default branch unknown" not in out
+    assert world.merged == []
 
 
 # ------------------------------------------------- closing finished sessions (#918)
@@ -3537,7 +3788,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 10
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 11
 
 
 @pytest.mark.parametrize("status", ["idle", "absent", "working"])
@@ -4856,3 +5107,332 @@ def test_a_queue_repo_red_pr_is_never_re_updated(
     messenger.status[BATCH_ITEM_B1] = "idle"
     _drive(tmp_path, "--once", "--yes")
     assert world.prs[101]["head_oid"] == "sha-101" and len(messenger.messages) == 1
+
+
+def test_settle_of_a_carried_repo_waits_by_the_keys_repo() -> None:
+    from fr.triage.batch_drive import Action
+    from fr.triage.claim_sync import ClaimEnv
+    from fr.triage.scope_config import ScopeConfig
+
+    facts = Facts(
+        viewer="operator", scope="derio-net--super-fr", kind="repo",
+        collected_at=NOW.isoformat(), repos=[REPO], issues=[],
+    )  # fmt: skip
+    env = ClaimEnv(me="s-me", config=ScopeConfig(), facts=facts, client_for=lambda r: None)  # type: ignore[arg-type,return-value]
+    settle = Action("settle", "", "closed", key="super-fr#4")  # names no batch
+    assert triage_batch_cmd.read_repo(settle, {}, env) == REPO
+    assert triage_batch_cmd.read_repo(settle, {}, None) is None
+    merge = Action("merge", "b1", "x")
+    assert triage_batch_cmd.read_repo(merge, {"b1": REPO}, env) == REPO
+    assert "settle" in triage_batch_cmd._LIVE_READ_ACTIONS
+
+
+def test_a_yes_pass_settles_a_closed_hit_no_batch_holds(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    from fr.triage.model import StaleInProgress
+
+    world.issues[1] = "closed"
+    world.stale_in_progress = [
+        StaleInProgress(key="super-fr#1", title="t", url="https://example.com/1", state="stale")
+    ]
+    _state(tmp_path, world)
+    code, out = _drive(tmp_path, "--once")
+    assert _lines(out, "settle") == ["settle super-fr#1: closed"]
+    assert "label 1" not in world.calls  # plan mode writes nothing
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "settle") == ["settle super-fr#1: unlabelled"]
+    assert "label 1" in world.calls
+
+
+def test_a_yes_pass_leaves_a_closed_hit_of_a_skipped_repo_alone(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r6: the carried-repo filter holds at pass level, not only in `read_repo`."""
+    from fr.triage.model import Skipped, StaleInProgress
+
+    world.issues[1] = "closed"
+    world.stale_in_progress = [
+        StaleInProgress(key="super-fr#1", title="t", url="https://example.com/1", state="stale")
+    ]
+    world.skipped = [Skipped(repo=REPO, reason="collect could not read it")]
+    _state(tmp_path, world)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "settle") == []
+    assert "label 1" not in world.calls
+
+
+def test_a_yes_pass_clears_a_release_pending_member(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p1-r5: a closed member whose own marker stands (release-pending) is settled by
+    `--once --yes`: its marker is released and its labels removed."""
+    from fr.triage.claims import Marker, parse_marker, render_marker
+    from fr.triage.model import Scope, StaleInProgress
+    from fr.triage.scope_config import scope_id
+
+    me = scope_id(Scope(kind="repo", target=REPO))
+    marker = Marker(signer=me, batch="b1", claimed=NOW, heartbeat=NOW, expires=NOW + timedelta(1))
+    world.comments[1] = [
+        {
+            "author": "operator",
+            "body": render_marker(marker),
+            "created_at": NOW.isoformat(),
+            "id": 7,
+        }
+    ]
+    world.issues[1] = "closed"
+    world.stale_in_progress = [
+        StaleInProgress(
+            key="super-fr#1", title="t", url="https://example.com/1", state="release-pending"
+        )
+    ]
+    _state(tmp_path, world)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert _lines(out, "settle") == ["settle super-fr#1: released"]
+    assert "label 1" in world.calls
+    released = parse_marker(world.comments[1][0]["body"])
+    assert released is not None and released.released is not None
+
+
+# ---------------------- conflicting archive and export PRs (merge-truth R12, §E)
+
+CLOSEOUT_B1 = f"{REPO}/run/closeout-b1"
+
+
+def _archive_conflict_yaml(head: str, delivered: str, minute: int) -> str:
+    return (
+        f"      - {{kind: archive_conflict, at: '2026-10-02T11:59:{minute:02d}Z', head: {head}, "
+        f"pr: 201, delivered: {delivered}}}\n"
+    )
+
+
+def _conflicting_archive(world: World, tmp_path: Path, events: str = "") -> None:
+    """b1 closing (run r1), its archive PR #201 green and conflicting at sha-201."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"],
+             mergeable="CONFLICTING")  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1 + events))
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8").replace("schema: 3\n", "schema: 11\n"), "utf-8")
+
+
+def _archive_conflicts(tmp_path: Path) -> list[Any]:
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    return [e for e in batch.events if e.kind == "archive_conflict"]
+
+
+def test_archive_conflict_messages_an_idle_closeout_session(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    _conflicting_archive(world, tmp_path)
+    messenger.status[CLOSEOUT_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")], out
+    ((target, text),) = messenger.messages
+    assert target == CLOSEOUT_B1
+    assert "PR #201" in text and "chore/archive-p1" in text and "sha-201" in text
+    assert "main" in text and "push" in text
+    (event,) = _archive_conflicts(tmp_path)
+    assert (event.head, event.pr, event.delivered, event.handle) == (
+        "sha-201", 201, "session", CLOSEOUT_B1)  # fmt: skip
+    assert _lines(out, "archive-conflict") == [
+        f"archive-conflict b1: handed back to its close-out session {CLOSEOUT_B1}"
+    ], out
+    _drive(tmp_path, "--once", "--yes")  # the same head is never handed back twice
+    assert len(messenger.messages) == 1 and len(_archive_conflicts(tmp_path)) == 1
+
+
+def test_archive_conflict_brief_enters_isolation_on_the_archive_branch() -> None:
+    """p2-r1: a fresh session starts in the driver's base clone, so step 1 enters the
+    archive branch's workspace as `conflict_brief` does, never `git switch` there."""
+    from fr.triage.batch_dispatch import archive_conflict_brief
+    from fr.triage.model import Batch
+
+    batch = Batch.model_validate({"id": "b1", "title": "Fix it", "ids": ["super-fr#1"]})
+    text = archive_conflict_brief(
+        batch, pr=201, head="sha-201", branch="chore/archive-p1", base="origin/main"
+    )
+    assert text.startswith("Archive PR conflict on batch b1 ")
+    step1 = next(line for line in text.splitlines() if line.startswith("1. "))
+    assert "`fr isolation up --branch chore/archive-p1`" in step1
+    assert "git switch" not in text
+    assert "at head sha-201, conflicts with" in text
+
+
+@pytest.mark.parametrize("status", ["working", "blocked"])
+def test_archive_conflict_waits_while_the_closeout_session_works(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    status: str,
+) -> None:  # fmt: skip
+    _conflicting_archive(world, tmp_path)
+    messenger.status[CLOSEOUT_B1] = status
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and messenger.dispatched == [], out
+    assert _archive_conflicts(tmp_path) == []
+    assert "nothing sent, retried next pass" in out
+
+
+@pytest.mark.parametrize("status", ["done", "absent"])
+def test_archive_conflict_starts_a_fresh_item_when_the_closeout_is_done(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    status: str,
+) -> None:  # fmt: skip
+    _conflicting_archive(world, tmp_path)
+    messenger.status[CLOSEOUT_B1] = status
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (item,) = messenger.dispatched
+    assert item.id == f"{REPO}/run/archive-conflict-b1-1", out
+    assert item.unit == "run" and item.payload["branch"] == "chore/archive-p1"
+    assert "PR #201" in item.payload["brief"] and "sha-201" in item.payload["brief"]
+    (event,) = _archive_conflicts(tmp_path)
+    assert event.delivered == "fresh" and messenger.messages == []
+
+
+def test_archive_conflict_held_records_a_stop_and_raises_the_need(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner
+) -> None:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    earlier = _archive_conflict_yaml("sha-a", "session", 1) + _archive_conflict_yaml(
+        "sha-b", "fresh", 2
+    )
+    _conflicting_archive(world, tmp_path, earlier)
+    messenger.status[CLOSEOUT_B1] = "idle"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [] and messenger.dispatched == [], out
+    held = _archive_conflicts(tmp_path)[-1]
+    assert (held.head, held.delivered, held.handle) == ("sha-201", "held", None)
+    stop = load_stops(tmp_path)["archive:b1"]
+    assert (stop.head, stop.reason) == ("sha-201", "archive PR #201 conflicts")
+    assert "b1" not in load_stops(tmp_path)  # never the batch PR's key (p2-r2)
+    facts = load_facts(tmp_path / "facts.json")
+    rows = needs_you(facts, load_judgements(tmp_path / "judgements.yaml"))
+    (need,) = [r for r in rows if r.kind == "archive-conflict"]
+    assert need.ref == "b1" and "PR #201" in need.text
+    assert not [r for r in rows if r.kind in ("failing-ci", "merge-conflict")]
+    code, out = _drive(tmp_path, "--yes")  # the loop ends on it: only the operator can act
+    assert code == 3 and "only blocked batches remain (b1)" in out, out
+
+
+def test_merged_archive_pr_clears_its_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    from fr.triage.merge_stops import MergeStop, record_stop
+
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    record_stop(tmp_path, "archive:b1", MergeStop("sha-old", "archive PR #201 conflicts", "t"))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert [m[0] for m in world.merged] == [201], out
+    assert "archive:b1" not in load_stops(tmp_path)
+
+
+def test_forge_refused_archive_merge_records_a_stop(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    world.refuse_merge = "protected branch"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 1 and world.merged == [], out
+    stop = load_stops(tmp_path)["archive:b1"]
+    assert stop.head == "sha-201" and "protected branch" in stop.reason
+
+
+def test_conflicting_export_pr_goes_straight_to_needs_you_with_stop_key_export_repo(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout
+) -> None:
+    from fr.triage.model import load_facts
+    from fr.triage.views import needs_you
+
+    sha = _export_pr(world, git_checkout.path, mergeable="CONFLICTING")
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert world.merged == [], out
+    assert _exports(state) == [("1", 40, False)]
+    (line,) = _lines(out, "export-conflict")  # p2-r5: its own kind, not archive-conflict
+    assert line.startswith(f"export-conflict wave 1 {REPO}: export PR #40 conflicts"), out
+    assert _lines(out, "archive-conflict") == []
+    stop = load_stops(state)[f"export:{REPO}"]
+    assert (stop.head, stop.reason) == (sha, "export PR #40 conflicts")
+    facts = load_facts(state / "facts.json")
+    rows = needs_you(facts, load_judgements(state / "judgements.yaml"), stops=load_stops(state))
+    (need,) = [r for r in rows if r.kind == "archive-conflict"]
+    assert need.ref == REPO and "export PR #40" in need.text
+    # once the export PR merges, its stop clears
+    world.prs[40]["mergeable"] = "MERGEABLE"
+    code, out = _export_drive(state, "--once", "--yes")
+    assert world.merged == [(40, sha, "squash")], out
+    assert f"export:{REPO}" not in load_stops(state)
+
+
+@pytest.mark.parametrize(("state_", "line"), [
+    ("MERGED", "recorded export PR #40 as merged"),
+    ("CLOSED", "recorded export PR #40 as closed"),
+])  # fmt: skip
+def test_an_export_pr_merged_or_closed_by_hand_clears_its_conflict_stop(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, state_: str, line: str
+) -> None:
+    """p2-r3: the export conflict's stop is over once the PR is merged by hand
+    (export-reconcile) or closed (export-closed), not only when the driver merges it."""
+    sha = _export_pr(world, git_checkout.path, mergeable="CONFLICTING")
+    state = _finished_wave(tmp_path, world, exports=_recorded(sha))
+    _export_drive(state, "--once", "--yes")
+    assert f"export:{REPO}" in load_stops(state)
+    world.prs[40]["state"] = state_
+    code, out = _export_drive(state, "--once", "--yes")
+    assert line in out, out
+    assert f"export:{REPO}" not in load_stops(state)
+
+
+def test_viewed_takes_head_and_mergeable_from_the_same_fresh_read() -> None:
+    """p2-r6: a fresh `pr_view`'s `mergeable` describes its own head; pairing it with
+    the facts' older head would pin a merge to a head the verdict never saw."""
+    from fr.commands.triage_batch_cmd import _viewed
+    from fr.triage.batch_drive import LivePr
+
+    old = LivePr(number=201, state="OPEN", draft=False, head="sha-old", checks="green")
+    view = {"head_oid": "sha-new", "mergeable": "MERGEABLE", "base_ref": "main"}
+    got = _viewed(old, view)
+    assert (got.head, got.mergeable, got.base) == ("sha-new", "MERGEABLE", "main")
+    assert _viewed(old, {"mergeable": "CONFLICTING"}).head == "sha-old"  # no head: kept
+
+
+@pytest.mark.parametrize("found_by", ["facts", "head"])
+def test_an_archive_pr_pushed_between_its_view_and_its_checks_is_never_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, found_by: str,
+) -> None:  # fmt: skip
+    """p2-r6 (security): the merge is pinned to a head, so the green verdict must be
+    for that head. The head is read, then the checks, then the head again; a push in
+    between makes the verdict pending this pass: no archive, no `pr_merge`."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    events = _dispatch_event("b1") + _CLOSEOUT_R1
+    _state(tmp_path, world, _batch("b1", 1, events=events))
+    if found_by == "head":  # opened after the collect: found by its head alone
+        facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+        facts["prs"] = [p for p in facts["prs"] if p["number"] != 201]
+        (tmp_path / "facts.json").write_text(json.dumps(facts), "utf-8")
+    real_view = world.pr_view
+    views: list[int] = []
+
+    def _pushed_after_first_view(repo: str, number: int) -> dict[str, Any]:
+        got = real_view(repo, number)
+        if number == 201:
+            views.append(number)
+            if len(views) == 1:  # a push lands right after the first read of the head
+                world.prs[201]["head_oid"] = "sha-pushed"
+        return got
+
+    monkeypatch.setattr(world, "pr_view", _pushed_after_first_view)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")], out
+    assert _lines(out, "archive") == [], out
+    assert len(views) >= 2  # the head was read on both sides of the checks

@@ -968,6 +968,34 @@ def _comment_facts(
     return (max(stamps) if stamps else None), claims
 
 
+def _closed_labelled(
+    forge: Forge, repo: str, limit: int, warnings: list[Truncation]
+) -> list[dict[str, Any]]:
+    """Closed issues of *repo* carrying `fr:in-progress` or `fr:claimed`, once each.
+
+    gh ANDs repeated `--label` flags, so this is one read per label, merged by number
+    (post-merge truth R3). A failed read is a warning on stderr and contributes nothing;
+    a read that hits *limit* warns, per read."""
+    merged: dict[int, dict[str, Any]] = {}
+    for label in (FR_IN_PROGRESS, FR_CLAIMED):
+        try:
+            got = forge.list_issues(
+                repo=repo,
+                state="closed",
+                limit=limit,
+                fields=ORIGINS_ISSUE_LIST_FIELDS,
+                labels=[label.name],
+            )
+        except _READ_FAILURES as exc:
+            print(f"fr triage: {repo}: closed {label.name} issues not read: {exc}", file=sys.stderr)
+            continue
+        if len(got) == limit:
+            warnings.append(Truncation(source="closed-in-progress", target=repo, limit=limit))
+        for i in got:
+            merged.setdefault(i["number"], i)
+    return [merged[n] for n in sorted(merged)]
+
+
 def _closed_in_progress(
     forge: Forge,
     repo: str,
@@ -976,25 +1004,14 @@ def _closed_in_progress(
     limit: int,
     warnings: list[Truncation],
 ) -> list[StaleInProgress]:
-    """Closed issues of *repo* still labelled `fr:in-progress` (board-truth §B, R2).
+    """Closed issues of *repo* still labelled `fr:in-progress` or `fr:claimed` (board-truth §B R2,
+    post-merge truth R3).
 
     Outside the per-repo skip: a failure here is a warning on stderr and an empty set,
     never a skipped repo. A hit that also carries `fr:claimed` has its comments read:
     this scope's own un-released claim makes it `release-pending` (the next `claim sync`
     takes both labels off), another scope's `held`, none `stale`."""
-    try:
-        raw = forge.list_issues(
-            repo=repo,
-            state="closed",
-            limit=limit,
-            fields=ORIGINS_ISSUE_LIST_FIELDS,
-            labels=[FR_IN_PROGRESS.name],
-        )
-    except _READ_FAILURES as exc:
-        print(f"fr triage: {repo}: closed fr:in-progress issues not read: {exc}", file=sys.stderr)
-        return []
-    if len(raw) == limit:
-        warnings.append(Truncation(source="closed-in-progress", target=repo, limit=limit))
+    raw = _closed_labelled(forge, repo, limit, warnings)
     me: str | None = None
     me_failed = False
     out: list[StaleInProgress] = []

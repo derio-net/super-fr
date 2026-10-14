@@ -783,3 +783,115 @@ def test_an_idle_session_is_never_a_failing_ci_need() -> None:
     )  # fmt: skip
     assert drive_snapshot(f, jd).idle == ()
     assert [n for n in needs_you(f, jd) if n.kind == "failing-ci"] == []
+
+
+# ------------------------- the card names its archive PR (merge-truth R10)
+
+
+@pytest.mark.parametrize(
+    ("checks", "wait"),
+    [
+        ({"pass": 0, "fail": 0, "pending": 2}, "checks pending"),
+        ({"pass": 1, "fail": 1, "pending": 0}, "checks failing"),
+        ({"pass": 1, "fail": 0, "pending": 0}, "ready to merge"),
+    ],
+)
+def test_card_names_an_existing_linked_archive_pr_and_its_wait(
+    checks: dict[str, int], wait: str
+) -> None:
+    """An archive PR that closes an issue lives in `issue.prs` only. The card reads it,
+    by the trust rule attribution uses, names it and what it waits on, and never says
+    "no archive PR", even with the close-out session idle."""
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 checks=checks)  # fmt: skip
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), closeout])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+         issue(2, prs=[archive])],
+        {closeout_item_id(REPO, "m"): "idle"},
+        bid="m",
+    )  # fmt: skip
+    assert "no archive PR" not in card.hint
+    assert card.hint == f"archive PR #30: {wait}"
+
+
+def test_a_linked_archive_pr_from_a_foreign_author_is_not_the_cards() -> None:
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 author="mallory")  # fmt: skip
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), closeout])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+         issue(2, prs=[archive])],
+        {closeout_item_id(REPO, "m"): "idle"},
+        bid="m",
+    )  # fmt: skip
+    assert "#30" not in card.hint and "no archive PR" in card.hint
+
+
+def test_the_card_says_a_conflicting_archive_pr_conflicts() -> None:
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 mergeable="CONFLICTING")  # fmt: skip
+    card = _idle_card(
+        [batch("m", [1], events=[dispatch("m"), closeout])],
+        [issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+         issue(2, prs=[archive])],
+        {},
+        bid="m",
+    )  # fmt: skip
+    assert card.hint == "archive PR #30: conflicts with the default branch"
+
+
+# ------------------- archive stops, keyed apart from the batch PR's (merge-truth R12)
+
+
+def _closing_archive(
+    events: list[dict[str, Any]] | None = None, **archive_kw: Any
+) -> tuple[Facts, Judgements]:
+    closeout = {**ARCHIVE, "run": "r-m"}
+    archive = pr(30, "chore/closeout-r-m", files=["docs/superpowers/runs/r-m.yaml"],
+                 **archive_kw)  # fmt: skip
+    f = facts([issue(1, state="closed", prs=[pr(10, "feat/batch-m", state="MERGED")]),
+               issue(2, prs=[archive])])  # fmt: skip
+    batches = [batch("m", [1], events=[dispatch("m"), closeout, *(events or [])])]
+    judged = {k: j(1) for k in ("widgets#1", "widgets#2")}
+    return f, judgements(judged, batches, schema=11)  # archive_conflict events: schema 11
+
+
+def test_a_refused_archive_merge_shows_its_stop_on_the_card() -> None:
+    """p2-r2: the batch PR is MERGED while it closes, so an archive stop is checked
+    against the archive PR's head, under its own key, never the batch PR's."""
+    from fr.triage.merge_stops import archive_stop_key
+
+    f, jd = _closing_archive()
+    stops = {archive_stop_key("m"): MergeStop("sha-30", "protected branch", "t")}
+    card = build_board(f, jd, {}, stops=stops).card("m")
+    assert card.hint == "needs you: merge stopped: protected branch"
+    assert card.needs_you
+    moved = {archive_stop_key("m"): MergeStop("sha-older", "protected branch", "t")}
+    card = build_board(f, jd, {}, stops=moved).card("m")
+    assert (card.hint, card.needs_you) == ("archive PR #30: ready to merge", False)
+
+
+def test_a_held_archive_conflict_card_needs_you() -> None:
+    from fr.triage.merge_stops import archive_stop_key
+
+    held = {"kind": "archive_conflict", "at": "2026-10-01T14:00:00Z", "head": "sha-30",
+            "pr": 30, "delivered": "held"}  # fmt: skip
+    f, jd = _closing_archive([held], mergeable="CONFLICTING")
+    stops = {archive_stop_key("m"): MergeStop("sha-30", "archive PR #30 conflicts", "t")}
+    card = build_board(f, jd, {}, stops=stops).card("m")
+    assert card.needs_you and card.hint == "needs you: merge stopped: archive PR #30 conflicts"
+    # the held event alone (no stop on this host) still asks for the operator
+    assert build_board(f, jd, {}).card("m").needs_you
+
+
+def test_a_ci_none_repos_archive_pr_with_no_checks_reads_ready_to_merge() -> None:
+    """p2-r4: the card's archive PR is judged by the repo's `ci none`, as the driver
+    judges it, never as a repo with CI whose checks have not registered."""
+    f, jd = _closing_archive(checks={"pass": 0, "fail": 0, "pending": 0})
+    assert build_board(f, jd, {}).card("m").hint == "archive PR #30: checks pending"
+    card = build_board(f, jd, {}, ci_none=(REPO,)).card("m")
+    assert card.hint == "archive PR #30: ready to merge"

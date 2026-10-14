@@ -1,0 +1,305 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Closed issues settle: claims released, both labels removed; release-pending
+    true; take records first; retire updates facts (R1-R6, R15)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-closed-issues-unclaimed
+  - triage-release-pending-true
+  - triage-claim-take-recorded-first
+  - triage-retire-then-sync
+  - triage-closed-in-progress-set
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/claim_writes.py
+  - packages/fr/src/fr/triage/claim_sync.py
+  - packages/fr/src/fr/triage/claims.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/kanban*.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_claim_cmd.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_claim*.py
+  - tests/unit/test_triage_collect*.py
+  - tests/unit/test_triage_check.py
+  - tests/unit/test_triage_clean_labels.py
+  - tests/unit/test_triage_kanban*.py
+  - tests/unit/test_triage_render.py
+  - tests/unit/test_triage_batch_drive*.py
+  - tests/unit/triage_claim_fixtures.py
+  - tests/integration/test_scenarios.py
+  - tests/scenarios/triage-closed-settle.sh
+  - tests/scenarios/triage-retire-sync.sh
+  - tests/scenarios/fixtures/**
+  - docs/acceptance/*
+  - .changes/feat-batch-merge-truth.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: 'Skeleton smoke: change fragment and a trivial pinned test, CI green on the
+    draft PR'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `.changes/feat-batch-merge-truth.yaml` with `bump: minor` and `summary: Post-merge truth: the driver and claim sync clear claims and labels on closed issues, see and finish archive PRs (live checks, drafts, conflicts handed back), and hold a repo whose default branch is unknown instead of aborting the pass.` Add a trivial pinned test `tests/unit/test_triage_claims.py::test_closed_settlements_is_exported` that imports `fr.triage.claims` and asserts `hasattr(claims, "closed_settlements")` (red: the function does not exist yet). Add a stub `closed_settlements(facts) -> list` returning `[]` so it goes green. Run `uv run pytest tests/unit/test_triage_claims.py -q --no-cov`.
+  - id: P1.T1.S2
+    text: |-
+      Commit, push (`git push`), and confirm CI runs on draft PR #1196 (`gh pr checks 1196`). The smoke is only that CI starts and the trivial test passes; do not wait for the whole suite.
+- number: 2
+  title: Collect reads both labels' closed hits (R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Red: in `tests/unit/test_triage_collect.py`, add `test_closed_hits_cover_either_label_deduplicated`: a fake client returning closed issue #4 for `fr:in-progress`, #5 for `fr:claimed` only, and #6 for both. Assert `stale_in_progress` holds exactly 4, 5, 6, once each. Add `test_untrusted_only_claimed_closed_hit_is_stale`: closed #7 carries `fr:claimed`, and its only marker comment is by an untrusted author. Assert state `stale`. This closes #1160 gap 2.
+  - id: P1.T2.S2
+    text: |-
+      Green: in `collect.py`'s closed-hits read (around 902-970), make one closed `list_issues` read per label (`FR_IN_PROGRESS`, `FR_CLAIMED`), merge by number, and warn on truncation per read. Classification stays the same through `read_claims`. Update the `StaleInProgress` docstring in `model.py` and every copy line that names only `fr:in-progress` for this set, so they name both labels.
+  - id: P1.T2.S3
+    text: |-
+      Refactor: keep the per-label read in one helper used for both labels. Run `uv run pytest tests/unit/test_triage_collect*.py -q --no-cov -n auto`.
+- number: 3
+  title: settle_closed writer and closed_settlements planner (R1-R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Red: in `tests/unit/test_triage_claim_writes.py`, add the following against the existing fake client:
+      - `test_settle_closed_releases_own_marker_and_removes_both_labels_in_one_edit`
+      - `test_settle_closed_without_any_marker_removes_both_labels`
+      - `test_settle_closed_leaves_a_reopened_issue_alone`
+      - `test_settle_closed_leaves_an_issue_a_foreign_trusted_claim_holds`
+      - `test_settle_closed_ignores_untrusted_markers`
+
+      In `test_triage_claims.py`, add `test_closed_settlements_targets_stale_and_release_pending_never_held`.
+  - id: P1.T3.S2
+    text: |-
+      Green: implement `claims.closed_settlements(facts)`, which yields `(key, state)` for `stale_in_progress` entries in `stale` or `release-pending`. Implement `claim_writes.settle_closed(client, repo, number, me, trusted)`:
+      1. Re-read the issue and its comments.
+      2. Return `Done("none")` if the issue is open or a trusted, un-released foreign claim stands.
+      3. Rewrite this scope's un-released marker to its released form.
+      4. Call `_remove_label(..., RELEASE_LABELS)`.
+
+      Leave `release()` unchanged.
+  - id: P1.T3.S3
+    text: |-
+      Refactor: share the marker-rewrite helper with `release()` if both duplicate it; otherwise record a refactor reason. Run `uv run pytest tests/unit/test_triage_claim_writes.py tests/unit/test_triage_claims.py -q --no-cov`.
+- number: 4
+  title: claim sync settles closed issues; closed members are not refreshed (R1, R2,
+    R4)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Red: in `tests/unit/test_triage_claim_cmd.py` (or a new `test_triage_claim_sync.py`), add:
+      - `test_sync_plans_a_settle_per_stale_and_release_pending_closed_hit`
+      - `test_sync_never_refreshes_a_member_facts_show_closed`
+      - `test_sync_keeps_the_due_refresh_for_a_member_facts_do_not_hold`: issue None, which keeps today's refresh.
+      - `test_sync_yes_settles_and_records_claims_released_for_members`
+      - `test_execute_release_removes_labels_in_exactly_one_edit`: closes #1160 gap 1, through `claim_sync.execute`, not `cw.release` directly.
+  - id: P1.T4.S2
+    text: |-
+      Green: in `claim_sync.py`:
+      - add `settle` to `OpKind`;
+      - make `ClaimOp.batch` optional, and validate that it is non-None for every kind but `settle`;
+      - in `plan_sync`, split the `issue is None or issue.state != "open"` branch, so that closed means no refresh and None keeps the due refresh, and emit one `settle` op per `closed_settlements` target, carrying the batch when the key is a member of one of this scope's batches;
+      - make `execute` run settle ops through `settle_closed`;
+      - make `released()` and `record_releases` count settle ops that released an own marker on a member.
+  - id: P1.T4.S3
+    text: |-
+      Refactor + run `uv run pytest tests/unit/test_triage_claim*.py -q --no-cov -n auto`.
+- number: 5
+  title: Driver settles every pass; clean-labels removes both labels (R1, R2)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Red: in `tests/unit/test_triage_batch_drive.py`, add `test_drive_pass_emits_settle_actions_after_releases` (pure pass, using `Snapshot.settles_owed`). In `test_triage_batch_drive_cmd.py`, add `test_settle_of_a_carried_repo_waits_by_the_keys_repo`. In `test_triage_clean_labels.py`, add `test_clean_labels_removes_both_labels_and_no_longer_skips_fr_claimed`, and keep `test_the_one_target_predicate_is_the_stale_entries_only` green.
+  - id: P1.T5.S2
+    text: |-
+      Green:
+      - `batch_drive.Snapshot` gains `settles_owed`, and `drive_pass` emits `Action("settle", ...)` after the releases.
+      - `triage_batch_cmd._claim_plan` maps settle ops into the new field.
+      - The carried / `_LIVE_READ_ACTIONS` filter for settle uses the key's repo.
+      - The command executes settle through `claim_sync.execute`.
+      - `kanban.py`'s phrase map gains `settle`.
+      - `clean-labels --yes` (`triage_cmd.py` 852-914) calls `settle_closed` over `clean_label_targets`; drop its `fr:claimed` skip and its in-progress-only removal.
+  - id: P1.T5.S3
+    text: |-
+      Refactor + run `uv run pytest tests/unit/test_triage_batch_drive*.py tests/unit/test_triage_clean_labels.py tests/unit/test_triage_kanban*.py -q --no-cov -n auto`.
+- number: 6
+  title: Copy and board note tell the truth (R4, R15)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Red:
+      - In `test_triage_render.py` and `test_triage_check.py`, assert that the closed-set copy names `claim sync --yes` or the next drive pass for stale and release-pending entries, and names `clean-labels --yes` as the manual route for the stale ones.
+      - In `test_triage_kanban_render.py` (or `test_triage_kanban_cmd.py`), add `test_rendered_board_html_carries_the_closed_set_note`: render `board.html` through the command with a facts fixture holding one `release-pending` entry, and assert the note is in the file. This closes #1160 gap 3.
+      - Add a case where only held entries exist, and assert there is no note.
+  - id: P1.T6.S2
+    text: |-
+      Green: update `render.py:1138-1142`, `check.py:31-35` and `in_progress_note` (`triage_kanban_cmd.py:359-367`), firing it on stale or release-pending entries.
+  - id: P1.T6.S3
+    text: |-
+      Refactor: one shared phrase for the clearing rule used by all three surfaces. Run the touched tests.
+- number: 7
+  title: claim take records first; refusal withdraws, transport failure keeps (R5)
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      Red: in `test_triage_claim_cmd.py`, add:
+      - `test_take_writes_nothing_to_the_forge_when_the_judgements_write_fails`
+      - `test_take_refused_by_the_forge_withdraws_the_recorded_event`: `cw.take` raises `ClaimError`, and the event is gone with exit 2.
+      - `test_take_held_withdraws_the_recorded_event`
+      - `test_take_transport_failure_keeps_the_event_and_next_sync_claims_the_member`: a forge `ForgeWriteError`, then `plan_sync` over re-collected facts plans a claim, never a release.
+  - id: P1.T7.S2
+    text: |-
+      Green: reorder `triage_claim_cmd.py` take (214-268): validate → append `ClaimTakenEvent` via `_write` → `cw.take`. On `ClaimError` or `Held`, write the judgements again with that just-appended event removed, then exit 2 naming the holder; if that write fails, exit 2 naming the stray event. On any other forge error, keep the event and exit 2 naming `fr triage claim sync --yes`.
+  - id: P1.T7.S3
+    text: |-
+      Refactor + run `uv run pytest tests/unit/test_triage_claim_cmd.py -q --no-cov`.
+- number: 8
+  title: scope retire updates the stored facts (R6)
+  steps:
+  - id: P1.T8.S1
+    text: |-
+      Red: in `test_triage_claim_cmd.py`, extend `test_scope_retire_previews_then_releases_every_stale_claim`, or add `test_scope_retire_yes_removes_the_signers_claims_from_facts`: after `--yes`, `facts.json` no longer lists the signer's claims; `fr triage check --json` shows none held; `plan_sync` plans a claim for an owed member; and the output has no `fr triage collect` line.
+  - id: P1.T8.S2
+    text: |-
+      Green: after the releases in `triage_claim_cmd.py` scope retire (324-400), remove the signer's `IssueClaim` entries from each affected issue in the loaded facts. Write `facts.json` back through `fr.artifacts.atomic.write_text_atomic` in the same state directory. Find how collect's facts write reaches a state ref (`triage_cmd.resolve_state_dir` / `state_ref`) and use the same path. Replace the closing line with one saying `claim sync --yes` will claim the members.
+  - id: P1.T8.S3
+    text: |-
+      Refactor + run the claim tests.
+- number: 9
+  title: 'Scenarios: closed settle and retire then sync, against a fake REST forge'
+  steps:
+  - id: P1.T9.S1
+    text: |-
+      Write `tests/scenarios/triage-closed-settle.sh` and its fixture under `tests/scenarios/fixtures/triage-closed-settle/`. Model it on `merge-train-label-gate.sh` and its `fixtures/merge-train-label-gate/bin/gh`: a fake gh that serves a scope's closed issues and comments and logs label edits.
+      - Collect, or seed facts, with one closed issue under an own marker and one untrusted-only issue with `fr:claimed`.
+      - Run `fr triage claim sync --yes`.
+      - Assert from the gh log that both labels were removed from both issues, and print `ok: triage-closed-settle`.
+  - id: P1.T9.S2
+    text: |-
+      Write `tests/scenarios/triage-retire-sync.sh` the same way: run retire `--yes`, then `fr triage check` (no held), then `claim sync --yes`. Assert the member's claim marker is posted and `fr:claimed` added. Register both scenarios in `tests/integration/test_scenarios.py`'s registry. Run `uv run pytest tests/integration/test_scenarios.py -q --no-cov -k 'closed_settle or retire_sync'`.
+- number: 10
+  title: Acceptance rows move
+  steps:
+  - id: P1.T10.S1
+    text: |-
+      For each row below, run `uv run fr acceptance set-status --id <row> --status ci --level unit=super-fr:tests/unit/<file>.py#<test> --notes "<why>"`: `triage-closed-issues-unclaimed`, `triage-release-pending-true`, `triage-claim-take-recorded-first` and `triage-retire-then-sync`. For the two candidate rows, also add `--scenario tests/scenarios/<name>.sh`. On `triage-closed-in-progress-set`, add the both-labels clean-labels test as a level and note the change. Then run `uv run fr acceptance check`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T6.S3:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T7.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T7.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T7.S3:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T8.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T8.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T8.S3:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T9.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T9.S2:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+    P1.T10.S1:
+      state: x
+      ticked_at: '2026-10-14T00:20:45+00:00'
+      note: null
+  completion:
+    at: '2026-10-14T00:20:45+00:00'
+    note: null
+    observed_prs: []

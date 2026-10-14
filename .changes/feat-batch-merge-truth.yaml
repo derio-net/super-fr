@@ -1,0 +1,2 @@
+bump: minor
+summary: "Post-merge truth: the driver and claim sync clear claims and labels on closed issues, see and finish archive PRs (live checks, drafts, conflicts handed back), and hold a repo whose default branch is unknown instead of aborting the pass."

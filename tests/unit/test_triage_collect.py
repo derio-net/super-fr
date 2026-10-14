@@ -94,6 +94,12 @@ def test_both_limits_are_passed_explicitly() -> None:
             "limit": 1000,
             "labels": ["fr:in-progress"],
         },
+        {
+            "repo": "derio-net/super-fr",
+            "state": "closed",
+            "limit": 1000,
+            "labels": ["fr:claimed"],
+        },
     ]
     assert forge.called("list_prs") == [
         {"repo": "derio-net/super-fr", "state": "all", "limit": 200}
@@ -794,7 +800,8 @@ def test_collect_lists_closed_in_progress_once_per_repo_with_the_label_filter() 
     facts = collect_facts(forge, SUPER_FR, now=NOW)
     closed = [c for c in forge.called("list_issues") if c["state"] == "closed"]
     assert closed == [
-        {"repo": REPO, "state": "closed", "limit": ISSUE_LIMIT, "labels": ["fr:in-progress"]}
+        {"repo": REPO, "state": "closed", "limit": ISSUE_LIMIT, "labels": ["fr:in-progress"]},
+        {"repo": REPO, "state": "closed", "limit": ISSUE_LIMIT, "labels": ["fr:claimed"]},
     ]
     (hit,) = facts.stale_in_progress
     assert (hit.key, hit.state, hit.closed_at) == ("super-fr#4", "stale", "2026-10-01T00:00:00Z")
@@ -840,6 +847,33 @@ def test_a_closed_hit_with_a_claim_is_release_pending_when_own_and_held_when_for
         "super-fr#5": "held",
         "super-fr#6": "stale",
     }
+
+
+def _only_claimed(number: int) -> dict[str, Any]:
+    issue = _labelled(number, "fr:claimed")
+    issue["closedAt"] = "2026-10-01T00:00:00Z"
+    return issue
+
+
+def test_closed_hits_cover_either_label_deduplicated() -> None:
+    forge = _closed_forge(
+        closed_in_progress={REPO: [_closed(4), _only_claimed(5), _closed(6, "fr:claimed")]}
+    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert sorted(h.key for h in facts.stale_in_progress) == [
+        "super-fr#4",
+        "super-fr#5",
+        "super-fr#6",
+    ]
+
+
+def test_untrusted_only_claimed_closed_hit_is_stale() -> None:
+    forged = dict(_marker_comment("s-33333333", 1), author="stranger")
+    forge = _closed_forge(
+        closed_in_progress={REPO: [_only_claimed(7)]}, comments={(REPO, 7): [forged]}
+    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW)
+    assert {h.key: h.state for h in facts.stale_in_progress} == {"super-fr#7": "stale"}
 
 
 def test_collect_stats_ignored_keys_land_in_facts_config_ignored() -> None:
@@ -903,5 +937,5 @@ def test_a_closed_list_at_its_limit_names_itself_and_leaves_the_carry_active() -
     )
     (w,) = facts.warnings
     assert isinstance(w, Truncation) and w.source == "closed-in-progress"
-    assert "closed fr:in-progress list" in w.describe(REPO)
+    assert "closed fr:in-progress / fr:claimed list" in w.describe(REPO)
     assert stats.carried == 1 and stats.viewed == 0

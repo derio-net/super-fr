@@ -35,6 +35,7 @@ from fr.triage.batch import (
     pr_open_queue,
 )
 from fr.triage.batch_drive import (
+    ARCHIVE_WAIT,
     AWAITING_LIVE_HOLD,
     CLOSEOUT_FALLBACK,
     DEFAULT_MAX_INFLIGHT,
@@ -50,6 +51,7 @@ from fr.triage.batch_drive import (
     enqueue_refusals,
     fact_ledger_unknown,
     fact_ledgers,
+    held_archive_conflict,
     held_conflict,
     last_enqueue,
 )
@@ -67,6 +69,7 @@ from fr.triage.model import (
     Facts,
     Judgement,
     Judgements,
+    PullRequest,
     RedHandbackEvent,
     Severity,
 )
@@ -180,6 +183,7 @@ class Need:
     #   (a collected close-out PR the driver will not merge unasked, R15)
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
+    # | archive-conflict
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
     text: str
@@ -198,6 +202,7 @@ NEED_LABELS = {
     "stale-dispatch": "Stale dispatch",
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
+    "archive-conflict": "Archive PR conflict",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
     "closeout-held": "Close-out held: Test Plan outcome owed",
@@ -252,7 +257,9 @@ def needs_you(
 ) -> list[Need]:
     """Everything waiting on the operator, from the facts the driver reads. *session_notes*
     are blocked sessions' own notes by item id, from a runner that gives them
-    (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is."""
+    (`SessionNotes`, cloud-triage R15); each is one row, and without them nothing is.
+    *stops* are the driver's recorded merge stops (`merge_stops.load_stops`): a
+    conflicting export PR's, keyed `export:<repo>`, is a row (merge-truth R12)."""
     snap = drive_snapshot(facts, judgements, ci_none=ci_none)
     plan = drive_pass(snap)
     by_id = {b.id: b for b in judgements.batches}
@@ -288,6 +295,8 @@ def needs_you(
     out.extend(queue_needs(snap))
     for action in plan.actions:
         if action.kind == "warn" and not action.ejected:
+            if action.detail.startswith(ARCHIVE_WAIT):
+                continue  # an archive PR's waiting line (merge-truth R9), never a Need
             failing_pr = batch_pr(by_id[action.batch], facts)
             url = failing_pr.url if failing_pr else None
             # R11: a red hand-back delivered at this head means its session has it in hand,
@@ -377,6 +386,8 @@ def needs_you(
                  f"#batch-{b.id}")
         )  # fmt: skip
 
+    out.extend(archive_conflict_needs(facts, judgements, snap.repos, stops or {}))
+
     # The four Needs-you lanes (exit-gates R17): one Need per card the board puts in one,
     # from the same `lane_of`, so "Needs you now" and the columns agree.
     held_stops = live_stops(judgements.batches, facts, stops or {})
@@ -420,6 +431,63 @@ def needs_you(
                          f"#batch-{b.id}")
                 )  # fmt: skip
     return out
+
+
+def archive_conflict_needs(
+    facts: Facts,
+    judgements: Judgements,
+    repos: Mapping[str, str],
+    stops: Mapping[str, MergeStop],
+) -> list[Need]:
+    """merge-truth R12: an archive PR whose hand-backs are spent (a held `archive_conflict`
+    event whose head is still the PR's, as far as the facts show it), and an export PR
+    the driver stopped on for a conflict. Never a `failing-ci` or `merge-conflict` row."""
+    out: list[Need] = []
+    known = {(p.repo, p.number): p for p in (*facts.prs, *(q for i in facts.issues for q in i.prs))}
+    for b in judgements.batches:
+        held = held_archive_conflict(b)
+        repo = repos.get(b.id)
+        if held is None or repo is None:
+            continue
+        found = known.get((repo, held.pr))
+        if found is not None and (found.state != "OPEN" or found.head_oid != held.head):
+            continue  # merged, closed, or a new head: no longer this conflict
+        out.append(
+            Need("archive-conflict", b.id,
+                 f"batch {b.id}'s archive PR #{held.pr} conflicts at {held.head[:12]}, and its "
+                 "hand-backs are spent: merge the default branch into it",
+                 found.url if found is not None else f"#batch-{b.id}")
+        )  # fmt: skip
+    for key, stop in sorted(stops.items()):
+        if key.startswith("export:") and "conflicts" in stop.reason:
+            repo = key.removeprefix("export:")
+            if not _export_stop_live(repo, stop, facts, judgements, known):
+                continue  # merged, closed, or a new head: no longer this conflict
+            out.append(
+                Need("archive-conflict", repo,
+                     f"{repo}'s {stop.reason} with the default branch: merge it in, or "
+                     "close the PR", None)
+            )  # fmt: skip
+    return out
+
+
+def _export_stop_live(
+    repo: str,
+    stop: MergeStop,
+    facts: Facts,
+    judgements: Judgements,
+    known: Mapping[tuple[str, int], PullRequest],
+) -> bool:
+    """An export conflict stop holds while *repo*'s recorded export PR is unmerged and
+    unclosed at the stopped head, and the facts (when they carry it) show it open at
+    that head (p2-r3)."""
+    for e in judgements.exports:
+        if e.repo != repo or e.pr is None or e.merged or e.closed or e.head != stop.head:
+            continue
+        found = known.get((repo, e.pr))
+        if found is None or (found.state == "OPEN" and found.head_oid == stop.head):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------- next up

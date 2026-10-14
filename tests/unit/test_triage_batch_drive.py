@@ -515,13 +515,81 @@ def test_an_attributed_ready_green_archive_pr_is_merged() -> None:
     assert (action.kind, action.pr, action.head) == ("archive", 7, "h7")
 
 
-@pytest.mark.parametrize("kw", [dict(draft=True), dict(checks="pending"), dict(checks="failing")])
+@pytest.mark.parametrize("kw", [dict(checks="pending"), dict(checks="failing")])
 def test_an_archive_pr_not_ready_and_green_waits(kw: dict[str, Any]) -> None:
     b = _closed("x", 1, archive="chore/archive-p", run="r-x")
     pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), **kw)
     got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
     assert [a.kind for a in got.actions if a.kind == "archive"] == []
     assert got.summary.closing == 1
+
+
+def _archive_lines(got: Any) -> list[tuple[str, str, str]]:
+    return [(a.kind, a.batch, a.detail) for a in got.actions]
+
+
+def test_attributed_archive_pr_with_pending_checks_gets_one_waiting_warn() -> None:
+    """merge-truth R9: an attributed open archive PR the drive does not merge is named,
+    with why, every pass (no head: never deduplicated)."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), checks="pending")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    assert _archive_lines(got) == [("warn", "x", "archive PR #7: checks pending")]
+    assert got.actions[0].head == "" and got.summary.closing == 1
+    assert action_line(got.actions[0]) == "warn x: archive PR #7: checks pending"
+
+
+def test_failing_checks_waiting_warn() -> None:
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), checks="failing")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    assert _archive_lines(got) == [("warn", "x", "archive PR #7: checks failing")]
+
+
+def test_wrong_base_gets_only_the_blocked_line_no_warn() -> None:
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), base="release")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    assert [a.kind for a in got.actions] == ["blocked"]
+
+
+def test_green_draft_archive_pr_gets_an_archive_action_flagged_draft() -> None:
+    """merge-truth R11: a close-out session that left its archive PR a draft no longer
+    strands it: the driver marks it ready, then merges it."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), draft=True)
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    (action,) = got.actions
+    assert (action.kind, action.pr, action.draft) == ("archive", 7, True)
+    plain = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",))
+    (action,) = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (plain,)})).actions
+    assert (action.kind, action.draft) == ("archive", False)
+
+
+def test_conflicting_archive_pr_gets_archive_conflict_never_archive() -> None:
+    """merge-truth R12: the forge reports it conflicting, so it is handed back, never
+    merged, and gets no waiting line."""
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), mergeable="CONFLICTING")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    (action,) = got.actions
+    assert (action.kind, action.pr, action.head, action.branch) == (
+        "archive-conflict", 7, "h7", "chore/archive-p")  # fmt: skip
+    assert got.summary.closing == 1 and got.summary.blocked == 0
+
+
+def test_a_held_archive_conflict_counts_as_blocked() -> None:
+    from fr.triage.model import ArchiveConflictEvent
+
+    b = _closed("x", 1, archive="chore/archive-p", run="r-x")
+    held = ArchiveConflictEvent(kind="archive_conflict", at=NOW, head="h7", pr=7,
+                                delivered="held")  # fmt: skip
+    b = b.model_copy(update={"events": [*b.events, held]})
+    pr = _archive(7, "chore/archive-p", files=(f"{RUNS}/r-x.yaml",), mergeable="CONFLICTING")
+    got = drive_pass(_snap([b], {"x": "merged"}, archives={REPO: (pr,)}))
+    (action,) = got.actions
+    assert action.kind == "blocked" and "PR #7" in action.detail and "spent" in action.detail
+    assert got.summary.closing == 0 and got.summary.blocked == 1
 
 
 def test_an_unattributed_archive_pr_is_never_merged() -> None:
@@ -1901,3 +1969,38 @@ def test_a_dispatch_hold_turns_every_dispatch_into_a_pending_hold() -> None:
     ]
     assert got.summary.pending == 2 and got.summary.held == 0
     assert not got.summary.stalled and not got.summary.idle
+
+
+def test_drive_pass_emits_settle_actions_after_releases() -> None:
+    batches = [_batch("a", 1)]
+    got = drive_pass(
+        _snap(
+            batches,
+            {"a": "proposed"},
+            me="s-me",
+            releases_owed=(("super-fr#9", "old"),),
+            settles_owed=(("super-fr#3", "a"), ("super-fr#4", "")),
+        )
+    )
+    assert [(a.kind, a.batch, a.key) for a in got.actions[:3]] == [
+        ("release", "old", "super-fr#9"),
+        ("settle", "a", "super-fr#3"),
+        ("settle", "", "super-fr#4"),
+    ]
+    from fr.triage.batch_drive import action_line
+
+    assert action_line(got.actions[1]) == "settle super-fr#3 (a): closed"
+    assert action_line(got.actions[2]) == "settle super-fr#4: closed"
+
+
+def test_a_conflicting_export_pr_is_its_own_export_conflict_kind() -> None:
+    """p2-r5: an export PR's conflict is `export-conflict`, never routed as a batch's
+    `archive-conflict` by whether the action carries a wave."""
+    from fr.triage.batch_drive import EXPORT_KINDS
+
+    live = _trusted(40, mergeable="CONFLICTING")
+    got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): live}))
+    (action,) = [a for a in got.actions if a.wave is not None]
+    assert (action.kind, action.pr, action.head) == ("export-conflict", 40, "export-head-40")
+    assert "export-conflict" not in EXPORT_KINDS  # the driver records a stop, nothing more
+    assert got.summary.blocked == 1

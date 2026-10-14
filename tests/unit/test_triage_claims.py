@@ -363,3 +363,30 @@ def test_held_line_hints_the_stale_take_before_expiry() -> None:
     line = held_line("r#1", _claim(OTHER, 1), T0 + timedelta(hours=7))
     assert "(stale: only the operator takes it over" in line
     assert "`fr triage claim take r#1 --batch <id> --stale --yes`" in line
+
+
+def test_closed_settlements_is_exported() -> None:
+    from fr.triage import claims
+
+    assert hasattr(claims, "closed_settlements")
+
+
+def test_closed_settlements_targets_stale_and_release_pending_never_held() -> None:
+    from fr.triage import claims
+    from fr.triage.model import Facts, StaleInProgress
+
+    def entry(n: int, state: str) -> StaleInProgress:
+        return StaleInProgress(
+            key=f"widgets#{n}",
+            title="t",
+            url="https://example.com/x",
+            state=state,  # type: ignore[arg-type]
+        )
+
+    facts = Facts.model_construct(
+        stale_in_progress=[entry(1, "stale"), entry(2, "release-pending"), entry(3, "held")]
+    )
+    assert claims.closed_settlements(facts) == [
+        ("widgets#1", "stale"),
+        ("widgets#2", "release-pending"),
+    ]

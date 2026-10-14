@@ -10,6 +10,7 @@ handling is asserted from its source, because no browser runs in CI.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from fr.triage.batch_drive import drive_pass
 from fr.triage.model import Facts, Judgements
@@ -23,6 +24,7 @@ from fr.triage.views import (
 )
 
 from tests.unit.triage_board_fixtures import (
+    REPO,
     URL,
     batch,
     busy,
@@ -684,3 +686,77 @@ def test_the_wave_table_stacks_into_labelled_cards_at_phone_width() -> None:
     assert cells[:8] == ["Batch", "Tier", "Skill", "Issues", "Why", "Size", "Depends on", "Stage"]
     page = render(f, jd)
     assert re.search(r"@media \(max-width: 480px\) \{[^}]*table\.grid\.stack", page)
+
+
+# --------------------------------------- archive PR lines are not Needs (merge-truth R9)
+
+
+def test_archive_warn_is_not_a_failing_ci_need(monkeypatch: object) -> None:
+    """A warn whose text starts `archive PR` is a status line the drive prints, never
+    a `failing-ci` Need: the batch PR it would look up is merged, not failing."""
+    from dataclasses import replace
+
+    from fr.triage import views
+    from fr.triage.batch_drive import Action
+
+    f, jd = busy()
+    real = views.drive_pass
+
+    def _with_archive_warn(snap: object) -> object:
+        plan = real(snap)  # type: ignore[arg-type]
+        warn = Action("warn", "a-merged", "archive PR #77: checks pending")
+        return replace(plan, actions=(*plan.actions, warn))
+
+    monkeypatch.setattr(views, "drive_pass", _with_archive_warn)  # type: ignore[attr-defined]
+    rows = needs_you(f, jd)
+    assert not [r for r in rows if r.ref == "a-merged" and r.kind == "failing-ci"]
+    assert {r.ref for r in rows if r.kind == "failing-ci"} == {"c-red"}
+
+
+def test_held_archive_conflict_is_an_archive_conflict_need() -> None:
+    """merge-truth R12: a held `archive_conflict` whose head is still the archive PR's is
+    the operator's: an `archive-conflict` Need, never `failing-ci` or `merge-conflict`.
+    Once the head moves, it is not."""
+    merged = pr(10, "feat/batch-m", state="MERGED", merged_at="2026-10-01T09:00:00Z")
+    archive = pr(30, "chore/archive-m", files=["docs/superpowers/runs/r-m.yaml"])
+    closeout = {"kind": "closeout", "at": "2026-10-01T10:00:00Z", "runner": "fake",
+                "handle": "c", "run": "r-m", "archive": "chore/archive-m"}  # fmt: skip
+    held = {"kind": "archive_conflict", "at": "2026-10-01T11:00:00Z", "head": "sha-30",
+            "pr": 30, "delivered": "held"}  # fmt: skip
+    f = facts([issue(1, state="closed", prs=[merged])], prs=[archive])
+    jd = judgements({"widgets#1": j(1)},
+                    [batch("m", [1], wave=1, events=[dispatch("m"), closeout, held])],
+                    schema=11)  # fmt: skip
+    rows = needs_you(f, jd)
+    (need,) = [r for r in rows if r.kind == "archive-conflict"]
+    assert need.ref == "m" and "PR #30" in need.text and need.href == f"{URL}/pull/30"
+    assert not [r for r in rows if r.kind in ("failing-ci", "merge-conflict")]
+    moved = facts([issue(1, state="closed", prs=[merged])],
+                  prs=[{**archive, "head_oid": "sha-new"}])  # fmt: skip
+    assert not [r for r in needs_you(moved, jd) if r.kind == "archive-conflict"]
+
+
+def test_an_export_conflict_need_holds_only_while_its_pr_is_open_at_the_stop_head() -> None:
+    """p2-r3: an `export:<repo>` stop is a Need only while the recorded export PR is
+    unmerged, unclosed and at the stopped head; a stale stop is no row."""
+    from fr.triage.merge_stops import MergeStop
+
+    stop = {f"export:{REPO}": MergeStop("sha-40", "export PR #40 conflicts", "t")}
+    f = facts([issue(1)])
+
+    def _jd(**export: Any) -> Any:
+        row = {"wave": "1", "repo": REPO, "at": "2026-10-01T13:00:00Z", "pr": 40,
+               "head": "sha-40", **export}  # fmt: skip
+        return judgements({"widgets#1": j(1)}, [], schema=10, exports=[row])
+
+    def _rows(jd: Any, fx: Any = f) -> list[Any]:
+        return [r for r in needs_you(fx, jd, stops=stop) if r.kind == "archive-conflict"]
+
+    (need,) = _rows(_jd())
+    assert need.ref == REPO and "export PR #40" in need.text
+    assert _rows(_jd(merged=True)) == []
+    assert _rows(_jd(closed=True)) == []
+    assert _rows(_jd(head="sha-new")) == []
+    assert _rows(judgements({"widgets#1": j(1)}, [], schema=10)) == []  # nothing recorded
+    shown = facts([issue(1)], prs=[pr(40, "fr-triage/export", state="MERGED", head_oid="sha-40")])
+    assert _rows(_jd(), shown) == []  # the facts show it merged

@@ -67,8 +67,9 @@ from fr.triage.stage import Stage, derive_stage
 # None, so no batch reads as gated and no cursor position is known.
 FACTS_SCHEMA: Literal[12] = 12
 FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-# The version this fr WRITES: every engine write stamps 10 (the `closeout_handback` event,
-# 2026-10-14-exit-gates R27; 9 was the `update`, `approval`,
+# The version this fr WRITES: every engine write stamps 11 (the `archive_conflict` event,
+# 2026-10-14-merge-truth §E; 10 was the `closeout_handback` and `closeout_hold` events and
+# the collected close-outs, 2026-10-14-exit-gates R15/R27; 9 was the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
 # `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
@@ -77,8 +78,8 @@ FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[10] = 10
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+JUDGEMENTS_SCHEMA: Literal[11] = 11
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -424,7 +425,8 @@ class Truncation(_Strict):
         """
         if self.source == "closed-in-progress":
             return (
-                f"the closed fr:in-progress list for {target} returned exactly its limit "
+                f"a closed fr:in-progress / fr:claimed list for {target} returned exactly "
+                f"its limit "
                 f"({self.limit}), so the closed-but-in-progress set may be incomplete; "
                 "no flag raises this limit"
             )
@@ -439,7 +441,7 @@ _LIST_WORDS: dict[str, str] = {
     "prs": "PR list",
     "issues": "issue list",
     "repos": "repo list",
-    "closed-in-progress": "closed fr:in-progress list",
+    "closed-in-progress": "closed fr:in-progress / fr:claimed list",
 }
 
 
@@ -585,9 +587,10 @@ InProgressState = Literal["stale", "release-pending", "held"]
 
 
 class StaleInProgress(_Strict):
-    """A CLOSED issue still labelled `fr:in-progress` (board-truth §B, R2). `stale` is
-    safe to clean; `release-pending` carries this scope's own un-released claim (the
-    next `claim sync` releases both labels); `held` carries another scope's."""
+    """A CLOSED issue still labelled `fr:in-progress` or `fr:claimed` (board-truth §B R2;
+    post-merge truth R3). `stale` is safe to clean; `release-pending` carries this scope's
+    own un-released claim (the next `claim sync --yes` or drive pass releases it and takes
+    both labels off); `held` carries another scope's."""
 
     key: str
     title: str
@@ -629,7 +632,7 @@ class Facts(_Strict):
     # visibility the forge answered (cloud-triage §B, §C): the state-repo decision and
     # the privacy guard read it; a repo missing here is read live by the guard.
     visibility: dict[str, str] = {}
-    # Closed issues still labelled `fr:in-progress` (board-truth §B, R2), schema 9.
+    # Closed issues still labelled `fr:in-progress` or `fr:claimed` (board-truth §B, R2), schema 9.
     stale_in_progress: list[StaleInProgress] = []
     # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (R4,
     # schema 9; the skew banner reads it).
@@ -966,6 +969,24 @@ class CollectedCloseout(_Strict):
     handed: list[str] = []
 
 
+class ArchiveConflictEvent(_Strict):
+    """The forge reported batch's archive PR #*pr* conflicting at *head*, and the driver
+    handed it to the close-out (2026-10-14-merge-truth §E, R12). Needs judgements schema
+    11. Written by the engine only. Counted apart from a batch PR's `conflict` events,
+    which name refused paths and raise the `merge-conflict` Need; this one does neither.
+
+    `delivered`: `session`, the brief was sent to the idle close-out session; `fresh`, a
+    new archive-conflict session was started; `held`, the hand-back bound was reached and
+    the operator owns it. `handle` is the item messaged or started; None when held."""
+
+    kind: Literal["archive_conflict"]
+    at: AwareDatetime
+    head: str = Field(min_length=1)
+    pr: int
+    delivered: ConflictDelivery
+    handle: str | None = None
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -978,6 +999,8 @@ SCHEMA_9_EVENTS = frozenset({"update", "approval", "red_handback", "enqueue"})
 """The event kinds only a schema 9 `judgements.yaml` may carry (merge-train-safety §B)."""
 SCHEMA_10_EVENTS = frozenset({"closeout_handback", "closeout_hold"})
 """The event kinds only a schema 10 `judgements.yaml` may carry (exit-gates R27)."""
+SCHEMA_11_EVENTS = frozenset({"archive_conflict"})
+"""The event kinds only a schema 11 `judgements.yaml` may carry (merge-truth §E)."""
 
 # Every schema-gated event kind, with the judgements schema it first appears in: the one
 # table `Judgements` refuses a too-low stamp from.
@@ -989,6 +1012,7 @@ _EVENT_SCHEMAS: tuple[tuple[int, frozenset[str]], ...] = (
     (8, SCHEMA_8_EVENTS),
     (9, SCHEMA_9_EVENTS),
     (10, SCHEMA_10_EVENTS),
+    (11, SCHEMA_11_EVENTS),
 )
 
 
@@ -1006,7 +1030,8 @@ BatchEvent = Annotated[
     | RedHandbackEvent
     | EnqueueEvent
     | CloseoutHandbackEvent
-    | CloseoutHoldEvent,
+    | CloseoutHoldEvent
+    | ArchiveConflictEvent,
     Field(discriminator="kind"),
 ]
 
@@ -1114,7 +1139,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}

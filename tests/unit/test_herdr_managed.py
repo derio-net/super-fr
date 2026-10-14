@@ -143,3 +143,28 @@ def test_live_conflict_reads_the_forge_adapter(descriptor, monkeypatch, state, m
 
     monkeypatch.setattr(managed, "client_for", lambda root: Client())
     assert managed.conflict_current(d) is expected
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    ["Merge conflict on batch b1 (t): PR #1", "Archive PR conflict on batch b1 (t): PR #2"],
+)
+def test_handback_recognises_batch_and_archive_conflict_briefs(descriptor, prefix):
+    """p2-r1: a managed archive-conflict session saves its head and brief too, so a
+    restart reconstructs the brief rather than the generic HOLD."""
+    text = f"{prefix} on feat/x, at head abc123, conflicts with origin/main."
+    saved = managed.handback(descriptor, text)
+    assert (saved.conflict_head, saved.conflict_brief) == ("abc123", text)
+
+
+def test_handback_ignores_other_prompts(descriptor):
+    text = "Something else at head abc123, conflicts with origin/main."
+    assert managed.handback(descriptor, text) == descriptor
+
+
+def test_restarted_archive_conflict_session_reconstructs_its_brief(descriptor, monkeypatch):
+    d = descriptor.model_copy(update={"role": "conflict", "branch": "chore/archive-p1"})
+    brief = "Archive PR conflict on batch b1 (t): archive PR #2 on x, at head abc, conflicts with m"
+    saved = managed.handback(d.model_copy(update={"brief": brief}), brief)
+    monkeypatch.setattr(managed, "conflict_current", lambda d: True)
+    assert managed.reconstruct(saved) == brief

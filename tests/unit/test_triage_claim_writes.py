@@ -455,3 +455,101 @@ def test_a_race_restores_only_labels_that_were_present_in_one_edit(
     adds = [c["add"] for n, c in gh.calls if n == "edit_issue_labels" and c["add"]]
     assert adds == [frozenset({"fr:claimed"})]
     assert "fr:in-progress" not in gh.issues[(REPO, 1)].labels
+
+
+# ------------------------------------------- post-merge truth R1-R3: settle_closed
+
+
+def _own_marker(gh: FakeGhClient, *, cid: int = 1500, number: int = 1) -> None:
+    body = render_marker(
+        Marker(signer=ME, batch="mine", claimed=NOW, heartbeat=NOW, expires=NOW + DAY)
+    )
+    gh.issue_comments.setdefault((REPO, number), []).append(
+        {"author": "operator", "body": body, "created_at": NOW.isoformat(), "id": cid}
+    )
+
+
+def _closed_issue(gh: FakeGhClient, *labels: str) -> None:
+    gh.issues[(REPO, 1)].state = "CLOSED"
+    gh.issues[(REPO, 1)].labels.update(labels)
+
+
+def _settle(gh: FakeGhClient) -> cw.Outcome:
+    return cw.settle_closed(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED)
+
+
+def test_settle_closed_releases_own_marker_and_removes_both_labels_in_one_edit(
+    gh: FakeGhClient,
+) -> None:
+    _own_marker(gh)
+    _closed_issue(gh, "fr:claimed", "fr:in-progress")
+    out = _settle(gh)
+    assert out == cw.Done("released", 1500)
+    (m,) = _markers(gh)
+    assert m.released == NOW
+    assert not {"fr:claimed", "fr:in-progress"} & gh.issues[(REPO, 1)].labels
+    removals = [c for n, c in gh.calls if n == "edit_issue_labels" and c["remove"]]
+    assert [c["remove"] for c in removals] == [frozenset({"fr:claimed", "fr:in-progress"})]
+
+
+def test_settle_closed_without_any_marker_removes_both_labels(gh: FakeGhClient) -> None:
+    _closed_issue(gh, "fr:claimed", "fr:in-progress")
+    assert _settle(gh) == cw.Done("unlabelled")
+    assert not {"fr:claimed", "fr:in-progress"} & gh.issues[(REPO, 1)].labels
+
+
+def test_settle_closed_leaves_a_reopened_issue_alone(gh: FakeGhClient) -> None:
+    _own_marker(gh)
+    gh.issues[(REPO, 1)].labels.update({"fr:claimed", "fr:in-progress"})
+    assert _settle(gh) == cw.Done("none")
+    assert _ops(gh) == []
+    assert _markers(gh)[0].released is None
+
+
+def test_settle_closed_leaves_an_issue_a_foreign_trusted_claim_holds(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - DAY, expires=NOW + DAY)
+    _closed_issue(gh, "fr:claimed", "fr:in-progress")
+    assert _settle(gh) == cw.Done("none")
+    assert {"fr:claimed", "fr:in-progress"} <= gh.issues[(REPO, 1)].labels
+    assert _ops(gh) == []
+
+
+def test_settle_closed_ignores_untrusted_markers(gh: FakeGhClient) -> None:
+    _foreign(gh, at=NOW - DAY, expires=NOW + DAY, author="stranger")
+    _closed_issue(gh, "fr:claimed")
+    assert _settle(gh) == cw.Done("unlabelled")
+    assert "fr:claimed" not in gh.issues[(REPO, 1)].labels
+
+
+def _count_views(gh: FakeGhClient) -> list[int]:
+    views: list[int] = []
+    real = gh.view_issue
+
+    def counting(repo: str, number: int) -> dict[str, object]:
+        views.append(number)
+        return real(repo, number)
+
+    gh.view_issue = counting  # type: ignore[method-assign]
+    return views
+
+
+def test_settle_closed_views_the_issue_once_and_edits_labels_once(gh: FakeGhClient) -> None:
+    """p1-r2: the labels come from the first read, the restore re-read is `_read`'s."""
+    _own_marker(gh)
+    _closed_issue(gh, "fr:claimed", "fr:in-progress")
+    views = _count_views(gh)
+    _settle(gh)
+    assert len(views) == 1
+    assert [n for n, _ in gh.calls].count("edit_issue_labels") == 1
+
+
+def test_settle_closed_with_no_release_label_edits_no_label_and_still_releases(
+    gh: FakeGhClient,
+) -> None:
+    _own_marker(gh)
+    _closed_issue(gh)
+    views = _count_views(gh)
+    assert _settle(gh) == cw.Done("released", 1500)
+    assert _markers(gh)[0].released == NOW
+    assert "edit_issue_labels" not in [n for n, _ in gh.calls]
+    assert len(views) == 1

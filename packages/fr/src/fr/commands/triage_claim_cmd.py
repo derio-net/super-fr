@@ -9,15 +9,17 @@ the one resolver the batch verbs share.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 import yaml
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.commands import triage_batch_cmd
 from fr.commands.triage_cmd import (
     DirOpt,
@@ -39,7 +41,14 @@ from fr.triage.check import claim_sets
 from fr.triage.claim_sync import ClaimEnv, SyncResult, execute, plan_sync, record_releases
 from fr.triage.claims import SCOPE_ID_PATTERN, Claim, expired, from_issue_claim, holder, stale
 from fr.triage.errors import TriageError
-from fr.triage.model import Batch, ClaimTakenEvent, Facts, normalize_key
+from fr.triage.model import (
+    Batch,
+    ClaimTakenEvent,
+    Facts,
+    load_facts,
+    load_judgements,
+    normalize_key,
+)
 from fr.triage.scope_config import default_board_name, load_scope_config, scope_id
 
 scope_app = typer.Typer(name="scope", help="This triage scope's identity and config.")
@@ -112,7 +121,7 @@ def claim_list_command(
 
 def _say_result(result: SyncResult) -> None:
     for op, done in result.done:
-        console.print(f"  {op.kind} {op.key} ({op.batch}): {done.action}", markup=False)
+        console.print(f"  {op.kind} {op.label}: {done.action}", markup=False)
     for h in result.held:
         console.print(
             f"  held {h.key} ({h.batch}) by {h.holder.signer} (batch {h.holder.batch})",
@@ -138,7 +147,7 @@ def claim_sync_command(
         if op.kind == "claim":
             console.print(f"claim {op.key} for {op.batch}", markup=False)
         else:
-            console.print(f"{op.kind} {op.key} ({op.batch})", markup=False)
+            console.print(f"{op.kind} {op.label}", markup=False)
     for h in plan.held:
         console.print(
             f"held {h.key} ({h.batch}): {h.holder.signer} holds it for batch {h.holder.batch}, "
@@ -242,8 +251,16 @@ def claim_take_command(
         console.print("nothing written; re-run with --yes to take it", markup=False)
         return
     owner_repo, number = _repo_of(env, key)
-    out = _write_one(
-        lambda: cw.take(
+    # The take makes the member owed (gh#1120): without the event a wave-less, undispatched
+    # batch owes nothing, and the next sync would release the claim just written. It is
+    # recorded FIRST (post-merge truth R5), so a failed write leaves the forge untouched and
+    # a forge write that lands can never be released by a sync that does not know of it.
+    event = ClaimTakenEvent(kind="claim_taken", at=now, keys=[key])
+    taken = chosen.model_copy(update={"events": [*chosen.events, event]})
+    batches = [taken if b.id == chosen.id else b for b in judgements.batches]
+    triage_batch_cmd._write(target, batches, facts, read=list(judgements.batches))
+    try:
+        out = cw.take(
             env.client(owner_repo),
             owner_repo,
             number,
@@ -253,19 +270,46 @@ def claim_take_command(
             now=now,
             trusted=env.trusted(owner_repo),
             allow=allow,
-        ),
-        key,
-    )
+        )
+    except (cw.ClaimError, UnsupportedForgeOperation) as exc:
+        _withdraw_take(target, facts, chosen.id, event, str(exc))
+    except FORGE_ERRORS as exc:
+        _fail(
+            f"{key}: {exc}. The take stays recorded for batch {chosen.id}; "
+            "`fr triage claim sync --yes` finishes it"
+        )
     if isinstance(out, cw.Held):
-        _fail(f"{key}: still held by {out.claim.signer} (batch {out.claim.batch})")
+        _withdraw_take(
+            target,
+            facts,
+            chosen.id,
+            event,
+            f"{key}: still held by {out.claim.signer} (batch {out.claim.batch})",
+        )
     console.print(f"took {key} for batch {chosen.id}", markup=False)
-    # The take makes the member owed (gh#1120): without the event a wave-less, undispatched
-    # batch owes nothing, and the next sync would release the claim just written.
-    taken = chosen.model_copy(
-        update={"events": [*chosen.events, ClaimTakenEvent(kind="claim_taken", at=now, keys=[key])]}
-    )
-    batches = [taken if b.id == chosen.id else b for b in judgements.batches]
-    triage_batch_cmd._write(target, batches, facts, read=list(judgements.batches))
+
+
+def _withdraw_take(
+    target: Path, facts: Facts, batch_id: str, event: ClaimTakenEvent, why: str
+) -> NoReturn:
+    """Remove the `claim_taken` event `take` just recorded, because the forge refused the
+    take: no take is recorded for a take that did not happen. Exits 2 naming *why*; when the
+    withdrawal write fails too, it names the stray event instead."""
+    try:
+        current = load_judgements(target / "judgements.yaml").batches
+        cleaned = [
+            b.model_copy(update={"events": [e for e in b.events if e != event]})
+            if b.id == batch_id
+            else b
+            for b in current
+        ]
+        triage_batch_cmd._save(target, cleaned, facts, read=list(current))
+    except TriageError as exc:
+        _fail(
+            f"{why}. The recorded claim_taken event on batch {batch_id} could not be withdrawn "
+            f"({exc}); remove it by hand"
+        )
+    _fail(why)
 
 
 @claim_app.command("release")
@@ -370,6 +414,7 @@ def scope_retire_command(
         console.print("nothing written; re-run with --yes to retire it", markup=False)
         return
     failed: list[str] = []
+    released: set[str] = set()
     for k, _ in held:
         owner_repo, number = _repo_of(env, k)
         try:
@@ -384,6 +429,7 @@ def scope_retire_command(
                 allow="any" if force else "stale",
             )
         except UnsupportedForgeOperation as exc:
+            _forget_claims(target, signer, released)  # those already released stay so
             _fail(str(exc))
         except cw.ClaimError as exc:
             failed.append(f"{k}: {exc}")
@@ -391,10 +437,36 @@ def scope_retire_command(
         except FORGE_ERRORS as exc:
             failed.append(f"{k}: {exc}")
             continue
+        released.add(k)
         console.print(f"released {k}", markup=False)
+    _forget_claims(target, signer, released)
     if failed:
         _fail("these were not released; re-run to complete: " + "; ".join(failed), code=1)
     console.print(
-        f"retired {signer}; re-run `fr triage collect` before `claim sync` or `batch create`",
+        f"retired {signer}; `fr triage claim sync --yes` claims the members a batch owes",
         markup=False,
     )
+
+
+def _forget_claims(target: Path, signer: str, keys: set[str]) -> None:
+    """Drop *signer*'s claims on *keys* from the stored facts (post-merge truth R6): facts
+    record only un-released claims, so this is what a fresh collect would write, and the
+    next `check` and `claim sync` read the retired scope as gone with no collect between.
+    The facts are re-read here, not taken from the command's start: a collect that ran
+    meanwhile is not undone. `facts.json` is host-local state (never a state-ref file),
+    written atomically; an unreadable one is left alone."""
+    if not keys:
+        return
+    try:
+        facts = load_facts(target / "facts.json")
+    except TriageError:
+        return
+    issues = [
+        i.model_copy(update={"claims": [c for c in i.claims if c.signer != signer]})
+        if i.key in keys
+        else i
+        for i in facts.issues
+    ]
+    updated = facts.model_copy(update={"issues": issues})
+    body = json.dumps(updated.to_json(), indent=2, ensure_ascii=False) + "\n"
+    write_text_atomic(target / "facts.json", body)

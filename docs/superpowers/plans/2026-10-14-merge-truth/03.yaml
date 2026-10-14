@@ -1,0 +1,81 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Default branch unknown holds the repo; wait_out spends no GraphQL (R13, R14)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - triage-default-branch-unknown-held
+  - triage-waitout-no-graphql
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/errors.py
+  - packages/fr/src/fr/triage/*.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - tests/unit/test_triage_quota_loop.py
+  - docs/acceptance/*
+  estimate_lines: 250
+tasks:
+- number: 1
+  title: DefaultBranchUnknown guard on every merge_ctx caller (R13)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Red: in `test_triage_batch_drive_cmd.py`, add these `--yes` tests over git fixtures:
+      - `test_yes_pass_over_a_clone_without_origin_head_heals_and_merges`
+      - `test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes`: one warning line, the other repo's work still runs, exit 0.
+      - `test_merge_methods_read_failure_still_fails_the_pass`: the unchanged gh#921 behaviour.
+  - id: P3.T1.S2
+    text: |-
+      Green: define `DefaultBranchUnknown(ForgeReadError)`. Raise it only from the fetch and `checkout.default_branch()` in `merge_ctx` (3490-3521) and `_base_rules` (3528), catching `GitError` there too. In `_archive`, `_recover`, the enqueue path, `_export_merge` and `_hand_back` (and `_hand_back_archive` from phase 2), catch that type alone, say `held: <repo> default branch unknown (<cause>)` once per pass, and skip.
+  - id: P3.T1.S3
+    text: |-
+      Refactor: one helper for the catch-and-say. Run the drive-cmd tests.
+- number: 2
+  title: wait_out renewal spends no GraphQL (R14)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      In `test_triage_quota_loop.py`, add `test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window`: a fake client whose GraphQL calls raise and are counted, with `repo_visibility` served by REST. Run `wait_out` across one renewal and assert zero GraphQL calls and a successful renewal. If it passes immediately (expected: #1153 landed R12), record that in the step note as the pin for #1178. If it fails, fix the renewal path to use `gh.repo_visibility`.
+  - id: P3.T2.S2
+    text: |-
+      Run `uv run pytest tests/unit/test_triage_quota_loop.py -q --no-cov`.
+- number: 3
+  title: Acceptance rows move
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Run `uv run fr acceptance set-status --id <row> --status ci --level unit=super-fr:tests/unit/<file>.py#<test> --notes "<why>"` for `triage-default-branch-unknown-held` and `triage-waitout-no-graphql`, then `uv run fr acceptance check`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-14T01:54:17+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-14T01:54:17+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-10-14T01:54:17+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-14T01:54:17+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-14T01:54:17+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-14T01:54:17+00:00'
+      note: null
+  completion:
+    at: '2026-10-14T01:54:17+00:00'
+    note: null
+    observed_prs: []

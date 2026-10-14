@@ -135,6 +135,7 @@ class Pacer:
             pending=pending,
             probes=sum(len(p) for p in probes.values()),
             full=full,
+            closing=probe.closing_repos(facts, judgements),
         )
         if facts is None:  # nothing to carry from: the collect reads every repo (p2-r5)
             plan = replace(plan, only=None, carried=frozenset())

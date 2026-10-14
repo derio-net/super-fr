@@ -280,3 +280,30 @@ def test_a_close_out_another_drivers_runner_owns_is_reported_and_left_to_it(
     out = capsys.readouterr().out
     (line,) = _lines(out, "closeout")
     assert "herdr" in line and "left to" in line
+
+
+def test_an_archive_conflict_left_to_another_driver_builds_no_merge_context(
+    tmp_path: Path,
+    world: World,
+    checkout: DriveCheckout,
+    runners: Runners,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """p2-r9: a close-out on a runner this driver lacks is left to that runner's driver
+    before anything is read for the brief: no merge context (a fetch, a forge read)."""
+    from tests.unit.test_triage_batch_drive_cmd import _conflicting_archive
+
+    _conflicting_archive(world, tmp_path)  # its close-out runs on `fake`, not claude-cloud
+    built: list[str] = []
+    real = triage_batch_cmd._Driver.merge_ctx
+
+    def _recording(self: Any, facts: Any, repo: str) -> Any:
+        built.append(repo)
+        return real(self, facts, repo)
+
+    monkeypatch.setattr(triage_batch_cmd._Driver, "merge_ctx", _recording)
+    _cloud_pass(tmp_path)
+    (line,) = _lines(capsys.readouterr().out, "archive-conflict")
+    assert "which this driver lacks" in line, line
+    assert built == []

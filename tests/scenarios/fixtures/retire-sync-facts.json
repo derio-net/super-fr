@@ -1,0 +1,50 @@
+{
+  "schema": 12,
+  "scope": "derio-net--super-fr",
+  "kind": "repo",
+  "collected_at": "2026-10-14T00:00:00Z",
+  "repos": [
+    "derio-net/super-fr"
+  ],
+  "issues": [
+    {
+      "repo": "derio-net/super-fr",
+      "number": 201,
+      "title": "issue 201",
+      "state": "open",
+      "labels": [
+        "fr:claimed"
+      ],
+      "url": "https://github.com/derio-net/super-fr/issues/201",
+      "created_at": null,
+      "updated_at": null,
+      "closed_at": null,
+      "body": "",
+      "prs": [],
+      "dispatch_marker_at": null,
+      "claims": [
+        {
+          "signer": "s-dddddddd",
+          "batch": "their-batch",
+          "claimed": "2026-09-01T00:00:00Z",
+          "heartbeat": "2026-09-01T00:00:00Z",
+          "expires": "2026-09-02T00:00:00Z",
+          "comment_id": 2001,
+          "created_at": "2026-09-01T00:00:00Z"
+        }
+      ],
+      "author": null
+    }
+  ],
+  "prs": [],
+  "skipped": [],
+  "unviewed": [],
+  "warnings": [],
+  "batch_prs": [],
+  "judged_prs": [],
+  "config": {},
+  "viewer": "operator",
+  "visibility": {},
+  "stale_in_progress": [],
+  "config_ignored": {}
+}

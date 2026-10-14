@@ -28,11 +28,12 @@ Pure: facts and judgements in, sets out. The command only formats them.
   marker's forge `createdAt` to `collected_at`, so every machine agrees and no
   clock is read; a marker time that cannot be read is skipped, never raised.
   Reported, never acted on;
-- **closed in progress** — a CLOSED issue still labelled `fr:in-progress` (board-truth
-  R2; `Facts.stale_in_progress`, read by collect): `stale` ones are what `fr triage
-  clean-labels` cleans (`clean_label_targets`, the one predicate), `release-pending`
-  ones carry this scope's own un-released claim (the next `claim sync` clears both
-  labels), `held` ones another scope's;
+- **closed in progress** — a CLOSED issue still labelled `fr:in-progress` or `fr:claimed`
+  (board-truth R2, post-merge truth R3; `Facts.stale_in_progress`, read by collect):
+  `stale` ones have no trusted claim, `release-pending` ones carry this scope's own
+  un-released claim, `held` ones another scope's. The next `claim sync --yes` or drive
+  pass settles the first two (`clearing_rule`, the one phrase); `clean-labels --yes`
+  is the manual route for the stale ones (`clean_label_targets`, the one predicate);
 - **awaiting live** — an open issue labelled `fr:awaiting-live`: its fix has merged
   and a post-merge acceptance row still waits for its walk (spec
   2026-10-06-verification-strategies §F, R18). It is not ranked or proposed as work,
@@ -384,6 +385,22 @@ def _aware(stamp: str | None) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo is not None else None
+
+
+def clearing_rule(scope_args: str = "") -> str:
+    """The one sentence every surface uses for how the closed-but-in-progress set clears
+    (post-merge truth R4, R15): the next `claim sync --yes` or drive pass settles the
+    `stale` and `release-pending` entries; `clean-labels --yes` is the manual route for the
+    `stale` ones. *scope_args* (`--repo X`) are put into each command when given."""
+    a = f" {scope_args}" if scope_args else ""
+    return (
+        f"the next `fr triage claim sync{a} --yes` or `fr triage batch drive{a} --yes` pass "
+        f"clears the stale and release-pending ones; `fr triage clean-labels{a} --yes` clears "
+        "the stale ones by hand"
+    )
+
+
+CLEARING_RULE = clearing_rule()
 
 
 def clean_label_targets(facts: Facts) -> list[StaleInProgress]:

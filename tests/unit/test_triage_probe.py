@@ -206,6 +206,60 @@ def test_plan_pass_narrows_to_changed_and_below_the_floor_to_live_repos() -> Non
     assert plan(fresh, {"A", "B", "C"}, False)[1] is None  # every repo: no narrowing
 
 
+# ------------------------------------- close-outs read every pass (merge-truth R8)
+
+_FRESH = PacingState(full_at=NOW, judgements_digest="d", summary=SUMMARY)
+
+
+def _plan(
+    changed: set[str], below: bool, closing: set[str], state: PacingState = _FRESH
+) -> tuple[object, ...]:
+    p = plan_pass(state, NOW, repos=["A", "B", "C"], changed=changed, digest="d",
+                  below_floor=below, live={"A"}, pending={}, probes=3, closing=closing)  # fmt: skip
+    return p.kind, p.only, p.carried
+
+
+def test_plan_pass_adds_closing_to_a_partial_pass() -> None:
+    assert _plan({"B"}, False, {"C"}) == ("partial", frozenset({"B", "C"}), frozenset({"A"}))
+
+
+def test_plan_pass_adds_closing_to_an_essential_pass() -> None:
+    kind, only, _ = _plan({"B"}, True, {"C"})
+    assert (kind, only) == ("essential", frozenset({"C"}))
+    old = replace(_FRESH, full_at=NOW - FULL_EVERY)
+    kind, only, _ = _plan(set(), True, {"C"}, old)
+    assert (kind, only) == ("essential", frozenset({"A", "C"}))
+
+
+def test_a_quiet_pass_with_closing_repos_reads_only_them() -> None:
+    assert _plan(set(), False, {"B"}) == ("partial", frozenset({"B"}), frozenset({"A", "C"}))
+    assert _plan(set(), False, set()) == ("quiet", frozenset(), frozenset({"A", "B", "C"}))
+
+
+def test_live_repos_includes_closing(tmp_path: Path) -> None:
+    """A batch whose close-out started and is not archived keeps its repo live; once
+    archived it does not."""
+    from fr.triage.probe import closing_repos
+
+    world = World()
+    world.issues[1] = "closed"
+    world.pr(101, "feat/batch-b1", [1], state="MERGED", merged_at=NOW.isoformat())
+    closeout = (
+        "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+        "run: r1, archive: chore/archive-p1}\n"
+    )
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + closeout))
+    facts = world.facts()
+    judgements = load_judgements(tmp_path / "judgements.yaml")
+    assert closing_repos(facts, judgements) == {REPO}
+    assert live_repos(facts, judgements) == {REPO}
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")
+                                   + closeout.replace("}\n", ", archived: 7}\n")))  # fmt: skip
+    judgements = load_judgements(tmp_path / "judgements.yaml")
+    assert closing_repos(facts, judgements) == set()
+    assert live_repos(facts, judgements) == set()
+
+
 def test_the_judgements_digest_is_of_the_bytes(tmp_path: Path) -> None:
     path = tmp_path / "judgements.yaml"
     assert judgements_digest(path) == judgements_digest(tmp_path / "missing.yaml")

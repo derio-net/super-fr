@@ -208,6 +208,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "merge-train-red-recovery",
         "merge-train-queue",
         "batch-merge-skip-held",
+        "triage-closed-settle",
+        "triage-retire-sync",
     }
     assert on_disk == here
 
@@ -350,3 +352,11 @@ def test_triage_adopt_hold(installed: Path, tmp_path: Path) -> None:
 
 def test_triage_adopt_list(installed: Path, tmp_path: Path) -> None:
     _scenario("triage-adopt-list", installed, tmp_path)
+
+
+def test_triage_closed_settle(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-closed-settle", installed, tmp_path)
+
+
+def test_triage_retire_sync(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-retire-sync", installed, tmp_path)

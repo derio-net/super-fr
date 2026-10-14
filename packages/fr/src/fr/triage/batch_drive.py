@@ -39,6 +39,7 @@ from fr.triage.batch import (
 from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
+    ArchiveConflictEvent,
     Batch,
     CloseoutEvent,
     CloseoutHandbackEvent,
@@ -98,11 +99,14 @@ ActionKind = Literal[
     "claim",
     "refresh",
     "release",
+    "settle",
     "export",
     "export-merge",
     "export-reconcile",
     "export-closed",
     "enqueue",
+    "archive-conflict",
+    "export-conflict",
     "awaiting-live",
     "gate-pass",
     "ledger-unread",
@@ -120,6 +124,13 @@ ActionKind = Literal[
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
 )
+
+ARCHIVE_WAIT = "archive PR"
+"""How an archive PR's waiting line starts (merge-truth R9): `views.needs_you` reads a warn
+that starts so as a status line, never a `failing-ci` Need."""
+
+CONFLICTING = "CONFLICTING"
+"""The forge's `mergeable` for a PR that cannot merge cleanly (merge-truth R12)."""
 
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
@@ -146,8 +157,9 @@ class LivePr:
     # The branch the PR merges into, as the forge says now; "" when not read. An export
     # PR is reused or merged only into the default branch (p4-r15).
     base: str = ""
-    # GitHub's `mergeable` and `mergeStateStatus`, "" when not read: a collected
-    # close-out's PR merges only once `MERGEABLE` (exit-gates R15).
+    # GitHub's `mergeable` (MERGEABLE | CONFLICTING | UNKNOWN) and `mergeStateStatus`, ""
+    # when not read. A CONFLICTING archive or export PR is never merged (merge-truth R12);
+    # a collected close-out's PR merges only once `MERGEABLE` (exit-gates R15).
     mergeable: str = ""
     merge_state: str = ""
 
@@ -325,6 +337,9 @@ class Snapshot:
     claims_owed: tuple[tuple[str, str], ...] = ()
     refresh_owed: tuple[tuple[str, str], ...] = ()
     releases_owed: tuple[tuple[str, str], ...] = ()
+    # Closed issues to settle (post-merge truth R1, R2): (key, batch id), the batch "" when
+    # no batch of this scope holds the key. Written after the releases.
+    settles_owed: tuple[tuple[str, str], ...] = ()
     # Sessions the runner reports idle with no PR, past `idle_session_minutes` (driver-sessions
     # §D, R7): built by the command from live statuses, never by `views.drive_snapshot`
     # (whose warns all read as a failing CI). `scope_args` are the drive's own, for the
@@ -398,14 +413,17 @@ class Action:
     # highest wave the export PR covers, which names its branch
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
-    # claim, refresh, release: the issue key; a collected close-out's actions: its name,
-    # `closeout-<date>-<n>`
+    # claim, refresh, release, settle: the issue key; a collected close-out's actions: its
+    # name, `closeout-<date>-<n>`
     key: str = ""
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
     gate: str = ""  # gate-pass: the post-merge gate whose rows all read walked
-    draft: bool = False  # archive of a collected close-out: its PR is a draft, ready it first
+    # archive: the PR is a draft, marked ready first (merge-truth R11; a collected
+    # close-out's PR the same way)
+    draft: bool = False
+    branch: str = ""  # archive-conflict: the archive PR's head branch (merge-truth R12)
 
 
 @dataclass(frozen=True)
@@ -931,6 +949,54 @@ def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
     return f"{repo}/run/conflict-{batch_id}-{n}"
 
 
+# ------------------------------------------ archive conflicts (merge-truth R12, §E)
+
+ARCHIVE_HANDBACKS_PER_CLOSEOUT = 2
+"""R12: hand-backs a conflicting archive PR gets per close-out before it is the operator's."""
+
+ArchiveConflictKind = Literal["skip", "held", "handback"]
+
+
+def archive_conflict_decision(events: Sequence[object], head: str) -> ArchiveConflictKind:
+    """The pure decision on an archive PR conflicting at *head* (R12).
+
+    `skip`: an `archive_conflict` event exists for this head, so a restarted driver
+    never hands the same head back twice. `held`: two `session|fresh` hand-backs were
+    made since the batch's latest close-out event (held ones never count; a batch PR's
+    `conflict` events are another counter). Else `handback`."""
+    if any(isinstance(e, ArchiveConflictEvent) and e.head == head for e in events):
+        return "skip"
+    handed = 0
+    for event in reversed(events):
+        if isinstance(event, CloseoutEvent):
+            break
+        if isinstance(event, ArchiveConflictEvent) and event.delivered != "held":
+            handed += 1
+    return "held" if handed >= ARCHIVE_HANDBACKS_PER_CLOSEOUT else "handback"
+
+
+def held_archive_conflict(batch: Batch) -> ArchiveConflictEvent | None:
+    """The batch's latest `archive_conflict` event when it is `held` and no close-out
+    event came after it (R12): the operator owns that conflict."""
+    for event in reversed(batch.events):
+        if isinstance(event, CloseoutEvent):
+            return None
+        if isinstance(event, ArchiveConflictEvent):
+            return event if event.delivered == "held" else None
+    return None
+
+
+def _held_archive_conflict(batch: Batch, head: str) -> bool:
+    held = held_archive_conflict(batch)
+    return held is not None and held.head == head
+
+
+def archive_conflict_item_id(repo: str, batch_id: str, n: int) -> str:
+    """`<OWNER>/<REPO>/run/archive-conflict-<batch-id>-<n>`: the *n*th fresh session
+    started for the batch's conflicting archive PR."""
+    return f"{repo}/run/archive-conflict-{batch_id}-{n}"
+
+
 # ------------------------------------------- collected close-out hand-back (R27)
 
 CLOSEOUT_HANDBACKS = 1
@@ -1299,6 +1365,11 @@ def _export_row(
         why = outside
     elif wrong := _wrong_base(live, default):
         why = wrong
+    elif live.mergeable == CONFLICTING:
+        # No session owns it: straight to the operator, with a recorded stop (R12).
+        return Action("export-conflict", repo, f"export PR #{live.number} conflicts with "
+                      "the default branch; the operator must act", pr=live.number,
+                      head=live.head, wave=wave), "blocked"  # fmt: skip
     elif live.draft:
         why = "is a draft"
     elif live.checks == "failing":
@@ -1591,8 +1662,9 @@ def _walk_merge_train(
 
 def _claim_actions(snap: Snapshot) -> list[Action]:
     """The claim writes of a pass, ahead of every other action (§3.F): claims, then
-    refreshes, then releases. A batch outside the selection is left alone; one the
-    snapshot does not know (a dropped member's old batch) is still released."""
+    refreshes, then releases, then the settles of closed issues. A batch outside the
+    selection is left alone; one the snapshot does not know (a dropped member's old
+    batch) is still released."""
     known = {b.id for b in snap.batches}
 
     def mine(bid: str) -> bool:
@@ -1603,6 +1675,7 @@ def _claim_actions(snap: Snapshot) -> list[Action]:
         ("claim", snap.claims_owed, "owed"),
         ("refresh", snap.refresh_owed, "heartbeat due"),
         ("release", snap.releases_owed, "no longer owed"),
+        ("settle", snap.settles_owed, "closed"),
     ):
         out.extend(
             Action(kind, bid, why, key=key)  # type: ignore[arg-type]
@@ -1817,7 +1890,11 @@ def drive_pass(snap: Snapshot) -> Pass:
             stale = _stale_closeout(batch, event, snap)
             if stale is not None:
                 actions.append(stale)
-        ready = [p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"]
+        # A draft is ready too (merge-truth R11): the archive marks it ready, then merges.
+        # One the forge reports conflicting is never merged: it is handed back (R12).
+        open_ = [p for p in mine if p.state == "OPEN"]
+        conflicting = [p for p in open_ if p.mergeable == CONFLICTING]
+        ready = [p for p in open_ if p.checks == "green" and p not in conflicting]
         default = snap.default_branch.get(snap.repos.get(batch.id, ""), "")
         good = next((p for p in ready if default and not _wrong_base(p, default)), None)
         if good is None and ready and default:
@@ -1831,12 +1908,37 @@ def drive_pass(snap: Snapshot) -> Pass:
                        f"{_wrong_base(wrong, default)}; it is never merged", pr=wrong.number)
             )  # fmt: skip
             continue
+        spent = [p for p in conflicting if _held_archive_conflict(batch, p.head)]
+        if good is None and spent:
+            # Its hand-backs are spent (R12): only the operator can resolve it, so the
+            # batch is blocked, and named every pass as a blocked dispatch is.
+            archives_blocked += 1
+            p = spent[0]
+            actions.append(
+                Action("blocked", batch.id, f"{ARCHIVE_WAIT} #{p.number} ({p.head_ref}) "
+                       "conflicts and its hand-backs are spent; resolve it", pr=p.number)
+            )  # fmt: skip
+            continue
         closing += 1
         if good is not None:
             actions.append(
                 Action("archive", batch.id, f"PR #{good.number} ({good.head_ref})",
-                       pr=good.number, head=good.head)
+                       pr=good.number, head=good.head, draft=good.draft)
             )  # fmt: skip
+        for p in conflicting:
+            actions.append(
+                Action("archive-conflict", batch.id, f"{ARCHIVE_WAIT} #{p.number} "
+                       f"({p.head_ref}) conflicts with the default branch", pr=p.number,
+                       head=p.head, branch=p.head_ref)
+            )  # fmt: skip
+        # merge-truth R9: every other attributed open one is named with what it waits on,
+        # every pass (no head, so never deduplicated). A status line, never a Need.
+        for p in open_:
+            if p not in conflicting and p.checks != "green":
+                actions.append(
+                    Action("warn", batch.id, f"{ARCHIVE_WAIT} #{p.number}: checks {p.checks}",
+                           pr=p.number)
+                )  # fmt: skip
 
     # 3a. Report idle sessions (driver-sessions R7). A warn never moves the summary.
     actions.extend(_idle_actions(snap, chosen))
@@ -1952,8 +2054,9 @@ def action_line(action: Action, outcome: str | None = None) -> str:
     the same words in `--once` and loop mode."""
     if action.kind == "dedupe":  # names no batch
         return f"dedupe: {outcome or action.detail}"
-    if action.kind in ("claim", "refresh", "release"):
-        return f"{action.kind} {action.key} ({action.batch}): {outcome or action.detail}"
+    if action.kind in ("claim", "refresh", "release", "settle"):
+        where = f" ({action.batch})" if action.batch else ""
+        return f"{action.kind} {action.key}{where}: {outcome or action.detail}"
     if action.wave is not None:
         return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"
