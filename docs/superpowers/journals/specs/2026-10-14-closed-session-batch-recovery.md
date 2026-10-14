@@ -67,3 +67,8 @@ row_kinds:
 run_gate: tester
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-closed-session-batch-recovery-p1 created=2026-10-14T18:02:46+00:00 -->
+### tier-2026-10-14-closed-session-batch-recovery-p1 · decision · hard: allocation ownership and uncertain-submission concurrency
+
+One coherent recovery ask; hard tier because durable pre-allocation intent, source/target locks and cross-store reconciliation must preserve no-replay gates.
