@@ -27,7 +27,9 @@ def test_label_families() -> None:
 
 def _repo(tmp_path: Path, section: str, remap: str | None = None) -> Path:
     (tmp_path / "docs").mkdir(exist_ok=True)
-    (tmp_path / SPEC).write_text(f"# Spec\n\n## Requirements\n\nR1. x\n\n## Verification\n\n{section}\n")
+    (tmp_path / SPEC).write_text(
+        f"# Spec\n\n## Requirements\n\nR1. x\n\n## Verification\n\n{section}\n"
+    )
     write_matrix(tmp_path, [row(SPEC, rid="a", verify=None)])
     if remap is not None:
         (tmp_path / ".fr").mkdir(exist_ok=True)
@@ -58,7 +60,8 @@ def _fake(labels: list[str]) -> FakeGhClient:
 @pytest.fixture(autouse=True)
 def _tracking(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "fr.services.resolve.resolve_tracking", lambda *_a, **_k: types.SimpleNamespace(type="github")
+        "fr.services.resolve.resolve_tracking",
+        lambda *_a, **_k: types.SimpleNamespace(type="github"),
     )
 
 

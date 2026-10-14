@@ -198,7 +198,9 @@ class FakeGhClient:
         self, repo: str, pr: int, *, add: frozenset[str], remove: frozenset[str]
     ) -> None:
         self._gate()
-        self.calls.append(("edit_pr_labels", {"repo": repo, "pr": pr, "add": add, "remove": remove}))
+        self.calls.append(
+            ("edit_pr_labels", {"repo": repo, "pr": pr, "add": add, "remove": remove})
+        )
         labels = self.pr_labels.setdefault((repo, pr), set())
         self.pr_labels[(repo, pr)] = (labels | set(add)) - set(remove)
 

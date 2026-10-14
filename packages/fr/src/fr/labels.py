@@ -211,7 +211,9 @@ def gate_label(gate: str, *, passed: bool = False) -> LabelDef:
     """`gate:<gate>` (held) or `gate:<gate>-passed` (the gate passed)."""
     if passed:
         return LabelDef(
-            f"{GATE_PREFIX}{gate}{PASSED_SUFFIX}", GATE_PASSED_LABEL_COLOR, f"The {gate} gate passed"
+            f"{GATE_PREFIX}{gate}{PASSED_SUFFIX}",
+            GATE_PASSED_LABEL_COLOR,
+            f"The {gate} gate passed",
         )
     return LabelDef(f"{GATE_PREFIX}{gate}", GATE_LABEL_COLOR, f"Held by the {gate} gate")
 

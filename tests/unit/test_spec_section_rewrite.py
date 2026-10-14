@@ -58,7 +58,10 @@ def test_it_inserts_a_missing_strategy_line_first() -> None:
 def test_it_adds_grammar_to_a_prose_only_section_and_keeps_the_prose() -> None:
     doc = "# S\n\n## Verification\n\nWe will walk it by hand.\n\n## End\n"
     new = rewrite_section(doc, strategy="candidate")
-    assert new == "# S\n\n## Verification\n\nstrategy: candidate\n\nWe will walk it by hand.\n\n## End\n"
+    assert (
+        new
+        == "# S\n\n## Verification\n\nstrategy: candidate\n\nWe will walk it by hand.\n\n## End\n"
+    )
 
 
 def test_a_row_without_a_reason_writes_a_bare_bullet() -> None:
@@ -83,5 +86,5 @@ def test_crlf_files_keep_their_line_endings() -> None:
 
 
 def test_a_reason_with_a_newline_is_refused() -> None:
-    with pytest.raises(SectionError, match="one line"):
+    with pytest.raises(SectionError, match="one non-empty line"):
         rewrite_section(DOC, row="a", strategy="live", reason="a\nb")

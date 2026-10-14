@@ -156,6 +156,59 @@ def exit_cmd(
     console.print(f"gated: {'yes' if result.is_gated else 'no'}")
 
 
+@verification_app.command("set")
+def set_cmd(
+    run: str = typer.Option(..., "--run", help="The run whose spec's Verification to change."),
+    strategy: str = typer.Option(..., "--strategy", help="The strategy (or `none`) to set."),
+    reason: str = typer.Option(..., "--reason", help="Why; journalled as a spec decision."),
+    row: str | None = typer.Option(None, "--row", help="Set this row's line (default: the run's)."),
+    gate: str | None = typer.Option(None, "--gate", help="Also set the gate (or `none`)."),
+    answered_by: str | None = typer.Option(
+        None,
+        "--answered-by",
+        help="operator | agent. After spec-review, a change that makes the exit wait less "
+        "needs `operator`; on Claude Code the claim is verified against the session transcript.",
+    ),
+) -> None:
+    """Insert or rewrite one `strategy:`, row bullet or `gate:` line of the spec's
+    `## Verification`, journal why, commit and re-sync the PR labels (spec
+    2026-10-14 exit-gates R8)."""
+    from fr.verification import labels as _labels
+    from fr.verification.set import SetRefusedError, exit_change
+
+    if answered_by not in (None, "operator", "agent"):
+        err_console.print("refused: --answered-by must be operator or agent", markup=False)
+        raise typer.Exit(2)
+    repo_root = resolve_repo_root()
+    try:
+        result = exit_change(
+            repo_root,
+            run,
+            row=row,
+            strategy=strategy,
+            gate=gate,
+            reason=reason,
+            answered_by=answered_by,
+        )
+    except SetRefusedError as e:
+        err_console.print(f"refused: {e} — nothing changed", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
+    for notice in result.notices:
+        err_console.print(notice, markup=False, soft_wrap=True)
+    console.print(f"{result.decision_id}: {result.spec_rel} updated", soft_wrap=True)
+    try:
+        from fr.run.model import load_run_state
+
+        outcome = _labels.sync_exit_labels(repo_root, load_run_state(repo_root, run), None)
+    except _labels.PrNotFound:
+        return
+    except Exception as e:  # noqa: BLE001 — advisory: the change is already committed
+        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        return
+    if outcome.warning:
+        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
+
+
 @verification_app.command("walk")
 def walk_cmd(
     run: str = typer.Option(..., "--run", help="The run whose spec's rows are walked."),
