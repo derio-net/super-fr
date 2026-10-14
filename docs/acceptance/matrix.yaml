@@ -7962,9 +7962,20 @@ rows:
       you now.'
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_conflicting_archive_pr_gets_archive_conflict_never_archive
+      - super-fr:tests/unit/test_triage_batch_conflict.py#test_archive_conflict_decision_holds_after_two_hand_backs_since_the_closeout
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_conflict_messages_an_idle_closeout_session
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_conflict_starts_a_fresh_item_when_the_closeout_is_done
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_archive_conflict_held_records_a_stop_and_raises_the_need
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_conflicting_export_pr_goes_straight_to_needs_you_with_stop_key_export_repo
+      - super-fr:tests/unit/test_triage_board_views.py#test_held_archive_conflict_is_an_archive_conflict_need
+    status: ci
+    notes: 'merge-truth phase 2: a conflicting archive PR is never merged; it is handed
+      to the close-out (idle message, wait while working, fresh session when done),
+      held as an archive-conflict Need with a recorded stop after two hand-backs; a
+      conflicting export PR stops straight away; a merge clears the stop (R12)'
     verify: none
   - id: triage-default-branch-unknown-held
     capability: triage-batches
