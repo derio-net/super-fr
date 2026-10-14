@@ -269,7 +269,7 @@ steps:
           visual: none
           findings: p7-r1,p7-r2,p7-r3,p7-r4,p7-r5,p7-r6,p7-r7,p7-r8
       phase/8/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T10:34:26+00:00'
           agent: a99337a345e6912d2
@@ -279,6 +279,11 @@ steps:
           tier: standard
           bound: sonnet
           session: 73abb433-5601-4db7-ba08-a64b67cbfcfb
+          returned: '2026-10-14T10:53:33+00:00'
+          outcome: done
+        evidence:
+          tests: ci:afe9ba8ce8ee2c245c51472b5ca1a3d8276e9933+7a6ae37a284aaf67258b9b4c5c633377c15323f9;tree=2d43ef926758e7c1659ac26b4d261dbe2babef30181dd06b93159a5707025ca4
+          visual: none
   journal-check:
     state: pending
   deliver:

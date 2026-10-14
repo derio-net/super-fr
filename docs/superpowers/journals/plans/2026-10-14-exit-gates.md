@@ -1115,3 +1115,13 @@ warns at limit, fetches tags; test_p7_r7_a_read_at_its_limit_warns_and_an_unfetc
 ### p7-r8-resolved · finding [out-of-scope] · resolves p7-r8: fr.cloud._version_tuple cannot parse X.Y.ZrcN; the cloud doctor's fr-version check reports ok on an RC install (phase 7)
 
 fr cloud doctor's version parser predates RC versions and degrades to ok, harmless; not part of the release tooling R25 names.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p8-t1 created=2026-10-14T10:53:27+00:00 phase=8 -->
+### no-refactor-p8-t1 · discovery · no-refactor-because P8.T1 (phase 8)
+
+preflight edit is a small additive branch around the existing checks; nothing duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p8-t3 created=2026-10-14T10:53:27+00:00 phase=8 -->
+### no-refactor-p8-t3 · discovery · no-refactor-because P8.T3 (phase 8)
+
+docs and matrix status only; no code to refactor
