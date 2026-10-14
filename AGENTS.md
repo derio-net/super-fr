@@ -556,8 +556,10 @@ every release fails (release.py reports that refusal
 by name, never as a lost race).
 
 **Release gating** (spec `2026-10-14-exit-gates` R20, R21, R25, R26). Before it
-cuts anything, `release.py` asks `fr release status --json` (with the workflow
-token, `FR_RELEASE_STATUS_TOKEN`) which PRs merged since the last **final** tag
+cuts anything, `release.py` reads every PR merged since the last final tag, with
+its labels, through `gh` (the workflow token, `FR_RELEASE_STATUS_TOKEN`), and asks
+`fr release status --from-json <facts> --json`, run with **no forge credential**
+in its environment, which of those PRs merged since the last **final** tag
 (`vX.Y.Z` exactly; an RC tag never counts) still carry `gate:tester` or
 `gate:devops` without the `-passed` label. While any do, a run cuts a release
 candidate instead: `release: vX.Y.Z-rc.N`, tagged and published as a GitHub

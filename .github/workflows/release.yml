@@ -9,12 +9,13 @@ name: Release
 #
 # Release gating (spec 2026-10-14-exit-gates R20, R21): while a PR merged since
 # the last final tag still carries an unpassed post-merge gate label
-# (`fr release status --json`), a run cuts a release candidate instead,
+# (`fr release status --from-json`), a run cuts a release candidate instead,
 # `release: vX.Y.Z-rc.N`, tagged and published as a GitHub pre-release and
 # consuming no fragment; the final follows once nothing waits. A gate passes
 # with no push to main, so the workflow also runs daily (and `fr gate pass`
-# prints the dispatch). `fr release status` reads the merged PRs with the
-# workflow token (`pull-requests: read`), never the app's.
+# prints the dispatch). release.py reads the merged PRs and their labels with
+# `gh` and the workflow token (`pull-requests: read`), never the app's, and fr
+# decides from those facts with no credential in its environment.
 #
 # Two modes, by the repo variable FR_AUTOMATION_APP_ID (spec
 # 2026-10-11-merge-train-safety §F). Unset: the push uses the GITHUB_TOKEN, and

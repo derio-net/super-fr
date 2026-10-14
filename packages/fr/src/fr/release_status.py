@@ -3,9 +3,9 @@
 
 The gate ledger is the merged PRs' labels (`fr.labels.held_gates`): a PR merged since
 the last FINAL tag that carries `gate:tester` or `gate:devops` without the matching
-`gate:<g>-passed` waits. `scripts/release.py` reads this module's JSON
-(`fr release status --json`) and cuts a release candidate while anything waits, the
-final once nothing does.
+`gate:<g>-passed` waits. `scripts/release.py` reads the forge itself and hands the
+facts to `fr release status --from-json` (no credential), whose JSON says whether it cuts
+a release candidate (anything waits) or the final (nothing does).
 
 Pure given its inputs: the forge is a two-method protocol, the owed rows a callable,
 and the tag and its date are passed in. `fr.commands.release_cmd` wires the real ones.

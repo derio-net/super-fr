@@ -280,3 +280,75 @@ def test_the_real_owed_rows_reader_reads_no_run_as_no_row(checkout: Path) -> Non
     read = release_cmd.owed_rows_reader(checkout)
     assert read("feat/none") == {}
     assert read("") is None
+
+
+# -- --from-json: release.py read the forge; fr only decides (credential-free) ----------
+
+
+def _facts(tmp: Path) -> Path:
+    path = tmp / "facts.json"
+    path.write_text(
+        json.dumps(
+            {
+                "repo": REPO,
+                "last_final": "v5.26.0",
+                "since": "2026-10-02T00:00:00+00:00",
+                "prs": [
+                    {**_pr(7, "2026-10-03T00:00:00Z"), "labels": [{"name": "gate:tester"}]},
+                    {**_pr(6, "2026-10-01T00:00:00Z"), "labels": ["gate:tester"]},
+                    {**_pr(8, "2026-10-04T00:00:00Z"), "labels": ["gate:tester-passed"]},
+                ],
+            }
+        )
+    )
+    return path
+
+
+def test_from_json_decides_without_touching_the_forge(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_forge(url: str) -> Any:
+        raise AssertionError("--from-json must never reach a forge")
+
+    monkeypatch.setattr(release_cmd, "client_for_url", no_forge)
+    monkeypatch.setattr(release_cmd, "owed_rows_reader", lambda root, ref=None: lambda b: {})
+
+    result = CliRunner().invoke(
+        app, ["release", "status", "--from-json", str(_facts(checkout)), "--json"]
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["last_final"] == "v5.26.0" and data["repo"] == REPO
+    assert [w["number"] for w in data["waiting"]] == [7]
+
+
+def test_an_unreadable_facts_file_fails_closed(checkout: Path) -> None:
+    bad = checkout / "bad.json"
+    bad.write_text("{not json")
+    result = CliRunner().invoke(app, ["release", "status", "--from-json", str(bad), "--json"])
+    assert result.exit_code == 2
+
+
+def test_both_paths_share_one_decision_function(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+    real = release_cmd.release_status
+
+    def spy(**kw: Any) -> ReleaseStatus:
+        seen.append(type(kw["forge"]).__name__)
+        return real(**kw)
+
+    monkeypatch.setattr(release_cmd, "release_status", spy)
+    _install(monkeypatch, FakeClient([_pr(7, "2026-10-03T00:00:00Z")], {7: ["gate:tester"]}))
+    monkeypatch.setattr(release_cmd, "owed_rows_reader", lambda root, ref=None: lambda b: {})
+
+    live = CliRunner().invoke(app, ["release", "status", "--json", "--repo", REPO])
+    facts = CliRunner().invoke(
+        app, ["release", "status", "--from-json", str(_facts(checkout)), "--json"]
+    )
+
+    assert live.exit_code == 0 and facts.exit_code == 0
+    assert seen == ["ClientReleaseForge", "FactsReleaseForge"]
+    assert json.loads(live.stdout)["waiting"] == json.loads(facts.stdout)["waiting"]

@@ -8,7 +8,8 @@ R25. Run by `release.yml` on every push to `main`, daily, and by hand through
 `workflow_dispatch`.
 
 Release gating (`compute`): while a PR merged since the last FINAL tag
-(`vX.Y.Z` exactly) still waits on a post-merge gate (`fr release status --json`),
+(`vX.Y.Z` exactly) still waits on a post-merge gate (`waiting_prs`: a `gh` read here,
+then `fr release status --from-json`, credential-free),
 a run cuts a release candidate `vX.Y.Z-rc.N` (no fragment consumed, a GitHub
 pre-release), or nothing when nothing merged since the newest RC tag; once nothing
 waits, the final `X.Y.Z` consumes the fragments. Versions parse through
@@ -62,6 +63,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -151,7 +153,13 @@ _FR_VERSION_PROBE = "import importlib.metadata as m; print(m.version('fr'))"
 _TAIL_LINES = 30
 
 
-_AUTH_ENV_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+_AUTH_ENV_VARS = (
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "GH_ENTERPRISE_TOKEN",
+    "GITHUB_ENTERPRISE_TOKEN",
+    "FR_RELEASE_STATUS_TOKEN",  # release.yml's workflow token for the merged-PR read
+)
 
 
 def _credential_free_env() -> dict[str, str]:
@@ -207,24 +215,48 @@ def _run_staged_tests(
 
 STATUS_SCHEMA = 1
 STATUS_TOKEN_VAR = "FR_RELEASE_STATUS_TOKEN"
+MERGED_PR_LIMIT = 1000
+"""`gh pr list --limit`: a read that returns this many may be truncated, so it refuses."""
+MERGED_PR_FIELDS = "number,title,url,mergedAt,headRefName,labels"
 
 
-def _run_release_status(
-    repo: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
-) -> list[dict[str, object]]:
-    """`fr release status --json`'s `waiting`: every PR merged since the last final tag
-    that a post-merge gate still holds (exit-gates R21). Read with the forge token (it
-    is a forge read); any failure refuses, because an empty answer would cut a final."""
+def _run_gh_read(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """A read-only `gh` call (the merged PRs and their labels). In release.yml it uses
+    the workflow token (`FR_RELEASE_STATUS_TOKEN`, pull-requests read), not the app's."""
     env = dict(os.environ)
-    if env.get(STATUS_TOKEN_VAR):  # release.yml: the workflow token, never the app's
+    if env.get(STATUS_TOKEN_VAR):
         env["GH_TOKEN"] = env[STATUS_TOKEN_VAR]
-    r = run(
-        ["uv", "run", "--locked", "fr", "release", "status", "--json"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    return subprocess.run(["gh", *args], capture_output=True, text=True, env=env)
+
+
+def _run_release_decide(
+    repo: Path, facts: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+) -> list[dict[str, object]]:
+    """`fr release status --from-json FACTS --json`'s `waiting` (exit-gates R21).
+
+    fr only decides here: release.py already read the forge, so fr runs with no forge
+    credential at all (`_credential_free_env`, plus an empty gh config dir so no stored
+    login is readable either), the same rule as the staged suite. Any failure refuses:
+    an empty answer would cut a final."""
+    with tempfile.TemporaryDirectory(prefix="fr-release-gh-") as gh_config:
+        env = {**_credential_free_env(), "GH_CONFIG_DIR": gh_config}
+        r = run(
+            [
+                "uv",
+                "run",
+                "--locked",
+                "fr",
+                "release",
+                "status",
+                "--from-json",
+                str(facts),
+                "--json",
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
     why = None
     waiting: object = None
     if r.returncode != 0:
@@ -240,8 +272,8 @@ def _run_release_status(
             why = f"no schema-{STATUS_SCHEMA} `waiting` list in {r.stdout.strip()[:200]!r}"
     if why is not None:
         raise ReleaseError(
-            "`fr release status --json` failed, so what still waits on a post-merge gate "
-            f"is unknown; refusing to choose between an RC and the final:\n{why}"
+            "`fr release status --from-json` failed, so what still waits on a post-merge "
+            f"gate is unknown; refusing to choose between an RC and the final:\n{why}"
         )
     assert isinstance(waiting, list)
     return waiting
@@ -256,7 +288,8 @@ class Commands:
     gh: Callable[[list[str]], subprocess.CompletedProcess[str]] = _run_gh
     test: Callable[[Path, str], str | None] = _run_staged_tests
     migrate: Callable[[Path], str | None] = _run_migrate
-    status: Callable[[Path], list[dict[str, object]]] = _run_release_status
+    gh_read: Callable[[list[str]], subprocess.CompletedProcess[str]] = _run_gh_read
+    decide: Callable[[Path, Path], list[dict[str, object]]] = _run_release_decide
 
 
 # -- git ---------------------------------------------------------------------
@@ -272,7 +305,10 @@ def _git(
     repo: Path, *args: str, check: bool = True, auth: bool = False
 ) -> subprocess.CompletedProcess[str]:
     cmd = ["git", *(_PUSH_AUTH if auth else []), *args]
-    r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
+    # Only an authenticated push reads the token (through gh's helper); every other git
+    # command runs credential-free.
+    env = None if auth else _credential_free_env()
+    r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, env=env)
     if check and r.returncode != 0:
         raise ReleaseError(f"git {' '.join(args)} failed: {r.stderr.strip()}")
     return r
@@ -343,6 +379,41 @@ def _merged_since(repo: Path, tag: str) -> bool:
     return _out(repo, "rev-list", "--count", f"refs/tags/{tag}..HEAD").strip() != "0"
 
 
+def waiting_prs(repo: Path, cmds: Commands) -> list[dict[str, object]]:
+    """What still waits on a post-merge gate (exit-gates R20, R21). release.py does the
+    credentialed forge read itself (`cmds.gh_read`: every PR merged since the last final
+    tag, with its labels), writes the facts to a temp file and lets fr decide from them
+    credential-free (`cmds.decide`)."""
+    tag = last_final(repo)
+    since = _out(repo, "log", "-1", "--format=%cI", f"refs/tags/{tag.tag}").strip() if tag else None
+    args = ["pr", "list", "--state", "merged", "--limit", str(MERGED_PR_LIMIT)]
+    if since:
+        args += ["--search", f"merged:>={since}"]
+    args += ["--json", MERGED_PR_FIELDS]
+    r = cmds.gh_read(args)
+    if r.returncode != 0:
+        raise ReleaseError(
+            "cannot read the PRs merged since the last final tag, so what waits on a "
+            f"post-merge gate is unknown; refusing:\n{r.stderr.strip()}"
+        )
+    try:
+        prs = json.loads(r.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise ReleaseError(f"`gh pr list` did not return JSON: {exc}") from None
+    if not isinstance(prs, list):
+        raise ReleaseError("`gh pr list` did not return a list of PRs")
+    if len(prs) >= MERGED_PR_LIMIT:
+        raise ReleaseError(
+            f"`gh pr list` returned {len(prs)} merged PRs, its limit: the read may be "
+            "truncated, so what waits is unknown; refusing"
+        )
+    facts = {"last_final": tag.tag if tag else None, "since": since, "prs": prs}
+    with tempfile.TemporaryDirectory(prefix="fr-release-facts-") as tmp:
+        path = Path(tmp) / "facts.json"
+        path.write_text(json.dumps(facts))
+        return cmds.decide(repo, path)
+
+
 def _final_plan(repo: Path, current: str, override: str, plan: Plan) -> Plan:
     if not FINAL_RE.match(override):
         raise ReleaseError(f"--version {override!r} is not X.Y.Z")
@@ -359,7 +430,7 @@ def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> P
     fragment or override, or when what waits cannot be read.
 
     1. Some PR merged since the last final tag still waits on a post-merge gate
-       (`cmds.status`): an RC `X.Y.Z-rc.N` that consumes no fragment, unless nothing
+       (`waiting_prs`): an RC `X.Y.Z-rc.N` that consumes no fragment, unless nothing
        merged since the newest RC tag; then nothing.
     2. Nothing waits, and HEAD is an RC or fragments are pending: the final `X.Y.Z`,
        consuming the fragments.
@@ -392,7 +463,7 @@ def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> P
     target = base.bumped(bump) if bump is not None else head.final
     while bump is not None and tag_exists(repo, target.semver):
         target = target.bumped(bump)  # a manual tag: bump past it, never re-tag
-    waiting = cmds.status(repo)
+    waiting = waiting_prs(repo, cmds)
     if not waiting:
         plan.new, plan.fragments = target.semver, fragments
         return plan

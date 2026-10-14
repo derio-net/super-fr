@@ -121,7 +121,10 @@ class World:
         self.migrate_calls: list[str] = []  # the version on disk when migrate ran
         self.migrate_failure: str | None = None
         self.waiting: list[dict[str, object]] = []  # `fr release status --json`'s waiting
-        self.status_calls = 0
+        self.status_calls = 0  # decisions asked of fr
+        self.merged: list[dict[str, object]] = []  # what `gh pr list --state merged` reads
+        self.read_calls: list[list[str]] = []
+        self.decided: list[dict[str, object]] = []  # the JSON fr decided from
 
     # -- other people's pushes -------------------------------------------
     def land(self, rel: str, text: str, message: str = "a merged PR") -> None:
@@ -188,12 +191,23 @@ class World:
             assert {vs.spelling("x.json", s.value) for s in vs.version_surfaces(repo)} == {new}
             return self.test_failure
 
-        def status(repo: Path) -> list[dict[str, object]]:
+        def gh_read(args: list[str]) -> subprocess.CompletedProcess[str]:
+            self.read_calls.append(list(args))
+            return subprocess.CompletedProcess(["gh", *args], 0, json.dumps(self.merged), "")
+
+        def decide(repo: Path, facts: Path) -> list[dict[str, object]]:
             self.status_calls += 1
+            self.decided.append(json.loads(facts.read_text()))
             return list(self.waiting)
 
         return release.Commands(
-            bump=bump, lock_check=lock_check, gh=gh, test=test, migrate=migrate, status=status
+            bump=bump,
+            lock_check=lock_check,
+            gh=gh,
+            test=test,
+            migrate=migrate,
+            gh_read=gh_read,
+            decide=decide,
         )
 
     def run(self, *argv: str) -> int:
@@ -709,7 +723,8 @@ def test_a_plan_edit_other_than_the_ceiling_widening_refuses(
         gh=original.gh,
         test=original.test,
         migrate=migrate_nothing,
-        status=original.status,
+        gh_read=original.gh_read,
+        decide=original.decide,
     )
     assert release.main([], repo=world.clone, commands=cmds) != 0
 
@@ -850,7 +865,8 @@ def _migrating(world: World, rewrite: Callable[[Path], None]) -> release.Command
         gh=original.gh,
         test=original.test,
         migrate=migrate,
-        status=original.status,
+        gh_read=original.gh_read,
+        decide=original.decide,
     )
 
 
@@ -1183,46 +1199,111 @@ def test_dry_run_says_it_would_cut_an_rc(world: World, capsys: pytest.CaptureFix
     assert "4.24.0-rc.1" in out and "RC" in out
 
 
-def test_the_default_status_command_reads_fr_release_status_json(tmp_path: Path) -> None:
-    calls: list[list[str]] = []
+def test_release_py_reads_the_forge_and_hands_fr_the_facts(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.merged = [
+        {"number": 9, "title": "t", "url": "u", "mergedAt": "2030-01-01T00:00:00Z",
+         "headRefName": "feat/x", "labels": [{"name": "gate:tester"}]},
+    ]  # fmt: skip
+    world.waiting = list(WAITS)
+
+    assert world.run() == 0
+
+    (read,) = world.read_calls
+    assert read[:4] == ["pr", "list", "--state", "merged"]
+    search = read[read.index("--search") + 1]
+    assert search.startswith("merged:>=")
+    (facts,) = world.decided
+    assert facts["last_final"] == f"v{BASE}"
+    assert facts["prs"] == world.merged
+
+
+def test_a_truncated_merged_pr_list_refuses(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.merged = [{"number": n, "mergedAt": "2030-01-01T00:00:00Z", "labels": []}
+                    for n in range(release.MERGED_PR_LIMIT)]  # fmt: skip
+    assert world.run() == release.EXIT_REFUSED
+    assert world.status_calls == 0
+
+
+def test_a_failed_forge_read_refuses(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    cmds = world.commands()
+    cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
+    assert release.main([], repo=world.clone, commands=cmds) == release.EXIT_REFUSED
+    assert world.bump_calls == []
+
+
+def test_the_default_decide_runs_fr_credential_free_from_the_facts_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for var in ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+        monkeypatch.setenv(var, "secret")
+    monkeypatch.setenv("FR_RELEASE_STATUS_TOKEN", "secret")
+    facts = tmp_path / "facts.json"
+    facts.write_text("{}")
+    calls: list[tuple[list[str], object]] = []
 
     def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
+        calls.append((cmd, kw.get("env")))
         doc = {"schema": 1, "repo": "o/r", "last_final": "v1.0.0", "since": None, "waiting": WAITS}
         return subprocess.CompletedProcess(cmd, 0, json.dumps(doc), "")
 
-    assert release._run_release_status(tmp_path, run=run) == WAITS
-    assert calls[0][-4:] == ["fr", "release", "status", "--json"]
+    assert release._run_release_decide(tmp_path, facts, run=run) == WAITS
+    ((cmd, env),) = calls
+    assert cmd[-5:] == ["release", "status", "--from-json", str(facts), "--json"]
+    assert isinstance(env, dict)
+    assert "secret" not in env.values()
+    assert "GH_CONFIG_DIR" in env  # an empty gh config: no stored login either
 
 
 @pytest.mark.parametrize(
     ("rc", "out"),
     [(1, ""), (0, "not json"), (0, json.dumps({"schema": 1})), (0, json.dumps({"schema": 2}))],
 )
-def test_the_default_status_command_fails_closed(tmp_path: Path, rc: int, out: str) -> None:
+def test_the_default_decide_fails_closed(tmp_path: Path, rc: int, out: str) -> None:
     def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(cmd, rc, out, "HTTP 502")
+        return subprocess.CompletedProcess(cmd, rc, out, "boom")
 
     with pytest.raises(release.ReleaseError):
-        release._run_release_status(tmp_path, run=run)
+        release._run_release_decide(tmp_path, tmp_path / "f.json", run=run)
 
 
-def test_the_default_test_command_accepts_the_pep440_spelling_of_an_rc(tmp_path: Path) -> None:
-    assert release._run_staged_tests(tmp_path, "5.0.0-rc.1", run=_FakeRun("5.0.0rc1")) is None
-    assert release._run_staged_tests(tmp_path, "5.0.0", run=_FakeRun("5.0.0rc1")) is not None
-
-
-def test_the_default_status_command_reads_with_the_workflow_token(
+def test_plain_git_commands_carry_no_forge_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "secret")
+    envs: list[object] = []
+
+    def fake(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        envs.append(kw.get("env"))
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(release.subprocess, "run", fake)
+    release._git(tmp_path, "tag", "--list")
+    release.push(tmp_path)
+    plain, pushed = envs
+    assert isinstance(plain, dict) and "GH_TOKEN" not in plain
+    assert pushed is None  # the push alone authenticates, through gh's helper
+
+
+def test_the_merged_pr_read_uses_the_workflow_token(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GH_TOKEN", "app-token")
     monkeypatch.setenv("FR_RELEASE_STATUS_TOKEN", "workflow-token")
     envs: list[object] = []
 
-    def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+    def fake(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
         envs.append(kw.get("env"))
-        return subprocess.CompletedProcess(cmd, 0, json.dumps({"schema": 1, "waiting": []}), "")
+        return subprocess.CompletedProcess(cmd, 0, "[]", "")
 
-    assert release._run_release_status(tmp_path, run=run) == []
+    monkeypatch.setattr(release.subprocess, "run", fake)
+    release._run_gh_read(["pr", "list"])
     (env,) = envs
     assert isinstance(env, dict) and env["GH_TOKEN"] == "workflow-token"
+
+
+def test_the_default_test_command_accepts_the_pep440_spelling_of_an_rc(tmp_path: Path) -> None:
+    assert release._run_staged_tests(tmp_path, "5.0.0-rc.1", run=_FakeRun("5.0.0rc1")) is None
+    assert release._run_staged_tests(tmp_path, "5.0.0", run=_FakeRun("5.0.0rc1")) is not None

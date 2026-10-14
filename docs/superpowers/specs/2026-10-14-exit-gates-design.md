@@ -340,7 +340,11 @@ pass.
 
 R21. `fr release status [--json]` lists every PR merged since the last final tag
 that still waits on a post-merge gate, with its gate and owed rows, read through
-the forge adapter. `release.py` decides between RC and final from its JSON.
+the forge adapter. `release.py` does its own forge read: it lists the PRs merged
+since the last final tag, with their labels, through `gh` and hands those facts to
+`fr release status --from-json <file> --json`, which runs with no forge credential
+in its environment and never reaches a forge. Both paths call one decision
+function. `release.py` decides between RC and final from its JSON.
 `release` joins `READ_ONLY_COMMANDS`: it touches no registered artifact, and CI
 runs it on the default branch.
 
@@ -568,9 +572,12 @@ code worth salvaging, and closed once this ships.
 
 `release.py`:
 
-- `compute` asks `fr release status --json` through an injectable `Commands`
-  entry, since `release.py` already runs `fr migrate`. It then applies R20's
-  cases.
+- `compute` reads the merged PRs and their labels itself, through `gh` (an
+  injectable `Commands` entry, the only call holding a token), writes them to a
+  temp file and runs `fr release status --from-json <file> --json` with the
+  credential-free environment the staged suite runs in. It then applies R20's
+  cases. Every other git command runs credential-free too; only the pushes
+  authenticate.
 - `previous_tag` and "the last final" match `^v\d+\.\d+\.\d+$`.
 - `tag_and_release` passes `--prerelease` for an RC.
 - `release.yml` adds a daily `schedule:`.
