@@ -725,3 +725,53 @@ comment updated. (66336cf5, CI green)
 ### p5-r11-resolved · finding [out-of-scope] · resolves p5-r11: a run blocked on a gate before its batch PR exists cannot reach Needs you · Developer (phase 5)
 
 R18 reads the cursor at the batch PR's head by design; a pre-PR gated run is a separate design question, not caused by this phase's code.
+
+<!-- fr:journal kind=decision scope=plan id=p6-driver-records-first created=2026-10-14T08:00:04+00:00 phase=6 -->
+### p6-driver-records-first · decision · The driver records each member's close-out event before the collected session starts (phase 6)
+
+gh#883's dedupe key stays the event: the driver writes one closeout event per member (archive = the collected branch, handle = the item, then the runner's handle once known) before runner.dispatch, and takes them all back if the dispatch fails. The verb reuses that branch, records nothing twice, and takes back a held member's pending event, so a held batch ends with no close-out event (R15). A hand-run verb records `runner: hand` events itself.
+
+<!-- fr:journal kind=decision scope=plan id=p6-predicted-holds created=2026-10-14T08:00:04+00:00 phase=6 -->
+### p6-predicted-holds · decision · The driver predicts an archive hold from the default branch and makes it a need, never a member (phase 6)
+
+Before planning the collected close-out, the driver reads each due batch's run on origin/<default> (ledger.closeout_read): a Test Plan step with no outcome and no passed gate means `fr archive` would hold, so the batch gets a `closeout-held` action (counted blocked; Need kind closeout-held) and is left out. Without this a held batch would be re-collected every pass. The verb still names any hold the prediction missed (exit 1). The facts-only board cannot see this need (it reads no clone).
+
+<!-- fr:journal kind=decision scope=plan id=p6-verify-merge-exit-2 created=2026-10-14T08:00:04+00:00 phase=6 -->
+### p6-verify-merge-exit-2 · decision · verify-merge exit 2 (the merged branch is gone) does not hold a batch (phase 6)
+
+A batch branch is deleted at merge, so `fr isolation verify-merge --branch <b>` in the scratch worktree usually exits 2 (unresolvable ref), which disproves nothing; the merged PR stands. Exit 1 (not verified) holds the batch.
+
+<!-- fr:journal kind=decision scope=plan id=p6-attributed-collected-heads created=2026-10-14T08:00:04+00:00 phase=6 -->
+### p6-attributed-collected-heads · decision · attributed accepts head == event.archive only for a collected head (phase 6)
+
+§D's rule is applied to `chore/closeout-<date>-<n>` heads, a name only that close-out produces. A per-batch `chore/archive-<plan>` or `chore/closeout-<run>` head still needs the run file or plan journal in its files (rg-12, pinned by test_head_only_attribution_is_the_branch_named_closeout_alone).
+
+<!-- fr:journal kind=decision scope=plan id=p6-handback-budget created=2026-10-14T08:00:04+00:00 phase=6 -->
+### p6-handback-budget · decision · The collected close-out's hand-back budget counts distinct heads per item across members (phase 6)
+
+closeout_handback_decision reads every member's closeout_handback events for the item: a hand-back at this head is skipped (or stuck when delivered none), one at an earlier head makes the next failure closeout-stuck. conflict_decision, red_decision and fresh_conflicts now share handbacks_since (per-dispatch count, semantics unchanged); the close-out's count is not per dispatch, so it counts heads instead.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-gitseam-runs-fr created=2026-10-14T08:00:04+00:00 phase=6 -->
+### p6-gitseam-runs-fr · discovery · gitseam's closed set of commands now includes this fr itself (phase 6)
+
+The collected close-out runs verify-merge, closeout outcome and archive as `python -m fr` (the running interpreter, never PATH) through Worktree.run_fr, which uses the one `_run` (coded=True for the exit code), so the seam still starts every process from its two subprocess.run calls and the batch modules stay subprocess-free.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-judgements-schema-10 created=2026-10-14T08:00:04+00:00 phase=6 -->
+### p6-judgements-schema-10 · discovery · closeout_handback moves the judgements writer schema 9 to 10 (origin/main is 9) (phase 6)
+
+Schemas 1-9 still load; a schema-9 file carrying closeout_handback is refused. Pinned tests moved to 10; the fr-triage skill example says `schema: 10`, and its `schema: 1` guard became a digit-aware regex. Parallel PRs collide on this number: recheck origin/main before merge.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-10-14T08:00:04+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+batch_closeout.py was written as one engine module (Member/Step/execute) beside the gitseam Worktree methods it needs; the naming helpers moved into batch_drive during GREEN, so nothing was left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-10-14T08:00:04+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+step 2's aggregation is one loop plus one per-repo planning block reusing next_collected/collected_name; attributed gained one guarded line; no duplication left to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t4 created=2026-10-14T08:00:04+00:00 phase=6 -->
+### no-refactor-p6-t4 · discovery · no-refactor-because P6.T4 (phase 6)
+
+prose, mirrors and a matrix status move only
