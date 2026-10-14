@@ -623,6 +623,17 @@ class Checkout:
         out = git(["diff", "--name-only", "--no-renames", "-z", f"{ref}...{head}"], self.path)
         return frozenset(p for p in out.split("\0") if p)
 
+    def changed_status(self, ref: str, head: str) -> frozenset[str]:
+        """What *head* changed since it forked from *ref*, as `<status>\t<path>` (A, M, D;
+        renames split into a D and an A): the collected close-out's recorded file set."""
+        out = git(["diff", "--name-status", "--no-renames", "-z", f"{ref}...{head}"], self.path)
+        parts = [p for p in out.split("\0") if p]
+        return frozenset(f"{parts[i][0]}\t{parts[i + 1]}" for i in range(0, len(parts) - 1, 2))
+
+    def commits_since(self, ref: str, head: str) -> tuple[str, ...]:
+        """The commits on *ref*..*head*, newest first."""
+        return tuple(git(["rev-list", f"{ref}..{head}"], self.path).split())
+
     # ------------------------------------------------------ the wave driver
 
     def fast_forward(self, *, switch: bool = False) -> None:

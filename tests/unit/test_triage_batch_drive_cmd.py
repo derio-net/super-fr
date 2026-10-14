@@ -298,6 +298,8 @@ class DriveCheckout:
         self.release_probes: list[str] = []
         self.added: dict[str, tuple[str, ...]] = {}  # merge commit -> paths it added
         self.live: set[str] = set()  # paths still on origin/main
+        self.status: dict[str, frozenset[str]] = {}  # head -> its `<status>\t<path>` diff
+        self.commits: dict[str, tuple[str, ...]] = {}  # head -> commits past the base
 
     def origin_repo(self) -> str | None:
         return REPO
@@ -318,6 +320,15 @@ class DriveCheckout:
 
     def remote_branch_exists(self, branch: str) -> bool:
         return False
+
+    def changed_status(self, ref: str, head: str) -> frozenset[str]:
+        return self.status.get(head, frozenset())
+
+    def commits_since(self, ref: str, head: str) -> tuple[str, ...]:
+        return self.commits.get(head, (head,))
+
+    def reach_commit(self, sha: str, branch: str) -> bool:
+        return bool(sha)
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         prefix = directory.rstrip("/") + "/"

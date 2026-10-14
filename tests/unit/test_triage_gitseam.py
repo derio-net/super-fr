@@ -569,3 +569,20 @@ def test_run_fr_runs_this_fr_and_returns_its_exit_code(tmp_path: Path) -> None:
     assert code == 0 and out.strip()
     code, out = wt.run_fr(["no-such-verb"])
     assert code == 2 and out
+
+
+def test_changed_status_splits_renames_and_commits_since_lists_the_head_alone(
+    tmp_path: Path,
+) -> None:
+    """The collected close-out's anchor (exit-gates R15, p6b-r1): a move out of a live
+    directory reads as a D and an A, never a rename the allowlist could misjudge."""
+    checkout = _repo(tmp_path)
+    wt = checkout.add_worktree(tmp_path / "closeout", "HEAD")
+    base = wt.head()
+    (wt.path / "docs").mkdir()
+    _git(wt.path, "mv", "a.txt", "docs/a.txt")
+    _git(wt.path, "commit", "--quiet", "-m", "archive")
+    head = wt.head()
+
+    assert checkout.changed_status(base, head) == {"D\ta.txt", "A\tdocs/a.txt"}
+    assert checkout.commits_since(base, head) == (head,)

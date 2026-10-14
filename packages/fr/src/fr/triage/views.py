@@ -176,7 +176,8 @@ class Need:
     # | needs-developer | needs-reviewer | needs-tester | needs-devops (the board's lanes)
     # | ledger-unread (a landed batch whose gate labels could not be read)
     # | closeout-held (a landed batch the close-out verb held, exit-gates R15)
-    # | closeout-pr-closed | closeout-needs-review (a collected close-out PR, p6-r5, p6-r6)
+    # | closeout-pr-closed | closeout-needs-review | closeout-unrecorded | closeout-reopened
+    #   (a collected close-out PR the driver will not merge unasked, R15)
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     kind: str
@@ -203,6 +204,8 @@ NEED_LABELS = {
     "closeout-stuck": "Close-out PR stuck",
     "closeout-pr-closed": "Close-out PR closed unmerged",
     "closeout-needs-review": "Close-out PR needs review",
+    "closeout-unrecorded": "Close-out pushed with nothing recorded",
+    "closeout-reopened": "Close-out PR reopened",
     "needs-developer": "Needs you · Developer",
     "needs-reviewer": "Needs you · Reviewer",
     "needs-tester": "Needs you · Tester",
@@ -316,7 +319,8 @@ def needs_you(
         if action.kind == "closeout-held":
             out.append(Need("closeout-held", action.batch, f"batch {action.batch}: "
                             f"{action.detail}", f"#batch-{action.batch}"))  # fmt: skip
-        elif action.kind in ("closeout-pr-closed", "closeout-needs-review"):
+        elif action.kind in ("closeout-pr-closed", "closeout-needs-review",
+                             "closeout-unrecorded", "closeout-reopened"):  # fmt: skip
             out.append(Need(action.kind, action.batch, action.detail, f"#batch-{action.batch}"))
         elif action.kind == "closeout-stuck" and action.key not in stuck:
             stuck.add(action.key)

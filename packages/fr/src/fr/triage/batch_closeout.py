@@ -5,16 +5,18 @@ not yet closed out, in ONE session and ONE housekeeping PR, on the branch
 `chore/closeout-<YYYY-MM-DD>-<n>`. For each batch, in order:
 
 1. `fr isolation verify-merge --branch <b> --default-branch <default>`: exit 1 (not
-   verified) holds the batch, and so does any exit 2 except the one that says the merged
-   branch's ref cannot be resolved (deleted at merge), which disproves nothing;
+   verified) holds the batch; an exit 2 saying the merged branch's ref cannot be resolved
+   (deleted at merge) disproves nothing and goes on; any other exit 2 is transient;
 2. a batch whose gates passed: `fr closeout outcome --ran --evidence <gate-pass comment>`
    for each Test Plan step with no outcome yet;
 3. `fr archive --branch <b> --no-issues` (finding filing moved to `deliver`, R10).
 
-A batch whose step fails, or that could not be read, is reset to where it started: it
-moves nothing, gets a durable `closeout_hold` event (the reason and the item), and is
-named. Then one commit, one push and one PR whose body lists its member batches in a
-marked block (`MEMBERS_MARKER`) and carries one `Closes <owner/repo#n>` line per issue a
+A batch whose step fails, or that could not be read, is reset to where it started and
+moves nothing. A deterministic failure (verify-merge exit 1, an archive refusal, an
+unreadable matrix or section) gets a durable `closeout_hold` event (the reason and the
+item); a transient one (any other) leaves the batch owed and is only reported. Then
+one commit, one push and one PR whose body lists its member batches in an
+informational block (`MEMBERS_MARKER`) and carries one `Closes <owner/repo#n>` line per issue a
 passed gate's rows cite (never one a narrowing decision names), so those issues close
 when the PR merges, not before. Only after the PR is open does each included batch get
 its `closeout` event, whose `archive` is the shared branch.
@@ -65,6 +67,7 @@ __all__ = [
     "members_from_body",
     "next_collected",
     "plan_lines",
+    "recorded_closes",
     "step_ranges",
 ]
 
@@ -72,7 +75,7 @@ StepKind = Literal["verify-merge", "outcome", "archive"]
 
 MEMBERS_MARKER = "<!-- fr:closeout-members "
 """How the housekeeping PR body's member block begins (`<!-- fr:closeout-members a,b -->`):
-what a driver reconciles membership from after a crash between push and record."""
+informational only; membership is what the verb records on the marker (p6b-r3)."""
 
 UNRESOLVABLE_REF = "cannot resolve branch ref"
 """verify-merge's words for a merged branch gone everywhere: its one tolerated exit 2."""
@@ -136,6 +139,8 @@ class CloseoutResult:
     done: tuple[str, ...]  # batch ids closed out, in order
     held: tuple[tuple[str, str], ...]  # (batch id, why): moved nothing, a hold event
     pr: int | None = None
+    head: str | None = None  # the pushed head
+    skipped: tuple[tuple[str, str], ...] = ()  # transient failures: owed still, no event
 
 
 def closeout_owed(
@@ -144,6 +149,7 @@ def closeout_owed(
     closeouts: Iterable[CollectedCloseout] = (),
     *,
     named: Collection[str] = (),
+    reserved: Collection[str] = (),
 ) -> list[Batch]:
     """R15's batches: landed, not gated, and not closed out (no close-out event, or one
     whose collected PR was closed unmerged). A batch held by an earlier close-out is owed
@@ -160,6 +166,8 @@ def closeout_owed(
         if closeout_of(b, markers) is not None:
             continue
         if closeout_hold(b) is not None and b.id not in named:
+            continue
+        if b.id in reserved:  # another collected close-out under way plans it (p6b-r7)
             continue
         ledger = ledgers.get(b.id)
         if ledger is not None and held_gates(ledger.labels):
@@ -234,10 +242,24 @@ def closes_from_body(body: str) -> tuple[str, ...]:
     return tuple(_CLOSES_RE.findall(body or ""))
 
 
-def pr_body(done: Sequence[Member], held: Sequence[tuple[str, str]]) -> str:
-    """The housekeeping PR's body: its members, marked; one `Closes` line per issue."""
+def recorded_closes(done: Sequence[Member], repo: str) -> tuple[str, ...]:
+    """The issues the PR closes: the passed gates' row issues of its members (narrowed ones
+    already out), in *repo* only (p6b-r5)."""
+    mine = repo.lower() + "#"
+    return tuple(dict.fromkeys(
+        ref for m in done if m.passed for ref in m.closes if ref.lower().startswith(mine)
+    ))  # fmt: skip
+
+
+def pr_body(done: Sequence[Member], held: Sequence[tuple[str, str]], repo: str = "") -> str:
+    """The housekeeping PR's body: its members (informational, never read back for
+    membership); one `Closes` line per recorded issue."""
     ids = [m.batch for m in done]
-    closes = list(dict.fromkeys(ref for m in done if m.passed for ref in m.closes))
+    closes = (
+        list(recorded_closes(done, repo))
+        if repo
+        else list(dict.fromkeys(ref for m in done if m.passed for ref in m.closes))
+    )
     lines = [f"Collected close-out of {len(ids)} landed batch(es) (exit-gates R15):", "",
              *(f"- {m.batch} ({m.branch})" for m in done), "",
              f"{MEMBERS_MARKER}{','.join(ids)} -->"]  # fmt: skip
@@ -259,8 +281,9 @@ def handback_brief(*, pr: int, branch: str, base: str, checks: Sequence[str]) ->
     return (
         f"The collected close-out PR #{pr} on {branch} {what}.\n"
         f"Fix it on {branch}: merge origin/{base} in, resolve, run the failing checks "
-        f"locally, and push. This is its one hand-back: the driver merges it once it is "
-        f"green and mergeable, and a second failure goes to the operator."
+        f"locally, and push; then run `fr triage batch closeout --branch {branch} --yes`, "
+        f"which records the new head (the driver merges only a head the verb recorded). "
+        f"This is its one hand-back: a second failure goes to the operator."
     )
 
 
@@ -285,6 +308,7 @@ def execute(
     hold: Callable[[str, str], None],
     say: Callable[[str], None],
     unreadable: Sequence[tuple[str, str]] = (),
+    transient: Sequence[tuple[str, str]] = (),
 ) -> CloseoutResult:
     """Run every batch's steps in *tree* (on *branch*, cut from *default*), then one
     commit, one push and one PR. *hold*(batch id, why) each batch held (the *unreadable*
@@ -293,9 +317,11 @@ def execute(
     base = tree.head()
     done: list[Member] = []
     held: list[tuple[str, str]] = list(unreadable)
+    skipped: list[tuple[str, str]] = list(transient)
     for m in members:
         start = tree.head()
         why = ""
+        durable = False
         for step in member_steps(m, default):
             code, out = tree.run_fr(list(step.argv))
             if code == 0:
@@ -305,25 +331,30 @@ def execute(
                     "nothing either way, the merged PR stands")  # fmt: skip
                 continue
             why = _why(step, code, out)
+            durable = (step.kind, code) == ("verify-merge", 1) or step.kind == "archive"
             break
         if why:
             tree.reset_hard(start)
-            held.append((m.batch, why))
+            (held if durable else skipped).append((m.batch, why))
             continue
         done.append(m)
         say(f"{m.batch}: closed out on {branch}")
     for bid, why in held:
         hold(bid, why)
         say(f"{bid}: held, moved nothing: {why}")
+    for bid, why in skipped:
+        say(f"{bid}: not closed out this time (transient, still owed): {why}")
     ids = [m.batch for m in done]
     if not done:
-        return CloseoutResult(branch, (), tuple(held))
+        return CloseoutResult(branch, (), tuple(held), skipped=tuple(skipped))
     title = closeout_title(branch, ids)
-    if tree.squash_all(base, title) is None:
+    head = tree.squash_all(base, title)
+    if head is None:
         say("nothing to commit: no PR opened")
-        return CloseoutResult(branch, (), tuple(held))
+        return CloseoutResult(branch, (), tuple(held), skipped=tuple(skipped))
     tree.push(branch)
-    pr = forge.pr_create(repo, head=branch, base=default, title=title, body=pr_body(done, held))
+    pr = forge.pr_create(repo, head=branch, base=default, title=title,
+                         body=pr_body(done, [*held, *skipped], repo))  # fmt: skip
     for m in done:
         record(m.batch, branch)
-    return CloseoutResult(branch, tuple(ids), tuple(held), pr)
+    return CloseoutResult(branch, tuple(ids), tuple(held), pr, head, tuple(skipped))

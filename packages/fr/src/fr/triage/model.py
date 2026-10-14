@@ -953,6 +953,17 @@ class CollectedCloseout(_Strict):
     pr: int | None = None
     merged: bool = False
     closed: bool = False
+    # What the verb, on the operator's host, recorded after its push: the ONLY things the
+    # driver merges without `approved-fr` (the trust anchor, R15). `head` the pushed SHA,
+    # `members` the batches the PR carries, `files` its exact diff against the default
+    # branch as `<status>\t<path>` (renames split into D and A), `closes` the issues its
+    # body closes. None/empty until recorded.
+    head: str | None = None
+    members: list[str] = []
+    files: list[str] = []
+    closes: list[str] = []
+    # The heads its PR was handed back at (R27): the budget is the item's, members or not.
+    handed: list[str] = []
 
 
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})

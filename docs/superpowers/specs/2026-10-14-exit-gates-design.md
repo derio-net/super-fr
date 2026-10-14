@@ -240,8 +240,8 @@ R15. **Collected close-out (#667).** `fr triage batch closeout [<id>...] [--yes]
 closes out, in one session and with ONE housekeeping PR, every landed batch that
 is not gated and not yet closed out. For each batch, in order, it:
 
-1. runs verify-merge with `--default-branch`; exit 1, and any exit 2 other than
-   an unresolvable merged-branch ref (the branch deleted at merge), holds it;
+1. runs verify-merge with `--default-branch`; exit 1 holds it; an exit 2 for an
+   unresolvable merged-branch ref (the branch deleted at merge) goes on;
 2. if the batch was gated and its gates have passed, records each Test Plan
    step's outcome as `--ran` with the gate-pass comment as evidence;
 3. archives the plan with `--no-issues` (R10 moved finding filing to `deliver`;
@@ -252,23 +252,41 @@ is not gated and not yet closed out. For each batch, in order, it:
    decision names. The issues close when the PR merges; the driver then removes
    their `fr:awaiting-live`.
 
-A batch whose step fails, or that cannot be read, moves nothing and gets a
-durable `closeout_hold` event (its reason and the close-out item), and the verb
-names it; the other batches go on. The driver never collects a held batch again
+A batch whose step fails, or that cannot be read, moves nothing, and the verb
+names it; the other batches go on. Only a deterministic failure (verify-merge
+exit 1, an archive refusal, an unreadable matrix or section) gets a durable
+`closeout_hold` event (its reason and the close-out item); a transient one (a
+forge or git error, any other step failure) leaves the batch owed. The driver never collects a held batch again
 and raises a Needs-you row for it, read from the judgements so the board agrees;
-only `fr triage batch closeout <id>` naming it retries it. Every batch the pushed
-PR carries gets one close-out event, written after the PR opens, whose `archive`
-names the shared branch; the PR body lists them in a marked member block. Without
-`--yes` the verb prints the plan. Re-run on a branch that already has its PR, it
-resumes when the PR's member block lists only batches still owed, and otherwise
-refuses by name.
+only `fr triage batch closeout <id>` naming it retries it. After the push the verb
+records on the start marker the pushed head, the member batches, the exact changed
+files (its own git diff of `origin/<default>...<head>`, renames split into a delete
+and an add) and the `Closes` set (passed-gate row issues of the marker's repo, less
+narrowed ones); then each member gets one close-out event whose `archive` names the
+shared branch. The PR body's member block is informational only. Without `--yes`
+the verb prints the plan. `--branch` must be a `chore/closeout-<date>-<n>` branch.
+While a collected close-out of the repo is under way, any other run refuses by
+name; re-run with that close-out's `--branch`, it resumes only an open PR that is
+the repo's own by an allowed author, recomputing membership as the marker's planned
+batches still owed and recording the anchor at the PR's head. A run that fails after
+writing its marker closes it.
 
 The driver starts at most one collected close-out per repo at a time, recording
 only a start marker (repo, item, branch) before the session starts; membership is
-the verb's record, or, after a crash between its push and its record, the PR's
-member block. It marks that close-out's PR ready and merges it, with no approval,
-once the PR is `MERGEABLE`, green and changes nothing outside `docs/superpowers/`
-and `docs/acceptance/`; any other path is a `closeout-needs-review` row. On a
+the verb's record on the marker, never the PR body. It marks that close-out's PR ready and merges it, with no approval
+and pinned to the recorded head, only when ALL of these hold: (1) the PR head is the
+recorded head; (2) the driver's own git diff to that head is exactly the recorded
+file set and every path is an archive's: under `docs/superpowers/implemented/`, a
+deletion under `docs/superpowers/{plans,specs,journals,runs,usage}/`, or
+`docs/acceptance/matrix.yaml` and its three reports (never a workflow or
+verification manifest; an unreadable diff refuses); (3) the PR is the repo's own
+by an allowed author and the recorded head is the only commit past the base; (4)
+its body's `Closes` set is the recorded set, less issues a narrowing decision
+names at pass time; and it is `MERGEABLE` with green checks reported for that
+head (none reported is pending). Anything else is a `closeout-needs-review` row and
+the PR needs `approved-fr` like any PR. A pushed close-out with no recorded anchor
+is a `closeout-unrecorded` row; the operator re-runs the verb. A PR closed and then
+reopened is never merged by the driver. On a
 conflict or red checks it hands back **once** to the close-out's session (R27); a
 second failure becomes a Needs-you row. A PR closed unmerged ends that close-out:
 its batches are owed again.
@@ -491,17 +509,20 @@ the number is main's plus one when the PR merges.
   planned ids), never a member's event. The next one waits until the previous
   marker's PR merged, was closed, or the close-out ended with no PR; a live
   session of the next item is never started twice.
-- Step 3 plans once per unfinished marker, from its PR on its branch. A PR
-  whose body lists members with no close-out event is reconciled from that list
-  (`closeout-reconcile`). A merged PR archives every member and removes
-  `fr:awaiting-live` from the issues its body `Closes`; a closed one ends the
-  close-out (`closeout-pr-closed`) and its batches are owed again. An open PR is
-  marked ready and merged once it is `MERGEABLE`, green and changes only
-  `docs/superpowers/` and `docs/acceptance/` paths (else `closeout-needs-review`).
-  Otherwise it plans one `closeout-handback`: a runner prompt to the close-out
-  item's session naming the conflicting files or the failing checks. That
-  action records R27's event. A second failure at a later head becomes a
-  `closeout-stuck` need.
+- Step 3 plans once per unfinished marker, from its trusted PR on its branch and
+  the driver's own git reads (`review_reasons`). A marker with no recorded anchor
+  is a `closeout-unrecorded` need, never reconciled from a PR body. A merged PR
+  archives the recorded members and removes `fr:awaiting-live` from the recorded
+  `Closes` issues in the marker's repo; a closed one ends the close-out
+  (`closeout-pr-closed`) and its batches are owed again; one reopened after that
+  is a `closeout-reopened` need. An open PR is marked ready and merged, pinned to
+  the recorded head, only under R15's four conditions (else
+  `closeout-needs-review`). On a conflict or red checks it plans one
+  `closeout-handback`: a runner prompt to the close-out item's session naming the
+  conflicting files or the failing checks, which re-runs the verb with `--branch`
+  to record the fixed head. That action records R27's event and the head on the
+  marker, so the budget holds with no member. A second failure at a later head
+  becomes a `closeout-stuck` need.
 
 Every forge write runs only with `--yes`.
 
@@ -525,7 +546,7 @@ runs R15's four steps in one `gitseam.Checkout` of the default branch, on branch
 - `fr closeout outcome --ran --evidence <gate-pass comment URL>`;
 - `fr archive --branch <b> --no-issues`.
 
-Then it makes one commit and one PR, whose body carries the member block
+Then it makes one commit and one PR, whose body carries the informational member block
 (`<!-- fr:closeout-members <ids> -->`) and the `Closes` lines. The close-out work item is `unit="run"`:
 one per collected close-out, with id `closeout-<date>-<n>`, briefed to run the
 verb. A single-run `fr pickup` close-out outside batches is unchanged.

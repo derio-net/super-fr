@@ -110,7 +110,8 @@ ActionKind = Literal[
     "closeout-held",
     "closeout-handback",
     "closeout-stuck",
-    "closeout-reconcile",
+    "closeout-unrecorded",
+    "closeout-reopened",
     "closeout-merged",
     "closeout-pr-closed",
     "closeout-needs-review",
@@ -365,11 +366,19 @@ class Snapshot:
     # `post-merge` action at merge, gated or not, before any close-out of it.
     post_merge_repos: frozenset[str] = frozenset()
     # Collected close-outs (exit-gates R15, §D): the start markers from the judgements,
-    # and, driver only, each unfinished one's PR on its branch as read now (`files`
-    # included) and the member ids that PR's body lists (`members_from_body`).
+    # and, driver only, what the driver itself reads for each unfinished one, by item:
+    # its PR on its branch; its own git diff (`<status>\t<path>`) and commits from the
+    # default branch to the RECORDED head (None: unreadable); the issues its PR body
+    # closes; the issues the members' narrowing decisions name now (None: unreadable);
+    # whether its branch is pushed; and the PR now open again on a closed marker's branch.
     closeouts: tuple[CollectedCloseout, ...] = ()
-    collected_prs: Mapping[str, LivePr] = field(default_factory=dict)  # item -> its PR
-    collected_members: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    collected_prs: Mapping[str, LivePr] = field(default_factory=dict)
+    collected_diff: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
+    collected_commits: Mapping[str, tuple[str, ...] | None] = field(default_factory=dict)
+    collected_body_closes: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    collected_narrowed: Mapping[str, frozenset[str] | None] = field(default_factory=dict)
+    collected_pushed: frozenset[str] = frozenset()
+    collected_reopened: Mapping[str, LivePr] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -932,7 +941,7 @@ CloseoutDecisionKind = Literal["skip", "handback", "stuck"]
 
 
 def closeout_handback_decision(
-    events: Iterable[object], item: str, head: str
+    events: Iterable[object], item: str, head: str, handed: Iterable[str] = ()
 ) -> CloseoutDecisionKind:
     """What the driver does with collected close-out *item*'s PR failing at *head*, from
     every member's events (R27): `skip`, its session was handed it at this head already;
@@ -942,49 +951,91 @@ def closeout_handback_decision(
     here = [e for e in mine if e.head == head]
     if here:
         return "stuck" if all(e.delivered == "none" for e in here) else "skip"
-    return "stuck" if len({e.head for e in mine}) >= CLOSEOUT_HANDBACKS else "handback"
+    heads = {e.head for e in mine} | set(handed)  # the marker's own count (p6b-r10)
+    if head in heads:
+        return "skip"
+    return "stuck" if len(heads) >= CLOSEOUT_HANDBACKS else "handback"
 
 
-REVIEW_FREE_PREFIXES = ("docs/superpowers/", "docs/acceptance/")
-"""What a collected close-out PR may change and still merge with no approval (p6-r6): the
-run artifacts it archives and the acceptance matrix with its reports."""
+ARCHIVE_DIRS = ("plans", "specs", "journals", "runs", "usage")
+MATRIX_FILES = frozenset({
+    "docs/acceptance/matrix.yaml", "docs/acceptance/report_local.html",
+    "docs/acceptance/report_linked.html", "docs/acceptance/report_linked.md",
+})  # fmt: skip
 
 
-def _needs_review(files: Sequence[str]) -> list[str]:
-    """The paths of a collected close-out PR outside `REVIEW_FREE_PREFIXES`; an unknown
-    file list is never review-free."""
-    if not files:
-        return ["(its changed files are unknown)"]
-    return [f for f in files if not f.startswith(REVIEW_FREE_PREFIXES)]
+def archive_allowed(entry: str) -> bool:
+    """Whether one `<status>\t<path>` change is what an archive makes (R15's auto-merge
+    allowlist): anything under `docs/superpowers/implemented/`, a deletion out of a live
+    artifact directory, or the acceptance matrix and its three reports. Never a workflow
+    or verification manifest, nor anything else."""
+    status, _, path = entry.partition("\t")
+    if not path or ".." in PurePosixPath(path).parts:
+        return False
+    if path.startswith("docs/superpowers/implemented/") or path in MATRIX_FILES:
+        return True
+    return status == "D" and path.startswith(tuple(f"docs/superpowers/{d}/" for d in ARCHIVE_DIRS))
+
+
+def review_reasons(marker: CollectedCloseout, pr: LivePr, snap: Snapshot) -> list[str]:
+    """Why the driver may NOT merge *marker*'s PR without `approved-fr` (R15's trust
+    anchor); [] only when every condition holds: the PR head is the head the verb
+    recorded; the driver's own diff to it is exactly the recorded file set and every
+    path is an archive's; the only commit past the base is that head; the PR is the
+    repo's own by an allowed author; and its body closes exactly the recorded issues,
+    less any a narrowing decision names now. Each unknown is a reason."""
+    why: list[str] = []
+    if not marker.head:
+        return ["the verb recorded no head for it"]
+    if pr.head != marker.head:
+        why.append(f"its head {pr.head[:12] or 'unknown'} is not the recorded {marker.head[:12]}")
+    if not pr.trusted:
+        why.append("it is not the repo's own PR by an allowed author")
+    diff = snap.collected_diff.get(marker.item)
+    if diff is None:
+        why.append("its diff could not be read")
+    else:
+        if diff != frozenset(marker.files):
+            why.append("its diff is not the recorded file set")
+        if outside := sorted(e.partition("\t")[2] for e in diff if not archive_allowed(e)):
+            why.append(f"it changes {', '.join(outside[:5])}, which no archive changes")
+    commits = snap.collected_commits.get(marker.item)
+    if commits is None or tuple(commits) != (marker.head,):
+        why.append("its commits past the base are not the one the verb pushed")
+    narrowed = snap.collected_narrowed.get(marker.item)
+    if narrowed is None:
+        why.append("its members' narrowing decisions could not be read")
+    else:
+        owner = marker.repo.lower()
+        want = {c for c in marker.closes if c.lower().startswith(owner + "#")}
+        want = {c for c in want if c.lower() not in narrowed}
+        if snap.collected_body_closes.get(marker.item, frozenset()) != want:
+            why.append("its body's Closes lines are not the recorded issues")
+    return why
 
 
 def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action | None, str]:
     """§D step 3 for one unfinished collected close-out, keyed on its start marker, and how
     the summary counts it (`closing` | `blocked` | ""). Membership is what the verb
-    recorded (`closeout` events naming the branch) or, after a crash between its push and
-    its record, what the PR's body lists (`closeout-reconcile`). Its PR is merged, with no
-    approval, only once it is `MERGEABLE`, green and changes nothing outside
-    `REVIEW_FREE_PREFIXES`; a conflict or failing checks go back ONCE to its session
-    (R27); a PR closed unmerged ends the close-out (p6-r5)."""
+    recorded on the marker, never a PR body. Its PR is merged with no approval only when
+    `review_reasons` is empty, at the recorded head; a conflict or failing checks go back
+    ONCE to its session (R27); a PR closed unmerged ends the close-out (p6-r5)."""
     repo = marker.repo
-    members = tuple(
-        b.id for b in snap.batches
-        if snap.repos.get(b.id) == repo and (e := closeout_event(b)) is not None
-        and e.archive == marker.branch
-    )  # fmt: skip
     known = {b.id for b in snap.batches}
-    listed = tuple(b for b in snap.collected_members.get(marker.item, ()) if b in known)
-    first = (members or listed or tuple(b for b in marker.planned if b in known) or ("",))[0]
+    members = tuple(b for b in marker.members if b in known)
+    first = (members or tuple(b for b in marker.planned if b in known) or ("",))[0]
     pr = snap.collected_prs.get(marker.item)
     if not first:
         return None, ""
     if pr is None:
+        pushed = marker.item in snap.collected_pushed
         live = marker.item in snap.existing
-        if (
-            not live
-            and marker.item in snap.closeout_probed
-            and snap.now - marker.at >= STALE_CLOSEOUT
-        ):
+        stale = snap.now - marker.at >= STALE_CLOSEOUT
+        if pushed and not live and stale:
+            return Action("closeout-unrecorded", first, f"{marker.branch} is pushed with no PR "
+                          f"the verb recorded: re-run `fr triage batch closeout --branch "
+                          f"{marker.branch} --yes`", key=marker.item), "blocked"  # fmt: skip
+        if not live and not pushed and marker.item in snap.closeout_probed and stale:
             return Action("closeout-abandoned", first, f"{marker.item} ended with no PR on "
                           f"{marker.branch}; its batches are owed a close-out again",
                           key=marker.item), "closing"  # fmt: skip
@@ -993,10 +1044,11 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
         return Action("closeout-pr-closed", first, f"close-out PR #{pr.number} on "
                       f"{marker.branch} was closed unmerged; its batches are owed a close-out "
                       "again", pr=pr.number, items=members, key=marker.item), "closing"  # fmt: skip
-    if missing := [b for b in listed if b not in members]:
-        return Action("closeout-reconcile", first, f"PR #{pr.number} lists {', '.join(missing)} "
-                      "with no close-out recorded; recording them from its body", pr=pr.number,
-                      items=listed, key=marker.item), "closing"  # fmt: skip
+    if not marker.head:
+        return Action("closeout-unrecorded", first, f"PR #{pr.number} on {marker.branch} has no "
+                      "head, members or files the verb recorded; re-run `fr triage batch "
+                      f"closeout --branch {marker.branch} --yes` to record them", pr=pr.number,
+                      key=marker.item), "blocked"  # fmt: skip
     if pr.state == "MERGED":
         return Action("closeout-merged", first, f"close-out PR #{pr.number} merged",
                       pr=pr.number, items=members, key=marker.item), "closing"  # fmt: skip
@@ -1006,11 +1058,6 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
     if wrong := _wrong_base(pr, default):
         return Action("blocked", first, f"close-out PR #{pr.number} ({pr.head_ref}) {wrong}; it "
                       "is never merged", pr=pr.number, items=members), "blocked"  # fmt: skip
-    if outside := _needs_review(pr.files):
-        return Action("closeout-needs-review", first, f"close-out PR #{pr.number} changes "
-                      f"{', '.join(outside[:5])}, outside {', '.join(REVIEW_FREE_PREFIXES)}: "
-                      "never merged without review", pr=pr.number, items=members,
-                      key=marker.item), "blocked"  # fmt: skip
     conflict = conflicting(pr.mergeable, pr.merge_state)
     if pr.checks == "failing" or conflict:
         what = (
@@ -1019,7 +1066,7 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
             else f"has failing checks: {', '.join(pr.failing) or 'unknown'}"
         )
         events = [e for b in snap.batches if b.id in members for e in b.events]
-        decision = closeout_handback_decision(events, marker.item, pr.head)
+        decision = closeout_handback_decision(events, marker.item, pr.head, marker.handed)
         if decision == "skip":
             return None, "closing"  # its session has it at this head
         checks = ("merge conflict",) if conflict else pr.failing
@@ -1031,10 +1078,15 @@ def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action |
         return Action("closeout-handback", first, f"close-out PR #{pr.number} {what}; hand "
                       f"it back to {marker.item}", pr=pr.number, head=pr.head, items=members,
                       key=marker.item, checks=checks), "closing"  # fmt: skip
+    if why := review_reasons(marker, pr, snap):
+        return Action("closeout-needs-review", first, f"close-out PR #{pr.number} is never "
+                      f"merged without approved-fr: {'; '.join(why)}", pr=pr.number,
+                      items=members, key=marker.item), "blocked"  # fmt: skip
     if pr.checks == "green" and pr.mergeable == "MERGEABLE":
         return Action("archive", first, f"PR #{pr.number} ({pr.head_ref}) for "
-                      f"{', '.join(members)}", pr=pr.number, head=pr.head, items=members,
-                      draft=pr.draft, key=marker.item), "closing"  # fmt: skip
+                      f"{', '.join(members)} at {marker.head[:12]}", pr=pr.number,
+                      head=marker.head, items=members, draft=pr.draft,
+                      key=marker.item), "closing"  # fmt: skip
     return None, "closing"
 
 
@@ -1727,6 +1779,15 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 3. Archive.
     archives_blocked = 0
     for marker in snap.closeouts:  # R15: one step per collected close-out, never per member
+        reopened = snap.collected_reopened.get(marker.item)
+        if marker.closed and reopened is not None:  # p6b-r10: never merged by the driver
+            key = f"reopened\0{marker.item}\0{reopened.number}"
+            if key not in snap.warned:
+                said = (f"close-out PR #{reopened.number} was closed and reopened: the driver "
+                        "never merges it; it needs approved-fr like any PR")  # fmt: skip
+                actions.append(Action("closeout-reopened", (marker.planned or [""])[0], said,
+                                      pr=reopened.number, key=marker.item, head=key))  # fmt: skip
+            continue
         if marker.merged or marker.closed:
             continue
         step, count = _collected_step(marker, snap)

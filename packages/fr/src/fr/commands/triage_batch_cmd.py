@@ -2896,13 +2896,9 @@ def _closeout_branch(
     repo: str, judgements: Judgements, checkout: Checkout, day: date, given: str | None
 ) -> str:
     """The branch of this collected close-out: *given* (`--branch`, the driver's brief),
-    else the branch of *repo*'s close-out still under way (its marker), else the next free
-    one of *day* (no marker, no event and no remote branch names it)."""
+    else the next free one of *day* (no marker, no event and no remote branch names it)."""
     if given:
         return given
-    open_ = [c for c in judgements.closeouts if c.repo == repo and not c.merged and not c.closed]
-    if open_:
-        return open_[-1].branch
     used = collected_used(repo, judgements.batches, judgements.closeouts)
     n = collected.next_collected(used, day)
     while checkout.remote_branch_exists(collected.collected_branch(day, n)):
@@ -2959,27 +2955,44 @@ def _record_hold(target: Path, facts: Facts, batch_id: str, item: str, reason: s
 
 
 def _resume_or_refuse(
-    client: GhClient, checkout: Checkout, repo: str, branch: str, owed: Sequence[Batch]
-) -> tuple[int, tuple[str, ...]] | None:
-    """p6-r9: `(PR, members)` to resume when *branch* already carries an open PR whose
-    member block lists only batches still owed; None when the branch is new. Any other
-    pushed head is refused by name, with the way out."""
+    client: GhClient, checkout: Checkout, repo: str, branch: str, allowed: frozenset[str]
+) -> tuple[int, str] | None:
+    """p6-r9, p6b-r3: `(PR, head)` to resume when *branch* already carries an open PR that
+    is the repo's own by an allowed author (never a fork's); None when the branch is new.
+    Any other pushed head is refused by name, with the way out."""
     prs = [p for p in client.list_prs_by_head(repo, branch) if p.get("state") == "OPEN"]
     if prs:
         number = int(prs[0]["number"])
-        listed = collected.members_from_body(str(client.pr_view(repo, number).get("body") or ""))
-        if listed and set(listed) <= {b.id for b in owed}:
-            return number, listed
-        _fail(f"{branch} already has PR #{number} for {', '.join(listed) or 'no listed batch'}, "
-              f"not {', '.join(b.id for b in owed)}: merge or close it, or name the batches it "
-              "lists, or pass another --branch")  # fmt: skip
+        why = _untrusted(prs[0], allowed)
+        if why is not None:
+            _fail(f"{branch} already has PR #{number}, which is not the repo's own by an "
+                  f"allowed author ({why}): close it, or pass another --branch")  # fmt: skip
+        return number, str(prs[0].get("headRefOid") or "")
     if checkout.remote_branch_exists(branch):
         _fail(f"{branch} is already pushed and has no open PR: delete it (`git push origin "
               f"--delete {branch}`) or open its PR, then re-run")  # fmt: skip
     return None
 
 
-_MEMBER_READ_ERRORS: tuple[type[Exception], ...] = (TriageError, *FORGE_ERRORS)
+def _record_anchor(
+    target: Path, checkout: Checkout, ref: str, branch: str, head: str, pr: int,
+    members: Sequence[collected.Member], repo: str,
+) -> None:  # fmt: skip
+    """R15's trust anchor, written by the verb on the operator's host after the push: the
+    pushed head, the members, the exact diff (through gitseam, renames split) and the
+    recorded closes. The driver merges without approval only at exactly these."""
+    files = sorted(checkout.changed_status(ref, head))
+    _save_marker(target, branch, pr=pr, head=head, members=[m.batch for m in members],
+                 files=files, closes=list(collected.recorded_closes(members, repo)))  # fmt: skip
+
+
+_TRANSIENT_READ_ERRORS: tuple[type[Exception], ...] = (GitError, *FORGE_ERRORS)
+"""p6b-r9: a git or forge failure reading a batch leaves it owed; never a durable hold."""
+
+
+def _under_way_line(marker: CollectedCloseout) -> str:
+    pushed = f"PR #{marker.pr}" if marker.pr else "not yet pushed"
+    return f"collected close-out {marker.item} is under way ({marker.branch}, {pushed})"
 
 
 @batch_app.command("closeout")
@@ -3004,14 +3017,27 @@ def batch_closeout_command(
     Per batch: verify-merge, a passed gate's Test Plan outcomes (`--ran`, the gate-pass
     comment as evidence) and `fr archive --branch <b> --no-issues`; the PR body closes the
     issues a passed gate's rows cite when it merges (never a narrowed one). A batch that
-    holds moves nothing, gets a `closeout_hold` event and is named; the verb then exits 1.
-    Naming a held batch retries it.
+    fails deterministically moves nothing, gets a `closeout_hold` event and is named; the
+    verb then exits 1. Naming a held batch retries it. After the push the verb records
+    the head, members, diff and closes the driver may merge without approval.
     """
+    if branch_opt is not None and collected.collected_name(branch_opt) is None:
+        _fail(f"--branch {branch_opt!r} is not a collected close-out branch "
+              "(chore/closeout-<YYYY-MM-DD>-<n>)")  # fmt: skip
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     wanted = {b.lower() for b in batch_ids or ()}
-    owed = collected.closeout_owed(judgements.batches, facts, judgements.closeouts, named=wanted)
+    open_markers = [c for c in judgements.closeouts if not (c.merged or c.closed)]
+    mine = next((c for c in open_markers if c.branch == branch_opt), None)
+    reserved = {b for c in open_markers if c is not mine for b in c.planned}
+    owed = collected.closeout_owed(judgements.batches, facts, judgements.closeouts,
+                                   named=wanted, reserved=reserved)  # fmt: skip
+    if mine is not None:  # the marker's own session: its planned batches still owed
+        owed = [b for b in owed if b.id in mine.planned]
     if wanted:
         if missing := sorted(wanted - {b.id for b in owed}):
+            under = [c for c in open_markers if c is not mine and wanted & set(c.planned)]
+            if under:
+                _fail(_under_way_line(under[0]))
             _fail(f"not owed a close-out here (not landed, gated, or closed out): "
                   f"{', '.join(missing)}")  # fmt: skip
         owed = [b for b in owed if b.id in wanted]
@@ -3023,19 +3049,24 @@ def batch_closeout_command(
         _fail(f"close out one repo's batches at a time (these span "
               f"{', '.join(sorted(map(str, repos)))}): name them, or use --repo")  # fmt: skip
     owner_repo = str(next(iter(repos)))
+    if mine is None and (busy := [c for c in open_markers if c.repo == owner_repo]):
+        _fail(_under_way_line(busy[0]))  # p6b-r7: one collected close-out per repo
     checkout = _open_checkout(checkout_path, owner_repo)
     client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
     members: list[collected.Member] = []
     unreadable: list[tuple[str, str]] = []
+    transient: list[tuple[str, str]] = []
     try:
         checkout.fetch()
         default = checkout.default_branch()
         ref = f"origin/{default}"
         branch = _closeout_branch(owner_repo, judgements, checkout, _now().date(), branch_opt)
-        for b in owed:  # p6-r4: one unreadable batch is held; the rest go on
+        for b in owed:  # p6-r4, p6b-r9: one batch's failure never fails the rest
             try:
                 members.append(_collected_member(b, facts, client, checkout, ref, owner_repo))
-            except _MEMBER_READ_ERRORS as exc:
+            except _TRANSIENT_READ_ERRORS as exc:
+                transient.append((b.id, f"could not be read now: {exc}"))
+            except TriageError as exc:
                 unreadable.append((b.id, f"cannot be read for its close-out: {exc}"))
     except UnsupportedForgeOperation as exc:
         _fail(str(exc))
@@ -3043,58 +3074,75 @@ def batch_closeout_command(
         _fail(str(exc))
     except FORGE_ERRORS as exc:
         _fail(f"a forge read failed: {exc}", code=1)
-    name = str(collected.collected_name(branch) or branch.removeprefix("chore/"))
+    name = str(collected.collected_name(branch))
     item = collected_item_id(owner_repo, name)
     for line in collected.plan_lines(members, branch, default):
         _say(line)
-    for bid, why in unreadable:
-        _say(f"  {bid}: held: {why}")
+    for bid, why in [*unreadable, *transient]:
+        _say(f"  {bid}: not closed out: {why}")
     if not yes:
         _say("nothing done; re-run with --yes to act")
         return
     runs = {m.batch: m.run for m in members}
+    allowed = allowed_authors(owner_repo, facts)
     try:
-        resumed = _resume_or_refuse(client, checkout, owner_repo, branch, owed)
+        resumed = _resume_or_refuse(client, checkout, owner_repo, branch, allowed)
     except FORGE_ERRORS as exc:
         _fail(f"a forge read failed: {exc}", code=1)
-    planned = [b.id for b in owed]
     marker = CollectedCloseout(repo=owner_repo, item=item, branch=branch, at=_now(),
-                               planned=planned)  # fmt: skip
+                               planned=[b.id for b in owed])  # fmt: skip
     _save_marker(target, branch, create=marker)
-    if resumed is not None:
-        number, listed = resumed
-        for bid in listed:
-            _record_collected(target, facts, bid, branch, runs.get(bid))
-        _save_marker(target, branch, pr=number)
-        _say(f"resumed PR #{number} on {branch}: recorded {', '.join(listed)}")
-        return
-    where = target / "closeout" / branch.removeprefix("chore/")
+    done = False
     try:
-        tree = checkout.add_worktree(where, ref)
-        tree.start_branch(branch)
-        result = collected.execute(
-            members, tree=tree, forge=client, repo=owner_repo, default=default, branch=branch,
-            record=lambda bid, br: _record_collected(target, facts, bid, br, runs.get(bid)),
-            hold=lambda bid, why: _record_hold(target, facts, bid, item, why),
-            say=_say, unreadable=unreadable,
-        )  # fmt: skip
-    except UnsupportedForgeOperation as exc:
-        _fail(str(exc))
-    except TriageError as exc:
-        _fail(str(exc))
-    except FORGE_ERRORS as exc:
-        _fail(f"the forge refused: {exc}", code=1)
-    if result.pr is not None:
-        _save_marker(target, branch, pr=result.pr)
-        _say(f"opened PR #{result.pr} on {branch}: {', '.join(result.done)}")
-    else:
-        _save_marker(target, branch, closed=True)  # ended with no archive
-    with suppress(TriageError):
-        checkout.remove_worktree(where)
-    if result.held:
-        _say(f"held, not closed out: {', '.join(b for b, _ in result.held)}; retry one with "
-             f"`fr triage batch closeout <id> --yes` once fixed")  # fmt: skip
-        raise typer.Exit(1)
+        if resumed is not None:  # p6b-r3: membership recomputed, never read from the body
+            number, head = resumed
+            if not head or not checkout.reach_commit(head, branch):
+                _fail(f"PR #{number}'s head on {branch} cannot be read; re-run")
+            _record_anchor(target, checkout, ref, branch, head, number, members, owner_repo)
+            for m in members:
+                _record_collected(target, facts, m.batch, branch, runs.get(m.batch))
+            done = True
+            _say(f"resumed PR #{number} on {branch}: recorded {', '.join(runs)} at {head[:12]}")
+            return
+        where = target / "closeout" / branch.removeprefix("chore/")
+        try:
+            tree = checkout.add_worktree(where, ref)
+            tree.start_branch(branch)
+            result = collected.execute(
+                members, tree=tree, forge=client, repo=owner_repo, default=default,
+                branch=branch, record=lambda bid, br: None,
+                hold=lambda bid, why: _record_hold(target, facts, bid, item, why),
+                say=_say, unreadable=unreadable, transient=transient,
+            )  # fmt: skip
+            if result.pr is not None and result.head:
+                carried = [m for m in members if m.batch in result.done]
+                _record_anchor(target, checkout, ref, branch, result.head, result.pr, carried,
+                               owner_repo)  # fmt: skip
+                for m in carried:
+                    _record_collected(target, facts, m.batch, branch, runs.get(m.batch))
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except TriageError as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            _fail(f"the forge refused: {exc}", code=1)
+        done = result.pr is not None
+        if result.pr is not None:
+            _say(f"opened PR #{result.pr} on {branch}: {', '.join(result.done)}")
+        else:
+            _save_marker(target, branch, closed=True)  # ended with no archive
+        with suppress(TriageError):
+            checkout.remove_worktree(where)
+        if result.held or result.skipped:
+            names = ", ".join(b for b, _ in (*result.held, *result.skipped))
+            _say(f"not closed out: {names}; a held one retries with "
+                 f"`fr triage batch closeout <id> --yes` once fixed")  # fmt: skip
+            raise typer.Exit(1)
+    finally:
+        if not done:  # p6b-r6: a verb that failed after its marker never wedges the repo
+            current = marker_of(branch, load_judgements(target / "judgements.yaml").closeouts)
+            if current is not None and not current.head and not current.closed:
+                _save_marker(target, branch, closed=True)
 
 
 # ------------------------------------------------------------------- drive
@@ -4065,13 +4113,11 @@ class _Driver:
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
         idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
         ledgers = self._ledgers(facts, judgements, stages, repos, ids, {*unread, *carried})
-        collected_prs, collected_members, live_items, asked_items = self._collected_reads(
-            facts, judgements, repos, due, {*unread, *carried}, now
-        )
+        reads = self._collected_reads(facts, judgements, repos, due, {*unread, *carried}, now)
+        live_items, asked_items = reads.pop("live"), reads.pop("asked")
         return Snapshot(
             closeouts=tuple(judgements.closeouts),
-            collected_prs=collected_prs,
-            collected_members=collected_members,
+            **reads,
             approvals=approvals,
             batches=tuple(judgements.batches),
             stages=stages,
@@ -4182,16 +4228,24 @@ class _Driver:
         due: Sequence[Batch],
         skip: set[str],
         now: datetime,
-    ) -> tuple[dict[str, LivePr], dict[str, tuple[str, ...]], frozenset[str], frozenset[str]]:
-        """R15, §D: each unfinished collected close-out's trusted PR on its branch (open,
-        else merged, else closed) with its checks, base, mergeability and files, and the
-        member ids its body lists; and, with --yes, which close-out items a runner holds
-        live (the markers' with no PR, and each repo's next candidate: never start one
-        twice), and which were asked."""
+    ) -> dict[str, Any]:
+        """R15, §D: the driver's OWN reads of each unfinished collected close-out, by item,
+        for `review_reasons`: its trusted PR on its branch (checks only at the recorded
+        head), the git diff and commits from the default branch to the recorded head, the
+        issues its body closes, the issues its members' narrowing decisions name now, and
+        whether its branch is pushed; a closed marker's PR open again; and, with --yes,
+        which items a runner holds live (a hand marker is asked of no runner) and which
+        were asked. Snapshot keyword arguments, plus `live` and `asked`."""
         from fr_dispatch.work_item import WorkItem
 
         prs: dict[str, LivePr] = {}
-        members: dict[str, tuple[str, ...]] = {}
+        diff: dict[str, frozenset[str] | None] = {}
+        commits: dict[str, tuple[str, ...] | None] = {}
+        body_closes: dict[str, frozenset[str]] = {}
+        narrowed: dict[str, frozenset[str] | None] = {}
+        pushed: set[str] = set()
+        reopened: dict[str, LivePr] = {}
+        asked: set[str] = set()
         probes: dict[str, list[WorkItem]] = {}
         by_id = {b.id: b for b in judgements.batches}
 
@@ -4204,36 +4258,78 @@ class _Driver:
                 tracking=None,
             ))  # fmt: skip
 
+        def git_read(m: CollectedCloseout) -> None:
+            try:
+                checkout = self._fetched_reader(m.repo)
+                if m.item and checkout.remote_branch_exists(m.branch):
+                    pushed.add(m.item)
+                if not m.head or not checkout.reach_commit(m.head, m.branch):
+                    diff[m.item] = commits[m.item] = None
+                    return
+                ref = f"origin/{checkout.default_branch()}"
+                diff[m.item] = checkout.changed_status(ref, m.head)
+                commits[m.item] = checkout.commits_since(ref, m.head)
+                tip = ref
+                names: set[str] = set()
+                for bid in m.members:
+                    if bid in by_id:
+                        read = closeout_read(checkout, tip, recorded_branch(by_id[bid]), m.repo)
+                        names |= {n.lower() for n in read.narrowed}
+                narrowed[m.item] = frozenset(names)
+            except TriageError:
+                diff.setdefault(m.item, None)
+                commits.setdefault(m.item, None)
+                narrowed[m.item] = None
+
         try:
             for m in judgements.closeouts:
-                if m.merged or m.closed or m.repo in skip:
+                if m.repo in skip or m.merged:
                     continue
                 client, allowed = self.client(facts, m.repo), allowed_authors(m.repo, facts)
-                found = [p for p in _live_head_prs(client, m.repo, m.branch, allowed) if p.trusted]
+                found = _live_head_prs(client, m.repo, m.branch, allowed)
+                if m.closed:  # p6b-r10: a closed close-out's PR open again
+                    again = next((p for p in found if p.state == "OPEN"
+                                  and p.number == m.pr), None)  # fmt: skip
+                    if again is not None:
+                        reopened[m.item] = again
+                    continue
+                mine = [p for p in found if p.trusted]
                 pick = next(
                     (p for state in ("OPEN", "MERGED", "CLOSED") for p in
-                     sorted(found, key=lambda x: -x.number) if p.state == state), None,
+                     sorted(mine, key=lambda x: -x.number) if p.state == state), None,
                 )  # fmt: skip
+                git_read(m)
                 if pick is None:
                     first = next((by_id[b] for b in m.planned if b in by_id), None)
                     if m.runner != "hand":
                         probe(m.runner, m.item, m.repo, first)
+                    else:
+                        asked.add(m.item)  # no runner holds a hand run: asked, never live
                     continue
                 view = client.pr_view(m.repo, pick.number)
+                body_closes[m.item] = frozenset(
+                    collected.closes_from_body(str(view.get("body") or ""))
+                )
+                head = str(view.get("head_oid") or pick.head)
+                pick = replace(pick, head=head)
                 if pick.state == "OPEN":
                     key = (m.repo, pick.number)
                     fact = next((p for p in facts.prs if (p.repo, p.number) == key), None)
-                    counts = fact.checks if fact is not None and fact.checks else {}
+                    # p6b-r2: only results for the head that will merge; none is pending
+                    counts = (
+                        (fact.checks or {}) if fact is not None and fact.head_oid == head else {}
+                    )
+                    required = (
+                        client.pr_required_checks(m.repo, pick.number) if head == m.head else []
+                    )
                     verdict, failing = checks_verdict(
-                        client.pr_required_checks(m.repo, pick.number), counts or {"pass": 1},
-                        ci_none=self._ci_none(m.repo),
-                    )  # fmt: skip
+                        required, counts, ci_none=self._ci_none(m.repo)
+                    )
                     pick = replace(pick, checks=verdict, failing=failing,
                                    base=str(view.get("base_ref") or ""),
                                    mergeable=str(view.get("mergeable") or ""),
                                    merge_state=str(view.get("merge_state") or ""))  # fmt: skip
                 prs[m.item] = pick
-                members[m.item] = collected.members_from_body(str(view.get("body") or ""))
             if self.yes:
                 for repo in sorted({repos[b.id] for b in due if b.id in repos} - skip):
                     _, item = collected_candidate(
@@ -4246,14 +4342,18 @@ class _Driver:
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         live: set[str] = set()
-        asked: set[str] = set()
         for name, items in probes.items() if self.yes else ():
             runner = self._try_runner(name)
             if runner is None or runner.preflight(items):
                 continue
             live |= runner.existing_dispatches(items)
             asked.update(i.id for i in items)
-        return prs, members, frozenset(live), frozenset(asked)
+        return {
+            "collected_prs": prs, "collected_diff": diff, "collected_commits": commits,
+            "collected_body_closes": body_closes, "collected_narrowed": narrowed,
+            "collected_pushed": frozenset(pushed), "collected_reopened": reopened,
+            "live": frozenset(live), "asked": frozenset(asked),
+        }  # fmt: skip
 
     def _claim_plan(
         self,
@@ -5076,7 +5176,7 @@ class _Driver:
                 self.warned.add(action.head)
             return action.detail, False, in_flight
         if action.kind in ("blocked", "held", "ledger-unread", "closeout-held", "closeout-stuck",
-                           "closeout-needs-review"):  # fmt: skip
+                           "closeout-needs-review", "closeout-unrecorded"):  # fmt: skip
             return action.detail, False, in_flight
         if action.kind in ("claim", "refresh", "release"):
             if action.kind == "claim" and action.batch in self._held_now:
@@ -5118,8 +5218,10 @@ class _Driver:
         if action.kind == "post-merge":
             outcome, did = self._post_merge(facts, judgements, batch, repo)
             return outcome, did, in_flight
-        if action.kind in ("closeout-reconcile", "closeout-merged", "closeout-pr-closed",
-                           "closeout-abandoned"):  # fmt: skip
+        if action.kind == "closeout-reopened":
+            self.warned.add(action.head)
+            return action.detail, False, in_flight
+        if action.kind in ("closeout-merged", "closeout-pr-closed", "closeout-abandoned"):
             return self._collected_record(action, facts, judgements, repo), True, in_flight
         if action.kind == "closeout-handback":
             line, did = self._closeout_hand_back(action, facts, judgements, repo)
@@ -6056,17 +6158,21 @@ class _Driver:
 
     def _collected_merged(self, action: Action, facts: Facts, repo: str) -> None:
         """Its PR merged: the marker records it, and each issue the body `Closes` (closed by
-        the merge itself, p6-r8) loses `fr:awaiting-live`. A failed label write is said and
-        never undoes the merge."""
+        the merge itself, p6-r8) loses `fr:awaiting-live` — only the RECORDED closes, only
+        in the marker's repo (p6b-r5), never what the body says. A failed label write is
+        said and never undoes the merge."""
         judgements = load_judgements(self.target / "judgements.yaml")
         marker = next((c for c in judgements.closeouts if c.item == action.key), None)
         if marker is not None:
             _save_marker(self.target, marker.branch, pr=action.pr, merged=True)
         client = self.client(facts, repo)
+        if marker is None:
+            return
         try:
-            body = str(client.pr_view(repo, action.pr or 0).get("body") or "")
-            for ref in collected.closes_from_body(body):
+            for ref in marker.closes:
                 where, _, n = ref.rpartition("#")
+                if where.lower() != marker.repo.lower():
+                    continue
                 client.edit_issue_labels(where, int(n), add=frozenset(),
                                          remove=frozenset({FR_AWAITING_LIVE.name}))  # fmt: skip
         except FORGE_ERRORS as exc:
@@ -6084,11 +6190,7 @@ class _Driver:
         marker = next((c for c in judgements.closeouts if c.item == action.key), None)
         if marker is None:
             return action.detail
-        if action.kind == "closeout-reconcile":
-            for bid in action.items:
-                _record_collected(self.target, facts, bid, marker.branch, None)
-            _save_marker(self.target, marker.branch, pr=action.pr)
-        elif action.kind == "closeout-merged":
+        if action.kind == "closeout-merged":
             written = list(judgements.batches)
             for bid in action.items:
                 member = _find(written, bid)
@@ -6148,6 +6250,8 @@ class _Driver:
             written = _replace(written, member.model_copy(
                 update={"events": [*member.events, event]}))  # fmt: skip
         _write(self.target, written, facts, read=judgements.batches, read_errors=True)
+        if marker is not None:  # the item's own count, members or not (p6b-r10)
+            _save_marker(self.target, marker.branch, handed=[*marker.handed, action.head])
         if delivered == "none":
             return f"{action.detail}; no session can take it: the operator's", True
         return f"{action.detail}; handed back to its session {action.key}", True

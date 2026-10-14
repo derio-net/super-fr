@@ -242,12 +242,24 @@ def test_an_unresolvable_merged_branch_does_not_hold_the_batch() -> None:
     assert result.done == ("a",) and recorded == [("a", BRANCH)]
 
 
-def test_p6_r7_any_other_verify_merge_exit_2_holds_the_batch() -> None:
+def test_p6_r7_any_other_verify_merge_exit_2_never_closes_the_batch_out() -> None:
+    """p6-r7, refined by p6b-r9: not closed out, and not a durable hold either (an exit 2
+    other than the gone branch is no proof the merge is wrong): owed, and reported."""
     key = ("verify-merge", "feat/batch-a")
     tree = FakeTree(codes={key: 2}, outs={key: "error: multiple workspaces"})
     result, recorded = _run([PLAIN], tree, FakeForge())
-    assert [b for b, _ in result.held] == ["a"] and recorded == []
-    assert "multiple workspaces" in result.held[0][1]
+    assert recorded == [] and result.held == () and HOLDS == []
+    assert [b for b, _ in result.skipped] == ["a"]
+    assert "multiple workspaces" in result.skipped[0][1]
+
+
+def test_p6b_r9_only_a_deterministic_step_failure_is_a_durable_hold() -> None:
+    tree = FakeTree(codes={("verify-merge", "feat/batch-a"): 1, ("outcome", ""): 1})
+    gated = Member(batch="g", branch="feat/batch-g", run="r-g", passed=("tester",),
+                   evidence=EVIDENCE, missing=(1,))  # fmt: skip
+    result, _ = _run([PLAIN, gated], tree, FakeForge())
+    assert [b for b, _ in result.held] == ["a"]  # verify-merge exit 1: deterministic
+    assert [b for b, _ in result.skipped] == ["g"]  # an outcome step's failure: transient
 
 
 def test_p6_r4_an_unreadable_batch_is_held_and_the_rest_close_out() -> None:

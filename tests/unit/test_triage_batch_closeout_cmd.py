@@ -200,7 +200,11 @@ def test_p6_r2_a_held_batch_gets_a_durable_hold_and_the_pr_carries_only_the_rest
     judgements = load_judgements(tmp_path / "judgements.yaml")
     (marker,) = judgements.closeouts
     assert (marker.branch, marker.item, marker.pr) == (BRANCH, item, 200)
-    # the driver never re-collects b2; naming it retries it
+    # once that close-out merged: b2 is never collected again; naming it retries it
+    from fr.triage.batch import save_closeouts
+
+    save_closeouts(tmp_path / "judgements.yaml", [marker.model_copy(update={"merged": True})],
+                   read=[marker])  # fmt: skip
     code, out = _closeout(tmp_path)
     assert "nothing to close out" in out
     code, out = _closeout(tmp_path, "b2")
@@ -229,20 +233,117 @@ def test_p6_r4_an_unreadable_batch_is_held_with_its_reason_and_the_rest_close_ou
     assert "cannot be read" in reason and "run r2" in reason
 
 
-def test_p6_r9_a_rerun_on_a_branch_with_its_pr_resumes_and_another_pr_is_refused(
+def test_p6_r9_a_rerun_on_a_branch_with_its_own_pr_resumes_and_records_the_anchor(
     tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
     _reads(monkeypatch, {})
     _landed(world, tmp_path, "b1", "b2")
-    world.pr(300, BRANCH, [], body="<!-- fr:closeout-members b1 -->")  # pushed, then a crash
+    world.pr(300, BRANCH, [], body="<!-- fr:closeout-members zz -->")  # pushed, then a crash
+    checkout.status["sha-300"] = frozenset({"D\tdocs/superpowers/runs/r.yaml"})
 
-    code, out = _closeout(tmp_path, "--yes")
+    code, out = _closeout(tmp_path, "--yes", "--branch", BRANCH)
 
     assert code == 0, out
     assert "resumed PR #300" in out and tree.calls == []  # nothing re-run, nothing re-pushed
-    assert [len(v) for v in _closeouts(tmp_path).values()] == [1, 0]
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    # p6b-r3: membership recomputed (planned ∩ owed), never read from the body's "zz"
+    assert (marker.head, marker.members, marker.files) == (
+        "sha-300", ["b1", "b2"], ["D\tdocs/superpowers/runs/r.yaml"])  # fmt: skip
 
-    world.prs[300]["body"] = "<!-- fr:closeout-members zz -->"
-    code, out = _closeout(tmp_path, "b2", "--yes", "--branch", BRANCH)
-    assert code == 2 and f"{BRANCH} already has PR #300" in " ".join(out.split())
+
+def test_p6b_r3_a_rerun_never_resumes_a_pr_that_is_not_the_repos_own(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Attack: a fork opens a PR on the predictable branch name before the verb runs."""
+    _reads(monkeypatch, {})
+    _landed(world, tmp_path, "b1")
+    world.pr(300, BRANCH, [], cross_repo=True, author="mallory")
+
+    code, out = _closeout(tmp_path, "--yes", "--branch", BRANCH)
+
+    assert code == 2 and "PR #300" in out and "not the repo's own" in " ".join(out.split())
+    assert load_judgements(tmp_path / "judgements.yaml").closeouts == []
+
+
+def test_p6b_r6_a_verb_that_fails_after_its_marker_closes_it(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Attack: make the verb die mid-run (here, the forge refuses the PR): the repo must
+    not stay wedged behind an open marker that no PR will ever finish."""
+    _reads(monkeypatch, {})
+    _landed(world, tmp_path, "b1")
+    world.refuse_create = "HTTP 422"
+
+    code, _ = _closeout(tmp_path, "--yes")
+
+    assert code != 0
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert marker.closed
+
+
+def _open_marker(tmp_path: Path, planned: list[str]) -> None:
+    from fr.triage.batch import save_closeouts
+    from fr.triage.model import CollectedCloseout
+
+    item = f"{REPO}/run/closeout-2026-10-02-1"
+    marker = CollectedCloseout(repo=REPO, item=item, branch=BRANCH, at=NOW, runner="fake",
+                               planned=planned)  # fmt: skip
+    save_closeouts(tmp_path / "judgements.yaml", [marker], read=[])
+
+
+def test_p6b_r7_a_hand_run_while_a_closeout_is_under_way_is_refused(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Attack: a second, hand-run close-out of the same batches while the driver's runs:
+    two PRs archiving the same plans."""
+    _reads(monkeypatch, {})
+    _landed(world, tmp_path, "b1", "b2")
+    _open_marker(tmp_path, ["b1"])
+
+    for args in ((), ("b1",), ("b2",)):
+        code, out = _closeout(tmp_path, *args, "--yes")
+        said = " ".join(out.split())
+        assert (
+            code == 2 and f"closeout-2026-10-02-1 is under way ({BRANCH}, not yet pushed)" in said
+        )
+    assert tree.calls == []
+
+
+def test_p6b_r8_a_branch_that_is_not_a_collected_close_out_branch_is_refused(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Attack: `--branch main` (or a batch branch) would push the archive over it."""
+    _reads(monkeypatch, {})
+    _landed(world, tmp_path, "b1")
+    for branch in ("main", "feat/batch-b1", "chore/closeout-x"):
+        code, out = _closeout(tmp_path, "--yes", "--branch", branch)
+        assert code == 2 and "not a collected close-out branch" in " ".join(out.split())
+    assert tree.calls == [] and load_judgements(tmp_path / "judgements.yaml").closeouts == []
+
+
+def test_p6b_r9_a_transient_git_failure_never_becomes_a_durable_hold(
+    tmp_path: Path, world: World, checkout: DriveCheckout, tree: FakeTree,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Attack: a network blip while reading b2 must not park it for good."""
+    from fr.triage.gitseam import GitError
+
+    def _read(checkout: Any, ref: str, branch: str, repo: str) -> CloseoutRead:
+        if branch == "feat/batch-b2":
+            raise GitError("`git show` timed out")
+        return CloseoutRead("r1")
+
+    monkeypatch.setattr(triage_batch_cmd, "closeout_read", _read)
+    _landed(world, tmp_path, "b1", "b2")
+
+    code, out = _closeout(tmp_path, "--yes")
+
+    assert code == 1, out
+    assert _holds(tmp_path)["b2"] == []  # still owed: the next run takes it
+    code, out = _closeout(tmp_path)
+    assert "nothing to close out" in out or "b2: fr archive" in out
