@@ -176,7 +176,7 @@ that accounts for it. Each item kind has its own accounting rule:
 | An out-of-scope finding in either journal | it is `deferred --tracked-by <issue>` |
 | An `owed` journal entry | it carries `filed_as` |
 | An owed row citing the spec (`not-implemented`, `unwired`, `walk-owed`) | a post-merge gate of this run gates it, or the row carries `issues:` |
-| A narrowing decision (R12) | it carries `tracked_by=` |
+| A narrowing decision (R12) | a later decision with the same `narrows=` carries `remainder_tracked_by=` |
 
 Under `tracking: none` there is no tracker, so only the gate route applies. The
 rest stay recorded in the journal and PR body, as today.
@@ -186,8 +186,9 @@ files each item through the archive's existing filers in `fr/archive_followups.p
 and records the result, so filing moves from close-out to `deliver`:
 
 - an out-of-scope finding or a narrowing decision: `file_open_ends`, label
-  `follow-up`, then appends a `deferred --tracked-by` resolution (or `tracked_by=`
-  on the decision);
+  `follow-up`, then appends a `deferred --tracked-by` resolution (or, for the
+  decision, a decision carrying the same `narrows=` and `remainder_tracked_by=`);
+  only an out-of-scope finding is filed — an in-scope open one is fixed;
 - an `owed` entry: `file_owed_ends`, label `fr:owed`, then records `filed_as`.
 
 R11. `deliver` refuses `Closes #n`, printing `Refs #n` as the fix, in two cases:
@@ -201,12 +202,22 @@ recorded:
 
 - `gate=<role>`;
 - `narrows=<ref>[,<ref>...]`, comma-separated;
-- `answered_by=operator`.
+- `decided_by=operator` (or `agent`);
+- `remainder_tracked_by=<issue>`, on the decision `fr journal file` appends.
 
-fr writes `answered_by=operator` on a decision in only two cases: when the
-brainstorm record applies it (that resolve verified the question rounds), or
-when `fr journal add … --answered-by operator` is verified against the
-transcript. A narrowing decision without the token is the agent's.
+Not `answered_by=` / `tracked_by=`: a released fr already knows those two tokens
+and refuses them off a resolution record, so a decision carrying them would make
+the journal unparseable to it. Token names no released fr knows are skipped by
+its named projection.
+
+fr writes `decided_by=operator` on a decision in only two cases: when the
+brainstorm record applies it (from the gate's derived answer — an observed
+answered round stamps an ordinary decision, and a narrowing one only when every
+narrowed ref appears in an answered round's question or answer text; an
+unobserved gate claimed by the operator stamps an ordinary decision with an
+unverified note and never a narrowing one), or when `fr journal add …
+--answered-by operator` is verified against the transcript. A narrowing decision
+without the token is the agent's.
 
 R13. The driver never closes out a **gated** landed batch: one whose merged PR
 carries an unpassed `gate:<tester|devops>` label. Its card sits in that gate's
@@ -433,10 +444,11 @@ it.
 `file_owed_ends`, then writes through `fr journal resolve`'s engine. The archive
 keeps calling the same two filers.
 
-`JournalEntry` gains `gate`, `narrows: tuple[str, ...]`, and `answered_by` on a
-decision. These are header tokens, written only when set and read by name, so an
-older fr ignores them, as it ignored `tracked_by=` and `input=`. The journal
-kind's stamp does not move.
+`JournalEntry` gains `gate`, `narrows: tuple[str, ...]`, `decided_by` and
+`remainder_tracked_by`, all decision-only; `answered_by` and `tracked_by` stay
+resolution-only, exactly as released. These are header tokens, written only when
+set and read by name under names no released fr knows, so an older fr ignores
+them, as it ignored `input=`. The journal kind's stamp does not move.
 
 The step record's `JournalItem` (`record/model.py`) is closed-world and read by
 released fr versions. Adding `gate` and `narrows` therefore moves the `record`
