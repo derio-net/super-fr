@@ -60,8 +60,10 @@ steps:
         state: running
         attempts:
         - dispatched: '2026-10-14T18:03:16+00:00'
-          agent_type: super-fr:fr-phase-executor
+          agent: ses_ec4699655ffeL3SP68hI3rHTR8
+          agent_type: fr-phase-executor
           harness: opencode
+          model: openai/gpt-6.1-sol
           tier: hard
           bound: openai/gpt-6.1-sol
           session: ses_ec52e48a3ffeYuGgSUiT9iZD10
