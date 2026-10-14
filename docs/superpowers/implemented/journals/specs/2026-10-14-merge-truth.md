@@ -256,3 +256,8 @@ what: post-merge — operator-driven: after release, run one `fr triage batch dr
 why: post-merge operator-driven live drive pass (fr triage batch drive --yes writes to the forge); only v5.27.0-rc.2 is cut, the final release has not shipped yet
 how: fr journal resolve --scope spec --slug 2026-10-14-merge-truth --id test-plan-step-1 --state fixed --note "<evidence>"
 owed_key: spec:2026-10-14-merge-truth#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-10-14T13:15:10+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1214 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1214] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1214; still owed until discharged.
