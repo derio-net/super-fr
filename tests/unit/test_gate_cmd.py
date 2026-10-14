@@ -21,10 +21,10 @@ from tests.unit.fakes import FakeGhClient
 REPO = "derio-net/super-fr"
 
 
-def _fake(labels: list[str]) -> FakeGhClient:
+def _fake(labels: list[str], state: str = "MERGED") -> FakeGhClient:
     fake = FakeGhClient()
     fake.prs[(REPO, 5)] = {
-        "state": "MERGED", "draft": False, "head_ref": "feat/x", "base_ref": "main",
+        "state": state, "draft": False, "head_ref": "feat/x", "base_ref": "main",
         "mergeable": "UNKNOWN", "title": "t", "body": "b", "labels": list(labels),
     }  # fmt: skip
     return fake
@@ -32,11 +32,17 @@ def _fake(labels: list[str]) -> FakeGhClient:
 
 @pytest.fixture
 def forge(monkeypatch: pytest.MonkeyPatch) -> Any:
-    holder: dict[str, FakeGhClient] = {}
+    holder: dict[str, Any] = {"urls": []}
 
-    def install(labels: list[str]) -> FakeGhClient:
-        holder["fake"] = _fake(labels)
-        monkeypatch.setattr(gate_cmd, "client_for_repo", lambda repo: holder["fake"])
+    def client(url: str) -> FakeGhClient:
+        holder["urls"].append(url)
+        return holder["fake"]
+
+    def install(labels: list[str], state: str = "MERGED") -> FakeGhClient:
+        holder["fake"] = _fake(labels, state)
+        holder["fake"].urls = holder["urls"]
+        monkeypatch.setattr(gate_cmd, "client_for_url", client)
+        monkeypatch.setattr("fr._hosts.origin_slug", lambda root: None)
         return holder["fake"]
 
     return install
@@ -103,3 +109,60 @@ def test_it_refuses_what_is_not_a_held_post_merge_gate(
 
 def test_gate_is_a_read_only_command() -> None:
     assert "gate" in trigger.READ_ONLY_COMMANDS
+
+
+# ------------------------------------------------------------ review p4-r4..r9
+
+
+def test_p4_r5_it_refuses_a_pr_that_is_not_merged(forge: Any) -> None:
+    fake = forge(["gate:tester"], state="OPEN")
+
+    result = _pass("--gate", "tester", "--yes")
+
+    assert result.exit_code == 2, result.output
+    assert "is OPEN, not merged" in result.output
+    assert _writes(fake) == []
+
+
+def test_p4_r9_no_release_command_while_another_gate_still_holds(forge: Any) -> None:
+    forge(["gate:tester", "gate:devops"])
+
+    result = _pass("--gate", "tester", "--yes")
+
+    assert result.exit_code == 0, result.output
+    assert "gh workflow run" not in result.output
+    assert "gate:devops still holds" in result.output
+
+
+def test_p4_r6_the_host_is_the_named_one_or_the_checkouts_origin(
+    forge: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = forge(["gate:tester"])
+    assert _pass("--gate", "tester", "--host", "ghe.example.com").exit_code == 0
+    assert fake.urls[-1] == f"https://ghe.example.com/{REPO}"
+
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda root: REPO)
+    monkeypatch.setattr("fr._hosts.origin_hostname", lambda root: "git.example.org")
+    assert _pass("--gate", "tester").exit_code == 0
+    assert fake.urls[-1] == f"https://git.example.org/{REPO}"
+
+
+def test_p4_r4_pass_gate_comments_first_and_never_twice() -> None:
+    from fr.verification.labels import gate_pass_comment, pass_gate
+
+    fake = _fake(["gate:tester"])
+    pass_gate(fake, REPO, 5, "tester", why="walked")
+    order = [c[0] for c in fake.calls if c[0] in ("comment_pr", "edit_pr_labels")]
+    assert order == ["comment_pr", "edit_pr_labels"]
+
+    again = _fake(["gate:tester"])
+    again.issue_comments[(REPO, 5)] = [{"body": gate_pass_comment("tester", "walked")}]
+    pass_gate(again, REPO, 5, "tester", why="walked")
+    assert [c[0] for c in again.calls if c[0] == "comment_pr"] == []
+    assert [c[0] for c in again.calls if c[0] == "edit_pr_labels"] == ["edit_pr_labels"]
+
+    failing = _fake(["gate:tester"])
+    failing.fail_on_mutation = 0  # the comment
+    with pytest.raises(Exception, match="configured failure"):
+        pass_gate(failing, REPO, 5, "tester", why="walked")
+    assert [c[0] for c in failing.calls if c[0] == "edit_pr_labels"] == []

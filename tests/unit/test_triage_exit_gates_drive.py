@@ -16,12 +16,12 @@ from typing import Any
 
 import pytest
 from fr.commands import triage_batch_cmd
+from fr.labels import held_gates
 from fr.triage.batch_drive import (
     GatedRow,
     GateLedger,
     action_line,
     drive_pass,
-    held_gates,
     is_gated,
     summary_line,
 )

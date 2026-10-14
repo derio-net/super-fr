@@ -22,9 +22,8 @@ from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from fr.gates import POST_MERGE_GATES
 from fr.ghclient import QueueState
-from fr.labels import gate_label
+from fr.labels import held_gates
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
@@ -154,17 +153,6 @@ class GateLedger:
     pr: int
     labels: frozenset[str]
     rows: tuple[GatedRow, ...] | None = None
-
-
-def held_gates(labels: Iterable[str]) -> frozenset[str]:
-    """The post-merge gates a PR's *labels* hold unpassed: `gate:<g>` with no
-    `gate:<g>-passed` beside it."""
-    names = set(labels)
-    return frozenset(
-        g
-        for g in POST_MERGE_GATES
-        if gate_label(g).name in names and gate_label(g, passed=True).name not in names
-    )
 
 
 def is_gated(batch: Batch, snap: Snapshot) -> bool:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
@@ -216,6 +217,19 @@ def gate_label(gate: str, *, passed: bool = False) -> LabelDef:
             f"The {gate} gate passed",
         )
     return LabelDef(f"{GATE_PREFIX}{gate}", GATE_LABEL_COLOR, f"Held by the {gate} gate")
+
+
+def held_gates(labels: Iterable[str]) -> frozenset[str]:
+    """The post-merge gates a PR's *labels* hold unpassed: `gate:<g>` with no
+    `gate:<g>-passed` beside it (exit-gates R13, R14)."""
+    from fr.gates import POST_MERGE_GATES
+
+    names = set(labels)
+    return frozenset(
+        g
+        for g in POST_MERGE_GATES
+        if gate_label(g).name in names and gate_label(g, passed=True).name not in names
+    )
 
 
 # Role-name → LabelDef map. Keys are the lifecycle slot names (snake_case);

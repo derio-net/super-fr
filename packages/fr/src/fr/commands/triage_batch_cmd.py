@@ -95,7 +95,7 @@ from fr.isolation.adopt import (
     workspace_path,
 )
 from fr.isolation.rename import IsolationError, rename_branch
-from fr.labels import APPROVED_FR, FR_AWAITING_LIVE, FR_IN_PROGRESS
+from fr.labels import APPROVED_FR, FR_AWAITING_LIVE, FR_IN_PROGRESS, held_gates
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
@@ -188,7 +188,6 @@ from fr.triage.batch_drive import (
     find_run,
     finished_waves,
     fresh_conflicts,
-    held_gates,
     housekeeping_branch,
     idle_session,
     is_archived,

@@ -171,10 +171,20 @@ def gate_pass_comment(gate: str, why: str) -> str:
 def pass_gate(client: GhClient, repo: str, pr: int, gate: str, *, why: str) -> None:
     """R14, both routes: swap PR *pr*'s `gate:<gate>` for `gate:<gate>-passed` and comment
     what passed it. The merged PR's labels are the gate ledger, so a pass needs no commit.
-    Forge failures propagate: the caller decides what one means."""
+    Forge failures propagate: the caller decides what one means.
+    The comment goes FIRST and the labels after (p4-r4): a failed comment leaves the
+    gate held, so the pass is retried and its record is never lost; a comment already
+    carrying this gate's marker (a pass whose swap failed) is not posted twice.
+    """
+    marker = f"{GATE_PASS_MARKER}{gate} -->"
+    posted = any(
+        str(c.get("body") or "").lstrip().startswith(marker)
+        for c in client.list_issue_comments(repo, pr)
+    )
+    if not posted:
+        client.comment_pr(repo, pr, gate_pass_comment(gate, why))
     passed = gate_label(gate, passed=True)
     client.ensure_labels(repo, [passed])
     client.edit_pr_labels(
         repo, pr, add=frozenset({passed.name}), remove=frozenset({gate_label(gate).name})
     )
-    client.comment_pr(repo, pr, gate_pass_comment(gate, why))
