@@ -16,7 +16,7 @@ from typing import Literal
 from fr.labels import held_gates
 from fr.triage.approval import approval_verdict, is_approved
 from fr.triage.batch import batch_pr, derive_batch_stage
-from fr.triage.batch_drive import LANDED, closeout_event, fact_ledger_unknown, fact_ledgers
+from fr.triage.batch_drive import LANDED, closeout_event, fact_ledgers
 from fr.triage.merge_stops import MergeStop, live_stop
 from fr.triage.model import Batch, Facts
 
@@ -55,19 +55,16 @@ def lane_of(batch: Batch, facts: Facts, stop: MergeStop | None = None) -> LaneVe
                 return LaneVerdict("needs-reviewer", f"PR #{pr.number} is delivered: approve it")
         return None
     if stage in LANDED and closeout_event(batch) is None:
-        stages = {batch.id: stage}
-        if batch.id in fact_ledger_unknown([batch], facts, stages):
-            return LaneVerdict(
-                "needs-developer",
-                "its merged PR's gate labels could not be read, so which gate holds it is "
-                "unknown; the next collect retries",
-            )
-        ledger = fact_ledgers([batch], facts, stages).get(batch.id)
+        ledger = fact_ledgers([batch], facts, {batch.id: stage}).get(batch.id)
         held = held_gates(ledger.labels) if ledger is not None else frozenset()
-        if "tester" in held:
-            return LaneVerdict("needs-tester", "landed; the tester gate is unpassed")
-        if "devops" in held:
-            return LaneVerdict("needs-devops", "landed; the devops gate is unpassed")
+        if ledger is not None and ("tester" in held or "devops" in held):
+            owed = "; ".join(
+                f"{g}: walk its gated rows, or `fr gate pass --pr {ledger.pr} --gate {g}`"
+                for g in ("tester", "devops")
+                if g in held
+            )
+            lane: Lane = "needs-tester" if "tester" in held else "needs-devops"
+            return LaneVerdict(lane, f"landed, held by a post-merge gate ({owed})")
     return None
 
 

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from fr.triage.kanban import COLUMN_TITLES, COLUMNS, build_board, column_of
+from fr.triage.lanes import lane_of
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import CONFLICT_HINT, conflicting
 from fr.triage.views import needs_you
@@ -139,11 +140,13 @@ def test_a_passed_gate_is_not_a_lane() -> None:
     assert _col(*_merged(["gate:tester", "gate:tester-passed"])) == "closing-out"
 
 
-def test_an_unread_ledger_is_in_a_lane_with_its_reason() -> None:
+def test_an_unread_ledger_stays_closing_out_with_the_drivers_hint_and_a_need() -> None:
     f, jd = _merged(None)
-    assert _col(f, jd) == "needs-developer"
+    assert _col(f, jd) == "closing-out"
     card = build_board(f, jd, {}).card("a")
-    assert "gate labels" in card.hint and card.needs_you
+    assert "gate labels unread" in card.hint
+    rows = [n for n in needs_you(f, jd) if n.ref == "a"]
+    assert [n.kind for n in rows] == ["ledger-unread"]  # p5-r2
 
 
 def test_an_ungated_landed_batch_is_closing_out() -> None:
@@ -155,13 +158,14 @@ def test_an_ungated_landed_batch_is_closing_out() -> None:
 
 def test_needs_you_emits_one_need_per_card_in_a_lane() -> None:
     for f, jd, col in (
-        (*_open(_cursor("gate")), "needs-developer"),
+        (*_open(_cursor("gate"), checks={"pass": 0, "fail": 0, "pending": 1}), "needs-developer"),
         (*_open(_cursor("deliver-done", "deliver")), "needs-reviewer"),
         (*_merged(["gate:tester"]), "needs-tester"),
         (*_merged(["gate:devops"]), "needs-devops"),
     ):
-        rows = [n for n in needs_you(f, jd) if n.kind == col]
+        rows = [n for n in needs_you(f, jd) if n.ref == "a"]
         assert len(rows) == 1, col
+        assert rows[0].kind in (col, "approve-pr")
         assert build_board(f, jd, {}).card("a").column == col
 
 
@@ -188,3 +192,62 @@ def test_the_rendered_board_shows_the_lane_columns() -> None:
     for title in ("Needs you · Developer", "Needs you · Reviewer", "Needs you · Tester",
                   "Needs you · DevOps"):  # fmt: skip
         assert title in page
+
+
+# ------------------------------------------------------------ review findings (phase 5)
+
+
+def test_p5_r1_a_recorded_merge_stop_reaches_the_rendered_needs_you_now() -> None:
+    from fr.triage.render import render
+
+    f, jd = _open(_cursor("none"), labels=["approved-fr"])
+    stop = MergeStop(head="sha-11", reason="conflict", at="2026-10-01T12:00:00Z")
+    assert 'data-need="needs-reviewer"' not in render(f, jd)
+    assert 'data-need="needs-reviewer"' in render(f, jd, stops={"a": stop})
+
+
+def test_p5_r3_a_green_unapproved_delivered_pr_has_one_row() -> None:
+    f, jd = _open(_cursor("deliver-done", "deliver"))
+    rows = [n for n in needs_you(f, jd) if n.ref == "a"]
+    assert [n.kind for n in rows] == ["approve-pr"]
+
+
+def test_p5_r4_a_red_delivered_pr_hint_is_the_red_one_not_approve_it() -> None:
+    f, jd = _open(_cursor("deliver-done", "deliver"), checks={"pass": 1, "fail": 2, "pending": 0})
+    card = build_board(f, jd, {}).card("a")
+    assert card.column == "needs-reviewer"
+    assert "approve" not in card.hint
+    assert [n.kind for n in needs_you(f, jd) if n.ref == "a"] == ["failing-ci"]
+
+
+def test_p5_r5_hint_and_column_agree_when_a_stop_meets_a_gate() -> None:
+    f, jd = _open(_cursor("gate"))
+    stop = MergeStop(head="sha-11", reason="conflict", at="2026-10-01T12:00:00Z")
+    card = build_board(f, jd, {}, stops={"a": stop}).card("a")
+    assert card.column == "needs-developer"
+    assert "blocked on" in card.hint
+
+
+def test_p5_r6_the_reason_names_every_held_gate_and_what_is_owed() -> None:
+    f, jd = _merged(["gate:tester", "gate:devops"])
+    reason = lane_of(jd.batches[0], f).reason  # type: ignore[union-attr]
+    assert "tester" in reason and "devops" in reason
+    assert "fr gate pass --pr 10 --gate tester" in reason
+    assert "fr gate pass --pr 10 --gate devops" in reason
+    assert "walk" in reason
+
+
+@pytest.mark.parametrize("kind", ["merge", "enqueue"])
+def test_p5_r7_the_conflicting_hint_replaces_merge_and_enqueue(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import kanban
+    from fr.triage.batch_drive import Action
+
+    f, jd = _open(_cursor("none"), mergeable="CONFLICTING")
+    monkeypatch.setattr(
+        kanban,
+        "_first_actions",
+        lambda plan: {"a": Action(kind, "a", "", pr=11)},  # type: ignore[arg-type]
+    )
+    assert build_board(f, jd, {}).card("a").hint == CONFLICT_HINT

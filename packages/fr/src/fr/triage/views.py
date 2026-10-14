@@ -171,6 +171,8 @@ def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
 @dataclass(frozen=True)
 class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
+    # | needs-developer | needs-reviewer | needs-tester | needs-devops (the board's lanes)
+    # | ledger-unread (a landed batch whose gate labels could not be read)
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
@@ -191,6 +193,7 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "session-blocked": "Session blocked",
+    "ledger-unread": "Gate labels unread",
     "needs-developer": "Needs you · Developer",
     "needs-reviewer": "Needs you · Reviewer",
     "needs-tester": "Needs you · Tester",
@@ -342,9 +345,16 @@ def needs_you(
     # The four Needs-you lanes (exit-gates R17): one Need per card the board puts in one,
     # from the same `lane_of`, so "Needs you now" and the columns agree.
     held_stops = live_stops(judgements.batches, facts, stops or {})
+    has_row = {n.ref for n in out if n.kind in ("approve-pr", "failing-ci", "red-pr")}  # p5-r3
     for b in judgements.batches:
+        if b.id in snap.ledger_unknown:  # p5-r2: not a lane; the close-out waits on it
+            out.append(
+                Need("ledger-unread", b.id,
+                     f"batch {b.id}: its merged PR's gate labels could not be read, so the "
+                     "close-out waits; the next collect retries", f"#batch-{b.id}")
+            )  # fmt: skip
         placed = lane_of(b, facts, held_stops.get(b.id))
-        if placed is None:
+        if placed is None or (placed.lane == "needs-reviewer" and b.id in has_row):
             continue
         lane_pr = batch_pr(b, facts)
         text = f"batch {b.id}: {placed.reason}"

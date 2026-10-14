@@ -52,6 +52,7 @@ from fr.triage.collect import (
 from fr.triage.components import pages_present, refresh_navs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import resolve_manifest
+from fr.triage.merge_stops import load_stops
 from fr.triage.model import (
     Batch,
     CloseoutEvent,
@@ -1053,7 +1054,7 @@ def render_command(
     noted = read_sessions(judgements, facts, target=target_dir, notes_only=True).session_notes
     page = render(
         facts, judgements, since, resolved, board=(target_dir / "board.html").is_file(),
-        session_notes=noted, ci_none=local_ci_none(facts),
+        session_notes=noted, ci_none=local_ci_none(facts), stops=load_stops(target_dir),
         present=pages_present(target_dir, "backlog"),
     )  # fmt: skip
     write_text_atomic(out, page)

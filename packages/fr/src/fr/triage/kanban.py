@@ -526,6 +526,12 @@ def _card(
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
     idle = _idle_of(batch, facts, repo, status, closeout_status, now)
+    first = actions.get(batch.id)
+    red = (
+        (_red_phrase(batch, first) or action_phrase(first))
+        if first and first.kind == "warn"
+        else None
+    )
     needs_you = (
         "blocked" in (status, closeout_status)
         or stop is not None
@@ -537,10 +543,12 @@ def _card(
         keys = (batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id)) if repo else ()
         said = [n for key in keys if (n := (notes or {}).get(key))]
         hint = f"{NEEDS_YOU}: {'; '.join(said)}" if said else NEEDS_YOU
+    elif lane is not None and not (lane.lane == "needs-reviewer" and red is not None):
+        hint = f"needs you: {lane.reason}"  # p5-r5: the column's own reason, always
+    elif lane is not None:
+        hint = red or ""  # p5-r4: a red delivered PR is not one to approve
     elif stop is not None:
         hint = f"{NEEDS_YOU_MERGE_STOPPED}: {stop.reason}"
-    elif lane is not None:
-        hint = f"needs you: {lane.reason}"
     elif idle is not None:
         hint = _idle_hint(idle, facts.collected_at)
     elif held := [d for d in batch.after if d in stops]:
@@ -549,7 +557,7 @@ def _card(
         hint = "waits on " + ", ".join(f"{d} (merge stopped)" for d in held)
     elif batch.id in actions:
         hint = _red_phrase(batch, actions[batch.id]) or action_phrase(actions[batch.id])
-        if actions[batch.id].kind == "merge" and _conflicting(batch, facts):
+        if actions[batch.id].kind in ("merge", "enqueue") and _conflicting(batch, facts):
             hint = CONFLICT_HINT  # R19: the train still plans it; the card never says ready
     elif batch.id in queued:
         hint = HINT_IN_MERGE_QUEUE
