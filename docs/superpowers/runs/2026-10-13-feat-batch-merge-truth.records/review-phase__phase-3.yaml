@@ -1,0 +1,42 @@
+schema_version: 9
+run: 2026-10-13-feat-batch-merge-truth
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: review
+    id: p3-review
+    phase: 3
+    title: "Phase 3 review: 7 findings (6 in scope: 4 fixed, 2 refuted; 1 out of scope)"
+    body: |
+      An independent reviewer read b52a47a0~1..HEAD against R13, R14, §F and §G. Verdict: approve, nothing blocking. 291 targeted tests passed.
+      It confirmed four points:
+      - the raise is narrow;
+      - every merge_ctx caller is guarded;
+      - gh#921 behaviour is unchanged;
+      - exit 3 matches pass_exit's held convention, because R13's "the pass continues" means not aborted.
+      Fixes in 8ca30113, ee216f4a, bf060c04 and 5eb82641 left 671 targeted tests passing.
+  - kind: decision
+    id: p3-exit-and-test-shape
+    phase: 3
+    title: "Unreachable-origin pass exits 3, proven over two held merges, not a dispatch"
+    body: "Plan step P3.T1.S1 said exit 0. The test asserts 3, which is correct per pass_exit: work remains and nothing acted. A same-repo dispatch cannot witness that the pass continues, because dispatch_batch fetches (read_errors=True, gh#1025) and so fails while origin is down. The test instead shows two independent approved PRs both reach 'held', the pass reaches its summary, and exactly one warning is printed."
+  - {kind: finding, id: p3-r1, phase: 3, review_scope: in, title: "Unreachable-origin test proved only not-aborted, not that later work ran", body: "test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes"}
+  - {kind: finding, id: p3-r2, phase: 3, review_scope: in, title: "_base_rules GitError→DefaultBranchUnknown untested; _queue_reads calls it unguarded", body: "triage_batch_cmd.py ~3605-3616, ~3680"}
+  - {kind: finding, id: p3-r3, phase: 3, review_scope: in, title: "Possible double warning: queue-unknown line plus _ctx_or_hold held line", body: "triage_batch_cmd.py ~3660-3672 vs _ctx_or_hold; the reviewer marked it unverified."}
+  - {kind: finding, id: p3-r4, phase: 3, review_scope: in, title: "Each held action prints its own outcome line beside the one warning", body: "_merge_batch, _archive and the other held returns."}
+  - {kind: finding, id: p3-r5, phase: 3, review_scope: in, title: "Plan said exit 0; test asserts 3; deviation and single-repo limit unrecorded", body: "03.yaml P3.T1.S1 vs the test."}
+  - {kind: finding, id: p3-r6, phase: 3, review_scope: in, title: "wait_out test docstring overclaims REST; matrix row cites no REST proof", body: "test_triage_quota_loop.py; REST-ness is proven in test_gh.py."}
+  - {kind: finding, id: p3-r7, phase: 3, review_scope: out, title: "MergeContext cached across passes: a later-unreachable origin is not re-fetched", body: "merge_ctx ~3573/3601: later passes act on stale origin refs instead of holding."}
+resolves:
+  - {id: p3-r1, state: fixed, body: "8ca30113: a second independent approved PR is also held, the pass reaches its summary, one warning is printed, and the exit is 3. A dispatch cannot witness it (see decision p3-exit-and-test-shape)."}
+  - {id: p3-r2, state: fixed, body: "ee216f4a: test_base_rules_names_an_unreadable_default_branch, plus a _queue_reads comment. The claim was verified: _queue_reads reads default_branch() first and holds on GitError before _base_rules runs."}
+  - {id: p3-r3, state: refuted, body: "ee216f4a adds test_no_origin_head_and_unreachable_origin_warns_once, which shows only _queue_reads' warning fires. It holds the repo before any merge_ctx/_ctx_or_hold call, so no double warning is possible on that path."}
+  - {id: p3-r4, state: refuted, body: "Per-action outcome lines ('merge b1: held: …') are the driver's existing reporting convention for every held action. R13's 'one warning line' counts the warning, which the test pins at exactly one. Suppressing the outcome lines would hide which actions waited. The reviewer itself judged this acceptable."}
+  - {id: p3-r5, state: fixed, body: "Recorded in this record's decision p3-exit-and-test-shape (exit 3 per pass_exit; why the witness is two held merges, not a dispatch)."}
+  - {id: p3-r6, state: fixed, body: "bf060c04 tightens the docstring. 5eb82641 adds test_gh.py#TestConditionalVisibility::test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer (argv api -i repos/o/r) to row triage-waitout-no-graphql."}
+  - {id: p3-r7, state: out-of-scope, body: "Not caused by this change: the per-host MergeContext cache predates it, and R13 concerns a default branch that cannot be resolved, which this case still can (from the local origin/HEAD). Re-fetching per pass is a separate change."}
+evidence:
+  review: p3-review
+  reviewer: a02e150e9df7c5a12
+  model: claude-opus-5-5
