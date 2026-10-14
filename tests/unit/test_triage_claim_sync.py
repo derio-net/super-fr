@@ -111,6 +111,24 @@ def test_sync_plans_a_settle_per_stale_and_release_pending_closed_hit(
     assert settles == {("super-fr#10", "mine"), ("super-fr#13", None)}
 
 
+def test_a_settle_serves_the_batch_that_owes_the_key_not_the_first_listing_it(
+    me: str, tmp_path: Path
+) -> None:
+    """p1-r3: an earlier, idle batch lists the key too; the wave's batch owes it."""
+    (tmp_path / "judgements.yaml").write_text(
+        JUDGEMENTS.replace(
+            "batches:\n",
+            'batches:\n  - {id: old, title: old, ids: ["super-fr#10"]}\n',
+        ),
+        "utf-8",
+    )
+    batches = load_judgements(tmp_path / "judgements.yaml").batches
+    assert [b.id for b in batches] == ["old", "mine"]
+    plan = cs.plan_sync(_env(me, _facts(me)), batches, NOW)
+    settles = {(o.key, o.batch) for o in plan.ops if o.kind == "settle"}
+    assert ("super-fr#10", "mine") in settles
+
+
 def test_sync_never_refreshes_a_member_facts_show_closed(me: str, tmp_path: Path) -> None:
     plan = cs.plan_sync(_env(me, _facts(me)), _batches(tmp_path), NOW)
     assert [o.kind for o in plan.ops if o.key == "super-fr#10"] == ["settle"]

@@ -155,11 +155,17 @@ def plan_sync(env: ClaimEnv, batches: Sequence[Batch], now: datetime) -> SyncPla
     ]
     settles = closed_settlements(env.facts)
     settled = {k for k, _ in settles}
-    for key, bid in owed_releases(batches, stages, archived, own=own_claims):
+    releases = owed_releases(batches, stages, archived, own=own_claims)
+    for key, bid in releases:
         if key not in settled:  # a settle releases the marker too
             plan.ops.append(ClaimOp("release", key, bid))
+    # The batch a settle serves is the one that owes the key (a claim, else a release), not
+    # the first listing it, which may be archived or cancelled (p1-r3).
+    serving: dict[str, str] = {}
+    for key, bid in [*owed_claims(batches, stages, archived), *releases]:
+        serving.setdefault(key, bid)
     for key, _ in settles:
-        member_of = next((b.id for b in batches if key in b.ids), None)
+        member_of = serving.get(key) or next((b.id for b in batches if key in b.ids), None)
         plan.ops.append(ClaimOp("settle", key, member_of))
     return plan
 
