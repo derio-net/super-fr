@@ -248,3 +248,11 @@ Phase 3 serves its own ask.
 ### tier-2026-10-14-merge-truth-p2 · decision · hard: judgements schema 9→10 migration plus a new hand-back path the whole merge train's stop/Need machinery relies on
 
 Phase 2 changes a closed-world judgements schema every triage reader loads and extends the conflict hand-back and stop recording used by every drive pass.
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-10-14T13:13:54+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: post-merge — operator-driven: after release, run one `fr triage batch drive --yes` pass over derio-net/super-fr. Then `gh issue list --state closed --label fr:in-progress` and `gh issue list --state closed --label fr:claimed` list only issues another scope's claim holds (today, none). Archive PR #1146 has been handed to a close-out session or is listed under Needs you now as an archive conflict, and is not reported as "stopped again".
+why: post-merge operator-driven live drive pass (fr triage batch drive --yes writes to the forge); only v5.27.0-rc.2 is cut, the final release has not shipped yet
+how: fr journal resolve --scope spec --slug 2026-10-14-merge-truth --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-14-merge-truth#step1
