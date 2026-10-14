@@ -204,3 +204,48 @@ def test_the_validator_accepts_both_fields(tmp_path: Path) -> None:
     )
     path = _record_file(tmp_path, text)
     assert artifact_kind("record").validate(path) == []
+
+
+# --- p3-r2 addendum: exact ref matching (parser differential) ------------------------
+
+
+def _decider(text: str, narrows: tuple[str, ...], identity=("derio-net", "super-fr")):
+    from fr.commands.run_cmd import GateAnswer
+    from fr.record.apply import _Context, _stamped_decider
+    from fr.run.telemetry import Round
+
+    ctx = _Context(
+        scope="spec", slug="s", journal_file=None, plan_dir=None, phase=None,
+        completes_phase=False, emits_ticks=False,
+        gate_answer=GateAnswer("operator", observed=True, rounds=(Round(question_texts=(text,)),)),
+        identity=identity,
+    )  # fmt: skip
+    return _stamped_decider(ctx, narrows)[0]
+
+
+@pytest.mark.parametrize(
+    ("text", "narrows", "want"),
+    [
+        ("Ship half of #12 here?", ("#1",), None),  # `#1` never matches `#12`
+        ("Ship half of #123 here?", ("#12",), None),
+        ("Ship half of #12 here?", ("derio-net/super-fr#12",), "operator"),
+        ("See https://github.com/derio-net/super-fr/issues/12", ("#12",), "operator"),
+        (
+            "Ship half of #12 here?",
+            ("https://github.com/derio-net/super-fr/issues/12",),
+            "operator",
+        ),
+        ("Ship half of other/repo#12?", ("#12",), None),  # another repo's #12
+        ("Ship half of #12 here?", ("other/repo#12",), None),
+        ("Ship half of other/repo#12?", ("other/repo#12",), "operator"),
+        ("Ship #12 and #13?", ("#12", "#14"), None),  # every ref, not some
+    ],
+)
+def test_p3_r2_narrowed_refs_match_answered_rounds_exactly(
+    text: str, narrows: tuple[str, ...], want: str | None
+) -> None:
+    assert _decider(text, narrows) == want
+
+
+def test_p3_r2_an_unknown_repo_identity_stamps_no_narrowing() -> None:
+    assert _decider("Ship half of #12 here?", ("#12",), identity=None) is None

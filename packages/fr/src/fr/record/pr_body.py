@@ -45,6 +45,7 @@ __all__ = [
     "UnreadableJournalError",
     "closing_refs",
     "holds_open_for_run",
+    "issue_refs",
     "missing_sections",
     "normalize_issue_ref",
     "pre_merge_owed_lines",
@@ -275,6 +276,18 @@ def normalize_issue_ref(ref: str, identity: tuple[str, str]) -> str | None:
         repo, _, n = ref.partition("#")
         return f"{repo.lower()}#{n}"
     return None
+
+
+def issue_refs(text: str, identity: tuple[str, str]) -> set[str]:
+    """Every issue reference in `text`, as `normalize_issue_ref` spells it —
+    extracted with the PR-body parser's own regex, so `#1` is never read out of
+    `#12` and a bare `#n` is `identity`'s (spec 2026-10-14 R12, review p3-r2)."""
+    found: set[str] = set()
+    for match in _ISSUE_REF_GITHUB.finditer(text):
+        ref = normalize_issue_ref(match.group(0), identity)
+        if ref is not None:
+            found.add(ref)
+    return found
 
 
 @dataclass(frozen=True)

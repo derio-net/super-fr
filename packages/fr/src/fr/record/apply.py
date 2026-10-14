@@ -179,6 +179,10 @@ class _Context:
     the same derivation `_gate_provenance` records), with the answered rounds
     it read. Its decisions are stamped `decided_by=operator` from it (spec
     2026-10-14 R12; reviews p3-r2, p3-r3) — see `_stamped_decider`."""
+    identity: tuple[str, str] | None = None
+    """The repo's `(org, repo)` — the Closes guard's — that a bare `#n` in a
+    narrowing or a round names; `None` when it cannot be resolved, and then no
+    narrowing is stamped."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -245,8 +249,23 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         completes_phase=emits_ticks and record.outcome == "done" and phase is not None,
         emits_ticks=emits_ticks,
         gate_answer=gate_answer,
+        identity=_repo_identity(repo_root) if gate_answer is not None else None,
     )
     return context, state
+
+
+def _repo_identity(repo_root: Path) -> tuple[str, str] | None:
+    """The `(org, repo)` the Closes guard resolves (`resolve_identity` over the
+    matrix, else the origin remote), or `None` when it cannot be resolved."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
+    from fr.commands.acceptance_cmd import MATRIX_REL
+
+    try:
+        path = repo_root / MATRIX_REL
+        return resolve_identity(load_matrix(path) if path.is_file() else Matrix(), repo_root)
+    except (AcceptanceError, OSError):
+        return None
 
 
 _UNVERIFIED_NOTE = (
@@ -254,14 +273,24 @@ _UNVERIFIED_NOTE = (
 )
 
 
-def _mentions(text: str, ref: str) -> bool:
-    """Does `text` name the issue `ref` — the ref as written, or its `#n`?"""
-    import re
+def _round_names_every_ref(
+    texts: list[str], narrows: tuple[str, ...], identity: tuple[str, str] | None
+) -> bool:
+    """Do the answered rounds name EVERY narrowed issue? Both sides are reduced
+    to `owner/repo#n` by the Closes guard's own normalizer, and the rounds' refs
+    are extracted with the PR-body parser's regex — never a substring test — so
+    `#1` never matches `#12`, and another repo's `#n` only that repo (review
+    p3-r2, its security addendum). An unknown identity, or a narrowed ref that
+    does not normalize, matches nothing."""
+    from fr.record.pr_body import issue_refs, normalize_issue_ref
 
-    number = ref.rsplit("#", 1)[-1] if "#" in ref else ref.rstrip("/").rsplit("/", 1)[-1]
-    if ref in text:
-        return True
-    return number.isdigit() and re.search(rf"(?<![\w/])#{number}(?!\d)", text) is not None
+    if identity is None:
+        return False
+    named: set[str] = set()
+    for text in texts:
+        named |= issue_refs(text, identity)
+    wanted = [normalize_issue_ref(ref, identity) for ref in narrows]
+    return all(ref is not None and ref in named for ref in wanted)
 
 
 def _stamped_decider(ctx: _Context, narrows: tuple[str, ...]) -> tuple[str | None, str | None]:
@@ -282,7 +311,7 @@ def _stamped_decider(ctx: _Context, narrows: tuple[str, ...]) -> tuple[str | Non
     if not answer.observed:
         return (None, None) if narrows else ("operator", _UNVERIFIED_NOTE)
     texts = [t for r in answer.rounds for t in (*r.question_texts, *r.answer_texts)]
-    if all(any(_mentions(t, ref) for t in texts) for ref in narrows):
+    if not narrows or _round_names_every_ref(texts, narrows, ctx.identity):
         return "operator", None
     return None, None
 

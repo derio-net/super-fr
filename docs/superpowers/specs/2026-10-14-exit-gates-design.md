@@ -213,7 +213,9 @@ its named projection.
 fr writes `decided_by=operator` on a decision in only two cases: when the
 brainstorm record applies it (from the gate's derived answer — an observed
 answered round stamps an ordinary decision, and a narrowing one only when every
-narrowed ref appears in an answered round's question or answer text; an
+narrowed ref appears in an answered round's question or answer text (refs
+extracted and normalized exactly as the `Closes` guard does, so `#1` never
+matches `#12` and another repo's `#n` matches only that repo); an
 unobserved gate claimed by the operator stamps an ordinary decision with an
 unverified note and never a narrowing one), or when `fr journal add …
 --answered-by operator` is verified against the transcript. A narrowing decision
