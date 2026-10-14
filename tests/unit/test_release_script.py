@@ -120,6 +120,8 @@ class World:
         self.before_push: Callable[[int], None] = lambda n: None
         self.migrate_calls: list[str] = []  # the version on disk when migrate ran
         self.migrate_failure: str | None = None
+        self.waiting: list[dict[str, object]] = []  # `fr release status --json`'s waiting
+        self.status_calls = 0
 
     # -- other people's pushes -------------------------------------------
     def land(self, rel: str, text: str, message: str = "a merged PR") -> None:
@@ -183,10 +185,16 @@ class World:
 
         def test(repo: Path, new: str) -> str | None:
             self.test_calls.append((new, self.origin_version()))
-            assert {s.value for s in vs.version_surfaces(repo)} == {new}
+            assert {vs.spelling("x.json", s.value) for s in vs.version_surfaces(repo)} == {new}
             return self.test_failure
 
-        return release.Commands(bump=bump, lock_check=lock_check, gh=gh, test=test, migrate=migrate)
+        def status(repo: Path) -> list[dict[str, object]]:
+            self.status_calls += 1
+            return list(self.waiting)
+
+        return release.Commands(
+            bump=bump, lock_check=lock_check, gh=gh, test=test, migrate=migrate, status=status
+        )
 
     def run(self, *argv: str) -> int:
         return release.main(list(argv), repo=self.clone, commands=self.commands())
@@ -701,6 +709,7 @@ def test_a_plan_edit_other_than_the_ceiling_widening_refuses(
         gh=original.gh,
         test=original.test,
         migrate=migrate_nothing,
+        status=original.status,
     )
     assert release.main([], repo=world.clone, commands=cmds) != 0
 
@@ -841,6 +850,7 @@ def _migrating(world: World, rewrite: Callable[[Path], None]) -> release.Command
         gh=original.gh,
         test=original.test,
         migrate=migrate,
+        status=original.status,
     )
 
 
@@ -1051,3 +1061,168 @@ def test_pushes_authenticate_only_their_own_command(
     auth = ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
     assert seen[0][1:5] == auth and "push" in seen[0]
     assert "credential.helper=!gh auth git-credential" not in seen[1]
+
+
+# -- release gating: an RC while a post-merge gate waits (exit-gates R20) ----------
+
+WAITS = [{"number": 9, "gates": ["tester"], "owed_rows": {"tester": ["row-a"]}}]
+
+
+def _surface_values(world: World) -> set[str]:
+    _git(world.clone, "fetch", "-q", "origin")
+    _git(world.clone, "reset", "-q", "--hard", "origin/main")
+    return {s.value for s in vs.version_surfaces(world.clone)}
+
+
+def test_something_waits_cuts_an_rc_that_consumes_no_fragment(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+    assert world.origin_version() == "4.24.0rc1"
+    assert _surface_values(world) == {"4.24.0rc1", "4.24.0-rc.1"}
+    assert world.origin_show(".changes/feat-b.yaml") is not None  # not consumed
+    assert "v4.24.0-rc.1" in world.origin_tags()
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0-rc.1" and "--prerelease" in call
+    assert "add the feature" in _arg(call, "--notes")
+    # The staged suite still runs, at the RC's own number (gh#854).
+    assert world.test_calls == [("4.24.0-rc.1", BASE)]
+
+
+def test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    head = world.origin_log("%H")
+    world.gh_calls.clear()
+
+    assert world.run() == 0
+
+    assert world.origin_log("%H") == head
+    assert world.gh_calls == []
+    assert world.origin_tags() == sorted([f"v{BASE}", "v4.24.0-rc.1"])
+
+
+def test_something_waits_and_a_new_merge_since_the_rc_cuts_the_next_rc(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    world.fragment("fix-a", "patch", "fix the thing")
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.2"
+    assert "v4.24.0-rc.2" in world.origin_tags()
+
+
+def test_a_bigger_bump_after_an_rc_starts_that_versions_rcs_at_one(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    world.fragment("break", "major", "a breaking change")
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v5.0.0-rc.1"
+
+
+def test_nothing_waits_and_head_is_an_rc_cuts_the_final_consuming_fragments(
+    world: World,
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    world.waiting = []
+    world.gh_calls.clear()
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0"
+    assert world.origin_version() == "4.24.0"
+    assert _surface_values(world) == {"4.24.0"}
+    assert world.origin_show(".changes/feat-b.yaml") is None
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0" and "--prerelease" not in call
+    assert "add the feature" in _arg(call, "--notes")
+
+
+def test_nothing_waits_with_fragments_on_a_final_head_cuts_the_final(world: World) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    assert world.run() == 0
+    assert world.origin_log()[0] == "release: v4.23.1"
+    assert world.status_calls >= 1
+
+
+def test_no_fragments_on_a_final_head_never_asks_what_waits(world: World) -> None:
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    assert world.status_calls == 0
+    assert world.bump_calls == []
+
+
+def test_the_last_final_ignores_rc_tags(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    _git(world.clone, "fetch", "-q", "--tags", "origin")
+    _git(world.clone, "reset", "-q", "--hard", "origin/main")
+
+    assert release.previous_tag(world.clone) == f"v{BASE}"
+    assert release.last_final(world.clone) == release.Version.parse(BASE)
+
+
+def test_dry_run_says_it_would_cut_an_rc(world: World, capsys: pytest.CaptureFixture[str]) -> None:
+    (world.clone / ".changes").mkdir(exist_ok=True)
+    (world.clone / ".changes" / "feat-b.yaml").write_text("bump: minor\nsummary: add it\n")
+    world.waiting = list(WAITS)
+    assert world.run("--dry-run") == 0
+    out = capsys.readouterr().out
+    assert "4.24.0-rc.1" in out and "RC" in out
+
+
+def test_the_default_status_command_reads_fr_release_status_json(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        doc = {"schema": 1, "repo": "o/r", "last_final": "v1.0.0", "since": None, "waiting": WAITS}
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(doc), "")
+
+    assert release._run_release_status(tmp_path, run=run) == WAITS
+    assert calls[0][-4:] == ["fr", "release", "status", "--json"]
+
+
+@pytest.mark.parametrize(
+    ("rc", "out"),
+    [(1, ""), (0, "not json"), (0, json.dumps({"schema": 1})), (0, json.dumps({"schema": 2}))],
+)
+def test_the_default_status_command_fails_closed(tmp_path: Path, rc: int, out: str) -> None:
+    def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, rc, out, "HTTP 502")
+
+    with pytest.raises(release.ReleaseError):
+        release._run_release_status(tmp_path, run=run)
+
+
+def test_the_default_test_command_accepts_the_pep440_spelling_of_an_rc(tmp_path: Path) -> None:
+    assert release._run_staged_tests(tmp_path, "5.0.0-rc.1", run=_FakeRun("5.0.0rc1")) is None
+    assert release._run_staged_tests(tmp_path, "5.0.0", run=_FakeRun("5.0.0rc1")) is not None
+
+
+def test_the_default_status_command_reads_with_the_workflow_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "app-token")
+    monkeypatch.setenv("FR_RELEASE_STATUS_TOKEN", "workflow-token")
+    envs: list[object] = []
+
+    def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        envs.append(kw.get("env"))
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({"schema": 1, "waiting": []}), "")
+
+    assert release._run_release_status(tmp_path, run=run) == []
+    (env,) = envs
+    assert isinstance(env, dict) and env["GH_TOKEN"] == "workflow-token"

@@ -3,8 +3,16 @@
 
     scripts/release.py [--version X.Y.Z] [--dry-run]
 
-Spec 2026-09-26-version-bump-churn §3.C, §3.E, §5. Run by `release.yml` on
-every push to `main` (and by hand through `workflow_dispatch`):
+Spec 2026-09-26-version-bump-churn §3.C, §3.E, §5, and 2026-10-14-exit-gates R20,
+R25. Run by `release.yml` on every push to `main`, daily, and by hand through
+`workflow_dispatch`.
+
+Release gating (`compute`): while a PR merged since the last FINAL tag
+(`vX.Y.Z` exactly) still waits on a post-merge gate (`fr release status --json`),
+a run cuts a release candidate `vX.Y.Z-rc.N` (no fragment consumed, a GitHub
+pre-release), or nothing when nothing merged since the newest RC tag; once nothing
+waits, the final `X.Y.Z` consumes the fragments. Versions parse through
+`versions.Version`: an RC is `X.Y.ZrcN` on the Python surfaces, `X.Y.Z-rc.N` elsewhere.
 
 1. Fetch and reset to the **tip** of `origin/main`, so a run sees every
    fragment merged before it started.
@@ -49,6 +57,7 @@ staged-tree tests and `gh` are injectable (`Commands`) so tests never run real `
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -62,6 +71,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import changes  # noqa: E402
 import floors  # noqa: E402
 import version_surfaces as vs  # noqa: E402
+from versions import FINAL_RE, FINAL_TAG_RE, RC_TAG_RE, Version  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 REMOTE = "origin"
@@ -70,7 +80,6 @@ MAX_ATTEMPTS = 3
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 RELEASE_PREFIX = "release: v"
-SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 GROUP_TITLES = {"major": "Major changes", "minor": "Minor changes", "patch": "Patch changes"}
 
 EXIT_OK = 0
@@ -154,6 +163,14 @@ def _credential_free_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in _AUTH_ENV_VARS}
 
 
+def _same_version(a: str, b: str) -> bool:
+    """*a* and *b* name the same version in either spelling (`X.Y.ZrcN` is `X.Y.Z-rc.N`)."""
+    try:
+        return Version.parse(a) == Version.parse(b)
+    except ValueError:
+        return False
+
+
 def _run_staged_tests(
     repo: Path, new: str, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
 ) -> str | None:
@@ -171,7 +188,7 @@ def _run_staged_tests(
         [*uv, "python", "-c", _FR_VERSION_PROBE], cwd=repo, capture_output=True, text=True, env=env
     )
     installed = probe.stdout.strip()
-    if probe.returncode != 0 or installed != new:
+    if probe.returncode != 0 or not _same_version(installed, new):
         return (
             f"the test env runs fr {installed or '(unknown)'}, not {new}; "
             f"refusing to test at the wrong number\n{probe.stderr.strip()}"
@@ -188,6 +205,48 @@ def _run_staged_tests(
     return "\n".join(f"{r.stdout}\n{r.stderr}".strip().splitlines()[-_TAIL_LINES:])
 
 
+STATUS_SCHEMA = 1
+STATUS_TOKEN_VAR = "FR_RELEASE_STATUS_TOKEN"
+
+
+def _run_release_status(
+    repo: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+) -> list[dict[str, object]]:
+    """`fr release status --json`'s `waiting`: every PR merged since the last final tag
+    that a post-merge gate still holds (exit-gates R21). Read with the forge token (it
+    is a forge read); any failure refuses, because an empty answer would cut a final."""
+    env = dict(os.environ)
+    if env.get(STATUS_TOKEN_VAR):  # release.yml: the workflow token, never the app's
+        env["GH_TOKEN"] = env[STATUS_TOKEN_VAR]
+    r = run(
+        ["uv", "run", "--locked", "fr", "release", "status", "--json"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    why = None
+    waiting: object = None
+    if r.returncode != 0:
+        why = (r.stderr or r.stdout).strip() or f"exit {r.returncode}"
+    else:
+        try:
+            doc = json.loads(r.stdout)
+        except json.JSONDecodeError as exc:
+            doc, why = None, f"not JSON: {exc}"
+        if isinstance(doc, dict) and doc.get("schema") == STATUS_SCHEMA:
+            waiting = doc.get("waiting")
+        if why is None and not isinstance(waiting, list):
+            why = f"no schema-{STATUS_SCHEMA} `waiting` list in {r.stdout.strip()[:200]!r}"
+    if why is not None:
+        raise ReleaseError(
+            "`fr release status --json` failed, so what still waits on a post-merge gate "
+            f"is unknown; refusing to choose between an RC and the final:\n{why}"
+        )
+    assert isinstance(waiting, list)
+    return waiting
+
+
 @dataclass
 class Commands:
     """Everything release.py runs that is not git: swapped out by the tests."""
@@ -197,6 +256,7 @@ class Commands:
     gh: Callable[[list[str]], subprocess.CompletedProcess[str]] = _run_gh
     test: Callable[[Path, str], str | None] = _run_staged_tests
     migrate: Callable[[Path], str | None] = _run_migrate
+    status: Callable[[Path], list[dict[str, object]]] = _run_release_status
 
 
 # -- git ---------------------------------------------------------------------
@@ -238,7 +298,7 @@ def sync_to_tip(repo: Path) -> None:
 
 
 def tag_exists(repo: Path, version: str) -> bool:
-    ref = f"refs/tags/v{version}"
+    ref = f"refs/tags/{Version.parse(version).tag}"
     return _git(repo, "rev-parse", "-q", "--verify", ref, check=False).returncode == 0
 
 
@@ -251,38 +311,102 @@ def current_version(repo: Path) -> str:
 
 @dataclass
 class Plan:
-    current: str
-    new: str | None  # None: nothing to release
+    current: str  # as the root pyproject spells it
+    new: str | None  # semver-spelled; None: nothing to release
     bump: str | None
-    fragments: list[changes.Fragment] = field(default_factory=list)
+    fragments: list[changes.Fragment] = field(default_factory=list)  # consumed by it
+    rc: bool = False
+    pending: list[changes.Fragment] = field(default_factory=list)  # every pending one
+    why: str = ""  # why there is nothing to release, or why an RC
 
 
-def _vtuple(version: str) -> tuple[int, ...]:
-    return floors.parse_version(version)
+def _tags(repo: Path, *extra: str) -> list[str]:
+    return _out(repo, "tag", "--list", *extra, "v*").split()
 
 
-def compute(repo: Path, override: str | None) -> Plan:
-    """The release the working tree asks for; raises on an invalid fragment or override."""
+def last_final(repo: Path, *, merged: bool = False) -> Version | None:
+    """The newest final tag (`^v\\d+\\.\\d+\\.\\d+$` only: an RC tag never is the
+    last final), by version; with *merged*, only tags HEAD contains."""
+    extra = ("--merged", "HEAD") if merged else ()
+    finals = [Version.from_tag(t) for t in _tags(repo, *extra) if FINAL_TAG_RE.match(t)]
+    return max(finals) if finals else None
+
+
+def _rcs_above(repo: Path, base: Version | None) -> list[tuple[Version, str]]:
+    """Every RC tag above *base*, oldest version first."""
+    rcs = [(Version.from_tag(t), t) for t in _tags(repo) if RC_TAG_RE.match(t)]
+    return sorted((v, t) for v, t in rcs if base is None or v > base)
+
+
+def _merged_since(repo: Path, tag: str) -> bool:
+    """Whether HEAD carries any commit *tag* does not."""
+    return _out(repo, "rev-list", "--count", f"refs/tags/{tag}..HEAD").strip() != "0"
+
+
+def _final_plan(repo: Path, current: str, override: str, plan: Plan) -> Plan:
+    if not FINAL_RE.match(override):
+        raise ReleaseError(f"--version {override!r} is not X.Y.Z")
+    if Version.parse(override) <= Version.parse(current):
+        raise ReleaseError(f"--version {override} must be above the current version {current}")
+    if tag_exists(repo, override):
+        raise ReleaseError(f"--version {override}: tag v{override} already exists")
+    plan.new, plan.fragments = override, plan.pending
+    return plan
+
+
+def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> Plan:
+    """The release the working tree asks for (exit-gates R20); raises on an invalid
+    fragment or override, or when what waits cannot be read.
+
+    1. Some PR merged since the last final tag still waits on a post-merge gate
+       (`cmds.status`): an RC `X.Y.Z-rc.N` that consumes no fragment, unless nothing
+       merged since the newest RC tag; then nothing.
+    2. Nothing waits, and HEAD is an RC or fragments are pending: the final `X.Y.Z`,
+       consuming the fragments.
+    3. Otherwise nothing. `--version` releases exactly that final, ungated.
+
+    `X.Y.Z` is the last final plus the highest pending bump; `N` is one past the
+    newest `vX.Y.Z-rc.*`. What waits is asked only when a release is possible.
+    """
+    cmds = cmds or Commands()
     try:
         fragments = changes.load_pending(repo)
     except changes.FragmentError as exc:
         raise ReleaseError(f"invalid fragment, refusing to release over it — {exc}") from None
     current = current_version(repo)
+    head = Version.parse(current)
     bump = changes.aggregate(fragments)
+    plan = Plan(current, None, bump, pending=fragments)
     if override is not None:
-        if not SEMVER_RE.match(override):
-            raise ReleaseError(f"--version {override!r} is not X.Y.Z")
-        if _vtuple(override) <= _vtuple(current):
-            raise ReleaseError(f"--version {override} must be above the current version {current}")
-        if tag_exists(repo, override):
-            raise ReleaseError(f"--version {override}: tag v{override} already exists")
-        return Plan(current, override, bump, fragments)
-    if bump is None:
-        return Plan(current, None, None, fragments)
-    new = changes.bumped(current, bump)
-    while tag_exists(repo, new):  # a manual tag: bump past it, never re-tag
-        new = changes.bumped(new, bump)
-    return Plan(current, new, bump, fragments)
+        return _final_plan(repo, current, override, plan)
+    if bump is None and not head.is_rc:
+        plan.why = "no pending fragments"
+        return plan
+    base = last_final(repo)
+    if base is None:
+        if head.is_rc:
+            raise ReleaseError(
+                f"HEAD is the RC {head} but no final tag vX.Y.Z exists to base it on"
+            )
+        base = head
+    target = base.bumped(bump) if bump is not None else head.final
+    while bump is not None and tag_exists(repo, target.semver):
+        target = target.bumped(bump)  # a manual tag: bump past it, never re-tag
+    waiting = cmds.status(repo)
+    if not waiting:
+        plan.new, plan.fragments = target.semver, fragments
+        return plan
+    numbers = ", ".join(f"#{w.get('number')}" for w in waiting)
+    rcs = _rcs_above(repo, base)
+    if rcs and not _merged_since(repo, rcs[-1][1]):
+        plan.why = (
+            f"{numbers} still wait on a post-merge gate and nothing merged since {rcs[-1][1]}"
+        )
+        return plan
+    n = 1 + max((v.rc or 0 for v, _ in rcs if v.final == target), default=0)
+    plan.new, plan.rc = target.with_rc(n).semver, True
+    plan.why = f"{numbers} still wait on a post-merge gate"
+    return plan
 
 
 def commit_body(fragments: list[changes.Fragment]) -> str:
@@ -319,7 +443,7 @@ def _plan_ceiling_widened(removed: list[str], added: list[str], new: str) -> boo
         return False
     if any(before.group(g) != after.group(g) for g in ("lead", "q", "trail")):
         return False
-    top = _vtuple(new)[0] + 1
+    top = Version.parse(new).major + 1
     ceiling = f"<{top}.0.0"
     # Whitespace-free pieces: the repair re-joins with "," and writes each kept
     # specifier as `str(Specifier(p))`, which drops inner spaces (`>= 4.20`).
@@ -420,10 +544,12 @@ def verify_staged(repo: Path, old: str, new: str, fragments: list[changes.Fragme
         if path not in per_file or status != "M":
             bad.append(f"{path} ({status})")
             continue
+        # Each surface in its own spelling: PEP 440 `X.Y.ZrcN` on a Python one (R25).
+        was, now = vs.spelling(path, old), vs.spelling(path, new)
         if (
             len(added) != per_file[path]
-            or [r.replace(old, new) for r in removed] != added
-            or any(old not in r for r in removed)
+            or [r.replace(was, now) for r in removed] != added
+            or any(was not in r for r in removed)
         ):
             bad.append(f"{path} (a line other than its version value)")
     if bad:
@@ -458,6 +584,10 @@ def make_release_commit(repo: Path, plan: Plan, cmds: Commands) -> None:
     verify_staged(repo, plan.current, plan.new, plan.fragments)
     message = [f"{RELEASE_PREFIX}{plan.new}"]
     body = commit_body(plan.fragments)
+    if plan.rc:  # an RC consumes nothing; its notes name what it previews
+        lead = f"Release candidate: {plan.why}."
+        pending = commit_body(plan.pending)
+        body = f"{lead}\n\n{pending}" if pending else lead
     if body:
         message += ["-m", body]
     _git(repo, *_bot("commit", "--quiet", "--cleanup=verbatim", "-m", *message))
@@ -501,13 +631,18 @@ def release_to_main(repo: Path, override: str | None, cmds: Commands) -> Plan:
     """Steps 1-5: recompute from the tip until the release commit lands (or there is none)."""
     for _attempt in range(MAX_ATTEMPTS):
         sync_to_tip(repo)
-        plan = compute(repo, override)
+        plan = compute(repo, override, cmds)
         if plan.new is None:
+            if plan.why:
+                print(f"nothing to release: {plan.why}")
             return plan
         make_release_commit(repo, plan, cmds)
         check_staged_suite(repo, plan.new, cmds)
         if push(repo) == "ok":
-            print(f"pushed {RELEASE_PREFIX}{plan.new} ({len(plan.fragments)} fragment(s))")
+            kind = (
+                "an RC, no fragment consumed" if plan.rc else f"{len(plan.fragments)} fragment(s)"
+            )
+            print(f"pushed {RELEASE_PREFIX}{plan.new} ({kind})")
             return plan
         print("main moved under the release; recomputing from the new tip", file=sys.stderr)
     raise ReleaseError(
@@ -520,21 +655,26 @@ def release_to_main(repo: Path, override: str | None, cmds: Commands) -> Plan:
 
 
 def release_notes(repo: Path, version: str) -> str:
-    """The body of the `release: vX.Y.Z` commit that made `version`, or '' if none did."""
-    log = _out(repo, "log", "-1", f"-S{version}", "--format=%s%x00%b", "--", vs.ROOT_PYPROJECT)
-    subject, _, body = log.partition("\x00")
-    return body.strip() if subject.strip() == f"{RELEASE_PREFIX}{version}" else ""
+    """The body of the `release: vX.Y.Z[-rc.N]` commit that made `version`, or '' if none
+    did. Found by its exact subject: an RC and its final share the `X.Y.Z` substring."""
+    subject = f"{RELEASE_PREFIX}{Version.parse(version).semver}"
+    log = _out(repo, "log", "--fixed-strings", f"--grep={subject}", "--format=%s%x00%b%x1e")
+    for entry in log.split("\x1e"):
+        found, _, body = entry.strip("\n").partition("\x00")
+        if found.strip() == subject:
+            return body.strip()
+    return ""
 
 
 def previous_tag(repo: Path) -> str | None:
-    r = _git(repo, "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD", check=False)
-    if r.returncode != 0:
-        return None
-    return r.stdout.strip() or None
+    """The newest FINAL tag HEAD contains (`^v\\d+\\.\\d+\\.\\d+$`); RC tags never count."""
+    found = last_final(repo, merged=True)
+    return found.tag if found is not None else None
 
 
 def floor_mismatches(repo: Path, version: str) -> list[str]:
-    """§3.E: every floor added since the previous tag newer than it must name `version`."""
+    """§3.E: every floor added since the previous final tag newer than it must name
+    `version`, a final: at an RC, the final it precedes (R26 lets the RC through)."""
     prev = previous_tag(repo)
     if prev is None:
         return []
@@ -553,14 +693,17 @@ def floor_mismatches(repo: Path, version: str) -> list[str]:
 
 
 def tag_and_release(repo: Path, version: str, cmds: Commands) -> None:
-    """The annotated tag and the GitHub Release, exactly as auto-tag.yml made them."""
-    tag = f"v{version}"
+    """The annotated tag and the GitHub Release, exactly as auto-tag.yml made them; an RC
+    is published as a GitHub pre-release (R20)."""
+    tag = Version.parse(version).tag
     _git(repo, *_bot("tag", "-a", tag, "-m", tag))
     _git(repo, "push", "--quiet", REMOTE, f"refs/tags/{tag}", auth=True)
     args = ["release", "create", tag, "--title", tag]
     notes = release_notes(repo, version)
     if notes:
         args += ["--notes", notes]
+    if Version.parse(version).is_rc:
+        args.append("--prerelease")
     args += ["--generate-notes", "--target", _out(repo, "rev-parse", "HEAD").strip()]
     r = cmds.gh(args)
     if r.returncode != 0:
@@ -588,11 +731,11 @@ def file_floor_issue(version: str, bad: list[str], cmds: Commands) -> None:
 
 def finish(repo: Path, cmds: Commands) -> int:
     """Step 6: tag the current version if it is untagged; the floor check rides along."""
-    version = current_version(repo)
+    version = Version.parse(current_version(repo)).semver
     if tag_exists(repo, version):
         print(f"v{version} is already tagged; nothing to do")
         return EXIT_OK
-    bad = floor_mismatches(repo, version)
+    bad = floor_mismatches(repo, Version.parse(version).final.semver)
     tag_and_release(repo, version, cmds)  # the number is right, so it tags regardless
     if not bad:
         return EXIT_OK
@@ -606,13 +749,23 @@ def finish(repo: Path, cmds: Commands) -> int:
 # -- entry -------------------------------------------------------------------------
 
 
-def dry_run(repo: Path, override: str | None) -> int:
-    plan = compute(repo, override)
+def dry_run(repo: Path, override: str | None, cmds: Commands) -> int:
+    plan = compute(repo, override, cmds)
     if plan.new is None:
         tagged = "tagged" if tag_exists(repo, plan.current) else "untagged — would tag it"
-        print(f"no pending fragments; {plan.current} is {tagged}")
+        print(
+            f"nothing to release ({plan.why or 'no pending fragments'}); {plan.current} is {tagged}"
+        )
         return EXIT_OK
-    how = f"override {override}" if override else f"{plan.bump} bump"
+    if plan.rc:
+        print(
+            f"would cut the RC {plan.current} -> {plan.new} ({plan.why}); "
+            f"{len(plan.pending)} fragment(s) stay pending:"
+        )
+        for f in plan.pending:
+            print(f"  - {f.path.name}: {f.bump}: {f.summary}")
+        return EXIT_OK
+    how = f"override {override}" if override else f"{plan.bump or 'no'} bump"
     print(
         f"would release {plan.current} -> {plan.new} ({how}) "
         f"from {len(plan.fragments)} fragment(s):"
@@ -634,7 +787,7 @@ def main(
     override = args.version or None
     try:
         if args.dry_run:
-            return dry_run(repo, override)
+            return dry_run(repo, override, cmds)
         release_to_main(repo, override, cmds)
         return finish(repo, cmds)
     except ReleaseError as exc:

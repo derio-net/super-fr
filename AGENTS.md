@@ -555,6 +555,20 @@ variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, o
 every release fails (release.py reports that refusal
 by name, never as a lost race).
 
+**Release gating** (spec `2026-10-14-exit-gates` R20, R21, R25, R26). Before it
+cuts anything, `release.py` asks `fr release status --json` (with the workflow
+token, `FR_RELEASE_STATUS_TOKEN`) which PRs merged since the last **final** tag
+(`vX.Y.Z` exactly; an RC tag never counts) still carry `gate:tester` or
+`gate:devops` without the `-passed` label. While any do, a run cuts a release
+candidate instead: `release: vX.Y.Z-rc.N`, tagged and published as a GitHub
+pre-release, **consuming no fragment**, or nothing at all when nothing has
+merged since the newest RC tag. Once nothing waits, the final `X.Y.Z` consumes
+the fragments. `release.yml` also runs daily, because a gate passes with no push to main.
+An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
+`X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one
+parser every script reads both spellings through. `fr_version` floors admit an RC of the
+final they name (`fr.version_floor.admits`).
+
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible
 workflow additions (new subcommand/skill/mandatory behavior) — e.g. the
 OpenCode-support release. Major = breaking CLI/plan-schema changes (e.g.
