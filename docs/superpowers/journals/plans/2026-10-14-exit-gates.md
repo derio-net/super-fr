@@ -1125,3 +1125,68 @@ preflight edit is a small additive branch around the existing checks; nothing du
 ### no-refactor-p8-t3 · discovery · no-refactor-because P8.T3 (phase 8)
 
 docs and matrix status only; no code to refactor
+
+<!-- fr:journal kind=finding scope=plan id=p8-r1 created=2026-10-14T11:12:14+00:00 phase=8 state=open review_scope=in -->
+### p8-r1 · finding [open] (reviewer: in scope) · installable_tags returns 1 when the lexically-last tag is unmarked; --version X.Y.Z/RC exit 1 silently under set -e (phase 8)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p8-r2 created=2026-10-14T11:12:14+00:00 phase=8 state=open review_scope=in -->
+### p8-r2 · finding [open] (reviewer: in scope) · bootstrap.sh header and clone comment describe the old main-only behaviour (phase 8)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p8-r3 created=2026-10-14T11:12:14+00:00 phase=8 state=open review_scope=in -->
+### p8-r3 · finding [open] (reviewer: in scope) · refusal listing ranks a final below its own RCs (phase 8)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p8-r4 created=2026-10-14T11:12:14+00:00 phase=8 state=open review_scope=in -->
+### p8-r4 · finding [open] (reviewer: in scope) · install.sh accepts any ^v[0-9] tag, looser than bootstrap (phase 8)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p8-r5 created=2026-10-14T11:12:14+00:00 phase=8 state=open review_scope=in -->
+### p8-r5 · finding [open] (reviewer: in scope) · no test for Channel: main on main, nor for a forwarded argument with spaces (phase 8)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p8-r6 created=2026-10-14T11:12:14+00:00 phase=8 state=open review_scope=out -->
+### p8-r6 · finding [open] (reviewer: out of scope) · untracked files in the managed cache survive a channel switch, so preflight refuses until a manual clean (phase 8)
+
+Reviewer tag: out (reset --hard had the same behaviour).
+
+<!-- fr:journal kind=review scope=plan id=p8-review-1 created=2026-10-14T11:12:14+00:00 phase=8 -->
+### p8-review-1 · review · phase 8 independent review: 6 findings (5 in, 1 out) (phase 8)
+
+Dispatched reviewer read 7103842b..70f1b930 against R22, R23, §G; verified strict tag grammar, numeric ordering, marker read from the tag, forced tag fetch, channel convergence and forwarding; reproduced the set -e silent exit on the real tag set (p8-r1, critical). All 5 in-scope fixed in 563c1dce; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p8-r1-resolved created=2026-10-14T11:12:14+00:00 phase=8 state=fixed resolves=p8-r1 -->
+### p8-r1-resolved · finding [fixed] · resolves p8-r1: installable_tags returns 1 when the lexically-last tag is unmarked; --version X.Y.Z/RC exit 1 silently under set -e (phase 8)
+
+loop body ends with if/echo and return 0; unmarked lexically-last fixture tags; test_exact_rc_and_exact_release, test_an_unmarked_tag_is_refused_listing_the_installable_ones (563c1dce, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p8-r2-resolved created=2026-10-14T11:12:14+00:00 phase=8 state=fixed resolves=p8-r2 -->
+### p8-r2-resolved · finding [fixed] · resolves p8-r2: bootstrap.sh header and clone comment describe the old main-only behaviour (phase 8)
+
+comments updated (563c1dce, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p8-r3-resolved created=2026-10-14T11:12:14+00:00 phase=8 state=fixed resolves=p8-r3 -->
+### p8-r3-resolved · finding [fixed] · resolves p8-r3: refusal listing ranks a final below its own RCs (phase 8)
+
+test_the_refusal_lists_installable_tags_in_version_order (563c1dce, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p8-r4-resolved created=2026-10-14T11:12:14+00:00 phase=8 state=fixed resolves=p8-r4 -->
+### p8-r4-resolved · finding [fixed] · resolves p8-r4: install.sh accepts any ^v[0-9] tag, looser than bootstrap (phase 8)
+
+strict grammar; test_preflight_refuses_a_loose_v_tag (563c1dce, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p8-r5-resolved created=2026-10-14T11:12:14+00:00 phase=8 state=fixed resolves=p8-r5 -->
+### p8-r5-resolved · finding [fixed] · resolves p8-r5: no test for Channel: main on main, nor for a forwarded argument with spaces (phase 8)
+
+test_preflight_on_main_in_sync_prints_channel_main, test_a_forwarded_argument_with_spaces_stays_one_argument (563c1dce, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p8-r6-resolved created=2026-10-14T11:12:14+00:00 phase=8 state=open resolves=p8-r6 out_of_scope=true -->
+### p8-r6-resolved · finding [out-of-scope] · resolves p8-r6: untracked files in the managed cache survive a channel switch, so preflight refuses until a manual clean (phase 8)
+
+Pre-existing: the managed cache never removed untracked files; a git clean before checkout is a separate design call.
