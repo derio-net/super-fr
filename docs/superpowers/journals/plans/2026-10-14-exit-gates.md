@@ -480,3 +480,103 @@ gate_cmd is one command over pass_gate, the helper the driver's gate-pass execut
 ### no-refactor-p4-t4 · discovery · no-refactor-because P4.T4 (phase 4)
 
 One fr acceptance set-status call; nothing to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · failed merged-PR label read leaves the batch ungated and closes it out (fail-open) (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · gated batch's post_merge deferred until its gate passes; needs_you hid it (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · run-level gate no row inherits auto-passed via an unrelated row gate (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · pass_gate swaps labels before commenting; a failed comment is lost (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · fr gate pass accepts an unmerged PR (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · fr gate pass --repo always builds a github.com client (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · per-pass cost: pr_view per batch, fetch per gated batch, worktree in plan mode (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · awaiting-live re-added every pass, spec said first pass (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-10-14T05:54:33+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · release command printed while other gates still hold (phase 4)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=review scope=plan id=p4-review-1 created=2026-10-14T05:54:33+00:00 phase=4 -->
+### p4-review-1 · review · phase 4 independent review: 9 findings (9 in, 0 out) (phase 4)
+
+Dispatched reviewer read b736af59..d735686c against R13, R14, §D; ruled drive_pass pure, gate rows from run_exit, swap idempotent, awaiting-live narrow, FACTS_SCHEMA 12 = main+1, fr gate pass refusals; found the fail-open ledger read (p4-r1) and the circular post_merge hold (p4-r2). All 9 fixed with tests in 9b543573; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: failed merged-PR label read leaves the batch ungated and closes it out (fail-open) (phase 4)
+
+ledger-unknown held: close-out skipped with a ledger-unread action; test_p4_r1_a_ledger_that_could_not_be_read_holds_the_closeout. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: gated batch's post_merge deferred until its gate passes; needs_you hid it (phase 4)
+
+post_merge is its own action at merge for every landed batch, close-out held until PostMergeEvent; views exemption dropped; test_p4_r2_a_gated_batch_gets_its_post_merge_at_merge_but_no_closeout, test_p4_r2_the_board_shows_a_gated_batchs_unfinished_post_merge. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: run-level gate no row inherits auto-passed via an unrelated row gate (phase 4)
+
+ledger carries run_gate/run_gate_inherited; test_p4_r3_a_run_gate_no_row_inherits_never_auto_passes. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: pass_gate swaps labels before commenting; a failed comment is lost (phase 4)
+
+comment first, never twice; test_p4_r4_pass_gate_comments_first_and_never_twice. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: fr gate pass accepts an unmerged PR (phase 4)
+
+refused; test_p4_r5_it_refuses_a_pr_that_is_not_merged. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: fr gate pass --repo always builds a github.com client (phase 4)
+
+host resolved; test_p4_r6_the_host_is_the_named_one_or_the_checkouts_origin. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: per-pass cost: pr_view per batch, fetch per gated batch, worktree in plan mode (phase 4)
+
+settled labels carried, one fetch per repo per pass, ledger read without a worktree; test_p4_r7_a_pass_fetches_each_repo_once_however_many_batches_are_gated, test_p4_r7_the_ledger_read_adds_no_worktree. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: awaiting-live re-added every pass, spec said first pass (phase 4)
+
+re-adding is intended; spec R13 amended; test_p4_r8_every_pass_re_adds_a_missing_awaiting_live_label pins it. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: release command printed while other gates still hold (phase 4)
+
+printed only when no held gate remains; test_p4_r9_no_release_command_while_another_gate_still_holds. (9b543573, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p4-gated-post-merge-delayed-resolved created=2026-10-14T05:54:33+00:00 phase=4 state=open resolves=p4-gated-post-merge-delayed out_of_scope=true -->
+### p4-gated-post-merge-delayed-resolved · finding [out-of-scope] · resolves p4-gated-post-merge-delayed: A gated batch's post_merge waits for its gate, yet the tester walks the merged build (phase 4)
+
+The executor tagged it out of scope; the reviewer reclassified the same defect in scope as p4-r2, fixed in 9b543573. This entry stays as the executor recorded it.
