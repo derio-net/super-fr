@@ -5203,3 +5203,16 @@ def test_an_export_pr_merged_or_closed_by_hand_clears_its_conflict_stop(
     code, out = _export_drive(state, "--once", "--yes")
     assert line in out, out
     assert f"export:{REPO}" not in load_stops(state)
+
+
+def test_viewed_takes_head_and_mergeable_from_the_same_fresh_read() -> None:
+    """p2-r6: a fresh `pr_view`'s `mergeable` describes its own head; pairing it with
+    the facts' older head would pin a merge to a head the verdict never saw."""
+    from fr.commands.triage_batch_cmd import _viewed
+    from fr.triage.batch_drive import LivePr
+
+    old = LivePr(number=201, state="OPEN", draft=False, head="sha-old", checks="green")
+    view = {"head_oid": "sha-new", "mergeable": "MERGEABLE", "base_ref": "main"}
+    got = _viewed(old, view)
+    assert (got.head, got.mergeable, got.base) == ("sha-new", "MERGEABLE", "main")
+    assert _viewed(old, {"mergeable": "CONFLICTING"}).head == "sha-old"  # no head: kept

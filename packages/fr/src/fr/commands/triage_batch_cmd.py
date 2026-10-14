@@ -3258,9 +3258,13 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
 
 
 def _viewed(pr: LivePr, view: Mapping[str, Any]) -> LivePr:
-    """*pr* with the base and `mergeable` a fresh `pr_view` read reports."""
+    """*pr* with the base, head and `mergeable` a fresh `pr_view` read reports: the
+    verdict and the head it describes come from the same read (p2-r6)."""
     return replace(
-        pr, base=str(view.get("base_ref") or ""), mergeable=str(view.get("mergeable") or "")
+        pr,
+        base=str(view.get("base_ref") or ""),
+        head=str(view.get("head_oid") or pr.head),
+        mergeable=str(view.get("mergeable") or ""),
     )
 
 
