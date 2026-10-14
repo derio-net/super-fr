@@ -191,6 +191,18 @@ class GhClient(Protocol):
         remove: frozenset[str],
     ) -> None: ...
 
+    def edit_pr_labels(
+        self, repo: str, pr: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        """Add and remove labels on a PR (exit-gates R7). On GitHub a PR is an
+        issue, so this is the issue endpoint for the PR's number; a forge that
+        cannot label a PR raises `UnsupportedForgeOperation`."""
+        ...
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        """Comment on a PR (exit-gates §B); same forge rules as `edit_pr_labels`."""
+        ...
+
     def edit_issue_state(
         self,
         repo: str,
@@ -532,6 +544,14 @@ class UnsupportedBatchOps:
 
     def _unsupported(self, op: str) -> UnsupportedForgeOperation:
         return UnsupportedForgeOperation(op, self.backend)
+
+    def edit_pr_labels(
+        self, repo: str, pr: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        raise self._unsupported("edit_pr_labels")
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        raise self._unsupported("comment_pr")
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         raise self._unsupported("list_issue_comments")

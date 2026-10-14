@@ -229,6 +229,14 @@ class RealGhClient:
             remove=sorted(remove),
         )
 
+    def edit_pr_labels(
+        self, repo: str, pr: int, *, add: frozenset[str], remove: frozenset[str]
+    ) -> None:
+        self.edit_issue_labels(repo, pr, add=add, remove=remove)  # a PR is an issue
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self.comment_issue(repo, pr, body)
+
     @_hosted
     def edit_issue_state(
         self,

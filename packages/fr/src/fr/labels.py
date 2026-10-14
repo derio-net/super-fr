@@ -187,6 +187,35 @@ def phase_label(n: int) -> LabelDef:
     return LabelDef(f"phase:{n}", PHASE_LABEL_COLOR, f"Plan phase {n}")
 
 
+# Exit labels (spec 2026-10-14 exit-gates R7): what a run's PR is verified by and
+# which post-merge gate holds it. `gate:<g>-passed` is the driver's/`fr gate
+# pass`'s to write, so a sync never removes one.
+VERIFICATION_PREFIX = "verification:"
+GATE_PREFIX = "gate:"
+PASSED_SUFFIX = "-passed"
+VERIFICATION_LABEL_COLOR = "1D76DB"
+GATE_LABEL_COLOR = "D93F0B"
+GATE_PASSED_LABEL_COLOR = "0E8A16"
+
+
+def verification_label(kind: str) -> LabelDef:
+    """`verification:<kind>` — one kind of the run's exit."""
+    return LabelDef(
+        _bounded_label_name(VERIFICATION_PREFIX, kind),
+        VERIFICATION_LABEL_COLOR,
+        f"Verified by {kind}",
+    )
+
+
+def gate_label(gate: str, *, passed: bool = False) -> LabelDef:
+    """`gate:<gate>` (held) or `gate:<gate>-passed` (the gate passed)."""
+    if passed:
+        return LabelDef(
+            f"{GATE_PREFIX}{gate}{PASSED_SUFFIX}", GATE_PASSED_LABEL_COLOR, f"The {gate} gate passed"
+        )
+    return LabelDef(f"{GATE_PREFIX}{gate}", GATE_LABEL_COLOR, f"Held by the {gate} gate")
+
+
 # Role-name → LabelDef map. Keys are the lifecycle slot names (snake_case);
 # `.name` on each LabelDef is the GitHub label string (kebab-case). The
 # diff/render projection looks up entries by GitHub name when computing
