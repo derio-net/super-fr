@@ -104,35 +104,24 @@ journal:
       shutdown and was explicitly terminated; it is not used as passing evidence.
       The final full suite is the passing authority. Parent cursor remains unresolved;
       no PR/push/live client walk or real batch/driver action was performed.
+  - kind: discovery
+    id: recovery-acceptance-record-emissions-corrected
+    phase: 1
+    title: Acceptance transitions applied separately through their supported CLI
+    body: |
+      Parent resolve correctly refused the disallowed acceptance section without
+      applying anything: implement-phase emits only journal:plan and plan:ticks.
+      The three automated recovery rows were moved to ci and the actual-client row
+      to walk-owed using fr acceptance set-status, with named unit/int refs and
+      regenerated reports. The live strategy and concrete scenario remain intact.
+      Evidence uses repo:path#test_name anchors, not pytest's path::test_name
+      invocation syntax. Acceptance check passes with the corrected anchors.
+      The rejected section is removed from this record; no cursor was resolved.
+      Changes are acceptance/report and record metadata only, so the existing
+      passing full-suite log still covers the unchanged implementation code tree.
 resolves:
   - id: recovery-pane-roster-capture-required
     state: fixed
     body: Parent supplied read-only real captured global pane/tab rosters and shell observations. Discovery uses the pane-list/tab-list join, never an invented tab-get pane field. Container tests need no real herdr installation.
 evidence:
   tests: /var/folders/28/d4n60x_92gbgh3rtf4vstb0h0000gn/T/opencode/closed-session-batch-recovery-full-84eeab81.log
-acceptance:
-  - id: triage-closed-recovery
-    status: ci
-    notes: Installed fake-backed CLI/runner/persistence scenario preserves dispatch/work and establishes fresh held ownership; not a native client walk.
-    levels:
-      unit: [tests/unit/test_triage_closed_recovery.py::test_recovery_success_preserves_lifecycle_and_changes_owner, tests/unit/test_herdr_closed_recovery.py::test_allocation_intent_and_single_input]
-      integration: [tests/integration/test_scenarios.py::test_triage_closed_recovery]
-  - id: triage-closed-recovery-refusals
-    status: ci
-    notes: Captured global roster-derived variants and disposable CLI state prove read-only preview and unsafe/unknown ownership refusal.
-    levels:
-      unit: [tests/unit/test_triage_closed_recovery.py::test_recovery_preview, tests/unit/test_triage_closed_recovery.py::test_live_scope_driver_refuses_before_effects, tests/unit/test_herdr_closed_recovery.py::test_unknown_rosters_refuse, tests/unit/test_herdr_closed_recovery.py::test_survivors_reused_panes_and_incomplete_join_refuse]
-      integration: [tests/integration/test_scenarios.py::test_triage_closed_recovery]
-  - id: triage-closed-recovery-repair
-    status: ci
-    notes: Allocation/checkpoint fault injection plus installed batch outcome-write failure prove same-attempt discovery and input-free repair without false ownership.
-    levels:
-      unit: [tests/unit/test_herdr_closed_recovery.py::test_uncertain_allocation_discovered_without_reallocation, tests/unit/test_herdr_closed_recovery.py::test_effect_and_checkpoint_failures_preserve_pending_no_replay, tests/unit/test_herdr_closed_recovery.py::test_activation_write_failure_repair_is_input_free]
-      integration: [tests/integration/test_scenarios.py::test_triage_closed_recovery]
-  - id: triage-closed-recovery-live
-    status: walk-owed
-    verify: live
-    scenario: tests/scenarios/herdr-closed-recovery-live.sh
-    notes: Operator-owned disposable actual-client recovery/HOLD walk is owed post-merge at Tester; automated instruction tests do not certify a live pass.
-    levels:
-      integration: [tests/integration/test_scenarios.py::test_herdr_closed_recovery_live_instructions]
