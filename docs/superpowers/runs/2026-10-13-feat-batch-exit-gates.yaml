@@ -3,7 +3,7 @@ run: 2026-10-13-feat-batch-exit-gates
 workflow: fr-goal@1
 branch: feat/batch-exit-gates
 started: '2026-10-13T21:49:30+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -299,7 +299,11 @@ steps:
           visual: none
           findings: p8-r1,p8-r2,p8-r3,p8-r4,p8-r5,p8-r6
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-14T11:12:20+00:00'
+    exit: 0
+    stdout: "7 out-of-scope finding(s): p1-r8, p3-r10, p4-gated-post-merge-delayed,\
+      \ p5-r11, \np6b-r11, p7-r8, p8-r6\n"
   deliver:
     state: pending
 fr_version: 5.26.0
