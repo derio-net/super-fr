@@ -67,7 +67,8 @@ from fr.triage.stage import Stage, derive_stage
 # None, so no batch reads as gated and no cursor position is known.
 FACTS_SCHEMA: Literal[12] = 12
 FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-# The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
+# The version this fr WRITES: every engine write stamps 10 (the `closeout_handback` event,
+# 2026-10-14-exit-gates R27; 9 was the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
 # `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
@@ -76,8 +77,8 @@ FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[9] = 9
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+JUDGEMENTS_SCHEMA: Literal[10] = 10
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -905,6 +906,22 @@ class EnqueueEvent(_Strict):
     detail: str = ""
 
 
+class CloseoutHandbackEvent(_Strict):
+    """The driver handed collected close-out *item*'s PR #*pr* back at *head* to its
+    session (exit-gates R15, R27): a conflict or failing checks, named in *reason*.
+    Recorded on EACH member batch; the budget of one is counted per *item*, across its
+    members. `delivered`: `session`, the prompt was sent; `none`, no session could take
+    it, so the operator owns it. Needs judgements schema 10. Written by the engine only."""
+
+    kind: Literal["closeout_handback"]
+    at: AwareDatetime
+    item: str = Field(min_length=1)
+    pr: int
+    head: str = Field(min_length=1)
+    reason: str = ""
+    delivered: RedDelivery = "session"
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -915,6 +932,8 @@ SCHEMA_8_EVENTS = frozenset({"claim_taken"})
 """The event kinds only a schema 8 `judgements.yaml` may carry (gh#1120)."""
 SCHEMA_9_EVENTS = frozenset({"update", "approval", "red_handback", "enqueue"})
 """The event kinds only a schema 9 `judgements.yaml` may carry (merge-train-safety §B)."""
+SCHEMA_10_EVENTS = frozenset({"closeout_handback"})
+"""The event kinds only a schema 10 `judgements.yaml` may carry (exit-gates R27)."""
 
 # Every schema-gated event kind, with the judgements schema it first appears in: the one
 # table `Judgements` refuses a too-low stamp from.
@@ -925,6 +944,7 @@ _EVENT_SCHEMAS: tuple[tuple[int, frozenset[str]], ...] = (
     (7, frozenset({"replacement"})),
     (8, SCHEMA_8_EVENTS),
     (9, SCHEMA_9_EVENTS),
+    (10, SCHEMA_10_EVENTS),
 )
 
 
@@ -940,7 +960,8 @@ BatchEvent = Annotated[
     | UpdateEvent
     | ApprovalEvent
     | RedHandbackEvent
-    | EnqueueEvent,
+    | EnqueueEvent
+    | CloseoutHandbackEvent,
     Field(discriminator="kind"),
 ]
 
@@ -1048,7 +1069,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}

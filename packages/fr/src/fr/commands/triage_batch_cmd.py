@@ -245,6 +245,7 @@ from fr.triage.model import (
     CancelEvent,
     ClaimsReleasedEvent,
     CloseoutEvent,
+    CloseoutHandbackEvent,
     ConflictEvent,
     CursorPosition,
     CursorReader,
@@ -4387,11 +4388,22 @@ class _Driver:
         # only into the default branch (gh#1004). Only an open one this batch owns can
         # be merged, so only those cost a read.
         return [
-            replace(p, base=str(client.pr_view(repo, p.number).get("base_ref") or ""))
-            if p.state == "OPEN" and attributed(p, batch, event)
+            self._viewed(client, repo, p) if p.state == "OPEN" and attributed(p, batch, event)
             else p
             for p in out.values()
-        ]
+        ]  # fmt: skip
+
+    @staticmethod
+    def _viewed(client: GhClient, repo: str, pr: LivePr) -> LivePr:
+        """*pr* with its base and mergeability read now: a collected close-out's PR merges
+        only once `MERGEABLE`, and a conflict is handed back (exit-gates R15, R27)."""
+        view = client.pr_view(repo, pr.number)
+        return replace(
+            pr,
+            base=str(view.get("base_ref") or ""),
+            mergeable=str(view.get("mergeable") or ""),
+            merge_state=str(view.get("merge_state") or ""),
+        )
 
     def _existing(
         self, facts: Facts, closing: list[Batch], repos: dict[str, str], *, soft: bool = False
@@ -4919,7 +4931,7 @@ class _Driver:
             if action.head:  # an export's warn names no head: it is said every pass
                 self.warned.add(action.head)
             return action.detail, False, in_flight
-        if action.kind in ("blocked", "held", "ledger-unread", "closeout-held"):
+        if action.kind in ("blocked", "held", "ledger-unread", "closeout-held", "closeout-stuck"):
             return action.detail, False, in_flight
         if action.kind in ("claim", "refresh", "release"):
             if action.kind == "claim" and action.batch in self._held_now:
@@ -4961,6 +4973,9 @@ class _Driver:
         if action.kind == "post-merge":
             outcome, did = self._post_merge(facts, judgements, batch, repo)
             return outcome, did, in_flight
+        if action.kind == "closeout-handback":
+            line, did = self._closeout_hand_back(action, facts, judgements, repo)
+            return line, did, in_flight
         if action.kind == "closeout" and action.items:
             outcome, did = self._collected_close_out(action, facts, judgements, repo)
             return outcome, did, in_flight
@@ -5828,7 +5843,7 @@ class _Driver:
         for bid in action.items:
             b = _find(judgements.batches, bid)
             if self.adapter.refusal(b) is not None:
-                skipped.append(f"{bid} (another driver's runner)")
+                skipped.append(f"{bid} (left to the driver of runner {b.launch.runner})")
             elif (
                 self.adapter.kind == "host"
                 and facts.config_for(repo).post_merge
@@ -5892,6 +5907,53 @@ class _Driver:
         left = f"; not now: {'; '.join(skipped)}" if skipped else ""
         return f"started {item.id} for {', '.join(b.id for b in members)}{left}", True
 
+    def _closeout_hand_back(
+        self, action: Action, facts: Facts, judgements: Judgements, repo: str
+    ) -> tuple[str, bool]:
+        """R27: prompt the collected close-out's session with the conflict or the failing
+        checks, and record a `closeout_handback` event on each member, keyed by the item
+        and the head: the budget of one is spent whether a session took it or not."""
+        from fr_dispatch.protocols import SessionMessenger
+        from fr_dispatch.work_item import WorkItem
+
+        members = [_find(judgements.batches, b) for b in action.items]
+        started = closeout_event(members[0])
+        name = started.runner if started is not None else "hand"
+        if name != "hand" and not self.adapter.carries(name):
+            return f"{action.detail}; its session runs on {name}: left to that driver", False
+        default = self.merge_ctx(facts, repo).main
+        branch = (started.archive or "") if started is not None else ""
+        brief = collected.handback_brief(
+            pr=action.pr or 0, branch=branch, base=default, checks=action.checks
+        )
+        delivered = "none"
+        if name != "hand":
+            runner = self.runner(name)
+            if isinstance(runner, SessionMessenger):
+                target = WorkItem(
+                    id=action.key, unit="run", workflow=batch_workflow(members[0]), repo=repo,
+                    parent=None, inputs=(), payload={"group": self.group_of(members[0])},
+                    tracking=None,
+                )  # fmt: skip
+                try:
+                    runner.message(target, brief)
+                except Exception as exc:  # noqa: BLE001 - retried next pass, never the drive's end
+                    return f"hand-back to {action.key} failed, retried next pass: {exc}", False
+                delivered = "session"
+        written = list(judgements.batches)
+        for member in members:
+            event = CloseoutHandbackEvent(
+                kind="closeout_handback", at=_now_after(member), item=action.key,
+                pr=action.pr or 0, head=action.head, reason=", ".join(action.checks),
+                delivered=delivered,  # type: ignore[arg-type]
+            )  # fmt: skip
+            written = _replace(written, member.model_copy(
+                update={"events": [*member.events, event]}))  # fmt: skip
+        _write(self.target, written, facts, read=judgements.batches, read_errors=True)
+        if delivered == "none":
+            return f"{action.detail}; no session can take it: the operator's", True
+        return f"{action.detail}; handed back to its session {action.key}", True
+
     def _dispatch_failed(self, batch: Batch, message: str, cause: BaseException | None) -> str:
         """A runner failed to start *batch*'s session (gh#931): as a refused merge
         (rg-4), reported in full once per batch and cause and tried again on a later
@@ -5921,6 +5983,8 @@ class _Driver:
         ctx = self.merge_ctx(facts, repo)
         assert action.pr is not None
         try:
+            if action.draft:  # a collected close-out's PR is readied once clean (R15)
+                ctx.client.pr_ready(repo, action.pr)
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -5934,13 +5998,17 @@ class _Driver:
             self.reported.add(key)
             return f"stopped: archive PR #{action.pr}: the forge refused the merge: {exc}", False
         # Record it: a PR attributed by its files alone is not found again once it
-        # left the open-PR list, and the batch would read as closing forever (rg-6).
-        event = closeout_event(batch)
-        if event is not None:
-            self._append(
-                judgements, facts, batch,
-                event.model_copy(update={"at": _now_after(batch), "archived": action.pr}),
-            )  # fmt: skip
+        # left the open-PR list, and the batch would read as closing forever (rg-6). A
+        # collected close-out's PR is recorded on every member (R15).
+        members = [_find(judgements.batches, b) for b in action.items] or [batch]
+        written = list(judgements.batches)
+        for member in members:
+            event = closeout_event(member)
+            if event is not None:
+                done = event.model_copy(update={"at": _now_after(member), "archived": action.pr})
+                written = _replace(written, member.model_copy(
+                    update={"events": [*member.events, done]}))  # fmt: skip
+        _write(self.target, written, facts, read=judgements.batches, read_errors=True)
         return f"merged archive PR #{action.pr}", True
 
     # ------------------------------------------------------- state export (R13)
@@ -6093,6 +6161,8 @@ class _Driver:
         ctx = self.merge_ctx(facts, repo)
         assert action.pr is not None
         try:
+            if action.draft:  # a collected close-out's PR is readied once clean (R15)
+                ctx.client.pr_ready(repo, action.pr)
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -6234,7 +6304,7 @@ def _collected_item(
         ),  # fmt: skip
         "harness": launch.harness,
         "model": launch.model,
-        "branch": base,
+        "branch": recorded_branch(members[0]),  # the first member's: as a per-batch item's
         "issues": [k for b in members for k in b.ids],
         "checkout": str(checkout),
         "base": base,

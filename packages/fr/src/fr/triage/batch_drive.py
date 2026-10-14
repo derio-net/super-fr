@@ -37,9 +37,11 @@ from fr.triage.batch import (
     recorded_branch,
 )
 from fr.triage.claims import Claim, held_line, held_members
+from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     Batch,
     CloseoutEvent,
+    CloseoutHandbackEvent,
     ConflictEvent,
     DispatchEvent,
     EnqueueEvent,
@@ -136,6 +138,10 @@ class LivePr:
     # The branch the PR merges into, as the forge says now; "" when not read. An export
     # PR is reused or merged only into the default branch (p4-r15).
     base: str = ""
+    # GitHub's `mergeable` and `mergeStateStatus`, "" when not read: a collected
+    # close-out's PR merges only once `MERGEABLE` (exit-gates R15).
+    mergeable: str = ""
+    merge_state: str = ""
 
 
 @dataclass(frozen=True)
@@ -381,6 +387,7 @@ class Action:
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
     gate: str = ""  # gate-pass: the post-merge gate whose rows all read walked
+    draft: bool = False  # archive of a collected close-out: its PR is a draft, ready it first
 
 
 @dataclass(frozen=True)
@@ -725,6 +732,23 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
 HANDBACKS_PER_DISPATCH = 2
 """R22: hand-backs a batch gets per dispatch; the next conflict is held."""
 
+
+def handbacks_since(
+    events: Sequence[object], counted: Callable[[object], bool], *, reset: bool = True
+) -> int:
+    """The hand-back budget's one count: the events *counted* accepts, newest first, back
+    to the batch's latest `dispatch` (*reset*), or all of them. Conflict (R22) and red
+    (R10) hand-backs count per dispatch here; a collected close-out's (R27) counts per
+    close-out item across its members, which no single batch's dispatch resets, so it
+    counts distinct heads instead (`closeout_handback_decision`)."""
+    n = 0
+    for event in reversed(events):
+        if reset and isinstance(event, DispatchEvent):
+            break
+        n += counted(event)
+    return n
+
+
 ConflictKind = Literal["skip", "wait-behind", "held", "handback"]
 
 
@@ -758,12 +782,9 @@ def conflict_decision(
     for batch_id, theirs in earlier_in_pass:
         if mine.intersection(theirs):
             return ConflictDecision("wait-behind", behind=batch_id)
-    handed = 0
-    for event in reversed(events):
-        if isinstance(event, DispatchEvent):
-            break
-        if isinstance(event, ConflictEvent) and event.delivered != "held":
-            handed += 1
+    handed = handbacks_since(
+        events, lambda e: isinstance(e, ConflictEvent) and e.delivered != "held"
+    )
     if handed >= HANDBACKS_PER_DISPATCH:
         return ConflictDecision("held")
     return ConflictDecision("handback")
@@ -811,12 +832,9 @@ def red_decision(
         and not any(e.head_before == head for e in updates)
     ):
         return "reupdate"
-    handed = 0
-    for event in reversed(events):
-        if isinstance(event, DispatchEvent):
-            break
-        if isinstance(event, RedHandbackEvent) and event.delivered == "session":
-            handed += 1
+    handed = handbacks_since(
+        events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
+    )
     if handed >= RED_HANDBACKS_PER_DISPATCH:
         return "needs_you"
     if status == "idle":
@@ -838,18 +856,86 @@ def held_conflict(batch: Batch) -> ConflictEvent | None:
 def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
     """How many fresh conflict sessions the batch started: all of them (the next one's
     number), or only since its latest dispatch (whether one is the message target)."""
-    count = 0
-    for event in reversed(batch.events):
-        if since_dispatch and isinstance(event, DispatchEvent):
-            break
-        if isinstance(event, ConflictEvent) and event.delivered == "fresh":
-            count += 1
-    return count
+    return handbacks_since(
+        batch.events,
+        lambda e: isinstance(e, ConflictEvent) and e.delivered == "fresh",
+        reset=since_dispatch,
+    )
 
 
 def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
     """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
     return f"{repo}/run/conflict-{batch_id}-{n}"
+
+
+# ------------------------------------------- collected close-out hand-back (R27)
+
+CLOSEOUT_HANDBACKS = 1
+"""R27: hand-backs a collected close-out gets, counted per close-out item across its
+members; apart from conflict and red hand-backs, which count per batch dispatch."""
+
+CloseoutDecisionKind = Literal["skip", "handback", "stuck"]
+
+
+def closeout_handback_decision(
+    events: Iterable[object], item: str, head: str
+) -> CloseoutDecisionKind:
+    """What the driver does with collected close-out *item*'s PR failing at *head*, from
+    every member's events (R27): `skip`, its session was handed it at this head already;
+    `stuck`, no session could take the hand-back at this head, or the one hand-back went
+    out at an earlier head (a second failure); else `handback`."""
+    mine = [e for e in events if isinstance(e, CloseoutHandbackEvent) and e.item == item]
+    here = [e for e in mine if e.head == head]
+    if here:
+        return "stuck" if all(e.delivered == "none" for e in here) else "skip"
+    return "stuck" if len({e.head for e in mine}) >= CLOSEOUT_HANDBACKS else "handback"
+
+
+def _collected_step(
+    batch: Batch, event: CloseoutEvent, mine: Sequence[LivePr], snap: Snapshot
+) -> Action | None:
+    """§D step 3 for one collected close-out: ready and merge its PR once it is `MERGEABLE`
+    and green; hand a conflict or failing checks back ONCE to its session (R27); after
+    that, a `closeout-stuck` need. Planned once for every member (`items`)."""
+    repo = snap.repos.get(batch.id, "")
+    pr = next((p for p in mine if p.state == "OPEN" and p.head_ref == event.archive), None)
+    default = snap.default_branch.get(repo, "")
+    if pr is None or not default:
+        return None  # not opened yet, or the default branch unknown: wait
+    members = tuple(
+        b.id for b in snap.batches
+        if snap.repos.get(b.id) == repo and (e := closeout_event(b)) is not None
+        and e.archive == event.archive and e.archived is None
+    )  # fmt: skip
+    if wrong := _wrong_base(pr, default):
+        return Action("blocked", batch.id, f"close-out PR #{pr.number} ({pr.head_ref}) "
+                      f"{wrong}; it is never merged", pr=pr.number, items=members)  # fmt: skip
+    item = event_item_id(repo, batch.id, event)
+    conflict = conflicting(pr.mergeable, pr.merge_state)
+    if pr.checks == "failing" or conflict:
+        what = (
+            "conflicts with its base"
+            if conflict
+            else f"has failing checks: {', '.join(pr.failing) or 'unknown'}"
+        )
+        events = [e for b in snap.batches if b.id in members for e in b.events]
+        decision = closeout_handback_decision(events, item, pr.head)
+        if decision == "skip":
+            return None  # its session has it at this head
+        checks = ("merge conflict",) if conflict else pr.failing
+        if decision == "stuck":
+            return Action("closeout-stuck", batch.id, f"close-out PR #{pr.number} {what} at "
+                          f"{pr.head[:12]}, and its one hand-back is spent: fix it on "
+                          f"{pr.head_ref}", pr=pr.number, head=pr.head, items=members,
+                          key=item, checks=checks)  # fmt: skip
+        return Action("closeout-handback", batch.id, f"close-out PR #{pr.number} {what}; hand "
+                      f"it back to {item}", pr=pr.number, head=pr.head, items=members,
+                      key=item, checks=checks)  # fmt: skip
+    if pr.checks == "green" and pr.mergeable == "MERGEABLE":
+        return Action("archive", batch.id, f"PR #{pr.number} ({pr.head_ref}) for "
+                      f"{', '.join(members)}", pr=pr.number, head=pr.head, items=members,
+                      draft=pr.draft)  # fmt: skip
+    return None
 
 
 def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
@@ -1543,6 +1629,8 @@ def drive_pass(snap: Snapshot) -> Pass:
 
     # 3. Archive.
     archives_blocked = 0
+    collected_seen: set[tuple[str, str]] = set()
+    collected_stuck: set[tuple[str, str]] = set()
     for batch in chosen:
         event = closeout_event(batch)
         if event is None or stages.get(batch.id) not in LANDED or batch.id in held_ids:
@@ -1561,6 +1649,21 @@ def drive_pass(snap: Snapshot) -> Pass:
             stale = _stale_closeout(batch, event, snap)
             if stale is not None:
                 actions.append(stale)
+        if collected_name(event.archive or "") is not None:  # R15: one PR for every member
+            key = (snap.repos.get(batch.id, ""), event.archive or "")
+            if key in collected_seen:
+                closing += key not in collected_stuck
+                continue
+            collected_seen.add(key)
+            step = _collected_step(batch, event, mine, snap)
+            if step is not None and step.kind in ("closeout-stuck", "blocked"):
+                collected_stuck.add(key)  # the operator's: blocked, never closing
+                archives_blocked += 1
+            else:
+                closing += 1
+            if step is not None:
+                actions.append(step)
+            continue
         ready = [p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"]
         default = snap.default_branch.get(snap.repos.get(batch.id, ""), "")
         good = next((p for p in ready if default and not _wrong_base(p, default)), None)

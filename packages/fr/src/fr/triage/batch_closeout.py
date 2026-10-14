@@ -54,6 +54,7 @@ __all__ = [
     "collected_branch",
     "collected_name",
     "execute",
+    "handback_brief",
     "issues_to_close",
     "member_steps",
     "next_collected",
@@ -214,6 +215,22 @@ def plan_lines(members: Sequence[Member], branch: str) -> list[str]:
     for m in members:
         lines += [f"  {m.batch}: {s.line}" for s in member_steps(m)]
     return lines
+
+
+def handback_brief(*, pr: int, branch: str, base: str, checks: Sequence[str]) -> str:
+    """R27's one hand-back to the collected close-out's session: what is wrong with its PR
+    and where to fix it. A second failure goes to the operator, not back here."""
+    what = (
+        f"conflicts with {base}"
+        if tuple(checks) == ("merge conflict",)
+        else f"has failing checks: {', '.join(checks) or 'unknown'}"
+    )
+    return (
+        f"The collected close-out PR #{pr} on {branch} {what}.\n"
+        f"Fix it on {branch}: merge origin/{base} in, resolve, run the failing checks "
+        f"locally, and push. This is its one hand-back: the driver merges it once it is "
+        f"green and mergeable, and a second failure goes to the operator."
+    )
 
 
 def closeout_title(branch: str, batches: Sequence[str]) -> str:

@@ -63,6 +63,7 @@ from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     Batch,
+    CloseoutHandbackEvent,
     Facts,
     Judgement,
     Judgements,
@@ -173,6 +174,8 @@ class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
     # | needs-developer | needs-reviewer | needs-tester | needs-devops (the board's lanes)
     # | ledger-unread (a landed batch whose gate labels could not be read)
+    # | closeout-held (a landed batch whose archive would hold, exit-gates R15)
+    # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     kind: str
     ref: str  # the batch id, `PR #n`, or issue key the row names
@@ -194,6 +197,8 @@ NEED_LABELS = {
     "merge-conflict": "Merge conflict",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
+    "closeout-held": "Close-out held: Test Plan outcome owed",
+    "closeout-stuck": "Close-out PR stuck",
     "needs-developer": "Needs you · Developer",
     "needs-reviewer": "Needs you · Reviewer",
     "needs-tester": "Needs you · Tester",
@@ -302,6 +307,26 @@ def needs_you(
                 f.pr for f in snap.foreign.get(action.batch, ()) if f.pr.number == action.pr
             )
             out.append(Need("foreign-pr", action.batch, action.detail, found_pr.url))
+    stuck: set[str] = set()  # one row per collected close-out, not per member
+    for action in plan.actions:
+        if action.kind == "closeout-held":
+            out.append(Need("closeout-held", action.batch, f"batch {action.batch}: "
+                            f"{action.detail}", f"#batch-{action.batch}"))  # fmt: skip
+        elif action.kind == "closeout-stuck" and action.key not in stuck:
+            stuck.add(action.key)
+            out.append(Need("closeout-stuck", action.batch, action.detail,
+                            f"#batch-{action.batch}"))  # fmt: skip
+    for b in judgements.batches:  # R27, from the events: no session could take it
+        event = closeout_event(b)
+        if event is None or event.archived is not None:
+            continue
+        for e in b.events:
+            if isinstance(e, CloseoutHandbackEvent) and e.delivered == "none":
+                if e.item not in stuck:
+                    stuck.add(e.item)
+                    text = (f"close-out PR #{e.pr} ({e.reason}) was handed back with no "
+                            f"session to take it: fix it on {event.archive}")  # fmt: skip
+                    out.append(Need("closeout-stuck", b.id, text, f"#batch-{b.id}"))
     for action in plan.actions:
         if action.kind == "blocked":
             out.append(

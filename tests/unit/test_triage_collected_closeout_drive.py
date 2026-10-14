@@ -165,3 +165,180 @@ def test_a_batch_whose_archive_would_hold_is_named_and_not_started(
     assert "b2" in held and "Test Plan step(s) 2 of run r2" in held
     (item,) = runner.dispatched
     assert "closeout b1 --yes" in item.payload["brief"]
+
+
+# ------------------------------------------------ step 3: ready, merge, hand back
+
+
+ITEM = f"{REPO}/run/closeout-{DAY}-1"
+
+
+def _under_way(pr: Any, *bids: str, handbacks: list[dict[str, Any]] | None = None) -> Any:
+    kw: dict[str, Any] = {f"{b}_events": [*_recorded(), *(handbacks or [])] for b in bids}
+    return _landed(*bids, archives={REPO: (pr,)}, **kw)
+
+
+def _shared(**kw: Any) -> Any:
+    kw.setdefault("mergeable", "MERGEABLE")
+    return _live(900, kw.pop("head", "h900"), head_ref=FIRST, trusted=True, base="main", **kw)
+
+
+def test_a_green_mergeable_collected_pr_is_readied_and_merged_once_for_every_member() -> None:
+    plan = drive_pass(_under_way(_shared(draft=True), "a", "b", "c"))
+
+    (merge,) = [a for a in plan.actions if a.kind == "archive"]
+    assert (merge.pr, merge.head, merge.items, merge.draft) == (900, "h900", ("a", "b", "c"), True)
+
+
+def test_a_collected_pr_not_yet_known_mergeable_waits() -> None:
+    plan = drive_pass(_under_way(_shared(mergeable="UNKNOWN"), "a"))
+    assert [a for a in plan.actions if a.kind in ("archive", "closeout-handback")] == []
+
+
+def test_a_conflicting_collected_pr_is_handed_back_once_to_its_session() -> None:
+    plan = drive_pass(_under_way(_shared(mergeable="CONFLICTING"), "a", "b"))
+
+    (back,) = [a for a in plan.actions if a.kind == "closeout-handback"]
+    assert (back.key, back.head, back.items, back.checks) == (ITEM, "h900", ("a", "b"),
+                                                              ("merge conflict",))  # fmt: skip
+    assert "archive" not in [k for k, _ in _kinds(plan.actions)]
+
+
+def test_a_red_collected_pr_is_handed_back_naming_its_failing_checks() -> None:
+    pr = _shared(checks="failing", failing=("lint", "test"))
+    (back,) = [a for a in drive_pass(_under_way(pr, "a")).actions if a.kind == "closeout-handback"]
+    assert back.checks == ("lint", "test")
+
+
+def _handback(head: str, delivered: str = "session") -> dict[str, Any]:
+    return {"kind": "closeout_handback", "at": "2026-10-02T11:30:00Z", "item": ITEM, "pr": 900,
+            "head": head, "reason": "merge conflict", "delivered": delivered}  # fmt: skip
+
+
+def test_a_hand_back_at_this_head_is_never_repeated() -> None:
+    snap = _under_way(_shared(mergeable="CONFLICTING"), "a", "b", handbacks=[_handback("h900")])
+    kinds = [k for k, _ in _kinds(drive_pass(snap).actions)]
+    assert "closeout-handback" not in kinds and "closeout-stuck" not in kinds
+
+
+def test_a_second_failure_at_a_later_head_is_a_stuck_need() -> None:
+    """R27: the budget is ONE per close-out item, counted across its members: a hand-back
+    recorded on a only still spends b's."""
+    snap = _landed("a", "b", archives={REPO: (_shared(mergeable="CONFLICTING", head="h901"),)},
+                   a_events=[*_recorded(), _handback("h900")], b_events=_recorded())  # fmt: skip
+    plan = drive_pass(snap)
+
+    (stuck,) = [a for a in plan.actions if a.kind == "closeout-stuck"]
+    assert stuck.key == ITEM and stuck.items == ("a", "b")
+    assert plan.summary.blocked == 1
+
+
+def test_a_hand_back_no_session_took_is_a_stuck_need_at_once() -> None:
+    snap = _under_way(_shared(mergeable="CONFLICTING"), "a", handbacks=[_handback("h900", "none")])
+    assert "closeout-stuck" in [k for k, _ in _kinds(drive_pass(snap).actions)]
+
+
+def test_the_closeout_hand_back_budget_is_its_own_and_conflict_decisions_is_unchanged() -> None:
+    from fr.triage.batch_drive import HANDBACKS_PER_DISPATCH, conflict_decision
+
+    assert HANDBACKS_PER_DISPATCH == 2
+    assert conflict_decision([], "h", ["p"], []).kind == "handback"
+
+
+# ------------------------------------------------------- the event (schema 10)
+
+
+def test_the_closeout_handback_event_moves_the_judgements_schema() -> None:
+    from fr.triage.model import JUDGEMENTS_READS, JUDGEMENTS_SCHEMA, Judgements
+
+    assert JUDGEMENTS_SCHEMA == 10 and JUDGEMENTS_READS[-1] == 10
+    batch = {"id": "a", "title": "a", "ids": ["super-fr#1"],
+             "events": [*_recorded(), _handback("h900")]}  # fmt: skip
+    judged = {"tiers": [{"n": 1, "title": "Now"}], "issues": {"super-fr#1": {"tier": 1}}}
+    got = Judgements.model_validate({"schema": 10, **judged, "batches": [batch]})
+    assert got.batches[0].events[-1].kind == "closeout_handback"
+    with pytest.raises(ValueError, match="schema"):
+        Judgements.model_validate({"schema": 9, **judged, "batches": [batch]})
+    older = {**batch, "events": _recorded()}
+    assert Judgements.model_validate({"schema": 9, **judged, "batches": [older]}).schema_ == 9
+
+
+# ------------------------------------------------- step 3, executed (§D)
+
+CMD_BRANCH = f"chore/closeout-{CMD_DAY}-1"
+CMD_ITEM = f"{REPO}/run/closeout-{CMD_DAY}-1"
+
+
+def _started(world: World, tmp_path: Path, *bids: str, **pr: Any) -> Path:
+    """*bids* landed, their collected close-out recorded and its PR #900 open."""
+    from tests.unit.test_triage_batch_drive_cmd import _batch, _dispatch_event, _state
+
+    rec = (f"      - {{kind: closeout, at: '2026-10-02T11:00:00Z', runner: fake, "
+           f"handle: {CMD_ITEM}, archive: {CMD_BRANCH}}}\n")  # fmt: skip
+    batches = []
+    for i, bid in enumerate(bids, 1):
+        world.issues[i] = "closed"
+        world.pr(100 + i, f"feat/batch-{bid}", [i], state="MERGED",
+                 merged_at=(NOW - timedelta(hours=1)).isoformat())  # fmt: skip
+        batches.append(_batch(bid, i, events=_dispatch_event(bid) + rec))
+    world.pr(900, CMD_BRANCH, [], **{"mergeable": "MERGEABLE", **pr})
+    return _state(tmp_path, world, *batches)
+
+
+def test_the_driver_readies_and_merges_the_collected_pr_and_records_every_member(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _started(world, tmp_path, "b1", "b2", draft=True)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert world.calls.index("pr_ready 900") < world.calls.index("pr_merge 900")
+    assert world.calls.count("pr_merge 900") == 1
+    archived = {b.id: closeout_event(b).archived  # type: ignore[union-attr]
+                for b in load_judgements(tmp_path / "judgements.yaml").batches}  # fmt: skip
+    assert archived == {"b1": 900, "b2": 900}
+
+
+def test_a_conflicting_collected_pr_is_handed_back_once_and_recorded_on_each_member(
+    tmp_path: Path, world: World, checkout: DriveCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import triage_batch_cmd
+
+    from tests.unit.test_triage_batch_drive_cmd import MessengerRunner
+
+    messenger = MessengerRunner()
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", lambda name: messenger)
+    _started(world, tmp_path, "b1", "b2", mergeable="CONFLICTING")
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    ((item, text),) = messenger.messages
+    assert item == CMD_ITEM and CMD_BRANCH in text and "PR #900" in text
+    backs = {
+        b.id: [(e.item, e.head) for e in b.events if e.kind == "closeout_handback"]  # type: ignore[union-attr]
+        for b in load_judgements(tmp_path / "judgements.yaml").batches
+    }
+    assert backs == dict.fromkeys(("b1", "b2"), [(CMD_ITEM, "sha-900")])
+    assert "pr_merge 900" not in world.calls
+    # a second pass at the same head hands nothing back again
+    _drive(tmp_path, "--once", "--yes")
+    assert len(messenger.messages) == 1
+
+
+def test_a_hand_back_no_session_took_is_a_need_on_the_board(tmp_path: Path, world: World) -> None:
+    from fr.triage.model import load_judgements as load
+    from fr.triage.views import NEED_LABELS, needs_you
+
+    target = _started(world, tmp_path, "b1", "b2", mergeable="CONFLICTING")
+    path = target / "judgements.yaml"
+    none = (f"      - {{kind: closeout_handback, at: '2026-10-02T11:30:00Z', item: {CMD_ITEM}, "
+            "pr: 900, head: sha-900, reason: merge conflict, delivered: none}\n")  # fmt: skip
+    text = path.read_text("utf-8").replace("schema: 3\n", "schema: 10\n", 1)
+    path.write_text(text.replace(f"archive: {CMD_BRANCH}}}\n", f"archive: {CMD_BRANCH}}}\n"
+                                 + none), "utf-8")  # fmt: skip
+
+    needs = [n for n in needs_you(world.facts(), load(path)) if n.kind == "closeout-stuck"]
+    assert len(needs) == 1 and "PR #900" in needs[0].text  # one row for both members
+    assert "closeout-stuck" in NEED_LABELS and "closeout-held" in NEED_LABELS

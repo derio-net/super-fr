@@ -144,7 +144,8 @@ class World:
         view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
         merge = p.get("merge_commit", f"merge-{number}")
         return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge,
-                "labels": list(p["labels"])}  # fmt: skip
+                "labels": list(p["labels"]), "mergeable": p.get("mergeable", ""),
+                "merge_state": p.get("merge_state", "")}  # fmt: skip
 
     def pr_ready(self, repo: str, number: int) -> None:
         self.calls.append(f"pr_ready {number}")
@@ -3524,7 +3525,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 9
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 10
 
 
 @pytest.mark.parametrize("status", ["idle", "absent", "working"])
