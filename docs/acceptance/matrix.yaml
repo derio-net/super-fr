@@ -8005,9 +8005,11 @@ rows:
       spends no GraphQL.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_quota_loop.py#test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window
+    status: ci
+    notes: pin for gh#1178; passed on arrival because gh#1153 landed R12
     verify: none
   - id: triage-post-merge-truth-live
     capability: triage-batches
