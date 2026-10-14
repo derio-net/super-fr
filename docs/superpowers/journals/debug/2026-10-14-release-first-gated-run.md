@@ -1,0 +1,7 @@
+<!-- fr:journal-schema=2 -->
+# Journal: 2026-10-14-release-first-gated-run
+
+<!-- fr:journal kind=repro scope=debug id=repro-rc-suite-red created=2026-10-14T11:54:28+00:00 -->
+### repro-rc-suite-red · repro · Release run 38557522803 refused 5.27.0-rc.1: staged suite red on 3 version-shape tests
+
+First release after #1195 (exit-gates). Gating chose an RC (#1195 waits on a post-merge gate), bumped 5.26.0 -> 5.27.0-rc.1 in 12 files, ran the staged suite: 3 failed, 12738 passed. Nothing pushed, tagged or published. Failures: tests/unit/test_version.py::test_version_is_semver (int-splits __version__ '5.27.0rc1'); tests/unit/test_version_surfaces.py::test_every_surface_value_equals_the_root_version (set {'5.27.0-rc.1','5.27.0rc1'} != {'5.27.0rc1'}); tests/unit/test_bridge_cli.py::test_tick_first_log_line_has_version_and_timestamp (banner regex v\d+.\d+.\d+ rejects v5.27.0rc1). Repro: bump-version.py 5.27.0-rc.1 in a worktree (uncommitted), run the three tests.
