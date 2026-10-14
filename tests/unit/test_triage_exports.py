@@ -38,8 +38,8 @@ HEAD = (
 
 
 def test_the_writer_writes_schema_5_and_the_reader_reads_1_to_5() -> None:
-    assert JUDGEMENTS_SCHEMA == 11
-    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+    assert JUDGEMENTS_SCHEMA == 12
+    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
     assert Judgements.model_validate({"schema": 4}).schema_ == 4
 
 
@@ -80,9 +80,9 @@ def test_save_exports_replaces_only_the_exports_section_and_stamps_5(tmp_path: P
     got = save_exports(path, [one], read=[])
 
     text = path.read_text(encoding="utf-8")
-    assert text.startswith("schema: 11\n" + HEAD.removeprefix("schema: 3\n"))
+    assert text.startswith("schema: 12\n" + HEAD.removeprefix("schema: 3\n"))
     assert yaml.safe_load(
-        text[len("schema: 11\n" + HEAD.removeprefix("schema: 3\n")) :]
+        text[len("schema: 12\n" + HEAD.removeprefix("schema: 3\n")) :]
     ).keys() == {"exports"}
     assert got.exports == [one]
     assert load_judgements(path).exports == [one]

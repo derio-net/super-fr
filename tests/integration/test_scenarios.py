@@ -96,6 +96,24 @@ def test_herdr_batch_replace(installed: Path, tmp_path: Path) -> None:
     _scenario("herdr-batch-replace", installed, tmp_path)
 
 
+def test_triage_closed_recovery(installed: Path, tmp_path: Path) -> None:
+    _scenario("triage-closed-recovery", installed, tmp_path)
+
+
+def test_herdr_closed_recovery_live_instructions() -> None:
+    done = subprocess.run(
+        ["bash", str(SCENARIOS / "herdr-closed-recovery-live.sh")],
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert done.returncode == 3, done.stderr
+    assert "OWED" in done.stdout and "disposable" in done.stdout
+    assert "ok: herdr-closed-recovery-live" not in done.stdout
+
+
 def test_herdr_opencode_live_instructions(tmp_path: Path) -> None:
     """Only the walk's honest instruction/verdict contract; never a live pass."""
     done = subprocess.run(
@@ -169,6 +187,8 @@ def test_the_install_refuses_a_source_without_the_package(tmp_path: Path) -> Non
 def test_every_scenario_script_has_a_test_here() -> None:
     on_disk = {p.stem for p in SCENARIOS.glob("*.sh") if not p.name.startswith("_")}
     here = {
+        "triage-closed-recovery",
+        "herdr-closed-recovery-live",
         "verification-strategy-resolution",
         "shipped-verification-strategies",
         "spec-verification-section",

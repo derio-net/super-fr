@@ -1,0 +1,8 @@
+{
+  "id":"cli:pane:process_info",
+  "result":{"process_info":{
+    "foreground_process_group_id":1001,
+    "foreground_processes":[{"argv":["-zsh"],"argv0":"zsh","cmdline":"-zsh","cwd":"/workspaces/alpha","name":"zsh","pid":1001}],
+    "pane_id":"w1T:p1","shell_pid":1001
+  },"type":"pane_process_info"}
+}

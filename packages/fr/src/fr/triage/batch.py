@@ -38,6 +38,7 @@ from fr.triage.model import (
     Judgements,
     Launch,
     PullRequest,
+    ReplacementEvent,
     TriageConfig,
     _check_schema,
     batch_marker,
@@ -122,6 +123,17 @@ def recorded_branch(batch: Batch) -> str:
     the event recorded."""
     event = last_dispatch(batch)
     return event.branch if event is not None else batch_branch(batch)
+
+
+def effective_handle(batch: Batch) -> str | None:
+    """Last successful owner since the latest dispatch; lifecycle remains immutable."""
+    owner = None
+    for event in batch.events:
+        if isinstance(event, DispatchEvent):
+            owner = event.handle
+        elif isinstance(event, ReplacementEvent) and event.result == "success" and owner:
+            owner = event.target_pane or event.handle
+    return owner
 
 
 _LABEL_REF = re.compile(r"(?<![\w./-])([A-Za-z0-9][\w.-]*)#(\d+)\b")

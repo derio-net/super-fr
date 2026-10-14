@@ -9518,3 +9518,71 @@ rows:
       fragment consumed; final once nothing waits), both RC spellings and RC-admitting
       floors are unit-tested against fake forges and temp git repos; a live RC then
       final on this repo's release.yml is still owed post-merge.
+  - id: triage-closed-recovery
+    capability: Triage batch recovery
+    acceptance: A closed batch session can recover into a fresh held OpenCode session
+      without losing work or original dispatch history.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_closed_recovery.py#test_recovery_success_preserves_lifecycle_and_changes_owner
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_allocation_intent_and_single_input
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_closed_recovery
+    status: ci
+    notes: Installed fake-backed recovery passes; named evidence uses supported Python
+      test-name anchors.
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-recovery.sh
+  - id: triage-closed-recovery-refusals
+    capability: Triage batch recovery
+    acceptance: Recovery refuses unsafe or unknown ownership and its previews leave
+      state and sessions untouched.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_closed_recovery.py#test_recovery_preview
+      - super-fr:tests/unit/test_triage_closed_recovery.py#test_live_scope_driver_refuses_before_effects
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_unknown_rosters_refuse
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_survivors_reused_panes_and_incomplete_join_refuse
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_closed_recovery
+    status: ci
+    notes: Captured-roster variants and disposable CLI tests prove preview/refusal safety;
+      named anchors resolve.
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-recovery.sh
+  - id: triage-closed-recovery-repair
+    capability: Triage batch recovery
+    acceptance: Interrupted recovery never duplicates launch or uncertain submission,
+      and explicit repair records truthful session ownership.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_uncertain_allocation_discovered_without_reallocation
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_effect_and_checkpoint_failures_preserve_pending_no_replay
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_activation_write_failure_repair_is_input_free
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_triage_closed_recovery
+    status: ci
+    notes: Fault injection and installed cross-store repair prove no replay or false
+      ownership; named anchors resolve.
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-recovery.sh
+  - id: triage-closed-recovery-live
+    capability: Triage batch recovery
+    acceptance: An actual closed disposable control pane recovers into autonomous OpenCode
+      HOLD with operator gates intact.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R8
+    levels:
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_closed_recovery_live_instructions
+    status: walk-owed
+    notes: Disposable actual-client walk remains owed post-merge at Tester; the named
+      instruction test is not live evidence.
+    verify: live
+    scenario: tests/scenarios/herdr-closed-recovery-live.sh

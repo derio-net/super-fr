@@ -379,7 +379,7 @@ def test_the_closeout_hand_back_budget_is_its_own_and_conflict_decisions_is_unch
 def test_the_closeout_events_move_the_judgements_schema() -> None:
     from fr.triage.model import JUDGEMENTS_READS, JUDGEMENTS_SCHEMA, Judgements
 
-    assert JUDGEMENTS_SCHEMA == 11 and 10 in JUDGEMENTS_READS
+    assert JUDGEMENTS_SCHEMA == 12 and 10 in JUDGEMENTS_READS
     judged = {"tiers": [{"n": 1, "title": "Now"}], "issues": {"super-fr#1": {"tier": 1}}}
     batch = {"id": "a", "title": "a", "ids": ["super-fr#1"],
              "events": [*_recorded(), _handback("h900"), _hold()]}  # fmt: skip

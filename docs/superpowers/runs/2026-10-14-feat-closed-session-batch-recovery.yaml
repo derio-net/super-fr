@@ -1,0 +1,112 @@
+schema_version: 10
+run: 2026-10-14-feat-closed-session-batch-recovery
+workflow: fr-goal@1
+branch: feat/closed-session-batch-recovery
+started: '2026-10-14T15:57:59+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-10-14T17:53:58+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md
+  spec-review:
+    state: done
+    at: '2026-10-14T18:00:51+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-14T17:54:02+00:00'
+          agent: ses_ec472fd02ffeXvPxnWq8wkk72A
+          agent_type: super-fr:fr-spec-reviewer
+          harness: opencode
+          tier: hard
+          bound: openai/gpt-6.1-sol
+          session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T18:00:51+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ses_ec472fd02ffeXvPxnWq8wkk72A
+          findings: s1
+  plan:
+    state: done
+    at: '2026-10-14T18:03:10+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-10-14-closed-session-batch-recovery
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-10-14T18:00:53+00:00'
+          harness: opencode
+          session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T18:03:10+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-10-14T18:03:15+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-10-14T20:43:27+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-14T18:03:16+00:00'
+          agent: ses_ec4699655ffeL3SP68hI3rHTR8
+          agent_type: fr-phase-executor
+          harness: opencode
+          model: openai/gpt-6.1-sol
+          tier: hard
+          bound: openai/gpt-6.1-sol
+          session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T20:13:10+00:00'
+          outcome: done
+        evidence:
+          tests: closed-session-batch-recovery-full-84eeab81.log@dd8ab06465fb;tree=85f9bd344425c1dd1f805ceda3e73a7984d17f32c2eb9cb4d530363f4c0031ca
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-14T20:13:11+00:00'
+          harness: opencode
+          model: openai/gpt-6.1-sol
+          session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T20:43:27+00:00'
+          outcome: done
+        evidence:
+          review: phase1-review
+          reviewer: ses_ec3f38899ffeDvvAyhmxZ7QQwj
+          visual: none
+          findings: recovery-pane-roster-capture-required,p1-r1,p1-r2,p1-r3,p1-r4
+  journal-check:
+    state: done
+    at: '2026-10-14T20:43:29+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: done
+    at: '2026-10-14T21:04:28+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1217
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-14T20:43:30+00:00'
+          harness: opencode
+          session: ses_ec52e48a3ffeYuGgSUiT9iZD10
+          returned: '2026-10-14T21:04:12+00:00'
+          outcome: done
+        evidence:
+          tests: ci:3f1c2e998c5fae333ce0f4554371adc34b2741a2+4085926fb7bc1908a2268ddffb08c0616ede5e47;tree=4ee6d416b80cbbfbe5393f0ebe8101a6482edde7d158d9758b002b32879192a9
+          walk: 20261014T205930Z.log@aa61fa707c83
+          proportionality: 4085926fb7bc1908a2268ddffb08c0616ede5e47:ef61771c16cdf87ef857bf58c0caabe3b62852330896a7ac4fb050be4712e0ba
+          visual: none
+fr_version: 5.27.0rc3

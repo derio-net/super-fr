@@ -1,0 +1,24 @@
+{
+  "id": "cli:pane:list",
+  "result": {
+    "panes": [
+      {"agent":"opencode","agent_status":"done","pane_id":"w9:pR","tab_id":"w9:tG","workspace_id":"w9"},
+      {"agent":"opencode","agent_status":"working","pane_id":"w9:p1H","tab_id":"w9:t0","workspace_id":"w9"},
+      {"agent":"opencode","agent_status":"done","pane_id":"w9:p1J","tab_id":"w9:t11","workspace_id":"w9"},
+      {"agent":"opencode","agent_status":"done","pane_id":"w9:p1K","tab_id":"w9:t12","workspace_id":"w9"},
+      {"agent_status":"unknown","pane_id":"wV:p3","tab_id":"wV:t3","workspace_id":"wV"},
+      {"agent":"claude","agent_status":"idle","pane_id":"wV:pG","tab_id":"wV:tG","workspace_id":"wV"},
+      {"agent_status":"unknown","pane_id":"wV:pH","tab_id":"wV:tH","workspace_id":"wV"},
+      {"agent_status":"unknown","pane_id":"wV:pN","tab_id":"wV:tH","workspace_id":"wV"},
+      {"agent":"claude","agent_status":"idle","pane_id":"wV:pJ","tab_id":"wV:tJ","workspace_id":"wV"},
+      {"agent_status":"unknown","pane_id":"wV:p11","tab_id":"wV:tJ","workspace_id":"wV"},
+      {"agent":"claude","agent_status":"idle","pane_id":"wV:pP","tab_id":"wV:tK","workspace_id":"wV"},
+      {"agent":"claude","agent_status":"idle","pane_id":"wV:pX","tab_id":"wV:tN","workspace_id":"wV"},
+      {"agent":"claude","agent_status":"idle","pane_id":"wV:pZ","tab_id":"wV:tQ","workspace_id":"wV"},
+      {"agent":"claude","agent_status":"idle","pane_id":"wV:p0","tab_id":"wV:tR","workspace_id":"wV"},
+      {"agent_status":"unknown","pane_id":"w1T:p1","tab_id":"w1T:t1","workspace_id":"w1T"},
+      {"agent":"opencode","agent_status":"working","pane_id":"w1V:p1","tab_id":"w1V:t1","workspace_id":"w1V"}
+    ],
+    "type": "pane_list"
+  }
+}

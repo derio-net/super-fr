@@ -270,6 +270,8 @@ class ReplacementRequest:
     harness: str
     model: str
     attempt: str
+    recover: bool = False
+    target_pane: str | None = None
 
 
 @dataclass(frozen=True)
@@ -278,6 +280,8 @@ class ReplacementResult:
     phase: str
     survivor: str
     detail: str = ""
+    pane: str | None = None
+    session: str | None = None
 
 
 @dataclass(frozen=True)

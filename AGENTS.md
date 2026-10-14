@@ -165,7 +165,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-    engine-appended `events` (fr reads schemas 1–11 and writes 11, see
+     engine-appended `events` (fr reads schemas 1–12 and writes 12, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -194,7 +194,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     that never change dispatch age or lifecycle; 8 adds `claim_taken`, which makes a
     taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
     (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); current writers
-    stamp 11 (read 1–11), adding `archive_conflict` (merge-truth R12).
+     stamp 12 (read 1–12), adding recovery ownership/session audit metadata;
+     11 added `archive_conflict` (merge-truth R12).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `merge`,
@@ -305,7 +306,12 @@ uv workspace monorepo, version lockstepped across every manifest (see
   Operator notes: `docs/herdr-control-sessions.md`, `packages/fr-herdr/README.md`.
   Optional `SessionReplacer` supports in-place Claude/OpenCode and model-only
   fresh replacement. Pending checkpoints exclude restart until explicit repair;
-  installed synthetic scenarios are not evidence of the operator-owned live walk.
+   installed synthetic scenarios are not evidence of the operator-owned live walk.
+   Explicit absent-source `batch replace --recover` uses `fr_herdr.recovery` and
+   global pane/tab/agent joins, pre-allocation server/item/source-keyed intent,
+   a new herdr pane and observed session identity. Repair never allocates or sends
+   input. Recovery HOLD overrides conflict/unfinished continuation on reconstruction
+   and managed restart; the disposable actual-client walk is post-merge Tester.
   It was the first to take `unit="run"` work: `fr triage batch dispatch` builds it
   through `fr_dispatch.registry.load_runner`'s `from_env()` and it opens a
   herdr tab, starts the harness on the batch's model and submits the brief.
