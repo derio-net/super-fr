@@ -7871,9 +7871,12 @@ rows:
       - super-fr:tests/unit/test_triage_claim_sync.py#test_sync_never_refreshes_a_member_facts_show_closed
       - super-fr:tests/unit/test_triage_clean_labels.py#test_every_surface_states_the_same_clearing_rule
       - super-fr:tests/unit/test_triage_clean_labels.py#test_the_board_note_fires_on_stale_or_release_pending_and_names_the_rule
+      - super-fr:tests/unit/test_triage_claim_sync.py#test_sync_yes_settles_and_records_claims_released_for_members
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_yes_pass_clears_a_release_pending_member
     status: ci
-    notes: 'phase 1: a closed member is settled, never refreshed; check, the page and
-      the board share one clearing rule'
+    notes: 'phase 1 review p1-r5: a claim sync --yes and a drive --once --yes pass each
+      clear a release-pending member; check, the page and the board share one clearing
+      rule'
     verify: none
   - id: triage-claim-take-recorded-first
     capability: triage-batches
