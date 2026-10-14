@@ -111,6 +111,7 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "export-merge": "state export PR ready to merge",
     "export-reconcile": "state export merged; the drive records it",
     "export-closed": "state export PR closed; the drive re-exports",
+    "export-conflict": "state export PR conflicts; the operator must act",
     "dedupe": "duplicate candidates to judge",  # names no batch; never a card hint
     # Claim bookkeeping (triage-claims §3.F): what the drive writes before it acts.
     "claim": "claims owed; the drive writes them",

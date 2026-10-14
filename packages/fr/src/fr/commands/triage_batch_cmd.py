@@ -4628,7 +4628,7 @@ class _Driver:
         """Execute *action*; its outcome line, whether it acted, and the in-flight count."""
         if action.kind == "dedupe":  # names no batch: a report, never a forge write (sr-1)
             return action.detail, False, in_flight
-        if action.kind == "archive-conflict" and action.wave is not None:
+        if action.kind == "export-conflict":
             return self._export_conflict(action), False, in_flight  # no session owns it
         if action.kind in EXPORT_KINDS:
             refusals, failures = self._export_refusals, self._export_failures

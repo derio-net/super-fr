@@ -98,6 +98,7 @@ ActionKind = Literal[
     "export-closed",
     "enqueue",
     "archive-conflict",
+    "export-conflict",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -954,7 +955,7 @@ def _export_row(
         why = wrong
     elif live.mergeable == CONFLICTING:
         # No session owns it: straight to the operator, with a recorded stop (R12).
-        return Action("archive-conflict", repo, f"export PR #{live.number} conflicts with "
+        return Action("export-conflict", repo, f"export PR #{live.number} conflicts with "
                       "the default branch; the operator must act", pr=live.number,
                       head=live.head, wave=wave), "blocked"  # fmt: skip
     elif live.draft:

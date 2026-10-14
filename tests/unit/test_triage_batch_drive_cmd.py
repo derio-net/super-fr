@@ -5170,6 +5170,9 @@ def test_conflicting_export_pr_goes_straight_to_needs_you_with_stop_key_export_r
 
     assert world.merged == [], out
     assert _exports(state) == [("1", 40, False)]
+    (line,) = _lines(out, "export-conflict")  # p2-r5: its own kind, not archive-conflict
+    assert line.startswith(f"export-conflict wave 1 {REPO}: export PR #40 conflicts"), out
+    assert _lines(out, "archive-conflict") == []
     stop = load_stops(state)[f"export:{REPO}"]
     assert (stop.head, stop.reason) == (sha, "export PR #40 conflicts")
     facts = load_facts(state / "facts.json")

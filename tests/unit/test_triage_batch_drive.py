@@ -1989,3 +1989,16 @@ def test_drive_pass_emits_settle_actions_after_releases() -> None:
 
     assert action_line(got.actions[1]) == "settle super-fr#3 (a): closed"
     assert action_line(got.actions[2]) == "settle super-fr#4: closed"
+
+
+def test_a_conflicting_export_pr_is_its_own_export_conflict_kind() -> None:
+    """p2-r5: an export PR's conflict is `export-conflict`, never routed as a batch's
+    `archive-conflict` by whether the action carries a wave."""
+    from fr.triage.batch_drive import EXPORT_KINDS
+
+    live = _trusted(40, mergeable="CONFLICTING")
+    got = drive_pass(_export_snap(exports=[_export(pr=40)], prs={(REPO, "1"): live}))
+    (action,) = [a for a in got.actions if a.wave is not None]
+    assert (action.kind, action.pr, action.head) == ("export-conflict", 40, "export-head-40")
+    assert "export-conflict" not in EXPORT_KINDS  # the driver records a stop, nothing more
+    assert got.summary.blocked == 1
