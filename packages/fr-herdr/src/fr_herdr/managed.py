@@ -22,6 +22,7 @@ import yaml
 from fr.artifacts.atomic import write_text_atomic
 from fr.git import git_answer
 from fr.hostclient import client_for
+from fr.run.model import RunStateError, parse_run_state
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 
@@ -271,30 +272,41 @@ def recovery_cursor(d: Descriptor) -> tuple[Path, dict[str, Any]]:
     runs = []
     try:
         for path in sorted((workspace / "docs/superpowers/runs").glob("*.yaml")):
-            data = yaml.safe_load(path.read_text())
+            text = path.read_text()
+            data = yaml.safe_load(text)
             if not isinstance(data, dict):
                 raise ManagedError(f"unreadable cursor {path}")
             if data.get("branch") == d.branch:
-                if (
-                    not isinstance(data.get("run"), str)
-                    or not data["run"]
-                    or not isinstance(data.get("cursor"), str)
-                    or not isinstance(data.get("steps"), dict)
-                    or not data["steps"]
-                    or any(
-                        not isinstance(v, dict)
-                        or v.get("state")
-                        not in {"pending", "running", "done", "blocked", "failed", "skipped"}
-                        for v in data["steps"].values()
-                    )
-                ):
-                    raise ManagedError(f"unreadable cursor {path}")
-                runs.append(data)
-    except (OSError, yaml.YAMLError) as exc:
-        raise ManagedError("unreadable branch cursor") from exc
+                # The supported parser owns cursor schema and step metadata validation.
+                # This is a read, never an artifact migration or a run-state write.
+                run = parse_run_state(text)
+                if run.branch != d.branch:
+                    raise ManagedError(f"branch cursor identity mismatch: {path}")
+                runs.append(run.model_dump(mode="json"))
+    except (OSError, yaml.YAMLError, RunStateError) as exc:
+        raise ManagedError(f"unreadable branch cursor: {exc}") from exc
     if len(runs) != 1:
         raise ManagedError("missing or ambiguous branch cursor; do not create another")
     return workspace, runs[0]
+
+
+def restart_admission(d: Descriptor) -> None:
+    """An active pane alone cannot certify the recovery's two-store activation."""
+    if not d.recovery_hold:
+        return
+    if not d.source_pane:
+        raise ManagedError("recovery intent source identity missing; repair owed")
+    # Runtime-only import: recovery owns intent storage and imports managed descriptors.
+    from fr_herdr.recovery import load_intent
+
+    intent = load_intent(d.item, d.source_pane)
+    if (
+        not intent
+        or intent.checkpoint != "active"
+        or not intent.target
+        or intent.target.pane != d.pane
+    ):
+        raise ManagedError("unresolved recovery intent; repair owed before restart")
 
 
 # The wave driver's two hand-back briefs (a batch PR's, an archive PR's), spelled

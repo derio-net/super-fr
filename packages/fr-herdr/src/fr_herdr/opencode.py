@@ -140,10 +140,13 @@ def eligible(
     exclude: set[str],
     *,
     run: Callable[[list[str]], dict[str, Any]] | None = None,
+    restart: bool = True,
 ) -> dict[str, Any]:
     observe = run or _run_herdr
     if d.checkpoint != "active":
         raise managed.ManagedError(f"unresolved managed checkpoint {d.checkpoint}; repair owed")
+    if restart:
+        managed.restart_admission(d)
     if d.pane == os.environ.get("HERDR_PANE_ID") or d.pane in exclude:
         raise managed.ManagedError("self or excluded")
     agent = _fresh(d.pane, run=observe)
@@ -191,7 +194,8 @@ def wait_ready(
 
     def ready() -> dict[str, Any] | None:
         try:
-            return eligible(observation, set(), run=run)
+            # Startup readiness is inside the owned pending transaction, not restart admission.
+            return eligible(observation, set(), run=run, restart=False)
         except managed.ManagedError as exc:
             if str(exc) == "unknown-layout":
                 return None

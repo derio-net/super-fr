@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fr.cli import app
 from fr.commands import triage_batch_cmd as cmd
+from fr.run.model import RunState, current_run_schema_version, dump_run_state
 from fr.triage.batch import effective_handle, last_dispatch, save_batches
 from fr.triage.model import Batch, DispatchEvent, Facts, Issue, load_judgements
 from fr_herdr import managed, recovery, replacement
@@ -123,8 +124,17 @@ runs = Path("docs/superpowers/runs")
 runs.mkdir(parents=True)
 cursor = runs / "fixture.yaml"
 cursor.write_text(
-    "run: fixture\nbranch: feat/fixture\ncursor: brainstorm\n"
-    "steps:\n  brainstorm: {state: running}\n"
+    dump_run_state(
+        RunState(
+            schema_version=current_run_schema_version(),
+            run="fixture",
+            workflow="fr-goal@1",
+            branch="feat/fixture",
+            started="2026-10-14T00:00:00Z",
+            cursor="brainstorm",
+            steps={"brainstorm": {"state": "running"}},
+        )
+    )
 )
 Path("dirty.txt").write_text("preserve this uncommitted work")
 state = Path("state")

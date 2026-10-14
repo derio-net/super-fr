@@ -34,6 +34,8 @@ def roster(kind: str, required: tuple[str, ...]) -> list[dict[str, Any]]:
     ):
         raise managed.ManagedError(f"unknown {kind} roster")
     identity = required[0]
+    if kind == "agent" and any("name" in row and not isinstance(row["name"], str) for row in rows):
+        raise managed.ManagedError("unknown agent roster: malformed present name")
     if len({row[identity] for row in rows}) != len(rows):
         raise managed.ManagedError(f"ambiguous {kind} roster")
     return rows

@@ -7,11 +7,27 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
+from fr.run.model import RunState, current_run_schema_version, dump_run_state
 from fr_dispatch.protocols import ReplacementRequest
 from fr_herdr import managed
 from fr_herdr.runner import agent_name
 
 CAPTURES = Path(__file__).parents[1] / "fixtures/herdr/recovery-capture"
+
+
+def cursor_text(state="running"):
+    return dump_run_state(
+        RunState(
+            schema_version=current_run_schema_version(),
+            run="fixture",
+            workflow="fr-goal@1",
+            branch="feat/original",
+            started="2026-10-14T00:00:00Z",
+            cursor="brainstorm",
+            steps={"brainstorm": {"state": state}, "deliver": {"state": state}},
+        )
+    )
 
 
 @pytest.fixture
@@ -28,10 +44,7 @@ def recovery_env(tmp_path, monkeypatch, native_herdr_cache):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     runs = tmp_path / "docs/superpowers/runs"
     runs.mkdir(parents=True)
-    (runs / "run.yaml").write_text(
-        "run: fixture\nbranch: feat/original\ncursor: brainstorm\n"
-        "steps:\n  brainstorm: {state: running}\n"
-    )
+    (runs / "run.yaml").write_text(cursor_text())
     responses = {
         "pane": json.loads((CAPTURES / "pane-list.json").read_text()),
         "tab": json.loads((CAPTURES / "tab-list.json").read_text()),
@@ -284,10 +297,7 @@ def test_crash_checkpoints_never_replay_input(execution, monkeypatch, checkpoint
 @pytest.mark.parametrize("state", ["running", "done", "pending"])
 def test_recovery_hold_precedes_all_continuation(execution, monkeypatch, state):
     op, _, _, runs = execution
-    (runs / "run.yaml").write_text(
-        "run: fixture\nbranch: feat/original\ncursor: brainstorm\nsteps:\n"
-        f"  brainstorm: {{state: {state}}}\n  deliver: {{state: {state}}}\n"
-    )
+    (runs / "run.yaml").write_text(cursor_text(state))
     monkeypatch.setattr(
         managed, "conflict_current", lambda d: pytest.fail("HOLD must precede conflict truth")
     )
@@ -325,7 +335,9 @@ def test_observed_autonomy_and_session_required(recovery_env, monkeypatch):
     with pytest.raises(managed.ManagedError, match="autonomous"):
         replacement.observe(op.target, safe=False)
     with pytest.raises(managed.ManagedError, match="autonomous"):
-        opencode.eligible(op.target.model_copy(update={"checkpoint": "active"}), set(), run=run)
+        opencode.eligible(
+            op.target.model_copy(update={"checkpoint": "active"}), set(), run=run, restart=False
+        )
     proc["argv"].append("--auto")
     with pytest.raises(managed.ManagedError, match="session"):
         op._target_identity()
@@ -482,3 +494,144 @@ def test_uncertain_allocation_ambiguous_roster_refuses_repair(execution, monkeyp
     with repair.ownership(), pytest.raises(managed.ManagedError, match="ambiguous"):
         repair.reconcile()
     assert effects == ["allocate"]
+
+
+@pytest.mark.parametrize("intent_state", ["pending", "unreadable"])
+def test_activation_failure_blocks_restart_input(execution, monkeypatch, intent_state):
+    from fr_herdr import opencode, recovery
+
+    op, effects, _, _ = execution
+    save = recovery.save_intent
+
+    def fail_activation(intent):
+        if intent.checkpoint == "active":
+            raise OSError("activation intent save failed")
+        save(intent)
+
+    with op.ownership():
+        op.prepare()
+        assert op.execute().ok
+        monkeypatch.setattr(recovery, "save_intent", fail_activation)
+        with pytest.raises(OSError):
+            op.activate(success=True)
+    d = managed.load(op.target_pane)
+    assert d.checkpoint == "active"
+    if intent_state == "unreadable":
+        recovery.intent_path(d.item, d.source_pane).write_text("broken")
+    inputs = []
+    monkeypatch.setattr(
+        opencode,
+        "_fresh",
+        lambda *a, **kw: {
+            "name": d.name,
+            "agent": "opencode",
+            "agent_status": "done",
+            "interactive_ready": True,
+        },
+    )
+    monkeypatch.setattr(
+        opencode,
+        "process",
+        lambda info: {
+            "pid": 5,
+            "cwd": d.checkout,
+            "argv": ["opencode", "--model", d.model, "--auto"],
+        },
+    )
+    monkeypatch.setattr(opencode, "input_reason", lambda screen: None)
+
+    def run(argv):
+        if argv[:2] in (
+            ["pane", "send-text"],
+            ["pane", "send-keys"],
+            ["agent", "start"],
+            ["agent", "prompt"],
+        ):
+            inputs.append(argv)
+            raise managed.ManagedError("unexpected restart input")
+        return {"raw": "synthetic safe input"}
+
+    monkeypatch.setattr(opencode, "_run_herdr", run)
+    with pytest.raises(managed.ManagedError, match="recovery intent"):
+        opencode.eligible(d, set())
+    verdict, detail, _ = opencode.restart_pane(d.pane, yes=True, exclude=set())
+    assert verdict == "skip" and "recovery intent" in detail
+    assert inputs == [] and effects == ["allocate", "launch", "prompt"]
+    if intent_state == "pending":
+        monkeypatch.setattr(recovery, "save_intent", save)
+        repair = recovery.Operation(recovery.pending(op.request.item, op.request.pane))
+        with repair.ownership():
+            assert repair.reconcile().ok
+            repair.activate(success=True)
+        assert opencode.eligible(managed.load(d.pane), set())["pid"] == 5
+        assert inputs == [] and effects == ["allocate", "launch", "prompt"]
+
+
+@pytest.mark.parametrize("mode", ["preview", "act"])
+@pytest.mark.parametrize("invalid", ["workflow", "started", "step-metadata", "future-schema"])
+def test_supported_cursor_validation_precedes_allocation(execution, mode, invalid):
+    op, effects, _, runs = execution
+    path = runs / "run.yaml"
+    raw = yaml.safe_load(path.read_text())
+    if invalid in {"workflow", "started"}:
+        del raw[invalid]
+    elif invalid == "step-metadata":
+        raw["steps"]["brainstorm"]["unknown_metadata"] = True
+    else:
+        raw["schema_version"] = current_run_schema_version() + 1
+    path.write_text(yaml.safe_dump(raw))
+    before = path.read_bytes()
+    with pytest.raises(managed.ManagedError, match="cursor"):
+        if mode == "preview":
+            op.inspect()
+        else:
+            with op.ownership():
+                op.prepare()
+    assert path.read_bytes() == before and effects == []
+    assert not list(managed.cache_dir().glob("*.json"))
+
+
+@pytest.mark.parametrize("mode", ["preview", "act", "repair"])
+@pytest.mark.parametrize("bad_name", [None, False, 7, ["name"], {"name": "hidden"}])
+def test_malformed_present_agent_names_refuse_without_effects(execution, mode, bad_name):
+    from fr_herdr import recovery
+
+    op, effects, responses, _ = execution
+    if mode == "repair":
+        with op.ownership():
+            op.prepare()
+            assert op.execute().ok
+        op = recovery.Operation(recovery.pending(op.request.item, op.request.pane))
+    pane = responses["pane"]["result"]["panes"][0]
+    responses["agent"]["result"]["agents"] = [
+        {
+            "pane_id": pane["pane_id"],
+            "tab_id": pane["tab_id"],
+            "name": bad_name,
+        }
+    ]
+    before_effects = list(effects)
+    before_store = {p: p.read_bytes() for p in managed.cache_dir().glob("*.json")}
+    with pytest.raises(managed.ManagedError, match="agent roster"):
+        if mode == "preview":
+            op.inspect()
+        else:
+            with op.ownership():
+                if mode == "repair":
+                    op.reconcile()
+                else:
+                    op.prepare()
+    assert effects == before_effects
+    assert {p: p.read_bytes() for p in managed.cache_dir().glob("*.json")} == before_store
+
+
+def test_legitimately_unnamed_agents_preserve_absence(recovery_env):
+    op, responses, _, _ = recovery_env
+    pane = responses["pane"]["result"]["panes"][0]
+    responses["agent"]["result"]["agents"] = [
+        {
+            "pane_id": pane["pane_id"],
+            "tab_id": pane["tab_id"],
+        }
+    ]
+    assert op.inspect().status == "absent"
