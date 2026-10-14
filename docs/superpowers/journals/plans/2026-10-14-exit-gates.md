@@ -110,3 +110,38 @@ self-review warns on a remap key that is none or names no strategy; test_p1_r7_a
 ### p1-r8-resolved · finding [out-of-scope] · resolves p1-r8: spec §A says an older collector refuses exit:; since gh#998 parse_triage_config drops unknown top-level keys (phase 1)
 
 Not caused by phase 1's code: the claim was in the spec text. The stale sentence was corrected in spec §A in passing (2c89b761); the finding stays out of scope as the reviewer tagged it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-label-sync-seam created=2026-10-14T01:10:19+00:00 phase=2 -->
+### p2-label-sync-seam · decision · sync_exit_labels reaches its forge through fr.verification.labels.client_for (phase 2)
+
+A brainstorm/spec-review/deliver resolve now calls the forge, so tests/conftest.py gains an autouse fixture that points that one name at a client which cannot label a PR (a warning, as on GitLab); a test of the sync passes its own fake client. A missing origin or PR is PrNotFound, silent at the early points. A non-empty Exit.remap_problem refuses the sync (fail closed), so deliver refuses naming it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-downgrade-guard-per-row created=2026-10-14T01:10:19+00:00 phase=2 -->
+### p2-downgrade-guard-per-row · decision · The R8 guard compares per row and for the run, not Exit.rank (phase 2)
+
+weakened() compares run_kind/run_gate and each row's row_kinds/row_gates: a post-merge gate that leaves a row (or the run), or a kind of lower kind_rank, is a downgrade, once spec-review is done. A row lowered beside one that still holds the maximum rank is caught. The operator claim is verified by the same transcript reader journal resolve uses (journal.operator.verify_operator_answer, factored out of verify_operator_claim), windowed from the spec-review step's completion. A non-empty remap_problem before or after refuses the change.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-decision-answered-by-not-yet created=2026-10-14T01:10:19+00:00 phase=2 -->
+### p2-decision-answered-by-not-yet · discovery · A journal decision cannot carry answered_by yet (R12 is a later phase) (phase 2)
+
+JournalEntry.answered_by is valid only on a resolution record, so the exit-change decision states the operator answer in its body; phase 5's R12 header tokens can replace that.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-10-14T01:10:19+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+Two protocol methods, one implementation per client delegating to the issue methods, and the fake gained two methods; nothing duplicated to merge.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-10-14T01:10:19+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+Two label constructors beside spec_label and one module over run_exit; no second copy of a family or a sync loop.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-10-14T01:10:19+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+Two small helpers beside _deliver_pr_gate, each calling the one sync function; nothing to merge.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-10-14T01:10:19+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+A scenario script, its wiring, two prose sentences and two matrix moves; nothing to clean.
