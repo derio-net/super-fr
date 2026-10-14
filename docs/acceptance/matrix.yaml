@@ -8008,8 +8008,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_quota_loop.py#test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window
+      - super-fr:tests/unit/test_gh.py#TestConditionalVisibility::test_the_second_read_sends_the_first_etag_and_a_304_returns_its_answer
     status: ci
-    notes: pin for gh#1178; passed on arrival because gh#1153 landed R12
+    notes: 'second level: the visibility read is REST (api repos/<o>/<r>, never graphql),
+      pinned in test_gh.py; the loop test proves the renewal goes through it'
     verify: none
   - id: triage-post-merge-truth-live
     capability: triage-batches
