@@ -1,2 +1,2 @@
 bump: minor
-summary: Declare each PR's exit (kinds and gates) in the spec, add schema-2 strategy gates, a repo gate remap and fr verification exit; deliver refuses unaccounted leftovers (fr journal file files them) and Closes over a gated or narrowed issue
+summary: Declare each PR's exit (kinds and gates) in the spec, add schema-2 strategy gates, a repo gate remap and fr verification exit; deliver refuses unaccounted leftovers (fr journal file files them) and Closes over a gated or narrowed issue; the wave driver never closes out a batch a post-merge gate holds, labels its rows' issues fr:awaiting-live and passes the gate once they are walked, and fr gate pass records a pass by hand
