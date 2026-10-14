@@ -22,7 +22,7 @@ import yaml
 from fr.artifacts.atomic import write_text_atomic
 from fr.git import git_answer
 from fr.hostclient import client_for
-from fr.run.model import RunStateError, parse_run_state
+from fr.run.model import RunStateError, parse_run_state, validate_run_id
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 
@@ -280,6 +280,16 @@ def recovery_cursor(d: Descriptor) -> tuple[Path, dict[str, Any]]:
                 # The supported parser owns cursor schema and step metadata validation.
                 # This is a read, never an artifact migration or a run-state write.
                 run = parse_run_state(text)
+                validate_run_id(run.run)
+                # Schema-readable is not enough for recovery: there must be a usable
+                # current step. Finished runs retain their last step's id, not a sentinel.
+                if (
+                    not run.cursor.strip()
+                    or run.cursor != run.cursor.strip()
+                    or not run.steps
+                    or run.cursor not in run.steps
+                ):
+                    raise ManagedError(f"unusable branch cursor: {path}")
                 if run.branch != d.branch:
                     raise ManagedError(f"branch cursor identity mismatch: {path}")
                 runs.append(run.model_dump(mode="json"))

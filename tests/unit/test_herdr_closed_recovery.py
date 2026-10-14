@@ -591,6 +591,61 @@ def test_supported_cursor_validation_precedes_allocation(execution, mode, invali
     assert not list(managed.cache_dir().glob("*.json"))
 
 
+@pytest.mark.parametrize("mode", ["preview", "act"])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "blank-run",
+        "whitespace-run",
+        "unsafe-run",
+        "blank-cursor",
+        "whitespace-cursor",
+        "empty-steps",
+        "missing-step",
+    ],
+)
+def test_recovery_requires_usable_cursor_after_schema_validation(execution, mode, invalid):
+    op, effects, _, runs = execution
+    path = runs / "run.yaml"
+    raw = yaml.safe_load(path.read_text())
+    if invalid == "blank-run":
+        raw["run"] = ""
+    elif invalid == "whitespace-run":
+        raw["run"] = " \t\n"
+    elif invalid == "unsafe-run":
+        raw["run"] = "../another-run"
+    elif invalid == "blank-cursor":
+        raw["cursor"] = ""
+    elif invalid == "whitespace-cursor":
+        raw["cursor"] = " \t\n"
+    elif invalid == "empty-steps":
+        raw["steps"] = {}
+    else:
+        raw["cursor"] = "nonexistent-step"
+    path.write_text(yaml.safe_dump(raw))
+    before = path.read_bytes()
+    with pytest.raises(managed.ManagedError, match="cursor"):
+        if mode == "preview":
+            op.inspect()
+        else:
+            with op.ownership():
+                op.prepare()
+    assert path.read_bytes() == before and effects == []
+    assert not list(managed.cache_dir().glob("*.json"))
+
+
+def test_finished_cursor_retains_its_last_step_and_can_be_inspected(execution):
+    op, effects, _, runs = execution
+    path = runs / "run.yaml"
+    raw = yaml.safe_load(path.read_text())
+    raw.update(cursor="deliver", steps={"deliver": {"state": "done"}})
+    path.write_text(yaml.safe_dump(raw))
+    before = path.read_bytes()
+    assert op.inspect().status == "absent"
+    assert "HOLD" in managed.reconstruct(op.target)
+    assert path.read_bytes() == before and effects == []
+
+
 @pytest.mark.parametrize("mode", ["preview", "act", "repair"])
 @pytest.mark.parametrize("bad_name", [None, False, 7, ["name"], {"name": "hidden"}])
 def test_malformed_present_agent_names_refuse_without_effects(execution, mode, bad_name):
