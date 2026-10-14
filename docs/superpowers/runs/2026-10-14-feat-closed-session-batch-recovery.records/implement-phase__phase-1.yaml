@@ -74,6 +74,21 @@ journal:
       transitions and named test evidence are carried in this record for the parent
       resolve, not hand-edited into the matrix. Original schema-11 writer/future-schema
       expectations were updated coherently to writer 12 and unsupported 13.
+  - kind: discovery
+    id: recovery-full-suite-environment-and-guidance
+    phase: 1
+    title: Full-suite resource bound and canonical skill guards
+    body: |
+      The first full-suite foreground bridge exceeded 600 seconds and lost workers;
+      its orphaned container process group was explicitly terminated and checked.
+      Full evidence therefore uses a detached, bounded-wait host coordinator command
+      and PYTEST_XDIST_AUTO_NUM_WORKERS=4 while retaining pytest -q --no-cov -n auto.
+      No isolation marker/config/version was changed. The first completed full run
+      reported 12907 passed, 125 skipped and three in-scope canonical skill failures:
+      its example still stamped 11 and the new separate paragraph exceeded the
+      120-line budget. The example now stamps 12; guidance is consolidated within
+      the original line budget, with both mirrors regenerated. Final evidence is a
+      fresh full run on the subsequent committed-clean code tree, not that red run.
 resolves:
   - id: recovery-pane-roster-capture-required
     state: fixed
