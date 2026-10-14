@@ -209,3 +209,121 @@ archive_conflict_decision mirrors conflict_decision but counts another event aga
 ### no-refactor-p2-t7 · discovery · no-refactor-because P2.T7 (phase 2)
 
 acceptance status moves only; no code
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-10-14T01:44:35+00:00 phase=2 -->
+### p2-review · review · Phase 2 review: 10 findings (9 in scope, all fixed; 1 out of scope) plus one security finding, fixed (phase 2)
+
+An independent reviewer read 818b6664~1..HEAD against spec R7–R12, §D and §E. 817 targeted tests passed, and both mirror syncs were clean. Verdict: approve after fixing p2-r1..r3 (Important). All five recorded executor deviations were judged acceptable; deviation 5 had the recovery gap fixed under p2-r1.
+p2-r1..r9 were each verified and fixed test-first: 78d9bc0e, 97977658, ec2d8d7e, cd365272, aab8ab10, 31d264ed, 89d0249e, 9fc99268 and 613a945d. A widened run then passed 3552 tests, with ruff and mypy clean.
+A background commit security review flagged a merge-pin bypass (TOCTOU on the CI gate). p2-r6's first fix had taken the archive PR's head from a view read after the checks. It is filed as p2-r11 and fixed in 2d7298e0 (`_pinned`: head, checks, head again; a moved head is pending). The orchestrator re-ran the TOCTOU tests (3 passed).
+p2-r10 is out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · archive_conflict_brief makes a fresh session git switch in the base clone; herdr handback() ignores the brief (phase 2)
+
+batch_dispatch.py archive brief and _hand_back_archive (checkout = main worktree), and fr_herdr.managed.handback prefix.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Archive stops keyed batch.id are filtered out by kanban.live_stops (phase 2)
+
+The batch PR is MERGED for a closing batch, so a refused archive merge's card read 'ready to merge' (gh#987 again), and a held archive conflict's card was not needs-you.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · export:<repo> stop never cleared on hand merge or close; the Need had no liveness check (phase 2)
+
+The export-reconcile and export-closed paths, and views.archive_conflict_needs.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · kanban._archive_prs hard-codes ci_none=False (phase 2)
+
+A ci-none repo's card said checks pending while the driver merged.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Export vs batch archive-conflict routed only by wave (phase 2)
+
+This routing was fragile; a distinct kind is needed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · _viewed took a fresh mergeable but kept the facts' head (phase 2)
+
+The event and stop could record a stale head.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · triage-archive-pr-conflict-handed row omitted tests its notes claim (phase 2)
+
+The wait-while-working, merge-clears-stop and forge-refusal tests were not cited.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · fr-triage SKILL.md driver paragraph behind the code (phase 2)
+
+Drafts readied, the archive-conflict hand-back and Need, export stops, and the stop semantics sentence were not covered.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · pr_ready refusal wording; delivered typed str with type: ignore; merge_ctx built before the carries() return (phase 2)
+
+Small correctness and typing issues in _archive, _archive_conflict_event and _hand_back_archive.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=out -->
+### p2-r10 · finding [open] (reviewer: out of scope) · A conflict at an unchanged head after a finished hand-back is skipped forever (phase 2)
+
+This is the spec's skip rule (§E, R12), shared with batch-PR conflict_decision.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11 created=2026-10-14T01:44:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r11 · finding [open] (reviewer: in scope) · Merge-pin bypass (TOCTOU): the archive merge could be pinned to a head CI never judged (phase 2)
+
+Found by the background commit security review. pr_checks_verdict judges the PR's head at read time, while 31d264ed took the pinned head from a later pr_view, so a push between the reads pinned --match-head-commit to an unchecked head.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: archive_conflict_brief makes a fresh session git switch in the base clone; herdr handback() ignores the brief (phase 2)
+
+78d9bc0e: brief step 1 is `fr isolation up --branch {branch}`. fr_herdr.managed gains HANDBACK_PREFIXES/is_handback (no fr.triage import). Tests in test_triage_batch_drive_cmd.py, test_herdr_managed.py and test_fr_herdr_runner.py.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Archive stops keyed batch.id are filtered out by kanban.live_stops (phase 2)
+
+97977658: stops are keyed archive:<batch> (merge_stops.archive_stop_key) and live_stops checks them against the archive PR head. Tests test_a_refused_archive_merge_shows_its_stop_on_the_card and test_a_held_archive_conflict_card_needs_you.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: export:<repo> stop never cleared on hand merge or close; the Need had no liveness check (phase 2)
+
+ec2d8d7e: reconcile and closed clear export_stop_key, and views._export_stop_live gives the Need a liveness check. Tests test_an_export_pr_merged_or_closed_by_hand_clears_its_conflict_stop and test_an_export_conflict_need_holds_only_while_its_pr_is_open_at_the_stop_head.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: kanban._archive_prs hard-codes ci_none=False (phase 2)
+
+cd365272: ci_none is passed through build_board → _card → live_stops → _archive_prs. Test test_a_ci_none_repos_archive_pr_with_no_checks_reads_ready_to_merge.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Export vs batch archive-conflict routed only by wave (phase 2)
+
+aab8ab10: new ActionKind export-conflict, routed by kind. Tests test_a_conflicting_export_pr_is_its_own_export_conflict_kind and the export stop-key test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: _viewed took a fresh mergeable but kept the facts' head (phase 2)
+
+31d264ed, completed by 2d7298e0 (see p2-r11): the head and mergeable come from the same read the verdict describes. Test test_viewed_takes_head_and_mergeable_from_the_same_fresh_read.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: triage-archive-pr-conflict-handed row omitted tests its notes claim (phase 2)
+
+89d0249e: the row cites the wait, clear, refusal, hand-merge, kanban-stop and export-liveness tests. fr acceptance check reports 521 rows OK.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: fr-triage SKILL.md driver paragraph behind the code (phase 2)
+
+9fc99268: the driver paragraph was updated in place (120 lines) and both syncs were run. The sync, skill-validation and tool-neutrality tripwires pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: pr_ready refusal wording; delivered typed str with type: ignore; merge_ctx built before the carries() return (phase 2)
+
+613a945d: the ready-step wording, ConflictDelivery typing and the early return before brief and merge_ctx. Tests test_a_refused_ready_on_a_draft_archive_is_worded_as_the_ready_step and test_an_archive_conflict_left_to_another_driver_builds_no_merge_context.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=open resolves=p2-r10 out_of_scope=true -->
+### p2-r10-resolved · finding [out-of-scope] · resolves p2-r10: A conflict at an unchanged head after a finished hand-back is skipped forever (phase 2)
+
+Not caused by this change's design choice: the skip-on-same-head rule is the spec's (§E/R12) and pre-exists for batch-PR conflicts (conflict_decision). An escalation after a finished hand-back is a rule change for both, so it belongs to its own issue.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11-resolved created=2026-10-14T01:44:35+00:00 phase=2 state=fixed resolves=p2-r11 -->
+### p2-r11-resolved · finding [fixed] · resolves p2-r11: Merge-pin bypass (TOCTOU): the archive merge could be pinned to a head CI never judged (phase 2)
+
+2d7298e0: _pinned reads head, then checks, then head again. A moved head is pending, with no archive action and no pr_merge, and the merge stays pinned with --match-head-commit to that head. Collected counts are used only at their collected head. Tests test_an_archive_pr_pushed_between_its_view_and_its_checks_is_never_merged[facts/head] (re-run by the orchestrator: passed).
