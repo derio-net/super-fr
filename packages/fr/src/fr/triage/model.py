@@ -922,6 +922,39 @@ class CloseoutHandbackEvent(_Strict):
     delivered: RedDelivery = "session"
 
 
+class CloseoutHoldEvent(_Strict):
+    """`fr triage batch closeout` held this batch out of collected close-out *item*: a
+    step failed (verify-merge, an outcome, the archive) or the batch could not be read,
+    as *reason* says (exit-gates R15). Durable: the driver never collects the batch again
+    until an explicit `fr triage batch closeout <id>` names it. Needs judgements schema
+    10. Written by the engine only."""
+
+    kind: Literal["closeout_hold"]
+    at: AwareDatetime
+    item: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+class CollectedCloseout(_Strict):
+    """One collected close-out (exit-gates R15, §D): the driver's start marker for work
+    item *item* on *branch*, recorded before its session starts (gh#883), and what became
+    of its PR. Which batches it closed out is the verb's to record (their `closeout`
+    events name *branch*), never this marker's: *planned* is only what the session was
+    briefed with. `closed`: the PR was closed unmerged, or the verb opened none, so the
+    close-out ended without an archive. Needs judgements schema 10. Engine-written."""
+
+    repo: str
+    item: str = Field(min_length=1)
+    branch: str = Field(min_length=1)
+    at: AwareDatetime
+    runner: str = "hand"
+    handle: str = ""
+    planned: list[str] = []
+    pr: int | None = None
+    merged: bool = False
+    closed: bool = False
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -932,7 +965,7 @@ SCHEMA_8_EVENTS = frozenset({"claim_taken"})
 """The event kinds only a schema 8 `judgements.yaml` may carry (gh#1120)."""
 SCHEMA_9_EVENTS = frozenset({"update", "approval", "red_handback", "enqueue"})
 """The event kinds only a schema 9 `judgements.yaml` may carry (merge-train-safety §B)."""
-SCHEMA_10_EVENTS = frozenset({"closeout_handback"})
+SCHEMA_10_EVENTS = frozenset({"closeout_handback", "closeout_hold"})
 """The event kinds only a schema 10 `judgements.yaml` may carry (exit-gates R27)."""
 
 # Every schema-gated event kind, with the judgements schema it first appears in: the one
@@ -961,7 +994,8 @@ BatchEvent = Annotated[
     | ApprovalEvent
     | RedHandbackEvent
     | EnqueueEvent
-    | CloseoutHandbackEvent,
+    | CloseoutHandbackEvent
+    | CloseoutHoldEvent,
     Field(discriminator="kind"),
 ]
 
@@ -1077,6 +1111,7 @@ class Judgements(_Strict):
     batches: list[Batch] = []
     features: list[Feature] = []  # ranked groups (wave-driver R9); any schema
     exports: list[Export] = []  # the driver's per-wave state exports; schema 4
+    closeouts: list[CollectedCloseout] = []  # collected close-out start markers; schema 10
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -1162,6 +1197,10 @@ class Judgements(_Strict):
         if self.schema_ < 3 and any(b.wave is not None or b.after for b in self.batches):
             raise ValueError(
                 f"`wave` and `after` need schema 3, but this file is stamped schema {self.schema_}"
+            )
+        if self.closeouts and self.schema_ < 10:
+            raise ValueError(
+                f"`closeouts:` needs schema 10, but this file is stamped schema {self.schema_}"
             )
         if self.exports and self.schema_ < 4:
             raise ValueError(

@@ -39,6 +39,7 @@ class FakeTree:
     call recorded; commits and resets are recorded too."""
 
     codes: dict[tuple[str, str], int] = field(default_factory=dict)  # (verb, branch) -> code
+    outs: dict[tuple[str, str], str] = field(default_factory=dict)  # (verb, branch) -> words
     calls: list[list[str]] = field(default_factory=list)
     sha: int = 0
     resets: list[str] = field(default_factory=list)
@@ -58,7 +59,8 @@ class FakeTree:
         code = self.codes.get((verb, branch), 0)
         if code == 0:
             self.sha += 1
-        return code, "" if code == 0 else f"{verb} held for {branch}\nlast line of why"
+        default = f"{verb} held for {branch}\nlast line of why"
+        return code, "" if code == 0 else self.outs.get((verb, branch), default)
 
     def reset_hard(self, sha: str) -> None:
         self.resets.append(sha)
@@ -91,11 +93,18 @@ class FakeForge:
         self.unlabelled.append((repo, number, remove))
 
 
-def _run(members: list[Member], tree: FakeTree, forge: FakeForge) -> tuple[Any, list[Any]]:
+HOLDS: list[tuple[str, str]] = []
+
+
+def _run(members: list[Member], tree: FakeTree, forge: FakeForge,
+         unreadable: tuple[tuple[str, str], ...] = ()) -> tuple[Any, list[Any]]:  # fmt: skip
     recorded: list[tuple[str, str]] = []
+    HOLDS.clear()
     result = execute(
         members, tree=tree, forge=forge, repo=REPO, default="main", branch=BRANCH,
-        record=lambda bid, branch: recorded.append((bid, branch)), say=lambda _l: None,
+        record=lambda bid, branch: recorded.append((bid, branch)),
+        hold=lambda bid, why: HOLDS.append((bid, why)), say=lambda _l: None,
+        unreadable=unreadable,
     )  # fmt: skip
     return result, recorded
 
@@ -128,41 +137,49 @@ def test_step_ranges_fold_consecutive_numbers() -> None:
 
 
 def test_a_plain_batch_runs_verify_merge_then_the_archive_with_no_issues() -> None:
-    argv = [s.argv for s in member_steps(PLAIN)]
+    argv = [s.argv for s in member_steps(PLAIN, "main")]
     assert argv == [
-        ("isolation", "verify-merge", "--repo", ".", "--branch", "feat/batch-a"),
+        (
+            "isolation",
+            "verify-merge",
+            "--repo",
+            ".",
+            "--branch",
+            "feat/batch-a",
+            "--default-branch",
+            "main",
+        ),
         ("archive", "--branch", "feat/batch-a", "--no-issues"),
     ]
 
 
 def test_a_passed_gated_batch_records_its_missing_outcomes_as_ran_with_the_comment() -> None:
-    steps = member_steps(GATED)
+    steps = member_steps(GATED, "main")
     outcomes = [s.argv for s in steps if s.kind == "outcome"]
     assert outcomes == [
         ("closeout", "outcome", "--run", "r-g", "--step", "1-3", "--ran", "--evidence", EVIDENCE),
         ("closeout", "outcome", "--run", "r-g", "--step", "5", "--ran", "--evidence", EVIDENCE),
     ]
-    assert [s.kind for s in steps] == ["verify-merge", "outcome", "outcome", "archive",
-                                       "close", "close"]  # fmt: skip
+    assert [s.kind for s in steps] == ["verify-merge", "outcome", "outcome", "archive"]
 
 
 def test_an_ungated_batch_records_no_outcome_even_with_steps_missing() -> None:
     held = Member(batch="h", branch="feat/batch-h", run="r-h", missing=(1,))
-    assert "outcome" not in [s.kind for s in member_steps(held)]
+    assert "outcome" not in [s.kind for s in member_steps(held, "main")]
 
 
 def test_a_debug_batch_with_no_run_still_closes_out() -> None:
-    assert [s.kind for s in member_steps(DEBUG)] == ["verify-merge", "archive"]
+    assert [s.kind for s in member_steps(DEBUG, "main")] == ["verify-merge", "archive"]
 
 
 def test_without_yes_the_plan_lists_each_batchs_steps() -> None:
-    lines = plan_lines([PLAIN, GATED], BRANCH)
+    lines = plan_lines([PLAIN, GATED], BRANCH, "main")
     text = "\n".join(lines)
     assert BRANCH in lines[0]
     assert "a: fr isolation verify-merge" in text
     assert "a: fr archive --branch feat/batch-a --no-issues" in text
     assert "g: fr closeout outcome --run r-g --step 1-3 --ran --evidence" in text
-    assert f"g: close {REPO}#7" in text
+    assert f"g: Closes {REPO}#7 when the PR merges" in text
 
 
 # --------------------------------------------------------------------- execute
@@ -181,13 +198,16 @@ def test_one_commit_one_branch_one_pr_and_every_event_names_that_branch() -> Non
     assert result.pr == 900 and result.done == ("a", "g", "d") and result.held == ()
 
 
-def test_only_the_passed_gates_issues_close_and_lose_awaiting_live() -> None:
+def test_p6_r8_issues_close_at_merge_through_the_pr_body_never_at_pr_open() -> None:
+    from fr.triage.batch_closeout import closes_from_body, members_from_body
+
     tree, forge = FakeTree(), FakeForge()
     _run([PLAIN, GATED], tree, forge)
 
-    assert forge.closed == [(REPO, 7), (REPO, 8)]
-    assert [(r, n) for r, n, _ in forge.unlabelled] == [(REPO, 7), (REPO, 8)]
-    assert all(rm == frozenset({"fr:awaiting-live"}) for _, _, rm in forge.unlabelled)
+    assert forge.closed == [] and forge.unlabelled == []  # nothing closes before the merge
+    body = forge.created[0]["body"]
+    assert closes_from_body(body) == (f"{REPO}#7", f"{REPO}#8")
+    assert members_from_body(body) == ("a", "g")
 
 
 def test_a_batch_whose_archive_holds_moves_nothing_and_gets_no_event() -> None:
@@ -200,7 +220,7 @@ def test_a_batch_whose_archive_holds_moves_nothing_and_gets_no_event() -> None:
     assert [b for b, _ in result.held] == ["h"]
     assert "last line of why" in result.held[0][1]
     assert recorded == [("a", BRANCH)]
-    assert forge.closed == []
+    assert HOLDS == [("h", result.held[0][1])]  # p6-r2: a durable hold, not silence
 
 
 def test_an_unverified_merge_holds_the_batch() -> None:
@@ -214,9 +234,27 @@ def test_an_unverified_merge_holds_the_batch() -> None:
 def test_an_unresolvable_merged_branch_does_not_hold_the_batch() -> None:
     """verify-merge exits 2 when the merged branch is gone everywhere (deleted at
     merge): that disproves nothing, so the close-out goes on."""
-    tree = FakeTree(codes={("verify-merge", "feat/batch-a"): 2})
+    tree = FakeTree(codes={("verify-merge", "feat/batch-a"): 2},
+                    outs={("verify-merge", "feat/batch-a"):
+                          "error: cannot resolve branch ref 'feat/batch-a' (neither local nor "
+                          "origin/feat/batch-a)."})  # fmt: skip
     result, recorded = _run([PLAIN], tree, FakeForge())
     assert result.done == ("a",) and recorded == [("a", BRANCH)]
+
+
+def test_p6_r7_any_other_verify_merge_exit_2_holds_the_batch() -> None:
+    key = ("verify-merge", "feat/batch-a")
+    tree = FakeTree(codes={key: 2}, outs={key: "error: multiple workspaces"})
+    result, recorded = _run([PLAIN], tree, FakeForge())
+    assert [b for b, _ in result.held] == ["a"] and recorded == []
+    assert "multiple workspaces" in result.held[0][1]
+
+
+def test_p6_r4_an_unreadable_batch_is_held_and_the_rest_close_out() -> None:
+    tree, forge = FakeTree(), FakeForge()
+    result, recorded = _run([PLAIN], tree, forge, unreadable=(("u", "cannot be read: boom"),))
+    assert recorded == [("a", BRANCH)] and result.pr == 900
+    assert HOLDS == [("u", "cannot be read: boom")]
 
 
 def test_every_batch_holding_opens_no_pr() -> None:

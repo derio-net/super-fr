@@ -145,6 +145,7 @@ class World:
         merge = p.get("merge_commit", f"merge-{number}")
         return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge,
                 "labels": list(p["labels"]), "mergeable": p.get("mergeable", ""),
+                "body": p.get("body", ""),
                 "merge_state": p.get("merge_state", "")}  # fmt: skip
 
     def pr_ready(self, repo: str, number: int) -> None:
@@ -219,7 +220,8 @@ class World:
         if self.refuse_create:
             raise GhError(self.refuse_create, returncode=1)
         number = max([*self.prs, 199]) + 1
-        self.pr(number, head, [], head_oid=self.head_of(head), files=list(self.create_files))
+        self.pr(number, head, [], head_oid=self.head_of(head), files=list(self.create_files),
+                body=body)  # fmt: skip
         return number
 
     def closing_ref(self, repo: str, number: int) -> str:
@@ -896,14 +898,14 @@ def test_post_merge_then_one_closeout_through_the_runner(
     (item,) = runner.dispatched
     assert item.id == COLLECTED
     assert item.unit == "run" and item.payload["kind"] == "closeout"
-    assert f"fr triage batch closeout b1 --yes --repo {REPO}" in item.payload["brief"]
+    branch = "chore/closeout-2026-10-02-1"
+    assert f"fr triage batch closeout b1 --branch {branch} --yes --repo {REPO}" in (
+        item.payload["brief"])  # fmt: skip
     assert item.payload["model"] == "claude-opus-5-5"
     assert item.payload["checkout"] == str(checkout.path)
-    assert _events(tmp_path, "b1") == ["dispatch", "post_merge", "closeout"]
-    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
-    closeout = batch.events[-1]
-    assert closeout.run == "2026-10-01-b1"  # type: ignore[union-attr]
-    assert closeout.archive == "chore/closeout-2026-10-02-1"  # type: ignore[union-attr]
+    assert _events(tmp_path, "b1") == ["dispatch", "post_merge"]  # members: the verb's (R15)
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert (marker.item, marker.branch, marker.planned) == (COLLECTED, branch, ["b1"])
     assert _lines(out, "closeout") == [f"closeout b1: started {COLLECTED} for b1"]
     # a second pass starts nothing
     code, _ = _drive(tmp_path, "--once", "--yes")
@@ -932,7 +934,7 @@ def test_batches_closed_out_by_hand_are_not_closed_out_again(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert [i.id for i in runner.dispatched] == [COLLECTED]
-    assert "closeout owed --yes" in runner.dispatched[0].payload["brief"]
+    assert "closeout owed --branch" in runner.dispatched[0].payload["brief"]
     assert "m101" not in checkout.release_probes  # an archived batch probes no release
 
 
@@ -1095,10 +1097,9 @@ def test_a_debug_batch_is_closed_out_with_branch(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     (item,) = runner.dispatched
-    assert "fr triage batch closeout b1 --yes" in item.payload["brief"]  # no run: still one
-    (event,) = [e for e in load_judgements(tmp_path / "judgements.yaml").batches[0].events
-                if e.kind == "closeout"]  # fmt: skip
-    assert event.run is None and event.archive == "chore/closeout-2026-10-02-1"  # type: ignore[union-attr]
+    assert "fr triage batch closeout b1 --branch" in item.payload["brief"]  # no run: still one
+    (marker,) = load_judgements(tmp_path / "judgements.yaml").closeouts
+    assert marker.planned == ["b1"] and marker.branch == "chore/closeout-2026-10-02-1"
     assert checkout.commands == []  # no post_merge configured: nothing runs
 
 

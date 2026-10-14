@@ -153,6 +153,7 @@ def drive_snapshot(
         post_merge_repos=frozenset(
             r for r in set(repos.values()) if facts.config_for(r).post_merge
         ),
+        closeouts=tuple(judgements.closeouts),  # the driver's and the board's one source
     )
 
 
@@ -174,7 +175,8 @@ class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
     # | needs-developer | needs-reviewer | needs-tester | needs-devops (the board's lanes)
     # | ledger-unread (a landed batch whose gate labels could not be read)
-    # | closeout-held (a landed batch whose archive would hold, exit-gates R15)
+    # | closeout-held (a landed batch the close-out verb held, exit-gates R15)
+    # | closeout-pr-closed | closeout-needs-review (a collected close-out PR, p6-r5, p6-r6)
     # | closeout-stuck (a collected close-out PR whose one hand-back is spent, R27)
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     kind: str
@@ -199,6 +201,8 @@ NEED_LABELS = {
     "ledger-unread": "Gate labels unread",
     "closeout-held": "Close-out held: Test Plan outcome owed",
     "closeout-stuck": "Close-out PR stuck",
+    "closeout-pr-closed": "Close-out PR closed unmerged",
+    "closeout-needs-review": "Close-out PR needs review",
     "needs-developer": "Needs you · Developer",
     "needs-reviewer": "Needs you · Reviewer",
     "needs-tester": "Needs you · Tester",
@@ -312,6 +316,8 @@ def needs_you(
         if action.kind == "closeout-held":
             out.append(Need("closeout-held", action.batch, f"batch {action.batch}: "
                             f"{action.detail}", f"#batch-{action.batch}"))  # fmt: skip
+        elif action.kind in ("closeout-pr-closed", "closeout-needs-review"):
+            out.append(Need(action.kind, action.batch, action.detail, f"#batch-{action.batch}"))
         elif action.kind == "closeout-stuck" and action.key not in stuck:
             stuck.add(action.key)
             out.append(Need("closeout-stuck", action.batch, action.detail,

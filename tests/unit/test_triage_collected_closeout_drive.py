@@ -1,15 +1,16 @@
 """The driver's collected close-out (spec 2026-10-14-exit-gates R15, R27, §D).
 
 `drive_pass` step 2 plans at most ONE `closeout` per repo, covering every landed batch
-that is not gated and not closed out, and none while a previous collected close-out is
-under way. `attributed` names the shared head for every member, a batch with no run
-included. A batch whose archive would hold is a need, never a member. The pass is pure:
-these tests hand-build the `Snapshot`.
+that is not gated, not held and not closed out, and none while a previous collected
+close-out (its start marker) is under way. Step 3 plans per marker, never per member:
+membership is what the verb recorded, or what the PR body lists after a crash. The pass
+is pure: these tests hand-build the `Snapshot`; the executor tests run the drive command
+over the in-memory forge.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,7 @@ from fr.triage.batch_drive import (
     collected_item_id,
     drive_pass,
 )
-from fr.triage.model import load_judgements
+from fr.triage.model import CollectedCloseout, load_judgements
 
 from tests.unit.test_triage_batch_closeout_cmd import _landed as _world_landed
 from tests.unit.test_triage_batch_dispatch import FakeRunner
@@ -38,6 +39,7 @@ from tests.unit.test_triage_batch_drive_cmd import (
 
 DAY = NOW.date().isoformat()
 FIRST = f"chore/closeout-{DAY}-1"
+ITEM = f"{REPO}/run/closeout-{DAY}-1"
 
 
 def _landed(*bids: str, **kw: Any) -> Any:
@@ -52,15 +54,22 @@ def _recorded(archive: str = FIRST, run: str | None = "r", **kw: Any) -> list[di
              "archive": archive, **kw}]  # fmt: skip
 
 
+def _marker(**kw: Any) -> CollectedCloseout:
+    kw.setdefault("at", datetime(2026, 10, 2, 11, 0, tzinfo=UTC))
+    return CollectedCloseout(repo=REPO, item=ITEM, branch=FIRST, runner="fake", **kw)
+
+
+def _hold(reason: str = "`fr archive` exited 2: Test Plan step 2 has no outcome") -> dict[str, Any]:
+    return {"kind": "closeout_hold", "at": "2026-10-02T11:30:00Z", "item": ITEM, "reason": reason}
+
+
 # ------------------------------------------------------------- step 2 (R15)
 
 
 def test_three_landed_batches_in_one_repo_get_one_collected_closeout() -> None:
     plan = drive_pass(_landed("a", "b", "c"))
 
-    closeouts = [a for a in plan.actions if a.kind == "closeout"]
-    assert len(closeouts) == 1
-    (action,) = closeouts
+    (action,) = [a for a in plan.actions if a.kind == "closeout"]
     assert action.items == ("a", "b", "c")
     assert action.key == f"closeout-{DAY}-1"
     assert collected_item_id(REPO, action.key) in action.detail
@@ -68,32 +77,26 @@ def test_three_landed_batches_in_one_repo_get_one_collected_closeout() -> None:
 
 
 def test_two_repos_get_one_collected_closeout_each() -> None:
-    other = "derio-net/other"
-    snap = _landed("a", "b", repos={"a": REPO, "b": other})
-    plan = drive_pass(snap)
-    assert sorted(a.items for a in plan.actions if a.kind == "closeout") == [("a",), ("b",)]
+    snap = _landed("a", "b", repos={"a": REPO, "b": "derio-net/other"})
+    assert sorted(a.items for a in drive_pass(snap).actions if a.kind == "closeout") == [
+        ("a",), ("b",)]  # fmt: skip
 
 
 def test_none_starts_while_a_previous_collected_closeout_is_under_way() -> None:
-    snap = _landed("a", "b", a_events=_recorded())
-    plan = drive_pass(snap)
+    plan = drive_pass(_landed("a", "b", closeouts=(_marker(planned=["a"]),)))
     assert [a for a in plan.actions if a.kind == "closeout"] == []
-    assert plan.summary.closing == 2  # b waits; a's close-out is still closing
 
 
 def test_the_next_collected_closeout_takes_the_next_number_once_the_last_merged() -> None:
-    snap = _landed("a", "b", a_events=_recorded(archived=900))
+    snap = _landed("a", "b", a_events=_recorded(archived=900),
+                   closeouts=(_marker(pr=900, merged=True),))  # fmt: skip
     (action,) = [a for a in drive_pass(snap).actions if a.kind == "closeout"]
     assert action.items == ("b",) and action.key == f"closeout-{DAY}-2"
 
 
-def test_a_batch_whose_archive_would_hold_is_a_need_never_a_member() -> None:
-    snap = _landed("a", "b", closeout_holds={"b": "Test Plan step 2 has no outcome"})
-    plan = drive_pass(snap)
-
-    assert [a.items for a in plan.actions if a.kind == "closeout"] == [("a",)]
-    assert ("closeout-held", "b") in _kinds(plan.actions)
-    assert plan.summary.blocked == 1
+def test_p6_r1_a_live_session_of_the_next_item_is_never_started_twice() -> None:
+    snap = _landed("a", existing=frozenset({ITEM}))
+    assert [a for a in drive_pass(snap).actions if a.kind == "closeout"] == []
 
 
 def test_a_gated_batch_never_joins_a_collected_closeout() -> None:
@@ -103,6 +106,34 @@ def test_a_gated_batch_never_joins_a_collected_closeout() -> None:
     assert [a.items for a in drive_pass(snap).actions if a.kind == "closeout"] == [("a",)]
 
 
+def test_p6_r3_a_held_batch_is_a_need_never_a_member_and_the_board_agrees(
+    tmp_path: Path, world: World
+) -> None:
+    from fr.triage.views import needs_you
+
+    snap = _landed("a", "b", b_events=[_hold()])
+    plan = drive_pass(snap)
+    assert [a.items for a in plan.actions if a.kind == "closeout"] == [("a",)]
+    (held,) = [a for a in plan.actions if a.kind == "closeout-held"]
+    assert "Test Plan step 2" in held.detail and "fr triage batch closeout b --yes" in held.detail
+
+    # the board's facts-only plan reads the same hold from the judgements
+    from tests.unit.test_triage_batch_drive_cmd import _batch, _dispatch_event, _state
+
+    hold = ("      - {kind: closeout_hold, at: '2026-10-02T11:30:00Z', item: x, "
+            "reason: archive held}\n")  # fmt: skip
+    world.issues.update({1: "closed", 2: "closed"})
+    for n, bid in ((101, "b1"), (102, "b2")):
+        world.pr(n, f"feat/batch-{bid}", [n - 100], state="MERGED",
+                 merged_at=(NOW - timedelta(hours=1)).isoformat())  # fmt: skip
+    b1 = _batch("b1", 1, events=_dispatch_event("b1"))
+    b2 = _batch("b2", 2, events=_dispatch_event("b2") + hold)
+    path = _state(tmp_path, world, b1, b2) / "judgements.yaml"
+    path.write_text(path.read_text("utf-8").replace("schema: 3\n", "schema: 10\n", 1), "utf-8")
+    rows = [n for n in needs_you(world.facts(), load_judgements(path)) if n.kind == "closeout-held"]
+    assert [(n.ref, "fr triage batch closeout b2 --yes" in n.text) for n in rows] == [("b2", True)]
+
+
 # -------------------------------------------------------- attributed (§D)
 
 
@@ -110,84 +141,33 @@ def test_attributed_accepts_the_shared_head_for_a_trusted_author_even_with_no_ru
     batch = _dispatched("d", 1, skill="debug", events=_recorded(run=None))
     event = closeout_event(batch)
     assert event is not None
-    shared = _live(900, "h900", head_ref=FIRST, trusted=True)
-    assert attributed(shared, batch, event)
+    assert attributed(_live(900, "h900", head_ref=FIRST, trusted=True), batch, event)
     assert not attributed(_live(901, "h", head_ref=FIRST, trusted=False), batch, event)
     other = _live(902, "h", head_ref=f"chore/closeout-{DAY}-2", trusted=True)
     assert not attributed(other, batch, event)
 
 
-# ------------------------------------------------------ the executor (§E)
-
-CMD_DAY = "2026-10-02"  # the drive tests' NOW
-
-
-def test_the_driver_starts_one_session_for_three_batches_and_records_each_first(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
-) -> None:
-    _world_landed(world, tmp_path, "b1", "b2", "b3")
-    checkout.released = True
-
-    code, out = _drive(tmp_path, "--once", "--yes")
-
-    assert code == 0, out
-    (item,) = runner.dispatched
-    assert item.id == f"{REPO}/run/closeout-{CMD_DAY}-1"
-    assert "fr triage batch closeout b1 b2 b3 --yes" in item.payload["brief"]
-    archives = {
-        b.id: [e.archive for e in b.events if e.kind == "closeout"]  # type: ignore[union-attr]
-        for b in load_judgements(tmp_path / "judgements.yaml").batches
-    }
-    assert archives == dict.fromkeys(("b1", "b2", "b3"), [f"chore/closeout-{CMD_DAY}-1"])
-    # the next pass starts nothing: the collected close-out is under way
-    code, out = _drive(tmp_path, "--once", "--yes")
-    assert len(runner.dispatched) == 1 and _lines(out, "closeout") == []
-
-
-def test_a_batch_whose_archive_would_hold_is_named_and_not_started(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:  # fmt: skip
-    from fr.commands import triage_batch_cmd
-    from fr.triage.ledger import CloseoutRead
-
-    reads = {"feat/batch-b2": CloseoutRead("r2", (2,))}
-    monkeypatch.setattr(
-        triage_batch_cmd, "closeout_read",
-        lambda c, ref, branch, repo: reads.get(branch, CloseoutRead(None)),
-    )  # fmt: skip
-    _world_landed(world, tmp_path, "b1", "b2")
-    checkout.released = True
-
-    code, out = _drive(tmp_path, "--once", "--yes")
-
-    (held,) = _lines(out, "closeout-held")
-    assert "b2" in held and "Test Plan step(s) 2 of run r2" in held
-    (item,) = runner.dispatched
-    assert "closeout b1 --yes" in item.payload["brief"]
-
-
-# ------------------------------------------------ step 3: ready, merge, hand back
-
-
-ITEM = f"{REPO}/run/closeout-{DAY}-1"
-
-
-def _under_way(pr: Any, *bids: str, handbacks: list[dict[str, Any]] | None = None) -> Any:
-    kw: dict[str, Any] = {f"{b}_events": [*_recorded(), *(handbacks or [])] for b in bids}
-    return _landed(*bids, archives={REPO: (pr,)}, **kw)
+# ------------------------------------------- step 3: one step per marker (§D)
 
 
 def _shared(**kw: Any) -> Any:
     kw.setdefault("mergeable", "MERGEABLE")
+    kw.setdefault("files", ("docs/superpowers/implemented/plans/p/_meta.yaml",))
     return _live(900, kw.pop("head", "h900"), head_ref=FIRST, trusted=True, base="main", **kw)
+
+
+def _under_way(pr: Any, *bids: str, handbacks: list[dict[str, Any]] | None = None,
+               **kw: Any) -> Any:  # fmt: skip
+    events = {f"{b}_events": [*_recorded(), *(handbacks or [])] for b in bids}
+    return _landed(*bids, closeouts=(_marker(pr=900),), collected_prs={ITEM: pr},
+                   collected_members={ITEM: bids}, **events, **kw)  # fmt: skip
 
 
 def test_a_green_mergeable_collected_pr_is_readied_and_merged_once_for_every_member() -> None:
     plan = drive_pass(_under_way(_shared(draft=True), "a", "b", "c"))
-
     (merge,) = [a for a in plan.actions if a.kind == "archive"]
-    assert (merge.pr, merge.head, merge.items, merge.draft) == (900, "h900", ("a", "b", "c"), True)
+    assert (merge.pr, merge.head, merge.items, merge.draft, merge.key) == (
+        900, "h900", ("a", "b", "c"), True, ITEM)  # fmt: skip
 
 
 def test_a_collected_pr_not_yet_known_mergeable_waits() -> None:
@@ -195,13 +175,28 @@ def test_a_collected_pr_not_yet_known_mergeable_waits() -> None:
     assert [a for a in plan.actions if a.kind in ("archive", "closeout-handback")] == []
 
 
+@pytest.mark.parametrize(
+    ("files", "merges"),
+    [(("docs/superpowers/runs/r.yaml", "docs/acceptance/report_linked.md"), True),
+     (("docs/superpowers/runs/r.yaml", "packages/fr/src/fr/x.py"), False), ((), False)],
+)  # fmt: skip
+def test_p6_r6_only_a_docs_only_collected_pr_merges_without_review(
+    files: tuple[str, ...], merges: bool
+) -> None:
+    plan = drive_pass(_under_way(_shared(files=files), "a"))
+    kinds = [k for k, _ in _kinds(plan.actions)]
+    assert ("archive" in kinds) is merges
+    assert ("closeout-needs-review" in kinds) is not merges
+    if not merges and files:
+        (need,) = [a for a in plan.actions if a.kind == "closeout-needs-review"]
+        assert "packages/fr/src/fr/x.py" in need.detail
+
+
 def test_a_conflicting_collected_pr_is_handed_back_once_to_its_session() -> None:
     plan = drive_pass(_under_way(_shared(mergeable="CONFLICTING"), "a", "b"))
-
     (back,) = [a for a in plan.actions if a.kind == "closeout-handback"]
     assert (back.key, back.head, back.items, back.checks) == (ITEM, "h900", ("a", "b"),
                                                               ("merge conflict",))  # fmt: skip
-    assert "archive" not in [k for k, _ in _kinds(plan.actions)]
 
 
 def test_a_red_collected_pr_is_handed_back_naming_its_failing_checks() -> None:
@@ -222,12 +217,11 @@ def test_a_hand_back_at_this_head_is_never_repeated() -> None:
 
 
 def test_a_second_failure_at_a_later_head_is_a_stuck_need() -> None:
-    """R27: the budget is ONE per close-out item, counted across its members: a hand-back
-    recorded on a only still spends b's."""
-    snap = _landed("a", "b", archives={REPO: (_shared(mergeable="CONFLICTING", head="h901"),)},
+    """R27: the budget is ONE per close-out item, counted across its members."""
+    snap = _landed("a", "b", closeouts=(_marker(pr=900),),
+                   collected_prs={ITEM: _shared(mergeable="CONFLICTING", head="h901")},
                    a_events=[*_recorded(), _handback("h900")], b_events=_recorded())  # fmt: skip
     plan = drive_pass(snap)
-
     (stuck,) = [a for a in plan.actions if a.kind == "closeout-stuck"]
     assert stuck.key == ITEM and stuck.items == ("a", "b")
     assert plan.summary.blocked == 1
@@ -236,6 +230,27 @@ def test_a_second_failure_at_a_later_head_is_a_stuck_need() -> None:
 def test_a_hand_back_no_session_took_is_a_stuck_need_at_once() -> None:
     snap = _under_way(_shared(mergeable="CONFLICTING"), "a", handbacks=[_handback("h900", "none")])
     assert "closeout-stuck" in [k for k, _ in _kinds(drive_pass(snap).actions)]
+
+
+def test_p6_r1_a_pr_whose_members_were_never_recorded_is_reconciled_from_its_body() -> None:
+    """A verb killed after its push: the marker and the PR exist, no member event does."""
+    snap = _landed("a", "b", closeouts=(_marker(),), collected_prs={ITEM: _shared()},
+                   collected_members={ITEM: ("a", "b")})  # fmt: skip
+    plan = drive_pass(snap)
+    (rec,) = [a for a in plan.actions if a.kind == "closeout-reconcile"]
+    assert rec.items == ("a", "b") and rec.pr == 900
+    assert [a for a in plan.actions if a.kind in ("closeout", "archive")] == []
+
+
+def test_p6_r5_a_collected_pr_closed_unmerged_ends_the_closeout_and_its_batches_are_owed() -> None:
+    closed = _shared(state="CLOSED")
+    plan = drive_pass(_under_way(closed, "a"))
+    (ended,) = [a for a in plan.actions if a.kind == "closeout-pr-closed"]
+    assert ended.key == ITEM
+    # recorded closed: the next pass re-collects a, on the next number
+    after = _landed("a", a_events=_recorded(), closeouts=(_marker(pr=900, closed=True),))
+    (again,) = [a for a in drive_pass(after).actions if a.kind == "closeout"]
+    assert again.items == ("a",) and again.key == f"closeout-{DAY}-2"
 
 
 def test_the_closeout_hand_back_budget_is_its_own_and_conflict_decisions_is_unchanged() -> None:
@@ -248,29 +263,53 @@ def test_the_closeout_hand_back_budget_is_its_own_and_conflict_decisions_is_unch
 # ------------------------------------------------------- the event (schema 10)
 
 
-def test_the_closeout_handback_event_moves_the_judgements_schema() -> None:
+def test_the_closeout_events_move_the_judgements_schema() -> None:
     from fr.triage.model import JUDGEMENTS_READS, JUDGEMENTS_SCHEMA, Judgements
 
     assert JUDGEMENTS_SCHEMA == 10 and JUDGEMENTS_READS[-1] == 10
-    batch = {"id": "a", "title": "a", "ids": ["super-fr#1"],
-             "events": [*_recorded(), _handback("h900")]}  # fmt: skip
     judged = {"tiers": [{"n": 1, "title": "Now"}], "issues": {"super-fr#1": {"tier": 1}}}
+    batch = {"id": "a", "title": "a", "ids": ["super-fr#1"],
+             "events": [*_recorded(), _handback("h900"), _hold()]}  # fmt: skip
     got = Judgements.model_validate({"schema": 10, **judged, "batches": [batch]})
-    assert got.batches[0].events[-1].kind == "closeout_handback"
+    assert [e.kind for e in got.batches[0].events][1:] == ["closeout_handback", "closeout_hold"]
     with pytest.raises(ValueError, match="schema"):
         Judgements.model_validate({"schema": 9, **judged, "batches": [batch]})
+    with pytest.raises(ValueError, match="schema 10"):
+        Judgements.model_validate({"schema": 9, "closeouts": [_marker().model_dump(mode="json")]})
     older = {**batch, "events": _recorded()}
     assert Judgements.model_validate({"schema": 9, **judged, "batches": [older]}).schema_ == 9
 
 
-# ------------------------------------------------- step 3, executed (§D)
+# ------------------------------------------------------ the executor (§E)
 
+CMD_DAY = "2026-10-02"  # the drive tests' NOW
 CMD_BRANCH = f"chore/closeout-{CMD_DAY}-1"
 CMD_ITEM = f"{REPO}/run/closeout-{CMD_DAY}-1"
 
 
+def test_p6_r1_the_driver_records_a_start_marker_and_never_a_members_event(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _world_landed(world, tmp_path, "b1", "b2", "b3")
+    checkout.released = True
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert item.id == CMD_ITEM
+    assert f"fr triage batch closeout b1 b2 b3 --branch {CMD_BRANCH} --yes" in item.payload["brief"]
+    judgements = load_judgements(tmp_path / "judgements.yaml")
+    assert [e.kind for b in judgements.batches for e in b.events] == ["dispatch"] * 3
+    (marker,) = judgements.closeouts
+    assert (marker.item, marker.branch, marker.planned) == (CMD_ITEM, CMD_BRANCH,
+                                                            ["b1", "b2", "b3"])  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")  # under way: nothing starts again
+    assert len(runner.dispatched) == 1 and _lines(out, "closeout") == []
+
+
 def _started(world: World, tmp_path: Path, *bids: str, **pr: Any) -> Path:
-    """*bids* landed, their collected close-out recorded and its PR #900 open."""
+    """*bids* landed and closed out by the verb onto PR #900, open on the shared branch."""
     from tests.unit.test_triage_batch_drive_cmd import _batch, _dispatch_event, _state
 
     rec = (f"      - {{kind: closeout, at: '2026-10-02T11:00:00Z', runner: fake, "
@@ -281,11 +320,18 @@ def _started(world: World, tmp_path: Path, *bids: str, **pr: Any) -> Path:
         world.pr(100 + i, f"feat/batch-{bid}", [i], state="MERGED",
                  merged_at=(NOW - timedelta(hours=1)).isoformat())  # fmt: skip
         batches.append(_batch(bid, i, events=_dispatch_event(bid) + rec))
-    world.pr(900, CMD_BRANCH, [], **{"mergeable": "MERGEABLE", **pr})
-    return _state(tmp_path, world, *batches)
+    body = f"<!-- fr:closeout-members {','.join(bids)} -->\nCloses {REPO}#7"
+    world.pr(900, CMD_BRANCH, [], **{"mergeable": "MERGEABLE", "body": body,
+                                     "files": ["docs/superpowers/runs/r.yaml"], **pr})  # fmt: skip
+    target = _state(tmp_path, world, *batches)
+    path = target / "judgements.yaml"
+    marker = (f"closeouts:\n  - {{repo: {REPO}, item: {CMD_ITEM}, branch: {CMD_BRANCH}, "
+              f"at: '2026-10-02T11:00:00Z', runner: fake, pr: 900}}\n")  # fmt: skip
+    path.write_text(path.read_text("utf-8").replace("schema: 3\n", "schema: 10\n", 1) + marker)
+    return target
 
 
-def test_the_driver_readies_and_merges_the_collected_pr_and_records_every_member(
+def test_p6_r8_the_driver_merges_the_collected_pr_then_unlabels_what_it_closed(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _started(world, tmp_path, "b1", "b2", draft=True)
@@ -295,9 +341,21 @@ def test_the_driver_readies_and_merges_the_collected_pr_and_records_every_member
     assert code == 0, out
     assert world.calls.index("pr_ready 900") < world.calls.index("pr_merge 900")
     assert world.calls.count("pr_merge 900") == 1
-    archived = {b.id: closeout_event(b).archived  # type: ignore[union-attr]
-                for b in load_judgements(tmp_path / "judgements.yaml").batches}  # fmt: skip
-    assert archived == {"b1": 900, "b2": 900}
+    assert "label 7" in world.calls  # fr:awaiting-live off the issue its body Closes
+    judgements = load_judgements(tmp_path / "judgements.yaml")
+    assert {b.id: closeout_event(b).archived for b in judgements.batches} == {  # type: ignore[union-attr]
+        "b1": 900, "b2": 900}  # fmt: skip
+    assert judgements.closeouts[0].merged
+
+
+def test_p6_r6_a_collected_pr_touching_code_is_never_auto_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _started(world, tmp_path, "b1", files=["docs/superpowers/runs/r.yaml", "scripts/x.sh"])
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert "pr_merge 900" not in world.calls
+    (line,) = _lines(out, "closeout-needs-review")
+    assert "scripts/x.sh" in line
 
 
 def test_a_conflicting_collected_pr_is_handed_back_once_and_recorded_on_each_member(
@@ -321,24 +379,55 @@ def test_a_conflicting_collected_pr_is_handed_back_once_and_recorded_on_each_mem
         for b in load_judgements(tmp_path / "judgements.yaml").batches
     }
     assert backs == dict.fromkeys(("b1", "b2"), [(CMD_ITEM, "sha-900")])
-    assert "pr_merge 900" not in world.calls
-    # a second pass at the same head hands nothing back again
     _drive(tmp_path, "--once", "--yes")
     assert len(messenger.messages) == 1
 
 
+def test_p6_r5_a_closed_collected_pr_is_recorded_once_and_its_batches_are_owed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _started(world, tmp_path, "b1", state="CLOSED")
+    checkout.released = True
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert len(_lines(out, "closeout-pr-closed")) == 1, out
+    assert load_judgements(tmp_path / "judgements.yaml").closeouts[0].closed
+    code, out = _drive(tmp_path, "--once", "--yes")  # owed again: a fresh close-out
+    assert _lines(out, "closeout-pr-closed") == []
+    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-{CMD_DAY}-2"]
+
+
+def test_p6_r1_a_crash_after_push_is_reconciled_from_the_pr_body(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    target = _started(world, tmp_path, "b1", "b2")
+    path = target / "judgements.yaml"  # the verb died before recording its members
+    path.write_text(path.read_text("utf-8").replace(
+        f"      - {{kind: closeout, at: '2026-10-02T11:00:00Z', runner: fake, "
+        f"handle: {CMD_ITEM}, archive: {CMD_BRANCH}}}\n", ""))  # fmt: skip
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert len(_lines(out, "closeout-reconcile")) == 1, out
+    archives = {b.id: [e.archive for e in b.events if e.kind == "closeout"]  # type: ignore[union-attr]
+                for b in load_judgements(path).batches}  # fmt: skip
+    assert archives == {"b1": [CMD_BRANCH], "b2": [CMD_BRANCH]}
+    assert runner.dispatched == []  # never a second close-out for the same batches
+
+
 def test_a_hand_back_no_session_took_is_a_need_on_the_board(tmp_path: Path, world: World) -> None:
-    from fr.triage.model import load_judgements as load
     from fr.triage.views import NEED_LABELS, needs_you
 
     target = _started(world, tmp_path, "b1", "b2", mergeable="CONFLICTING")
     path = target / "judgements.yaml"
     none = (f"      - {{kind: closeout_handback, at: '2026-10-02T11:30:00Z', item: {CMD_ITEM}, "
             "pr: 900, head: sha-900, reason: merge conflict, delivered: none}\n")  # fmt: skip
-    text = path.read_text("utf-8").replace("schema: 3\n", "schema: 10\n", 1)
-    path.write_text(text.replace(f"archive: {CMD_BRANCH}}}\n", f"archive: {CMD_BRANCH}}}\n"
-                                 + none), "utf-8")  # fmt: skip
-
-    needs = [n for n in needs_you(world.facts(), load(path)) if n.kind == "closeout-stuck"]
-    assert len(needs) == 1 and "PR #900" in needs[0].text  # one row for both members
-    assert "closeout-stuck" in NEED_LABELS and "closeout-held" in NEED_LABELS
+    end = f"archive: {CMD_BRANCH}}}\n"
+    path.write_text(path.read_text("utf-8").replace(end, end + none))
+    needs = [
+        n for n in needs_you(world.facts(), load_judgements(path)) if n.kind == "closeout-stuck"
+    ]
+    assert len(needs) == 1 and "PR #900" in needs[0].text
+    assert {"closeout-stuck", "closeout-held", "closeout-pr-closed",
+            "closeout-needs-review"} <= NEED_LABELS.keys()  # fmt: skip

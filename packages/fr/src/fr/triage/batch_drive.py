@@ -42,6 +42,8 @@ from fr.triage.model import (
     Batch,
     CloseoutEvent,
     CloseoutHandbackEvent,
+    CloseoutHoldEvent,
+    CollectedCloseout,
     ConflictEvent,
     DispatchEvent,
     EnqueueEvent,
@@ -108,6 +110,11 @@ ActionKind = Literal[
     "closeout-held",
     "closeout-handback",
     "closeout-stuck",
+    "closeout-reconcile",
+    "closeout-merged",
+    "closeout-pr-closed",
+    "closeout-needs-review",
+    "closeout-abandoned",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -357,10 +364,12 @@ class Snapshot:
     # The repos whose `post_merge` this driver runs (p4-r2): a landed batch of one gets a
     # `post-merge` action at merge, gated or not, before any close-out of it.
     post_merge_repos: frozenset[str] = frozenset()
-    # Landed batches whose archive would hold (exit-gates R15: a Test Plan step with no
-    # outcome and no passed gate to record it), with why, read on the default branch by
-    # the driver: a need, never a member of a collected close-out.
-    closeout_holds: Mapping[str, str] = field(default_factory=dict)
+    # Collected close-outs (exit-gates R15, §D): the start markers from the judgements,
+    # and, driver only, each unfinished one's PR on its branch as read now (`files`
+    # included) and the member ids that PR's body lists (`members_from_body`).
+    closeouts: tuple[CollectedCloseout, ...] = ()
+    collected_prs: Mapping[str, LivePr] = field(default_factory=dict)  # item -> its PR
+    collected_members: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -666,19 +675,64 @@ def event_item_id(repo: str, batch_id: str, event: CloseoutEvent) -> str:
     return collected_item_id(repo, name) if name else closeout_item_id(repo, batch_id)
 
 
+def marker_of(branch: str, closeouts: Iterable[CollectedCloseout]) -> CollectedCloseout | None:
+    """The start marker of the collected close-out on *branch*, if one was recorded."""
+    return next((c for c in closeouts if c.branch == branch), None)
+
+
+def closeout_of(batch: Batch, closeouts: Iterable[CollectedCloseout]) -> CloseoutEvent | None:
+    """The batch's close-out, as owed-ness reads it: its latest `closeout` event, unless
+    that event names a collected close-out whose PR was closed unmerged (R15, p6-r5):
+    then the batch is owed a close-out again."""
+    event = closeout_event(batch)
+    if event is None or collected_name(event.archive or "") is None:
+        return event
+    marker = marker_of(event.archive or "", closeouts)
+    return None if marker is not None and marker.closed and not marker.merged else event
+
+
+def closeout_hold(batch: Batch) -> CloseoutHoldEvent | None:
+    """The batch's `closeout_hold` since its last dispatch with no close-out after it (R15):
+    the driver never collects it again; only `fr triage batch closeout <id>` retries it."""
+    for event in reversed(batch.events):
+        if isinstance(event, (DispatchEvent, CloseoutEvent)):
+            return None
+        if isinstance(event, CloseoutHoldEvent):
+            return event
+    return None
+
+
+def collected_used(repo: str, batches: Iterable[Batch],
+                   closeouts: Iterable[CollectedCloseout]) -> list[str]:  # fmt: skip
+    """Every collected branch *repo* has used: its markers' and its events' archives."""
+    out = [c.branch for c in closeouts if c.repo == repo]
+    out += [e.archive for b in batches for e in b.events
+            if isinstance(e, CloseoutEvent) and e.archive]  # fmt: skip
+    return out
+
+
+def collected_candidate(
+    repo: str,
+    batches: Iterable[Batch],
+    repos: Mapping[str, str],
+    closeouts: Iterable[CollectedCloseout],
+    day: date,
+) -> tuple[str, str]:
+    """`(name, item id)` of *repo*'s next collected close-out on *day*."""
+    used = collected_used(repo, (b for b in batches if repos.get(b.id) == repo), closeouts)
+    name = str(collected_name(collected_branch(day, next_collected(used, day))))
+    return name, collected_item_id(repo, name)
+
+
+def next_collected_item(repo: str, snap: Snapshot) -> tuple[str, str]:
+    """`collected_candidate` on the pass's day."""
+    return collected_candidate(repo, snap.batches, snap.repos, snap.closeouts, snap.now.date())
+
+
 def _collected_under_way(repo: str, snap: Snapshot) -> bool:
-    """R15: a collected close-out of *repo* was started and its PR has not merged (nor
-    been recorded merged): the next one waits for it."""
-    for b in snap.batches:
-        event = closeout_event(b)
-        if (
-            snap.repos.get(b.id) == repo
-            and event is not None
-            and collected_name(event.archive or "") is not None
-            and not is_finished(b, snap.stages.get(b.id, "merged"), snap.archives.get(repo, ()))
-        ):
-            return True
-    return False
+    """R15: a collected close-out of *repo* was started (its marker) and has not ended
+    (merged, or closed with no archive): the next one waits for it."""
+    return any(c.repo == repo and not c.merged and not c.closed for c in snap.closeouts)
 
 
 def wave_group(prefix: str, wave: int | None) -> str:
@@ -891,26 +945,72 @@ def closeout_handback_decision(
     return "stuck" if len({e.head for e in mine}) >= CLOSEOUT_HANDBACKS else "handback"
 
 
-def _collected_step(
-    batch: Batch, event: CloseoutEvent, mine: Sequence[LivePr], snap: Snapshot
-) -> Action | None:
-    """§D step 3 for one collected close-out: ready and merge its PR once it is `MERGEABLE`
-    and green; hand a conflict or failing checks back ONCE to its session (R27); after
-    that, a `closeout-stuck` need. Planned once for every member (`items`)."""
-    repo = snap.repos.get(batch.id, "")
-    pr = next((p for p in mine if p.state == "OPEN" and p.head_ref == event.archive), None)
-    default = snap.default_branch.get(repo, "")
-    if pr is None or not default:
-        return None  # not opened yet, or the default branch unknown: wait
+REVIEW_FREE_PREFIXES = ("docs/superpowers/", "docs/acceptance/")
+"""What a collected close-out PR may change and still merge with no approval (p6-r6): the
+run artifacts it archives and the acceptance matrix with its reports."""
+
+
+def _needs_review(files: Sequence[str]) -> list[str]:
+    """The paths of a collected close-out PR outside `REVIEW_FREE_PREFIXES`; an unknown
+    file list is never review-free."""
+    if not files:
+        return ["(its changed files are unknown)"]
+    return [f for f in files if not f.startswith(REVIEW_FREE_PREFIXES)]
+
+
+def _collected_step(marker: CollectedCloseout, snap: Snapshot) -> tuple[Action | None, str]:
+    """§D step 3 for one unfinished collected close-out, keyed on its start marker, and how
+    the summary counts it (`closing` | `blocked` | ""). Membership is what the verb
+    recorded (`closeout` events naming the branch) or, after a crash between its push and
+    its record, what the PR's body lists (`closeout-reconcile`). Its PR is merged, with no
+    approval, only once it is `MERGEABLE`, green and changes nothing outside
+    `REVIEW_FREE_PREFIXES`; a conflict or failing checks go back ONCE to its session
+    (R27); a PR closed unmerged ends the close-out (p6-r5)."""
+    repo = marker.repo
     members = tuple(
         b.id for b in snap.batches
         if snap.repos.get(b.id) == repo and (e := closeout_event(b)) is not None
-        and e.archive == event.archive and e.archived is None
+        and e.archive == marker.branch
     )  # fmt: skip
+    known = {b.id for b in snap.batches}
+    listed = tuple(b for b in snap.collected_members.get(marker.item, ()) if b in known)
+    first = (members or listed or tuple(b for b in marker.planned if b in known) or ("",))[0]
+    pr = snap.collected_prs.get(marker.item)
+    if not first:
+        return None, ""
+    if pr is None:
+        live = marker.item in snap.existing
+        if (
+            not live
+            and marker.item in snap.closeout_probed
+            and snap.now - marker.at >= STALE_CLOSEOUT
+        ):
+            return Action("closeout-abandoned", first, f"{marker.item} ended with no PR on "
+                          f"{marker.branch}; its batches are owed a close-out again",
+                          key=marker.item), "closing"  # fmt: skip
+        return None, "closing"
+    if pr.state == "CLOSED":
+        return Action("closeout-pr-closed", first, f"close-out PR #{pr.number} on "
+                      f"{marker.branch} was closed unmerged; its batches are owed a close-out "
+                      "again", pr=pr.number, items=members, key=marker.item), "closing"  # fmt: skip
+    if missing := [b for b in listed if b not in members]:
+        return Action("closeout-reconcile", first, f"PR #{pr.number} lists {', '.join(missing)} "
+                      "with no close-out recorded; recording them from its body", pr=pr.number,
+                      items=listed, key=marker.item), "closing"  # fmt: skip
+    if pr.state == "MERGED":
+        return Action("closeout-merged", first, f"close-out PR #{pr.number} merged",
+                      pr=pr.number, items=members, key=marker.item), "closing"  # fmt: skip
+    default = snap.default_branch.get(repo, "")
+    if not default:
+        return None, "closing"  # the default branch unknown: wait
     if wrong := _wrong_base(pr, default):
-        return Action("blocked", batch.id, f"close-out PR #{pr.number} ({pr.head_ref}) "
-                      f"{wrong}; it is never merged", pr=pr.number, items=members)  # fmt: skip
-    item = event_item_id(repo, batch.id, event)
+        return Action("blocked", first, f"close-out PR #{pr.number} ({pr.head_ref}) {wrong}; it "
+                      "is never merged", pr=pr.number, items=members), "blocked"  # fmt: skip
+    if outside := _needs_review(pr.files):
+        return Action("closeout-needs-review", first, f"close-out PR #{pr.number} changes "
+                      f"{', '.join(outside[:5])}, outside {', '.join(REVIEW_FREE_PREFIXES)}: "
+                      "never merged without review", pr=pr.number, items=members,
+                      key=marker.item), "blocked"  # fmt: skip
     conflict = conflicting(pr.mergeable, pr.merge_state)
     if pr.checks == "failing" or conflict:
         what = (
@@ -919,23 +1019,23 @@ def _collected_step(
             else f"has failing checks: {', '.join(pr.failing) or 'unknown'}"
         )
         events = [e for b in snap.batches if b.id in members for e in b.events]
-        decision = closeout_handback_decision(events, item, pr.head)
+        decision = closeout_handback_decision(events, marker.item, pr.head)
         if decision == "skip":
-            return None  # its session has it at this head
+            return None, "closing"  # its session has it at this head
         checks = ("merge conflict",) if conflict else pr.failing
         if decision == "stuck":
-            return Action("closeout-stuck", batch.id, f"close-out PR #{pr.number} {what} at "
+            return Action("closeout-stuck", first, f"close-out PR #{pr.number} {what} at "
                           f"{pr.head[:12]}, and its one hand-back is spent: fix it on "
                           f"{pr.head_ref}", pr=pr.number, head=pr.head, items=members,
-                          key=item, checks=checks)  # fmt: skip
-        return Action("closeout-handback", batch.id, f"close-out PR #{pr.number} {what}; hand "
-                      f"it back to {item}", pr=pr.number, head=pr.head, items=members,
-                      key=item, checks=checks)  # fmt: skip
+                          key=marker.item, checks=checks), "blocked"  # fmt: skip
+        return Action("closeout-handback", first, f"close-out PR #{pr.number} {what}; hand "
+                      f"it back to {marker.item}", pr=pr.number, head=pr.head, items=members,
+                      key=marker.item, checks=checks), "closing"  # fmt: skip
     if pr.checks == "green" and pr.mergeable == "MERGEABLE":
-        return Action("archive", batch.id, f"PR #{pr.number} ({pr.head_ref}) for "
+        return Action("archive", first, f"PR #{pr.number} ({pr.head_ref}) for "
                       f"{', '.join(members)}", pr=pr.number, head=pr.head, items=members,
-                      draft=pr.draft)  # fmt: skip
-    return None
+                      draft=pr.draft, key=marker.item), "closing"  # fmt: skip
+    return None, "closing"
 
 
 def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
@@ -1548,7 +1648,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in merging or batch.id in held_ids:
             continue
-        if closeout_event(batch) is not None:
+        if closeout_of(batch, snap.closeouts) is not None:
             continue
         driven_now = snap.selected is None or batch.id in snap.selected
         if batch.id in snap.unverified:
@@ -1605,22 +1705,19 @@ def drive_pass(snap: Snapshot) -> Pass:
         if item in snap.existing:  # a per-batch close-out started before R15: recorded
             actions.append(Action("closeout", batch.id, f"record the live {item}", recorded=True))
             continue
-        if batch.id in snap.closeout_holds:  # R15: its archive would hold; the operator's
+        if (hold := closeout_hold(batch)) is not None:  # R15: held by the verb; the operator's
             closing -= 1
             closeouts_held += 1
-            actions.append(Action("closeout-held", batch.id, f"its archive holds: "
-                                  f"{snap.closeout_holds[batch.id]}"))  # fmt: skip
+            actions.append(Action("closeout-held", batch.id, f"{hold.reason}; fix it, then "
+                                  f"retry: fr triage batch closeout {batch.id} --yes",
+                                  key=hold.item))  # fmt: skip
             continue
         collecting.setdefault(snap.repos.get(batch.id, ""), []).append(batch.id)
     # R15: at most one collected close-out per repo, and none while one is under way.
     for repo in sorted(collecting):
-        if _collected_under_way(repo, snap):
-            continue
-        used = [e.archive for b in snap.batches if snap.repos.get(b.id) == repo
-                for e in b.events if isinstance(e, CloseoutEvent) and e.archive]  # fmt: skip
-        day = snap.now.date()
-        name = collected_name(collected_branch(day, next_collected(used, day)))
-        assert name is not None
+        name, item_id = next_collected_item(repo, snap)
+        if _collected_under_way(repo, snap) or item_id in snap.existing:
+            continue  # one at a time; a live session of this item is not started twice
         taking = tuple(collecting[repo])
         actions.append(
             Action("closeout", taking[0], f"start {collected_item_id(repo, name)} for "
@@ -1629,12 +1726,22 @@ def drive_pass(snap: Snapshot) -> Pass:
 
     # 3. Archive.
     archives_blocked = 0
-    collected_seen: set[tuple[str, str]] = set()
-    collected_stuck: set[tuple[str, str]] = set()
+    for marker in snap.closeouts:  # R15: one step per collected close-out, never per member
+        if marker.merged or marker.closed:
+            continue
+        step, count = _collected_step(marker, snap)
+        if step is not None:
+            actions.append(step)
+        if count == "blocked":
+            archives_blocked += 1
+        elif count == "closing":
+            closing += 1
     for batch in chosen:
         event = closeout_event(batch)
         if event is None or stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
+        if collected_name(event.archive or "") is not None:
+            continue  # its collected close-out's marker plans for it, above
         archives = snap.archives.get(snap.repos.get(batch.id, ""), ())
         mine = [p for p in archives if attributed(p, batch, event)]
         if is_finished(batch, stages[batch.id], archives):
@@ -1649,21 +1756,6 @@ def drive_pass(snap: Snapshot) -> Pass:
             stale = _stale_closeout(batch, event, snap)
             if stale is not None:
                 actions.append(stale)
-        if collected_name(event.archive or "") is not None:  # R15: one PR for every member
-            key = (snap.repos.get(batch.id, ""), event.archive or "")
-            if key in collected_seen:
-                closing += key not in collected_stuck
-                continue
-            collected_seen.add(key)
-            step = _collected_step(batch, event, mine, snap)
-            if step is not None and step.kind in ("closeout-stuck", "blocked"):
-                collected_stuck.add(key)  # the operator's: blocked, never closing
-                archives_blocked += 1
-            else:
-                closing += 1
-            if step is not None:
-                actions.append(step)
-            continue
         ready = [p for p in mine if p.state == "OPEN" and not p.draft and p.checks == "green"]
         default = snap.default_branch.get(snap.repos.get(batch.id, ""), "")
         good = next((p for p in ready if default and not _wrong_base(p, default)), None)

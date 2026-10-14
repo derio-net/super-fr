@@ -134,9 +134,14 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "gate-pass": "gate's rows walked; the drive passes it",
     "ledger-unread": "gate labels unread; close-out waits",
     "post-merge": "post_merge due",
-    "closeout-held": "archive holds: Test Plan outcome owed",
+    "closeout-held": "close-out held: retry it by name",
     "closeout-handback": "close-out PR handed back",
     "closeout-stuck": "close-out PR stuck",
+    "closeout-reconcile": "close-out recorded from its PR",
+    "closeout-merged": "close-out PR merged",
+    "closeout-pr-closed": "close-out PR closed unmerged",
+    "closeout-needs-review": "close-out PR needs review",
+    "closeout-abandoned": "close-out ended with no PR",
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason

@@ -29,6 +29,7 @@ from fr.triage.model import (
     JUDGEMENTS_SCHEMA,
     Batch,
     CancelEvent,
+    CollectedCloseout,
     DispatchEvent,
     Export,
     Facts,
@@ -584,6 +585,18 @@ def save_exports(path: Path, exports: Sequence[Export], *, read: Sequence[Export
         "exports",
         _dump_exports(exports),
         unchanged=lambda now: list(now.exports) == list(read),
+    )
+
+
+def save_closeouts(
+    path: Path, closeouts: Sequence[CollectedCloseout], *, read: Sequence[CollectedCloseout]
+) -> Judgements:
+    """Write *closeouts* as `path`'s `closeouts:` section (exit-gates R15): the sibling of
+    `save_exports`, under the same refuse-or-write discipline."""
+    docs = [c.model_dump(mode="json", exclude_defaults=True) for c in closeouts]
+    block = yaml.safe_dump({"closeouts": docs}, sort_keys=False, allow_unicode=True, width=100)
+    return _rewrite(
+        path, "closeouts", block, unchanged=lambda now: list(now.closeouts) == list(read)
     )
 
 
