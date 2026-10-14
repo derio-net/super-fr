@@ -135,12 +135,19 @@ steps:
           tests: ci:abea84b42d6d037d20ddc43b61d1b592b621caaa+7a6ae37a284aaf67258b9b4c5c633377c15323f9;tree=cf8f57f64f76ed49de6773084e93c9173db2c6c8b5d3aaf4e77f5f1ac0daf450
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T03:23:42+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 73abb433-5601-4db7-ba08-a64b67cbfcfb
+          returned: '2026-10-14T04:19:33+00:00'
+          outcome: done
+        evidence:
+          review: p3-review-1
+          reviewer: ab63b1a21747b0afb
+          visual: none
+          findings: p3-older-fr-refuses-decision-tokens,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9,p3-r10
   journal-check:
     state: pending
   deliver:

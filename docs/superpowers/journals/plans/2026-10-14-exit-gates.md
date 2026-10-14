@@ -330,3 +330,113 @@ fr/journal/file.py only plans and builds one record over the archive's two filer
 ### no-refactor-p3-t5 · discovery · no-refactor-because P3.T5 (phase 3)
 
 Prose, mirrors, a re-rendered explainer and one matrix move; nothing to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · released fr refuses answered_by=/tracked_by= on a decision; every operator-answered spec journal would become unparseable (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · brainstorm-gate stamp marks unasked narrows= decisions operator, waiving R11 (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · stamp reads the claimed answered_by, not the derived provenance (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · _journals silently drops an unparseable journal (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · an owed row's tracking issue can be closed by Closes #n (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · plan_filing defers in-scope open findings (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · old-reader test never exercised answered_by/tracked_by (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · migration description omits filed_as (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · no e2e deliver under tracking none with an unfiled finding (phase 3)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-10-14T04:19:31+00:00 phase=3 state=open review_scope=out -->
+### p3-r10 · finding [open] (reviewer: out of scope) · verify_operator_answer opens its window at 1970 on an empty journal and accepts any answer since the journal last moved (phase 3)
+
+Reviewer tag: out (the existing resolution-claim verifier has the same weakness).
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-10-14T04:19:31+00:00 phase=3 -->
+### p3-review-1 · review · phase 3 independent review: 10 findings (9 in, 1 out) (phase 3)
+
+Dispatched reviewer read a7f81181..172aa3f0 against R9-R12, §C and the artifact-versioning and explainers rules; ruled on token compatibility (confirmed against origin/main, p3-r1), narrowing self-authorization (p3-r2), claimed vs derived provenance (p3-r3), leftover predicates (match; gaps p3-r4..r6), fixtures (justified) and the record kind 10 migration (compliant). A security review added exact ref matching to p3-r2. All 9 in-scope fixed with tests in 73cb6792; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: released fr refuses answered_by=/tracked_by= on a decision; every operator-answered spec journal would become unparseable (phase 3)
+
+decision-only tokens decided_by= and remainder_tracked_by=, answered_by/tracked_by resolution-only as released, spec R9/R10/R12/§C amended (decision decision-token-names); test_p3_r7_the_released_reader_parses_every_new_token (vendored fr 5.26 reader), test_p3_r1_the_live_model_keeps_answered_by_and_tracked_by_resolution_only. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: brainstorm-gate stamp marks unasked narrows= decisions operator, waiving R11 (phase 3)
+
+a narrowing is the operator's only when every narrowed ref, normalized like the Closes guard, appears in an answered round; test_p3_r2_narrowed_refs_match_answered_rounds_exactly (9 cases), test_p3_r2_a_narrowing_no_answered_round_names_stays_the_agents. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: stamp reads the claimed answered_by, not the derived provenance (phase 3)
+
+stamp computed from the gate's derived provenance; unobserved never stamps a narrowing; test_p3_r3_an_unobserved_gate_never_stamps_a_narrowing_and_notes_the_rest. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: _journals silently drops an unparseable journal (phase 3)
+
+deliver gates refuse naming it; test_p3_r4_an_unparseable_journal_refuses_the_deliver_gates_naming_it. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: an owed row's tracking issue can be closed by Closes #n (phase 3)
+
+refused; test_p3_r5_a_close_over_an_owed_rows_tracking_issue_is_refused. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: plan_filing defers in-scope open findings (phase 3)
+
+only out-of-scope findings file; test_an_unfileable_id_is_refused_and_nothing_is_filed_or_written. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: old-reader test never exercised answered_by/tracked_by (phase 3)
+
+rewritten against a vendored released reader; test_p3_r7_the_released_reader_parses_every_new_token. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: migration description omits filed_as (phase 3)
+
+named; test_p3_r8_the_migration_names_every_field_it_adds. (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: no e2e deliver under tracking none with an unfiled finding (phase 3)
+
+test_p3_r9_under_tracking_none_an_unfiled_out_of_scope_finding_delivers_and_is_listed (guards pre-existing behaviour, so not red-first). (73cb6792, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=open resolves=p3-r10 out_of_scope=true -->
+### p3-r10-resolved · finding [out-of-scope] · resolves p3-r10: verify_operator_answer opens its window at 1970 on an empty journal and accepts any answer since the journal last moved (phase 3)
+
+Pre-existing in the shared operator-claim verifier used by fr journal resolve --answered-by; this change reuses it unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=p3-older-fr-refuses-decision-tokens-resolved created=2026-10-14T04:19:31+00:00 phase=3 state=fixed resolves=p3-older-fr-refuses-decision-tokens -->
+### p3-older-fr-refuses-decision-tokens-resolved · finding [fixed] · resolves p3-older-fr-refuses-decision-tokens: A released fr refuses answered_by= and tracked_by= on a decision, so spec §C's "an older fr ignores them" holds only for gate= and narrows= (phase 3)
+
+Same defect as p3-r1, fixed by the decided_by=/remainder_tracked_by= tokens (73cb6792).
