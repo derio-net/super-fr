@@ -7924,9 +7924,20 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R9
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_head_found_open_archive_pr_gets_live_checks_not_pending
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_linked_archive_pr_in_issue_prs_gets_the_facts_verdict
+      - super-fr:tests/unit/test_triage_quota_passes.py#test_a_recorded_closeout_not_archived_turns_a_quiet_pass_into_a_read_of_its_repo
+      - super-fr:tests/unit/test_triage_probe.py#test_a_quiet_pass_with_closing_repos_reads_only_them
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_attributed_archive_pr_with_pending_checks_gets_one_waiting_warn
+      - super-fr:tests/unit/test_triage_board_views.py#test_archive_warn_is_not_a_failing_ci_need
+      - super-fr:tests/unit/test_triage_kanban.py#test_card_names_an_existing_linked_archive_pr_and_its_wait
+    status: ci
+    notes: 'merge-truth phase 2: live checks for head-found archive PRs and linked ones
+      read (R7), closing repos read every pass (R8), one waiting line per unmerged archive
+      PR that is never a failing-ci Need (R9), and the card names the PR and its wait
+      (R10), each proven by a unit test in CI'
     verify: none
   - id: triage-archive-pr-draft-merged
     capability: triage-batches
