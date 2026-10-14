@@ -5,3 +5,8 @@
 ### repro-rc-suite-red · repro · Release run 38557522803 refused 5.27.0-rc.1: staged suite red on 3 version-shape tests
 
 First release after #1195 (exit-gates). Gating chose an RC (#1195 waits on a post-merge gate), bumped 5.26.0 -> 5.27.0-rc.1 in 12 files, ran the staged suite: 3 failed, 12738 passed. Nothing pushed, tagged or published. Failures: tests/unit/test_version.py::test_version_is_semver (int-splits __version__ '5.27.0rc1'); tests/unit/test_version_surfaces.py::test_every_surface_value_equals_the_root_version (set {'5.27.0-rc.1','5.27.0rc1'} != {'5.27.0rc1'}); tests/unit/test_bridge_cli.py::test_tick_first_log_line_has_version_and_timestamp (banner regex v\d+.\d+.\d+ rejects v5.27.0rc1). Repro: bump-version.py 5.27.0-rc.1 in a worktree (uncommitted), run the three tests.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-self-referential-version-tests created=2026-10-14T11:55:05+00:00 -->
+### rc-self-referential-version-tests · root-cause · Three tests read the repo's own version and assume a final X.Y.Z; only the release runner ever stages an RC
+
+Phase 7 of exit-gates (#1195) taught scripts/versions.Version both RC spellings and routed every release script through it, but three tests assert on the LIVE version: test_version_is_semver int-splits fr.__version__ (PEP 440 '5.27.0rc1'), the bridge banner regex allows only v\d+.\d+.\d+, and test_every_surface_value_equals_the_root_version demands one string although an RC is two spellings by design (R25: X.Y.ZrcN on pyproject/uv.lock, X.Y.Z-rc.N elsewhere). A PR's tree is always final, so PR CI cannot see this; the staged suite on the release runner is the first tree at an RC, and it refused correctly (gh#854 gate). No other test failed (3 of 12741).
