@@ -34,6 +34,9 @@ __all__ = ["LabelSyncError", "PrNotFound", "SyncOutcome", "desired_labels", "syn
 _PR_URL = re.compile(r"^https?://[^/]+/(?P<repo>.+?)/(?:-/merge_requests|pulls?)/(?P<n>\d+)")
 
 
+_FORGE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, HostRefusedError)
+
+
 class LabelSyncError(Exception):
     """The PR's labels could not be synced (a forge refusal or an unreadable remap)."""
 
@@ -117,6 +120,6 @@ def sync_exit_labels(
             gh.edit_pr_labels(repo, number, add=add, remove=remove)
     except UnsupportedForgeOperation as e:
         return SyncOutcome(synced=False, warning=f"PR labels not synced: {e}")
-    except (*FORGE_ERRORS, HostRefusedError) as e:
+    except _FORGE_FAILURES as e:
         raise LabelSyncError(str(e)) from e
     return SyncOutcome(synced=True, added=tuple(sorted(add)), removed=tuple(sorted(remove)))

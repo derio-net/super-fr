@@ -159,11 +159,13 @@ def exit_change(
                 None,
                 StepRecord(
                     journal=(
-                        JournalItem(
-                            kind="decision",
-                            id=decision_id,
-                            title=f"exit change: {target} -> {what}",
-                            body=body,
+                        JournalItem.model_validate(
+                            {
+                                "kind": "decision",
+                                "id": decision_id,
+                                "title": f"exit change: {target} -> {what}",
+                                "body": body,
+                            }
                         ),
                     )
                 ),
