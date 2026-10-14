@@ -3,7 +3,7 @@ run: 2026-10-13-feat-batch-merge-truth
 workflow: fr-goal@1
 branch: feat/batch-merge-truth
 started: '2026-10-13T21:49:42+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -146,7 +146,11 @@ steps:
           visual: none
           findings: p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7
   journal-check:
-    state: pending
+    state: done
+    at: '2026-10-14T02:02:49+00:00'
+    exit: 0
+    stdout: |
+      4 out-of-scope finding(s): p1-r7, p1-r8, p2-r10, p3-r7
   deliver:
     state: pending
 fr_version: 5.26.0
