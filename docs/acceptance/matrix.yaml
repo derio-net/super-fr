@@ -9233,9 +9233,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R22
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R23
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_channels.py#test_rc_installs_the_newest_rc_numerically
+      - super-fr:tests/integration/test_install_channels.py#test_preflight_passes_on_a_clean_detached_tag
+    status: ci
+    notes: bootstrap.sh --version and install.sh tagged-checkout preflight proven against
+      a fixture remote (phase 8)
   - id: exit-gates-pr-labels
     capability: exit-gates
     acceptance: A run's PR carries one verification:<kind> label per kind and one gate:<gate>
