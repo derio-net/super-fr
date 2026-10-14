@@ -1105,12 +1105,20 @@ def _reservation(
         _fail(str(exc))
 
 
-def _fresh_config(checkout: Checkout, facts: Facts, owner_repo: str) -> str:
+def _fresh_config(
+    checkout: Checkout, facts: Facts, owner_repo: str, *, hold_unknown: bool = False
+) -> str:
     """Fetch, then hold the §3.I rule: the collected `.fr/triage.yaml` must be the
     one on `origin/<default>` now. Returns that ref. The read ignores a top-level
-    key this `fr` does not know (R4)."""
-    checkout.fetch()
-    default = f"origin/{checkout.default_branch()}"
+    key this `fr` does not know (R4). *hold_unknown*: a failed fetch or default-branch
+    read raises `DefaultBranchUnknown` (the merge path's, R13) rather than a `GitError`."""
+    try:
+        checkout.fetch()
+        default = f"origin/{checkout.default_branch()}"
+    except GitError as exc:
+        if not hold_unknown:
+            raise
+        raise DefaultBranchUnknown(owner_repo, exc) from exc
     ignored = check_config_fresh(
         facts.config.get(owner_repo),
         checkout.show(default, TRIAGE_CONFIG_PATH),
@@ -2953,6 +2961,18 @@ class ForgeReadError(Exception):
         self.code = code
 
 
+class DefaultBranchUnknown(ForgeReadError):  # noqa: N818 - the spec's name (R13)
+    """*repo*'s clone cannot name its default branch because origin cannot answer: the
+    fetch, or `checkout.default_branch()`, failed (merge-truth R13, gh#1176). Raised
+    ONLY by those two reads in `merge_ctx` and `_base_rules`; every other
+    `ForgeReadError` (a merge-methods or config read) behaves as before (gh#921). Each
+    caller catches this type alone, holds the repo for the pass and goes on."""
+
+    def __init__(self, repo: str, cause: object) -> None:
+        super().__init__(f"{repo} default branch unknown ({cause})", code=2)
+        self.repo = repo
+
+
 def recollect(
     scope: Scope,
     target: Path,
@@ -3379,6 +3399,7 @@ class _Driver:
         self._first_seen: dict[str, datetime] = {}  # merged with no merge time known
         self._ci: dict[str, bool] = {}  # per pass: repo -> origin/<default> says ci none
         self._rules: dict[str, BaseRules] = {}  # per pass: repo -> its base branch's rules
+        self._unknown_said: set[str] = set()  # per pass: repos whose hold was said (R13)
         self._unlanded: set[str] = set()  # per pass: planned merges that did not land
         self._held = 0  # per pass: planned dispatches that did not start
         self._stopped: dict[str, str] = {}  # per pass: repo -> batch that stopped its train
@@ -3552,8 +3573,8 @@ class _Driver:
         if repo not in self._merge:
             client, checkout = self.client(facts, repo), self.checkout(repo)
             try:
-                _fresh_config(checkout, facts, repo)
-            except TriageError as exc:  # a fetch, or main's config moved under the pass
+                _fresh_config(checkout, facts, repo, hold_unknown=True)
+            except TriageError as exc:  # main's config moved under the pass
                 raise ForgeReadError(str(exc), code=2) from exc
             try:
                 method = choose_method(
@@ -3588,9 +3609,24 @@ class _Driver:
                 self._rules[repo] = self.client(facts, repo).base_rules(
                     repo, self._reader(repo).default_branch()
                 )
+            except GitError as exc:  # R13: origin cannot name it
+                raise DefaultBranchUnknown(repo, exc) from exc
             except FORGE_ERRORS as exc:
                 raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return self._rules[repo]
+
+    def _ctx_or_hold(self, facts: Facts, repo: str) -> MergeContext | None:
+        """`merge_ctx`, or None with *repo* held for the pass (R13): the one catch-and-say
+        every merge-path caller shares. Only `DefaultBranchUnknown` is held."""
+        try:
+            return self.merge_ctx(facts, repo)
+        except DefaultBranchUnknown as exc:
+            if repo not in self._unknown_said:
+                self._unknown_said.add(repo)
+                err_console.print(
+                    f"[yellow]warning:[/yellow] held: {escape(str(exc))}", soft_wrap=True
+                )
+            return None
 
     def _queue_reads(
         self,
@@ -4490,6 +4526,7 @@ class _Driver:
             ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._rules = {}
+        self._unknown_said = set()
         self._clone_unread = {}
         self._restart = {}
         self._stopped, self._queued, self._conflicts = {}, 0, {}
@@ -4925,7 +4962,10 @@ class _Driver:
         repo: str,
         in_flight: int,
     ) -> _MergeOutcome:
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13: the repo is held for the pass
+            self._unlanded.add(batch.id)
+            return _MergeOutcome("held: default branch unknown", False, in_flight, False)
         entries = [
             e
             for e in pr_open_queue(judgements.batches, facts, judgements.issues)
@@ -5015,7 +5055,9 @@ class _Driver:
         never strands). A refusal is a held line and a `refused` event: the walk retries once
         more at the same head, then asks the operator (`enqueue-refused`)."""
         assert action.pr is not None
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown", False
         entries = [
             e
             for e in pr_open_queue(judgements.batches, facts, judgements.issues)
@@ -5155,7 +5197,9 @@ class _Driver:
             for e in batch.events
         ):
             return "", False  # rule 1, decided with no I/O: a hand-back covers this head
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "", False
         events = [*batch.events, *ctx.recorded.get(batch.id, [])]
         try:
             ctx.checkout.fetch()
@@ -5337,9 +5381,12 @@ class _Driver:
         last = last_dispatch(batch)
         name, target, launch = self._hand_back_target(facts, batch, repo)
         branch = last.branch if last else batch_branch(batch)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return f"{stopped}; held: default branch unknown", False
         brief = conflict_brief(
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
-            base=self.merge_ctx(facts, repo).main, mirrors=facts.config_for(repo).mirrors,
+            base=ctx.main, mirrors=facts.config_for(repo).mirrors,
         )  # fmt: skip
         if not self.adapter.carries(name):  # p4-o2: another driver's session
             return (
@@ -5560,7 +5607,9 @@ class _Driver:
     def _archive(
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
     ) -> tuple[str, bool]:
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown", False
         assert action.pr is not None
         step = "refused the merge"
         try:
@@ -5644,9 +5693,11 @@ class _Driver:
                 "runner's driver",
                 False,
             )
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown", False
         brief = archive_conflict_brief(
-            batch, pr=action.pr, head=action.head, branch=action.branch,
-            base=self.merge_ctx(facts, repo).main,
+            batch, pr=action.pr, head=action.head, branch=action.branch, base=ctx.main,
         )  # fmt: skip
         target = WorkItem(
             id=closeout_item_id(repo, batch.id), unit="run", workflow=batch_workflow(batch),
@@ -5857,7 +5908,9 @@ class _Driver:
         from the export record and only when the live head equals it), never the live
         one: nobody reviews this PR, so a commit someone else pushed to its branch must
         not reach the default branch (p4-sec-unpinned-merge). Then record it merged."""
-        ctx = self.merge_ctx(facts, repo)
+        ctx = self._ctx_or_hold(facts, repo)
+        if ctx is None:  # R13
+            return "held: default branch unknown"
         assert action.pr is not None
         try:
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)

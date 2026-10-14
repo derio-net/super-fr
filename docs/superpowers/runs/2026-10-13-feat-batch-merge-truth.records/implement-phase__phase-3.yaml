@@ -1,0 +1,30 @@
+schema_version: 9
+run: 2026-10-13-feat-batch-merge-truth
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3, P3.T2.S1, P3.T2.S2, P3.T3.S1]
+refactor:
+  P3.T2: "a test-only task over an already-correct renewal path; nothing to clean"
+  P3.T3: "acceptance status moves only; no code"
+journal:
+  - kind: decision
+    id: p3-ctx-or-hold
+    title: One _ctx_or_hold helper is the catch-and-say for every merge_ctx caller (phase 3)
+    body: |
+      DefaultBranchUnknown(ForgeReadError, code 2) is raised only by the fetch and default_branch read (via _fresh_config(hold_unknown=True), which other _fresh_config callers do not set) and by _base_rules' default_branch read (GitError). _ctx_or_hold catches that type alone and prints "held: <repo> default branch unknown (<cause>)" once per repo per pass (_unknown_said, reset each pass). Callers: _merge_batch, _enqueue, _recover, _hand_back, _archive, _hand_back_archive, _export_merge. _queue_reads keeps its own earlier hold ("queue mode unknown"). A held --once pass exits 3 (work remains), as any held merge does.
+    phase: 3
+  - kind: discovery
+    id: p3-wait-out-pin-1178
+    title: wait_out renewal spends no GraphQL, the test passed on arrival (phase 3)
+    body: |
+      test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window passed immediately, as expected: #1153 landed R12 (visibility read via REST repo_visibility). It is the regression pin for #1178, not a fix.
+    phase: 3
+  - kind: discovery
+    id: p3-heal-test-passes-on-arrival
+    title: The origin/HEAD heal test already passed; the unreachable-origin one was the red one (phase 3)
+    body: |
+      Checkout.default_branch already heals a missing origin/HEAD with `remote set-head --auto`, so test_yes_pass_over_a_clone_without_origin_head_heals_and_merges is a pin. Deviation: the unreachable-origin test uses one repo (World is single-repo), so "the other repo's work still runs" is not asserted; the hold is per repo by construction (_unknown_said is keyed by repo).
+    phase: 3
+resolves: []
+evidence: {}

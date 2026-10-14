@@ -2217,6 +2217,95 @@ def test_a_failed_read_while_acting_on_a_merge_does_not_end_the_loop(
     assert world.merged == [(101, "sha-101", "squash")]
 
 
+# ------------------------------------- default branch unknown (merge-truth R13, gh#1176)
+
+
+def _git(cwd: Path, *args: str) -> None:
+    import subprocess
+
+    subprocess.run(
+        ["git", "-c", "user.email=t@example.com", "-c", "user.name=t", *args],
+        cwd=cwd, check=True, capture_output=True,
+    )  # fmt: skip
+
+
+class GitHeadCheckout(DriveCheckout):
+    """DriveCheckout whose fetch and default branch are a REAL clone's: a git fixture."""
+
+    def __init__(self, path: Path, world: World, real: Checkout) -> None:
+        super().__init__(path, world)
+        self.real = real
+
+    def default_branch(self) -> str:
+        return self.real.default_branch()
+
+    def fetch(self) -> None:
+        self.real.fetch()
+
+
+def _git_clone(tmp_path: Path, world: World, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """origin (bare, on main) and a clone of it with `origin/HEAD` removed, as a cloud
+    session's clone has none. Returns the origin."""
+    origin, clone = tmp_path / "origin.git", tmp_path / "gitclone"
+    _git(tmp_path, "init", "--bare", "-b", "main", str(origin))
+    _git(tmp_path, "clone", "-q", str(origin), str(clone))
+    (clone / "f").write_text("x")
+    _git(clone, "add", "f")
+    _git(clone, "commit", "-qm", "init")
+    _git(clone, "push", "-q", "origin", "HEAD:main")
+    _git(clone, "remote", "set-head", "origin", "--auto")
+    _git(clone, "remote", "set-head", "origin", "-d")
+    fake = GitHeadCheckout(clone, world, Checkout.at(clone))
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    return origin
+
+
+def test_yes_pass_over_a_clone_without_origin_head_heals_and_merges(
+    tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _git_clone(tmp_path, world, monkeypatch)
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert world.merged == [(101, "sha-101", "squash")]
+    assert "default branch unknown" not in out
+
+
+def test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes(
+    tmp_path: Path, world: World, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fetch fails with `origin/HEAD` set: the repo is held with ONE warning line,
+    the pass ends without an error, and nothing is written to it."""
+    import shutil
+
+    origin = _git_clone(tmp_path, world, monkeypatch)
+    _git(tmp_path / "gitclone", "remote", "set-head", "origin", "main")
+    shutil.rmtree(origin)
+    _pr_open(world, tmp_path)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 3, out  # not an error: work remains, as for any held merge (exit 3)
+    assert world.merged == []
+    assert out.count(f"held: {REPO} default branch unknown (") == 1, out
+
+
+def test_merge_methods_read_failure_still_fails_the_pass(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """The unchanged gh#921 behaviour: only the default-branch read is held; any other
+    forge read failure in the merge context still ends a `--once` pass non-zero."""
+    _pr_open(world, tmp_path)
+
+    def _methods(repo: str) -> dict[str, Any]:
+        raise GhError(EOF_MSG, returncode=1)
+
+    monkeypatch.setattr(world, "repo_merge_methods", _methods)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code != 0, out
+    assert "default branch unknown" not in out
+    assert world.merged == []
+
+
 # ------------------------------------------------- closing finished sessions (#918)
 
 BATCH_ITEM = f"{REPO}/run/batch-b1"
