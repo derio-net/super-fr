@@ -412,3 +412,8 @@ Pre-existing in the triage page's open-PR row; this change does not touch render
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-10-14-exit-gates-p7 created=2026-10-13T23:06:28+00:00 -->
 ### tier-2026-10-14-exit-gates-p7 · decision · hard: changes how every release is cut and how versions and fr_version floors are read
+
+<!-- fr:journal kind=decision scope=spec id=decision-token-names created=2026-10-14T03:41:55+00:00 -->
+### decision-token-names · decision · Decision tokens are decided_by= and remainder_tracked_by=: released fr refuses answered_by/tracked_by on a decision
+
+Review p3-r1: fr <= 5.26 knows answered_by= and tracked_by= and its validator refuses them off a resolution record, so a decision carrying them made the journal unparseable to it. Decision-only tokens no released fr knows are skipped by its named projection, so the journal stamp stays put; answered_by/tracked_by stay resolution-only. Spec R9, R10, R12 and §C amended.
