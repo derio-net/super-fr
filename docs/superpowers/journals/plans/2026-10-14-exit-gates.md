@@ -605,3 +605,8 @@ mergeability.py is one two-line predicate and one string; the hint call site is 
 ### no-refactor-p5-t3 · discovery · no-refactor-because P5.T3 (phase 5)
 
 prose and a matrix status move only; lane logic was already one function (P5.T2.S3)
+
+<!-- fr:journal kind=decision scope=plan id=p5-ledger-unknown-lane-2 created=2026-10-14T06:22:28+00:00 phase=5 -->
+### p5-ledger-unknown-lane-2 · decision · Supersedes p5-ledger-unknown-lane: an unread gate ledger stays in Closing out (phase 5)
+
+lane_of no longer places a landed batch with unread gate labels in Needs you - Developer. It stays in Closing out with the driver's ledger-unread hint (gate labels unread; close-out waits), and needs_you lists it under a distinct ledger-unread kind (not a role lane) until the next collect reads them.
