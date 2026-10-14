@@ -1,0 +1,12 @@
+schema_version: 10
+run: 2026-10-13-feat-batch-exit-gates
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2]
+refactor:
+  P3.T1: "Three header tokens beside the existing ones, one projection helper each; the serializer's tuple join is the only new branch, so nothing duplicated to merge."
+  P3.T2: "A stamp-only hop over the shared record reader shape, two optional JournalItem fields and one context flag in the engine; nothing to clean."
+journal: []
+resolves: []
+evidence: {}

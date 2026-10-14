@@ -6323,24 +6323,35 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     """R15: a live PR body that closes, fixes or resolves an issue a post-merge,
     not-walk-verified row cites would close it on merge, before the promise it
     carries has been verified. Printed with the `Refs <ref>` that mentions it
-    without closing; exit 2. A repo whose matrix cites no issue is never asked
-    (the reference's repo identity needs a remote or matrix keys)."""
+    without closing; exit 2. Exit-gates R11 widens it: a row gated by a post-merge
+    gate holds its issues too, and so does a narrowing decision the operator did
+    not answer. A repo whose matrix cites no issue and whose journals narrow none
+    is never asked (the reference's repo identity needs a remote or matrix keys)."""
     from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
     from fr.commands.acceptance_cmd import MATRIX_REL
-    from fr.record.pr_body import holds_open_for_run, premature_closes
+    from fr.record.pr_body import (
+        PrematureClose,
+        holds_open_for_run,
+        premature_closes,
+        run_narrowings,
+    )
     from fr.requirements import load_spec_matrix, run_spec
+    from fr.verification.exit import run_exit
 
     path = repo_root / MATRIX_REL
-    if not path.is_file():
-        return
+    narrowings = run_narrowings(repo_root, state)
     try:
-        matrix = load_matrix(path)
-        if not any(row.issues for row in matrix.rows):
+        matrix = load_matrix(path) if path.is_file() else Matrix()
+        if not any(row.issues for row in matrix.rows) and not narrowings:
             return
         identity = resolve_identity(matrix, repo_root)
         spec_rel = run_spec(state)
-        spec_ref = load_spec_matrix(repo_root, spec_rel)[1] if spec_rel is not None else None
+        spec_ref = (
+            load_spec_matrix(repo_root, spec_rel)[1]
+            if spec_rel is not None and path.is_file()
+            else None
+        )
     except AcceptanceError as e:
         err_console.print(
             f"[red]refused: cannot check the PR body's closing keywords against the "
@@ -6348,20 +6359,68 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
+    try:
+        exit_ = run_exit(repo_root, state)
+    except Exception:  # noqa: BLE001 — an unreadable exit is the label sync's to refuse
+        exit_ = None
     found = premature_closes(
-        live, matrix, identity, holds_open_for_run(repo_root, state, matrix, spec_ref)
+        live,
+        matrix,
+        identity,
+        holds_open_for_run(repo_root, state, matrix, spec_ref),
+        exit=exit_,
+        narrowings=narrowings,
     )
     if not found:
         return
+
+    def why(p: PrematureClose) -> str:
+        held = []
+        if p.rows:
+            held.append(
+                f"row {', '.join(p.rows)} still holds open (post-merge or gated by a "
+                "post-merge gate, and not yet walk-verified)"
+            )
+        if p.decisions:
+            held.append(
+                f"decision {', '.join(p.decisions)} narrows it and the operator did not "
+                "answer it (`answered_by=operator`)"
+            )
+        return " and ".join(held)
+
     lines = "\n".join(
-        f"  {p.line!r} closes {p.ref}, which row {', '.join(p.rows)} still holds open "
-        f"(post-merge, not yet walk-verified) — write instead: {p.fix}"
-        for p in found
+        f"  {p.line!r} closes {p.ref}, which {why(p)} — write instead: {p.fix}" for p in found
     )
     err_console.print(
         "refused: the PR body closes an issue whose promise is not verified until after "
-        "merge. Mention it without closing (`Refs <ref>`); the close command is printed "
-        f"when the walk is recorded (`fr acceptance set-status --walk`):\n{lines}",
+        "merge, or that a decision narrowed. Mention it without closing (`Refs <ref>`); "
+        "the close command is printed when the walk is recorded (`fr acceptance "
+        f"set-status --walk`):\n{lines}",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
+def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R9: `deliver` refuses while the run leaves anything unaccounted
+    — an out-of-scope finding, an owed entry, an owed row citing the spec, a
+    narrowing decision — printing each with the command that accounts for it.
+    An unreadable exit judges no row here; the label sync refuses it."""
+    from fr.record.pr_body import unaccounted
+    from fr.verification.exit import run_exit
+
+    try:
+        exit_ = run_exit(repo_root, state)
+    except Exception:  # noqa: BLE001 — the label sync refuses an unreadable exit
+        exit_ = None
+    leftovers = unaccounted(repo_root, state, exit_)
+    if not leftovers:
+        return
+    lines = "\n".join(f"  {left.line()}" for left in leftovers)
+    err_console.print(
+        "refused: the run leaves work unaccounted for. File each leftover, gate it, or "
+        f"track it, then resolve again:\n{lines}",
         markup=False,
         soft_wrap=True,
     )
@@ -6653,6 +6712,7 @@ def _resolve_body(
         # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
+        _deliver_leftovers_gate(repo_root, state)
         _deliver_pr_gate(repo_root, state, pr)
         _deliver_exit_guard(repo_root, state)
         _deliver_label_sync(repo_root, state, pr, run_id)

@@ -31,7 +31,13 @@ def _at_deliver(tmp_path: Path) -> Path:
         ],
         resolves=[
             {"id": "p1-f1", "state": "fixed", "body": "covered"},
-            {"id": "p1-f2", "state": "out-of-scope", "body": "predates this change"},
+            # Filed, so `deliver` finds it accounted for (exit-gates R9).
+            {
+                "id": "p1-f2",
+                "state": "deferred",
+                "body": "predates this change",
+                "tracked_by": "derio-net/super-fr#99",
+            },
         ],
     )
     step = ["run", "resolve", RUN, "--step"]
@@ -50,9 +56,25 @@ def _at_deliver(tmp_path: Path) -> Path:
     assert out.exit_code == 0, out.output
     # One call (R4): the same resolve runs journal-check and briefs deliver.
     assert load_run_state(root, RUN).steps["deliver"].state == "running"
+    account_seeded_row(root)
     commit_all(root, "at deliver")
     (root / "suite.log").write_text("n passed\n")
     return root
+
+
+def account_seeded_row(root: Path) -> None:
+    """The seeded `unwired` row cites the spec, so `deliver` asks where its rest
+    is tracked (exit-gates R9): give it an issue."""
+    from tests.unit.record_support import SEEDED_ROW
+
+    out = fr(
+        root,
+        [
+            *("acceptance", "set-status", "--id", SEEDED_ROW, "--status", "unwired"),
+            *("--issue", "derio-net/super-fr#98", "--notes", "the rest is tracked"),
+        ],
+    )
+    assert out.exit_code == 0, out.output
 
 
 def _deliver(root: Path):
