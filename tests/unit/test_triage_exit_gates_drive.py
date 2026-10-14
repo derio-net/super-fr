@@ -349,3 +349,18 @@ def test_the_board_owes_no_post_merge_for_a_gated_batch() -> None:
     passed = [n for n in needs_you(_ledger_facts(world), _judgements()) if n.kind == "post-merge"]
 
     assert gated == [] and [n.ref for n in passed] == ["b1"]
+
+
+def test_p4_r8_every_pass_re_adds_a_missing_awaiting_live_label() -> None:
+    """R13 (amended): not only the first pass. An issue whose label was removed is
+    labelled again; one that carries it is left alone."""
+    rows = (GatedRow("row-a", "tester", walked=False, issues=(ISSUE,)),)
+    ledger = _ledger("gate:tester", rows=rows)
+    first = drive_pass(_landed(ledgers=ledger, awaiting_unlabelled=frozenset({ISSUE})))
+    labelled = drive_pass(_landed(ledgers=ledger, awaiting_unlabelled=frozenset()))
+    removed = drive_pass(_landed(ledgers=ledger, awaiting_unlabelled=frozenset({ISSUE})))
+
+    def keys(plan: Any) -> list[str]:
+        return [a.key for a in plan.actions if a.kind == "awaiting-live"]
+
+    assert (keys(first), keys(labelled), keys(removed)) == ([ISSUE], [], [ISSUE])

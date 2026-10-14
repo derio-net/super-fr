@@ -223,9 +223,8 @@ without the token is the agent's.
 
 R13. The driver never closes out a **gated** landed batch: one whose merged PR
 carries an unpassed `gate:<tester|devops>` label. Its card sits in that gate's
-lane (R17), naming the gate and what is owed. The first pass that sees it gated
-adds `fr:awaiting-live` to the issues its gated rows cite. Its `Refs` issues stay
-open.
+lane (R17), naming the gate and what is owed. Every pass adds `fr:awaiting-live`
+to any issue its gated rows cite that lacks it. Its `Refs` issues stay open.
 
 R14. **A post-merge gate passes in either of two ways.** Both swap the PR's
 `gate:<g>` label for `gate:<g>-passed` and add a PR comment saying what passed
