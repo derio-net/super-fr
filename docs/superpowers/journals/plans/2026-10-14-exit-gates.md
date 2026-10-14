@@ -1030,3 +1030,88 @@ The RC parsing went straight into one shared value (scripts/versions.py Version)
 ### no-refactor-p7-t4 · discovery · no-refactor-because P7.T4 (phase 7)
 
 One fr acceptance set-status call; nothing to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=in -->
+### p7-r1 · finding [open] (reviewer: in scope) · untagged RC at HEAD recomputes the same RC; every later run refuses (phase 7)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=in -->
+### p7-r2 · finding [open] (reviewer: in scope) · merged-PR read trusts the eventually consistent search index; no --base main (phase 7)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=in -->
+### p7-r3 · finding [open] (reviewer: in scope) · bump and lock-check inherit write tokens while the spec claims otherwise (phase 7)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=in -->
+### p7-r4 · finding [open] (reviewer: in scope) · FR_RELEASE_STATUS_TOKEN described as read-only but is the write-capable github.token (phase 7)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=in -->
+### p7-r5 · finding [open] (reviewer: in scope) · failed or capped gate read blocks RCs too (phase 7)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=in -->
+### p7-r6 · finding [open] (reviewer: in scope) · removed major fragment moves the version backwards (phase 7)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=in -->
+### p7-r7 · finding [open] (reviewer: in scope) · human fr release status truncates silently and reads unfetched tags (phase 7)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8 created=2026-10-14T10:34:24+00:00 phase=7 state=open review_scope=out -->
+### p7-r8 · finding [open] (reviewer: out of scope) · fr.cloud._version_tuple cannot parse X.Y.ZrcN; the cloud doctor's fr-version check reports ok on an RC install (phase 7)
+
+Reviewer tag: out.
+
+<!-- fr:journal kind=review scope=plan id=p7-review-1 created=2026-10-14T10:34:24+00:00 phase=7 -->
+### p7-review-1 · review · phase 7 independent review: 8 findings (7 in, 1 out) (phase 7)
+
+Dispatched reviewer read 55036128..11ca630e against R20, R21, R25, R26 and AGENTS.md's release flow, ran probes with the World fixture; confirmed one Version object, credential-free fr decision, no RC loop, narrow floor admission; reproduced the untagged-RC wedge (p7-r1) and found the search-index gap (p7-r2). All 7 in-scope fixed in 4fdf1676; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=fixed resolves=p7-r1 -->
+### p7-r1-resolved · finding [fixed] · resolves p7-r1: untagged RC at HEAD recomputes the same RC; every later run refuses (phase 7)
+
+test_p7_r1_an_untagged_rc_at_head_is_tagged_with_no_new_commit (4fdf1676, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=fixed resolves=p7-r2 -->
+### p7-r2-resolved · finding [fixed] · resolves p7-r2: merged-PR read trusts the eventually consistent search index; no --base main (phase 7)
+
+cross-checked against git log PR numbers, --base main; test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_final (4fdf1676, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=fixed resolves=p7-r3 -->
+### p7-r3-resolved · finding [fixed] · resolves p7-r3: bump and lock-check inherit write tokens while the spec claims otherwise (phase 7)
+
+credential-free; test_p7_r3_bump_and_lock_check_run_with_no_forge_token (4fdf1676, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=fixed resolves=p7-r4 -->
+### p7-r4-resolved · finding [fixed] · resolves p7-r4: FR_RELEASE_STATUS_TOKEN described as read-only but is the write-capable github.token (phase 7)
+
+wording fixed in release.yml and AGENTS.md; test_p7_r4_header_says_the_status_token_is_the_write_capable_workflow_token (4fdf1676, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=fixed resolves=p7-r5 -->
+### p7-r5-resolved · finding [fixed] · resolves p7-r5: failed or capped gate read blocks RCs too (phase 7)
+
+unknown gate state cuts an RC naming the reason; test_p7_r5_a_failed_forge_read_cuts_an_rc_naming_the_reason (4fdf1676, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=fixed resolves=p7-r6 -->
+### p7-r6-resolved · finding [fixed] · resolves p7-r6: removed major fragment moves the version backwards (phase 7)
+
+target <= head refused; test_p7_r6_a_removed_major_fragment_never_moves_the_version_backwards (4fdf1676, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r7-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=fixed resolves=p7-r7 -->
+### p7-r7-resolved · finding [fixed] · resolves p7-r7: human fr release status truncates silently and reads unfetched tags (phase 7)
+
+warns at limit, fetches tags; test_p7_r7_a_read_at_its_limit_warns_and_an_unfetched_tag_is_said (4fdf1676, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r8-resolved created=2026-10-14T10:34:24+00:00 phase=7 state=open resolves=p7-r8 out_of_scope=true -->
+### p7-r8-resolved · finding [out-of-scope] · resolves p7-r8: fr.cloud._version_tuple cannot parse X.Y.ZrcN; the cloud doctor's fr-version check reports ok on an RC install (phase 7)
+
+fr cloud doctor's version parser predates RC versions and degrades to ok, harmless; not part of the release tooling R25 names.
