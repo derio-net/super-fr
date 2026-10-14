@@ -9298,6 +9298,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R20
     - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R21
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_status.py
+      - super-fr:tests/unit/test_release_script.py
+      - super-fr:tests/unit/test_version_rc.py
+      - super-fr:tests/unit/test_release_workflow.py
+    status: walk-owed
+    notes: fr release status, release.py's RC/final decision (RC tag, pre-release, no
+      fragment consumed; final once nothing waits), both RC spellings and RC-admitting
+      floors are unit-tested against fake forges and temp git repos; a live RC then
+      final on this repo's release.yml is still owed post-merge.
