@@ -51,7 +51,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-10-14T18:03:16+00:00'
+    at: '2026-10-14T20:13:11+00:00'
     members:
     - implement-phase
     - review-phase
@@ -72,6 +72,12 @@ steps:
         evidence:
           tests: closed-session-batch-recovery-full-84eeab81.log@dd8ab06465fb;tree=85f9bd344425c1dd1f805ceda3e73a7984d17f32c2eb9cb4d530363f4c0031ca
           visual: none
+      phase/1/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-10-14T20:13:11+00:00'
+          harness: opencode
+          session: ses_ec52e48a3ffeYuGgSUiT9iZD10
   journal-check:
     state: pending
   deliver:
