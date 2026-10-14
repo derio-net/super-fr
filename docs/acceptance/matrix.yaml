@@ -9146,12 +9146,12 @@ rows:
       gate= — is computed once and printed by fr verification exit; a run is held after
       merge iff a gate is tester or devops.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_verification_exit.py
@@ -9166,7 +9166,7 @@ rows:
       the reason and re-syncs the labels; after spec-review a change that makes the
       exit wait less is refused without a verified operator answer.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_verification_set.py
@@ -9184,7 +9184,7 @@ rows:
       like any other (unresolvable, unrunnable install, missing scenario, post-merge
       or none without a reason).'
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R24
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R24
     levels:
       unit:
       - super-fr:tests/unit/test_row_verification_issues.py
@@ -9200,10 +9200,10 @@ rows:
       issue a post-merge gate holds or an agent-decided narrowing names; fr journal
       file files the issue and defers the finding in one move.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R9
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_deliver_leftovers.py#test_each_kind_of_leftover_is_listed_with_its_fix
@@ -9220,9 +9220,9 @@ rows:
       lanes read from the run cursor and the gate labels, and never shows merge ready,
       nor merges, a CONFLICTING or DIRTY PR.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R17
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R19
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R18
     levels:
       unit:
       - super-fr:tests/unit/test_triage_board_lanes.py#test_a_cursor_blocked_on_a_step_gate_is_needs_developer
@@ -9238,8 +9238,8 @@ rows:
       and installs nothing for an unknown version while listing the available ones;
       install.sh accepts a clean checkout at a v* tag.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R22
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R23
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R22
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R23
     levels:
       int:
       - super-fr:tests/integration/test_install_channels.py#test_rc_installs_the_newest_rc_numerically
@@ -9252,7 +9252,7 @@ rows:
     acceptance: A run's PR carries one verification:<kind> label per kind and one gate:<gate>
       label per post-merge gate, kept in sync as the spec changes.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_exit_label_sync.py
@@ -9268,8 +9268,8 @@ rows:
       its Refs issues open under its Needs-you lane until its rows are walked on main
       or fr gate pass records the pass, which swaps the label to gate:<g>-passed.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_triage_exit_gates_drive.py
@@ -9287,9 +9287,9 @@ rows:
       one housekeeping PR that the driver marks ready and merges once clean, closing
       passed batches' Refs issues; one reconcile attempt, then the operator.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R15
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R16
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R27
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R27
     levels:
       unit:
       - super-fr:tests/unit/test_triage_batch_closeout.py
@@ -9308,10 +9308,10 @@ rows:
       since the last final waits on a post-merge gate, and the final vX.Y.Z once none
       does; fr release status lists what still waits.
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R20
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R21
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R25
-    - super-fr:docs/superpowers/specs/2026-10-14-exit-gates-design.md#R26
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R21
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R25
+    - super-fr:docs/superpowers/implemented/specs/2026-10-14-exit-gates-design.md#R26
     levels:
       unit:
       - super-fr:tests/unit/test_release_status.py

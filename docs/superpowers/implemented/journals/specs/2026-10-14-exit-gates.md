@@ -464,3 +464,23 @@ what: **Release.** While step 2's PR is unpassed, a push to `main` cuts `vX.Y.Z-
 why: release run 38557522803 chose 5.27.0-rc.1 correctly but the staged suite refused it (3 tests assume final-only versions); nothing pushed/tagged. Tracked by #1203
 how: fr journal resolve --scope spec --slug 2026-10-14-exit-gates --id test-plan-step-4 --state fixed --note "<evidence>"
 owed_key: spec:2026-10-14-exit-gates#step4
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-10-14T11:59:47+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1204 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1204] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1204; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved created=2026-10-14T11:59:47+00:00 state=open resolves=test-plan-step-2 filed_as=derio-net/super-fr#1205 -->
+### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1205] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Filed at archive as derio-net/super-fr#1205; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-3-resolved created=2026-10-14T11:59:47+00:00 state=open resolves=test-plan-step-3 filed_as=derio-net/super-fr#1206 -->
+### test-plan-step-3-resolved · finding [filed → derio-net/super-fr#1206] · resolves test-plan-step-3: Test Plan step 3 owed
+
+Filed at archive as derio-net/super-fr#1206; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-4-resolved created=2026-10-14T11:59:47+00:00 state=open resolves=test-plan-step-4 filed_as=derio-net/super-fr#1207 -->
+### test-plan-step-4-resolved · finding [filed → derio-net/super-fr#1207] · resolves test-plan-step-4: Test Plan step 4 owed
+
+Filed at archive as derio-net/super-fr#1207; still owed until discharged.
