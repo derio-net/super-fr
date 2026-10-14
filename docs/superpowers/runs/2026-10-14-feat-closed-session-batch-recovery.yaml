@@ -3,7 +3,7 @@ run: 2026-10-14-feat-closed-session-batch-recovery
 workflow: fr-goal@1
 branch: feat/closed-session-batch-recovery
 started: '2026-10-14T15:57:59+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -44,7 +44,11 @@ steps:
           returned: '2026-10-14T18:03:10+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-10-14T18:03:15+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
