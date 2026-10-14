@@ -519,3 +519,37 @@ def test_settle_closed_ignores_untrusted_markers(gh: FakeGhClient) -> None:
     _closed_issue(gh, "fr:claimed")
     assert _settle(gh) == cw.Done("unlabelled")
     assert "fr:claimed" not in gh.issues[(REPO, 1)].labels
+
+
+def _count_views(gh: FakeGhClient) -> list[int]:
+    views: list[int] = []
+    real = gh.view_issue
+
+    def counting(repo: str, number: int) -> dict[str, object]:
+        views.append(number)
+        return real(repo, number)
+
+    gh.view_issue = counting  # type: ignore[method-assign]
+    return views
+
+
+def test_settle_closed_views_the_issue_once_and_edits_labels_once(gh: FakeGhClient) -> None:
+    """p1-r2: the labels come from the first read, the restore re-read is `_read`'s."""
+    _own_marker(gh)
+    _closed_issue(gh, "fr:claimed", "fr:in-progress")
+    views = _count_views(gh)
+    _settle(gh)
+    assert len(views) == 1
+    assert [n for n, _ in gh.calls].count("edit_issue_labels") == 1
+
+
+def test_settle_closed_with_no_release_label_edits_no_label_and_still_releases(
+    gh: FakeGhClient,
+) -> None:
+    _own_marker(gh)
+    _closed_issue(gh)
+    views = _count_views(gh)
+    assert _settle(gh) == cw.Done("released", 1500)
+    assert _markers(gh)[0].released == NOW
+    assert "edit_issue_labels" not in [n for n, _ in gh.calls]
+    assert len(views) == 1
