@@ -1220,3 +1220,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1202.
 ### p4-gated-post-merge-delayed-resolved-2 · finding [fixed] · resolves p4-gated-post-merge-delayed: A gated batch's post_merge waits for its gate, yet the tester walks the merged build
 
 Fixed as p4-r2 in 9b543573 (post_merge runs at merge for every landed batch); operator authorized recording it fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved-2 created=2026-10-14T11:15:18+00:00 state=fixed resolves=p1-r8 answered_by=operator -->
+### p1-r8-resolved-2 · finding [fixed] · resolves p1-r8: spec §A says an older collector refuses exit:; since gh#998 parse_triage_config drops unknown top-level keys
+
+Spec §A sentence corrected in 2c89b761 (an older fr ignores exit:); operator authorized recording it fixed.
