@@ -1,0 +1,58 @@
+schema_version: 10
+run: 2026-10-14-feat-closed-session-batch-recovery
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-goal
+    title: "Operator goal and development authorization"
+    body: |
+      Operator approved taking the supported closed-session recovery fix to a reviewed draft PR. You own implementation of this goal in super-fr; coordinator remains w9:pR. Invoke fr-goal FIRST and follow its full pipeline, starting fr run start in isolation with a feature branch such as feat/closed-session-batch-recovery, binding your actual session ses_ec52e48a3ffeYuGgSUiT9iZD10 and harness opencode. Goal: provide a supported, explicit recovery path for already-dispatched triage batches whose original harness sessions/panes were closed. Preserve batch identity and dispatch history, updated existing branches/worktrees and durable run cursors; audit fresh pane/session ownership; launch fresh OpenCode with --auto and model binding; never replay uncertain submission; retain all operator question/approval gates. Investigate existing restart/replace/dispatch seams to choose the smallest coherent API; comply with super-fr AGENTS.md including bridge audit before spec, isolation, acceptance rows, change fragment, tests and explainers as applicable. Use fr-goal's prescribed spec-review/phase-executor/review delegation. Heavy suites use bash ~/.cache/fr/coord/testslot.sh -- <cmd>. Operator owns design question rounds: do not answer them or default them. Bring the question round back to the coordinator as explicit questions, then hold; coordinator will pass operator answers. This approval is for developing and delivering the fix only: do NOT recover/dispatch the six real batches, mutate their triage state, restart any org loop, ready/merge PRs, add approved-fr, or access live hardware/secrets/vault. Keep existing driver stopped. Any new OpenCode session MUST use opencode --auto. Start now and continue autonomously until an operator gate, genuine blocker, or reviewed draft PR delivery. Report run ID, workspace and question gate when reached.
+  - kind: decision
+    id: recovery-hold
+    title: "Recovered sessions start in HOLD"
+    body: "Operator Q1: Start in HOLD. Reconstruct/report-only until separate operator go-ahead; no automatic cursor continuation. Confirmed through the OpenCode question tool."
+  - kind: decision
+    id: recovery-verification
+    title: "Automated tests and post-merge Tester walk"
+    body: "Operator Q2: tests and the walk, which will be at the Tester gate. Candidate tests run before delivery; the actual disposable herdr recovery walk is post-merge, operator-driven, and holds close-out. Confirmed through the OpenCode question tool."
+  - kind: discovery
+    id: bridge-audit
+    title: "Bridge audit before spec"
+    body: "Read all 12 fr_dispatch and all 14 fr_vk source modules end-to-end. Tick dispatches item graphs and stamps tracker projections; VK is a phase/card adapter. Closed batch session recovery belongs in the optional herdr replacement seam, with unchanged mandatory Runner and dispatch lifecycle."
+resolves: []
+acceptance:
+  - id: triage-closed-recovery
+    capability: "Triage batch recovery"
+    acceptance: "A closed batch session can recover into a fresh held OpenCode session without losing work or original dispatch history."
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R2"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-recovery.sh
+  - id: triage-closed-recovery-refusals
+    capability: "Triage batch recovery"
+    acceptance: "Recovery refuses unsafe or unknown ownership and its previews leave state and sessions untouched."
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R3"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-recovery.sh
+  - id: triage-closed-recovery-repair
+    capability: "Triage batch recovery"
+    acceptance: "Interrupted recovery never duplicates launch or uncertain submission, and explicit repair records truthful session ownership."
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R7"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/triage-closed-recovery.sh
+  - id: triage-closed-recovery-live
+    capability: "Triage batch recovery"
+    acceptance: "An actual closed disposable control pane recovers into autonomous OpenCode HOLD with operator gates intact."
+    origin: ["derio-net/super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R8"]
+    status: not-implemented
+    verify: live
+    scenario: tests/scenarios/herdr-closed-recovery-live.sh
+emitted:
+  spec: docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md
+evidence:
+  answered_by: operator
