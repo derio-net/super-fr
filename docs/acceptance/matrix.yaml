@@ -7990,9 +7990,14 @@ rows:
       origin/HEAD whose origin answers merges.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-merge-truth-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_yes_pass_with_unreachable_origin_holds_the_repo_and_finishes
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_yes_pass_over_a_clone_without_origin_head_heals_and_merges
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_merge_methods_read_failure_still_fails_the_pass
+    status: ci
+    notes: DefaultBranchUnknown holds the repo on a failed fetch or default-branch read;
+      heal and gh#921 pinned
     verify: none
   - id: triage-waitout-no-graphql
     capability: triage-batches
