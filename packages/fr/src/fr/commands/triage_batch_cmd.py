@@ -177,6 +177,7 @@ from fr.triage.batch_drive import (
     closeout_due,
     closeout_event,
     closeout_item_id,
+    collected_item_id,
     conflict_decision,
     conflict_item_id,
     default_selection,
@@ -3545,6 +3546,7 @@ class _Driver:
         # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
         # move only when the default branch does
         self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
+        self._holds: dict[tuple[str, str, str], str | None] = {}
         self._fetched: set[str] = set()  # per pass: repos whose origin was fetched (p4-r7)
 
     # -------------------------------------------------------------- reaching out
@@ -3970,7 +3972,14 @@ class _Driver:
             probed = frozenset(b.id for b in stale if closeout_item_id(repos[b.id], b.id) in asked)
         idle = self._idle(facts, chosen, repos, stages, archives, now) if self.yes else ()
         ledgers = self._ledgers(facts, judgements, stages, repos, ids, {*unread, *carried})
+        holds = {
+            b.id: why
+            for b in due
+            if not held_gates(ledgers[b.id].labels if b.id in ledgers else ())
+            and (why := self._closeout_hold(facts, repos[b.id], b)) is not None
+        }
         return Snapshot(
+            closeout_holds=holds,
             approvals=approvals,
             batches=tuple(judgements.batches),
             stages=stages,
@@ -4071,6 +4080,34 @@ class _Driver:
                 f"cannot read the rows {batch.id}'s gates hold on {repo}'s default branch "
                 f"({exc}); no fr:awaiting-live label and no gate pass is planned for it",
             )
+            return None
+
+    def _closeout_hold(self, facts: Facts, repo: str, batch: Batch) -> str | None:
+        """Why *batch*'s archive would hold (R15), read on `origin/<default>`: its run's
+        Test Plan has steps with no outcome and no passed gate will record them. None when
+        it would not, or (reported once) when the clone cannot say: the close-out's own
+        verb then names it."""
+        pr = batch_pr(batch, facts)
+        if pr is not None and passed_gates(pr.labels or ()):
+            return None  # the verb records every missing outcome as ran (R15 step 2)
+        branch = recorded_branch(batch)
+        try:
+            checkout = self._fetched_reader(repo)
+            tip = f"origin/{checkout.default_branch()}"
+            key = (repo, checkout.rev_parse(tip), branch)
+            if key not in self._holds:
+                read = closeout_read(checkout, tip, branch, repo)
+                steps = ", ".join(map(str, read.missing))
+                self._holds[key] = (
+                    f"Test Plan step(s) {steps} of run {read.run} have no recorded outcome: "
+                    f"`fr closeout outcome --run {read.run} --step <n> --ran|--owed|--na`"
+                    if read.run and read.missing
+                    else None
+                )
+            return self._holds[key]
+        except TriageError as exc:
+            why = f"cannot read whether {batch.id}'s archive holds ({exc})"
+            self._report_once(f"hold\0{batch.id}\0{exc}", why)
             return None
 
     def _claim_plan(
@@ -4882,7 +4919,7 @@ class _Driver:
             if action.head:  # an export's warn names no head: it is said every pass
                 self.warned.add(action.head)
             return action.detail, False, in_flight
-        if action.kind in ("blocked", "held", "ledger-unread"):
+        if action.kind in ("blocked", "held", "ledger-unread", "closeout-held"):
             return action.detail, False, in_flight
         if action.kind in ("claim", "refresh", "release"):
             if action.kind == "claim" and action.batch in self._held_now:
@@ -4923,6 +4960,9 @@ class _Driver:
             return line, did, in_flight
         if action.kind == "post-merge":
             outcome, did = self._post_merge(facts, judgements, batch, repo)
+            return outcome, did, in_flight
+        if action.kind == "closeout" and action.items:
+            outcome, did = self._collected_close_out(action, facts, judgements, repo)
             return outcome, did, in_flight
         if action.kind == "closeout":
             outcome, did = self._close_out(action, facts, judgements, batch, repo)
@@ -5777,6 +5817,81 @@ class _Driver:
         pickup = f"--run {run}" if run else f"--branch {branch}"
         return f"started {item.id} (fr pickup {pickup})", True
 
+    def _collected_close_out(
+        self, action: Action, facts: Facts, judgements: Judgements, repo: str
+    ) -> tuple[str, bool]:
+        """R15: start ONE close-out session for *action*'s batches, briefed to run `fr
+        triage batch closeout`. Each member's close-out event (`archive` the shared branch)
+        is recorded before the tab starts (gh#883) and taken back if it cannot start."""
+        members: list[Batch] = []
+        skipped: list[str] = []
+        for bid in action.items:
+            b = _find(judgements.batches, bid)
+            if self.adapter.refusal(b) is not None:
+                skipped.append(f"{bid} (another driver's runner)")
+            elif (
+                self.adapter.kind == "host"
+                and facts.config_for(repo).post_merge
+                and not any(e.kind == "post_merge" for e in b.events)
+            ):
+                skipped.append(f"{bid} (its post_merge has not succeeded)")
+            else:
+                members.append(b)
+        if not members:
+            return f"close-out held: {'; '.join(skipped)}", False
+        checkout = self.checkout(repo)
+        try:
+            checkout.fast_forward(switch=self.adapter.owns_checkout)
+            _fresh_config(checkout, facts, repo)
+            base = checkout.default_branch()
+            day = _now().date()
+            used = [e.archive for b in judgements.batches for e in b.events
+                    if isinstance(e, CloseoutEvent) and e.archive]  # fmt: skip
+            n = collected.next_collected([*used, f"chore/{action.key}"], day) - 1
+            while checkout.remote_branch_exists(collected.collected_branch(day, n)):
+                n += 1  # a closeout run by hand, or a start that died: never reuse its head
+        except TriageError as exc:
+            return f"close-out held: {exc}", False
+        branch = collected.collected_branch(day, n)
+        name = str(collected.collected_name(branch))
+        launch = self._launch(facts, members[0], repo)
+        item = _collected_item(
+            repo, members, launch, name=name, branch=branch, checkout=checkout.main_worktree(),
+            group=self.group_of(members[0]), base=base, scope_args=self.scope_args,
+        )  # fmt: skip
+        runner = self.runner(str(launch.runner))
+        if not runner.can_dispatch(item):
+            _fail(f"runner `{launch.runner}` does not take run-unit work")
+        refusal = runner.preflight([item])
+        if refusal:
+            _fail(f"runner `{launch.runner}` refused: {refusal}")
+        cursors = _cursors(checkout.path)
+        recorded = list(judgements.batches)
+        for b in members:
+            found = find_run(cursors, recorded_branch(b))
+            event = CloseoutEvent(kind="closeout", at=_now_after(b), runner=str(launch.runner),
+                                  handle=item.id, run=found[0] if found else None,
+                                  archive=branch)  # fmt: skip
+            recorded = _replace(recorded, b.model_copy(update={"events": [*b.events, event]}))
+        _write(self.target, recorded, facts, read=judgements.batches, read_errors=True)
+        try:
+            handle = runner.dispatch(item)
+        except Exception as exc:  # the runner's own failure: nothing started, taken back
+            _write(self.target, judgements.batches, facts, read=recorded, read_errors=True)
+            return self._dispatch_failed(
+                members[0], f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", exc
+            ), False
+        if handle and handle != item.id:  # the runner's own handle, once it is known
+            known = recorded
+            for b in members:
+                mine = _find(known, b.id)
+                last = mine.events[-1].model_copy(update={"handle": handle})
+                known = _replace(known, mine.model_copy(update={"events": [*mine.events[:-1],
+                                                                           last]}))  # fmt: skip
+            _write(self.target, known, facts, read=recorded, read_errors=True)
+        left = f"; not now: {'; '.join(skipped)}" if skipped else ""
+        return f"started {item.id} for {', '.join(b.id for b in members)}{left}", True
+
     def _dispatch_failed(self, batch: Batch, message: str, cause: BaseException | None) -> str:
         """A runner failed to start *batch*'s session (gh#931): as a refused merge
         (rg-4), reported in full once per batch and cause and tried again on a later
@@ -6080,6 +6195,56 @@ def _closeout_item(
         payload=payload,
         tracking=None,
     )
+
+
+def collected_brief(
+    repo: str, ids: Sequence[str], *, branch: str, checkout: Path, scope_args: Sequence[str]
+) -> str:
+    """The collected close-out's brief (R15): run the verb once; fix a hand-back (R27)."""
+    verb = shlex.join(["fr", "triage", "batch", "closeout", *ids, "--yes", *scope_args])
+    return (
+        f"Close out batches {', '.join(ids)} of {repo}: their PRs have merged.\n"
+        f"In {checkout}, run `{verb}` once and report what it prints. It opens ONE PR "
+        f"on {branch}; the driver merges it once it is green.\n"
+        f"If the driver hands that PR back (a conflict or failing checks), fix it on "
+        f"{branch} and push; it hands back once."
+    )
+
+
+def _collected_item(
+    repo: str,
+    members: Sequence[Batch],
+    launch: Launch,
+    *,
+    name: str,
+    branch: str,
+    checkout: Path,
+    group: str | None,
+    base: str,
+    scope_args: Sequence[str],
+) -> WorkItem:
+    """The collected close-out's work item (§E): unit `run`, id `closeout-<date>-<n>`."""
+    from fr_dispatch.work_item import WorkItem
+
+    ids = [b.id for b in members]
+    payload: dict[str, Any] = {
+        "kind": "closeout",
+        "brief": collected_brief(
+            repo, ids, branch=branch, checkout=checkout, scope_args=scope_args
+        ),  # fmt: skip
+        "harness": launch.harness,
+        "model": launch.model,
+        "branch": base,
+        "issues": [k for b in members for k in b.ids],
+        "checkout": str(checkout),
+        "base": base,
+    }
+    if group:
+        payload["group"] = group
+    return WorkItem(
+        id=collected_item_id(repo, name), unit="run", workflow=batch_workflow(members[0]),
+        repo=repo, parent=None, inputs=(), payload=payload, tracking=None,
+    )  # fmt: skip
 
 
 def build_driver(

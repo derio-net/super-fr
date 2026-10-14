@@ -53,7 +53,8 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 — fixtures
     world_fixture,
 )
 
-CLOSEOUT_ITEM = f"{REPO}/run/closeout-b1"
+CLOSEOUT_ITEM = f"{REPO}/run/closeout-b1"  # a per-batch close-out, recorded before R15
+COLLECTED_ITEM = f"{REPO}/run/closeout-2026-10-02-1"
 
 
 # ------------------------------------------------- gh#883: one close-out, ever
@@ -162,8 +163,8 @@ def test_a_closeout_the_runner_fails_to_start_does_not_end_the_loop_and_is_repor
     result = _drive_named(tmp_path, "--yes")
     assert isinstance(result.exception, _StopError), result.output
     assert result.output.count("agent_pane_busy") == 1
-    assert tries == [CLOSEOUT_ITEM] * 3
-    assert [i.id for i in runner.dispatched] == [CLOSEOUT_ITEM]
+    assert tries == [COLLECTED_ITEM] * 3
+    assert [i.id for i in runner.dispatched] == [COLLECTED_ITEM]
     assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
 
 

@@ -103,6 +103,9 @@ ActionKind = Literal[
     "gate-pass",
     "ledger-unread",
     "post-merge",
+    "closeout-held",
+    "closeout-handback",
+    "closeout-stuck",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -348,6 +351,10 @@ class Snapshot:
     # The repos whose `post_merge` this driver runs (p4-r2): a landed batch of one gets a
     # `post-merge` action at merge, gated or not, before any close-out of it.
     post_merge_repos: frozenset[str] = frozenset()
+    # Landed batches whose archive would hold (exit-gates R15: a Test Plan step with no
+    # outcome and no passed gate to record it), with why, read on the default branch by
+    # the driver: a need, never a member of a collected close-out.
+    closeout_holds: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -360,12 +367,16 @@ class Action:
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
     train: str = ""  # merge: the repo whose train this candidate belongs to
     archived: int | None = None  # adopt: the close-out event's `archived`
-    items: tuple[str, ...] = ()  # close: the item ids whose sessions to close
+    # close: the item ids whose sessions to close; closeout, archive, closeout-handback,
+    # closeout-stuck of a collected close-out: its member batch ids
+    items: tuple[str, ...] = ()
     # export*, and a warn about one: the wave key (`batch` is then the repo); the
     # highest wave the export PR covers, which names its branch
     wave: str | None = None
     covers: tuple[str, ...] = ()  # export: every wave the PR records
-    key: str = ""  # claim, refresh, release: the issue key
+    # claim, refresh, release: the issue key; a collected close-out's actions: its name,
+    # `closeout-<date>-<n>`
+    key: str = ""
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     ejected: bool = False  # warn: a queued PR that left the merge queue unmerged (§D)
@@ -497,7 +508,7 @@ def idle_session(
         if event.archived is not None or any(attributed(p, batch, event) for p in archives):
             return None
         since = event.at
-        item = closeout_item_id(repo, batch.id)
+        item = event_item_id(repo, batch.id, event)
     else:
         dispatch = last_dispatch(batch)
         if dispatch is None or stage != "dispatched":
@@ -575,7 +586,7 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
     the batch would read `closing` forever. Said once; the operator decides."""
     if snap.now - event.at < STALE_CLOSEOUT:
         return None
-    item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+    item = event_item_id(snap.repos.get(batch.id, ""), batch.id, event)
     if item in snap.existing:
         return None
     key = f"stale-closeout\0{batch.id}\0{event.at.isoformat()}"
@@ -634,6 +645,33 @@ def next_collected(branches: Iterable[str], day: date) -> int:
         if (m := _COLLECTED.match(b)) is not None and m.group(1) == day.isoformat()
     ]
     return max(used, default=0) + 1
+
+
+def collected_item_id(repo: str, name: str) -> str:
+    """`<OWNER>/<REPO>/run/closeout-<date>-<n>`: unit `run`, one per collected close-out."""
+    return f"{repo}/run/{name}"
+
+
+def event_item_id(repo: str, batch_id: str, event: CloseoutEvent) -> str:
+    """The work item a batch's close-out event started: the collected close-out's when its
+    `archive` is a collected branch (R15), else the batch's own."""
+    name = collected_name(event.archive or "")
+    return collected_item_id(repo, name) if name else closeout_item_id(repo, batch_id)
+
+
+def _collected_under_way(repo: str, snap: Snapshot) -> bool:
+    """R15: a collected close-out of *repo* was started and its PR has not merged (nor
+    been recorded merged): the next one waits for it."""
+    for b in snap.batches:
+        event = closeout_event(b)
+        if (
+            snap.repos.get(b.id) == repo
+            and event is not None
+            and collected_name(event.archive or "") is not None
+            and not is_finished(b, snap.stages.get(b.id, "merged"), snap.archives.get(repo, ()))
+        ):
+            return True
+    return False
 
 
 def wave_group(prefix: str, wave: int | None) -> str:
@@ -822,9 +860,13 @@ def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:
     `chore/closeout-*` head (`chore/archive-<plan>`, `chore/closeout-<run-id>`) must
     also change the batch's run file or its plan journal (review rg-12). Neither
     attributes a PR that is not `trusted`: a fork or a foreign author can choose
-    both the head name and the files (gh#936)."""
+    both the head name and the files (gh#936). A trusted PR on the event's own collected
+    `archive` head (`chore/closeout-<date>-<n>`, a name only that close-out produces) is
+    the batch's: its one PR names every member, a batch with no run included (§D)."""
     if not pr.trusted:
         return False
+    if collected_name(event.archive or "") is not None and pr.head_ref == event.archive:
+        return True  # a collected close-out's shared head names every member (§D)
     branch = recorded_branch(batch)
     if pr.head_ref == f"chore/closeout-{branch.replace('/', '-')}":
         return True
@@ -1414,7 +1456,8 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 2. Close out. Recording a close-out that has already finished starts nothing and
     # writes nothing to the forge, so it reads every landed batch, selected or not
     # (gh#990); starting one, or recording one under way, follows the selection.
-    closing = gated = 0
+    closing = gated = closeouts_held = 0
+    collecting: dict[str, list[str]] = {}  # repo -> the batches its collected close-out takes
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in merging or batch.id in held_ids:
@@ -1473,10 +1516,30 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue
         if not due:
             continue
-        if item in snap.existing:
+        if item in snap.existing:  # a per-batch close-out started before R15: recorded
             actions.append(Action("closeout", batch.id, f"record the live {item}", recorded=True))
-        else:
-            actions.append(Action("closeout", batch.id, f"start {item}"))
+            continue
+        if batch.id in snap.closeout_holds:  # R15: its archive would hold; the operator's
+            closing -= 1
+            closeouts_held += 1
+            actions.append(Action("closeout-held", batch.id, f"its archive holds: "
+                                  f"{snap.closeout_holds[batch.id]}"))  # fmt: skip
+            continue
+        collecting.setdefault(snap.repos.get(batch.id, ""), []).append(batch.id)
+    # R15: at most one collected close-out per repo, and none while one is under way.
+    for repo in sorted(collecting):
+        if _collected_under_way(repo, snap):
+            continue
+        used = [e.archive for b in snap.batches if snap.repos.get(b.id) == repo
+                for e in b.events if isinstance(e, CloseoutEvent) and e.archive]  # fmt: skip
+        day = snap.now.date()
+        name = collected_name(collected_branch(day, next_collected(used, day)))
+        assert name is not None
+        taking = tuple(collecting[repo])
+        actions.append(
+            Action("closeout", taking[0], f"start {collected_item_id(repo, name)} for "
+                   f"{', '.join(taking)}", items=taking, key=name)
+        )  # fmt: skip
 
     # 3. Archive.
     archives_blocked = 0
@@ -1538,7 +1601,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     for bid in merging:
         stages[bid] = "merged"
     by_id = {b.id: b for b in snap.batches}
-    pending, blocked = 0, exports_blocked + archives_blocked
+    pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue

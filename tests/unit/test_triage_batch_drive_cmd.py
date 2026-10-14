@@ -42,6 +42,7 @@ REPO = "derio-net/super-fr"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 DISPATCHED = "2026-10-01T10:00:00Z"
 LAUNCH = "{runner: fake, harness: claude, model: claude-opus-5-5}"
+COLLECTED = f"{REPO}/run/closeout-2026-10-02-1"  # the pass's one collected close-out (R15)
 
 
 # ------------------------------------------------------------------ fakes
@@ -314,6 +315,11 @@ class DriveCheckout:
 
     def remote_branch_exists(self, branch: str) -> bool:
         return False
+
+    def list_dir(self, ref: str, directory: str) -> list[str]:
+        prefix = directory.rstrip("/") + "/"
+        return sorted({f.removeprefix(prefix).split("/")[0] for (at, f) in self.files
+                       if at == ref and f.startswith(prefix)})  # fmt: skip
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return descendant not in self.behind
@@ -887,19 +893,17 @@ def test_post_merge_then_one_closeout_through_the_runner(
     assert checkout.forwarded == 2  # post_merge's (p4-r2), then the close-out's
     assert checkout.commands == [["./scripts/install.sh"]]
     (item,) = runner.dispatched
-    assert item.id == f"{REPO}/run/closeout-b1"
+    assert item.id == COLLECTED
     assert item.unit == "run" and item.payload["kind"] == "closeout"
-    assert "fr pickup --run 2026-10-01-b1" in item.payload["brief"]
+    assert f"fr triage batch closeout b1 --yes --repo {REPO}" in item.payload["brief"]
     assert item.payload["model"] == "claude-opus-5-5"
     assert item.payload["checkout"] == str(checkout.path)
     assert _events(tmp_path, "b1") == ["dispatch", "post_merge", "closeout"]
     batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
     closeout = batch.events[-1]
     assert closeout.run == "2026-10-01-b1"  # type: ignore[union-attr]
-    assert closeout.archive == "chore/archive-2026-10-01-b1"  # type: ignore[union-attr]
-    assert _lines(out, "closeout") == [
-        f"closeout b1: started {REPO}/run/closeout-b1 (fr pickup --run 2026-10-01-b1)"
-    ]
+    assert closeout.archive == "chore/closeout-2026-10-02-1"  # type: ignore[union-attr]
+    assert _lines(out, "closeout") == [f"closeout b1: started {COLLECTED} for b1"]
     # a second pass starts nothing
     code, _ = _drive(tmp_path, "--once", "--yes")
     assert len(runner.dispatched) == 1 and checkout.commands == [["./scripts/install.sh"]]
@@ -926,7 +930,8 @@ def test_batches_closed_out_by_hand_are_not_closed_out_again(
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-owed"]
+    assert [i.id for i in runner.dispatched] == [COLLECTED]
+    assert "closeout owed --yes" in runner.dispatched[0].payload["brief"]
     assert "m101" not in checkout.release_probes  # an archived batch probes no release
 
 
@@ -940,7 +945,7 @@ def test_a_named_batch_already_archived_by_hand_is_not_closed_out(
     checkout.released = True
     checkout.live.add(journal)  # not archived yet: the close-out is owed
     code, out = _drive(tmp_path, "--once", "b1")
-    assert _lines(out, "closeout") == [f"closeout b1: start {REPO}/run/closeout-b1"], out
+    assert _lines(out, "closeout") == [f"closeout b1: start {COLLECTED} for b1"], out
     checkout.live.discard(journal)  # archived by hand
     code, out = _drive(tmp_path, "--once", "--yes", "b1")
     assert code == 0, out
@@ -1047,7 +1052,7 @@ def test_a_closed_hand_closeout_pr_leaves_the_closeout_owed(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert _lines(out, "adopt") == []
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+    assert [i.id for i in runner.dispatched] == [COLLECTED]
 
 
 def test_a_forks_pr_on_the_closeout_head_is_never_adopted(
@@ -1065,7 +1070,7 @@ def test_a_forks_pr_on_the_closeout_head_is_never_adopted(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert _lines(out, "adopt") == []
-    assert [i.id for i in runner.dispatched] == [f"{REPO}/run/closeout-b1"]
+    assert [i.id for i in runner.dispatched] == [COLLECTED]
 
 
 def test_plan_mode_reports_an_adoption_and_writes_nothing(
@@ -1089,7 +1094,10 @@ def test_a_debug_batch_is_closed_out_with_branch(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     (item,) = runner.dispatched
-    assert "fr pickup --branch fix/batch-b1" in item.payload["brief"]
+    assert "fr triage batch closeout b1 --yes" in item.payload["brief"]  # no run: still one
+    (event,) = [e for e in load_judgements(tmp_path / "judgements.yaml").batches[0].events
+                if e.kind == "closeout"]  # fmt: skip
+    assert event.run is None and event.archive == "chore/closeout-2026-10-02-1"  # type: ignore[union-attr]
     assert checkout.commands == []  # no post_merge configured: nothing runs
 
 
@@ -1117,7 +1125,7 @@ def test_a_failing_post_merge_holds_the_closeout_every_pass(
             "post-merge b1: post_merge failed, close-out held: install.sh: exit 1"
         ]
         assert _lines(out, "closeout") == [
-            "closeout b1: close-out held: the repo's post_merge has not succeeded yet"
+            "closeout b1: close-out held: b1 (its post_merge has not succeeded)"
         ]
     assert runner.dispatched == []
     assert _events(tmp_path, "b1") == ["dispatch"]
@@ -1887,7 +1895,7 @@ def test_closeout_and_batch_dispatch_resolve_the_same_model(
     assert code == 0, out
     models_by_item = {i.id: i.payload["model"] for i in runner.dispatched}
     assert models_by_item == {
-        f"{REPO}/run/closeout-b1": "repo-model",
+        COLLECTED: "repo-model",
         f"{REPO}/run/batch-b2": "repo-model",
     }
 

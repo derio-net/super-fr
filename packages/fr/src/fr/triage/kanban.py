@@ -134,6 +134,9 @@ _ACTION_PHRASES: Mapping[str, str] = {
     "gate-pass": "gate's rows walked; the drive passes it",
     "ledger-unread": "gate labels unread; close-out waits",
     "post-merge": "post_merge due",
+    "closeout-held": "archive holds: Test Plan outcome owed",
+    "closeout-handback": "close-out PR handed back",
+    "closeout-stuck": "close-out PR stuck",
 }
 NEEDS_YOU = "needs you: session blocked"
 NEEDS_YOU_MERGE_STOPPED = "needs you: merge stopped"  # gh#987, followed by the reason

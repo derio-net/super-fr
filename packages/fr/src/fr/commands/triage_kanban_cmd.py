@@ -55,6 +55,7 @@ from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
     closeout_event,
     closeout_item_id,
+    event_item_id,
     wave_group,
 )
 from fr.triage.check import clean_label_targets
@@ -142,7 +143,12 @@ def probe_item(
     """The batch's (or its close-out's) run item identity: what a runner matches a session by."""
     from fr_dispatch.work_item import WorkItem
 
-    item_id = (closeout_item_id if closeout else batch_item_id)(scope_repo, batch.id)
+    event = closeout_event(batch) if closeout else None
+    item_id = (
+        event_item_id(scope_repo, batch.id, event)  # a collected close-out's own item (R15)
+        if event is not None
+        else (closeout_item_id if closeout else batch_item_id)(scope_repo, batch.id)
+    )
     return WorkItem(
         id=item_id,
         unit="run",
