@@ -25,6 +25,7 @@ from fr.triage.batch_drive import (
     is_gated,
     summary_line,
 )
+from fr.triage.ledger import LedgerRead
 from fr.triage.views import drive_snapshot
 
 from tests.unit.test_triage_batch_dispatch import FakeRunner
@@ -221,9 +222,9 @@ def _gated(world: GatedWorld, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     _state(tmp_path, world, _batch("b1", 7, events=_dispatch_event("b1")))
     seen: list[tuple[str, str]] = []
 
-    def _rows(checkout: Any, ref: str, branch: str) -> tuple[GatedRow, ...]:
+    def _rows(checkout: Any, ref: str, branch: str) -> LedgerRead:
         seen.append((ref, branch))
-        return rows
+        return LedgerRead(rows, run_gate="none", run_gate_inherited=False)
 
     monkeypatch.setattr(triage_batch_cmd, "gated_rows_at", _rows)
     world.rows_read = seen  # type: ignore[attr-defined]
@@ -273,7 +274,8 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _ledger_repo(tmp_path: Path, *, walked: bool) -> Any:
+def _ledger_repo(tmp_path: Path, *, walked: bool, section: str | None = None,
+                 other: bool = True) -> Any:  # fmt: skip
     """A clone whose `origin/main` holds a run on feat/batch-b1, its spec and the matrix."""
     from fr.run.model import RunState, StepRecord, dump_run_state, run_path
     from fr.triage.gitseam import Checkout
@@ -288,16 +290,14 @@ def _ledger_repo(tmp_path: Path, *, walked: bool) -> Any:
         _git(clone, "config", k, v)
     spec = "docs/superpowers/specs/s.md"
     (clone / spec).parent.mkdir(parents=True)
-    (clone / spec).write_text(
-        "# Spec\n\n## Requirements\n\nR1. x\n\n## Verification\n\nstrategy: candidate\n"
-        "- r-live: live — needs the merged build\n"
-    )
+    section = section or "strategy: candidate\n- r-live: live — needs the merged build\n"
+    (clone / spec).write_text(f"# Spec\n\n## Requirements\n\nR1. x\n\n## Verification\n\n{section}")
     live = {**row(spec, rid="r-live"), "issues": [ISSUE],
             "status": "walked" if walked else "walk-owed"}  # fmt: skip
     if walked:
         live["walks"] = [{"strategy": "live", "harness": "claude-code", "model": "m",
                           "outcome": "pass", "at": "2026-10-02", "evidence": "log"}]  # fmt: skip
-    write_matrix(clone, [live, row(spec, rid="r-other")])
+    write_matrix(clone, [live, *([row(spec, rid="r-other")] if other else [])])
     brainstorm = StepRecord(state="done", emitted={"spec": spec})
     state = RunState(run="r1", workflow="fr-goal@1", branch="feat/batch-b1",
                      started="2026-10-01T00:00:00Z", cursor="deliver",
@@ -322,21 +322,22 @@ def test_the_gated_rows_are_read_on_the_default_branch_through_gitseam(
 
     checkout = _ledger_repo(tmp_path, walked=walked)
 
-    rows = gated_rows_at(checkout, "origin/main", "feat/batch-b1")
+    read = gated_rows_at(checkout, "origin/main", "feat/batch-b1")
 
-    assert rows == (GatedRow("r-live", "tester", walked=walked, issues=(ISSUE,)),)
+    assert read.rows == (GatedRow("r-live", "tester", walked=walked, issues=(ISSUE,)),)
+    assert (read.run_gate, read.run_gate_inherited) == ("none", True)
     assert _git(checkout.path, "worktree", "list").count("\n") == 0  # the scratch tree is gone
 
 
 def test_a_branch_no_run_names_has_no_gated_row(tmp_path: Path) -> None:
     from fr.triage.ledger import gated_rows_at
 
-    assert gated_rows_at(_ledger_repo(tmp_path, walked=False), "origin/main", "fix/x") == ()
+    assert gated_rows_at(_ledger_repo(tmp_path, walked=False), "origin/main", "fix/x").rows == ()
 
 
-def test_the_board_owes_no_post_merge_for_a_gated_batch() -> None:
-    """A gated batch is never closed out, so its post_merge is not owed yet (R13): the
-    board's needs read the same `is_gated` the driver's step 2 does."""
+def test_p4_r2_the_board_shows_a_gated_batchs_unfinished_post_merge() -> None:
+    """post_merge runs at merge, gated or not (p4-r2): a gated batch whose post_merge has
+    not succeeded is a need like any other."""
     from fr.triage.views import needs_you
 
     world = World()
@@ -348,7 +349,7 @@ def test_the_board_owes_no_post_merge_for_a_gated_batch() -> None:
     world.prs[101]["labels"] = ["gate:tester-passed"]
     passed = [n for n in needs_you(_ledger_facts(world), _judgements()) if n.kind == "post-merge"]
 
-    assert gated == [] and [n.ref for n in passed] == ["b1"]
+    assert [n.ref for n in gated] == ["b1"] and [n.ref for n in passed] == ["b1"]
 
 
 def test_p4_r8_every_pass_re_adds_a_missing_awaiting_live_label() -> None:
@@ -364,3 +365,127 @@ def test_p4_r8_every_pass_re_adds_a_missing_awaiting_live_label() -> None:
         return [a.key for a in plan.actions if a.kind == "awaiting-live"]
 
     assert (keys(first), keys(labelled), keys(removed)) == ([ISSUE], [], [ISSUE])
+
+
+# ------------------------------------------------------------- review p4-r1..r7
+
+
+def test_p4_r1_a_ledger_that_could_not_be_read_holds_the_closeout() -> None:
+    plan = drive_pass(_landed(ledger_unknown=frozenset({"b1"})))
+
+    assert "closeout" not in [k for k, _ in _kinds(plan.actions)]
+    (unread,) = [a for a in plan.actions if a.kind == "ledger-unread"]
+    assert unread.batch == "b1" and "labels" in unread.detail
+    assert not plan.summary.done  # read again next pass
+
+
+def test_p4_r1_the_facts_mark_an_unread_merged_pr_label_set_unknown() -> None:
+    world = World()
+    world.issues[7] = "open"
+    world.pr(101, "feat/batch-b1", [7], state="MERGED",
+             merged_at=(NOW - timedelta(hours=1)).isoformat())  # fmt: skip
+    facts = world.facts().model_copy(update={"schema_": 12})  # labels None: a failed read
+
+    snap = drive_snapshot(facts, _judgements())
+
+    assert snap.ledger_unknown == {"b1"} and "b1" not in snap.ledgers
+
+
+def test_p4_r2_a_gated_batch_gets_its_post_merge_at_merge_but_no_closeout() -> None:
+    plan = drive_pass(_landed(ledgers=_ledger("gate:tester"), post_merge_repos=frozenset({REPO})))
+    assert ("post-merge", "b1") in _kinds(plan.actions)
+    assert "closeout" not in [k for k, _ in _kinds(plan.actions)]
+
+
+def test_p4_r2_post_merge_comes_before_the_closeout_and_only_once() -> None:
+    plan = drive_pass(_landed(post_merge_repos=frozenset({REPO})))
+    kinds = [k for k, b in _kinds(plan.actions) if b == "b1"]
+    assert kinds.index("post-merge") < kinds.index("closeout")
+    assert not hasattr(plan.actions[0], "post_merge")  # the close-out never runs it itself
+
+    done = _dispatched("b1", 7, events=[{"kind": "post_merge", "at": "2026-10-02T11:00:00Z"}])
+    again = drive_pass(_snap([done], {"b1": "merged"}, post_merge_repos=frozenset({REPO}), **DUE))
+    assert "post-merge" not in [k for k, _ in _kinds(again.actions)]
+
+
+def test_p4_r2_the_driver_runs_a_gated_batchs_post_merge_and_holds_its_closeout(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.model import load_judgements
+
+    gworld.config = {"post_merge": ["./scripts/install.sh"]}
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", False, (ISSUE,)),))
+    checkout = triage_batch_cmd.make_checkout(None)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert checkout.commands == [["./scripts/install.sh"]]
+    (b1,) = load_judgements(tmp_path / "judgements.yaml").batches
+    assert [e.kind for e in b1.events] == ["dispatch", "post_merge"]
+    assert gworld.runner.dispatched == []  # type: ignore[attr-defined]
+
+
+def test_p4_r3_a_run_gate_no_row_inherits_never_auto_passes() -> None:
+    rows = (GatedRow("r-line", "tester", walked=True),)
+    alone = {"b1": GateLedger(pr=101, labels=frozenset({"gate:tester"}), rows=rows,
+                              run_gate="tester", run_gate_inherited=False)}  # fmt: skip
+    inherited = {"b1": GateLedger(pr=101, labels=frozenset({"gate:tester"}), rows=rows,
+                                  run_gate="tester", run_gate_inherited=True)}  # fmt: skip
+
+    assert [a for a in drive_pass(_landed(ledgers=alone)).actions if a.kind == "gate-pass"] == []
+    assert [a.gate for a in drive_pass(_landed(ledgers=inherited)).actions
+            if a.kind == "gate-pass"] == ["tester"]  # fmt: skip
+
+
+def test_p4_r3_the_ledger_read_names_the_run_gate_and_whether_a_row_inherits_it(
+    tmp_path: Path,
+) -> None:
+    from fr.triage.ledger import gated_rows_at
+
+    section = "strategy: candidate\ngate: tester\n- r-live: live — needs the merged build\n"
+    checkout = _ledger_repo(tmp_path, walked=True, section=section, other=False)
+
+    read = gated_rows_at(checkout, "origin/main", "feat/batch-b1")
+
+    assert [r.id for r in read.rows] == ["r-live"]
+    assert (read.run_gate, read.run_gate_inherited) == ("tester", False)
+
+
+def test_p4_r7_the_ledger_read_adds_no_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.gitseam import Checkout
+    from fr.triage.ledger import gated_rows_at
+
+    checkout = _ledger_repo(tmp_path, walked=True)
+
+    def _no_worktree(*_: Any, **__: Any) -> Any:
+        raise AssertionError("the ledger read added a worktree")
+
+    monkeypatch.setattr(Checkout, "add_worktree", _no_worktree)
+    assert [r.id for r in gated_rows_at(checkout, "origin/main", "feat/batch-b1").rows] == [
+        "r-live"
+    ]
+
+
+def test_p4_r7_a_pass_fetches_each_repo_once_however_many_batches_are_gated(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gworld.issues.update({7: "open", 8: "open"})
+    for n, bid in ((101, "b1"), (102, "b2")):
+        merged = (NOW - timedelta(hours=1)).isoformat()
+        gworld.pr(n, f"feat/batch-{bid}", [7 if bid == "b1" else 8], state="MERGED",
+                  labels=["gate:tester"], merged_at=merged)  # fmt: skip
+    _state(tmp_path, gworld, _batch("b1", 7, events=_dispatch_event("b1")),
+           _batch("b2", 8, events=_dispatch_event("b2")))  # fmt: skip
+    monkeypatch.setattr(triage_batch_cmd, "gated_rows_at",
+                        lambda c, ref, branch: LedgerRead((), "none", False))  # fmt: skip
+    checkout = triage_batch_cmd.make_checkout(None)
+    fetches: list[int] = []
+    monkeypatch.setattr(checkout, "fetch", lambda: fetches.append(1))
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert fetches == [1]

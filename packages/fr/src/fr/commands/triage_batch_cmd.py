@@ -163,7 +163,6 @@ from fr.triage.batch_drive import (
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
-    GatedRow,
     GateLedger,
     IdleSession,
     LivePr,
@@ -184,6 +183,7 @@ from fr.triage.batch_drive import (
     export_branch,
     export_target,
     export_wave_of,
+    fact_ledger_unknown,
     fact_ledgers,
     find_run,
     finished_waves,
@@ -234,7 +234,7 @@ from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.lease import acquire, load_lease, mark_pass, release
-from fr.triage.ledger import gated_rows_at
+from fr.triage.ledger import LedgerRead, gated_rows_at
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     ApprovalEvent,
@@ -3381,7 +3381,8 @@ class _Driver:
         self._cursors: dict[tuple[str, str], CursorPosition | None] = {}
         # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
         # move only when the default branch does
-        self._ledger_rows: dict[tuple[str, str, str], tuple[GatedRow, ...]] = {}
+        self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
+        self._fetched: set[str] = set()  # per pass: repos whose origin was fetched (p4-r7)
 
     # -------------------------------------------------------------- reaching out
 
@@ -3845,6 +3846,12 @@ class _Driver:
             refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
             ledgers=ledgers,
             awaiting_unlabelled=awaiting_unlabelled(facts),
+            ledger_unknown=fact_ledger_unknown(judgements.batches, facts, stages),
+            post_merge_repos=frozenset(
+                r for r in set(repos.values()) if facts.config_for(r).post_merge
+            )
+            if self.adapter.kind == "host"
+            else frozenset(),
             **queue_reads,
             **claim_plan,
         )
@@ -3874,18 +3881,22 @@ class _Driver:
                 or not held_gates(ledger.labels)
             ):
                 continue
-            rows = self._gated_rows(repo, batch)
-            if rows is not None:
-                ledgers[batch.id] = replace(ledger, rows=rows)
+            read = self._gated_rows(repo, batch)
+            if read is not None:
+                ledgers[batch.id] = replace(
+                    ledger,
+                    rows=read.rows,
+                    run_gate=read.run_gate,
+                    run_gate_inherited=read.run_gate_inherited,
+                )
         return ledgers
 
-    def _gated_rows(self, repo: str, batch: Batch) -> tuple[GatedRow, ...] | None:
+    def _gated_rows(self, repo: str, batch: Batch) -> LedgerRead | None:
         """*batch*'s gated rows on `origin/<default>` (R14's rows-walked check reads that
         branch's matrix); None, reported once, when the clone cannot say."""
         branch = recorded_branch(batch)
         try:
-            checkout = self._reader(repo)
-            checkout.fetch()
+            checkout = self._fetched_reader(repo)
             tip = f"origin/{checkout.default_branch()}"
             key = (repo, checkout.rev_parse(tip), branch)
             if key not in self._ledger_rows:
@@ -3952,8 +3963,7 @@ class _Driver:
         if not head:
             return ()
         try:
-            checkout = self._reader(repo)
-            checkout.fetch()
+            checkout = self._fetched_reader(repo)
             ref = f"origin/{checkout.default_branch()}"
             return tuple(sorted(checkout.changed_paths(ref, head)))
         except TriageError:
@@ -4080,6 +4090,15 @@ class _Driver:
                 return pick
         return None
 
+    def _fetched_reader(self, repo: str) -> Checkout:
+        """`_reader`, fetched once per pass (p4-r7): every read of `origin/<default>` a
+        pass makes shares one fetch, however many batches ask."""
+        checkout = self._reader(repo)
+        if repo not in self._fetched:
+            checkout.fetch()
+            self._fetched.add(repo)
+        return checkout
+
     def _reader(self, repo: str) -> Checkout:
         """The clone for a read: the checked one with --yes, else leniently opened
         (plan mode never refuses on a clone it does not write)."""
@@ -4092,8 +4111,7 @@ class _Driver:
         the pass; an unreadable declaration is not `none`."""
         if repo not in self._ci:
             try:
-                checkout = self._reader(repo)
-                checkout.fetch()
+                checkout = self._fetched_reader(repo)
                 self._ci[repo] = ci_none_at(checkout)
             except TriageError as exc:
                 self._ci[repo] = False  # an unreadable declaration is not `none`
@@ -4113,8 +4131,7 @@ class _Driver:
         `fr archive` leaves them, whether a driver or a hand ran the close-out. None in
         plan mode when the clone cannot be read: unknown, never "not archived" (gh#991)."""
         try:
-            checkout = self._reader(repo)
-            checkout.fetch()
+            checkout = self._fetched_reader(repo)
             tip = f"origin/{checkout.default_branch()}"
             return is_archived(
                 checkout.added_paths(merge_commit), lambda p: checkout.exists_at(tip, p)
@@ -4127,8 +4144,7 @@ class _Driver:
 
     def _released(self, repo: str, merge_commit: str) -> bool | None:
         try:
-            checkout = self._reader(repo)
-            checkout.fetch()
+            checkout = self._fetched_reader(repo)
             return checkout.released_after(merge_commit)
         except TriageError as exc:
             if self.yes:  # as `_archived` (gh#921)
@@ -4510,6 +4526,7 @@ class _Driver:
         for ctx in self._merge.values():
             ctx.recorded.clear()  # what a context recorded last pass is on disk now
         self._ci, self._unlanded, self._held = {}, set(), 0
+        self._fetched = set()
         self._rules = {}
         self._clone_unread = {}
         self._restart = {}
@@ -4702,7 +4719,7 @@ class _Driver:
             if action.head:  # an export's warn names no head: it is said every pass
                 self.warned.add(action.head)
             return action.detail, False, in_flight
-        if action.kind in ("blocked", "held"):
+        if action.kind in ("blocked", "held", "ledger-unread"):
             return action.detail, False, in_flight
         if action.kind in ("claim", "refresh", "release"):
             if action.kind == "claim" and action.batch in self._held_now:
@@ -4741,6 +4758,9 @@ class _Driver:
         if action.kind == "enqueue":
             line, did = self._enqueue(action, facts, judgements, batch, repo)
             return line, did, in_flight
+        if action.kind == "post-merge":
+            outcome, did = self._post_merge(facts, judgements, batch, repo)
+            return outcome, did, in_flight
         if action.kind == "closeout":
             outcome, did = self._close_out(action, facts, judgements, batch, repo)
             return outcome, did, in_flight
@@ -5479,16 +5499,62 @@ class _Driver:
         self._append(judgements, facts, batch, event)
         return f"{stopped}; handed back to a fresh session {item.id}", True
 
+    def _post_merge(
+        self, facts: Facts, judgements: Judgements, batch: Batch, repo: str
+    ) -> tuple[str, bool]:
+        """p4-r2: the repo's `post_merge`, at merge and apart from the close-out, so a
+        gated batch's merged build is installed for its walk. From the fast-forwarded
+        clone, through the driver adapter (R20); recorded as a `post_merge` event, which
+        the close-out waits for. A failure is said and retried next pass."""
+        foreign = self.adapter.refusal(batch)
+        if foreign is not None:  # another driver's runner dispatched it: its post_merge too
+            return f"left to the driver of runner {batch.launch.runner} ({foreign})", False
+        checkout = self.checkout(repo)
+        try:
+            checkout.fast_forward(switch=self.adapter.owns_checkout)
+            _fresh_config(checkout, facts, repo)
+        except TriageError as exc:
+            return f"post_merge held: {exc}", False
+        command = facts.config_for(repo).post_merge
+        if not command:
+            return "no post_merge configured", False
+        try:
+            ran = self.adapter.post_merge(checkout, command)  # the host's (R20)
+        except TriageError as exc:
+            return f"post_merge failed, close-out held: {exc}", False
+        if not ran:
+            return "post_merge is not this driver's to run", False
+        self._append(
+            judgements, facts, batch, PostMergeEvent(kind="post_merge", at=_now_after(batch))
+        )
+        installed = _installed_version()
+        if installed is not None and installed != __version__:
+            self.restart_to = installed  # after this pass: see `batch_drive_command`
+        if facts.config_for(repo).post_merge_restart == "idle":
+            name = str(self._launch(facts, batch, repo).runner)  # restarted at the pass's end
+            self._restart.setdefault(
+                name, probe_item(repo, batch, closeout=True, prefix=self.workspace_prefix)
+            )
+        return f"ran {shlex.join(command)}", True
+
     def _close_out(
         self, action: Action, facts: Facts, judgements: Judgements, batch: Batch, repo: str
     ) -> tuple[str, bool]:
-        """§B step 2 and §C: fast-forward, post_merge, then the close-out item."""
+        """§B step 2 and §C: fast-forward, then the close-out item, once the repo's
+        `post_merge` (its own action since p4-r2) has succeeded."""
         foreign = self.adapter.refusal(batch)
         if foreign is not None:  # another driver's runner dispatched it: its close-out too
             return (
                 f"left to the driver of runner {batch.launch.runner}, never started through "
                 f"a runner this driver lacks ({foreign})"
             ), False  # cloud-triage §E, p4-r10
+        if (
+            not action.recorded  # a live tab started after its post_merge (the old order)
+            and self.adapter.kind == "host"
+            and facts.config_for(repo).post_merge
+            and not any(e.kind == "post_merge" for e in batch.events)
+        ):
+            return "close-out held: the repo's post_merge has not succeeded yet", False
         checkout = self.checkout(repo)
         try:
             checkout.fast_forward(switch=self.adapter.owns_checkout)
@@ -5496,21 +5562,6 @@ class _Driver:
             base = checkout.default_branch()
         except TriageError as exc:
             return f"close-out held: {exc}", False
-        command = facts.config_for(repo).post_merge
-        post_merged = False
-        if action.post_merge and command:
-            try:
-                post_merged = self.adapter.post_merge(checkout, command)  # the host's (R20)
-            except TriageError as exc:
-                return f"post_merge failed, close-out held: {exc}", False
-        if post_merged:
-            batch = self._append(
-                judgements, facts, batch, PostMergeEvent(kind="post_merge", at=_now_after(batch))
-            )
-            judgements = load_judgements(self.target / "judgements.yaml")
-            installed = _installed_version()
-            if installed is not None and installed != __version__:
-                self.restart_to = installed  # after this pass: see `batch_drive_command`
         last = last_dispatch(batch)
         branch = last.branch if last else batch_branch(batch)
         found = find_run(_cursors(checkout.path), branch)
@@ -5518,11 +5569,6 @@ class _Driver:
         archive = housekeeping_branch(branch, run, plan_slug)
         item_id = closeout_item_id(repo, batch.id)
         launch = self._launch(facts, batch, repo)
-        if post_merged and facts.config_for(repo).post_merge_restart == "idle":
-            name = str(launch.runner)  # restarted once at the end of the pass, not here
-            self._restart.setdefault(
-                name, probe_item(repo, batch, closeout=True, prefix=self.workspace_prefix)
-            )
         if action.recorded:
             self._append(
                 judgements, facts, batch,
@@ -5786,7 +5832,7 @@ _GATE_WRITE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedF
 """What a gate-ledger write (`awaiting-live`, `gate-pass`) may fail with: reported and
 planned again next pass, never fatal to the pass."""
 
-_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt"})
+_LIVE_READ_ACTIONS = frozenset({"merge", "update", "closeout", "archive", "adopt", "post-merge"})
 
 
 def _ignored_note(paths: tuple[str, ...], *, short: bool = False) -> str:

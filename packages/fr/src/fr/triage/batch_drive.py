@@ -100,6 +100,8 @@ ActionKind = Literal[
     "enqueue",
     "awaiting-live",
     "gate-pass",
+    "ledger-unread",
+    "post-merge",
 ]
 EXPORT_KINDS: frozenset[str] = frozenset(
     {"export", "export-merge", "export-reconcile", "export-closed"}
@@ -153,6 +155,10 @@ class GateLedger:
     pr: int
     labels: frozenset[str]
     rows: tuple[GatedRow, ...] | None = None
+    # The run-level gate, and whether any row inherits it (p4-r3): a run gate no row
+    # inherits is never passed by walked rows, only by `fr gate pass`.
+    run_gate: str = "none"
+    run_gate_inherited: bool = False
 
 
 def is_gated(batch: Batch, snap: Snapshot) -> bool:
@@ -180,6 +186,25 @@ def fact_ledgers(
         if pr is not None and pr.state == "MERGED" and pr.labels is not None:
             out[b.id] = GateLedger(pr=pr.number, labels=frozenset(pr.labels))
     return out
+
+
+def fact_ledger_unknown(
+    batches: Iterable[Batch], facts: Facts, stages: Mapping[str, str]
+) -> frozenset[str]:
+    """The landed batches with no close-out event whose merged PR's labels collect could
+    not read (p4-r1): from facts 12 on, every such PR is read, so None is a failed read.
+    Unknown is not ungated: step 2 holds their close-out. A file below 12 never read them,
+    and is upgraded by the next collect."""
+    if facts.schema_ < 12:
+        return frozenset()
+    out: set[str] = set()
+    for b in batches:
+        if stages.get(b.id) not in LANDED or closeout_event(b) is not None:
+            continue
+        pr = batch_pr(b, facts)
+        if pr is not None and pr.state == "MERGED" and pr.labels is None:
+            out.add(b.id)
+    return frozenset(out)
 
 
 def awaiting_unlabelled(facts: Facts) -> frozenset[str]:
@@ -316,6 +341,12 @@ class Snapshot:
     # the issues (`owner/repo#n`) that are open in facts without `fr:awaiting-live`.
     ledgers: Mapping[str, GateLedger] = field(default_factory=dict)
     awaiting_unlabelled: frozenset[str] = frozenset()
+    # Landed batches whose merged PR's labels could not be read (p4-r1): never closed out
+    # until the ledger is known.
+    ledger_unknown: frozenset[str] = frozenset()
+    # The repos whose `post_merge` this driver runs (p4-r2): a landed batch of one gets a
+    # `post-merge` action at merge, gated or not, before any close-out of it.
+    post_merge_repos: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -326,7 +357,6 @@ class Action:
     pr: int | None = None
     head: str = ""
     recorded: bool = False  # closeout: the runner holds the tab; record the event only
-    post_merge: bool = False  # closeout: run the repo's post_merge first
     train: str = ""  # merge: the repo whose train this candidate belongs to
     archived: int | None = None  # adopt: the close-out event's `archived`
     items: tuple[str, ...] = ()  # close: the item ids whose sessions to close
@@ -1293,6 +1323,8 @@ def _gate_actions(batch: Batch, snap: Snapshot, labelled: set[str]) -> list[Acti
             out.append(Action("awaiting-live", batch.id, f"label {ref} fr:awaiting-live",
                               pr=ledger.pr, key=ref))  # fmt: skip
     for gate in sorted(held):
+        if gate == ledger.run_gate and not ledger.run_gate_inherited:
+            continue  # p4-r3: no row stands for the run gate, so no walk passes it
         mine = [r for r in rows if r.gate == gate]
         if mine and all(r.walked for r in mine):
             ids = ", ".join(r.id for r in mine)
@@ -1380,6 +1412,29 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue
         if not driven_now:
             continue
+        due = closeout_due(
+            released=batch.id in snap.released,
+            merged_at=snap.merged_at.get(batch.id),
+            now=snap.now,
+        )
+        owed = not any(e.kind == "post_merge" for e in batch.events)
+        item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+        if (
+            due
+            and hand is None
+            and owed
+            and item not in snap.existing  # a live close-out tab ran it before it started
+            and snap.repos.get(batch.id) in snap.post_merge_repos
+        ):
+            # p4-r2: at merge (once its release commit landed, or the fallback), gated or
+            # not, and always ahead of the batch's close-out, which never runs it itself.
+            actions.append(Action("post-merge", batch.id, "run the repo's post_merge"))
+        if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
+            closing += 1
+            actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
+                                  "read, so whether a gate holds it is unknown; no close-out "
+                                  "until they are"))  # fmt: skip
+            continue
         if is_gated(batch, snap):  # R13: held by a post-merge gate, never closed out
             gated += 1
             actions.extend(_gate_actions(batch, snap, labelled))
@@ -1390,19 +1445,12 @@ def drive_pass(snap: Snapshot) -> Pass:
                                   f"close-out PR #{hand.number} ({hand.head_ref}) is open",
                                   pr=hand.number))  # fmt: skip
             continue
-        due = closeout_due(
-            released=batch.id in snap.released,
-            merged_at=snap.merged_at.get(batch.id),
-            now=snap.now,
-        )
         if not due:
             continue
-        item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
-        owed = not any(e.kind == "post_merge" for e in batch.events)
         if item in snap.existing:
             actions.append(Action("closeout", batch.id, f"record the live {item}", recorded=True))
         else:
-            actions.append(Action("closeout", batch.id, f"start {item}", post_merge=owed))
+            actions.append(Action("closeout", batch.id, f"start {item}"))
 
     # 3. Archive.
     archives_blocked = 0

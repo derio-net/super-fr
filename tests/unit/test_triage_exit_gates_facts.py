@@ -207,3 +207,38 @@ def test_read_cursor_reads_the_cursor_at_the_pr_head_through_gitseam(tmp_path: P
     )
     unknown = pr.model_copy(update={"head_oid": "0" * 40})
     assert read_cursor(Checkout(repo), unknown) is None  # a head the clone cannot reach
+
+
+def test_p4_r7_a_merged_pr_known_ungated_or_passed_is_not_read_again() -> None:
+    forge = _forge([_pr(40), _pr(42, head="feat/batch-y")], pr_labels={(REPO, 40): ["x"]})
+    forge.head_prs[(REPO, "feat/batch-y")] = [_pr(42, head="feat/batch-y")]
+    branches = [("alpha", BRANCH, AT), ("alpha", "feat/batch-y", AT)]
+
+    facts = collect_facts(
+        forge, SCOPE, now=NOW, batch_branches=branches, ledger_branches=branches,
+        known_labels={(REPO, 40): ["gate:tester", "gate:tester-passed"],
+                      (REPO, 42): ["gate:tester"]},
+    )  # fmt: skip
+
+    assert {p.number: p.labels for p in facts.batch_prs} == {
+        40: ["gate:tester", "gate:tester-passed"],
+        42: [],
+    }
+    assert forge.called("pr_labels") == [{"repo": REPO, "number": 42}]  # held: read again
+
+
+def test_p4_r7_only_a_batch_with_no_closeout_event_is_a_ledger_branch() -> None:
+    from fr.commands.triage_cmd import ledger_branches
+    from fr.triage.model import Batch
+
+    def batch(bid: str, *extra: dict[str, Any]) -> Batch:
+        dispatch = {"kind": "dispatch", "at": "2026-10-01T10:00:00Z", "runner": "fake",
+                    "handle": "h", "branch": f"feat/batch-{bid}"}  # fmt: skip
+        return Batch.model_validate(
+            {"id": bid, "title": bid, "ids": [f"alpha#{bid[-1]}"], "events": [dispatch, *extra]}
+        )
+
+    started = {"kind": "closeout", "at": "2026-10-02T10:00:00Z", "runner": "fake", "handle": "c"}
+    got = ledger_branches([batch("b1"), batch("b2", started)])
+
+    assert [b for _, b, _ in got] == ["feat/batch-b1"]

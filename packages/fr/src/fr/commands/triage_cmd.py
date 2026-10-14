@@ -526,12 +526,7 @@ def collect_into(
         and events[-1].kind != "cancel"
         and (event := last_dispatch(b)) is not None
     ]
-    ledger = [
-        (repo_name, branch, at)
-        for b in (loaded.batches if loaded else [])
-        if not any(isinstance(e, CloseoutEvent) and e.archived is not None for e in b.events)
-        for repo_name, branch, at in _dispatched_branch(b)
-    ]
+    ledger = ledger_branches(loaded.batches if loaded else [])
     previous = _previous_facts(target_dir / "facts.json", scope)
     facts, stats = collect_facts_counted(
         make_forge(),
@@ -546,6 +541,7 @@ def collect_into(
         previous=previous,
         ledger_branches=ledger,
         cursor_at=cursor_at,
+        known_labels=known_settled_labels(previous),
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
@@ -559,6 +555,36 @@ def collect_into(
     elif load_durable(target_dir).state_repo is None:
         err_console.print(f"warning: {NO_STATE_REPO}", markup=False, soft_wrap=True)
     return facts, out, stats
+
+
+def ledger_branches(batches: Iterable[Batch]) -> list[tuple[str, str, datetime]]:
+    """The gate-ledger branches (exit-gates §D Facts, p4-r7): `(repo name, branch,
+    dispatched at)` of each dispatched, uncancelled batch with no close-out event. A
+    close-out is started only once no gate holds the batch, so its labels are settled."""
+    return [
+        entry
+        for b in batches
+        if not any(isinstance(e, CloseoutEvent) for e in b.events)
+        for entry in _dispatched_branch(b)
+    ]
+
+
+def known_settled_labels(previous: Facts | None) -> dict[tuple[str, int], list[str]]:
+    """Merged PRs whose labels the previous facts read with no gate held (none, or every
+    one passed), by (repo, number) (p4-r7): a pass label is never taken back, so they are
+    carried rather than read again."""
+    from fr.labels import held_gates
+    from fr.triage.collect import linked_prs_all
+
+    if previous is None:
+        return {}
+    every = [*linked_prs_all(previous.issues), *previous.prs, *previous.batch_prs,
+             *previous.judged_prs]  # fmt: skip
+    return {
+        (p.repo, p.number): list(p.labels)
+        for p in every
+        if p.state == "MERGED" and p.labels is not None and not held_gates(p.labels)
+    }
 
 
 def _dispatched_branch(batch: Batch) -> list[tuple[str, str, datetime]]:

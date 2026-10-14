@@ -48,9 +48,9 @@ from fr.triage.batch_drive import (
     closeout_item_id,
     drive_pass,
     enqueue_refusals,
+    fact_ledger_unknown,
     fact_ledgers,
     held_conflict,
-    is_gated,
     last_enqueue,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
@@ -145,6 +145,10 @@ def drive_snapshot(
         approvals=fact_approvals(queue),
         queue_inferred=True,
         ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)
+        ledger_unknown=fact_ledger_unknown(batches, facts, stages),
+        post_merge_repos=frozenset(
+            r for r in set(repos.values()) if facts.config_for(r).post_merge
+        ),
     )
 
 
@@ -305,7 +309,6 @@ def needs_you(
             or closeout_event(b) is not None
             or any(e.kind == "post_merge" for e in b.events)
             or not facts.config_for(repo).post_merge
-            or is_gated(b, snap)  # never closed out yet, so its post_merge is not owed (R13)
         ):
             continue
         merged = snap.merged_at.get(b.id)

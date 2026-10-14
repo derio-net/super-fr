@@ -2,18 +2,23 @@
 R13, R14, §D `drive_pass` step 2).
 
 The driver never recomputes WHICH gates hold a batch: the merged PR's `gate:*` labels
-say that (`batch_drive.held_gates`). What only the repo can say is which matrix rows
-each gate gates, which issues those rows cite (they get `fr:awaiting-live`), and
-whether every one of them reads `walked` yet (the rows-walked pass). Those are read
-from the default branch, where the walk's `set-status` lands, through a detached
-worktree the git seam's `Checkout` adds and removes: this module starts no process.
-The exit itself is `fr.verification.exit.run_exit` over that tree, the one function
-every consumer reads.
+say that (`fr.labels.held_gates`). What only the repo can say is which matrix rows each
+gate gates, which issues those rows cite (they get `fr:awaiting-live`), whether every
+one of them reads `walked` yet (the rows-walked pass), and whether any row inherits the
+run-level gate (a run gate no row inherits passes only explicitly, p4-r3). Those are
+read from the default branch, where the walk's `set-status` lands.
+
+The read adds no worktree (p4-r7): the cursor is read with `Checkout.show`, and only
+the files the exit needs (the spec, the matrix, `.fr/`, the repo's strategy and
+workflow manifests) are copied with `Checkout.snapshot_paths`, modes kept, into a
+temporary directory. This module starts no process. The exit itself is
+`fr.verification.exit.run_exit` over that copy, the one function every consumer reads.
 """
 
 from __future__ import annotations
 
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -22,50 +27,93 @@ from fr.triage.batch_drive import RUNS_DIR, GatedRow, find_run
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 
+EXIT_INPUTS = (
+    "docs/acceptance/matrix.yaml",
+    ".fr",
+    "docs/superpowers/verifications",
+    "docs/superpowers/workflows",
+)
+"""What `run_exit` reads besides the spec: the matrix, the remap and the install contract
+(`.fr/`), and the repo's own strategy and workflow manifests."""
 
-def _cursors(root: Path) -> list[object]:
-    out: list[object] = []
-    for path in sorted((root / RUNS_DIR).glob("*.yaml")):
-        try:
-            out.append(yaml.safe_load(path.read_text(encoding="utf-8")))
-        except (OSError, yaml.YAMLError):
+
+@dataclass(frozen=True)
+class LedgerRead:
+    """A run's gated rows on the default branch, its run-level gate, and whether any row
+    citing the spec inherits that gate (its kind is the run's, with no row gate line)."""
+
+    rows: tuple[GatedRow, ...]
+    run_gate: str
+    run_gate_inherited: bool
+
+
+NO_RUN = LedgerRead((), "none", False)
+
+
+def _run_text(checkout: Checkout, ref: str, branch: str) -> tuple[str, str] | None:
+    """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does."""
+    texts: list[tuple[str, object]] = []
+    for name in checkout.list_dir(ref, RUNS_DIR):
+        if not name.endswith(".yaml"):
             continue
-    return out
+        text = checkout.show(ref, f"{RUNS_DIR}/{name}")
+        if text is None:
+            continue
+        try:
+            texts.append((text, yaml.safe_load(text)))
+        except yaml.YAMLError:
+            continue
+    found = find_run([doc for _, doc in texts], branch)
+    if found is None:
+        return None
+    run, _ = found
+    text = next(
+        t
+        for t, doc in texts
+        if isinstance(doc, dict) and doc.get("run") == run and doc.get("branch") == branch
+    )
+    return run, text
 
 
-def gated_rows(root: Path, branch: str) -> tuple[GatedRow, ...]:
-    """The rows a post-merge gate gates for the run on *branch*, in the tree at *root*:
-    each with its gate, whether it reads `walked`, and the issues it cites. No cursor
-    naming the branch (a debug batch, a run that left none) is no row: such a gate
-    passes only explicitly. An exit that cannot be read raises `TriageError`."""
-    from fr.acceptance.model import AcceptanceError
-    from fr.run.model import RunStateError, load_run_state
+def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
+    """The ledger read for the run on *branch* at *ref* (the default branch's tip). No
+    cursor naming the branch (a debug batch, a run that left none) is no row and no run
+    gate: such a gate passes only explicitly. An exit that cannot be read raises
+    `TriageError`."""
+    from fr.acceptance.model import AcceptanceError, archive_twin
+    from fr.requirements import run_spec
+    from fr.run.model import RunStateError, parse_run_state
     from fr.verification.exit import run_exit
+    from fr.verification.rows import spec_section_at
     from fr.verification.spec_section import SectionError
 
-    found = find_run(_cursors(root), branch)
+    found = _run_text(checkout, ref, branch)
     if found is None:
-        return ()
-    run, _ = found
+        return NO_RUN
+    run, text = found
     try:
-        exit_ = run_exit(root, load_run_state(root, run))
+        state = parse_run_state(text)
+        spec = run_spec(state)
+        twin = archive_twin(spec) if spec else None
+        paths = (*EXIT_INPUTS, *(p for p in (spec, twin) if p))
+        with tempfile.TemporaryDirectory(prefix="fr-ledger-") as tmp:
+            root = Path(tmp) / "tree"
+            checkout.snapshot_paths(ref, paths, root)
+            exit_ = run_exit(root, state)
+            section = spec_section_at(root, spec)
     except (RunStateError, SectionError, AcceptanceError, OSError, ValueError) as exc:
         raise TriageError(f"the exit of run {run} cannot be read: {exc}") from exc
     if exit_.remap_problem:
         raise TriageError(f"the gate remap is unreadable: {exit_.remap_problem}")
-    return tuple(
+    lines = section.row_gates if section is not None else {}
+    inherited = any(
+        exit_.row_kinds[r.id] == exit_.run_kind
+        and r.id not in lines
+        and exit_.row_gates[r.id] == exit_.run_gate
+        for r in exit_.rows
+    )
+    rows = tuple(
         GatedRow(r.id, exit_.row_gates[r.id], r.status == "walked", tuple(r.issues))
         for r in exit_.gated_rows
     )
-
-
-def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> tuple[GatedRow, ...]:
-    """`gated_rows` at *ref* (the default branch's tip), read in a detached worktree of
-    *checkout* that is removed afterwards. Raises `TriageError` when it cannot be read."""
-    with tempfile.TemporaryDirectory(prefix="fr-ledger-") as tmp:
-        where = Path(tmp) / "tree"
-        worktree = checkout.add_worktree(where, ref)
-        try:
-            return gated_rows(worktree.path, branch)
-        finally:
-            checkout.remove_worktree(where)
+    return LedgerRead(rows, exit_.run_gate, inherited)

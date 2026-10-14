@@ -401,7 +401,7 @@ def test_first_actions_keeps_the_first_action_per_batch() -> None:
     got = first_actions(f, jd)
     assert got["e-next"].kind == "dispatch"
     assert got["c-red"].kind == "warn"
-    assert got["a-merged"].kind == "closeout"
+    assert got["a-merged"].kind == "post-merge"  # its post_merge comes first (p4-r2)
     assert "b-draft" not in got
 
 

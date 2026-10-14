@@ -25,7 +25,7 @@ from pydantic import ValidationError
 from fr import real_ghclient
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
-from fr.labels import FR_CLAIMED, FR_IN_PROGRESS
+from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, held_gates
 from fr.triage.claims import read_claims, to_issue_claim
 from fr.triage.errors import ForgeError, TriageError
 from fr.triage.model import (
@@ -509,6 +509,7 @@ def collect_facts(
     repo_limit: int = REPO_LIMIT,
     ledger_branches: Iterable[tuple[str, str, datetime]] = (),
     cursor_at: CursorReader | None = None,
+    known_labels: Mapping[tuple[str, int], list[str]] | None = None,
 ) -> Facts:
     """`collect_facts_counted` without a carried set: every not-open judged key is viewed."""
     return collect_facts_counted(
@@ -523,6 +524,7 @@ def collect_facts(
         repo_limit=repo_limit,
         ledger_branches=ledger_branches,
         cursor_at=cursor_at,
+        known_labels=known_labels,
     )[0]
 
 
@@ -563,6 +565,7 @@ def collect_facts_counted(
     previous: Facts | None = None,
     ledger_branches: Iterable[tuple[str, str, datetime]] = (),
     cursor_at: CursorReader | None = None,
+    known_labels: Mapping[tuple[str, int], list[str]] | None = None,
 ) -> tuple[Facts, CollectStats]:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
@@ -602,7 +605,8 @@ def collect_facts_counted(
     finished (exit-gates §D Facts): each one's MERGED PR has its labels read once (the
     gate ledger, which no list read carries), and each one's OPEN PR gets the run
     cursor's position at its head from *cursor_at* (the command layer's `gitseam`
-    reader; None reads no cursor). A carried repo is not read for either.
+    reader; None reads no cursor). A carried repo is not read for either. A merged PR in
+    *known_labels* (the previous facts read it with no gate held) is not read again.
     """
     keep = _carry_set(only, previous)
     if keep and previous is not None:
@@ -768,7 +772,7 @@ def collect_facts_counted(
     in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
     judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
     every = [*linked_prs_all(out), *unlinked, *batch_prs, *judged_prs]
-    ledger = _ledger_reads(forge, every, ledger_branches, collected, cursor_at)
+    ledger = _ledger_reads(forge, every, ledger_branches, collected, cursor_at, known_labels or {})
     if ledger:
         out = [i.model_copy(update={"prs": [ledger.get((p.repo, p.number), p) for p in i.prs]})
                for i in out]  # fmt: skip
@@ -808,6 +812,7 @@ def _ledger_reads(
     branches: Iterable[tuple[str, str, datetime]],
     collected: Sequence[str],
     cursor_at: CursorReader | None,
+    known: Mapping[tuple[str, int], list[str]],
 ) -> dict[tuple[str, int], PullRequest]:
     """(repo, number) -> the PR with its gate-ledger labels (merged) or its cursor
     position (open), for every PR of a *branches* entry this pass read (§D Facts). One
@@ -821,7 +826,10 @@ def _ledger_reads(
             pr.repo == r and pr.head_ref == b and _created_since(pr, at) for r, b, at in wanted
         ):
             continue
-        if pr.state == "MERGED":
+        if pr.state == "MERGED" and key in known and not held_gates(known[key]):
+            # settled (no gate held, or every one passed): never read again (p4-r7)
+            out[key] = pr.model_copy(update={"labels": list(known[key])})
+        elif pr.state == "MERGED":
             try:
                 out[key] = pr.model_copy(
                     update={"labels": forge.pr_labels(repo=pr.repo, number=pr.number)}

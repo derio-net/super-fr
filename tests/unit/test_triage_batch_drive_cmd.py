@@ -884,7 +884,7 @@ def test_post_merge_then_one_closeout_through_the_runner(
     checkout.released = True
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
-    assert checkout.forwarded == 1
+    assert checkout.forwarded == 2  # post_merge's (p4-r2), then the close-out's
     assert checkout.commands == [["./scripts/install.sh"]]
     (item,) = runner.dispatched
     assert item.id == f"{REPO}/run/closeout-b1"
@@ -1113,8 +1113,11 @@ def test_a_failing_post_merge_holds_the_closeout_every_pass(
     for _ in range(2):
         code, out = _drive(tmp_path, "--once", "--yes")
         assert code == 3, out
+        assert _lines(out, "post-merge") == [
+            "post-merge b1: post_merge failed, close-out held: install.sh: exit 1"
+        ]
         assert _lines(out, "closeout") == [
-            "closeout b1: post_merge failed, close-out held: install.sh: exit 1"
+            "closeout b1: close-out held: the repo's post_merge has not succeeded yet"
         ]
     assert runner.dispatched == []
     assert _events(tmp_path, "b1") == ["dispatch"]

@@ -259,7 +259,7 @@ def test_the_host_never_switches_the_operators_clone(
 
     _drive(tmp_path, "--once", "--yes")
 
-    assert checkout.switched == [False]
+    assert checkout.switched and not any(checkout.switched)  # post_merge's and close-out's
 
 
 def test_a_close_out_another_drivers_runner_owns_is_reported_and_left_to_it(

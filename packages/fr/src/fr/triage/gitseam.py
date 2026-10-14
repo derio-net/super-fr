@@ -707,15 +707,22 @@ class Checkout:
         rg-5). Nothing in this clone changes."""
         git(["init", "--quiet", str(dest)], self.path)
         git(["remote", "add", "origin", self.origin_url()], dest)
-        # `-z`: names unquoted, so a non-ASCII path is copied, not skipped as unknown.
-        listed = git_bytes(["ls-tree", "-r", "-z", "--name-only", ref, "--", *paths], self.path)
-        for name in (os.fsdecode(n) for n in listed.split(b"\0") if n):
+        # `-z`: names unquoted, so a non-ASCII path is copied, not skipped as unknown. The
+        # mode is kept: an executable at *ref* (a repo's `.fr/candidate-install`) is
+        # executable in the copy, so a reader that asks whether it can run it is answered
+        # as on the branch (p4-r7).
+        listed = git_bytes(["ls-tree", "-r", "-z", ref, "--", *paths], self.path)
+        for record in (r for r in listed.split(b"\0") if r):
+            meta, _, raw = record.partition(b"\t")
+            name = os.fsdecode(raw)
             content = self.show_bytes(ref, name)  # any file, binary included (gh#889)
             if content is None:
                 continue
             target = dest / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
+            if meta.split(b" ")[0] == b"100755":
+                target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).
