@@ -1,0 +1,47 @@
+schema_version: 10
+run: 2026-10-14-feat-closed-session-batch-recovery
+step: implement-phase
+item: phase/1
+outcome: blocked
+ticks: []
+refactor: {}
+journal:
+  - kind: discovery
+    id: recovery-python314-ready
+    phase: 1
+    title: Supported Python 3.14 repairs the isolated test environment
+    body: |
+      uv run --python 3.14 inside the existing isolation installed CPython 3.14.8
+      and the workspace dependencies successfully. The existing replacement CLI
+      tests passed (37 passed). No isolation marker/config/version was changed.
+      Real executor session: ses_ec4699655ffeL3SP68hI3rHTR8; model openai/gpt-6.1-sol.
+  - kind: finding
+    id: recovery-pane-roster-capture-required
+    phase: 1
+    state: open
+    review_scope: in
+    title: Missing captured pane discovery contract blocks safe recovery
+    body: |
+      R3 and R7 require proving that the recorded pane has no unrelated occupant
+      and discovering an allocated shell pane after a lost allocation response.
+      Existing captured tab-list-all.json exposes tab_id/label/pane_count but no
+      pane ids; agent-list.json only observes agents, not newly allocated shell
+      panes. The fixture README says tab-create.json is constructed rather than
+      captured and references pane-list/tab-get observations not supplied as
+      fixtures. No pane discovery wire format may be invented alongside its parser.
+
+      Attempting a read-only CLI availability check through the mandated bridge,
+      fr isolation exec --branch feat/closed-session-batch-recovery -- herdr --help,
+      failed: OCI runtime exec failed: exec failed: unable to start container
+      process: exec: "herdr": executable file not found in $PATH: unknown.
+
+      Please supply redacted real captures of the complete pane roster and the
+      labelled tab-to-pane discovery response (including an allocated shell), or
+      provide an authorized read-only capture route accessible through isolation.
+      This is not a request to run the live client walk or take over any real batch.
+      Implementation stopped rather than constructing fixtures or degrading isolation.
+      Provisional source/schema/API edits and red tests were removed so no incomplete
+      --recover surface remains. No step is ticked; all six tasks remain owed.
+      No acceptance status, real batch, driver, pane, or PR state was changed.
+resolves: []
+evidence: {}
