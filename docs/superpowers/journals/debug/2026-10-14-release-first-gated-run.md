@@ -15,3 +15,8 @@ Phase 7 of exit-gates (#1195) taught scripts/versions.Version both RC spellings 
 ### fix-rc-version-tests · finding [fixed] · Version-shape tests accept a staged RC (both spellings)
 
 test_version_is_semver: fullmatch X.Y.Z(rcN)?; bridge banner regex allows rcN; test_every_surface_value_equals_the_root_version: every surface parses to the root Version AND carries vs.spelling(file, root). Red at a locally staged 5.27.0-rc.1 (bump-version, uncommitted): 3 failed; green after: 27 passed at the RC and 27 passed at 5.26.0 after restoring the version files. Tests only, no fragment.
+
+<!-- fr:journal kind=review scope=debug id=review-pr-1209 created=2026-10-14T12:02:40+00:00 -->
+### review-pr-1209 · review · PR #1209 reviewed by the debugging session: no findings
+
+Self-review of a 3-test, test-only diff; no independent reviewer dispatched (proportionate to size). Checked: the patterns admit exactly X.Y.Z and X.Y.ZrcN (N>=1, no leading zero), matching scripts/versions._VERSION_RE's PEP 440 branch; the surfaces test is stricter than before (per-file spelling via version_surfaces.spelling) and passes at both a final and an RC. No findings.
