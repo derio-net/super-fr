@@ -942,3 +942,39 @@ def test_a_forge_error_reading_the_base_rules_ends_batch_merge_cleanly(
     code, out = _merge(tmp_path, "--yes")
     assert code == 1 and "a forge read failed" in out and "connection reset" in out
     assert forge.merged == []
+
+
+# ------------------------------------------- one verdict rule, two callers (merge-truth R7)
+
+
+@pytest.mark.parametrize(
+    ("required", "every", "ci_none"),
+    [
+        ([{"name": "test", "bucket": "pass"}], None, False),
+        ([{"name": "test", "bucket": "fail"}], None, False),
+        ([{"name": "test", "bucket": "pending"}], None, False),
+        ([], [{"name": "lint", "bucket": "fail"}, {"name": "x", "bucket": "pass"}], False),
+        ([], [], False),
+        ([{"name": "test", "bucket": "fail"}], None, True),
+    ],
+)
+def test_pr_checks_verdict_matches_live_checks(
+    tmp_path: Path, required: list[dict[str, Any]], every: Any, ci_none: bool
+) -> None:
+    """`pr_checks_verdict` holds the rule `live_checks` merges by: the archive step
+    reads a PR the facts do not hold through it, with no MergeContext to hand."""
+    from fr.triage.batch_merge import MergeContext, live_checks, pr_checks_verdict
+
+    forge = MergeForge()
+    forge.add(7, "head-7")
+    forge.checks[7] = required
+    if every is not None:
+        forge.all_checks[7] = every
+    ctx = MergeContext(
+        client=forge,  # type: ignore[arg-type]
+        checkout=FakeCheckout(tmp_path, forge),  # type: ignore[arg-type]
+        repo="derio-net/super-fr", version=None, scratch_root=tmp_path, method="squash",
+        say=lambda line: None, ci_none=ci_none,
+    )  # fmt: skip
+    direct = pr_checks_verdict(forge, "derio-net/super-fr", 7, ci_none=ci_none)  # type: ignore[arg-type]
+    assert direct == live_checks(ctx, 7)

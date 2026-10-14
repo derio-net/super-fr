@@ -206,6 +206,7 @@ from fr.triage.batch_merge import (
     describe,
     merge_ready,
     plan_queue,
+    pr_checks_verdict,
     run_queue,
     update_failing,
 )
@@ -3235,7 +3236,7 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
                 state=str(rec.get("state", "")).upper(),
                 draft=bool(rec.get("isDraft")),
                 head=str(rec.get("headRefOid") or ""),
-                checks="pending",  # an open one's checks come from the facts' record
+                checks="pending",  # the archive step reads an open one's (merge-truth R7)
                 head_ref=str(rec.get("headRefName") or head),
                 files=tuple(
                     str(f.get("path") if isinstance(f, dict) else f) for f in rec.get("files") or ()
@@ -4054,21 +4055,26 @@ class _Driver:
         self, facts: Facts, repo: str, batch: Batch, event: CloseoutEvent
     ) -> list[LivePr]:
         """Archive PR candidates: the open `chore/*` PRs collect read (with files and
-        checks), plus any PR on the close-out's own heads, merged ones included."""
+        checks), unlinked or linked to an issue (merge-truth R7), plus any PR on the
+        close-out's own heads, merged ones included. A head-found open PR the facts do
+        not hold has its checks read live, never assumed pending (R7)."""
         client = self.client(facts, repo)
         allowed = allowed_authors(repo, facts)
+        ci_none = self._ci_none(repo)
         out: dict[int, LivePr] = {}
-        for pr in facts.prs:
+        linked = [p for issue in facts.issues for p in issue.prs]
+        for pr in (*facts.prs, *linked):
             if (
                 pr.repo != repo
                 or pr.state != "OPEN"
                 or not pr.head_ref.startswith(ARCHIVE_PREFIXES)
+                or pr.number in out
             ):
                 continue
             verdict, failing = checks_verdict(
                 client.pr_required_checks(repo, pr.number),
                 pr.checks or {},
-                ci_none=self._ci_none(repo),
+                ci_none=ci_none,
             )
             out[pr.number] = LivePr(
                 number=pr.number, state="OPEN", draft=pr.is_draft, head=pr.head_oid,
@@ -4079,6 +4085,11 @@ class _Driver:
         heads |= {event.archive} if event.archive else set()
         for head in sorted(heads):
             for found in _live_head_prs(client, repo, head, allowed):
+                if found.state == "OPEN" and found.number not in out:
+                    verdict, failing = pr_checks_verdict(
+                        client, repo, found.number, ci_none=ci_none
+                    )
+                    found = replace(found, checks=verdict, failing=failing)
                 if found.state != "OPEN" or found.number not in out:
                     out[found.number] = found
         # The base, read fresh as the export reads it (p4-r15): an archive PR is merged

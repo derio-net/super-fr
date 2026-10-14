@@ -68,6 +68,7 @@ class World:
         self.queue_states: dict[int, QueueState] = {}  # PR -> its merge-queue state
         self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
         self.skipped: list[Any] = []  # repos collect did not read
+        self.hidden: set[int] = set()  # PRs opened after the facts' collect (merge-truth R7)
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -89,7 +90,8 @@ class World:
 
     def facts(self) -> Facts:
         prs = {n: self._pr(n) for n in self.prs}
-        linked = {i: [prs[n] for n, p in self.prs.items() if i in p["closes"]] for i in self.issues}
+        seen = {n: p for n, p in self.prs.items() if n not in self.hidden}
+        linked = {i: [prs[n] for n, p in seen.items() if i in p["closes"]] for i in self.issues}
         return Facts(
             schema=3,
             scope="derio-net--super-fr",
@@ -108,7 +110,7 @@ class World:
                 )
                 for i, s in self.issues.items()
             ],  # fmt: skip
-            prs=[prs[n] for n, p in self.prs.items() if not p["closes"] and p["state"] == "OPEN"],
+            prs=[prs[n] for n, p in seen.items() if not p["closes"] and p["state"] == "OPEN"],
             config={REPO: TriageConfig.model_validate(self.config)} if self.config else {},
             stale_in_progress=self.stale_in_progress,
             skipped=self.skipped,
@@ -147,7 +149,8 @@ class World:
         view = {k: p[k] for k in ("state", "draft", "head_oid", "head_ref")}
         merge = p.get("merge_commit", f"merge-{number}")
         return {**view, "base_ref": p.get("base", "main"), "merge_commit": merge,
-                "labels": list(p["labels"])}  # fmt: skip
+                "labels": list(p["labels"]),
+                "mergeable": p.get("mergeable", "MERGEABLE")}  # fmt: skip
 
     def pr_ready(self, repo: str, number: int) -> None:
         self.calls.append(f"pr_ready {number}")
@@ -1297,6 +1300,60 @@ def test_an_archive_pr_retargeted_off_the_default_branch_is_reported_and_never_m
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert [m[0] for m in world.merged] == [201]
+
+
+_CLOSEOUT_R1 = (
+    "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+    "run: r1, archive: chore/archive-p1}\n"
+)
+
+
+def _closing(world: World, tmp_path: Path, events: str = "") -> None:
+    """b1 merged, its close-out started (run r1, archive head chore/archive-p1)."""
+    _merged(world, tmp_path, events=_CLOSEOUT_R1 + events)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1 + events))
+
+
+def test_head_found_open_archive_pr_gets_live_checks_not_pending(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """merge-truth R7: an archive PR opened after the last full collect is found by
+    its head alone. Its checks are read live, never assumed `pending`."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    world.hidden.add(201)
+    world.checks[201] = [{"name": "test", "bucket": "pass"}]
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201], out
+    assert _lines(out, "archive") == ["archive b1: merged archive PR #201"]
+
+
+def test_head_found_open_archive_pr_with_red_live_checks_is_not_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    world.hidden.add(201)
+    world.checks[201] = [{"name": "test", "bucket": "fail"}]
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [], out
+
+
+def test_linked_archive_pr_in_issue_prs_gets_the_facts_verdict(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """merge-truth R7: an archive PR that closes an issue sits in `issue.prs`, never
+    `facts.prs`. Path 1 scans both, so a head the close-out did not name is found."""
+    _closing(world, tmp_path)
+    world.issues[9] = "open"
+    world.pr(201, "chore/closeout-r1", [9], files=["docs/superpowers/runs/r1.yaml"])
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert [m[0] for m in world.merged] == [201], out
 
 
 # ------------------------------------------------- the board, every pass (R11)

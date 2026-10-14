@@ -251,15 +251,22 @@ def run_queue(ctx: MergeContext, queue: Sequence[Slot]) -> None:
         previous = slot.step.batch.id
 
 
-def live_checks(ctx: MergeContext, number: int) -> tuple[ChecksVerdict, tuple[str, ...]]:
+def pr_checks_verdict(
+    client: GhClient, repo: str, number: int, *, ci_none: bool
+) -> tuple[ChecksVerdict, tuple[str, ...]]:
     """R4 on the PR's head as the forge reports it now: the required checks when
     the branch has any, else every check; nothing reported is pending (gh#880).
-    The one rule the driver pass and `batch merge` both merge by."""
-    if ctx.ci_none:
+    The one rule the driver pass, `batch merge` and the archive step merge by."""
+    if ci_none:
         return checks_verdict([], {}, ci_none=True)
-    required = ctx.client.pr_required_checks(ctx.repo, number)
-    every = {} if required else _counts(ctx.client.pr_checks(ctx.repo, number))
+    required = client.pr_required_checks(repo, number)
+    every = {} if required else _counts(client.pr_checks(repo, number))
     return checks_verdict(required, every, ci_none=False)
+
+
+def live_checks(ctx: MergeContext, number: int) -> tuple[ChecksVerdict, tuple[str, ...]]:
+    """`pr_checks_verdict` for the context's repo."""
+    return pr_checks_verdict(ctx.client, ctx.repo, number, ci_none=ctx.ci_none)
 
 
 def _counts(checks: Sequence[dict[str, Any]]) -> dict[str, int]:
