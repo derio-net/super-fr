@@ -57,6 +57,7 @@ class World:
         self.all_checks: dict[int, dict[str, int]] = {}
         self.merged: list[tuple[int, str, str]] = []
         self.refuse_merge: str | None = None
+        self.refuse_ready: str | None = None
         self.refuse_create: str | None = None
         self.create_files: list[str] = []  # what a PR pr_create opens changes
         self.head_of: Any = lambda branch: "sha-created"  # the head a pushed branch has
@@ -154,6 +155,8 @@ class World:
 
     def pr_ready(self, repo: str, number: int) -> None:
         self.calls.append(f"pr_ready {number}")
+        if self.refuse_ready:
+            raise GhError(self.refuse_ready, returncode=1)
         self.prs[number]["draft"] = False
 
     def label_exists(self, repo: str, name: str) -> bool:
@@ -1372,6 +1375,24 @@ def test_archive_of_a_draft_calls_pr_ready_before_pr_merge_and_says_so(
     assert acts == ["pr_ready 201", "pr_merge 201"], world.calls
     assert _lines(out, "archive") == ["archive b1: marked ready, merged archive PR #201"]
     assert not [c for c in world.calls if "approved-fr" in c or c.startswith("label ")]
+
+
+def test_a_refused_ready_on_a_draft_archive_is_worded_as_the_ready_step(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """p2-r9: the forge refusing `pr_ready` is not a refused merge: the line names the
+    ready step, and nothing is merged."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"],
+             draft=True, labels=[])  # fmt: skip
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1") + _CLOSEOUT_R1))
+    world.refuse_ready = "not permitted"
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 1 and world.merged == [], out
+    (line,) = _lines(out, "archive")
+    assert "refused to mark it ready: not permitted" in line, line
+    assert "refused the merge" not in line
+    assert "not permitted" in load_stops(tmp_path)["archive:b1"].reason
 
 
 def test_plan_mode_never_marks_a_draft_archive_ready(

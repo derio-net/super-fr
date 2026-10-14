@@ -247,6 +247,7 @@ from fr.triage.model import (
     CancelEvent,
     ClaimsReleasedEvent,
     CloseoutEvent,
+    ConflictDelivery,
     ConflictEvent,
     DispatchEvent,
     EnqueueEvent,
@@ -5529,9 +5530,12 @@ class _Driver:
     ) -> tuple[str, bool]:
         ctx = self.merge_ctx(facts, repo)
         assert action.pr is not None
+        step = "refused the merge"
         try:
             if action.draft:  # merge-truth R11: as the train readies an approved draft
+                step = "refused to mark it ready"
                 ctx.client.pr_ready(repo, action.pr)
+                step = "refused the merge"
             ctx.client.pr_merge(repo, action.pr, head_sha=action.head, method=ctx.method)
         except UnsupportedForgeOperation as exc:
             _fail(str(exc))
@@ -5546,7 +5550,7 @@ class _Driver:
             if key in self.reported:
                 return f"stopped again at {action.head[:12]} (reported above)", False
             self.reported.add(key)
-            return f"stopped: archive PR #{action.pr}: the forge refused the merge: {exc}", False
+            return f"stopped: archive PR #{action.pr}: the forge {step}: {exc}", False
         # Record it: a PR attributed by its files alone is not found again once it
         # left the open-PR list, and the batch would read as closing forever (rg-6).
         event = closeout_event(batch)
@@ -5583,12 +5587,12 @@ class _Driver:
 
     @staticmethod
     def _archive_conflict_event(
-        action: Action, batch: Batch, delivered: str, handle: str | None = None
+        action: Action, batch: Batch, delivered: ConflictDelivery, handle: str | None = None
     ) -> ArchiveConflictEvent:
         assert action.pr is not None
         return ArchiveConflictEvent(
             kind="archive_conflict", at=_now_after(batch), head=action.head, pr=action.pr,
-            delivered=delivered, handle=handle,  # type: ignore[arg-type]
+            delivered=delivered, handle=handle,
         )  # fmt: skip
 
     def _hand_back_archive(
@@ -5602,16 +5606,16 @@ class _Driver:
         event = closeout_event(batch)
         launch = self._launch(facts, batch, repo)
         name = str(event.runner if event is not None and event.runner != "hand" else launch.runner)
-        brief = archive_conflict_brief(
-            batch, pr=action.pr, head=action.head, branch=action.branch,
-            base=self.merge_ctx(facts, repo).main,
-        )  # fmt: skip
-        if not self.adapter.carries(name):
+        if not self.adapter.carries(name):  # before the brief: it reads the merge context
             return (
                 f"its close-out runs on {name}, which this driver lacks: left to that "
                 "runner's driver",
                 False,
             )
+        brief = archive_conflict_brief(
+            batch, pr=action.pr, head=action.head, branch=action.branch,
+            base=self.merge_ctx(facts, repo).main,
+        )  # fmt: skip
         target = WorkItem(
             id=closeout_item_id(repo, batch.id), unit="run", workflow=batch_workflow(batch),
             repo=repo, parent=None, inputs=(), payload={"group": self.group_of(batch)},
