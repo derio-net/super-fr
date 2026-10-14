@@ -37,7 +37,8 @@ def test_tick_first_log_line_has_version_and_timestamp(caplog):  # G5
     assert rc == 0
     first_record = caplog.records[0]
     pattern = (
-        r"^\[bridge\] - v\d+\.\d+\.\d+ - "
+        # `rcN`: the release runs this suite on a staged release candidate (exit-gates R25).
+        r"^\[bridge\] - v\d+\.\d+\.\d+(?:rc[1-9]\d*)? - "
         r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC - tick$"
     )
     assert re.match(pattern, first_record.getMessage()), (
