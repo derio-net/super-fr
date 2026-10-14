@@ -19,7 +19,7 @@ R3. Prove source absence using fresh complete herdr tab/agent observations, incl
 R4. Launch a fresh managed OpenCode control session in a new pane from the stable primary checkout, using the supplied provider/model and `--auto`. Derive its name from the unchanged work-item identity and let herdr allocate its pane; never synthesize a live descriptor or name from operator guesses.
 R5. Persist auditable attempt/outcome records linking old and new pane ownership, observed fresh harness session id, model/harness and reason. Original lifecycle events stay immutable. Subsequent replacement/repair and other handle readers use successful effective ownership without changing dispatch age or lifecycle derivation; failed attempts never become effective ownership.
 R6. Submit at most one reconstruction brief after independently confirming target process/name/model/cwd and safe rendered input. Every recovered session starts in HOLD: acknowledge and report existing run and pending gates, but make no mutations, abandon/redispatch no units, answer no questions, and wait for separate operator go-ahead. HOLD survives managed reconstruction/restart and overrides conflict or unfinished-cursor continuation instructions.
-R7. Checkpoint partial failures and make explicit repair discover the same attempt and allocated pane. Repair launches nothing and sends no prompt; success requires persisted uptake confirmation and matching live ownership. Uncertain submission, startup/observation failure, or cross-store write failure never authorizes replay or an automatic second launch. Report exact checkpoint, surviving target/pane and inspection/repair action.
+R7. Persist recovery intent keyed by original item/source identity before pane allocation; checkpoint partial failures and make explicit repair discover the same attempt and allocated or uncertain pane. Repair launches nothing and sends no prompt; success requires persisted uptake confirmation and matching live ownership. Uncertain allocation/submission, startup/observation failure, or cross-store write failure never authorizes replay or an automatic second allocation/launch. Report exact checkpoint, surviving target/pane and inspection/repair action.
 R8. Keep recovery operator-invoked only: no automatic wave-driver recovery, org loop restart or real-batch takeover is part of this feature. Document preview, act, repair, HOLD release by separate operator instruction, scope/state identity, and limitations. Ship meaningful fake-backed candidate scenarios plus a disposable operator-owned post-merge walk at the Tester gate.
 
 ## Design
@@ -90,12 +90,23 @@ before changing its scope. Acquire the existing source identity lock to serializ
 recovery/replacement, plus the new target pane's lock before any target input; locks
 must remain held through both durable-store commits.
 
-The attempt becomes durable before launch. Once a pane is allocated, persist enough
-information to find the pending attempt by original batch/item identity even if the
-batch attempt write fails. A target allocated but not launched is still reported and
-never silently replaced by another pane. Cross-store repair must cover that boundary,
-not just normal target-uptake failures. No automatic tab cleanup may destroy a
-possibly-live or uncertain target.
+Persist durable recovery intent keyed by server and original batch/item/source
+identity BEFORE calling herdr allocation. It carries attempt id, source ownership,
+branch, target harness/model and an allocation-pending checkpoint. Do not rely on a
+pane-keyed descriptor that cannot exist until the allocation response is parsed.
+Fresh item-labelled tab observations must permit read-only discovery of an allocation
+whose response was lost or whose target-descriptor write failed. A malformed, failed
+or ambiguous roster remains unknown: never allocate again to resolve it. Repair may
+record the one positively identified allocated target or report confirmed absence,
+without allocating, launching or sending a prompt. After a confirmed failed/aborted
+attempt, any subsequent allocation requires a new explicit operator recovery act.
+
+Once allocation returns, persist the actual target pane before launch and before any
+prompt; retain the source-keyed intent so pending lookup survives batch audit failure.
+A target allocated but not launched is still reported and never silently replaced by
+another pane. Cross-store repair covers allocation effects, lost/invalid response,
+first target-descriptor save, batch attempt save, startup and uptake boundaries.
+No automatic tab cleanup may destroy a possibly-live or uncertain target.
 
 Record source ownership separately from actual target ownership. Defaults must keep
 legacy same-pane replacement events/descriptors readable. If the durable audit schema
@@ -132,7 +143,8 @@ real descriptor serialization and batch audit save/read. Scenarios run an instal
 candidate in disposable local fixtures with fake herdr/forge, never the six org
 batches. Cover source closure, same-model recovery, no-op previews, live/ambiguous/
 reused-pane refusals, repeated recovery after success, driver/lock contention,
-allocation/metadata/startup/uptake failures, explicit repair without input, ownership
+allocation effects followed by lost/invalid responses or first descriptor-save
+failure, metadata/startup/uptake failures, explicit repair without input, ownership
 after repair and subsequent replacement, old schema reads, HOLD and `--auto`.
 
 Business-level acceptance rows:
