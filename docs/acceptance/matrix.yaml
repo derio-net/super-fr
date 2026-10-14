@@ -9524,9 +9524,15 @@ rows:
       without losing work or original dispatch history.
     origin:
     - super-fr:docs/superpowers/specs/2026-10-14-closed-session-batch-recovery-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_closed_recovery.py::test_recovery_success_preserves_lifecycle_and_changes_owner
+      - super-fr:tests/unit/test_herdr_closed_recovery.py::test_allocation_intent_and_single_input
+      int:
+      - super-fr:tests/integration/test_scenarios.py::test_triage_closed_recovery
+    status: ci
+    notes: Installed fake-backed CLI/runner/persistence scenario preserves dispatch/work
+      and establishes fresh held ownership; not a native client walk.
     verify: candidate
     scenario: tests/scenarios/triage-closed-recovery.sh
   - id: triage-closed-recovery-refusals
