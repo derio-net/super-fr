@@ -92,6 +92,7 @@ def plan_filing(entries: list[JournalEntry], ids: list[str]) -> Plan:
     states = effective_finding_states(entries)
     owed_open = set(open_owed_ids(entries))
     filed = owed_filed_as(entries)
+    narrowing_ids = {d.id for d in narrowing_decisions(entries)}
     findings: list[JournalEntry] = []
     narrowings: list[JournalEntry] = []
     owed: list[JournalEntry] = []
@@ -113,7 +114,7 @@ def plan_filing(entries: list[JournalEntry], ids: list[str]) -> Plan:
                 refusals.append(f"{eid}: the owed action is discharged")
             else:
                 owed.append(entry)
-        elif entry in narrowing_decisions(entries):
+        elif eid in narrowing_ids:
             where = narrowing_accounted(entries, entry)
             if where is not None:
                 refusals.append(f"{eid}: already filed as {where}")
