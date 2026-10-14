@@ -61,7 +61,8 @@ from fr.triage.stage import Stage, derive_stage
 # reader rejects; a file below 11 reads `author` as None, so its digests are untrusted.
 FACTS_SCHEMA: Literal[11] = 11
 FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11)
-# The version this fr WRITES: every engine write stamps 9 (the `update`, `approval`,
+# The version this fr WRITES: every engine write stamps 10 (the `archive_conflict` event,
+# 2026-10-14-merge-truth §E; 9 was the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
 # `claim_taken` event, gh#1120;
 # 7 was audited replacement; 6 was spec 2026-10-06-triage-claims
@@ -70,8 +71,8 @@ FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11)
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[9] = 9
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+JUDGEMENTS_SCHEMA: Literal[10] = 10
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -865,6 +866,24 @@ class EnqueueEvent(_Strict):
     detail: str = ""
 
 
+class ArchiveConflictEvent(_Strict):
+    """The forge reported batch's archive PR #*pr* conflicting at *head*, and the driver
+    handed it to the close-out (2026-10-14-merge-truth §E, R12). Needs judgements schema
+    10. Written by the engine only. Counted apart from a batch PR's `conflict` events,
+    which name refused paths and raise the `merge-conflict` Need; this one does neither.
+
+    `delivered`: `session`, the brief was sent to the idle close-out session; `fresh`, a
+    new archive-conflict session was started; `held`, the hand-back bound was reached and
+    the operator owns it. `handle` is the item messaged or started; None when held."""
+
+    kind: Literal["archive_conflict"]
+    at: AwareDatetime
+    head: str = Field(min_length=1)
+    pr: int
+    delivered: ConflictDelivery
+    handle: str | None = None
+
+
 SCHEMA_3_EVENTS = frozenset({"closeout", "post_merge"})
 """The event kinds only a schema 3 `judgements.yaml` may carry (wave-driver §A)."""
 SCHEMA_5_EVENTS = frozenset({"conflict"})
@@ -875,6 +894,8 @@ SCHEMA_8_EVENTS = frozenset({"claim_taken"})
 """The event kinds only a schema 8 `judgements.yaml` may carry (gh#1120)."""
 SCHEMA_9_EVENTS = frozenset({"update", "approval", "red_handback", "enqueue"})
 """The event kinds only a schema 9 `judgements.yaml` may carry (merge-train-safety §B)."""
+SCHEMA_10_EVENTS = frozenset({"archive_conflict"})
+"""The event kinds only a schema 10 `judgements.yaml` may carry (merge-truth §E)."""
 
 # Every schema-gated event kind, with the judgements schema it first appears in: the one
 # table `Judgements` refuses a too-low stamp from.
@@ -885,6 +906,7 @@ _EVENT_SCHEMAS: tuple[tuple[int, frozenset[str]], ...] = (
     (7, frozenset({"replacement"})),
     (8, SCHEMA_8_EVENTS),
     (9, SCHEMA_9_EVENTS),
+    (10, SCHEMA_10_EVENTS),
 )
 
 
@@ -900,7 +922,8 @@ BatchEvent = Annotated[
     | UpdateEvent
     | ApprovalEvent
     | RedHandbackEvent
-    | EnqueueEvent,
+    | EnqueueEvent
+    | ArchiveConflictEvent,
     Field(discriminator="kind"),
 ]
 
@@ -1008,7 +1031,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}

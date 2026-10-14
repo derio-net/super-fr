@@ -35,6 +35,7 @@ from fr.triage.batch import (
 )
 from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.model import (
+    ArchiveConflictEvent,
     Batch,
     CloseoutEvent,
     ConflictEvent,
@@ -688,6 +689,38 @@ def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
 def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
     """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
     return f"{repo}/run/conflict-{batch_id}-{n}"
+
+
+# ------------------------------------------ archive conflicts (merge-truth R12, §E)
+
+ARCHIVE_HANDBACKS_PER_CLOSEOUT = 2
+"""R12: hand-backs a conflicting archive PR gets per close-out before it is the operator's."""
+
+ArchiveConflictKind = Literal["skip", "held", "handback"]
+
+
+def archive_conflict_decision(events: Sequence[object], head: str) -> ArchiveConflictKind:
+    """The pure decision on an archive PR conflicting at *head* (R12).
+
+    `skip`: an `archive_conflict` event exists for this head, so a restarted driver
+    never hands the same head back twice. `held`: two `session|fresh` hand-backs were
+    made since the batch's latest close-out event (held ones never count; a batch PR's
+    `conflict` events are another counter). Else `handback`."""
+    if any(isinstance(e, ArchiveConflictEvent) and e.head == head for e in events):
+        return "skip"
+    handed = 0
+    for event in reversed(events):
+        if isinstance(event, CloseoutEvent):
+            break
+        if isinstance(event, ArchiveConflictEvent) and event.delivered != "held":
+            handed += 1
+    return "held" if handed >= ARCHIVE_HANDBACKS_PER_CLOSEOUT else "handback"
+
+
+def archive_conflict_item_id(repo: str, batch_id: str, n: int) -> str:
+    """`<OWNER>/<REPO>/run/archive-conflict-<batch-id>-<n>`: the *n*th fresh session
+    started for the batch's conflicting archive PR."""
+    return f"{repo}/run/archive-conflict-{batch_id}-{n}"
 
 
 def attributed(pr: LivePr, batch: Batch, event: CloseoutEvent) -> bool:

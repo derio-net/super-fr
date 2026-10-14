@@ -237,8 +237,8 @@ def test_a_write_upgrades_schema_1_to_2_and_touches_only_the_batches_section(
     save_batches(path, [batch], read=judgements.batches)
 
     text = path.read_text(encoding="utf-8")
-    assert JUDGEMENTS_SCHEMA == 9
-    assert text.startswith("schema: 9\n")
+    assert JUDGEMENTS_SCHEMA == 10
+    assert text.startswith("schema: 10\n")
     assert "# the agent's own comment survives" in text
     assert "super-fr#577: {tier: 1, note: 'keep: me'}" in text
     again = load_judgements(path)
@@ -305,7 +305,7 @@ def test_a_quoted_batches_key_is_replaced_not_duplicated(tmp_path: Path, quote: 
 
     text = path.read_text(encoding="utf-8")
     assert text.count("batches") == 1
-    assert text.startswith(f"schema: 9\n{_REST}batches:\n")
+    assert text.startswith(f"schema: 10\n{_REST}batches:\n")
     assert [b.id for b in load_judgements(path).batches] == ["new"]
 
 
@@ -330,7 +330,7 @@ def test_a_leading_document_marker_stays_one_document(
     save_batches(path, [batch], read=[])
 
     text = path.read_text(encoding="utf-8")
-    assert text.startswith(f"{head}schema: 9\n{_REST}batches:\n")
+    assert text.startswith(f"{head}schema: 10\n{_REST}batches:\n")
     assert load_judgements(path).batches == [batch]
 
 
@@ -342,7 +342,7 @@ def test_a_document_end_marker_keeps_the_batches_inside_the_document(tmp_path: P
     save_batches(path, [batch], read=[])
 
     text = path.read_text(encoding="utf-8")
-    assert text.startswith(f"---\nschema: 9\n{_REST}batches:\n")
+    assert text.startswith(f"---\nschema: 10\n{_REST}batches:\n")
     assert text.endswith("...\n")
     assert load_judgements(path).batches == [batch]
 
@@ -358,7 +358,7 @@ def test_a_prepended_key_goes_after_the_document_start(head: str) -> None:
 
 def test_a_write_keeps_every_other_byte(tmp_path: Path) -> None:
     path = tmp_path / "judgements.yaml"
-    head = "schema: 9\n"
+    head = "schema: 10\n"
     path.write_text("schema: 2\n" + _REST, encoding="utf-8")
 
     save_batches(path, [Batch.model_validate(_batch())], read=[])
@@ -662,3 +662,57 @@ def test_a_linked_pr_outranks_in_progress() -> None:
 
 def test_in_progress_outranks_blocked() -> None:
     assert derive_stage(_issue(1, labels=["blocked", "fr:in-progress"]), []) == "in-progress"
+
+
+# ------------------------------------- the archive_conflict event (merge-truth R12, §E)
+
+_ARCHIVE_CONFLICT = {
+    "kind": "archive_conflict", "at": "2026-10-14T10:00:00Z", "head": "sha-7", "pr": 7,
+    "delivered": "session", "handle": "derio-net/super-fr/run/closeout-b1",
+}  # fmt: skip
+
+
+def _with_events(schema: int, *events: dict[str, Any]) -> dict[str, Any]:
+    dispatch = {"kind": "dispatch", "at": "2026-10-14T09:00:00Z", "runner": "fake",
+                "handle": "h", "branch": "feat/batch-b1"}  # fmt: skip
+    return {
+        "schema": schema,
+        "tiers": [{"n": 1, "title": "Now"}],
+        "issues": {"super-fr#1": {"tier": 1}},
+        "batches": [
+            {"id": "b1", "title": "b1", "ids": ["super-fr#1"], "events": [dispatch, *events]}
+        ],
+    }
+
+
+@pytest.mark.parametrize("delivered", ["session", "fresh", "held"])
+def test_archive_conflict_event_round_trips(delivered: str) -> None:
+    from fr.triage.model import ArchiveConflictEvent
+
+    doc = _with_events(10, {**_ARCHIVE_CONFLICT, "delivered": delivered})
+    event = Judgements.model_validate(doc).batches[0].events[-1]
+    assert isinstance(event, ArchiveConflictEvent)
+    assert (event.head, event.pr, event.delivered) == ("sha-7", 7, delivered)
+    again = Judgements.model_validate(
+        Judgements.model_validate(doc).model_dump(mode="json", by_alias=True)
+    )
+    assert again.batches[0].events[-1] == event
+    with pytest.raises(ValidationError):  # a schema-9 file cannot carry it
+        Judgements.model_validate(_with_events(9, _ARCHIVE_CONFLICT))
+
+
+def test_judgements_schema_10_is_written_and_1_to_10_read(tmp_path: Path) -> None:
+    from fr.triage.model import JUDGEMENTS_READS
+
+    assert JUDGEMENTS_SCHEMA == 10
+    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    for schema in JUDGEMENTS_READS:
+        assert Judgements.model_validate({"schema": schema}).schema_ == schema
+    path = tmp_path / "judgements.yaml"
+    path.write_text(
+        "schema: 9\ntiers:\n  - {n: 1, title: Now}\n"
+        "issues:\n  super-fr#577: {tier: 1}\n  super-fr#575: {tier: 1}\n",
+        "utf-8",
+    )
+    save_batches(path, [Batch.model_validate(_batch())], read=load_judgements(path).batches)
+    assert path.read_text("utf-8").startswith("schema: 10\n")

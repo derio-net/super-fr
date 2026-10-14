@@ -118,8 +118,8 @@ def _judgements(schema: int, *events: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_the_writer_writes_schema_5_and_the_reader_reads_1_to_5() -> None:
-    assert JUDGEMENTS_SCHEMA == 9
-    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9)
+    assert JUDGEMENTS_SCHEMA == 10
+    assert JUDGEMENTS_READS == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     assert Judgements.model_validate({"schema": 5}).schema_ == 5
 
 
@@ -208,3 +208,60 @@ def test_a_new_dispatch_resets_the_count() -> None:
         _dispatch(_t(4)),
     ]
     assert conflict_decision(events, "sha-3", ("src/a.py",), ()).kind == "handback"
+
+
+# ---------------------------------- archive_conflict_decision (merge-truth R12, §E)
+
+
+def _closeout(at: datetime) -> Any:
+    from fr.triage.model import CloseoutEvent
+
+    return CloseoutEvent(kind="closeout", at=at, runner="fake", handle="c", run="r1")
+
+
+def _archive_conflict(head: str, delivered: str, at: datetime) -> Any:
+    from fr.triage.model import ArchiveConflictEvent
+
+    return ArchiveConflictEvent(
+        kind="archive_conflict", at=at, head=head, pr=7, delivered=delivered,  # type: ignore[arg-type]
+        handle=None,
+    )  # fmt: skip
+
+
+def test_archive_conflict_decision_skips_a_head_already_handed_back() -> None:
+    from fr.triage.batch_drive import archive_conflict_decision
+
+    events = [_dispatch(), _closeout(_t(1)), _archive_conflict("sha-1", "session", _t(2))]
+    assert archive_conflict_decision(events, "sha-1") == "skip"
+    assert archive_conflict_decision(events, "sha-2") == "handback"
+
+
+def test_archive_conflict_decision_holds_after_two_hand_backs_since_the_closeout() -> None:
+    from fr.triage.batch_drive import archive_conflict_decision
+
+    events = [_dispatch(), _closeout(_t(1)),
+              _archive_conflict("sha-1", "session", _t(2)),
+              _archive_conflict("sha-2", "fresh", _t(3))]  # fmt: skip
+    assert archive_conflict_decision(events, "sha-3") == "held"
+    held = [*events[:3], _archive_conflict("sha-2", "held", _t(3))]
+    assert archive_conflict_decision(held, "sha-3") == "handback"  # held never counts
+    # two before an earlier close-out do not count against a later one
+    earlier = [_dispatch(), _archive_conflict("sha-1", "session", _t(1)),
+               _archive_conflict("sha-2", "fresh", _t(2)), _closeout(_t(3))]  # fmt: skip
+    assert archive_conflict_decision(earlier, "sha-3") == "handback"
+
+
+def test_archive_conflict_decision_ignores_batch_pr_conflict_events() -> None:
+    from fr.triage.batch_drive import archive_conflict_decision
+
+    events = [_dispatch(), _closeout(_t(1)),
+              _conflict("sha-1", "session", _t(2)), _conflict("sha-2", "fresh", _t(3))]  # fmt: skip
+    assert archive_conflict_decision(events, "sha-1") == "handback"
+
+
+def test_archive_conflict_item_id_names_the_batch_and_the_count() -> None:
+    from fr.triage.batch_drive import archive_conflict_item_id
+
+    assert archive_conflict_item_id("derio-net/super-fr", "b1", 2) == (
+        "derio-net/super-fr/run/archive-conflict-b1-2"
+    )
