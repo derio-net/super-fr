@@ -4903,7 +4903,12 @@ def test_a_yes_pass_clears_a_release_pending_member(
     me = scope_id(Scope(kind="repo", target=REPO))
     marker = Marker(signer=me, batch="b1", claimed=NOW, heartbeat=NOW, expires=NOW + timedelta(1))
     world.comments[1] = [
-        {"author": "operator", "body": render_marker(marker), "created_at": NOW.isoformat(), "id": 7}
+        {
+            "author": "operator",
+            "body": render_marker(marker),
+            "created_at": NOW.isoformat(),
+            "id": 7,
+        }
     ]
     world.issues[1] = "closed"
     world.stale_in_progress = [
