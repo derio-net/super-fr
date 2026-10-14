@@ -149,10 +149,11 @@ def _idle_hint(idle: IdleSession, collected_at: str) -> str:
     return f"idle, dispatched {idle.minutes_since} min ago, no PR as of {when_}"
 
 
-def _archive_prs(batch_repo_: str, facts: Facts) -> list[LivePr]:
+def _archive_prs(batch_repo_: str, facts: Facts, ci_none: Collection[str] = ()) -> list[LivePr]:
     """The collected archive PRs of *batch_repo_*, unlinked and linked to an issue
     (merge-truth R10), as the driver's attribution reads them: trusted by the rule
-    `attributed()` applies (gh#936), checks by the facts' verdict."""
+    `attributed()` applies (gh#936), checks by the facts' verdict, green on a repo in
+    *ci_none* as the driver judges it."""
     allowed = allowed_authors(batch_repo_, facts)
     out: dict[int, LivePr] = {}
     for p in (*facts.prs, *(q for issue in facts.issues for q in issue.prs)):
@@ -160,7 +161,7 @@ def _archive_prs(batch_repo_: str, facts: Facts) -> list[LivePr]:
             continue
         if p.number in out:
             continue
-        verdict, failing = checks_verdict([], p.checks or {}, ci_none=False)
+        verdict, failing = checks_verdict([], p.checks or {}, ci_none=batch_repo_ in ci_none)
         out[p.number] = LivePr(
             number=p.number, state=p.state, draft=p.is_draft, head=p.head_oid,
             checks=verdict, failing=failing, head_ref=p.head_ref, files=tuple(p.files),
@@ -523,6 +524,7 @@ def _card(
     notes: Mapping[str, str] | None = None,
     awaiting: frozenset[str] = frozenset(),
     queued: frozenset[str] = frozenset(),
+    ci_none: Collection[str] = (),
 ) -> Card:
     column = column_of(batch, facts, batches)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
@@ -536,7 +538,7 @@ def _card(
         key = closeout_item_id(repo, batch.id) if repo else ""
         closeout_status = statuses.get(key, "unknown")
     stop = stops.get(batch.id) or stops.get(archive_stop_key(batch.id))
-    archives = _archive_prs(repo, facts) if repo else []
+    archives = _archive_prs(repo, facts, ci_none) if repo else []
     idle = _idle_of(batch, facts, repo, status, closeout_status, now, archives)
     held_archive = _held_archive(batch, archives)
     needs_you = (
@@ -633,7 +635,10 @@ def _own_expiries(facts: Facts, me: str, now: datetime) -> dict[str, ClaimExpiry
 
 
 def live_stops(
-    batches: Sequence[Batch], facts: Facts, stops: Mapping[str, MergeStop]
+    batches: Sequence[Batch],
+    facts: Facts,
+    stops: Mapping[str, MergeStop],
+    ci_none: Collection[str] = (),
 ) -> dict[str, MergeStop]:
     """The recorded stops that still hold: the batch's PR is open, at the stopped head;
     an archive stop (`archive:<batch>`, merge-truth R12) while the batch's attributed
@@ -646,7 +651,7 @@ def live_stops(
                 out[b.id] = stop
         key = archive_stop_key(b.id)
         if key in stops and (repo := batch_repo(b, facts)):
-            archive = _open_archive(b, _archive_prs(repo, facts))
+            archive = _open_archive(b, _archive_prs(repo, facts, ci_none))
             if archive is not None and (stop := live_stop(stops[key], archive.head)):
                 out[key] = stop
     return out
@@ -680,7 +685,7 @@ def build_board(
     actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
     queued = _in_merge_queue(plan)
     selected = default_selection(batches)
-    live = live_stops(batches, facts, stops or {})
+    live = live_stops(batches, facts, stops or {}, ci_none)
     cards = [
         _card(
             b,
@@ -695,6 +700,7 @@ def build_board(
             notes=notes,
             awaiting=awaiting,
             queued=queued,
+            ci_none=ci_none,
         )
         for b in batches
     ]

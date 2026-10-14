@@ -881,3 +881,12 @@ def test_a_held_archive_conflict_card_needs_you() -> None:
     assert card.needs_you and card.hint == "needs you: merge stopped: archive PR #30 conflicts"
     # the held event alone (no stop on this host) still asks for the operator
     assert build_board(f, jd, {}).card("m").needs_you
+
+
+def test_a_ci_none_repos_archive_pr_with_no_checks_reads_ready_to_merge() -> None:
+    """p2-r4: the card's archive PR is judged by the repo's `ci none`, as the driver
+    judges it, never as a repo with CI whose checks have not registered."""
+    f, jd = _closing_archive(checks={"pass": 0, "fail": 0, "pending": 0})
+    assert build_board(f, jd, {}).card("m").hint == "archive PR #30: checks pending"
+    card = build_board(f, jd, {}, ci_none=(REPO,)).card("m")
+    assert card.hint == "archive PR #30: ready to merge"
