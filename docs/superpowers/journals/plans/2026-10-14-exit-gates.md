@@ -610,3 +610,118 @@ prose and a matrix status move only; lane logic was already one function (P5.T2.
 ### p5-ledger-unknown-lane-2 · decision · Supersedes p5-ledger-unknown-lane: an unread gate ledger stays in Closing out (phase 5)
 
 lane_of no longer places a landed batch with unread gate labels in Needs you - Developer. It stays in Closing out with the driver's ledger-unread hint (gate labels unread; close-out waits), and needs_you lists it under a distinct ledger-unread kind (not a role lane) until the next collect reads them.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · merge stops never reach Needs you now; board lane and Needs-you disagree (§F) (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · ledger-unread batch placed in Needs you · Developer (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · duplicate approve-pr and needs-reviewer rows (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r4 · finding [open] (reviewer: in scope) · reviewer lane hint outranks red-CI hints (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r5 · finding [open] (reviewer: in scope) · stop vs gate precedence differs between hint and column (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r6 · finding [open] (reviewer: in scope) · Tester/DevOps reason names one gate and not what is owed (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r7 · finding [open] (reviewer: in scope) · conflicting hint covers only merge, not enqueue (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r8 · finding [open] (reviewer: in scope) · matrix row cites one test for R17+R19 (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r9 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r9 · finding [open] (reviewer: in scope) · SKILL lanes paragraph left the --refresh parenthetical dangling (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r10 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=in -->
+### p5-r10 · finding [open] (reviewer: in scope) · Need.kind comment missing the lane kinds (phase 5)
+
+Reviewer tag: in.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r11 created=2026-10-14T06:39:40+00:00 phase=5 state=open review_scope=out -->
+### p5-r11 · finding [open] (reviewer: out of scope) · a run blocked on a gate before its batch PR exists cannot reach Needs you · Developer (phase 5)
+
+Reviewer tag: out (the cursor is read only at a PR head, by R18's construction; mitigated because batch dispatch opens the PR).
+
+<!-- fr:journal kind=review scope=plan id=p5-review-1 created=2026-10-14T06:39:40+00:00 phase=5 -->
+### p5-review-1 · review · phase 5 independent review: 11 findings (10 in, 1 out) (phase 5)
+
+Dispatched reviewer read b8dacdb3..33959e3f against R17-R19 and §F; confirmed lane_of is the one lane function, R18 and R19 hold, no batch lost; found merge stops missing from Needs you now (p5-r1) and the ledger-unread misplacement (p5-r2). All 10 in-scope fixed in 66336cf5; CI green.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: merge stops never reach Needs you now; board lane and Needs-you disagree (§F) (phase 5)
+
+stops threaded through triage_cmd/render/_needs_section/needs_you; test_p5_r1_a_recorded_merge_stop_reaches_the_rendered_needs_you_now. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: ledger-unread batch placed in Needs you · Developer (phase 5)
+
+back to Closing out with the driver's hint plus a ledger-unread Need; test_an_unread_ledger_stays_closing_out_with_the_drivers_hint_and_a_need. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: duplicate approve-pr and needs-reviewer rows (phase 5)
+
+one row per card; test_p5_r3_a_green_unapproved_delivered_pr_has_one_row. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r4 -->
+### p5-r4-resolved · finding [fixed] · resolves p5-r4: reviewer lane hint outranks red-CI hints (phase 5)
+
+red outranks; test_p5_r4_a_red_delivered_pr_hint_is_the_red_one_not_approve_it. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r5 -->
+### p5-r5-resolved · finding [fixed] · resolves p5-r5: stop vs gate precedence differs between hint and column (phase 5)
+
+hint uses lane.reason; test_p5_r5_hint_and_column_agree_when_a_stop_meets_a_gate. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r6 -->
+### p5-r6-resolved · finding [fixed] · resolves p5-r6: Tester/DevOps reason names one gate and not what is owed (phase 5)
+
+every held gate and the owed act named; test_p5_r6_the_reason_names_every_held_gate_and_what_is_owed. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r7-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r7 -->
+### p5-r7-resolved · finding [fixed] · resolves p5-r7: conflicting hint covers only merge, not enqueue (phase 5)
+
+both; test_p5_r7_the_conflicting_hint_replaces_merge_and_enqueue. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r8-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r8 -->
+### p5-r8-resolved · finding [fixed] · resolves p5-r8: matrix row cites one test for R17+R19 (phase 5)
+
+conflicting and agreement tests added as levels. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r9-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r9 -->
+### p5-r9-resolved · finding [fixed] · resolves p5-r9: SKILL lanes paragraph left the --refresh parenthetical dangling (phase 5)
+
+moved back; skill-validation tripwire green. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r10-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=fixed resolves=p5-r10 -->
+### p5-r10-resolved · finding [fixed] · resolves p5-r10: Need.kind comment missing the lane kinds (phase 5)
+
+comment updated. (66336cf5, CI green)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r11-resolved created=2026-10-14T06:39:40+00:00 phase=5 state=open resolves=p5-r11 out_of_scope=true -->
+### p5-r11-resolved · finding [out-of-scope] · resolves p5-r11: a run blocked on a gate before its batch PR exists cannot reach Needs you · Developer (phase 5)
+
+R18 reads the cursor at the batch PR's head by design; a pre-PR gated run is a separate design question, not caused by this phase's code.
