@@ -39,9 +39,12 @@ class ClientReleaseForge:
 
     def __init__(self, client: GhClient, repo: str, limit: int) -> None:
         self.client, self.repo, self.limit = client, repo, limit
+        self.read = 0  # how many merged PRs the list returned
 
     def merged_prs(self) -> list[dict[str, Any]]:
-        return self.client.list_prs(self.repo, "merged", self.limit)
+        prs = self.client.list_prs(self.repo, "merged", self.limit)
+        self.read = len(prs)
+        return prs
 
     def labels(self, number: int) -> list[str]:
         return [str(n) for n in self.client.pr_view(self.repo, number).get("labels") or []]
@@ -129,23 +132,41 @@ def _from_facts(root: Path, path: Path) -> ReleaseStatus:
 
 def _from_forge(root: Path, repo: str | None, host: str | None, limit: int) -> ReleaseStatus:
     from fr.triage.errors import TriageError
+    from fr.triage.gitseam import git
 
+    try:  # p7-r7: the last final tag is only as current as this checkout's tags
+        git(["fetch", "--quiet", "--tags", "origin"], root)
+    except TriageError as exc:
+        typer.echo(
+            f"fr release status: could not fetch tags ({exc}); "
+            "assuming this checkout's tags are current",
+            err=True,
+        )
     try:
         tag, since = _last_final(root)
     except TriageError as exc:
         _fail(str(exc), 2)
     slug, forge_host = resolve_target(repo, host, root)
+    forge = None
     try:
         client = client_for_url(f"https://{forge_host}/{slug}")
-        return release_status(
+        forge = ClientReleaseForge(client, slug, limit)
+        status = release_status(
             repo=slug,
             last_final=tag,
             since=since,
-            forge=ClientReleaseForge(client, slug, limit),
+            forge=forge,
             owed_rows=owed_rows_reader(root),
         )
     except _FORGE_FAILURES as exc:
         _fail(f"cannot read {slug}'s merged PRs on {forge_host}: {exc}", 1)
+    if forge.read >= limit:
+        typer.echo(
+            f"fr release status: the merged-PR read returned {forge.read} PRs, its --limit: "
+            f"older PRs merged since {tag or 'the start'} may be missing; raise --limit",
+            err=True,
+        )
+    return status
 
 
 def _last_final(root: Path) -> tuple[str | None, str | None]:

@@ -1218,20 +1218,127 @@ def test_release_py_reads_the_forge_and_hands_fr_the_facts(world: World) -> None
     assert facts["prs"] == world.merged
 
 
-def test_a_truncated_merged_pr_list_refuses(world: World) -> None:
+def test_p7_r5_a_truncated_merged_pr_list_cuts_an_rc_never_a_final(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
     world.fragment("feat-b", "minor", "add the feature")
     world.merged = [{"number": n, "mergedAt": "2030-01-01T00:00:00Z", "labels": []}
                     for n in range(release.MERGED_PR_LIMIT)]  # fmt: skip
-    assert world.run() == release.EXIT_REFUSED
+    assert world.run() == 0
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
     assert world.status_calls == 0
+    assert "unknown" in capsys.readouterr().out
 
 
-def test_a_failed_forge_read_refuses(world: World) -> None:
+def test_p7_r5_a_failed_forge_read_cuts_an_rc_naming_the_reason(world: World) -> None:
     world.fragment("feat-b", "minor", "add the feature")
     cmds = world.commands()
     cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
-    assert release.main([], repo=world.clone, commands=cmds) == release.EXIT_REFUSED
-    assert world.bump_calls == []
+    assert release.main([], repo=world.clone, commands=cmds) == 0
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+    (call,) = _release_calls(world)
+    assert "--prerelease" in call and "HTTP 502" in _arg(call, "--notes")
+
+
+def test_p7_r5_an_unknown_state_with_nothing_new_since_the_rc_is_a_no_op(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    cmds = world.commands()
+    cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
+    assert release.main([], repo=world.clone, commands=cmds) == 0
+    head = world.origin_log("%H")
+    assert release.main([], repo=world.clone, commands=cmds) == 0
+    assert world.origin_log("%H") == head
+
+
+def test_p7_r5_a_failed_decision_cuts_an_rc(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    cmds = world.commands()
+
+    def boom(repo: Path, facts: Path) -> list[dict[str, object]]:
+        raise release.ReleaseError("fr crashed")
+
+    cmds.decide = boom
+    assert release.main([], repo=world.clone, commands=cmds) == 0
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+
+
+def test_p7_r1_an_untagged_rc_at_head_is_tagged_with_no_new_commit(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    head = world.origin_log("%H")
+    _git(world.origin, "tag", "-d", "v4.24.0-rc.1")  # the tag push failed
+    world.gh_calls.clear()
+
+    assert world.run() == 0
+
+    assert world.origin_log("%H") == head
+    assert "v4.24.0-rc.1" in world.origin_tags()
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0-rc.1" and "--prerelease" in call
+
+
+def test_p7_r6_a_removed_major_fragment_never_moves_the_version_backwards(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.fragment("break", "major", "a breaking change")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    assert world.origin_version() == "5.0.0rc1"
+    _git(world.other, "pull", "-q", "--ff-only", "origin", "main")
+    _git(world.other, "rm", "-q", ".changes/break.yaml")
+    _git(world.other, "commit", "-q", "-m", "revert the break")
+    _git(world.other, "push", "-q", "origin", "HEAD:main")
+    world.waiting = []
+    head = world.origin_log("%H")
+
+    assert world.run() == 0
+
+    assert world.origin_version() == "5.0.0rc1"
+    assert world.origin_log("%H") == head
+    assert "not above" in capsys.readouterr().out
+
+
+def test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_final(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.land(".changes/feat-b.yaml", "bump: minor\nsummary: add\n", "feat: b (#42)")
+    world.merged = []  # the search index has not caught up with #42
+    world.waiting = []
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+    (read,) = world.read_calls
+    assert read[read.index("--base") + 1] == "main"
+    assert "#42" in capsys.readouterr().out
+
+
+def test_p7_r2_a_read_covering_every_logged_pr_still_cuts_the_final(world: World) -> None:
+    world.land(".changes/feat-b.yaml", "bump: minor\nsummary: add\n", "feat: b (#42)")
+    world.merged = [{"number": 42, "mergedAt": "2030-01-01T00:00:00Z", "labels": []}]
+    assert world.run() == 0
+    assert world.origin_log()[0] == "release: v4.24.0"
+
+
+def test_p7_r3_bump_and_lock_check_run_with_no_forge_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for var in ("GH_TOKEN", "GITHUB_TOKEN", "FR_RELEASE_STATUS_TOKEN"):
+        monkeypatch.setenv(var, "secret")
+    envs: list[object] = []
+
+    def fake(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        envs.append(kw.get("env"))
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(release.subprocess, "run", fake)
+    release._run_bump(tmp_path, "4.24.0")
+    release._run_lock_check(tmp_path)
+    assert len(envs) == 2
+    for env in envs:
+        assert isinstance(env, dict) and "secret" not in env.values()
 
 
 def test_the_default_decide_runs_fr_credential_free_from_the_facts_file(

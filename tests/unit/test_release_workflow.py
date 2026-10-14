@@ -142,3 +142,10 @@ def test_the_release_job_has_a_budget_for_the_full_suite() -> None:
 
 def test_auto_tag_workflow_is_gone() -> None:
     assert not (REPO / ".github" / "workflows" / "auto-tag.yml").exists()
+
+
+def test_p7_r4_header_says_the_status_token_is_the_write_capable_workflow_token() -> None:
+    header = " ".join(WORKFLOW.read_text().split("\non:", 1)[0].replace("#", " ").split())
+    assert "FR_RELEASE_STATUS_TOKEN is the workflow's github.token" in header
+    assert "contents and issues write" in header
+    assert "never fr or repo code" in header

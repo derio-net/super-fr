@@ -115,12 +115,21 @@ class ReleaseError(Exception):
 
 def _run_bump(repo: Path, new: str) -> None:
     subprocess.run(
-        [sys.executable, str(repo / "scripts" / "bump-version.py"), new], cwd=repo, check=True
+        [sys.executable, str(repo / "scripts" / "bump-version.py"), new],
+        cwd=repo,
+        check=True,
+        env=_credential_free_env(),  # it runs `uv sync` and the repo's own `fr`
     )
 
 
 def _run_lock_check(repo: Path) -> str | None:
-    r = subprocess.run(["uv", "lock", "--check"], cwd=repo, capture_output=True, text=True)
+    r = subprocess.run(
+        ["uv", "lock", "--check"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=_credential_free_env(),  # resolving runs dependency build code
+    )
     return None if r.returncode == 0 else (r.stderr or r.stdout).strip() or "uv lock --check failed"
 
 
@@ -379,39 +388,71 @@ def _merged_since(repo: Path, tag: str) -> bool:
     return _out(repo, "rev-list", "--count", f"refs/tags/{tag}..HEAD").strip() != "0"
 
 
+_PR_SUBJECT_RE = re.compile(r"\(#(\d+)\)\s*$|^Merge pull request #(\d+)\b")
+
+
+def logged_prs(repo: Path, tag: Version) -> set[int]:
+    """The PR numbers `git log <tag>..HEAD` names: a squash merge's `(#N)` subject or a
+    merge commit's `Merge pull request #N`; the release bot's own commits are skipped."""
+    out = _out(repo, "log", f"refs/tags/{tag.tag}..HEAD", "--format=%an%x00%s")
+    numbers: set[int] = set()
+    for line in out.splitlines():
+        author, _, subject = line.partition("\x00")
+        if author == BOT_NAME or subject.startswith(RELEASE_PREFIX):
+            continue
+        m = _PR_SUBJECT_RE.search(subject)
+        if m:
+            numbers.add(int(m.group(1) or m.group(2)))
+    return numbers
+
+
+class GateStateUnknownError(Exception):
+    """What waits on a post-merge gate cannot be known: the run cuts an RC (R20)."""
+
+
 def waiting_prs(repo: Path, cmds: Commands) -> list[dict[str, object]]:
-    """What still waits on a post-merge gate (exit-gates R20, R21). release.py does the
-    credentialed forge read itself (`cmds.gh_read`: every PR merged since the last final
-    tag, with its labels), writes the facts to a temp file and lets fr decide from them
-    credential-free (`cmds.decide`)."""
+    """What still waits on a post-merge gate (exit-gates R20, R21); raises `GateStateUnknownError`.
+
+    release.py does the credentialed forge read itself (`cmds.gh_read`: every PR merged
+    into main since the last final tag, with its labels), checks it covers every PR the
+    git log names since that tag (the search index lags), writes the facts to a temp
+    file and lets fr decide from them credential-free (`cmds.decide`). A failed read, a
+    read at its limit, a PR the read misses or a failed decision is `GateStateUnknownError`."""
     tag = last_final(repo)
     since = _out(repo, "log", "-1", "--format=%cI", f"refs/tags/{tag.tag}").strip() if tag else None
-    args = ["pr", "list", "--state", "merged", "--limit", str(MERGED_PR_LIMIT)]
+    args = ["pr", "list", "--state", "merged", "--base", BRANCH, "--limit", str(MERGED_PR_LIMIT)]
     if since:
         args += ["--search", f"merged:>={since}"]
     args += ["--json", MERGED_PR_FIELDS]
     r = cmds.gh_read(args)
     if r.returncode != 0:
-        raise ReleaseError(
-            "cannot read the PRs merged since the last final tag, so what waits on a "
-            f"post-merge gate is unknown; refusing:\n{r.stderr.strip()}"
-        )
+        raise GateStateUnknownError(f"the merged-PR read failed: {(r.stderr or r.stdout).strip()}")
     try:
         prs = json.loads(r.stdout or "[]")
     except json.JSONDecodeError as exc:
-        raise ReleaseError(f"`gh pr list` did not return JSON: {exc}") from None
-    if not isinstance(prs, list):
-        raise ReleaseError("`gh pr list` did not return a list of PRs")
+        raise GateStateUnknownError(f"`gh pr list` did not return JSON: {exc}") from None
+    if not isinstance(prs, list) or not all(isinstance(p, dict) for p in prs):
+        raise GateStateUnknownError("`gh pr list` did not return a list of PRs")
     if len(prs) >= MERGED_PR_LIMIT:
-        raise ReleaseError(
-            f"`gh pr list` returned {len(prs)} merged PRs, its limit: the read may be "
-            "truncated, so what waits is unknown; refusing"
+        raise GateStateUnknownError(
+            f"the merged-PR read returned {len(prs)} PRs, its limit: it may be truncated"
         )
+    if tag is not None:
+        read = {int(p["number"]) for p in prs if isinstance(p.get("number"), int)}
+        missing = sorted(logged_prs(repo, tag) - read)
+        if missing:
+            names = ", ".join(f"#{n}" for n in missing)
+            raise GateStateUnknownError(
+                f"the merged-PR read misses {names}, merged since {tag.tag}"
+            )
     facts = {"last_final": tag.tag if tag else None, "since": since, "prs": prs}
     with tempfile.TemporaryDirectory(prefix="fr-release-facts-") as tmp:
         path = Path(tmp) / "facts.json"
         path.write_text(json.dumps(facts))
-        return cmds.decide(repo, path)
+        try:
+            return cmds.decide(repo, path)
+        except ReleaseError as exc:
+            raise GateStateUnknownError(str(exc)) from None
 
 
 def _final_plan(repo: Path, current: str, override: str, plan: Plan) -> Plan:
@@ -463,20 +504,41 @@ def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> P
     target = base.bumped(bump) if bump is not None else head.final
     while bump is not None and tag_exists(repo, target.semver):
         target = target.bumped(bump)  # a manual tag: bump past it, never re-tag
-    waiting = waiting_prs(repo, cmds)
-    if not waiting:
+    try:
+        waiting = waiting_prs(repo, cmds)
+        reason = ""
+        if waiting:
+            numbers = ", ".join(f"#{w.get('number')}" for w in waiting)
+            reason = f"{numbers} still wait on a post-merge gate"
+    except (
+        GateStateUnknownError
+    ) as exc:  # R20: an unknown gate state degrades to an RC, never a final
+        reason = f"what waits on a post-merge gate is unknown ({exc})"
+    if not reason:
         plan.new, plan.fragments = target.semver, fragments
-        return plan
-    numbers = ", ".join(f"#{w.get('number')}" for w in waiting)
+        return _not_backwards(plan, head)
     rcs = _rcs_above(repo, base)
     if rcs and not _merged_since(repo, rcs[-1][1]):
-        plan.why = (
-            f"{numbers} still wait on a post-merge gate and nothing merged since {rcs[-1][1]}"
-        )
+        plan.why = f"{reason}, and nothing merged since {rcs[-1][1]}"
         return plan
     n = 1 + max((v.rc or 0 for v, _ in rcs if v.final == target), default=0)
-    plan.new, plan.rc = target.with_rc(n).semver, True
-    plan.why = f"{numbers} still wait on a post-merge gate"
+    plan.new, plan.rc, plan.why = target.with_rc(n).semver, True, reason
+    return _not_backwards(plan, head)
+
+
+def _not_backwards(plan: Plan, head: Version) -> Plan:
+    """A release never moves the version backwards, or re-cuts HEAD's own (p7-r1, r6):
+    a computed version at or below HEAD's releases nothing, and `finish` then tags HEAD
+    if its tag is missing (a failed tag push)."""
+    assert plan.new is not None
+    if Version.parse(plan.new) > head:
+        return plan
+    plan.why = (
+        f"the computed release {plan.new} is not above HEAD's {head.semver} "
+        "(a fragment removed since HEAD's RC, or HEAD's tag push failed); "
+        "releasing nothing new"
+    )
+    plan.new, plan.rc, plan.fragments = None, False, []
     return plan
 
 
@@ -707,6 +769,8 @@ def release_to_main(repo: Path, override: str | None, cmds: Commands) -> Plan:
             if plan.why:
                 print(f"nothing to release: {plan.why}")
             return plan
+        if plan.rc:
+            print(f"release candidate: {plan.why}")
         make_release_commit(repo, plan, cmds)
         check_staged_suite(repo, plan.new, cmds)
         if push(repo) == "ok":

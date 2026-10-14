@@ -352,3 +352,17 @@ def test_both_paths_share_one_decision_function(
     assert live.exit_code == 0 and facts.exit_code == 0
     assert seen == ["ClientReleaseForge", "FactsReleaseForge"]
     assert json.loads(live.stdout)["waiting"] == json.loads(facts.stdout)["waiting"]
+
+
+def test_p7_r7_a_read_at_its_limit_warns_and_an_unfetched_tag_is_said(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = FakeClient([_pr(7, "2026-10-03T00:00:00Z")], {7: ["gate:tester"]})
+    _install(monkeypatch, client)
+
+    result = CliRunner().invoke(app, ["release", "status", "--repo", REPO, "--limit", "1"])
+
+    assert result.exit_code == 0, result.output
+    assert "--limit" in result.output and "may be missing" in result.output
+    # The fixture has no origin: the fetch fails and the command says what it assumes.
+    assert "assuming this checkout's tags are current" in result.output

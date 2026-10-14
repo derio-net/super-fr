@@ -321,9 +321,12 @@ auto-resolution and the conflict hand-back (both started inside
 R20. **Release gating.** On each run (push to `main`, the daily schedule, or a
 dispatch), `release.py` takes the first case that applies:
 
-1. *Some change waits:* a PR merged since the last **final** tag carries an
-   unpassed post-merge gate label. Cut an RC, unless nothing has merged since
-   the newest RC tag; then do nothing.
+1. *Some change waits, or what waits is unknown:* a PR merged since the last
+   **final** tag carries an unpassed post-merge gate label, or the gate state
+   cannot be read (a failed read, a read at its cap, a PR the git log names that
+   the read misses, a failed decision). Cut an RC whose notes name the reason,
+   unless nothing has merged since the newest RC tag; then do nothing. An unknown
+   state never cuts a final and never refuses the run.
 2. *Nothing waits, and the head is an RC or fragments are pending:* cut the
    final.
 3. *Otherwise:* do nothing.
@@ -332,6 +335,9 @@ The "last final tag" matches `^v\d+\.\d+\.\d+$` only. Version arithmetic:
 
 - The final is `X.Y.Z`: the last final plus the highest pending fragment bump.
 - An RC is `X.Y.Z-rc.N`, where `N` is one past the newest `vX.Y.Z-rc.*`.
+- A computed version at or below HEAD's releases nothing: a removed fragment
+  never moves the version backwards, and an untagged RC at HEAD (a failed tag
+  push) is tagged and published by the same run instead of re-cut.
 
 An RC is a `release: vX.Y.Z-rc.N` commit, tagged `vX.Y.Z-rc.N` and published as
 a GitHub pre-release. It consumes no fragment. Only the final's commit consumes
@@ -343,7 +349,10 @@ that still waits on a post-merge gate, with its gate and owed rows, read through
 the forge adapter. `release.py` does its own forge read: it lists the PRs merged
 since the last final tag, with their labels, through `gh` and hands those facts to
 `fr release status --from-json <file> --json`, which runs with no forge credential
-in its environment and never reaches a forge. Both paths call one decision
+in its environment and never reaches a forge. The read is filtered to `--base main`
+and cross-checked against the PR numbers `git log <last final>..HEAD` names. The
+human forge path fetches tags first (or says it assumes them current) and warns
+when its read reaches `--limit`. Both paths call one decision
 function. `release.py` decides between RC and final from its JSON.
 `release` joins `READ_ONLY_COMMANDS`: it touches no registered artifact, and CI
 runs it on the default branch.
@@ -573,11 +582,14 @@ code worth salvaging, and closed once this ships.
 `release.py`:
 
 - `compute` reads the merged PRs and their labels itself, through `gh` (an
-  injectable `Commands` entry, the only call holding a token), writes them to a
-  temp file and runs `fr release status --from-json <file> --json` with the
-  credential-free environment the staged suite runs in. It then applies R20's
-  cases. Every other git command runs credential-free too; only the pushes
-  authenticate.
+  injectable `Commands` entry), writes them to a temp file and runs
+  `fr release status --from-json <file> --json` with the credential-free
+  environment the staged suite runs in. It then applies R20's cases. Exactly
+  these calls authenticate: the `gh` read, the `gh release` and `gh issue`
+  writes, and the pushes. The bump, `uv lock --check`, the migration, the staged
+  suite, fr's decision and every other git command run credential-free.
+  `FR_RELEASE_STATUS_TOKEN` is the workflow's `github.token` (it carries the
+  job's contents and issues write) and reaches the `gh` read alone.
 - `previous_tag` and "the last final" match `^v\d+\.\d+\.\d+$`.
 - `tag_and_release` passes `--prerelease` for an RC.
 - `release.yml` adds a daily `schedule:`.
