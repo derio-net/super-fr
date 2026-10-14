@@ -163,6 +163,7 @@ from fr.triage.batch_drive import (
     RUNS_DIR,
     STALE_CLOSEOUT,
     Action,
+    ChecksVerdict,
     IdleSession,
     LivePr,
     Snapshot,
@@ -3258,6 +3259,43 @@ def _live_head_prs(client: GhClient, repo: str, head: str, allowed: frozenset[st
     return out
 
 
+def _judge(
+    client: GhClient,
+    repo: str,
+    pr: LivePr,
+    counts: Mapping[str, int] | None,
+    ci_none: bool,
+    head: str | None = None,
+) -> tuple[ChecksVerdict, tuple[str, ...]]:
+    """*pr*'s checks verdict, read now: the collected counts stand in for every check
+    only while the PR is still at the head they were collected for (*head*, read
+    fresh); otherwise every check is read live."""
+    if counts is not None and (head is None or head == pr.head):
+        return checks_verdict(client.pr_required_checks(repo, pr.number), counts, ci_none=ci_none)
+    return pr_checks_verdict(client, repo, pr.number, ci_none=ci_none)
+
+
+def _pinned(
+    client: GhClient,
+    repo: str,
+    pr: LivePr,
+    counts: Mapping[str, int] | None,
+    *,
+    ci_none: bool,
+) -> LivePr:
+    """*pr* as the archive step may merge it (p2-r6, security): the head is read, then
+    the checks, then the head again, so the verdict is for the head the merge is pinned
+    to. A head that moved between the two reads is `pending` this pass, never green; the
+    base and `mergeable` are the second read's, for the head it reports."""
+    before = client.pr_view(repo, pr.number)
+    head = str(before.get("head_oid") or pr.head)
+    verdict, failing = _judge(client, repo, pr, counts, ci_none, head)
+    after = client.pr_view(repo, pr.number)
+    if str(after.get("head_oid") or head) != head:
+        verdict, failing = "pending", ()
+    return replace(_viewed(pr, after), head=head, checks=verdict, failing=failing)
+
+
 def _viewed(pr: LivePr, view: Mapping[str, Any]) -> LivePr:
     """*pr* with the base, head and `mergeable` a fresh `pr_view` read reports: the
     verdict and the head it describes come from the same read (p2-r6)."""
@@ -4080,11 +4118,14 @@ class _Driver:
         """Archive PR candidates: the open `chore/*` PRs collect read (with files and
         checks), unlinked or linked to an issue (merge-truth R7), plus any PR on the
         close-out's own heads, merged ones included. A head-found open PR the facts do
-        not hold has its checks read live, never assumed pending (R7)."""
+        not hold has its checks read live, never assumed pending (R7). An open one this
+        batch owns, the only kind the archive step merges, is judged between two fresh
+        reads of its head (`_pinned`)."""
         client = self.client(facts, repo)
         allowed = allowed_authors(repo, facts)
         ci_none = self._ci_none(repo)
         out: dict[int, LivePr] = {}
+        counts: dict[int, Mapping[str, int]] = {}  # the collected checks, at the facts' head
         linked = [p for issue in facts.issues for p in issue.prs]
         for pr in (*facts.prs, *linked):
             if (
@@ -4094,37 +4135,28 @@ class _Driver:
                 or pr.number in out
             ):
                 continue
-            verdict, failing = checks_verdict(
-                client.pr_required_checks(repo, pr.number),
-                pr.checks or {},
-                ci_none=ci_none,
-            )
+            counts[pr.number] = pr.checks or {}
             out[pr.number] = LivePr(
                 number=pr.number, state="OPEN", draft=pr.is_draft, head=pr.head_oid,
-                checks=verdict, failing=failing, head_ref=pr.head_ref, files=tuple(pr.files),
+                checks="pending", head_ref=pr.head_ref, files=tuple(pr.files),
                 trusted=distrust(pr.author, pr.cross_repo, allowed) is None,
             )  # fmt: skip
         heads = {_closeout_head(batch)}
         heads |= {event.archive} if event.archive else set()
         for head in sorted(heads):
             for found in _live_head_prs(client, repo, head, allowed):
-                if found.state == "OPEN" and found.number not in out:
-                    verdict, failing = pr_checks_verdict(
-                        client, repo, found.number, ci_none=ci_none
-                    )
-                    found = replace(found, checks=verdict, failing=failing)
                 if found.state != "OPEN" or found.number not in out:
                     out[found.number] = found
-        # The base, read fresh as the export reads it (p4-r15): an archive PR is merged
-        # only into the default branch (gh#1004). Only an open one this batch owns can
-        # be merged, so only those cost a read; the same read says whether it conflicts
-        # (merge-truth R12).
-        return [
-            _viewed(p, client.pr_view(repo, p.number))
-            if p.state == "OPEN" and attributed(p, batch, event)
-            else p
-            for p in out.values()
-        ]
+        judged: list[LivePr] = []
+        for p in out.values():
+            if p.state != "OPEN":
+                judged.append(p)
+            elif attributed(p, batch, event):
+                judged.append(_pinned(client, repo, p, counts.get(p.number), ci_none=ci_none))
+            else:  # never merged by this step: its verdict is only reported
+                verdict, failing = _judge(client, repo, p, counts.get(p.number), ci_none)
+                judged.append(replace(p, checks=verdict, failing=failing))
+        return judged
 
     def _existing(
         self, facts: Facts, closing: list[Batch], repos: dict[str, str], *, soft: bool = False

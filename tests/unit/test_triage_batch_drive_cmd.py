@@ -5237,3 +5237,37 @@ def test_viewed_takes_head_and_mergeable_from_the_same_fresh_read() -> None:
     got = _viewed(old, view)
     assert (got.head, got.mergeable, got.base) == ("sha-new", "MERGEABLE", "main")
     assert _viewed(old, {"mergeable": "CONFLICTING"}).head == "sha-old"  # no head: kept
+
+
+@pytest.mark.parametrize("found_by", ["facts", "head"])
+def test_an_archive_pr_pushed_between_its_view_and_its_checks_is_never_merged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, found_by: str,
+) -> None:  # fmt: skip
+    """p2-r6 (security): the merge is pinned to a head, so the green verdict must be
+    for that head. The head is read, then the checks, then the head again; a push in
+    between makes the verdict pending this pass: no archive, no `pr_merge`."""
+    _closing(world, tmp_path)
+    world.pr(201, "chore/archive-p1", [], files=["docs/superpowers/runs/r1.yaml"])
+    events = _dispatch_event("b1") + _CLOSEOUT_R1
+    _state(tmp_path, world, _batch("b1", 1, events=events))
+    if found_by == "head":  # opened after the collect: found by its head alone
+        facts = json.loads((tmp_path / "facts.json").read_text("utf-8"))
+        facts["prs"] = [p for p in facts["prs"] if p["number"] != 201]
+        (tmp_path / "facts.json").write_text(json.dumps(facts), "utf-8")
+    real_view = world.pr_view
+    views: list[int] = []
+
+    def _pushed_after_first_view(repo: str, number: int) -> dict[str, Any]:
+        got = real_view(repo, number)
+        if number == 201:
+            views.append(number)
+            if len(views) == 1:  # a push lands right after the first read of the head
+                world.prs[201]["head_oid"] = "sha-pushed"
+        return got
+
+    monkeypatch.setattr(world, "pr_view", _pushed_after_first_view)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert world.merged == [] and not [c for c in world.calls if c.startswith("pr_merge")], out
+    assert _lines(out, "archive") == [], out
+    assert len(views) >= 2  # the head was read on both sides of the checks
