@@ -327,3 +327,28 @@ Not caused by this change's design choice: the skip-on-same-head rule is the spe
 ### p2-r11-resolved · finding [fixed] · resolves p2-r11: Merge-pin bypass (TOCTOU): the archive merge could be pinned to a head CI never judged (phase 2)
 
 2d7298e0: _pinned reads head, then checks, then head again. A moved head is pending, with no archive action and no pr_merge, and the merge stays pinned with --match-head-commit to that head. Collected counts are used only at their collected head. Tests test_an_archive_pr_pushed_between_its_view_and_its_checks_is_never_merged[facts/head] (re-run by the orchestrator: passed).
+
+<!-- fr:journal kind=decision scope=plan id=p3-ctx-or-hold created=2026-10-14T01:54:17+00:00 phase=3 -->
+### p3-ctx-or-hold · decision · One _ctx_or_hold helper is the catch-and-say for every merge_ctx caller (phase 3) (phase 3)
+
+DefaultBranchUnknown(ForgeReadError, code 2) is raised only by the fetch and default_branch read (via _fresh_config(hold_unknown=True), which other _fresh_config callers do not set) and by _base_rules' default_branch read (GitError). _ctx_or_hold catches that type alone and prints "held: <repo> default branch unknown (<cause>)" once per repo per pass (_unknown_said, reset each pass). Callers: _merge_batch, _enqueue, _recover, _hand_back, _archive, _hand_back_archive, _export_merge. _queue_reads keeps its own earlier hold ("queue mode unknown"). A held --once pass exits 3 (work remains), as any held merge does.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-wait-out-pin-1178 created=2026-10-14T01:54:17+00:00 phase=3 -->
+### p3-wait-out-pin-1178 · discovery · wait_out renewal spends no GraphQL, the test passed on arrival (phase 3) (phase 3)
+
+test_wait_out_renewal_spends_no_graphql_in_an_exhausted_window passed immediately, as expected: #1153 landed R12 (visibility read via REST repo_visibility). It is the regression pin for #1178, not a fix.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-heal-test-passes-on-arrival created=2026-10-14T01:54:17+00:00 phase=3 -->
+### p3-heal-test-passes-on-arrival · discovery · The origin/HEAD heal test already passed; the unreachable-origin one was the red one (phase 3) (phase 3)
+
+Checkout.default_branch already heals a missing origin/HEAD with `remote set-head --auto`, so test_yes_pass_over_a_clone_without_origin_head_heals_and_merges is a pin. Deviation: the unreachable-origin test uses one repo (World is single-repo), so "the other repo's work still runs" is not asserted; the hold is per repo by construction (_unknown_said is keyed by repo).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-14T01:54:17+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+a test-only task over an already-correct renewal path; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-14T01:54:17+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+acceptance status moves only; no code
