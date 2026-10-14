@@ -117,3 +117,64 @@ def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
         for r in exit_.gated_rows
     )
     return LedgerRead(rows, exit_.run_gate, inherited)
+
+
+@dataclass(frozen=True)
+class CloseoutRead:
+    """What the collected close-out needs of one batch's run on the default branch (R15):
+    the run id (None: no cursor names the branch, a debug batch), the Test Plan steps with
+    no recorded outcome, the gated rows, and the issues (`owner/repo#n`) a narrowing
+    decision of the run's spec or plan journal names, which the close-out never closes."""
+
+    run: str | None
+    missing: tuple[int, ...] = ()
+    rows: tuple[GatedRow, ...] = ()
+    narrowed: tuple[str, ...] = ()
+
+
+def closeout_read(checkout: Checkout, ref: str, branch: str, repo: str) -> CloseoutRead:
+    """`CloseoutRead` for the run on *branch* at *ref*, from a copy of only what it needs
+    (as `gated_rows_at`). An unreadable run raises `TriageError`."""
+    from fr.archive import missing_outcomes, spec_slug_of
+    from fr.journal.model import JournalParseError, parse_journal, resolve_journal_read_path
+    from fr.record.pr_body import normalize_issue_ref
+    from fr.requirements import run_spec
+    from fr.run.model import RunStateError, parse_run_state
+
+    found = _run_text(checkout, ref, branch)
+    if found is None:
+        return CloseoutRead(None)
+    run, text = found
+    rows = gated_rows_at(checkout, ref, branch).rows
+    owner, _, name = repo.partition("/")
+    try:
+        state = parse_run_state(text)
+        spec = run_spec(state)
+        plan = next(
+            (r.emitted["plan"] for r in state.steps.values() if r.emitted and "plan" in r.emitted),
+            None,
+        )
+        with tempfile.TemporaryDirectory(prefix="fr-closeout-") as tmp:
+            root = Path(tmp) / "tree"
+            paths = ("docs/superpowers/journals", *(p for p in (spec,) if p))
+            checkout.snapshot_paths(ref, paths, root)
+            missing: tuple[int, ...] = ()
+            journals: list[Path] = []
+            if spec and (root / spec).is_file():
+                missing = tuple(s.n for s in missing_outcomes(root, root / spec))
+                journals.append(resolve_journal_read_path(root, "spec", spec_slug_of(root / spec)))
+            if plan:
+                journals.append(resolve_journal_read_path(root, "plan", Path(plan).name))
+            narrowed: list[str] = []
+            for journal in journals:
+                if not journal.is_file():
+                    continue
+                for e in parse_journal(journal.read_text(encoding="utf-8")):
+                    if e.kind == "decision":
+                        narrowed += [
+                            n for ref_ in e.narrows
+                            if (n := normalize_issue_ref(ref_, (owner, name))) is not None
+                        ]  # fmt: skip
+    except (RunStateError, JournalParseError, OSError, ValueError) as exc:
+        raise TriageError(f"run {run} cannot be read for its close-out: {exc}") from exc
+    return CloseoutRead(run, missing, rows, tuple(dict.fromkeys(narrowed)))

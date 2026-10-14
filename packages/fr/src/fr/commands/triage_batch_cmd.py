@@ -46,9 +46,9 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 from urllib.parse import urlparse
@@ -95,10 +95,11 @@ from fr.isolation.adopt import (
     workspace_path,
 )
 from fr.isolation.rename import IsolationError, rename_branch
-from fr.labels import APPROVED_FR, FR_AWAITING_LIVE, FR_IN_PROGRESS, held_gates
+from fr.labels import APPROVED_FR, FR_AWAITING_LIVE, FR_IN_PROGRESS, held_gates, passed_gates
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.services import ServicesError, require_tracker
 from fr.services.resolve import resolve_services
+from fr.triage import batch_closeout as collected
 from fr.triage.approval import (
     ApprovalVerdict,
     EventWriter,
@@ -234,7 +235,7 @@ from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.lease import acquire, load_lease, mark_pass, release
-from fr.triage.ledger import LedgerRead, gated_rows_at
+from fr.triage.ledger import LedgerRead, closeout_read, gated_rows_at
 from fr.triage.merge_stops import MergeStop, clear_stop, record_stop
 from fr.triage.model import (
     ApprovalEvent,
@@ -269,7 +270,7 @@ from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
-from fr.verification.labels import pass_gate
+from fr.verification.labels import GATE_PASS_MARKER, pass_gate
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
@@ -2843,6 +2844,168 @@ def batch_merge_command(
     except TriageError as exc:
         _fail(str(exc))
     ctx.say(f"merged {plural(len(slots), 'batch')}")
+
+
+# ------------------------------------------------- collected close-out (exit-gates R15)
+
+
+def gate_pass_url(client: GhClient, host: str, repo: str, pr: int, gates: Iterable[str]) -> str:
+    """The URL of PR *pr*'s first gate-pass comment for one of *gates* (R15 step 2's
+    evidence), else the PR's own URL: a pass recorded with no comment still has a label."""
+    wanted = tuple(f"{GATE_PASS_MARKER}{g} -->" for g in sorted(gates))
+    for c in client.list_issue_comments(repo, pr):
+        if str(c.get("body") or "").lstrip().startswith(wanted) and c.get("id"):
+            return f"https://{host}/{repo}/pull/{pr}#issuecomment-{c['id']}"
+    return f"https://{host}/{repo}/pull/{pr}"
+
+
+def _collected_member(
+    batch: Batch, facts: Facts, client: GhClient, checkout: Checkout, ref: str, repo: str
+) -> collected.Member:
+    """One batch as R15 needs it: its run, missing Test Plan steps and passed gates' rows
+    from the default branch (`closeout_read`), its passed gates from the merged PR's
+    labels, and the gate-pass comment as evidence."""
+    branch = recorded_branch(batch)
+    read = closeout_read(checkout, ref, branch, repo)
+    pr = batch_pr(batch, facts)
+    passed = passed_gates(pr.labels or ()) if pr is not None else frozenset()
+    evidence = (
+        gate_pass_url(client, _host_of(facts, repo), repo, pr.number, passed)
+        if passed and pr is not None
+        else None
+    )
+    cited = [i for r in read.rows if r.gate in passed for i in r.issues]
+    return collected.Member(
+        batch=batch.id, branch=branch, run=read.run, passed=tuple(sorted(passed)),
+        evidence=evidence, missing=read.missing,
+        closes=collected.issues_to_close(cited, narrowed=read.narrowed),
+    )  # fmt: skip
+
+
+def collected_branch_for(batches: Sequence[Batch], every: Sequence[Batch], checkout: Checkout,
+                         day: date) -> str:  # fmt: skip
+    """The branch of this collected close-out: the one the driver recorded on every member
+    before its session started (gh#883), else the next free one of *day* (no recorded
+    event of any batch, and no remote branch, names it)."""
+    recorded = {e.archive for b in batches if (e := collected.pending_collected(b)) is not None}
+    if len(recorded) == 1 and all(collected.pending_collected(b) for b in batches):
+        return str(next(iter(recorded)))
+    used = [e.archive for b in every for e in b.events
+            if isinstance(e, CloseoutEvent) and e.archive]  # fmt: skip
+    n = collected.next_collected(used, day)
+    while checkout.remote_branch_exists(collected.collected_branch(day, n)):
+        n += 1
+    return collected.collected_branch(day, n)
+
+
+def _record_collected(target: Path, facts: Facts, batch_id: str, branch: str, run: str | None,
+                      ) -> None:  # fmt: skip
+    """R15: a closed-out batch's one close-out event, `archive` the shared branch; none
+    when the driver recorded it already."""
+    batch = _find(load_judgements(target / "judgements.yaml").batches, batch_id)
+    pending = collected.pending_collected(batch)
+    if pending is not None and pending.archive == branch:
+        return
+    name = collected.collected_name(branch) or branch
+    event_writer(target, facts)(
+        batch_id,
+        CloseoutEvent(kind="closeout", at=_now_after(batch), runner="hand", handle=name,
+                      run=run, archive=branch),
+    )  # fmt: skip
+
+
+def _take_back(target: Path, facts: Facts, batch_id: str, branch: str) -> None:
+    """A held batch gets no close-out event (R15): one the driver recorded for this
+    branch before the session started is taken back, as a failed start's is."""
+    judgements = load_judgements(target / "judgements.yaml")
+    batch = _find(judgements.batches, batch_id)
+    last = batch.events[-1] if batch.events else None
+    if isinstance(last, CloseoutEvent) and last.archive == branch and last.archived is None:
+        new = batch.model_copy(update={"events": batch.events[:-1]})
+        _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
+
+
+@batch_app.command("closeout")
+def batch_closeout_command(
+    batch_ids: Annotated[
+        list[str] | None,
+        typer.Argument(help="Batches to close out; default: every landed, ungated one."),
+    ] = None,
+    checkout_path: CheckoutOpt = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    workspace: WorkspaceOpt = None,
+) -> None:
+    """Close out every landed, ungated batch in ONE housekeeping PR (exit-gates R15).
+
+    Per batch: verify-merge, a passed gate's Test Plan outcomes (`--ran`, the gate-pass
+    comment as evidence), `fr archive --branch <b> --no-issues`, and the issues a passed
+    gate's rows cite closed (never a narrowed one). A batch whose archive holds moves
+    nothing, gets no close-out event and is named; the verb then exits 1.
+    """
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
+    owed = collected.closeout_owed(judgements.batches, facts)
+    if batch_ids:
+        wanted = {b.lower() for b in batch_ids}
+        if missing := sorted(wanted - {b.id for b in owed}):
+            _fail(f"not owed a close-out here (not landed, gated, or closed out): "
+                  f"{', '.join(missing)}")  # fmt: skip
+        owed = [b for b in owed if b.id in wanted]
+    if not owed:
+        _say("nothing to close out")
+        return
+    repos = {batch_repo(b, facts) for b in owed}
+    if len(repos) != 1 or None in repos:
+        _fail(f"close out one repo's batches at a time (these span "
+              f"{', '.join(sorted(map(str, repos)))}): name them, or use --repo")  # fmt: skip
+    owner_repo = str(next(iter(repos)))
+    checkout = _open_checkout(checkout_path, owner_repo)
+    client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
+    try:
+        checkout.fetch()
+        default = checkout.default_branch()
+        ref = f"origin/{default}"
+        branch = collected_branch_for(owed, judgements.batches, checkout, _now().date())
+        members = [_collected_member(b, facts, client, checkout, ref, owner_repo) for b in owed]
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except TriageError as exc:
+        _fail(str(exc))
+    except FORGE_ERRORS as exc:
+        _fail(f"a forge read failed: {exc}", code=1)
+    for line in collected.plan_lines(members, branch):
+        _say(line)
+    if not yes:
+        _say("nothing done; re-run with --yes to act")
+        return
+    where = target / "closeout" / branch.removeprefix("chore/")
+    runs = {m.batch: m.run for m in members}
+    try:
+        tree = checkout.add_worktree(where, ref)
+        tree.start_branch(branch)
+        result = collected.execute(
+            members, tree=tree, forge=client, repo=owner_repo, default=default, branch=branch,
+            record=lambda bid, br: _record_collected(target, facts, bid, br, runs[bid]),
+            say=_say,
+        )  # fmt: skip
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except TriageError as exc:
+        _fail(str(exc))
+    except FORGE_ERRORS as exc:
+        _fail(f"the forge refused: {exc}", code=1)
+    for bid, _why in result.held:
+        _take_back(target, facts, bid, branch)
+    with suppress(TriageError):
+        checkout.remove_worktree(where)
+    if result.pr is not None:
+        _say(f"opened PR #{result.pr} on {branch}: {', '.join(result.done)}")
+    if result.held:
+        _say(f"held, not closed out: {', '.join(b for b, _ in result.held)}")
+    if result.held or result.failed:
+        raise typer.Exit(1)
 
 
 # ------------------------------------------------------------------- drive

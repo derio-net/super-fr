@@ -15,10 +15,11 @@ testable. `tests/unit/test_triage_batch_drive.py` pins that.
 
 from __future__ import annotations
 
+import re
 import shlex
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
@@ -608,6 +609,31 @@ def closeout_item_id(repo: str, batch_id: str) -> str:
     Spelled here like `batch_item_id`: `fr.triage` never imports `fr_dispatch`.
     """
     return f"{repo}/run/closeout-{batch_id}"
+
+
+COLLECTED_PREFIX = "chore/closeout-"
+_COLLECTED = re.compile(r"^chore/closeout-(\d{4}-\d{2}-\d{2})-(\d+)$")
+
+
+def collected_branch(day: date, n: int) -> str:
+    """`chore/closeout-<YYYY-MM-DD>-<n>`: the head of one collected close-out."""
+    return f"{COLLECTED_PREFIX}{day.isoformat()}-{n}"
+
+
+def collected_name(branch: str) -> str | None:
+    """`closeout-<YYYY-MM-DD>-<n>` for a collected close-out's branch, the name of its
+    work item; None for any other head (a per-batch close-out's)."""
+    return branch.removeprefix("chore/") if _COLLECTED.match(branch) else None
+
+
+def next_collected(branches: Iterable[str], day: date) -> int:
+    """The first number after every collected close-out of *day* in *branches*."""
+    used = [
+        int(m.group(2))
+        for b in branches
+        if (m := _COLLECTED.match(b)) is not None and m.group(1) == day.isoformat()
+    ]
+    return max(used, default=0) + 1
 
 
 def wave_group(prefix: str, wave: int | None) -> str:

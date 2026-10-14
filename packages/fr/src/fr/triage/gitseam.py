@@ -8,8 +8,9 @@ while this one module keeps it (review r2p-f11).
 
 What this module may run is closed: `git`, plus the commands a repo
 declares in its own `.fr/triage.yaml` (`version.set`, `version.relock`, run in a
-scratch worktree, and `post_merge`, run by the wave driver in the clone itself) and
-the scope's `publish` argument list (`run_publish`, triage-claims R14).
+scratch worktree, and `post_merge`, run by the wave driver in the clone itself),
+the scope's `publish` argument list (`run_publish`, triage-claims R14), and this
+`fr` itself (`Worktree.run_fr`: the collected close-out's own verbs, exit-gates §E).
 It never runs a forge CLI: every forge
 operation goes through the `GhClient` adapter (§3.J), and
 `tests/unit/test_forge_adapter_batch_ops.py` pins that this file names none.
@@ -23,6 +24,7 @@ import re
 import shlex
 import stat
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -51,11 +53,13 @@ def _run(
     timeout: float | None = None,
     env: dict[str, str] | None = None,
     stdin: str | None = None,
+    coded: bool = False,
 ) -> Any:
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
     `GitError` with the command's own words. *env* is laid over the process environment;
-    *stdin* is fed to the command (text mode only)."""
+    *stdin* is fed to the command (text mode only). *coded*: any return code is an answer,
+    `(code, stdout + stderr)`, never a raise (text mode only)."""
     full_env = {**os.environ, **env} if env else None
     try:
         result = subprocess.run(
@@ -72,6 +76,8 @@ def _run(
         raise GitError(f"`{shlex.join(argv)}` timed out after {timeout:g}s in {cwd}") from exc
     except OSError as exc:
         raise GitError(f"cannot run {argv[0]}: {exc}") from exc
+    if coded:
+        return result.returncode, f"{result.stdout or ''}{result.stderr or ''}"
     if result.returncode not in ok:
         err, out = result.stderr, result.stdout
         words = (err.decode("utf-8", "replace") if isinstance(err, bytes) else err).strip()
@@ -873,6 +879,42 @@ class Worktree:
             )
             out.update(line for line in os.fsdecode(raw).splitlines() if line)
         return tuple(sorted(out))
+
+    # ------------------------------------ the collected close-out (exit-gates §E)
+
+    def head(self) -> str:
+        return git(["rev-parse", "HEAD"], self.path).strip()
+
+    def start_branch(self, branch: str) -> None:
+        """Put this worktree on a local *branch* at its HEAD (replacing a stale one of that
+        name), so the close-out's own verbs commit on a branch, never a detached HEAD."""
+        git(["switch", "--quiet", "-C", branch], self.path)
+
+    def run_fr(self, args: list[str]) -> tuple[int, str]:
+        """Run THIS `fr` (`python -m fr` of the running interpreter, never one found on
+        PATH) with *args* in this worktree: `(exit code, its words)`. The collected
+        close-out's verbs: verify-merge, closeout outcome, archive. An argument list,
+        never a shell string."""
+        code, out = _run([sys.executable, "-m", "fr", *args], self.path, coded=True)
+        return int(code), str(out)
+
+    def reset_hard(self, sha: str) -> None:
+        """Back to *sha*, every change and untracked file since gone: a held batch moves
+        nothing (R15)."""
+        git(["reset", "--hard", "--quiet", sha], self.path)
+        git(["clean", "-fdq"], self.path)
+
+    def squash_all(self, base: str, message: str) -> str | None:
+        """Everything since *base* (commits, staged and unstaged changes, new files) as ONE
+        commit on *base*; the new head, or None when nothing changed. `--all` is right
+        here, unlike `commit_all`: the worktree is fresh and only fr's own verbs wrote in
+        it, and an archive's moves are new files."""
+        git(["add", "--all"], self.path)
+        git(["reset", "--soft", "--quiet", base], self.path)
+        if git_ok(["diff", "--cached", "--quiet"], self.path):
+            return None
+        git(["commit", "--no-verify", "--quiet", "-m", message], self.path)
+        return self.head()
 
     def push(self, branch: str, *, force: bool = False) -> None:
         """Push HEAD to *branch*; *force* overwrites it, for a branch fr owns (the

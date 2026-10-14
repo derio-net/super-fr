@@ -232,6 +232,15 @@ def held_gates(labels: Iterable[str]) -> frozenset[str]:
     )
 
 
+def passed_gates(labels: Iterable[str]) -> frozenset[str]:
+    """The post-merge gates a PR's *labels* record as passed (`gate:<g>-passed`): the
+    gates whose rows the collected close-out records and whose issues it closes (R15)."""
+    from fr.gates import POST_MERGE_GATES
+
+    names = set(labels)
+    return frozenset(g for g in POST_MERGE_GATES if gate_label(g, passed=True).name in names)
+
+
 # Role-name → LabelDef map. Keys are the lifecycle slot names (snake_case);
 # `.name` on each LabelDef is the GitHub label string (kebab-case). The
 # diff/render projection looks up entries by GitHub name when computing
