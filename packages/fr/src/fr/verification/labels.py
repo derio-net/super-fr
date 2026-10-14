@@ -29,7 +29,14 @@ from fr.labels import (
 if TYPE_CHECKING:
     from fr.run.model import RunState
 
-__all__ = ["LabelSyncError", "PrNotFound", "SyncOutcome", "desired_labels", "sync_exit_labels"]
+__all__ = [
+    "ForgeUndeterminable",
+    "LabelSyncError",
+    "PrNotFound",
+    "SyncOutcome",
+    "desired_labels",
+    "sync_exit_labels",
+]
 
 _PR_URL = re.compile(r"^https?://[^/]+/(?P<repo>.+?)/(?:-/merge_requests|pulls?)/(?P<n>\d+)")
 
@@ -42,7 +49,11 @@ class LabelSyncError(Exception):
 
 
 class PrNotFound(LabelSyncError):  # noqa: N818 — a kind of sync failure, not a fault
-    """The run has no PR to label (yet): not a failure for a caller that syncs early."""
+    """The run has no open PR to label (yet): not a failure for a caller that syncs early."""
+
+
+class ForgeUndeterminable(PrNotFound):  # noqa: N818 — same family
+    """Which forge the PR is on cannot be told (no `origin` remote): nothing to label."""
 
 
 @dataclass(frozen=True)
@@ -51,6 +62,8 @@ class SyncOutcome:
     warning: str | None = None
     added: tuple[str, ...] = ()
     removed: tuple[str, ...] = ()
+    unknown: bool = False
+    """The run's exit could not be read, so its labels are not known (`warning` says why)."""
 
 
 def desired_labels(kinds: frozenset[str], gates: frozenset[str]) -> list[LabelDef]:
@@ -69,12 +82,12 @@ def _is_managed(name: str) -> bool:
 def _target(repo_root: Path, state: RunState, pr: str | None, client: GhClient) -> tuple[str, int]:
     from fr._hosts import origin_slug
 
+    slug = origin_slug(repo_root)
+    if slug is None:  # a checkout with no `origin` has no forge to ask, whatever the PR ref
+        raise ForgeUndeterminable("no `origin` remote, so the forge is unknown and no PR to label")
     ref = (pr or "").strip()
     if (m := _PR_URL.match(ref)) is not None:
         return m["repo"], int(m["n"])
-    slug = origin_slug(repo_root)
-    if slug is None:
-        raise PrNotFound("no `origin` remote, so no PR to label")
     if ref.isdigit():
         return slug, int(ref)
     found = client.open_pr_for_head(slug, state.branch)
@@ -88,10 +101,12 @@ def sync_exit_labels(
 ) -> SyncOutcome:
     """Bring the PR's `verification:*` / `gate:*` labels to the run's exit.
 
-    A no-op under `tracking: none`. A forge that cannot label a PR
-    (`UnsupportedForgeOperation`) comes back as `SyncOutcome.warning`; any other
-    forge failure, a PR it cannot find, or an unreadable remap raises
-    `LabelSyncError`, so a caller that must not proceed on stale labels refuses.
+    A no-op under `tracking: none`. `SyncOutcome.warning` carries a forge that cannot
+    label a PR (`UnsupportedForgeOperation`); `SyncOutcome.unknown` an exit that cannot
+    be read (the section or matrix is `fr plan self-review`'s to report), which a caller
+    that needs the labels treats as a failure. `ForgeUndeterminable` / `PrNotFound` say
+    there is no forge or no open PR to label; any other forge failure, or an unreadable
+    remap, raises `LabelSyncError`.
     """
     from fr.acceptance.model import AcceptanceError
     from fr.services.model import ServicesError
@@ -105,11 +120,19 @@ def sync_exit_labels(
     except ServicesError:
         pass
     try:
+        gh = client if client is not None else client_for(repo_root)
+        repo, number = _target(repo_root, state, pr, gh)
+    except UnsupportedForgeOperation as e:
+        return SyncOutcome(synced=False, warning=f"PR labels not synced: {e}")
+    except _FORGE_FAILURES as e:
+        raise LabelSyncError(str(e)) from e
+    try:
         exit_ = run_exit(repo_root, state)
     except (SectionError, AcceptanceError, OSError, ValueError) as e:
-        # Not a forge failure: the section or matrix is `fr plan self-review`'s to report.
         return SyncOutcome(
-            synced=False, warning=f"PR labels not synced: the exit cannot be read: {e}"
+            synced=False,
+            unknown=True,
+            warning=f"PR labels not synced: the exit cannot be read: {e}",
         )
     if exit_.remap_problem:
         raise LabelSyncError(
@@ -117,13 +140,12 @@ def sync_exit_labels(
         )
     want = desired_labels(exit_.kinds, exit_.gates)
     try:
-        gh = client if client is not None else client_for(repo_root)
-        repo, number = _target(repo_root, state, pr, gh)
-        gh.ensure_labels(repo, want)
+        # Probe the PR first: a forge that cannot label one creates no labels.
         have = {str(n) for n in gh.pr_view(repo, number).get("labels", [])}
         names = {d.name for d in want}
         add = frozenset(names - have)
         remove = frozenset(n for n in have if _is_managed(n) and n not in names)
+        gh.ensure_labels(repo, want)
         if add or remove:
             gh.edit_pr_labels(repo, number, add=add, remove=remove)
     except UnsupportedForgeOperation as e:

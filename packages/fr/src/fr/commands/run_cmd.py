@@ -6143,25 +6143,20 @@ def _questions_from_flags(
         raise typer.Exit(2) from e
 
 
-def _emitted_pr(state: RunState) -> str | None:
-    """The PR a step of the run emitted, if any."""
-    return next(
-        (r.emitted["pr"] for r in state.steps.values() if r.emitted and "pr" in r.emitted), None
-    )
+def _spec_review_ids(repo_root: Path, state: RunState) -> tuple[str, ...]:
+    from fr.verification.baseline import spec_review_steps
+
+    return spec_review_steps(repo_root, state)
 
 
 def _warn_label_sync(repo_root: Path, state: RunState) -> None:
-    """Exit-gates R7: a spec-bearing step resolved, so bring the PR labels to the run's
-    exit — only when the run already has a known PR (an emitted `pr`); otherwise nothing
-    happens and nothing is printed. Advisory: any failure is a warning, `deliver` is the
-    one place the labels are required."""
+    """Exit-gates R7: a spec-bearing step resolved, so bring the run's PR labels to its
+    exit (the PR is found by the run's branch). Advisory: a run with no PR yet is
+    silent, any failure a warning — `deliver` is the one place the labels are required."""
     from fr.verification import labels as _labels
 
-    pr = _emitted_pr(state)
-    if pr is None:
-        return
     try:
-        outcome = _labels.sync_exit_labels(repo_root, state, pr)
+        outcome = _labels.sync_exit_labels(repo_root, state, None)
     except _labels.PrNotFound:
         return
     except Exception as e:  # noqa: BLE001 — advisory, after the step already resolved
@@ -6171,25 +6166,75 @@ def _warn_label_sync(repo_root: Path, state: RunState) -> None:
         err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
 
 
-def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id: str) -> None:
-    """Exit-gates R7: `deliver` refuses a PR whose `verification:`/`gate:` labels it could
-    not sync (printing the retry), and only warns on a forge that cannot label a PR."""
-    from fr.verification import labels as _labels
+def _queue_exit_baseline(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R8: the spec-reviewing step is resolving `done`, so journal the run's
+    exit as the baseline `deliver` holds later lowerings against. Once per run; a spec
+    whose exit cannot be read gets none (and so no check)."""
+    from fr.requirements import run_spec
+    from fr.verification.baseline import BASELINE_ID, baseline_body, spec_entries
+    from fr.verification.exit import run_exit
+
+    spec_rel = run_spec(state)
+    if spec_rel is None:
+        return
+    try:
+        if any(e.id == BASELINE_ID for e in spec_entries(repo_root, spec_rel)):
+            return
+        body = baseline_body(run_exit(repo_root, state))
+    except Exception:  # noqa: BLE001 — advisory: an unreadable exit leaves no baseline
+        return
+    _queue_gate_decision(
+        repo_root, spec_rel, BASELINE_ID, title="exit when spec-review resolved", body=body
+    )
+
+
+def _deliver_exit_guard(repo_root: Path, state: RunState) -> None:
+    """Exit-gates R8: `deliver` refuses an exit lowered since the baseline that no
+    operator-answered `exit-change-*` decision covers (a hand edit of the spec)."""
+    from fr.verification.baseline import unaccounted_lowerings
 
     try:
-        outcome = _labels.sync_exit_labels(repo_root, state, pr)
-    except _labels.PrNotFound as e:  # the forge cannot be determined: as an unsupported forge
-        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        lowered = unaccounted_lowerings(repo_root, state)
+    except Exception:  # noqa: BLE001 — an unreadable exit is the label sync's to report
         return
-    except _labels.LabelSyncError as e:
+    if lowered:
         err_console.print(
-            f"refused: could not sync the PR's verification/gate labels: {e}. Fix that, then "
+            "refused: the spec's verification exit waits for less than when spec-review "
+            "resolved, and no operator-answered `fr verification set` covers it: "
+            + "; ".join(lowered)
+            + ". Restore it, or have the operator answer it with `fr verification set "
+            "... --answered-by operator`",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
+def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id: str) -> None:
+    """Exit-gates R7: `deliver` refuses a PR whose `verification:`/`gate:` labels it could
+    not sync (printing the retry) — a failed write, no open PR, an unreadable exit — and
+    only warns where there is no forge to ask or it cannot label a PR."""
+    from fr.verification import labels as _labels
+
+    def refuse(why: str) -> typer.Exit:
+        err_console.print(
+            f"refused: could not sync the PR's verification/gate labels: {why}. Fix that, then "
             f"resolve again (`{_resolve_hint(run_id, 'deliver', None)}`, with your --record "
             "if you resolve through one)",
             markup=False,
             soft_wrap=True,
         )
-        raise typer.Exit(2) from e
+        return typer.Exit(2)
+
+    try:
+        outcome = _labels.sync_exit_labels(repo_root, state, pr)
+    except _labels.ForgeUndeterminable as e:
+        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
+        return
+    except _labels.LabelSyncError as e:
+        raise refuse(str(e)) from e
+    if outcome.unknown:
+        raise refuse(outcome.warning or "the exit cannot be read")
     if outcome.warning:
         err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
 
@@ -6609,6 +6654,7 @@ def _resolve_body(
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
         _deliver_pr_gate(repo_root, state, pr)
+        _deliver_exit_guard(repo_root, state)
         _deliver_label_sync(repo_root, state, pr, run_id)
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first
@@ -6618,6 +6664,8 @@ def _resolve_body(
     if rebind is not None and state_value == "done":
         state, manifest = _rebound(state, rebind, step_id), rebind
         console.print(f"{step_id}: run rebound onto {state.workflow}", soft_wrap=True)
+    if state_value == "done" and step_id in _spec_review_ids(repo_root, state):
+        _queue_exit_baseline(repo_root, state)
     new_state = _complete_step(
         state,
         manifest,
@@ -6633,7 +6681,7 @@ def _resolve_body(
     _flush_gate_decisions(repo_root)
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
-    if step_id in ("brainstorm", "spec-review") and state_value == "done":
+    if state_value == "done" and step_id in ("brainstorm", *_spec_review_ids(repo_root, new_state)):
         _warn_label_sync(repo_root, new_state)
     if step_id == "deliver" and state_value == "done":
         # spec 2026-09-25 §5.B.3: the usage capture rides this commit

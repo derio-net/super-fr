@@ -74,7 +74,7 @@ expect_grep 'exit-change-1' "$(cat docs/superpowers/journals/specs/*.md)" "the r
 run_fr out verification set --run $RUN --row row-live --strategy live --gate tester --reason "walk it after merge"
 require_exit 0 "$out"
 expect_grep '^gate: row-live=tester$' "$(cat "$SPEC")" "the row gate line was inserted"
-expect_grep '^- row-live: live — walk it after merge$' "$(cat "$SPEC")" "the row bullet was rewritten"
+expect_grep '^- row-live: live — needs the released build$' "$(cat "$SPEC")" "the row bullet keeps its rationale"
 
 # After spec-review: waiting less is refused, and nothing changes.
 write_cursor done

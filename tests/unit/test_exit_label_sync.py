@@ -59,6 +59,7 @@ def _fake(labels: list[str]) -> FakeGhClient:
 
 @pytest.fixture(autouse=True)
 def _tracking(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: REPO)
     monkeypatch.setattr(
         "fr.services.resolve.resolve_tracking",
         lambda *_a, **_k: types.SimpleNamespace(type="github"),
@@ -134,8 +135,45 @@ def test_an_unreadable_remap_refuses_naming_the_problem(tmp_path: Path) -> None:
         sync_exit_labels(root, _state(), URL, client=_fake([]))
 
 
-def test_an_unreadable_exit_is_a_warning_not_a_refusal(tmp_path: Path) -> None:
+def test_p2_r6_an_unreadable_exit_is_its_own_outcome(tmp_path: Path) -> None:
     root = _repo(tmp_path, "strategy: live")
     (root / SPEC).write_bytes(b"# Spec\n\n## Verification\n\nstrategy: live\n\xff\xfe\n")
     out = sync_exit_labels(root, _state(), URL, client=_fake([]))
-    assert not out.synced and out.warning and "cannot be read" in out.warning
+    assert not out.synced and out.unknown and "cannot be read" in (out.warning or "")
+
+
+def test_p2_r11_an_unsupported_forge_creates_no_labels(tmp_path: Path) -> None:
+    ensured: list[object] = []
+
+    class _Glab(UnsupportedBatchOps):
+        backend = "gitlab"
+
+        def ensure_labels(self, repo: str, labels: list) -> None:
+            ensured.append(labels)
+
+    out = sync_exit_labels(_repo(tmp_path, "strategy: live"), _state(), URL, client=_Glab())  # type: ignore[arg-type]
+    assert out.warning and ensured == []
+
+
+def test_p2_r7_a_missing_pr_is_not_an_unknown_forge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.labels import ForgeUndeterminable, PrNotFound
+
+    fake = FakeGhClient()  # no PR for the branch
+    import fr._hosts
+
+    monkeypatch.setattr(fr._hosts, "origin_slug", lambda _r: "o/r")
+    with pytest.raises(PrNotFound) as e:
+        sync_exit_labels(_repo(tmp_path, "strategy: live"), _state(), None, client=fake)
+    assert not isinstance(e.value, ForgeUndeterminable)
+
+
+def test_a_checkout_with_no_origin_has_no_forge_even_for_a_pr_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.labels import ForgeUndeterminable
+
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: None)
+    with pytest.raises(ForgeUndeterminable):
+        sync_exit_labels(_repo(tmp_path, "strategy: live"), _state(), URL, client=_fake([]))

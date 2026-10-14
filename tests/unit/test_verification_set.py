@@ -90,7 +90,7 @@ def test_a_row_and_a_gate_are_written_beside_their_kind(tmp_path: Path) -> None:
         _set(root, "--row", "req-r1", "--strategy", "candidate", "--gate", "tester").exit_code == 0
     )
     text = (root / SPEC).read_text()
-    assert "- req-r1: candidate — because\n" in text and "gate: req-r1=tester\n" in text
+    assert "- req-r1: candidate — needs a release\n" in text and "gate: req-r1=tester\n" in text
     assert "prose stays." in text
 
 
@@ -172,3 +172,154 @@ def test_an_agent_answer_does_not_lift_the_guard(tmp_path: Path) -> None:
     root = _at(tmp_path, past_review=True)
     out = _set(root, "--strategy", "candidate", "--answered-by", "agent")
     assert out.exit_code == 2
+
+
+def _entries(root: Path):
+    from fr.verification.baseline import spec_entries
+
+    return spec_entries(root, SPEC)
+
+
+def _state(root: Path):
+    from fr.run.model import load_run_state
+
+    return load_run_state(root, RUN)
+
+
+def test_p2_r3_spec_review_journals_the_exit_as_a_baseline(tmp_path: Path) -> None:
+    from fr.verification.baseline import read_baseline
+
+    root = _at(tmp_path, past_review=True)
+    base = read_baseline(_entries(root))
+    assert base is not None and base.run_kind == "live" and base.run_gate == "tester"
+    assert base.row_kinds == {"req-r1": "live"} and base.row_gates == {"req-r1": "tester"}
+    assert git(root, "status", "--porcelain").strip() == ""
+
+
+def test_p2_r3_a_hand_edit_that_lowers_the_exit_is_found_and_an_operator_change_is_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.baseline import unaccounted_lowerings
+
+    root = _at(tmp_path, past_review=True)
+    assert unaccounted_lowerings(root, _state(root)) == []
+    text = (root / SPEC).read_text()
+    (root / SPEC).write_text(text.replace("gate: tester", "gate: reviewer"))
+    found = unaccounted_lowerings(root, _state(root))
+    assert found and any("tester" in x for x in found)
+    (root / SPEC).write_text(text)
+    monkeypatch.setattr("fr.run.telemetry.operator_answered_since", lambda env, since: True)
+    assert _set(root, "--gate", "reviewer", "--answered-by", "operator").exit_code == 0
+    assert unaccounted_lowerings(root, _state(root)) == []
+
+
+def test_p2_r3_a_run_with_no_baseline_is_not_checked(tmp_path: Path) -> None:
+    from fr.verification.baseline import unaccounted_lowerings
+
+    root = _at(tmp_path)  # spec-review not resolved: no baseline
+    (root / SPEC).write_text((root / SPEC).read_text().replace("gate: tester", "gate: none"))
+    assert unaccounted_lowerings(root, _state(root)) == []
+
+
+def test_p2_r2_the_spec_reviewing_step_comes_from_the_manifest(tmp_path: Path) -> None:
+    from fr.verification.baseline import spec_review_steps
+
+    root = _at(tmp_path)
+    state = _state(root)
+    assert spec_review_steps(root, state) == ("spec-review",)
+    light = state.model_copy(update={"workflow": "fr-goal-light@1"})
+    assert spec_review_steps(root, light) == ("spec-plan-review",)
+
+
+def test_p2_r2_the_guard_applies_on_fr_goal_light(tmp_path: Path) -> None:
+    root = _at(tmp_path, past_review=True)
+    cursor = root / "docs" / "superpowers" / "runs" / f"{RUN}.yaml"
+    text = (
+        cursor.read_text()
+        .replace("fr-goal@1", "fr-goal-light@1")
+        .replace("  spec-review:", "  spec-plan-review:")
+    )
+    cursor.write_text(text)
+    commit_all(root, "light shape")
+    out = _set(root, "--strategy", "candidate")
+    assert out.exit_code == 2 and "--answered-by operator" in out.output
+
+
+def test_p2_r4_the_answer_window_opens_at_the_later_of_review_and_last_change() -> None:
+    from fr.journal.model import JournalEntry
+    from fr.journal.model import journal_stamp_as_utc as utc
+    from fr.verification.set import _window_start
+
+    change = JournalEntry(
+        kind="decision", scope="spec", id="exit-change-1", created="2026-10-14T10:00:00+00:00",
+        title="t", body="b",
+    )  # fmt: skip
+    assert _window_start([change], "2026-10-14T09:00:00+00:00") == utc("2026-10-14T10:00:00+00:00")
+    assert _window_start([change], "2026-10-14T11:00:00+00:00") == utc("2026-10-14T11:00:00+00:00")
+    assert _window_start([], None) is None
+
+
+def test_p2_r5_an_unverified_claim_is_marked_in_the_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _at(tmp_path, past_review=True)
+    monkeypatch.setattr(
+        "fr.journal.operator.verify_operator_answer", lambda *a, **k: "could not verify the claim"
+    )
+    assert _set(root, "--strategy", "candidate", "--answered-by", "operator").exit_code == 0
+    (decision,) = _decisions(root)
+    assert "UNVERIFIED: could not verify the claim" in decision.body
+
+
+def test_p2_r8_replacing_one_post_merge_gate_with_another_needs_the_operator(
+    tmp_path: Path,
+) -> None:
+    root = _at(tmp_path, past_review=True)
+    out = _set(root, "--strategy", "live", "--gate", "devops")
+    assert out.exit_code == 2 and "--answered-by operator" in out.output
+
+
+def test_p2_r9_an_unknown_strategy_is_refused_before_anything_is_written(tmp_path: Path) -> None:
+    root = _at(tmp_path)
+    before, tip = (root / SPEC).read_text(), head(root)
+    out = _set(root, "--strategy", "no-such-strategy")
+    assert out.exit_code == 2 and "no-such-strategy" in out.output
+    assert (root / SPEC).read_text() == before and head(root) == tip and _no_journal(root)
+
+
+def test_p2_r10_a_gate_only_change_keeps_the_strategy_and_a_row_keeps_its_rationale(
+    tmp_path: Path,
+) -> None:
+    root = _at(tmp_path)
+    assert _set(root, "--gate", "reviewer").exit_code == 0
+    text = (root / SPEC).read_text()
+    assert "strategy: live\n" in text and "gate: reviewer\n" in text
+    assert _set(root, "--row", "req-r1", "--strategy", "candidate").exit_code == 0
+    assert "- req-r1: candidate — needs a release\n" in (root / SPEC).read_text()
+    assert "because" in _decisions(root)[-1].body
+
+
+def test_p2_r10_a_set_with_neither_strategy_nor_gate_is_refused(tmp_path: Path) -> None:
+    assert _set(_at(tmp_path)).exit_code == 2
+
+
+def test_p2_r12_a_no_op_writes_nothing(tmp_path: Path, sync: _Sync) -> None:
+    root = _at(tmp_path)
+    tip = head(root)
+    out = _set(root, "--strategy", "live")
+    assert out.exit_code == 0 and "unchanged" in out.output
+    assert head(root) == tip and _no_journal(root)
+
+
+def test_p2_r13_the_success_line_is_printed_literally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.set import SetResult
+
+    root = _at(tmp_path)
+    monkeypatch.setattr(
+        "fr.verification.set.exit_change",
+        lambda *a, **k: SetResult("docs/[bold]x[/bold].md", "exit-change-1", (), ()),
+    )
+    out = _set(root, "--strategy", "candidate")
+    assert "[bold]x[/bold]" in out.output

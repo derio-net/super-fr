@@ -212,6 +212,13 @@ def _set_line(text: str, kind: str, row: str | None, content: str) -> str:
     else:
         hit = next((n for n, ln in stripped if bullet_row(ln) == row), None)
     if hit is not None:
+        if kind == "bullet":
+            # An existing bullet keeps its rationale; only a new one carries `reason`.
+            old = _ROW_LINE.match(dict(stripped)[hit])
+            if old is not None and old["reason"]:
+                content = content.split(" — ", 1)[0] + f" — {old['reason']}"
+            else:
+                content = content.split(" — ", 1)[0]
         _replace(lines, hit, content)
         return "".join(lines)
 

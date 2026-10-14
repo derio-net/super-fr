@@ -2,18 +2,26 @@
 exit honest about it (spec 2026-10-14 exit-gates R8, §B).
 
 One engine function over `spec_section.rewrite_section`: rewrite one grammar line,
-compare the run's exit before and after, and — once `spec-review` is done — refuse a
-change that makes the exit wait less unless a verified operator answered it. The
-decision, the commit and the label re-sync follow.
+compare the run's exit before and after, and — once the spec-reviewing step is done —
+refuse a change that makes the exit wait less unless a verified operator answered it.
+The decision (with a parseable block `deliver` reads back), the commit and the caller's
+label re-sync follow.
 """
 
 from __future__ import annotations
 
+import datetime as _dt
 from dataclasses import dataclass
 from pathlib import Path
 
-from fr.gates import POST_MERGE_GATES
-from fr.verification.exit import Exit, kind_rank
+from fr.verification.baseline import (
+    Lowering,
+    change_block,
+    review_record,
+    spec_entries,
+    weakened,
+)
+from fr.verification.exit import Exit
 
 __all__ = ["SetRefusedError", "SetResult", "exit_change", "weakened"]
 
@@ -25,48 +33,36 @@ class SetRefusedError(Exception):
 @dataclass(frozen=True)
 class SetResult:
     spec_rel: str
-    decision_id: str
+    decision_id: str | None
+    """`None` when the change was a no-op (nothing written, nothing journalled)."""
     notices: tuple[str, ...]
     weakened: tuple[str, ...]
 
 
-def weakened(before: Exit, after: Exit, repo_root: Path) -> list[str]:
-    """What `after` waits for less than `before` (R8): the run, and each row, on its
-    own — a post-merge gate that is gone, or a kind of lower rank. The exit's overall
-    rank would hide a row lowered beside one that still holds the maximum."""
-    out: list[str] = []
-
-    def lowered(label: str, kind_b: str, kind_a: str, gate_b: str, gate_a: str) -> None:
-        if gate_b in POST_MERGE_GATES and gate_a not in POST_MERGE_GATES:
-            out.append(f"{label}: the `{gate_b}` gate is gone (now `{gate_a}`)")
-        if kind_rank(kind_a, repo_root) < kind_rank(kind_b, repo_root):
-            out.append(f"{label}: kind `{kind_b}` -> `{kind_a}` waits for less")
-
-    lowered("the run", before.run_kind, after.run_kind, before.run_gate, after.run_gate)
-    for rid, kind_b in before.row_kinds.items():
-        lowered(
-            f"row {rid}",
-            kind_b,
-            after.row_kinds.get(rid, "none"),
-            before.row_gates.get(rid, "none"),
-            after.row_gates.get(rid, "none"),
-        )
-    return out
-
-
-def _decision_number(repo_root: Path, slug: str) -> int:
-    from fr.journal.model import journal_path, parse_journal
-
-    path = journal_path(repo_root, "spec", slug)
-    taken = [
-        e.id
-        for e in (parse_journal(path.read_text()) if path.is_file() else [])
-        if e.kind == "decision"
-    ]
+def _decision_number(entries: list) -> int:  # type: ignore[type-arg]
     nums = [
-        int(i.rsplit("-", 1)[1]) for i in taken if i.startswith("exit-change-") and i[12:].isdigit()
+        int(e.id.rsplit("-", 1)[1])
+        for e in entries
+        if e.kind == "decision" and e.id.startswith("exit-change-") and e.id[12:].isdigit()
     ]
     return max(nums, default=0) + 1
+
+
+def _window_start(entries: list, review_at: str | None) -> str | None:  # type: ignore[type-arg]
+    """The later of the review's `at` and the latest `exit-change-*` decision's stamp:
+    an operator answer from before either answered something else (p2-r4)."""
+    from fr.journal.model import journal_stamp_as_utc
+
+    stamps = [review_at] if review_at else []
+    stamps += [e.created for e in entries if e.id.startswith("exit-change-") and e.created]
+    parsed: list[tuple[_dt.datetime, str]] = []
+    for raw in stamps:
+        utc = journal_stamp_as_utc(raw)
+        try:
+            parsed.append((_dt.datetime.fromisoformat(utc), utc))
+        except ValueError:
+            continue
+    return max(parsed)[1] if parsed else None
 
 
 def exit_change(
@@ -74,7 +70,7 @@ def exit_change(
     run_id: str,
     *,
     row: str | None,
-    strategy: str,
+    strategy: str | None,
     gate: str | None,
     reason: str,
     answered_by: str | None,
@@ -90,8 +86,17 @@ def exit_change(
     from fr.requirements import run_spec
     from fr.run.model import RunStateError, load_run_state
     from fr.verification.exit import run_exit
+    from fr.verification.model import RESERVED, StrategyError
+    from fr.verification.resolve import resolve_strategy
     from fr.verification.spec_section import SectionError, rewrite_section
 
+    if strategy is None and gate is None:
+        raise SetRefusedError("give --strategy, --gate, or both")
+    if strategy is not None and strategy != RESERVED:
+        try:
+            resolve_strategy(strategy, repo_root)
+        except StrategyError as e:
+            raise SetRefusedError(f"`{strategy}` is not a strategy: {e}") from e
     try:
         state = load_run_state(repo_root, run_id)
     except RunStateError as e:
@@ -114,6 +119,8 @@ def exit_change(
         raise SetRefusedError(f"the exit is not known while {before.remap_problem}")
     if row is not None and row not in {r.id for r in before.rows}:
         raise SetRefusedError(f"no acceptance row `{row}` cites {spec_rel}")
+    if new_text == original:
+        return SetResult(spec_rel, None, (), ())
 
     def restore() -> None:
         write_text_atomic(spec, original)
@@ -123,36 +130,42 @@ def exit_change(
         after = run_exit(repo_root, state)
         if after.remap_problem:
             raise SetRefusedError(f"the exit is not known after the change: {after.remap_problem}")
-        lowered: list[str] = []
+        lowered: list[Lowering] = []
         notices: list[str] = []
-        review = state.steps.get("spec-review")
-        if review is not None and review.state == "done":
+        entries = spec_entries(repo_root, spec_rel)
+        review = review_record(repo_root, state)
+        advisory: str | None = None
+        if review is not None:
             lowered = weakened(before, after, repo_root)
             if lowered and answered_by != "operator":
                 raise SetRefusedError(
                     "spec-review is done and this makes the exit wait less ("
-                    + "; ".join(lowered)
+                    + "; ".join(x.text for x in lowered)
                     + "): only the operator may lower it — ask them, then pass "
                     "`--answered-by operator`"
                 )
             if lowered:
-                since = review.at
+                since = _window_start(entries, review.at)
                 try:
-                    advisory = verify_operator_answer(
-                        "exit-change", since, _utc(since) if since else None
-                    )
+                    advisory = verify_operator_answer("exit-change", since, since)
                 except OperatorClaimRefusedError as e:
                     raise SetRefusedError(str(e)) from e
                 if advisory:
                     notices.append(advisory)
         slug = spec_journal_slug(Path(spec_rel).stem)
-        number = _decision_number(repo_root, slug)
-        decision_id = f"exit-change-{number}"
+        decision_id = f"exit-change-{_decision_number(entries)}"
         target = f"row {row}" if row else "the run"
-        what = f"strategy {strategy}" + (f", gate {gate}" if gate else "")
+        what = ", ".join(
+            x
+            for x in (f"strategy {strategy}" if strategy else "", f"gate {gate}" if gate else "")
+            if x
+        )
         body = f"{reason}\n\nbefore: {_describe(before)}\nafter: {_describe(after)}"
         if lowered:
-            body += "\nanswered_by: operator (lowered: " + "; ".join(lowered) + ")"
+            body += "\nlowered with an operator answer: " + "; ".join(x.text for x in lowered)
+        if advisory:
+            body += f"\nUNVERIFIED: {advisory}"
+        body += "\n\n" + change_block(answered_by=answered_by, lowered=lowered)
         try:
             engine.apply_record(
                 repo_root,
@@ -185,13 +198,7 @@ def exit_change(
     )
     if not (outcome.committed or outcome.unchanged):
         notices.append(f"the spec change is written but NOT committed: {outcome.reason}")
-    return SetResult(spec_rel, decision_id, tuple(notices), tuple(lowered))
-
-
-def _utc(stamp: str) -> str:
-    from fr.journal.model import journal_stamp_as_utc
-
-    return journal_stamp_as_utc(stamp)
+    return SetResult(spec_rel, decision_id, tuple(notices), tuple(x.text for x in lowered))
 
 
 def _describe(ex: Exit) -> str:

@@ -37,8 +37,9 @@ def test_it_rewrites_the_run_gate_but_not_a_row_gate() -> None:
 def test_it_rewrites_a_row_gate_and_a_row_bullet() -> None:
     new = rewrite_section(DOC, row="a", gate="tester", strategy="live", reason="new reason")
     old, added = _diff(DOC, new)
-    assert old == ["gate: a=devops\n", "- a: live — needs a release\n"]
-    assert added == ["gate: a=tester\n", "- a: live — new reason\n"]
+    assert "- a: candidate" not in new
+    assert old == ["gate: a=devops\n"]
+    assert added == ["gate: a=tester\n"]  # the bullet and its rationale are as they were
 
 
 def test_it_inserts_a_missing_row_bullet_and_gate_beside_their_kind() -> None:
@@ -88,3 +89,13 @@ def test_crlf_files_keep_their_line_endings() -> None:
 def test_a_reason_with_a_newline_is_refused() -> None:
     with pytest.raises(SectionError, match="one non-empty line"):
         rewrite_section(DOC, row="a", strategy="live", reason="a\nb")
+
+
+def test_p2_r10_an_existing_bullets_rationale_survives_a_new_strategy() -> None:
+    new = rewrite_section(DOC, row="a", strategy="candidate", reason="ignored")
+    assert "- a: candidate — needs a release\n" in new
+
+
+def test_p2_r10_a_gate_only_change_writes_no_strategy_line() -> None:
+    new = rewrite_section(DOC, row="b", gate="reviewer")
+    assert _diff(DOC, new) == ([], ["gate: b=reviewer\n"])

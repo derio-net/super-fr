@@ -159,7 +159,9 @@ def exit_cmd(
 @verification_app.command("set")
 def set_cmd(
     run: str = typer.Option(..., "--run", help="The run whose spec's Verification to change."),
-    strategy: str = typer.Option(..., "--strategy", help="The strategy (or `none`) to set."),
+    strategy: str | None = typer.Option(
+        None, "--strategy", help="The strategy (or `none`) to set; optional with --gate."
+    ),
     reason: str = typer.Option(..., "--reason", help="Why; journalled as a spec decision."),
     row: str | None = typer.Option(None, "--row", help="Set this row's line (default: the run's)."),
     gate: str | None = typer.Option(None, "--gate", help="Also set the gate (or `none`)."),
@@ -195,7 +197,10 @@ def set_cmd(
         raise typer.Exit(2) from e
     for notice in result.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
-    console.print(f"{result.decision_id}: {result.spec_rel} updated", soft_wrap=True)
+    if result.decision_id is None:
+        console.print(f"{result.spec_rel}: unchanged", soft_wrap=True, markup=False)
+        return
+    console.print(f"{result.decision_id}: {result.spec_rel} updated", soft_wrap=True, markup=False)
     try:
         from fr.run.model import load_run_state
 
