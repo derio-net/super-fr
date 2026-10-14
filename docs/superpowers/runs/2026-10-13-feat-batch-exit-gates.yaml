@@ -179,7 +179,7 @@ steps:
           visual: none
           findings: p4-gated-post-merge-delayed,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9
       phase/5/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-14T05:54:35+00:00'
           agent: aaf00fb261a445b9b
@@ -189,6 +189,11 @@ steps:
           tier: standard
           bound: sonnet
           session: 73abb433-5601-4db7-ba08-a64b67cbfcfb
+          returned: '2026-10-14T06:16:46+00:00'
+          outcome: done
+        evidence:
+          tests: ci:c8dd8a7346e60f1629de3cc757dc807c0974e664+7a6ae37a284aaf67258b9b4c5c633377c15323f9;tree=0dc597615fb0018a209981aada39574bbd941dcb4d8bc19a5c31452eb86fadba
+          visual: none
   journal-check:
     state: pending
   deliver:

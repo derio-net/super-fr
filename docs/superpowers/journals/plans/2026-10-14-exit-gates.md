@@ -580,3 +580,28 @@ printed only when no held gate remains; test_p4_r9_no_release_command_while_anot
 ### p4-gated-post-merge-delayed-resolved · finding [out-of-scope] · resolves p4-gated-post-merge-delayed: A gated batch's post_merge waits for its gate, yet the tester walks the merged build (phase 4)
 
 The executor tagged it out of scope; the reviewer reclassified the same defect in scope as p4-r2, fixed in 9b543573. This entry stays as the executor recorded it.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-1107-salvage created=2026-10-14T06:16:40+00:00 phase=5 -->
+### p5-1107-salvage · discovery · #1107 read: nothing salvaged (phase 5)
+
+PR 1107 (batch-sweep-status-lanes) derives human lanes from a run cursor at the PR head too, but it is a parallel design (its own matrix row, gitseam reader, scenario) written against session-status-era kanban code. Phase 4 already put cursor_position/read_cursor (fr/triage/cursor.py, facts schema 12) in place, so nothing was copied; lane_of reads PullRequest.cursor. #1107 can be closed once this ships (spec F).
+
+<!-- fr:journal kind=decision scope=plan id=p5-ledger-unknown-lane created=2026-10-14T06:16:40+00:00 phase=5 -->
+### p5-ledger-unknown-lane · decision · A landed batch with an unread gate ledger sits in Needs you · Developer (phase 5)
+
+Not Done and not Closing out, so an operator sees it: lane_of puts a landed, not closed-out batch whose merged-PR labels collect could not read in needs-developer, reason saying which gate holds it is unknown and the next collect retries. The card leaves the lane when a collect reads the labels.
+
+<!-- fr:journal kind=decision scope=plan id=p5-lane-one-function created=2026-10-14T06:16:40+00:00 phase=5 -->
+### p5-lane-one-function · decision · lane_of (triage/lanes.py) is the one lane function (phase 5)
+
+column_of and needs_you both call it, from facts alone (cursor, approval_verdict on the PR labels and events, a live merge stop, held_gates on the merged PR labels). live_stops moved there from kanban to avoid a kanban/views cycle. needs_you gained an optional stops argument; render.py's caller passes none, so a recorded merge stop lane shows on the board only.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-10-14T06:16:40+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+mergeability.py is one two-line predicate and one string; the hint call site is a single branch in _card, nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t3 created=2026-10-14T06:16:40+00:00 phase=5 -->
+### no-refactor-p5-t3 · discovery · no-refactor-because P5.T3 (phase 5)
+
+prose and a matrix status move only; lane logic was already one function (P5.T2.S3)
