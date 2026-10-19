@@ -1,0 +1,2 @@
+bump: minor
+summary: Add explicit held recovery for closed herdr batch control sessions.

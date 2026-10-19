@@ -67,7 +67,8 @@ from fr.triage.stage import Stage, derive_stage
 # None, so no batch reads as gated and no cursor position is known.
 FACTS_SCHEMA: Literal[12] = 12
 FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-# The version this fr WRITES: every engine write stamps 11 (the `archive_conflict` event,
+# The version this fr WRITES: every engine write stamps 12 (recovery ownership/session
+# metadata; 11 added the `archive_conflict` event,
 # 2026-10-14-merge-truth §E; 10 was the `closeout_handback` and `closeout_hold` events and
 # the collected close-outs, 2026-10-14-exit-gates R15/R27; 9 was the `update`, `approval`,
 # `red_handback` and `enqueue` events, 2026-10-11-merge-train-safety §B; 8 was the
@@ -78,8 +79,8 @@ FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[11] = 11
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+JUDGEMENTS_SCHEMA: Literal[12] = 12
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -849,6 +850,19 @@ class ReplacementEvent(_Strict):
     branch: str = Field(min_length=1)
     detail: str = ""
     reconciled: bool = False
+    recover: bool = False
+    target_pane: str | None = Field(default=None, min_length=1)
+    session: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _recovery_success_has_ownership(self) -> ReplacementEvent:
+        if (
+            self.recover
+            and self.result == "success"
+            and (not self.target_pane or self.target_pane == self.pane or not self.session)
+        ):
+            raise ValueError("recovery success requires a new actual pane and observed session id")
+        return self
 
 
 class UpdateEvent(_Strict):
@@ -1139,7 +1153,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -1243,6 +1257,12 @@ class Judgements(_Strict):
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
         carried = {e.kind for b in self.batches for e in b.events}
+        if self.schema_ < 12 and any(
+            isinstance(e, ReplacementEvent) and (e.recover or e.target_pane or e.session)
+            for b in self.batches
+            for e in b.events
+        ):
+            raise ValueError("recovery ownership metadata needs schema 12")
         for needs, kinds in _EVENT_SCHEMAS:
             late = sorted(carried & kinds)
             if self.schema_ < needs and late:

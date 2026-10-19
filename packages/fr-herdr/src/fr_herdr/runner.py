@@ -256,13 +256,27 @@ class HerdrRunner:
     def replacement_session(self, request: ReplacementRequest) -> ReplacementOperation:
         from fr_herdr.replacement import Operation
 
+        if request.recover:
+            from fr_herdr.recovery import Operation as RecoveryOperation
+
+            return RecoveryOperation(request)
         return Operation(request)
 
     def replacement_pending(self, item: str, pane: str) -> ReplacementRequest | None:
         from fr_dispatch.protocols import ReplacementRequest
 
+        from fr_herdr.recovery import pending
+
+        recovery = pending(item, pane)
+        if recovery:
+            return recovery
+
         d = managed.load(pane)
-        if d is None or d.attempt is None:
+        if d and d.recovery_hold and d.source_pane:
+            recovery = pending(item, d.source_pane)
+            if recovery:
+                return recovery
+        if d is None or d.attempt is None or d.checkpoint in {"active", "aborted"}:
             return None
         if d.item != item or d.name != agent_name(item) or not d.old_harness or not d.old_model:
             raise managed.ManagedError("pending descriptor identity is not the batch's")

@@ -75,6 +75,8 @@ def observe(d: managed.Descriptor, safe: bool = True, source: bool = False) -> d
     info = _run_herdr(["pane", "process-info", "--pane", d.pane])
     proc = _foreground_process(info, d.harness, allow_workers=not safe)
     argv = proc.get("argv", [])
+    if d.recovery_hold and d.harness == "opencode" and "--auto" not in argv:
+        raise managed.ManagedError("recovered OpenCode is not autonomous (--auto missing)")
     cwd_matches = proc.get("cwd") == d.checkout
     model_matches = (
         opencode.model_matches(proc, d)
@@ -130,6 +132,11 @@ def source_eligible(d: managed.Descriptor) -> dict[str, Any]:
     if d.pane == os.environ.get("HERDR_PANE_ID"):
         raise managed.ManagedError("caller-self session")
     return observe(d, source=True)
+
+
+def confirmed_shell(d: managed.Descriptor) -> str | None:
+    """Read-only shell survivor confirmation for reconciliation."""
+    return opencode.shell_cwd(_run_herdr(["pane", "process-info", "--pane", d.pane]))
 
 
 def exit_to_shell(d: managed.Descriptor) -> None:
@@ -321,6 +328,8 @@ class Operation:
                 update={
                     "conflict_head": previous.conflict_head,
                     "conflict_brief": previous.conflict_brief,
+                    "recovery_hold": previous.recovery_hold,
+                    "source_pane": previous.source_pane,
                 }
             )
         self.brief = managed.reconstruct(self.target)
@@ -340,16 +349,7 @@ class Operation:
                 raise managed.ManagedError("source changed immediately before exit")
             exit_to_shell(self.source)
             self._checkpoint("source-exited")
-            launch_target(self.target)
-            self._checkpoint("target-ready")
-            self._checkpoint("submission-started")
-            try:
-                submit(self.target, self.brief)
-            except Exception:
-                self._checkpoint("submission-uncertain")
-                raise
-            self._checkpoint("uptake-confirmed")
-            return ReplacementResult(True, "uptake-confirmed", "target")
+            return self._target_execution()
         except Exception as exc:  # noqa: BLE001 - preserve checkpoint and never restore source
             survivor = "unknown"
             try:
@@ -373,6 +373,31 @@ class Operation:
                 survivor,
                 f"{exc}; inspect pane {d.pane}; repair owed; never blindly resubmit",
             )
+
+    def _target_identity(self) -> None:
+        """Recovery strengthens identity without changing ordinary replacement."""
+
+    def _target_execution(self) -> ReplacementResult:
+        launch_target(self.target)
+        if self.request.recover:
+            observe(self.target)  # Independently confirm rendered safe input before submission.
+        self._target_identity()
+        self._checkpoint("target-ready")
+        self._checkpoint("submission-started")
+        try:
+            submit(self.target, self.brief)
+        except Exception:
+            self._checkpoint("submission-uncertain")
+            raise
+        self._target_identity()
+        self._checkpoint("uptake-confirmed")
+        return ReplacementResult(
+            True,
+            "uptake-confirmed",
+            "target",
+            pane=self.target.pane if self.request.recover else None,
+            session=self.target.session,
+        )
 
     def _pending(self) -> managed.Descriptor:
         d = managed.load(self.target.pane)

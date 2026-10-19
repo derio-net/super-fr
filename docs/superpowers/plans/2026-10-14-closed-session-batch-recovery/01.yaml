@@ -1,0 +1,183 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Explicit held recovery for closed batch control sessions (R1–R8)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-closed-recovery
+  - triage-closed-recovery-refusals
+  - triage-closed-recovery-repair
+  - triage-closed-recovery-live
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/operation_lock.py
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr-herdr/src/fr_herdr/*.py
+  - tests/unit/test_*recover*.py
+  - tests/unit/test_*replac*.py
+  - tests/unit/test_herdr_managed.py
+  - tests/unit/test_import_direction.py
+  - tests/unit/test_triage*.py
+  - tests/unit/triage_fixtures.py
+  - tests/integration/test_scenarios.py
+  - tests/scenarios/triage-closed-recovery.sh
+  - tests/scenarios/herdr-closed-recovery-live.sh
+  - tests/scenarios/fixtures/**
+  - docs/herdr-control-sessions.md
+  - packages/fr-herdr/README.md
+  - AGENTS.md
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - docs/acceptance/*
+  - .changes/feat-closed-session-batch-recovery.yaml
+  estimate_lines: 1800
+tasks:
+- number: 1
+  title: Recovery API and immutable lifecycle audit (R1,R2,R5)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Red: add fake-backed CLI/schema tests in tests/unit/test_triage_closed_recovery.py proving --recover preview has zero writes/inputs, explicit OpenCode model/reason are required, same-model recovery is allowed, --recover --repair is refused, and successful new ownership never changes original dispatch/history/branch/reservation. Run targeted pytest with --no-cov; missing recovery behavior must fail.
+  - id: P1.T1.S2
+    text: |-
+      Green: extend batch replace and the optional ReplacementRequest/Result/Operation seam with explicit recovery intent and actual ownership; add backward-readable audit metadata and one effective-owner derivation. Keep latest original dispatch intact, apply successful ownership only after that dispatch, and use it for later replacement/repair and relevant handle readers. No wave-driver recovery logic or #1216 implementation.
+  - id: P1.T1.S3
+    text: |-
+      Refactor: centralize effective owner and optional recovery validation, retaining ordinary replacement tests. Run tests/unit/test_triage_batch_replace.py, test_triage_replace_state.py, test_triage_replacement_events.py and new CLI tests. Add minor change fragment without editing versions.
+- number: 2
+  title: Absence and workspace truth before effects (R2,R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Red: add runner tests for a closed pane and empty complete roster, surviving item/name anywhere, unknown/malformed/read-failed roster, reused source pane, caller identity, live driver, lock contention, missing worktree, missing/ambiguous/unreadable cursor, and dirty work preserved. Assert refusal performs no allocation, descriptor/state write, launch or prompt.
+  - id: P1.T2.S2
+    text: |-
+      Green: inspect fresh complete agent and tab rosters, prove positive absence across original pane/canonical name/item label, and validate existing branch workspace and one readable matching run. Reject unsafe truth before effects and recheck under scope/source ownership. Reuse live branch-PR gate and canonical herdr names; never invent descriptors or create another worktree.
+  - id: P1.T2.S3
+    text: |-
+      Refactor: share strict roster parsing and absence checks instead of trusting existing empty-on-malformed helpers; keep narrower ordinary replacement eligibility intact. Run new runner refusal tests and existing replacement observer tests.
+- number: 3
+  title: Allocation intent, single submission and repair (R5,R7)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Red: inject failures before/after allocation effect, lost/invalid allocation response, first descriptor save, batch attempt save, launch readiness, submission-started/uncertain, confirmed uptake, outcome save and activation. Assert pending discovery by original source/item, no repeated allocation/launch/prompt, truthful effective owner, and --repair sends no input.
+  - id: P1.T3.S2
+    text: |-
+      Green: persist server/source/item keyed durable recovery intent before external allocation; retain discoverable checkpoints and actual herdr ownership. Lock the new pane through launch and both-store activation. Discover uncertain allocation via fresh item-labelled roster and refuse ambiguous/unknown truth. Launch only after durable preparation and attempt audit. Require persisted uptake and matching observed session identity for successful repair; confirmed aborted failures need a new explicit recovery act.
+  - id: P1.T3.S3
+    text: |-
+      Refactor: reuse target launch/submission/reconciliation primitives and avoid a parallel initial-dispatch implementation. Run recovery crash/repair tests plus tests/unit/test_herdr_replacement.py and test_triage_replace_state.py; preserve pending target evidence, never blind-cleanup live panes.
+- number: 4
+  title: Autonomous OpenCode HOLD with gates intact (R4,R6)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Red: verify actual start argv has --auto and explicit provider/model; reject a target process without --auto or without observable session id. Test pending brainstorm, running unit, delivered cursor and current-conflict reconstruction all start acknowledge/report-only HOLD, with no cursor advance, holder abandonment, auto binding or prompt retry.
+  - id: P1.T4.S2
+    text: |-
+      Green: reuse opencode.launch_args and safe input readiness, observe fresh session id, persist recovery HOLD, and make managed reconstruction/restart honor HOLD before conflict/unfinished-run continuation. Brief names existing workspace/run and pending gates, prohibits mutations/answers, and requires separate operator release. No actual OpenCode session is launched in automated tests.
+  - id: P1.T4.S3
+    text: |-
+      Refactor: use one HOLD reconstruction policy; run targeted managed/restart/recovery tests, including delivered and running-unit cases. Confirm ordinary non-recovery restart/replacement behavior stays covered.
+- number: 5
+  title: Installed scenarios and operator walk documentation (R8)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Red: create tests/scenarios/triage-closed-recovery.sh using disposable local state/git/herdr/forge fixtures and register it in tests/integration/test_scenarios.py. Exercise installed CLI preview, recover, refusals and repair through a fake runner without network or real panes. Verify the live walk artifact includes an explicit operator gate before any fixture harness launch.
+  - id: P1.T5.S2
+    text: |-
+      Green: finish installed scenario and tests/scenarios/herdr-closed-recovery-live.sh as a safe operator-driven disposable walkthrough; all future OpenCode commands use --auto with provider/model. Document recovery preview/act/repair, exact scope/checkout, HOLD, separate release, failure checkpoints, post-merge Tester walk, and unsupported cases in docs/herdr-control-sessions.md, packages/fr-herdr/README.md and canonical fr-triage guidance; regenerate both OpenCode and Hermes mirrors if guidance changes.
+  - id: P1.T5.S3
+    text: |-
+      Refactor: remove duplicated guidance/helpers and verify import boundaries/schema/mirrors. Update automated acceptance rows to ci with named test refs through record/acceptance CLI; leave actual-client row walk-owed with verify live and concrete scenario, never claim a live pass. Record explainer applicability and keep #1216 outside scope.
+- number: 6
+  title: Committed-tree automated evidence and quality gates
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Run targeted recovery/replacement/managed/import tests, ruff format/check, mypy for touched packages, acceptance check/report consistency and scenario integration. Use fr isolation exec for tests/builds; full heavy suites use bash ~/.cache/fr/coord/testslot.sh -- <command>. Repair only in-scope failures, record unrelated ones for review.
+  - id: P1.T6.S2
+    text: |-
+      Commit final code and step record, then run the full pytest suite LAST on the committed-clean code tree through the coordinator test-slot wrapper into a host-visible log outside run.records. Use an appropriate Python supported by the workspace (the initial container Python 3.15 dependency build timed out); no host secrets or hardware access. Return record path, outcome, tests_log and <=5-line summary.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-10-14T20:13:05+00:00'
+      note: null
+  completion:
+    at: '2026-10-14T20:13:05+00:00'
+    note: null
+    observed_prs: []

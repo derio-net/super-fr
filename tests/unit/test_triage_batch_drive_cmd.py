@@ -3788,7 +3788,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "merge")
     assert line.startswith("merge b1: stopped: PR #101") and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 11
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 12
 
 
 @pytest.mark.parametrize("status", ["idle", "absent", "working"])

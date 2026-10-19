@@ -16,12 +16,13 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from fr.artifacts.atomic import write_text_atomic
 from fr.git import git_answer
 from fr.hostclient import client_for
+from fr.run.model import RunStateError, parse_run_state, validate_run_id
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 
@@ -46,9 +47,13 @@ class Descriptor(BaseModel):
     attempt: str | None = None
     old_harness: Literal["opencode", "claude"] | None = None
     old_model: str | None = None
+    recovery_hold: bool = False
+    source_pane: str | None = None
+    session: str | None = None
     checkpoint: Literal[
         "prepared",
         "source-exited",
+        "launch-started",
         "target-ready",
         "submission-started",
         "submission-uncertain",
@@ -157,11 +162,14 @@ def _git(d: Descriptor, *args: str) -> str:
 
 def branch_workspace(d: Descriptor) -> Path:
     where = None
+    matches = []
     for line in _git(d, "worktree", "list", "--porcelain").splitlines():
         if line.startswith("worktree "):
             where = Path(line.removeprefix("worktree "))
-        if line == f"branch refs/heads/{d.branch}" and where and where.is_dir():
-            return where
+        if line == f"branch refs/heads/{d.branch}" and where:
+            matches.append(where)
+    if len(matches) == 1 and matches[0].is_dir():
+        return matches[0]
     raise ManagedError(f"existing workspace for {d.branch} is unavailable; do not create another")
 
 
@@ -205,6 +213,20 @@ def pickup(d: Descriptor) -> str:
 
 
 def reconstruct(d: Descriptor) -> str:
+    if d.recovery_hold:
+        workspace, run = recovery_cursor(d)
+        return (
+            f"HOLD — acknowledge/report-only recovery of {d.item}.\n"
+            f"Existing workspace: {workspace}; branch: {d.branch}; run: {run['run']}; "
+            f"cursor: {run['cursor']}. Step/gate states: {run['steps']!r}.\n"
+            "Inspect cursor, committed and in-progress records, journal handoff and pending "
+            "operator gates read-only. Report dirty work without cleaning it. "
+            "Make NO mutations, answer NO questions/gates, abandon or redispatch NO units, "
+            "start NO new goal/worktree/run, and do NOT bind this session automatically. "
+            "Do not approve/ready/merge a PR or restart a driver. "
+            "Acknowledge/report and wait for a separate explicit operator go-ahead. "
+            "A managed restart begins in HOLD again; conflict/delivery state is not release.\n"
+        )
     if d.role == "closeout":
         return pickup(d)
     if d.conflict_head and d.conflict_brief and conflict_current(d):
@@ -242,6 +264,59 @@ def reconstruct(d: Descriptor) -> str:
         "Use fr's claim/abandoned reconciliation, preserving attempts and records; never "
         "dispatch the same running unit twice. Resume the actual unfinished cursor only."
     )
+
+
+def recovery_cursor(d: Descriptor) -> tuple[Path, dict[str, Any]]:
+    """A fresh absent-source operation requires one readable existing branch cursor."""
+    workspace = branch_workspace(d)
+    runs = []
+    try:
+        for path in sorted((workspace / "docs/superpowers/runs").glob("*.yaml")):
+            text = path.read_text()
+            data = yaml.safe_load(text)
+            if not isinstance(data, dict):
+                raise ManagedError(f"unreadable cursor {path}")
+            if data.get("branch") == d.branch:
+                # The supported parser owns cursor schema and step metadata validation.
+                # This is a read, never an artifact migration or a run-state write.
+                run = parse_run_state(text)
+                validate_run_id(run.run)
+                # Schema-readable is not enough for recovery: there must be a usable
+                # current step. Finished runs retain their last step's id, not a sentinel.
+                if (
+                    not run.cursor.strip()
+                    or run.cursor != run.cursor.strip()
+                    or not run.steps
+                    or run.cursor not in run.steps
+                ):
+                    raise ManagedError(f"unusable branch cursor: {path}")
+                if run.branch != d.branch:
+                    raise ManagedError(f"branch cursor identity mismatch: {path}")
+                runs.append(run.model_dump(mode="json"))
+    except (OSError, yaml.YAMLError, RunStateError) as exc:
+        raise ManagedError(f"unreadable branch cursor: {exc}") from exc
+    if len(runs) != 1:
+        raise ManagedError("missing or ambiguous branch cursor; do not create another")
+    return workspace, runs[0]
+
+
+def restart_admission(d: Descriptor) -> None:
+    """An active pane alone cannot certify the recovery's two-store activation."""
+    if not d.recovery_hold:
+        return
+    if not d.source_pane:
+        raise ManagedError("recovery intent source identity missing; repair owed")
+    # Runtime-only import: recovery owns intent storage and imports managed descriptors.
+    from fr_herdr.recovery import load_intent
+
+    intent = load_intent(d.item, d.source_pane)
+    if (
+        not intent
+        or intent.checkpoint != "active"
+        or not intent.target
+        or intent.target.pane != d.pane
+    ):
+        raise ManagedError("unresolved recovery intent; repair owed before restart")
 
 
 # The wave driver's two hand-back briefs (a batch PR's, an archive PR's), spelled
