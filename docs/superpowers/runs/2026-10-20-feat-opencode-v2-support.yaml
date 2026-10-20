@@ -3,7 +3,7 @@ run: 2026-10-20-feat-opencode-v2-support
 workflow: fr-goal@1
 branch: feat/opencode-v2-support
 started: '2026-10-20T05:10:23+00:00'
-cursor: plan
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -34,13 +34,17 @@ steps:
           findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16
           unobserved: reviewer
   plan:
-    state: running
-    at: '2026-10-20T05:35:48+00:00'
+    state: done
+    at: '2026-10-20T05:45:16+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-10-20-opencode-2-support
     units:
       step/plan:
         attempts:
         - dispatched: '2026-10-20T05:35:48+00:00'
           harness: opencode
+          returned: '2026-10-20T05:45:16+00:00'
+          outcome: done
   plan-review:
     state: pending
   implement:
