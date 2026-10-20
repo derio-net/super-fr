@@ -26,6 +26,7 @@ from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
 
 from tests.unit.opencode_fixture import opencode_env, shifted, with_copied_child, with_resumed_child
+from tests.unit.opencode_v2 import to_v2
 from tests.unit.test_run_cli import _invoke_as_harness, _invoke_measurable, _squash
 from tests.unit.test_run_evidence_separate_context import _later
 from tests.unit.transcript_sessions import (
@@ -151,6 +152,7 @@ def _set_return(db: Path, child: str, text: str) -> None:
                 )
                 con.execute("UPDATE part SET data=? WHERE id=?", (json.dumps(data), pid))
         con.commit()
+    to_v2(db)
 
 
 def _block(*lines: str) -> str:

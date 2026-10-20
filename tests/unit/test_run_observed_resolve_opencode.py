@@ -21,6 +21,7 @@ from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
 
 from tests.unit.opencode_fixture import DB, opencode_env, shifted, with_copied_child
+from tests.unit.opencode_v2 import to_v2
 from tests.unit.test_run_cli import (
     _GROUPED_SHAPE,
     _dispatch_of,
@@ -260,6 +261,7 @@ def _bash_part(db: Path, session: str, log: Path, start_ms: int, end_ms: int) ->
             ),
         )
         con.commit()
+    to_v2(db)
 
 
 def _phase_log_in(tmp_path: Path, writer: str | None):

@@ -59,6 +59,7 @@ NARRATION = _of("narration")
 _ALIASES: dict[str, str] = {
     # shell
     "bash": "Bash",
+    "shell": "Bash",
     "terminal": "Bash",
     "execute_code": "Bash",
     # reads
@@ -81,6 +82,7 @@ _ALIASES: dict[str, str] = {
     "list": "Glob",
     # orchestration
     "task": "Agent",
+    "subagent": "Agent",
     "Task": "Agent",
     "delegate_task": "Agent",
     "SendMessage": "Agent",

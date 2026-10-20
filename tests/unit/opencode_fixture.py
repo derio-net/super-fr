@@ -1,5 +1,7 @@
 """The committed OpenCode run-tree fixture (`tests/fixtures/usage/opencode/`,
-built by its `build.py`), and a copy of it moved in time.
+built by its `build.py`, in OpenCode 1.x's tables), carried into OpenCode 2's
+`session_v2`/`session_message` by `tests.unit.opencode_v2.to_v2` — `DB` is that
+2.x copy, `V1_DB` the 1.x original — and a copy of it moved in time.
 
 A resolve-level gate reads only what happened since its unit opened — "now",
 in a CLI test — while the fixture's clock is fixed. `shifted` copies the
@@ -15,10 +17,24 @@ import datetime as _dt
 import json
 import shutil
 import sqlite3
+import tempfile
 from contextlib import closing
 from pathlib import Path
 
-DB = Path(__file__).parents[1] / "fixtures" / "usage" / "opencode" / "opencode.db"
+from tests.unit.opencode_v2 import to_v2
+
+V1_DB = Path(__file__).parents[1] / "fixtures" / "usage" / "opencode" / "opencode.db"
+"""The committed 1.x-shaped fixture: what a 1.x store holds, and so what fr refuses."""
+
+
+def _v2_copy() -> Path:
+    db = Path(tempfile.mkdtemp(prefix="fr-opencode-v2-")) / "opencode.db"
+    shutil.copy(V1_DB, db)
+    return to_v2(db)
+
+
+DB = _v2_copy()
+"""`V1_DB` carried into OpenCode 2's tables, as OpenCode 2's migration does."""
 T0 = 1790328511802
 TR = T0 + 3_600_000
 """When the run tree (`ses_run` and its children) starts, epoch ms."""
@@ -28,7 +44,7 @@ def shifted(tmp_path: Path, starts_at: _dt.datetime) -> Path:
     """A copy of the fixture whose run tree starts at `starts_at`."""
     delta = int(starts_at.timestamp() * 1000) - TR
     db = tmp_path / "opencode-shifted.db"
-    shutil.copy(DB, db)
+    shutil.copy(V1_DB, db)
     with closing(sqlite3.connect(db)) as con:
         con.execute("UPDATE session SET time_created = time_created + ?", (delta,))
         con.execute(
@@ -49,7 +65,7 @@ def shifted(tmp_path: Path, starts_at: _dt.datetime) -> Path:
                 (json.dumps(data), delta, delta, part_id),
             )
         con.commit()
-    return db
+    return to_v2(db)
 
 
 def opencode_env(db: Path, session: str | None = "ses_run") -> dict[str, str | None]:
@@ -67,7 +83,7 @@ def with_copied_child(db: Path, source: str, new: str) -> Path:
     """`db` with a second child session `new`, dispatched exactly as `source`
     was (its `session` row and its dispatching `task` part, re-keyed). Edits
     the copy in place — pass a `shifted` copy, never `DB`."""
-    assert db != DB
+    assert db not in (DB, V1_DB)
     with closing(sqlite3.connect(db)) as con:
         (parent, directory, title, created) = con.execute(
             "SELECT parent_id, directory, title, time_created FROM session WHERE id = ?",
@@ -93,14 +109,14 @@ def with_copied_child(db: Path, source: str, new: str) -> Path:
                 (f"{part_id}_copy", message_id, session, t_created, t_updated, json.dumps(data)),
             )
         con.commit()
-    return db
+    return to_v2(db)
 
 
 def with_resumed_child(db: Path, source: str) -> Path:
     """`db` with `source`'s dispatching `task` part repeated a second later — the
     orchestrator sending the same child back (OpenCode resumes a task by
     session). Edits the copy in place — pass a `shifted` copy, never `DB`."""
-    assert db != DB
+    assert db not in (DB, V1_DB)
     with closing(sqlite3.connect(db)) as con:
         for part_id, message_id, session, t_created, t_updated, raw in con.execute(
             "SELECT id, message_id, session_id, time_created, time_updated, data FROM part"
@@ -121,4 +137,4 @@ def with_resumed_child(db: Path, source: str) -> Path:
                  json.dumps(data)),
             )  # fmt: skip
         con.commit()
-    return db
+    return to_v2(db)
