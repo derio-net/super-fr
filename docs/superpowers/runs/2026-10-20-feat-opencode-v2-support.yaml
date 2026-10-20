@@ -3,7 +3,7 @@ run: 2026-10-20-feat-opencode-v2-support
 workflow: fr-goal@1
 branch: feat/opencode-v2-support
 started: '2026-10-20T05:10:23+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -16,8 +16,8 @@ steps:
         evidence:
           unobserved: operator-gate
   spec-review:
-    state: running
-    at: '2026-10-20T05:29:57+00:00'
+    state: done
+    at: '2026-10-20T05:35:47+00:00'
     units:
       step/spec-review:
         attempts:
@@ -26,6 +26,13 @@ steps:
           harness: opencode
           tier: hard
           bound: github-copilot/claude-opus-5.5
+          returned: '2026-10-20T05:35:47+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ses_ea8361939ffejsV6ZUu4xcfvfY
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16
+          unobserved: reviewer
   plan:
     state: pending
   plan-review:
