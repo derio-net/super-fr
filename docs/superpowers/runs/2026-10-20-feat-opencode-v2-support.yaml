@@ -3,7 +3,7 @@ run: 2026-10-20-feat-opencode-v2-support
 workflow: fr-goal@1
 branch: feat/opencode-v2-support
 started: '2026-10-20T05:10:23+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-10-20T05:45:16+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-10-20T05:45:18+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
