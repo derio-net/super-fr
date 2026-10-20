@@ -14,12 +14,14 @@ store whether or not the plugin is installed, and the loud 1.x refusal is what
 keeps the V2-only choice honest. Parity, the matrix, the prose and the release
 fragment close the plan, because they must describe what actually shipped.
 
-Phase 1 carries the one genuinely unknown premise: V2's `ShellCreateBefore`
-carries no session id, so `FR_OPENCODE_SESSION_ID` is correlated from the tool
-call that produced the command. That correlation is measured in a real binary
-before anything depends on it, and the stated failure outcome is "export
-nothing and say so" — never a guess, because `deliver-tests-provenance` trusts
-the attribution.
+Phase 1 carries the one genuinely unknown premise: where V2's session id
+comes from. The plan measured it in a real binary before anything depended on
+it and found the answer was already there — OpenCode 2 sets
+`OPENCODE_SESSION_ID` on every command it spawns, naming the issuing session —
+so the designed correlation queue was built, measured redundant, and deleted
+in the same phase (spec R6/§C record the measurement). The stated failure
+outcome stays "export nothing and say so", never a guess, because
+`deliver-tests-provenance` trusts the attribution.
 
 Two engines decide the shell gate after phase 2 (the shipped bash script and
 the TypeScript port). They are held together by one verdict table captured from

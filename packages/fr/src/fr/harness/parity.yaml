@@ -459,15 +459,15 @@ surfaces:
 
   - id: run-session-identity
     kind: interaction
-    summary: Which session is "the run's" (spec 2026-10-02-opencode-observe-2 §B). `fr run start`/`advance` record the TOP-LEVEL session of the calling process, and every gate that reads a transcript or session store (`operator-gate`, `spec-review-independence`, `visual-evidence`, `deliver-tests-provenance`) reads that session — never a child's, even when a subagent runs the command. Claude Code names its session in the environment; OpenCode's super-fr plugin exports it into `bash` (`FR_OPENCODE_SESSION_ID`, via `shell.env`) and fr walks `parent_id` up to the root. Not a hook, so `fr harness parity` observes nothing for it and `session.ts` carries no parity marker.
+    summary: Which session is "the run's" (spec 2026-10-02-opencode-observe-2 §B). `fr run start`/`advance` record the TOP-LEVEL session of the calling process, and every gate that reads a transcript or session store (`operator-gate`, `spec-review-independence`, `visual-evidence`, `deliver-tests-provenance`) reads that session — never a child's, even when a subagent runs the command. Claude Code names its session in the environment; OpenCode 2 sets `OPENCODE_SESSION_ID` on every command it spawns (no plugin code), and fr walks `parent_id` up to the root. Not a hook, so `fr harness parity` observes nothing for it.
     harnesses:
       claude-code: {state: enforced}
       opencode:
         state: partial
         scope_note: >-
           verified in fixture tests, not yet live (tests/unit/test_run_observed_opencode.py,
-          test_run_observed_resolve_opencode.py); a plugin older than this
-          release exports no id, and the gates then read as unobserved or
+          test_run_observed_resolve_opencode.py); OpenCode 1.x exports no id fr
+          reads, and the gates then read as unobserved or
           fall back to the unscoped reading. Stays `partial` until the
           post-merge row `opencode-observe-take10-rerun` runs live
       hermes:

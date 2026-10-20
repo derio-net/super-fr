@@ -43,8 +43,10 @@ afterEach(() => {
 // The V2 handler takes one event, `{tool, sessionID, input}`, where `input` is
 // the tool's arguments. This adapter keeps every case below in the 1.x
 // `(input, {args})` spelling it was written in, so no assertion moved in the port.
-async function makeHook(directory: string, _worktree = directory) {
-  const { executeBefore } = await load({ directory });
+async function makeHook(location: string | { directory: string; projectDirectory?: string }) {
+  const { executeBefore } = await load(
+    typeof location === "string" ? { directory: location } : location
+  );
   return (input: { tool: string }, output: { args?: unknown } | undefined) =>
     executeBefore({ tool: input.tool, sessionID: "", input: output?.args });
 }
@@ -180,18 +182,32 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     await expect(hook({ tool: "future_writer" } as never, {} as never)).resolves.toBeUndefined();
   });
 
-  test("resolves a relative target against the session worktree", async () => {
+  test("resolves a relative target against the session's directory", async () => {
     const hook = await makeHook(repo);
     await expect(
       hook({ tool: "edit" } as never, { args: { filePath: "README.md" } } as never)
     ).rejects.toThrow(/fr-isolation/);
   });
 
-  test("resolves relative targets against OpenCode's directory, not worktree", async () => {
-    const hook = await makeHook(repo, "/");
-    await expect(
-      hook({ tool: "edit" } as never, { args: { filePath: "README.md" } } as never)
-    ).rejects.toThrow(/fr-isolation/);
+  test("resolves relative targets against OpenCode's directory, not the project", async () => {
+    // The V2 context replaced 1.x's `worktree || directory` with `location`;
+    // `location.project.directory` is the PROJECT root, which may sit above the
+    // workspace. The base is the session's own directory, so a relative target
+    // from elsewhere is outside any fr-enabled repo — while an absolute target
+    // in the project is still denied, so the base moved rather than the gate
+    // switching off.
+    const elsewhere = mkdtempSync(join(tmpdir(), "fr-opencode-elsewhere-"));
+    try {
+      const hook = await makeHook({ directory: elsewhere, projectDirectory: repo });
+      await expect(
+        hook({ tool: "edit" } as never, { args: { filePath: "README.md" } } as never)
+      ).resolves.toBeUndefined();
+      await expect(
+        hook({ tool: "edit" } as never, { args: { filePath: join(repo, "README.md") } } as never)
+      ).rejects.toThrow(/fr-isolation/);
+    } finally {
+      rmSync(elsewhere, { recursive: true, force: true });
+    }
   });
 
   test("normalizes nonexistent path segments before checking the marker", async () => {

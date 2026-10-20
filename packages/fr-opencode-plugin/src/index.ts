@@ -48,7 +48,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { createClaimHandler, sharedClaimed } from "./claim";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
-import { createPinHandler } from "./pin";
+import { createPinHandler, type ShellCreateEvent } from "./pin";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. The shell tool (`shell` in OpenCode 2,
@@ -137,7 +137,10 @@ function normalizeTarget(directory: string, target: string): string {
   throw new Error("fr-isolation: target symlink chain exceeds 40 hops");
 }
 
-type GateEvent = ToolBeforeEvent & { tool?: unknown; input?: unknown };
+// The event is NOT annotated here with a hand-copied OpenCode type: the call
+// site passes the real `execute.before` event, so a renamed field is a compile
+// error there (the gate's one assumption is that the tool name is `tool`).
+type GateEvent = { tool: string; input?: unknown };
 
 /** The edit gate: throws to reject the call, which OpenCode 2 allows from
  * `execute.before` alone. */

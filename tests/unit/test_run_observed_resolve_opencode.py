@@ -195,19 +195,21 @@ def test_every_agent_type_comparison_folds_the_opencode_tier() -> None:
 # --- p1-r5: the unobservable wording names what is missing -----------------
 
 
-def test_why_unobservable_on_opencode_names_the_missing_export(monkeypatch) -> None:
+def test_why_unobservable_on_opencode_names_the_missing_session_id(monkeypatch) -> None:
     from fr.commands.run_cmd import _why_unobservable
 
     monkeypatch.setenv("FR_HARNESS", "opencode")
     why = _why_unobservable("questions")
-    assert "FR_OPENCODE_SESSION_ID" in why
-    assert "super-fr OpenCode plugin" in why
+    # OpenCode 2 sets OPENCODE_SESSION_ID itself (2026-10-20 review p1-r2), so
+    # the wording names that variable and never a plugin export that is gone.
+    assert "OPENCODE_SESSION_ID is unset" in why
+    assert "super-fr OpenCode plugin" not in why
     assert "no transcript reader" not in why
     monkeypatch.setenv("FR_HARNESS", "hermes")
     assert "hermes" in _why_unobservable("questions")
 
 
-def test_an_unexported_session_warns_with_the_plugin_wording(tmp_path: Path) -> None:
+def test_an_unexported_session_warns_with_the_session_id_wording(tmp_path: Path) -> None:
     repo, shipped, opened = _at_the_spec_review(tmp_path, shape=_AGENT_SPEC_SHAPE)
     db = _shifted_to(tmp_path, opened)
     _spec_journal(repo, _REVIEW)
@@ -220,7 +222,7 @@ def test_an_unexported_session_warns_with_the_plugin_wording(tmp_path: Path) -> 
     )
 
     assert result.exit_code == 0, result.output
-    assert "super-fr OpenCode plugin" in _squash(result.stderr)
+    assert "OPENCODE_SESSION_ID is unset" in _squash(result.stderr)
 
 
 # --- the phase `tests=` witness on OpenCode (spec §A, Test Plan 5a) ----------

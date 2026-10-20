@@ -137,6 +137,11 @@ jobs:
       - name: Install dependencies
         working-directory: packages/fr-opencode-plugin
         run: bun install --frozen-lockfile
+      # `bun test` transpiles and never typechecks, so a hook event read through
+      # the wrong field name would ship green (found reviewing the V2 port).
+      - name: Typecheck the plugin
+        working-directory: packages/fr-opencode-plugin
+        run: bunx tsc --noEmit
       - name: Run OpenCode plugin tests
         working-directory: packages/fr-opencode-plugin
         run: bun test

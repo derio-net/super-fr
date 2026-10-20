@@ -189,6 +189,11 @@ def test_current_session_reads_the_key_its_harness_owns() -> None:
     assert current_session({"FR_HARNESS": "opencode", "CLAUDE_CODE_SESSION_ID": "x"}) is None
     assert current_session({"FR_HARNESS": "hermes", **both}) is None
     assert current_session({"FR_HARNESS": "not-a-harness", **both}) is None
+    # OpenCode 2 sets its own key on every command it spawns (measured on
+    # 2.0.32), so no plugin export is needed; the FR_ override still wins.
+    native = {"FR_HARNESS": "opencode", "OPENCODE_SESSION_ID": "ses_native"}
+    assert current_session(native) == "ses_native"
+    assert current_session({**native, **both}) == "ses_run"
 
 
 # --- review p1-r2 / p1-r4 ---------------------------------------------------

@@ -84,17 +84,23 @@ is exactly what this module needs — the orchestrator's file is where the
 dispatch tool_use ids live. Claude Code's entry of `SESSION_ID_ENVS`, kept
 under its old name for importers."""
 
-OPENCODE_SESSION_ID_ENV = "FR_OPENCODE_SESSION_ID"
-"""Exported into every OpenCode `bash` call by the super-fr OpenCode plugin's
-`shell.env` hook (spec 2026-10-02-opencode-observe-2 §B): the id of the session
-that issued the command — a CHILD's id when a subagent runs it."""
+OPENCODE_NATIVE_SESSION_ID_ENV = "OPENCODE_SESSION_ID"
+"""Set by OpenCode 2 itself on every command it spawns (measured on 2.0.32,
+2026-10-20): the id of the session that ISSUED the command — a CHILD's id when
+a subagent runs it. The only source fr needs; the plugin exports nothing."""
 
-SESSION_ID_ENVS: Mapping[str, str] = {
-    "claude-code": SESSION_ID_ENV,
-    "opencode": OPENCODE_SESSION_ID_ENV,
+OPENCODE_SESSION_ID_ENV = "FR_OPENCODE_SESSION_ID"
+"""The FR_ override, honored first where a wrapper sets it. OpenCode 1.x's
+plugin exported it (spec 2026-10-02-opencode-observe-2 §B); 2.x does not, and
+does not need to."""
+
+SESSION_ID_ENVS: Mapping[str, tuple[str, ...]] = {
+    "claude-code": (SESSION_ID_ENV,),
+    "opencode": (OPENCODE_SESSION_ID_ENV, OPENCODE_NATIVE_SESSION_ID_ENV),
 }
-"""The key each harness's session id arrives under, by `detect_harness` key.
-A harness absent here has no session fr can learn."""
+"""The keys each harness's session id arrives under, by `detect_harness` key,
+in the order they are read. A harness absent here has no session fr can
+learn."""
 
 
 # --- 1. reading: a path in, numbers out ----------------------------------
@@ -439,8 +445,19 @@ def current_session(env: Mapping[str, str]) -> str | None:
 def _session_under(env: Mapping[str, str], harness: str | None) -> str | None:
     """`current_session` for an already-detected `harness` — detection may run
     `ps`, so `run_session` does it once (review p1-r2)."""
-    key = SESSION_ID_ENV if harness is None else SESSION_ID_ENVS.get(harness)
-    return (env.get(key) or None) if key else None
+    found = session_id_from(env, harness)
+    return None if found is None else found[0]
+
+
+def session_id_from(env: Mapping[str, str], harness: str | None) -> tuple[str, str] | None:
+    """The session id `env` carries for `harness`, and the KEY that carried it —
+    one rule for reading and for saying which variable was missing."""
+    keys = (SESSION_ID_ENV,) if harness is None else SESSION_ID_ENVS.get(harness, ())
+    for key in keys:
+        value = env.get(key)
+        if value:
+            return value, key
+    return None
 
 
 def run_session(env: Mapping[str, str]) -> str | None:

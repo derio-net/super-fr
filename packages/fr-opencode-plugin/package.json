@@ -7,7 +7,8 @@
   "types": "src/index.ts",
   "license": "MIT",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@opencode/plugin": "*"

@@ -1435,7 +1435,7 @@ def _gate_provenance(
         )
         raise typer.Exit(2)
     # Wherever the gate cannot observe — no harness, an unreadable Claude Code
-    # transcript, OpenCode without a session export (FR_OPENCODE_SESSION_ID)
+    # transcript, OpenCode without a session id (OPENCODE_SESSION_ID),
     # or with an unreadable store, or Hermes, which has no question reader —
     # it says so on the record (§5.B.7, p2-r28); `advance` already printed the
     # degradation notice there, which is no reason to be quiet now.

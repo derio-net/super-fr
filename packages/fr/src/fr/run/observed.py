@@ -725,18 +725,23 @@ def why_unobservable(harness: str | None, env: Mapping[str, str], what: str) -> 
         return "no harness detected"
     if harness == "opencode":
         # OpenCode HAS a reader (above); what is missing is the session to
-        # read, or the database that holds it (#837 review p1-r5).
-        if not env.get("FR_OPENCODE_SESSION_ID"):
+        # read, or the database that holds it (#837 review p1-r5). The wording
+        # names the variable fr actually read (`OPENCODE_SESSION_ID`, which
+        # OpenCode 2 sets itself) — never a plugin export that no longer exists
+        # (2026-10-20 review p1-r2).
+        from fr.run.telemetry import session_id_from
+
+        found = session_id_from(env, harness)
+        if found is None:
             return (
                 f"your harness (opencode) exported no session id to fr, so its {what} "
-                "cannot be read (FR_OPENCODE_SESSION_ID is unset: the super-fr OpenCode "
-                "plugin is missing or older than this release)"
+                "cannot be read (OPENCODE_SESSION_ID is unset: fr is not running inside an "
+                "OpenCode 2.x shell — super-fr supports 2.0 only)"
             )
         return (
-            "the session your harness (opencode) exported (FR_OPENCODE_SESSION_ID) is not "
-            f"in the OpenCode database fr read, or that database could not be read, so its "
-            f"{what} cannot be read — check FR_OPENCODE_DB / XDG_DATA_HOME; the super-fr "
-            "OpenCode plugin exports the id"
+            f"the session your harness (opencode) exported ({found[1]}) is not in the "
+            f"OpenCode database fr read, or that database could not be read, so its {what} "
+            "cannot be read — check FR_OPENCODE_DB / XDG_DATA_HOME"
         )
     if harness != "claude-code":
         return f"fr has no transcript reader for {harness}'s {what}"

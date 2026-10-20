@@ -340,8 +340,8 @@ the **Tester** gate with an explicit refusal expectation:
 1. An `edit` into an fr-enabled base clone is refused.
 2. A `shell` command from the base clone during an active pipeline is denied,
    and `git status` from the worktree is not.
-3. `FR_OPENCODE_SESSION_ID` reaches the command and `fr run status` names the
-   right session.
+3. `OPENCODE_SESSION_ID` reaches the command, and `fr run status` names the
+   top-level session, not a child's.
 4. The idle nudge is actually submitted.
 5. The status line renders the fr segment.
 
@@ -354,7 +354,7 @@ OpenCode 2.0.x and a fresh config dir:
    base clone; expect the plugin's refusal and no file change.
 2. From the workspace, run `git status` (allowed) and then a base-clone write
    through `shell` during an active pipeline (denied, with the escape list).
-3. In the same session run `fr run status` and confirm `FR_OPENCODE_SESSION_ID`
+3. In the same session run `fr run status` and confirm `OPENCODE_SESSION_ID`
    resolved to the top-level session, not a child's.
 4. Let a run sit advanceable and confirm one idle nudge is submitted, with no
    second nudge at the same `position`.

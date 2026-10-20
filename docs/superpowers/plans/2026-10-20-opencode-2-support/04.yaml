@@ -51,9 +51,10 @@ tasks:
       dispatch tool name in one alias table; keep the historical V1 names readable.
   - id: P4.T2.S3
     text: |-
-      Green: route `why_unobservable` through the probe and name the session-id correlation miss
-      as a cause of an unset `FR_OPENCODE_SESSION_ID` (R6). Test both the gate path and the
-      wording.
+      Green: route `why_unobservable` through the probe so a 1.x store and an absent session
+      id each get their own wording (R6's refusal names 1.x by version). Test both the gate
+      path and the wording. The variable the wording names is `OPENCODE_SESSION_ID`; reading
+      it landed early, in phase 1 (2026-10-20 review p1-r2).
 - number: 3
   title: Usage, and the scenario that proves both
   steps:

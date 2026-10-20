@@ -6,6 +6,9 @@ export type Hook = (event: never) => Promise<void> | void;
 
 export type FakeOptions = {
   directory?: string;
+  /** `location.project.directory` — the PROJECT root, which the gate must not
+   * use as its base (a workspace can sit inside a project). */
+  projectDirectory?: string;
   session?: unknown;
   /** Events `ctx.event.subscribe` yields, in order. */
   events?: unknown[];
@@ -23,7 +26,10 @@ export function fakeCtx(options: FakeOptions = {}) {
   /** Resolves once the plugin has consumed (and handled) every scripted event. */
   const drained = new Promise<void>((resolve) => (markDrained = resolve));
   const ctx = {
-    location: { directory: options.directory ?? "/nonexistent" },
+    location: {
+      directory: options.directory ?? "/nonexistent",
+      project: { id: "prj", directory: options.projectDirectory ?? "/nonexistent", canonical: "/nonexistent" },
+    },
     session: options.session ?? {},
     tool: { hook: register("tool") },
     shell: { hook: register("shell") },
