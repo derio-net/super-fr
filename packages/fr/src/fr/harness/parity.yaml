@@ -483,7 +483,7 @@ surfaces:
       claude-code: {state: enforced}
       opencode:
         state: partial
-        scope_note: fr-statusline-segment.sh is harness-neutral (stdin or --cwd) and callable today; no renderer/registration ships for OpenCode
+        scope_note: fr-opencode-plugin ships a TUI entry (tui/index.tsx, slots prompt.footer.status and home.footer.status) rendering fr-statusline-segment.sh --cwd <session dir>, and install.sh lists the plugin directory in cli.json; render is proven by a live TUI test, the post-merge walks are still owed
       hermes:
         state: partial
         scope_note: same segment script callable; no renderer/registration ships for Hermes

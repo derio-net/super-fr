@@ -10,7 +10,7 @@ phase:
   - opencode-2-status-line
   tier: hard
   files:
-  - packages/fr-opencode-plugin/tui/**
+  - packages/fr-opencode-plugin/src/tui/**
   - packages/fr-opencode-plugin/test/**
   - packages/fr/src/fr/harness/**
   - scripts/deliver-opencode-plugin.sh
@@ -60,10 +60,14 @@ tasks:
       asserting the delivered file set, and that the file the server loads never imports the TUI.
   - id: P3.T3.S2
     text: |-
-      `scripts/install.sh` appends the TUI entry's path to `cli.json`'s `plugins` list: create the
-      file when absent, refuse (with the file named) rather than overwrite unparsable content,
-      be idempotent by exact path on reinstall, and remove only its own entry on uninstall. Tests
-      beside `tests/unit/test_opencode_plugin_delivery.py` cover all four.
+      `scripts/install.sh` (via `deliver-opencode-plugin.sh`) lists the plugin DIRECTORY's absolute
+      path in `cli.json`'s `plugins` list — the directory, never the TUI entry's file path, which
+      opencode 2.1.0 silently ignores (plan journal `p3-tui-spike` item 1; decision
+      `p3-cli-json-lists-the-directory`). Validate `cli.json` FIRST and refuse (with the file named)
+      unparsable content before any byte moves; create the file when absent; on reinstall drop
+      every exact copy of the entry, then append one (spec §E); remove only its own entry on
+      uninstall, even when the plugins directory is already gone; keep a symlinked `cli.json` a
+      symlink and its mode. Tests in `tests/unit/test_opencode_plugin_delivery.py` cover all of it.
   - id: P3.T3.S3
     text: |-
       `fr.harness.observe` gains a config probe for the status-line row (the entry is listed AND
