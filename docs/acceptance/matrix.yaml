@@ -4024,7 +4024,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R8
     levels: {}
     status: not-implemented
-    notes: Born at spec review (2026-10-20).
+    notes: 'Scenario named at spec review: the delivered plugin''s handlers are driven
+      with a fake context inside the candidate walk.'
+    scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-nag
     capability: OpenCode adaptation
     acceptance: An OpenCode 2.x session in a repo with an acceptance matrix receives
