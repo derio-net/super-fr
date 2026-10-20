@@ -209,4 +209,4 @@ resolves:
       Out of scope for phase 4. Tracked by derio-net/super-fr#1225, the issue being filed for it; if the filed number
       differs the orchestrator corrects it here.
 evidence:
-  tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p4-full-suite.log
+  tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p4-review-full-suite.log
