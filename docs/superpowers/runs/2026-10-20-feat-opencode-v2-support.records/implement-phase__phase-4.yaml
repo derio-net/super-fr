@@ -1,0 +1,109 @@
+schema_version: 10
+run: 2026-10-20-feat-opencode-v2-support
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T2.S1, P4.T2.S2, P4.T2.S3, P4.T3.S1, P4.T3.S2, P4.T3.S3]
+refactor:
+  P4.T1: "The fixture builder and its pinning test are new and single-purpose; the one candidate for sharing (the 1.x builder in tests/fixtures/usage/opencode/) must stay untouched as the 1.x refusal evidence, so there was nothing to merge."
+  P4.T2: "The adapter was extracted before the reader moved (P4.T3.S3 done first, deliberately): observed.py's ToolPart/tool_part/_final_text JSON handling went into fr.run.opencode_store, leaving observed with queries by name only; nothing further to clean in the observed reader."
+journal:
+  - kind: discovery
+    id: p4-store-shape-measured
+    phase: 4
+    title: "OpenCode 2.1.0 store measured from a read-only copy: session_v2/session_message shape, and where it differs from spec §C"
+    body: |
+      Measured 2026-10-20 on a read-only COPY of a live OpenCode 2.1.0 opencode.db (copy deleted after; no identity recorded).
+      Tables: session_v2 (id, project_id, parent_id, slug, directory, title, version, cost, tokens_*, agent, model,
+      time_created/updated/…, plus 2.x-only fork_session_id, fork_boundary, time_suspended, resume_attempts, time_idle,
+      time_viewed, idle_outcome); session_message (id, session_id, type, seq, time_created, time_updated, data; unique
+      (session_id, seq), seq not contiguous). Legacy session/message/part keep their 1.x DDL.
+      Differences from spec §C/§D, all coded to the measurement:
+      1. The role is the ROW's `type` column (assistant|user|system|synthetic|compaction|idle), not data.role.
+      2. A tool item carries its times on the ITEM, not in state: {type:"tool", id, name, time:{created, ran?, completed?},
+         state:{status, input, metadata, content:[{type:"text", text}], error?}, executed?}. `time.ran` is present only
+         when the call ran. fr reads began = time.ran, else time.created, else the message's; ended = time.completed.
+      3. Output is state.content[].text; shell/bash exit is state.metadata.exit (as §C). Migrated bash items also keep
+         metadata.output.
+      4. 2.x dispatch is `subagent`: metadata {sessionID (capital ID), status}, input {agent, description, prompt,
+         sessionID?}; there is NO parentSessionId — the parent is the session whose message carries the item.
+         Migrated 1.x `task` items keep metadata {sessionId, parentSessionId}, input.subagent_type. Both are read.
+      5. data.cost is sometimes an integer (0); data.model is {id, providerID, variant}; data.time is {created, completed?}.
+      6. skill input is {name} in most rows; {id} also occurs (p2-v2-tool-inputs saw only {id}).
+      7. Context says the legacy tables "receive nothing" and part has 0 rows: on this store the legacy tables still HOLD
+         the historical 1.x rows (every one also present in session_v2) — frozen, not empty. Only new 2.x sessions are
+         absent from them. v1-only (a legacy row with no session_v2 row) did not occur on this store, which is why the
+         fixture builds it.
+      8. Migrated history in session_message keeps 1.x tool names (bash, task) alongside 2.x ones (shell, subagent).
+  - kind: decision
+    id: p4-one-adapter-and-alias-table
+    phase: 4
+    title: "fr.run.opencode_store is the one adapter; TOOL_ALIASES (bash->shell, task->subagent) is the one alias list"
+    body: |
+      packages/fr/src/fr/run/opencode_store.py holds store_version (the R14 probe), open_ro/query, the SQL for every
+      query site (session probe, children, root walk, per-session messages, top-level messages + activity probe since a
+      time, the usage tree), StoredMessage/ToolItem and the dispatch accessors. fr.run.observed and
+      fr.usage.readers.opencode import it (open_ro is re-exported for the hermes reader). Readers compare against
+      canonical 2.x names; the usage classifier gained `shell`->Bash and `subagent`->Agent beside its existing
+      multi-harness names. test_usage_opencode_store_agreement.py proves both readers see the same tool calls, the
+      same child and the same 1.x reason on the fixture.
+  - kind: decision
+    id: p4-probe-answers-and-wording
+    phase: 4
+    title: "The four probe answers and how each is worded"
+    body: |
+      store_version(db, sid): unreadable = open/query fails, or the file has neither session_v2 nor session;
+      v2 = a session_v2 row; v1-only = no session_v2 row but a legacy session row (also when session_v2 is missing,
+      i.e. a 1.x store — reported per session, never as a preflight); absent = neither.
+      observed_session returns None for absent and v1-only (unreadable keeps a view whose methods are all None).
+      why_unobservable (after walking the root): v1-only -> "...cannot have its <what> read: it is an OpenCode 1.x session
+      (present only in the legacy `session` table) — upgrade opencode; super-fr supports 2.0 only" (no FR_OPENCODE_DB);
+      unreadable -> names the database path that could not be read + check FR_OPENCODE_DB / XDG_DATA_HOME;
+      absent -> today's "not in the OpenCode database fr read … check FR_OPENCODE_DB / XDG_DATA_HOME";
+      no session id -> phase 1's OPENCODE_SESSION_ID wording, unchanged. The usage reader maps v1-only to
+      unavailable("session <id>: " + the same reason). The probe test is
+      tests/unit/test_run_observed_opencode_v2.py::test_a_session_is_probed_as_v2_v1_only_absent_or_unreadable.
+  - kind: decision
+    id: p4-v1-test-stores-folded-to-v2
+    phase: 4
+    title: "Existing 1.x-shaped test stores are folded into 2.x tables by tests/unit/opencode_v2.to_v2; the 1.x files are untouched"
+    body: |
+      ~10 test modules built or mutated 1.x session/message/part rows. Rather than rewrite each, tests/unit/opencode_v2.py
+      folds a 1.x store into session_v2/session_message the way the measured migration did (parts into data.content[],
+      1.x tool names kept, part state.time.start/end -> item time.created/ran/completed, output -> state.content[].text,
+      message role -> row type, modelID/providerID -> data.model). opencode_fixture.DB is now that 2.x copy (V1_DB the
+      original); shifted/with_copied_child/with_resumed_child and the in-test mutations re-fold after editing. Their
+      assertions are unchanged except the usage tool name `bash` -> `shell` (the alias). This fold is a construction,
+      not a capture: it encodes the measured migration, and two-sessions.db (built to the captured DDL) is the
+      independent pin. tests/fixtures/usage/opencode/ and its builder are untouched and now prove the 1.x refusal
+      (test_opencode_1x_only_session_is_unavailable_naming_1x_and_the_upgrade).
+  - kind: discovery
+    id: p4-scenario-output
+    phase: 4
+    title: "tests/scenarios/opencode-store-v2.sh passes against the candidate install"
+    body: |
+      Candidate-installed fr, HOME in a temp dir, store = a copy of two-sessions.db: `fr usage collect` reports
+      "collected 2 session(s), 1 unavailable"; `fr usage report` shows ses_v2demo at $0.01 exact on example-model and
+      ses_v1only `—` with the 1.x/upgrade note; `fr run advance` on an operator gate prints no notice for the 2.x session
+      and the R14 wording (not FR_OPENCODE_DB) for the 1.x one; `fr run status` reads the cursor. Registered in
+      tests/integration/test_scenarios.py (test_opencode_store_v2 + the every-script list); that module: 50 passed.
+  - kind: discovery
+    id: p4-full-suite-first-run
+    phase: 4
+    title: "The first full suite found three cost-table tests still reading the 1.x fixture for data; fixed before the evidence run"
+    body: |
+      tests/unit/test_run_cost_cmd.py pointed FR_OPENCODE_DB at tests/fixtures/usage/opencode/opencode.db (1.x) and
+      expected figures; now refused as 1.x, they failed (3 failed, 13043 passed). Pointed at opencode_fixture.DB (the
+      2.x fold), commit b40821dba; the evidence run is 13046 passed, 108 skipped, exit=0.
+  - kind: finding
+    id: p4-compaction-tokens-uncounted
+    phase: 4
+    state: open
+    review_scope: out
+    title: "OpenCode 2 `compaction` messages carry tokens (cost 0) that the usage reader does not count"
+    body: |
+      Measured: every compaction row has data.tokens and data.cost 0 (none priced). The usage reader counts only
+      type == "assistant" rows, as the 1.x reader counted only role == "assistant". Dollars are unaffected (cost 0);
+      token totals undercount compaction work. Not in R13's field list; left as is.
+evidence:
+  tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p4-full-suite.log
