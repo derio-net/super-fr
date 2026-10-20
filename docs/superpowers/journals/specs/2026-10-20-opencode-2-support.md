@@ -342,3 +342,8 @@ Phase 1's restore does not contain them. Two decision engines must agree on whol
 ### phase-split-2026-10-20-opencode-2-support-p3 · decision · risk-first: the TUI delivery mechanism is the one unproven mechanism in the port
 
 The status line may not be deliverable without consumer-side peer packages. Proving or falling back before the readers keeps the risk early, when the fallback can still shape the parity decision.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p4 created=2026-10-20T05:43:54+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p4 · decision · ask: reading OpenCode 2's store is independent of the plugin
+
+fr must read the 2.0 store whether or not the plugin is installed, and the loud 1.x refusal is its own contract. No other phase can serve it.
