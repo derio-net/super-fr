@@ -10,10 +10,10 @@
     "test": "bun test"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": "*"
+    "@opencode/plugin": "*"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.17.0",
+    "@opencode/plugin": "2.0.32",
     "@types/bun": "latest",
     "typescript": "^5.5.0"
   }

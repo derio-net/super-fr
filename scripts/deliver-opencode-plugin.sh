@@ -45,7 +45,7 @@ case "$action" in
 // Re-running it overwrites this file and ./fr-opencode-plugin/; do not edit.
 // OpenCode loads only top-level modules here, so this loader is the plugin
 // and the sources beside it are its imports (gh#563).
-export { FrIsolationRequired as default } from "./fr-opencode-plugin/index";
+export { default } from "./fr-opencode-plugin/index";
 EOF
     ;;
   uninstall)

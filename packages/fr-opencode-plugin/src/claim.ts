@@ -25,10 +25,15 @@
 //     `--open-unit`, or hanging are all silence. A claim is attribution; the
 //     open record already refuses a second dispatch without it.
 //
+// OpenCode 2 (V2 plugin API): the hook is `ctx.tool.hook("execute.before")`,
+// whose event carries `sessionID`, and the lookup is `ctx.session.get({sessionID})`,
+// which resolves to the session info itself (`parentID`, `agent`, `model`) and
+// throws on a failed lookup.
+//
 // NOT PROVEN: that this runs, in a live OpenCode session, before the child's
-// first tool executes. The session shape (`parentID`, `agent`, `model` on
-// `GET /session/{id}`) was read off a live OpenCode 1.18 server; the handler
-// itself is driven by a fake client in the tests. Until a live run shows the
+// first tool executes. The session shape was read off `@opencode/client`
+// 2.0.32's `SessionInfo`; the handler itself is driven by a fake session API in
+// the tests. Until a live run shows the
 // claim landing (the gh#494 standard), `parity.yaml` keeps
 // `dispatch-holder-identity` `partial` on OpenCode.
 import { execFile } from "node:child_process";
@@ -39,7 +44,8 @@ export type ClaimAnswer = { code: number | null };
 export const SHARED_CLAIMED = Symbol.for("super-fr.fr-opencode-plugin.claim.claimed");
 
 export type ClaimHandlerOptions = {
-  client: unknown;
+  /** `ctx.session` — only its `get({sessionID})` is used. */
+  session: unknown;
   directory: string;
   /** Test seam. Default: `fr <args>` in `cwd`. */
   runFr?: (cwd: string, args: string[]) => Promise<ClaimAnswer>;
@@ -74,15 +80,12 @@ type Child = { agent: string; model?: string };
 
 /** The child's agent and model — or undefined for a top-level session, a
  * failed lookup, or one that names no agent. */
-async function childOf(client: unknown, id: string, directory: string): Promise<Child | undefined> {
-  const get = (client as { session?: { get?: unknown } } | null | undefined)?.session?.get;
+async function childOf(session: unknown, id: string): Promise<Child | undefined> {
+  const get = (session as { get?: unknown } | null | undefined)?.get;
   if (typeof get !== "function") return undefined;
-  const response = (await get.call((client as { session: unknown }).session, {
-    path: { id },
-    query: { directory },
-  })) as { data?: Record<string, unknown> | null; error?: unknown } | null | undefined;
-  const data = response && !response.error ? response.data : undefined;
-  if (!data || typeof data.parentID !== "string" || data.parentID === "") return undefined;
+  const data = (await get.call(session, { sessionID: id })) as Record<string, unknown> | null | undefined;
+  if (!data || typeof data !== "object") return undefined;
+  if (typeof data.parentID !== "string" || data.parentID === "") return undefined;
   if (typeof data.agent !== "string" || data.agent === "") return undefined;
   const model = data.model as { providerID?: unknown; id?: unknown } | undefined;
   const named =
@@ -103,7 +106,7 @@ export function createClaimHandler(options: ClaimHandlerOptions) {
       if (claimed.has(sessionID)) return;
       claimed.add(sessionID);
 
-      const child = await childOf(options.client, sessionID, options.directory);
+      const child = await childOf(options.session, sessionID);
       if (!child) return;
 
       const args = ["run", "claim", "--open-unit", "--agent", sessionID, "--agent-type", child.agent];

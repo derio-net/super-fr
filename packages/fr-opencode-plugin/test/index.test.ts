@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { execFileSync } from "node:child_process";
 
-import { FrIsolationRequired } from "../src/index";
+import { load } from "./fake";
 
 function sh(cmd: string, args: string[], cwd: string): void {
   execFileSync(cmd, args, { cwd, stdio: "pipe" });
@@ -40,15 +40,13 @@ afterEach(() => {
   rmSync(repo, { recursive: true, force: true });
 });
 
-async function makeHook(directory: string, worktree = directory) {
-  const plugin = await FrIsolationRequired({
-    project: undefined as never,
-    client: undefined as never,
-    $: undefined as never,
-    directory,
-    worktree,
-  });
-  return plugin["tool.execute.before"]!;
+// The V2 handler takes one event, `{tool, sessionID, input}`, where `input` is
+// the tool's arguments. This adapter keeps every case below in the 1.x
+// `(input, {args})` spelling it was written in, so no assertion moved in the port.
+async function makeHook(directory: string, _worktree = directory) {
+  const { executeBefore } = await load({ directory });
+  return (input: { tool: string }, output: { args?: unknown } | undefined) =>
+    executeBefore({ tool: input.tool, sessionID: "", input: output?.args });
 }
 
 describe("fr-isolation-required (OpenCode plugin)", () => {
@@ -293,6 +291,19 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     await expect(
       hook({ tool: "bash" } as never, { args: { filePath: target } } as never)
     ).resolves.toBeUndefined();
+  });
+
+  test("keeps OpenCode 2's `shell` tool ungated, as `bash` was", async () => {
+    const hook = await makeHook(repo);
+    const target = join(repo, "README.md");
+    await expect(
+      hook({ tool: "shell" } as never, { args: { filePath: target } } as never)
+    ).resolves.toBeUndefined();
+  });
+
+  test("a call that names no tool is inspected, not waved through", async () => {
+    const { executeBefore } = await load({ directory: repo });
+    await expect(executeBefore({ input: { filePath: join(repo, "README.md") } })).rejects.toThrow(/fr-isolation/);
   });
 
   test("lets the host-side `cd <worktree> && fr run …` form through", async () => {

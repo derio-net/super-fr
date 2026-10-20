@@ -39,7 +39,8 @@ def test_install_writes_a_top_level_loader_and_every_source(tmp_path: Path) -> N
     loader = plugins / "fr-opencode-plugin.ts"
     assert loader.is_file(), "the loader must sit at the TOP level — OpenCode scans nothing deeper"
     assert 'from "./fr-opencode-plugin/index"' in loader.read_text()
-    assert "export {" in loader.read_text() and "as default" in loader.read_text()
+    # OpenCode 2 loads only a default plugin definition (spec 2026-10-20 R1).
+    assert 'export { default } from "./fr-opencode-plugin/index";' in loader.read_text()
 
     sources = sorted(p.name for p in PLUGIN_SRC.glob("*.ts"))
     assert sources, "no plugin sources found — did packages/fr-opencode-plugin/src move?"

@@ -142,10 +142,10 @@ jobs:
         run: bun test
       # gh#563: the plugin install.sh DELIVERS must be one the real OpenCode
       # binary loads and runs. Pinned to the version the probe was written
-      # against; FR_REQUIRE_OPENCODE=1 turns a missing binary into a failure,
+      # against (OpenCode 2 ships as `@opencode/cli`; `opencode-ai` stops at 1.x); FR_REQUIRE_OPENCODE=1 turns a missing binary into a failure,
       # so the probe cannot silently skip here.
       - name: Install OpenCode
-        run: npm install -g opencode-ai@1.18.32
+        run: npm install -g @opencode/cli@2.0.32
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Live delivery probe (real opencode binary)
         env:
