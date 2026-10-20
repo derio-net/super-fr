@@ -7,7 +7,12 @@ import datetime as _dt
 from pathlib import Path
 
 from fr.run import observed
-from fr.run.opencode_store import TOOL_ALIASES, canonical_tool, store_version
+from fr.run.opencode_store import (
+    STORE_TOOL_ALIASES,
+    STORE_TOOLS,
+    store_tool_name,
+    store_version,
+)
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "opencode" / "two-sessions.db"
 T0 = 1792400000000
@@ -76,11 +81,24 @@ def test_no_session_id_names_opencode_session_id() -> None:
     assert "OPENCODE_SESSION_ID" in why
 
 
-def test_the_alias_table_is_one_place() -> None:
-    assert canonical_tool("bash") == "shell"
-    assert canonical_tool("task") == "subagent"
-    assert canonical_tool("shell") == "shell"
-    assert dict(TOOL_ALIASES) == {"bash": "shell", "task": "subagent"}
+def test_the_store_alias_table_maps_1x_names_to_2x() -> None:
+    assert store_tool_name("bash") == "shell"
+    assert store_tool_name("task") == "subagent"
+    assert store_tool_name("shell") == "shell"
+    assert dict(STORE_TOOL_ALIASES) == {"bash": "shell", "task": "subagent"}
+
+
+def test_every_store_tool_name_is_known_to_the_activity_vocabulary() -> None:
+    """p4-r3: the two tables are different jobs; what they need is that a name
+    the store readers yield never falls through `classify` as unknown."""
+    from fr.usage import classify
+
+    names = set(STORE_TOOLS) | set(STORE_TOOL_ALIASES) | set(STORE_TOOL_ALIASES.values())
+    for name in sorted(names):
+        assert name in classify._ALIASES, name
+    assert classify.classify("shell", "ls").activity != "other_tool"
+    assert classify.classify("subagent") == classify.classify("Agent")
+    assert classify.canonical_tool("shell") == classify.canonical_tool("bash") == "Bash"
 
 
 def test_a_2x_session_is_observed_end_to_end() -> None:

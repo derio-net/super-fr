@@ -33,14 +33,20 @@ DISPATCH_TOOL: Final = "subagent"
 QUESTION_TOOL: Final = "question"
 READ_TOOL: Final = "read"
 
-TOOL_ALIASES: Final[Mapping[str, str]] = {"bash": SHELL_TOOL, "task": DISPATCH_TOOL}
-"""THE alias table (R13): OpenCode 1.x tool names, still carried by migrated
-`session_message` rows, onto their 2.x names. Every reader canonicalises
-through `canonical_tool`; nothing else lists these names."""
+STORE_TOOLS: Final = (SHELL_TOOL, DISPATCH_TOOL, QUESTION_TOOL, READ_TOOL)
+"""The 2.x tool names the store readers act on."""
+
+STORE_TOOL_ALIASES: Final[Mapping[str, str]] = {"bash": SHELL_TOOL, "task": DISPATCH_TOOL}
+"""The store's alias table (R13): OpenCode 1.x tool names, still carried by
+migrated `session_message` rows, onto their OpenCode 2.x names — what the store
+readers in this module match on. NOT the activity vocabulary: that is
+`fr.usage.classify.canonical_tool`, which maps every harness's names onto Claude
+Code's spelling, and must know every name in `STORE_TOOLS` (pinned by test)."""
 
 
-def canonical_tool(name: str) -> str:
-    return TOOL_ALIASES.get(name, name)
+def store_tool_name(name: str) -> str:
+    """`name` as OpenCode 2.x spells it (`bash` -> `shell`, `task` -> `subagent`)."""
+    return STORE_TOOL_ALIASES.get(name, name)
 
 
 StoreVersion = Literal["v2", "v1-only", "absent", "unreadable"]
@@ -233,7 +239,7 @@ def tool_item(message: StoredMessage, item: Mapping[str, Any]) -> ToolItem | Non
     return ToolItem(
         session=message.session,
         message=message.id,
-        tool=canonical_tool(name),
+        tool=store_tool_name(name),
         call_id=call_id if isinstance(call_id, str) else None,
         status=status if isinstance(status, str) else None,
         input=mapping(state.get("input")),
