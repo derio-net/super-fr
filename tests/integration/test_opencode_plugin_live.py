@@ -122,13 +122,54 @@ def _opencode(opencode: str, *args: str, cwd: Path, env: dict[str, str]):
 
 @contextmanager
 def _service(opencode: str, project: Path, env: dict[str, str]) -> Iterator[None]:
-    """An isolated OpenCode 2 background service, stopped on the way out."""
+    """An isolated OpenCode 2 background service, stopped on the way out.
+
+    The service is a DETACHED daemon and inherits the stdio of whichever CLI
+    call first started it, so a survivor holds the test runner's stdout pipe
+    open after pytest has already printed its summary. Measured: 34s of tests,
+    3m19s of wall clock, and `exit 124` from a `timeout` around a run that had
+    already reported `3 passed`. So the pid recorded in this environment's
+    `service.json` is captured before `service stop` (a successful stop deletes
+    the file) and killed if it is still alive afterwards."""
     port = _opencode(opencode, "service", "set", "port", str(_free_port()), cwd=project, env=env)
     assert port.returncode == 0, port.stderr
     try:
         yield
     finally:
+        pid = _service_pid(env)
         _opencode(opencode, "service", "stop", cwd=project, env=env)
+        _reap_service(pid)
+
+
+def _service_pid(env: dict[str, str]) -> int | None:
+    import json
+
+    path = Path(env["XDG_STATE_HOME"]) / "opencode" / "service.json"
+    try:
+        return int(json.loads(path.read_text())["pid"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _reap_service(pid: int | None) -> None:
+    """Kill a service `service stop` left behind; bounded, and never a stranger's."""
+    import signal
+    import time
+
+    if pid is None:
+        return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.kill(pid, sig)
+        except (ProcessLookupError, PermissionError):
+            return
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.05)
 
 
 def _project(root: Path) -> Path:

@@ -98,16 +98,49 @@ journal:
     body: |
       See p3-tui-inside-the-plugin-dir. The spec is the contract, so its R12 sentence (and its stated reason) should be
       corrected to the measured layout: one directory, `index.ts` for the server, `tui/` for the TUI, cli.json listing the
-      directory (a file path is ignored by 2.1.0). Not edited here: the spec is not in this phase's files.
+      directory (a file path is ignored by 2.1.0). Left open by the implementer because the spec was not in the phase's
+      files; the orchestrator edited R12 and section E before review — a contract that states a layout the code must not
+      use is worse than no sentence.
   - kind: finding
     id: p3-package-readme-describes-the-1x-loader
     phase: 3
     review_scope: in
-    title: "packages/fr-opencode-plugin/README.md still describes the top-level fr-opencode-plugin.ts loader"
+    title: "packages/fr-opencode-plugin/README.md still described the 1.x loader, and said the shell is ungated"
     body: |
-      The delivery no longer writes it (and deletes a stale one). The README is prose phase 5 owns (R16); it must
-      describe the one-directory layout, the tui/ status line and the cli.json entry.
+      The delivery no longer writes the loader (and deletes a stale one), so the README's "How consumers get it" block
+      described a layout that no longer exists. It also carried a larger falsehood: "Bash is intentionally ungated
+      because an OpenCode tool hook cannot inspect filesystem effects performed by a shell command" — phase 2 shipped
+      the whole-line shell gate, so the README told a reader the opposite of what the plugin does. Rewritten before
+      review: the surface table, the one-directory layout with the cli.json entry and the stale-loader removal, the
+      shell gate and the push backstop, the nag, and the status line (including why tui/index.tsx alone is out of tsc).
+      R16 gives phase 5 the repo-level prose; this file documents the package and had to move with the code.
+  - kind: discovery
+    id: p3-live-test-leaked-a-service
+    phase: 3
+    title: "The live test left an OpenCode service behind, and it held the runner's stdout open for three more minutes"
+    body: |
+      `time uv run pytest tests/integration/test_opencode_plugin_live.py` printed "3 passed in 34.19s" and then took
+      3m19s of wall clock to exit (175s of system CPU). Cause: OpenCode's service is a detached daemon that inherits the
+      stdio of the CLI call that first started it, so a survivor keeps the runner's stdout pipe open — and under a
+      `timeout` wrapper that reads as `exit 124` on a run whose tests had all passed (the flake seen during the phase).
+      `service stop` deletes service.json when it succeeds, so the fix captures the pid recorded in this environment's
+      service.json BEFORE stopping and reaps it (SIGTERM, then SIGKILL, 5s bound) if it is still alive. Same command
+      after: 3 passed in 33.09s, 33.8s total.
 resolves:
+  - id: p3-r12-text-contradicts-measurement
+    state: fixed
+    body: |
+      Spec R12 now states the measured layout (the TUI inside the plugin directory as its `tui` entry, cli.json listing
+      the DIRECTORY, a file path silently ignored by 2.1.0), records the earlier draft's false premise and the double
+      load it caused, and keeps the fallback/partial clause. Section E ("Delivery and configuration") is corrected the
+      same way.
+  - id: p3-package-readme-describes-the-1x-loader
+    state: fixed
+    body: |
+      packages/fr-opencode-plugin/README.md rewritten against the shipped code: surface table matched to index.ts's
+      registrations, one-directory delivery, cli.json semantics (create/refuse-unparsable/idempotent/uninstall),
+      stale 1.x loader removed, shell gate and push backstop explained, nag and status line documented, and
+      `bunx tsc --noEmit` added to the dev commands.
   - id: p1-v2-loads-sources-dir-as-plugin
     state: fixed
     body: |

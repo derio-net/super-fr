@@ -138,15 +138,23 @@ R11. Session bind/unbind: a completed `shell` call whose first line is
 (`fr isolation detach --session <id>`). Both are best-effort and never block.
 
 R12. The status line is a delivered TUI entrypoint rendering
-`fr-statusline-segment.sh`. It lives **beside**, not inside, the server plugin
-(the server loader picks up every top-level file in the plugin directory), and
-`install.sh` registers its path in `cli.json`'s `plugins` list, appending only
-its own entry. The row is observed by a config probe in `fr.harness.observe`
-(the entry is listed and the file exists), not by a `super-fr-parity:` marker. If
-OpenCode cannot load a delivered TSX entrypoint without consumer-side peer
-packages, the fallback is a command that prints the segment; the row stays
-`partial` and the PR says which happened rather than claiming a status line that
-does not render.
+`fr-statusline-segment.sh`. It ships **inside** the plugin directory as that
+directory's `tui` entry (`tui/index.tsx`): OpenCode 2 resolves a plugin
+directory's entrypoints by NAME — `<dir>/server` or else `<dir>/index` for the
+server, `<dir>/tui` for the TUI — so the server never imports the TUI and the
+TUI never scans the server's sources. (An earlier draft said "beside, not
+inside", on the premise that the server picks up every file in the plugin
+directory; measured false on 2.1.0, and a top-level entry was in fact a second
+load of the same plugin — see `p3-tui-spike`.) `install.sh` registers the
+plugin **directory** in `cli.json`'s `plugins` list, appending only its own
+entry; 2.1.0 also discovers the directory on its own and de-duplicates the two,
+so the entry is the explicit enablement the probe reads, not the only thing
+that makes the status line work. The row is observed by a config probe in
+`fr.harness.observe` (the entry is listed and `<dir>/tui/index.tsx` exists), not
+by a `super-fr-parity:` marker. If OpenCode cannot load a delivered TSX
+entrypoint without consumer-side peer packages, the fallback is a command that
+prints the segment; the row stays `partial` and the PR says which happened
+rather than claiming a status line that does not render.
 
 R13. `fr` reads OpenCode 2's store: session rows from `session_v2`, messages
 from `session_message` (`data.content[]`), with V2's field names (`id`, `name`,
@@ -283,9 +291,11 @@ that is what makes "V2-only" loud rather than silent.
 
 ### E. Delivery and configuration
 
-`scripts/deliver-opencode-plugin.sh` keeps writing the server entrypoint and its
-directory, copies the status-line entrypoint beside it (not inside the server
-plugin's top-level scan), and `install.sh` gains a `cli.json` registration. Its
+`scripts/deliver-opencode-plugin.sh` writes ONE plugin directory (the server
+entrypoint `index.ts` and the sources it imports), with the status-line
+entrypoint inside it as `tui/index.tsx` — never a top-level file, which would be
+a second plugin to the server's scanner — and `install.sh` gains a `cli.json`
+registration. Its
 behaviour is stated rather than implied: `$XDG_CONFIG_HOME/opencode/cli.json`
 (or `~/.config/opencode/cli.json`); created holding only this entry when absent;
 unparsable or JSONC content refuses with a message and is never overwritten;
