@@ -25,6 +25,7 @@ from fr.triage.model import Scope, load_judgements
 from tests.unit.test_triage_batch_dispatch import FakeRunner
 from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
     NOW,
+    _sandbox,
     REPO,
     DriveCheckout,
     World,
@@ -42,6 +43,13 @@ CONFIG = {
     "post_merge": ["./scripts/install.sh"],
     "post_merge_restart": "idle",
 }
+
+
+@pytest.fixture(autouse=True)
+def _sandbox_here(_sandbox: None) -> None:
+    """The drive tests' sandbox (HOME, XDG_CONFIG_HOME and the pass clock), which
+    autouse does not reach across modules — without it this module read the wall
+    clock and its close-out ids were right only on the day they were written."""
 
 
 class Runners:
@@ -215,7 +223,7 @@ def test_the_host_runs_post_merge_and_restarts_after_it(
     assert code == 0, out
     assert checkout.commands == [["./scripts/install.sh"]]
     assert _events(tmp_path, "b1") == ["dispatch", "post_merge"]  # the marker, not an event
-    assert runners.dispatched() == {"herdr": [f"{REPO}/run/closeout-2026-10-14-1"]}
+    assert runners.dispatched() == {"herdr": [f"{REPO}/run/closeout-{NOW.date().isoformat()}-1"]}
 
 
 def test_the_cloud_runs_neither_post_merge_nor_its_restart(
@@ -232,7 +240,7 @@ def test_the_cloud_runs_neither_post_merge_nor_its_restart(
     assert acted
     assert checkout.commands == []
     assert _events(tmp_path, "b1") == ["dispatch"]  # the marker, not an event
-    assert runners.dispatched() == {"claude-cloud": [f"{REPO}/run/closeout-2026-10-14-1"]}
+    assert runners.dispatched() == {"claude-cloud": [f"{REPO}/run/closeout-{NOW.date().isoformat()}-1"]}
     assert "restart" not in capsys.readouterr().out
 
 

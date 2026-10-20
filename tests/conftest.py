@@ -360,6 +360,23 @@ def _opencode_db_off_the_operators_machine(monkeypatch: pytest.MonkeyPatch, tmp_
 
 
 @pytest.fixture(autouse=True)
+def _no_inherited_opencode_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drop the OpenCode variables a suite run from inside OpenCode inherits.
+
+    OpenCode 2 places `OPENCODE_SESSION_ID` (plus its own markers) in every
+    spawned command's environment, so a suite started from an OpenCode shell
+    believes it is under a real session and 46 tests fail by that one fact
+    (measured 2026-10-20). A test of the detection sets what it needs."""
+    for key in (
+        "OPENCODE",
+        "OPENCODE_SESSION_ID",
+        "OPENCODE_TERMINAL",
+        "FR_OPENCODE_SESSION_ID",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_live_model_probe(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Keep the suite off the real `opencode` CLI and the operator's model cache.
 
