@@ -1344,6 +1344,10 @@ def test_the_verdict_table_covers_what_the_spec_names() -> None:
     ):
         assert needed in ids
     assert ids == {rid for rid, *_ in _capture.ROWS}, "table is stale: re-run the capture"
+    table = __import__("yaml").safe_load(_capture.TABLE.read_text())
+    # The TS loader expands paths from the table's own map; it must be this one.
+    assert table["placeholders"] == _capture.PLACEHOLDERS
+    assert table["session"] == _capture.SESSION
 
 
 @pytest.mark.parametrize("row", _VERDICT_ROWS, ids=[r["id"] for r in _VERDICT_ROWS])

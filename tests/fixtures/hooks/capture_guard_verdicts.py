@@ -188,6 +188,7 @@ def capture() -> list[dict[str, Any]]:
 HEADER = """\
 # CAPTURED from plugins/super-fr/hooks/fr-isolation-guard.sh — do not edit by hand.
 # Regenerate: uv run python tests/fixtures/hooks/capture_guard_verdicts.py
+# placeholders: each {name} is <world root>/<path> (in this order, longest first).
 # Inputs: id, command, cwd, sentinel (the session sentinel before the call, null =
 # none), env. Captured: expected, reason (the deny text, paths as placeholders),
 # sentinel_after. Placeholders and the sandbox: guard-world.sh. Loaded by
@@ -198,7 +199,7 @@ HEADER = """\
 
 def main() -> None:
     rows = capture()
-    body = yaml.safe_dump({"rows": rows}, sort_keys=False, width=100, allow_unicode=True)
+    body = yaml.safe_dump({"placeholders": PLACEHOLDERS, "session": SESSION, "rows": rows}, sort_keys=False, width=100, allow_unicode=True)
     TABLE.write_text(HEADER + body)
     print(f"captured {len(rows)} rows -> {TABLE.relative_to(REPO)}")
 
