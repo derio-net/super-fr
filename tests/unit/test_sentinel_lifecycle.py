@@ -294,3 +294,64 @@ def test_external_mode_end_to_end(world: World) -> None:
     world.env["KUBERNETES_SERVICE_HOST"] = ""  # the same marker on a bare host
     if not (Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()):
         assert world.guard("git status", repo) == "deny"
+
+
+# --- the OpenCode 2 writer (spec 2026-10-20-opencode-2-support R10) ----------
+#
+# packages/fr-opencode-plugin/src/sentinel.ts writes the same file from
+# `execute.after`. Its readers are this repo's Python (`stamp_sentinel_workspace`,
+# `clear_workspace_sentinels`) and the bash guard, so its shape is asserted
+# HERE, against them, rather than only in the TypeScript suite: a key the port
+# renames goes red in the language that reads it.
+
+PLUGIN_SENTINEL = (
+    Path(__file__).resolve().parents[2] / "packages" / "fr-opencode-plugin" / "src" / "sentinel.ts"
+)
+needs_bun = pytest.mark.skipif(shutil.which("bun") is None, reason="the TS writer runs under bun")
+
+
+def _load_skill_opencode(world: World, skill: str, cwd: Path) -> None:
+    script = (
+        f"import {{ writePipelineSentinel }} from {json.dumps(str(PLUGIN_SENTINEL))};\n"
+        "writePipelineSentinel({tool: 'skill', sessionID: process.argv[1], "
+        "status: 'completed', input: {id: process.argv[2]}}, process.argv[3]);\n"
+    )
+    subprocess.run(
+        ["bun", "-e", script, SESSION, skill, str(cwd)],
+        env=world.env,
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+
+
+@needs_bun
+def test_the_opencode_writer_writes_the_bash_writers_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = World(tmp_path, monkeypatch)
+    repo = world.repo("a")
+    world.load_skill("fr-goal", repo)
+    bash_written = json.loads(world.sentinel.read_text())
+    world.sentinel.unlink()
+    _load_skill_opencode(world, "fr-goal", repo)
+    ts_written = json.loads(world.sentinel.read_text())
+    assert set(ts_written) == set(bash_written) == {"repo_root", "skill", "started_at"}
+    assert ts_written["repo_root"] == bash_written["repo_root"]
+
+
+@needs_bun
+def test_the_python_reader_stamps_and_the_opencode_writer_carries_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lifecycle across languages: TS arms, Python stamps (`attach`), TS
+    reloads and keeps the stamp, the bash guard reads the result."""
+    world = World(tmp_path, monkeypatch)
+    repo = world.repo("a")
+    _load_skill_opencode(world, "fr-goal", repo)
+    wt = world.worktree(repo, "feat/x")
+    stamp_sentinel_workspace(SESSION, wt)
+    assert world.workspaces() == ["worktrees/a/feat__x"]
+    _load_skill_opencode(world, "fr-brainstorming", repo)
+    assert world.workspaces() == ["worktrees/a/feat__x"]
+    assert world.guard("ls", repo) == "deny"
