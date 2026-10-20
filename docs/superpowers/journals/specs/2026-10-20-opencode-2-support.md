@@ -352,3 +352,8 @@ fr must read the 2.0 store whether or not the plugin is installed, and the loud 
 ### phase-split-2026-10-20-opencode-2-support-p5 · decision · ask: the published surfaces must describe what actually shipped
 
 Parity rows, the acceptance matrix and its three reports, the canonical rule and its mirrors, the explainer and the release fragment are a distinct ask that no implementation phase serves.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-20-opencode-2-support-p1 created=2026-10-20T05:43:56+00:00 decided_by=agent -->
+### tier-2026-10-20-opencode-2-support-p1 · decision · hard: the V2 hook map is new and the event ordering is measured, not documented
+
+A wrong entrypoint fails silently: the plugin looks installed while every gate is inert (the exact state this run starts from).
