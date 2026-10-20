@@ -424,3 +424,115 @@ guard.ts and push.ts share sentinel.ts and spawn.ts; the remaining duplication (
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 Done as P2.T4.S3: pin, claim, idle, nag and bind now spawn fr through spawn.ts run(); guard/sentinel use runSync.
+
+<!-- fr:journal kind=review scope=plan id=p2r-review created=2026-10-20T08:44:53+00:00 phase=2 -->
+### p2r-review · review · Phase 2 reviewed by an independent agent: 3 in-scope findings, 1 filed, and 38 extra inputs with no divergence (phase 2)
+
+Reviewer: ses_ea7a1e857ffeH3VpiFAWn8ns2S (general agent, read-only, one context). Given the
+spec, 02.yaml, the implementer's record, the plan journal, both bash engines and the TS port,
+and told to treat the record as a hypothesis list rather than evidence. It ran every suite
+itself (tsc exit 0, bun 202 pass, the two Python hook files 151 passed, the live probe 2
+passed on the host's 2.1.0, ruff clean), re-ran the capture without writing and confirmed
+`guard-verdicts.yaml` is byte-identical, then drove both engines over 38 inputs NOT in the
+table (cd variants, `;` and tab separators, tilde, quoted paths, relative `..`, the
+allow-prefix root, a corrupt sentinel, a numeric repo_root, non-array workspaces, live and
+gone workspaces, a symlinked cwd, cwd-is-a-file, empty command, redirects, env prefixes,
+multi-line) and got 0 divergent verdicts and 0 divergent reason strings. It also compared
+the push matcher and the bind/unbind argv against the real bash hooks.
+
+It found three things phase 2 had to fix (p2r-1 nag memory, p2r-2 a stale record, p2r-3 a
+plan step describing a sentinel shape nobody implemented), filed one for a follow-up
+(p2r-4 bare `git` from PATH, beside the implementer's p2-marker-unbounded), and explicitly
+cleared the things it expected to be wrong and were not (sentinel shape/GC across bash, TS
+and Python; push refusal text; the start-anchored allowance; the bounded spawn path).
+
+<!-- fr:journal kind=finding scope=plan id=p2r-1 created=2026-10-20T08:44:53+00:00 phase=2 state=open review_scope=in -->
+### p2r-1 · finding [open] (reviewer: in scope) · The nag's once-per-session memory is per plugin copy, so R9's one system part becomes two (phase 2)
+
+nag.ts allocated its `served` set inside createNagHandler and took no shared-memory seam, so
+index.ts could not pass one. OpenCode 2 loads the delivered plugin twice while the 1.x
+loader+sources layout is still being delivered (phase-1 finding
+p1-v2-loads-sources-dir-as-plugin, deferred to P3.T3.S4), and `claim.ts`/`idle.ts` already
+document and fix exactly this ("module state is per copy, globalThis is not"). Each copy
+registers its own `session.hook("context")`, so a top-level session's first request would get
+two identical system parts and two `fr acceptance status --brief` spawns — contradicting R9
+and Test Plan item 6, which the post-merge live row would have failed. No test could see it:
+every test built one handler.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-2 created=2026-10-20T08:44:53+00:00 phase=2 state=open review_scope=in -->
+### p2r-2 · finding [open] (reviewer: in scope) · The phase record called three of its own failures pre-existing, and miscounted the verdict table (phase 2)
+
+The record filed `p2-full-suite-preexisting-failures` claiming the suite's 2 failures and 12
+errors were in files the phase did not touch, naming the live delivery probe among them and
+concluding "No commit in a52a0756f..HEAD touches packages/fr or those test files". Two of the
+three were this phase's: the probe's sentinel builds the context setup() runs against, and
+phase 2 gave setup a `session.hook("context")` registration against `session: {}`; and the
+drive tests' sandbox, imported under an alias, was never a resolvable fixture. It also said
+"13 deny, 19 allow" where the captured table is 14 deny / 18 allow, and its evidence log
+predated the fix. The record is transient but journalled as-is by `fr run resolve`, so an
+uncorrected record would have written a false cause into an append-only log.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-3 created=2026-10-20T08:44:53+00:00 phase=2 state=open review_scope=in -->
+### p2r-3 · finding [open] (reviewer: in scope) · P2.T2.S2 still asserts a sentinel shape that was never implemented and that the reader rejects (phase 2)
+
+The step text says the writer produces `{repo_root, workspaces, session, created}`. The
+shipped writer produces `{repo_root, skill, started_at}` plus `workspaces` only when it
+carries a live entry — matching fr-pipeline-sentinel.sh and the Python reader, which reads
+none of `session`/`created`. The code is right and the journal records the divergence
+(p2-sentinel-shape-follows-bash), but the plan is the live contract later phases read, and
+phase 1 already set the precedent of rewriting a step whose premise fell (p1-r6).
+
+<!-- fr:journal kind=finding scope=plan id=p2r-4 created=2026-10-20T08:44:53+00:00 phase=2 state=open review_scope=out -->
+### p2r-4 · finding [open] (reviewer: out of scope) · The edit gate spawns bare `git` from PATH where the bash guard resolves FR_GIT_CANDIDATES (phase 2)
+
+lib/fr-isolation-decision.sh pins an absolute git for the same reason gh#746 pins `fr`:
+hooks and this plugin spawn with no shell. guard.ts (phase 2) and marker.ts (phase 1) call
+`git` directly, and with git unreachable every toplevel probe is undefined, so the gate fails
+open where the bash guard still denies. The verdict table cannot cover it — the sandbox
+always has git on PATH. Filed with p2-marker-unbounded as issue #1221; moving both onto
+resolved git belongs with the edit gate's own bounded-spawn work, not mid-port.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-tests-opened-a-credential-prompt created=2026-10-20T08:44:53+00:00 phase=2 -->
+### p2-tests-opened-a-credential-prompt · discovery · A triage test could open a macOS credential dialog: a fixture repo with no origin/HEAD makes git ask github.com (phase 2)
+
+Reported by another session watching the desktop: a full-suite run raised "Username for
+'https://github.com'". Cause: test fixtures `git init` + `remote add origin
+https://github.com/...` (a URL, never a network clone) and leave `origin/HEAD` unset, so any
+path that resolves the default branch reaches `Checkout.default_branch()`'s fallback
+`git remote set-head origin --auto`, which is a network call; with no credentials git falls
+back to SSH_ASKPASS and macOS shows a modal dialog. Two fixes: `tests/conftest.py` gains an
+autouse `_no_git_credential_prompt` (GIT_TERMINAL_PROMPT=0, GIT_ASKPASS=true,
+SSH_ASKPASS/SUDO_ASKPASS dropped) so no test can ever ask a HUMAN, and the triage render
+fixture records `refs/remotes/origin/HEAD` like a real clone so the network path is not
+taken at all. This is test infrastructure, not a phase-2 surface, but it was found by
+running the phase's suite and a prompt is worse than a failure.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-1-resolved created=2026-10-20T08:44:53+00:00 phase=2 state=fixed resolves=p2r-1 -->
+### p2r-1-resolved · finding [fixed] · resolves p2r-1: The nag's once-per-session memory is per plugin copy, so R9's one system part becomes two (phase 2)
+
+nag.ts exports SHARED_SERVED/sharedServed() (globalThis, the shape claim.ts uses), NagHandlerOptions takes `served?: Set<string>`, and index.ts passes sharedServed(). Test: two handlers built over one set serve one part between them and spawn fr once (test/nag.test.ts). bun 203 pass, tsc exit 0.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-2-resolved created=2026-10-20T08:44:53+00:00 phase=2 state=fixed resolves=p2r-2 -->
+### p2r-2-resolved · finding [fixed] · resolves p2r-2: The phase record called three of its own failures pre-existing, and miscounted the verdict table (phase 2)
+
+The implement-phase phase/2 record is corrected before resolve: 14 deny/18 allow, the suite finding now says two of its three causes were phase 2's (the live probe's fake context and the aliased sandbox fixture) and one was phase 1's wording, with the fix commit named, review_scope moved to `in`, resolved fixed, and evidence.tests re-pointed at a post-fix full-suite log.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-3-resolved created=2026-10-20T08:44:53+00:00 phase=2 state=fixed resolves=p2r-3 -->
+### p2r-3-resolved · finding [fixed] · resolves p2r-3: P2.T2.S2 still asserts a sentinel shape that was never implemented and that the reader rejects (phase 2)
+
+02.yaml P2.T2.S2 now states the shape fr-pipeline-sentinel.sh and fr.isolation.types actually use ({repo_root, skill, started_at}[, workspaces]), cites spec R10 and journal decision p2-sentinel-shape-follows-bash, and keeps the Python key-set assertion.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-4-resolved created=2026-10-20T08:44:53+00:00 phase=2 state=open resolves=p2r-4 tracked_by=derio-net/super-fr#1221 -->
+### p2r-4-resolved · finding [deferred → derio-net/super-fr#1221] · resolves p2r-4: The edit gate spawns bare `git` from PATH where the bash guard resolves FR_GIT_CANDIDATES (phase 2)
+
+Filed with p2-marker-unbounded as derio-net/super-fr#1221: bound the edit gate's git calls on spawn.ts' runSync and resolve git as the bash guard does, with a verdict-table row for git absent from PATH.
+
+<!-- fr:journal kind=finding scope=plan id=p2-marker-unbounded-resolved created=2026-10-20T08:44:53+00:00 phase=2 state=open resolves=p2-marker-unbounded tracked_by=derio-net/super-fr#1221 -->
+### p2-marker-unbounded-resolved · finding [deferred → derio-net/super-fr#1221] · resolves p2-marker-unbounded: The edit gate's git calls in marker.ts have no timeout (phase 2)
+
+Same issue: marker.ts is the last caller still using unbounded execFileSync; moving it changes the edit gate's timeout decision, which is phase-1 surface and needs a deliberate fail-closed choice.
+
+<!-- fr:journal kind=finding scope=plan id=p2-not-proven-live-resolved created=2026-10-20T08:44:53+00:00 phase=2 state=open resolves=p2-not-proven-live out_of_scope=true -->
+### p2-not-proven-live-resolved · finding [out-of-scope] · resolves p2-not-proven-live: None of the phase-2 handlers has run inside a real OpenCode 2 session (phase 2)
+
+By design and by contract: R15 and Test Plan items 1-6 name these as POST-MERGE live rows (a throw from execute.before reaching the model as the refusal text, execute.after on skill, context's system part reaching the request, session.deleted arriving). No pre-merge phase can prove them, and the acceptance matrix carries them as the opencode-2-* rows whose status stays walk-owed until the live walk, which `fr acceptance check` keeps failing until then.

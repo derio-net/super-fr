@@ -101,11 +101,19 @@ steps:
           visual: none
           unobserved: tests
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-20T08:44:44+00:00'
           harness: opencode
           session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-20T08:44:54+00:00'
+          outcome: done
+        evidence:
+          review: p2r-review
+          reviewer: ses_ea7a1e857ffeH3VpiFAWn8ns2S
+          visual: none
+          findings: p2-marker-unbounded,p2-not-proven-live,p2-full-suite-preexisting-failures,p2r-1,p2r-2,p2r-3,p2r-4
+          unobserved: reviewer,reviewer-return
   journal-check:
     state: pending
   deliver:
