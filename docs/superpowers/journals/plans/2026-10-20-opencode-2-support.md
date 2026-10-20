@@ -185,3 +185,82 @@ the queue was written, measured redundant against OpenCode's own OPENCODE_SESSIO
 ### p1-v2-loads-sources-dir-as-plugin-resolved · finding [out-of-scope] · resolves p1-v2-loads-sources-dir-as-plugin: OpenCode 2 loads the delivered sources directory as a second plugin
 
 Delivery layout is phase 3's subject, and phase 3 now carries it explicitly as P3.T3.S4: V2 scans the plugins directory for directories too, so the 1.x loader+sources pair loads the plugin twice; the phase delivers exactly one entrypoint and asserts a single 'loading plugin' line.
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-10-20T07:31:21+00:00 phase=1 -->
+### p1-review · review · Phase 1 reviewed by an independent agent: 3 findings, all in scope, all fixed (phase 1)
+
+Reviewer: ses_ea7e51e67ffe3eJ0m8pXOhZ7HN (general agent, read-only, one context).
+It was given the spec, the phase plan, the implementer's record and the diff
+(8e20a4b25..HEAD), told to judge adversarially and to run both suites itself.
+It confirmed the port loads and the behaviours survive, and raised three
+findings — every one in scope, none refuted:
+
+- p1-r1: src/index.ts named types that no longer exist (ToolBeforeEvent,
+  ShellCreateEvent), so `tsc --noEmit` failed and GateEvent collapsed to any;
+  bun test transpiles only, so CI had no type gate at all.
+- p1-r2: spec R6 claims fr reads OPENCODE_SESSION_ID; the Python reader still
+  read only FR_OPENCODE_SESSION_ID, which the plugin no longer sets.
+- p1-r3: the "directory, not worktree" test passed its second argument to a
+  helper that ignored it, so it was the same call as the test above and could
+  not fail for the reason it named.
+
+All three are fixed in a6fd95d7e and every fix is verified below. The review
+also confirmed the two things the phase actually depended on: the plugin
+loads on 2.0.32 (it previously did not load at all) and the removed session
+queue really is redundant.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-10-20T07:31:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · index.ts named deleted types, so tsc failed and the gate event was untyped (phase 1)
+
+src/index.ts:140 `GateEvent = ToolBeforeEvent & {...}` and :214
+`event as ShellCreateEvent` referenced types that the session.ts removal had
+deleted; `bunx tsc --noEmit` (the package's own strict tsconfig, which
+includes src and test) failed on both, and `GateEvent` silently became `any`.
+That is the one place the port's correctness lives — that `execute.before`
+carries `tool`/`input` — so `event.args` would have compiled just as well.
+CI ran only `bun test`, which transpiles without typechecking.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-10-20T07:31:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · Spec R6 said fr reads OPENCODE_SESSION_ID, but the reader still read only FR_OPENCODE_SESSION_ID (phase 1)
+
+The phase amended R6 to the measured mechanism (OpenCode 2 sets
+OPENCODE_SESSION_ID on every command it spawns) and removed the plugin export
+— but left fr reading the FR_ variable the plugin used to set, so the amended
+requirement was false as written: on 2.0 fr would have observed no session at
+all and reported it unobserved, with a message blaming a plugin that no longer
+exports anything. The spec is the contract, so the code had to move to it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-10-20T07:31:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · The 'directory, not worktree' test was a duplicate that could not fail (phase 1)
+
+test/index.test.ts declared `makeHook(directory, _worktree = directory)` and
+never read the second parameter, so `makeHook(repo, "/")` was byte-for-byte
+the call above it. It is the only assertion the port added for the V1→V2 base
+change (`ctx.worktree || ctx.directory` → `ctx.location.directory`), so a
+regression back to a project root would have stayed green.
+
+<!-- fr:journal kind=decision scope=plan id=p1-r2-fixed-in-phase-1 created=2026-10-20T07:31:21+00:00 phase=1 -->
+### p1-r2-fixed-in-phase-1 · decision · R6's reader half landed in phase 1, not phase 4 (phase 1)
+
+The reviewer is right that an amended requirement must hold. Rather than leave
+R6 false until the reader phase, `SESSION_ID_ENVS` became an ordered tuple of
+keys per harness (opencode: FR_OPENCODE_SESSION_ID then OPENCODE_SESSION_ID)
+and `current_session` reads them in order; `why_unobservable` and visual.py
+name the variable fr actually read. Phase 4 keeps the store move
+(session_v2/session_message) and the loud 1.x refusal; its plan step was
+re-pointed to the wording that is actually left.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-10-20T07:31:21+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: index.ts named deleted types, so tsc failed and the gate event was untyped (phase 1)
+
+GateEvent is `{tool: string; input?: unknown}` and takes the real event at the call site (a renamed hook field is a compile error there); ShellCreateEvent is imported from ./pin; package.json gains `typecheck` and ci.yml runs `bunx tsc --noEmit` before `bun test`. Verified: `bunx tsc --noEmit` exits 0.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-10-20T07:31:21+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: Spec R6 said fr reads OPENCODE_SESSION_ID, but the reader still read only FR_OPENCODE_SESSION_ID (phase 1)
+
+telemetry.session_id_from reads SESSION_ID_ENVS (now a tuple per harness: FR_OPENCODE_SESSION_ID, then OPENCODE_SESSION_ID) and _session_under uses it; observed.why_unobservable and visual.py name OPENCODE_SESSION_ID; tests/unit/test_run_observed_opencode.py asserts the native key resolves and that the FR_ override still wins. Verified: test_run_observed_opencode.py, test_run_observed_resolve_opencode.py, test_journal_operator_guard_opencode.py, test_run_cli.py -k unobservable/opencode/notice all green.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-10-20T07:31:21+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: The 'directory, not worktree' test was a duplicate that could not fail (phase 1)
+
+The fake context carries location.project.directory (test/fake.ts) and the test now loads with directory=<a temp dir outside the repo> + projectDirectory=<the repo>: the relative target is outside any fr-enabled repo (allowed) while an absolute target in the project is still denied — a pair that pins the base rather than an allow. Verified: bun test 107 pass, tsc clean.

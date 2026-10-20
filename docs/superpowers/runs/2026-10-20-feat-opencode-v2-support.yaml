@@ -73,10 +73,18 @@ steps:
           visual: none
           unobserved: tests
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-20T06:58:29+00:00'
           harness: opencode
+          returned: '2026-10-20T07:31:21+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: ses_ea7e51e67ffe3eJ0m8pXOhZ7HN
+          visual: none
+          findings: p1-v2-loads-sources-dir-as-plugin,p1-suite-harness-env-leak,p1-r1,p1-r2,p1-r3
+          unobserved: reviewer,reviewer-return
   journal-check:
     state: pending
   deliver:
