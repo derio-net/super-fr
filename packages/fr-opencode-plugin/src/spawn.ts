@@ -7,7 +7,7 @@
 // exited, and `null` for one that never ran, was killed, or timed out.
 import { execFile, spawnSync } from "node:child_process";
 
-export type RunAnswer = { code: number | null; stdout: string };
+export type RunAnswer = { code: number | null; stdout: string; stderr?: string };
 
 export type RunOptions = { cwd?: string; timeoutMs: number };
 
@@ -19,12 +19,16 @@ export function run(cmd: string, args: string[], options: RunOptions): Promise<R
         cmd,
         args,
         { cwd: options.cwd, timeout: options.timeoutMs, killSignal: "SIGKILL", windowsHide: true },
-        (error, stdout) => {
+        (error, stdout, stderr) => {
           // `error.code` is the exit status for a process that ran and exited
           // non-zero, a STRING ("ENOENT") when it never ran, and absent when it
           // was killed. Only a number is an exit status.
           const raw = error ? (error as { code?: unknown }).code : 0;
-          resolve({ code: typeof raw === "number" ? raw : null, stdout: String(stdout ?? "") });
+          resolve({
+            code: typeof raw === "number" ? raw : null,
+            stdout: String(stdout ?? ""),
+            stderr: String(stderr ?? ""),
+          });
         }
       );
     } catch {

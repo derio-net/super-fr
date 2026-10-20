@@ -30,7 +30,11 @@ export function fakeCtx(options: FakeOptions = {}) {
       directory: options.directory ?? "/nonexistent",
       project: { id: "prj", directory: options.projectDirectory ?? "/nonexistent", canonical: "/nonexistent" },
     },
-    session: options.session ?? {},
+    // The caller's session API (get/prompt), plus the hook registrar the
+    // plugin's `context` handler needs.
+    session: Object.assign(Object.create((options.session ?? {}) as object), {
+      hook: register("session"),
+    }) as unknown,
     tool: { hook: register("tool") },
     shell: { hook: register("shell") },
     event: {
@@ -63,6 +67,8 @@ export async function load(options: FakeOptions = {}) {
     ...fake,
     cleanup,
     executeBefore: one("tool:execute.before"),
+    executeAfter: one("tool:execute.after"),
+    context: one("session:context"),
     createBefore: one("shell:create.before"),
   };
 }

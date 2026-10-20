@@ -40,15 +40,37 @@
 // the OpenCode half of Claude Code's SessionStart hook:
 // super-fr-parity: fr-binary-pin.sh
 //
+// Phase 2 of the OpenCode 2 port (spec 2026-10-20-opencode-2-support R3, R4,
+// R9, R10, R11) adds the bash enforcement around a live pipeline:
+//   - ./sentinel — `execute.after` on a completed `skill` call arms the session's
+//     pipeline sentinel (fr-pipeline-sentinel.sh);
+//   - ./guard — `execute.before` on `shell` refuses base-repo commands while it
+//     is armed, judging the WHOLE command line (fr-isolation-guard.sh); its
+//     contract with the bash script is the captured verdict table
+//     tests/fixtures/hooks/guard-verdicts.yaml;
+//   - ./push — the merged-PR push guard on the same hook (fr-merged-pr-push-guard.sh);
+//   - ./nag — the acceptance nag, one system part at a top-level session's
+//     first model request (fr-acceptance-nag.sh);
+//   - ./bind — attach/detach on `fr isolation up|exec|down` / `fr run start`
+//     and on `session.deleted` (fr-session-bind.sh, fr-session-unbind.sh).
+// Their `super-fr-parity:` markers and parity.yaml cells move together in the
+// plan's phase 5, which owns the declared matrix.
+//
 // EXPORT DISCIPLINE: this module's only export is the default definition.
-// Helpers live in ./marker, ./idle, ./claim and ./pin.
+// Helpers live in ./marker, ./idle, ./claim, ./pin, ./sentinel, ./guard,
+// ./push, ./nag, ./bind and ./spawn.
 import type { Plugin } from "@opencode/plugin";
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { createBindHandler, createUnbindHandler, shellCwd } from "./bind";
 import { createClaimHandler, sharedClaimed } from "./claim";
+import { decideShell } from "./guard";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
+import { createNagHandler } from "./nag";
 import { createPinHandler, type ShellCreateEvent } from "./pin";
+import { decidePush } from "./push";
+import { writePipelineSentinel } from "./sentinel";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. The shell tool (`shell` in OpenCode 2,
@@ -206,19 +228,48 @@ const plugin: Plugin.Plugin = {
     });
     const exportPin = createPinHandler();
     const idle = createIdleHandler({ session: ctx.session, directory, actedOn: sharedActedOn() });
+    const bind = createBindHandler({ session: ctx.session, directory });
+    const unbind = createUnbindHandler({ directory });
+    const nag = createNagHandler({ session: ctx.session, directory });
 
     await ctx.tool.hook("execute.before", async (event) => {
       // Before the gate, and whatever the tool: a child's first call of ANY
       // kind is the earliest moment it can be named. Neither throws.
       await claimChild(event);
+      if (event.tool === "shell") {
+        // The shell gate decides on the WHOLE command line, before any path
+        // inspection (R3); a refusal rejects this call alone.
+        const input = (event.input ?? {}) as { command?: unknown; workdir?: unknown };
+        const command = typeof input.command === "string" ? input.command : "";
+        const cwd = shellCwd(directory, input.workdir);
+        const refusal = decideShell(command, cwd, event.sessionID);
+        if (refusal) throw new Error(refusal);
+        const pushRefusal = await decidePush(command, cwd, event.sessionID);
+        if (pushRefusal) throw new Error(pushRefusal);
+      }
       await gate(directory, event);
+    });
+    await ctx.tool.hook("execute.after", async (event) => {
+      // Neither throws: they follow a call that already ran.
+      writePipelineSentinel(event, directory);
+      await bind(event);
+    });
+    await ctx.session.hook("context", async (event) => {
+      await nag(event);
     });
     await ctx.shell.hook("create.before", async (event) => {
       await exportPin(event as ShellCreateEvent);
     });
 
     const controller = new AbortController();
-    void runIdleLoop(ctx.event, idle, controller.signal);
+    void runIdleLoop(
+      ctx.event,
+      async (event) => {
+        await unbind(event);
+        await idle(event);
+      },
+      controller.signal
+    );
     return () => controller.abort();
   },
 };

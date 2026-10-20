@@ -26,9 +26,14 @@ describe("V2 plugin definition", () => {
     expect(subscribed[0]!.aborted).toBe(true);
   });
 
-  test("setup registers exactly one execute.before and one create.before", async () => {
+  test("setup registers exactly one of each hook it uses", async () => {
     const { hooks } = await load();
-    expect([...hooks.keys()].sort()).toEqual(["shell:create.before", "tool:execute.before"]);
+    expect([...hooks.keys()].sort()).toEqual([
+      "session:context",
+      "shell:create.before",
+      "tool:execute.after",
+      "tool:execute.before",
+    ]);
   });
 
   test("setup survives a context with no event domain", async () => {
