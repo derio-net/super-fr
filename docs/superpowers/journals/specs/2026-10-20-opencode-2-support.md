@@ -357,3 +357,8 @@ Parity rows, the acceptance matrix and its three reports, the canonical rule and
 ### tier-2026-10-20-opencode-2-support-p1 · decision · hard: the V2 hook map is new and the event ordering is measured, not documented
 
 A wrong entrypoint fails silently: the plugin looks installed while every gate is inert (the exact state this run starts from).
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-20-opencode-2-support-p2 created=2026-10-20T05:43:57+00:00 decided_by=agent -->
+### tier-2026-10-20-opencode-2-support-p2 · decision · hard: two decision engines must agree on whole-command semantics
+
+The sentinel's mtime refresh, shared lock and orphan heal have no TypeScript precedent, and a broader gate would deny commands the Claude path allows.
