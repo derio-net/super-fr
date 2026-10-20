@@ -1,0 +1,150 @@
+schema_version: 2
+phase:
+  number: 1
+  title: The plugin loads on OpenCode 2 and the edit gate holds (R1, R2, R5, R6, R7,
+    R8)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-2-plugin-loads
+  - opencode-2-edit-gate
+  - opencode-2-pin
+  - opencode-2-idle-nudge
+  - opencode-2-claim
+  - opencode-2-session-export
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr-opencode-plugin/src/**
+  - packages/fr-opencode-plugin/test/**
+  - packages/fr-opencode-plugin/package.json
+  - .opencode/plugins/**
+  - .github/workflows/ci.yml
+  - tests/integration/test_opencode_plugin_live.py
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Skeleton smoke, then a V2 entrypoint
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Baseline smoke, recorded in the step record: `cd packages/fr-opencode-plugin && bun test`
+      and `uv run pytest -q --no-cov tests/unit/test_hooks_guard.py` must be green on the branch
+      before any code moves. If CI is red for an unrelated reason, record that as a finding and
+      continue only when the failure is not in the files this phase touches.
+  - id: P1.T1.S2
+    text: |-
+      Red: add `packages/fr-opencode-plugin/test/plugin.test.ts` importing the module's default
+      export and asserting `typeof plugin.id === "string"` and `typeof plugin.setup === "function"`,
+      and that `await plugin.setup(fakeCtx())` returns a cleanup function. `bun test` fails on the
+      current `export async function FrIsolationRequired(ctx)` shape.
+  - id: P1.T1.S3
+    text: |-
+      Green: replace the export in `src/index.ts` with
+      `export default { id: "super-fr", async setup(ctx) { ... } }`. Import types only —
+      `import type { Plugin } from "@opencode/plugin"` — so the delivered files need no
+      node_modules. Replace `@opencode-ai/plugin` with `@opencode/plugin` ^2 in package.json's
+      devDependencies (never its version field) and update `bun.lock`. Keep the three
+      `// super-fr-parity:` markers on the same handlers so `fr harness parity` still observes them.
+- number: 2
+  title: Edit gate, pin, idle and claim on V2 hooks
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Port the edit gate: register `ctx.tool.hook("execute.before", event)` and read
+      `event.tool` / `event.input`, keeping `marker.ts`'s decisions untouched. Add V2's `shell`
+      to the non-writing tool set beside `bash`. Rewrite `test/index.test.ts` to capture the
+      handler from `setup(fakeCtx())`; keep every existing assertion (nested path args, absolute
+      paths, patch headers, symlink escape, malformed patch denial, allowlist, `FR_BASE_OK`).
+  - id: P1.T2.S2
+    text: |-
+      Port the pin: `src/pin.ts` gains a `create.before` handler that sets
+      `event.env.FR_HARNESS_FR`, and never throws. Port the claim: `src/claim.ts` reads
+      `event.sessionID` and `ctx.session.get({sessionID})` for `parentID`/`agent`/model, keeping
+      `fr run claim --open-unit` as the only verdict. Port the idle guard: `src/idle.ts` consumes
+      `for await (const event of ctx.event.subscribe({signal}))`, filters `session.idle`, and
+      nudges with `ctx.session.prompt`. `setup` returns `() => controller.abort()`.
+  - id: P1.T2.S3
+    text: |-
+      Rewrite `test/{pin,idle,claim}.test.ts` against the new registrations with fake contexts
+      (captured hook map, scripted event iterable, stubbed `session.get`/`session.prompt`).
+      `bun test` green; `uv run fr harness parity --check` still reports agreement.
+- number: 3
+  title: Session-id export, measured before it is trusted
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Red then green: `src/session.ts` keeps a short-TTL pending list; `execute.before` for
+      `tool === "shell"` records `(sessionID, input.command)`; `create.before` sets
+      `FR_OPENCODE_SESSION_ID` only when exactly one pending entry from exactly one session
+      matches the command, and exports nothing on ambiguity or expiry. Tests cover the single
+      match, two sessions with the same command, an unmatched event, and expiry.
+  - id: P1.T3.S2
+    text: |-
+      Measure the premise in a real binary: a throwaway probe plugin under a temporary
+      `XDG_CONFIG_HOME` logs the `execute.before` and `create.before` order and whether
+      `input.command === event.command` for `opencode run --auto "run: git status"`. Record the
+      measurement in the plan journal. If the premise is false, leave the export registered but
+      inert (never guess), and say so in the record and the PR body.
+- number: 4
+  title: Re-pin CI and the live delivery probe to 2.0.x
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Change `.github/workflows/ci.yml`'s `opencode-plugin-test` job from
+      `npm install -g opencode-ai@1.18.32` to the 2.0 line, and update
+      `tests/integration/test_opencode_plugin_live.py`'s expectations (the plugin must appear in
+      `opencode debug config`'s list and the sentinel plugin's probe must observe the
+      `execute.before` verdicts). Run it locally with `FR_REQUIRE_OPENCODE=1`.
+  - id: P1.T4.S2
+    text: |-
+      Refactor: delete the V1 hook object and any `@opencode-ai/plugin` import left behind, run
+      `bun test`, `uv run ruff check packages/ tests/`, and the targeted Python tests above; the
+      phase must be green with no V1 code path remaining.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

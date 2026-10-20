@@ -1,0 +1,114 @@
+schema_version: 2
+phase:
+  number: 4
+  title: fr reads OpenCode 2's store, and refuses 1.x by name (R13, R14)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-2-store-read
+  - opencode-2-v1-refusal
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/**
+  - packages/fr/src/fr/usage/**
+  - tests/unit/test_run_observed*.py
+  - tests/unit/test_usage*.py
+  - tests/fixtures/opencode/**
+  - tests/scenarios/**
+  - tests/integration/test_scenarios.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: A fixture that pins the migration's shape
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Capture `tests/fixtures/opencode/two-sessions.db` from a real store: one 2.0 session
+      (`session_v2` + `session_message` with tool items named `shell`/`question`/`skill`, cost and
+      tokens on a completed assistant message) and one session present only in the legacy
+      `session` table. Redact directories, titles and prompts; keep the shape.
+  - id: P4.T1.S2
+    text: |-
+      Add a fixture test asserting the file's tables and columns match the reader's expectations,
+      so a later store change fails here first.
+- number: 2
+  title: The version probe and the observed reader
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Red: `tests/unit/test_run_observed_opencode_v2.py` asserts `opencode_store_version(db, sid)`
+      returns `v2`, `v1-only`, `absent`, `unreadable` for the four cases, and that `_known` plus
+      `why_unobservable` produce the R14 wording for `v1-only` (naming OpenCode 1.x and the
+      upgrade) instead of "check FR_OPENCODE_DB".
+  - id: P4.T2.S2
+    text: |-
+      Green: move `_known`, `_parts`, `_final_text`, `_children`, `opencode_root` and the unscoped
+      top-level query/activity probe onto `session_v2`/`session_message`, mapping V2 fields
+      (`id`, `name`, `state.status`, `state.input`, `state.content[].text`,
+      `state.metadata.exit`, `time.created|ran|completed`). Resolve `shell`/`bash` and the V2
+      dispatch tool name in one alias table; keep the historical V1 names readable.
+  - id: P4.T2.S3
+    text: |-
+      Green: route `why_unobservable` through the probe and name the session-id correlation miss
+      as a cause of an unset `FR_OPENCODE_SESSION_ID` (R6). Test both the gate path and the
+      wording.
+- number: 3
+  title: Usage, and the scenario that proves both
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Move `fr/usage/readers/opencode.py` onto `session_v2`/`session_message`: `data.cost`,
+      `data.tokens.{input,output,reasoning,cache.{read,write}}`,
+      `data.model.{id,providerID}`, `data.agent`, `time.created`; never raise; a `v1-only`
+      answer becomes `unavailable` carrying the R14 reason. Tests assert the dollars and tokens
+      the fixture holds, and `—` (never zero) where the store has none.
+  - id: P4.T3.S2
+    text: |-
+      Add `tests/scenarios/opencode-store-v2.sh` (candidate install, `fr usage collect` +
+      `fr run status`) and register it where the other scenarios run; run
+      `uv run pytest -q --no-cov tests/integration/test_scenarios.py`.
+  - id: P4.T3.S3
+    text: |-
+      Refactor: one shared adapter module (the probe + row mapping) imported by both readers, with
+      a test that they agree on the fixture's tool calls and figures; run the full targeted suites
+      and `uv run ruff check packages/ tests/`.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

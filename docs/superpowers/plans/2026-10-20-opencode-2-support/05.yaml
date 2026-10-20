@@ -1,0 +1,120 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Parity, matrix, prose and release wiring (R15, R16)
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  tracking_issue: null
+  acceptance:
+  - opencode-2-plugin-loads
+  - opencode-2-edit-gate
+  - opencode-2-bash-gate
+  - opencode-2-store-read
+  - opencode-2-v1-refusal
+  - opencode-2-session-export
+  - opencode-2-idle-nudge
+  - opencode-2-status-line
+  - opencode-2-push-guard
+  - opencode-2-claim
+  - opencode-2-pin
+  - opencode-2-nag
+  - opencode-2-sentinel
+  - opencode-2-bind-unbind
+  tier: mechanical
+  files:
+  - packages/fr/src/fr/harness/**
+  - docs/acceptance/**
+  - docs/explainers/**
+  - README.md
+  - AGENTS.md
+  - plugins/super-fr/rules/**
+  - .claude/rules/**
+  - .opencode/**
+  - .hermes/**
+  - .changes/**
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: The declared parity matrix
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Move `parity.yaml`'s OpenCode cells to what the code now does: edit gate, shell gate, push
+      guard, nag, sentinel and bind/unbind `enforced`; idle `partial` with its scope note; status
+      line per P3's outcome. Keep every `super-fr-parity:` marker on the handler it credits and
+      run `uv run fr harness parity --check` plus its tripwires.
+- number: 2
+  title: Matrix and reports
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Move every `opencode-2-*` row with evidence (`fr acceptance set-status --id … --status ci|walk-owed
+      --notes … --level …`), and re-point `opencode-isolation-enforcement` off its 1.18.32 note.
+      Runs proven only by a live session stay `walk-owed` until the post-merge Test Plan executes.
+  - id: P5.T2.S2
+    text: |-
+      Regenerate the three committed reports (`fr acceptance report --deterministic`) and run
+      `uv run fr acceptance check`.
+- number: 3
+  title: Prose, mirrors and the explainer
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      Update the canonical `plugins/super-fr/rules/fr-isolation-required.md` (OpenCode now gates
+      bash through `execute.before`), its hand-maintained `.claude/rules/` mirror, `AGENTS.md`'s
+      fr-opencode-plugin paragraph, and `README.md`'s OpenCode section. Then run
+      `scripts/sync-opencode.py` and `scripts/sync-hermes.py` and commit both mirrors.
+  - id: P5.T3.S2
+    text: |-
+      Update `docs/explainers/fr-isolation.html` (hand-authored, edit in place, never rewrite) for
+      the new OpenCode coverage, and any renderer-backed page the change touches; verify with the
+      tripwire `tests/unit/test_tripwire_explainers_fresh.py`.
+- number: 4
+  title: Release wiring and the final gate
+  steps:
+  - id: P5.T4.S1
+    text: |-
+      Add `.changes/feat-opencode-v2-support.yaml` with `bump: major` and a summary naming the
+      OpenCode 2.0 port and the dropped 1.x support. Confirm no version-bearing field moved
+      (`uv run --no-project python scripts/bump-version.py --check`).
+  - id: P5.T4.S2
+    text: |-
+      Refactor/close: run `uv run pytest -q --no-cov -n auto`, `bun test`, `ruff check`,
+      `mypy packages/fr/src …`, `fr validate artifacts`, and `fr harness parity --check`; record
+      every command and its result in the step record.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
