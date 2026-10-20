@@ -130,11 +130,19 @@ steps:
           visual: none
           unobserved: tests
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-20T10:44:52+00:00'
           harness: opencode
           session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-20T10:44:56+00:00'
+          outcome: done
+        evidence:
+          review: p3-review
+          reviewer: ses_ea738c8b4ffeMnME45Y0tkt4bk
+          visual: none
+          findings: p3-r12-text-contradicts-measurement,p3-package-readme-describes-the-1x-loader,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9,p3-r10
+          unobserved: reviewer,reviewer-return
   journal-check:
     state: pending
   deliver:
