@@ -341,13 +341,13 @@ What `candidate` proves before merge (a new `tests/scenarios/` script):
 What only a live model-driven 2.x session proves, and is therefore post-merge at
 the **Tester** gate with an explicit refusal expectation:
 
-- an `edit` into an fr-enabled base clone is refused;
-- a `shell` command from the base clone during an active pipeline is denied, and
-  `git status` from the worktree is not;
-- `FR_OPENCODE_SESSION_ID` reaches the command and `fr run status` names the
-  right session;
-- the idle nudge is actually submitted;
-- the status line renders the fr segment.
+1. An `edit` into an fr-enabled base clone is refused.
+2. A `shell` command from the base clone during an active pipeline is denied,
+   and `git status` from the worktree is not.
+3. `FR_OPENCODE_SESSION_ID` reaches the command and `fr run status` names the
+   right session.
+4. The idle nudge is actually submitted.
+5. The status line renders the fr segment.
 
 ## Test Plan
 
