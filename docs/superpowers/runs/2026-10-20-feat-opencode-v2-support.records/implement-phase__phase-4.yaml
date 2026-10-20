@@ -105,5 +105,108 @@ journal:
       Measured: every compaction row has data.tokens and data.cost 0 (none priced). The usage reader counts only
       type == "assistant" rows, as the 1.x reader counted only role == "assistant". Dollars are unaffected (cost 0);
       token totals undercount compaction work. Not in R13's field list; left as is.
+  - kind: finding
+    id: p4-r1
+    phase: 4
+    review_scope: in
+    title: "why_unobservable worded a healthy v2 session with the absent answer's FR_OPENCODE_DB sentence"
+    body: |
+      Review: store_version == "v2" fell through to "not in the OpenCode database … check FR_OPENCODE_DB", printed on
+      the operator-gate refusal whenever a healthy 2.x session shows no observed question/dispatch/command.
+  - kind: finding
+    id: p4-r2
+    phase: 4
+    review_scope: in
+    title: "an unparseable session_message.data row became {} and the usage figure stayed `exact`"
+    body: |
+      Review: opencode_store.loads swallowed JSONDecodeError into {}; one corrupt row lowered cost with source exact and
+      unavailable None, and dropped that row's tool calls and tokens.
+  - kind: finding
+    id: p4-r3
+    phase: 4
+    review_scope: in
+    title: "two alias tables and two canonical_tool functions, mapping bash to different targets, both claiming to be the only one"
+    body: |
+      Review: opencode_store.TOOL_ALIASES/canonical_tool (bash->shell) and usage.classify.canonical_tool (bash->Bash),
+      each docstring claiming the ONE table.
+  - kind: finding
+    id: p4-r4
+    phase: 4
+    review_scope: in
+    title: "spec §D's field mapping did not record the measured shape (role = session_message.type column, row time beside item time.*)"
+    body: |
+      Review: the spec still described data.role and per-state times; the measured divergences are in p4-store-shape-measured.
+  - kind: finding
+    id: p4-r5
+    phase: 4
+    review_scope: in
+    title: "the store fixture was built, not captured, against R13's 'migrated V1 rows taken from a real store'"
+    body: |
+      Review: DDL verbatim from a live store, rows constructed — the reader was pinned against its author's own mapping.
+  - kind: decision
+    id: p4-r2-degradation
+    phase: 4
+    title: "An unreadable message row makes the usage record unavailable (naming the row) and the observation None"
+    body: |
+      opencode_store.parse_data returns None for data that is not a JSON object; StoredMessage carries unreadable=True
+      (data {} only so read-around code cannot crash). The usage reader returns unavailable("OpenCode message row(s)
+      <ids> have unreadable data, so the session's cost, tokens and tool calls cannot be read whole"); observed._messages
+      returns None, so every gate reads the session as unobservable. Chosen over an `estimated`-labelled partial sum:
+      the missing row's cost, tokens AND tool calls are unknown, a partial figure would still be attributed across
+      activities as if whole, and R14 says never a figure that hides what could not be read. A value that does not even
+      decode as UTF-8 (CAST(x'fffe' AS TEXT)) fails inside sqlite's fetch and was already unavailable via the
+      sqlite3.Error path; the case that silently passed is valid text that is not JSON ('{not json', '[]').
+  - kind: discovery
+    id: p4-migrated-session-captured
+    phase: 4
+    title: "A real migrated 1.x session read whole by the 2.x readers; captured, redacted, into the fixture"
+    body: |
+      Read-only COPY of the live 2.1.0 store (2026-10-20): 242 session_v2 rows, 229 also in the legacy session table
+      (versions 1.17.x-1.19.x migrated; 2.0.x/2.1.0 native). session_message types: assistant, user, system, synthetic,
+      compaction, idle. 145 rows carry migrated task metadata (sessionId/parentSessionId). One small migrated session
+      (four rows: user, assistant, assistant, system; two 1.x `bash` items; an assistant row with error.type aborted and
+      integer cost 0; tool items with providerState and a reasoning item with state.signature; message rows' time_updated
+      past data.time.completed) is now tests/fixtures/opencode/migrated-1x-session.json, ids/text/model/absolute times
+      redacted and figures rounded to two significant digits. The usage reader reads it whole (cost exact, both calls as
+      shell) — test_a_captured_migrated_1x_session_reads_whole. The capture holds no migrated `task` item; a migrated
+      dispatch is still pinned only by the constructed fold.
+resolves:
+  - id: p4-r1
+    state: fixed
+    body: |
+      packages/fr/src/fr/run/observed.py why_unobservable: a `v2` branch — "the session your harness (opencode) exported
+      in <key> (<sid>) was read, and it holds no <what> yet", no FR_OPENCODE_DB pointer. Test
+      tests/unit/test_run_observed_opencode_v2.py::test_each_of_the_four_answers_words_itself (four distinct sentences).
+  - id: p4-r2
+    state: fixed
+    body: |
+      opencode_store.parse_data + StoredMessage.unreadable; usage reader -> unavailable naming the row; observed._messages
+      -> None (decision p4-r2-degradation). Tests: test_opencode_an_unparseable_message_row_is_unavailable_naming_it,
+      the tightened test_opencode_one_bad_row_is_unavailable_or_tolerated_never_a_crash (a tolerated row must keep the
+      healthy figure and source), test_an_unparseable_message_row_makes_the_session_unobservable.
+  - id: p4-r3
+    state: fixed
+    body: |
+      opencode_store.TOOL_ALIASES/canonical_tool -> STORE_TOOL_ALIASES/store_tool_name (+ STORE_TOOLS), docstrings say
+      which job each table does; classify gains `question` -> AskUserQuestion so every store name is a classify key.
+      Test test_every_store_tool_name_is_known_to_the_activity_vocabulary.
+  - id: p4-r4
+    state: fixed
+    body: |
+      Fixed by the orchestrator: spec §D's field mapping now records the role as the session_message.type column, the
+      row's time_created beside per-item time.*, and the other measured divergences. Committed with p4-r1's commit.
+  - id: p4-r5
+    state: fixed
+    body: |
+      Captured route: one real migrated 1.x session's message rows, redacted, in
+      tests/fixtures/opencode/migrated-1x-session.json, loaded by build.py as ses_v1migrated; README states exactly
+      what is captured and what is constructed (session rows, the other three sessions). R13's sentence now holds as
+      written for the message rows; a migrated `task` dispatch is not in the capture (p4-migrated-session-captured).
+  - id: p4-compaction-tokens-uncounted
+    state: deferred
+    tracked_by: derio-net/super-fr#1225
+    body: |
+      Out of scope for phase 4. Tracked by derio-net/super-fr#1225, the issue being filed for it; if the filed number
+      differs the orchestrator corrects it here.
 evidence:
   tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p4-full-suite.log
