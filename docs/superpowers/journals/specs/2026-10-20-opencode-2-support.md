@@ -332,3 +332,8 @@ The sentence was removed.
 ### phase-split-2026-10-20-opencode-2-support-p1 · decision · review-size: the V2 restore is one ask across the entrypoint, edit gate, pin, idle, claim and export
 
 Phase 5 only records these rows' evidence as matrix bookkeeping; it does not serve the restore ask. Keeping the restore whole makes the diff reviewable as one port, and the enforcement surfaces (sentinel, shell gate, push guard) are a different ask that belongs in its own review.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p2 created=2026-10-20T05:43:52+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p2 · decision · ask: the pipeline sentinel, the shell gate and the push guard are a new enforcement surface
+
+Phase 1's restore does not contain them. Two decision engines must agree on whole-command semantics, and the sentinel is the gate's prerequisite, so they land together as one reviewable enforcement ask.
