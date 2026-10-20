@@ -1,0 +1,181 @@
+[
+ {
+  "id": "msg_m1",
+  "type": "user",
+  "seq": 0,
+  "time_created": 1792313600000,
+  "time_updated": 1792313604057,
+  "data": {
+   "text": "redacted text",
+   "time": {
+    "created": 1792313600000
+   }
+  }
+ },
+ {
+  "id": "msg_m2",
+  "type": "assistant",
+  "seq": 1,
+  "time_created": 1792313600017,
+  "time_updated": 1792313603927,
+  "data": {
+   "agent": "build",
+   "model": {
+    "providerID": "example-provider",
+    "id": "example-model",
+    "variant": "default"
+   },
+   "content": [
+    {
+     "type": "reasoning",
+     "text": "",
+     "state": {
+      "anthropic": {
+       "signature": "sig-redacted"
+      }
+     },
+     "time": {
+      "created": 1792313603157,
+      "completed": 1792313603261
+     }
+    },
+    {
+     "type": "tool",
+     "id": "call_m1",
+     "name": "bash",
+     "providerState": {
+      "anthropic": {
+       "caller": {
+        "type": "direct"
+       }
+      }
+     },
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "ls /home/u/work/legacy"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "redacted text"
+       }
+      ],
+      "metadata": {
+       "output": "redacted text",
+       "exit": 1,
+       "truncated": false
+      }
+     },
+     "time": {
+      "created": 1792313603729,
+      "completed": 1792313603732
+     }
+    }
+   ],
+   "snapshot": {
+    "start": "0000000000000000000000000000000000000000",
+    "end": "0000000000000000000000000000000000000000"
+   },
+   "finish": "tool-calls",
+   "cost": 0.06,
+   "tokens": {
+    "input": 2,
+    "output": 140,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 23000
+    }
+   },
+   "time": {
+    "created": 1792313600017,
+    "completed": 1792313603927
+   }
+  }
+ },
+ {
+  "id": "msg_m3",
+  "type": "assistant",
+  "seq": 2,
+  "time_created": 1792313603929,
+  "time_updated": 1792313616877,
+  "data": {
+   "agent": "build",
+   "model": {
+    "providerID": "example-provider",
+    "id": "example-model",
+    "variant": "default"
+   },
+   "content": [
+    {
+     "type": "tool",
+     "id": "call_m2",
+     "name": "bash",
+     "providerState": {
+      "anthropic": {
+       "caller": {
+        "type": "direct"
+       }
+      }
+     },
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "ls /home/u/work/legacy"
+      },
+      "content": [
+       {
+        "type": "text",
+        "text": "redacted text"
+       }
+      ],
+      "metadata": {
+       "output": "redacted text",
+       "exit": null,
+       "truncated": false
+      }
+     },
+     "time": {
+      "created": 1792313605763,
+      "completed": 1792313616764
+     }
+    }
+   ],
+   "snapshot": {
+    "start": "0000000000000000000000000000000000000000"
+   },
+   "cost": 0,
+   "tokens": {
+    "input": 0,
+    "output": 0,
+    "reasoning": 0,
+    "cache": {
+     "read": 0,
+     "write": 0
+    }
+   },
+   "error": {
+    "type": "aborted",
+    "message": "redacted error"
+   },
+   "time": {
+    "created": 1792313603929,
+    "completed": 1792313616877
+   }
+  }
+ },
+ {
+  "id": "msg_m4",
+  "type": "system",
+  "seq": 3,
+  "time_created": 1792313603929,
+  "time_updated": 1792313616877,
+  "data": {
+   "text": "redacted text",
+   "time": {
+    "created": 1792313603929
+   }
+  }
+ }
+]

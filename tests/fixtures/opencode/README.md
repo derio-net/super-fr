@@ -1,6 +1,7 @@
 # OpenCode 2 store fixture — provenance
 
-`two-sessions.db` is BUILT by `build.py` (re-run it after editing; the file is
+`two-sessions.db` is BUILT by `build.py` from constructed rows plus one
+captured row set (`migrated-1x-session.json`) (re-run it after editing; the file is
 committed). It pins the shape `fr` reads (spec
 `2026-10-20-opencode-2-support-design.md` R13, R14):
 
@@ -19,6 +20,21 @@ committed). It pins the shape `fr` reads (spec
   migrated 1.x tool name (`bash`), `cost` 0 (an integer, as live rows have).
 - **`ses_v2child`** — its subagent child (`parent_id` = `ses_v2demo`), one
   assistant message with a final text item, `cost` 0.002.
+- **`ses_v1migrated`** — CAPTURED, redacted. The four `session_message` rows
+  (`user`, `assistant`, `assistant`, `system`) of one real OpenCode 1.18.x
+  session that the 2.x migration moved into `session_v2`, copied 2026-10-20
+  from a read-only copy of a live 2.1.0 store (the live file was never opened).
+  Kept as captured: every row's `type`, `seq`, the order and nesting of every
+  `data` key, every enum value (`type`, `status`, `name` — the 1.x `bash` —,
+  `finish`, `agent`, `variant`, `error.type`), `exit`, `truncated`, and the
+  time DELTAS. Redacted: ids (`msg_m*`, `call_m*`), every free text (prompt,
+  command, output, signature, error message, snapshot hashes), model id and
+  provider (`example-*`), and absolute times (shifted to one day before `T0`).
+  Figures are rounded to two significant digits (magnitude kept). The
+  `session_v2`/`session` rows (directory, title, slug) are CONSTRUCTED: the
+  capture is the message rows only, and the legacy `message`/`part` rows of
+  that session are not carried.
+- **`ses_v2demo`, `ses_v2child`, `ses_v1only`** are CONSTRUCTED (below).
 - **`ses_v1only`** — a 1.x session present ONLY in the legacy
   `session`/`message`/`part` tables: what `v1-only` means.
 

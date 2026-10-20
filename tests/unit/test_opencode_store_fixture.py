@@ -37,7 +37,7 @@ def test_the_fixture_holds_one_2x_session_and_one_1x_only_session() -> None:
             for item in json.loads(raw).get("content", [])
             if item.get("type") == "tool"
         }
-    assert v2 == {"ses_v2demo", "ses_v2child"}
+    assert v2 == {"ses_v2demo", "ses_v2child", "ses_v1migrated"}
     assert v1 - v2 == {"ses_v1only"}
     assert {"shell", "question", "skill", "subagent", "bash"} <= names
 
@@ -47,3 +47,18 @@ def test_the_fixture_carries_no_real_identity() -> None:
         dirs = {r[0] for r in con.execute("SELECT directory FROM session_v2 UNION "
                                           "SELECT directory FROM session")}  # fmt: skip
     assert all(d.startswith("/home/u/") for d in dirs)
+
+
+def test_a_captured_migrated_1x_session_reads_whole() -> None:
+    """R13 "migration lost nothing", against rows a real 1.x -> 2.x migration
+    wrote (captured, redacted — see the fixture README): every assistant row's
+    cost and tokens, and its 1.x `bash` items as `shell` calls."""
+    from fr.usage.readers import opencode
+
+    record = opencode.read(FIXTURE, "ses_v1migrated")
+    assert record.unavailable is None
+    assert record.cost.source == "exact"
+    assert record.cost.usd == 0.06
+    assert len(record.messages) == 2
+    assert sum(m.tokens.output for m in record.messages) == 140
+    assert [c.name for m in record.messages for c in m.tool_calls] == ["shell", "shell"]

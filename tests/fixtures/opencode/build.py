@@ -119,6 +119,11 @@ T0 = 1792400000000  # 2026-10-20, epoch ms (fictional instant)
 V2 = "ses_v2demo"
 CHILD = "ses_v2child"
 V1 = "ses_v1only"
+MIGRATED = "ses_v1migrated"
+CAPTURE = Path(__file__).with_name("migrated-1x-session.json")
+"""Rows of ONE real migrated 1.x session (version 1.18.x, in both `session` and
+`session_v2`), copied from a read-only copy of a live 2.1.0 store and redacted:
+see README.md for exactly which parts are captured."""
 MODEL = {"id": "example-model", "providerID": "example-provider", "variant": "default"}
 TOKENS = {"input": 1200, "output": 300, "reasoning": 50, "cache": {"read": 4000, "write": 600}}
 CHILD_TOKENS = {"input": 200, "output": 40, "reasoning": 0, "cache": {"read": 0, "write": 0}}
@@ -302,6 +307,24 @@ def main() -> None:
             ),
         ),
     )
+    # A real migrated 1.x session (R13's "migration lost nothing"): captured rows.
+    captured = json.loads(CAPTURE.read_text())
+    born = captured[0]["time_created"] - 24
+    for table in ("session_v2", "session"):
+        con.execute(
+            f"INSERT INTO {table} (id, project_id, parent_id, slug, directory, title, version, "
+            "time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (MIGRATED, "prj_demo", None, "slug-migrated", "/home/u/work/legacy",
+             "migrated session", "1.18.10", born, captured[-1]["time_updated"]),
+        )  # fmt: skip
+    con.executemany(
+        "INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            (r["id"], MIGRATED, r["type"], r["seq"], r["time_created"], r["time_updated"],
+             json.dumps(r["data"]))
+            for r in captured
+        ],
+    )  # fmt: skip
     con.commit()
     con.execute("VACUUM")
     con.close()
