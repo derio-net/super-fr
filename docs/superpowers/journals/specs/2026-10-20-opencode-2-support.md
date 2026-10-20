@@ -367,3 +367,8 @@ The sentinel's mtime refresh, shared lock and orphan heal have no TypeScript pre
 ### tier-2026-10-20-opencode-2-support-p3 · decision · hard: the delivery mechanism is unproven and its failure mode is silent
 
 A slot that never renders looks like a status line that shows nothing. The phase must decide and record which mechanism shipped.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-20-opencode-2-support-p4 created=2026-10-20T05:43:59+00:00 decided_by=agent -->
+### tier-2026-10-20-opencode-2-support-p4 · decision · hard: every query site moves and a missed one returns empty silently
+
+The loud 1.x refusal is the only thing that makes an omission visible, so the probe and both readers must land together.
