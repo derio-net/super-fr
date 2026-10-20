@@ -536,3 +536,161 @@ Same issue: marker.ts is the last caller still using unbounded execFileSync; mov
 ### p2-not-proven-live-resolved · finding [out-of-scope] · resolves p2-not-proven-live: None of the phase-2 handlers has run inside a real OpenCode 2 session (phase 2)
 
 By design and by contract: R15 and Test Plan items 1-6 name these as POST-MERGE live rows (a throw from execute.before reaching the model as the refusal text, execute.after on skill, context's system part reaching the request, session.deleted arriving). No pre-merge phase can prove them, and the acceptance matrix carries them as the opencode-2-* rows whose status stays walk-owed until the live walk, which `fr acceptance check` keeps failing until then.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-tui-spike created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-tui-spike · discovery · TUI spike, measured on opencode 2.1.0: a plugin DIRECTORY's `tui` entry loads and renders with no consumer-side packages; a cli.json FILE path is silently ignored (phase 3)
+
+Throwaway XDG_CONFIG/DATA/STATE/CACHE_HOME and HOME, own service port (`opencode service set port`, stopped after),
+TUI started under a pseudo-terminal in a git repo. Minimal entry `export default {id, setup(ctx)}` registering
+`ctx.ui.slot({append: "prompt.footer.status"|"home.footer.status", render: () => <text>…</text>})`, setup writing a proof file.
+1. `cli.json` = `{"plugins": ["<abs>/tui/statusline.tsx"]}` (a FILE): not loaded, no proof, no error, no toast.
+   Reason, read from the binary: reconciliation does `if (resolved path isFile) continue` — only directories are taken.
+2. Directory `<config>/opencode/plugins/fr-opencode-plugin/` containing `tui.tsx`, NO cli.json: loaded, setup ran,
+   both slot texts rendered. The TUI scans the same plugins dirs as the server and resolves entrypoints by name:
+   server = `<dir>/server` else `<dir>/index`; tui = `<dir>/tui` (a `tui/index.tsx` directory resolves too — the delivered layout).
+3. cli.json `{"plugins": ["<abs dir outside plugins/>"]}`: loaded and rendered. So the working registration is key `plugins`,
+   value an absolute DIRECTORY path (or file:// URL / ./relative), never a file.
+4. Directory discovered AND listed in cli.json: setup ran ONCE (entries are de-duplicated by resolved href).
+JSX, `solid-js` and `@opentui/solid` are supplied by the binary's runtime plugin (it maps those specifiers and
+`@opencode/plugin/tui` to bundled modules and runs a Solid babel transform on .tsx): nothing installed consumer-side.
+Hence P3.T1.S2's fallback (a keymap command) was NOT taken; the status line is real.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-one-load-measured created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-one-load-measured · discovery · Exactly one `loading plugin` line for the directory-only delivery; two for the 1.x shape (measured) (phase 3)
+
+Isolated config, `opencode plugin list` under its own service. Directory only: one line,
+`id=<plugins>/fr-opencode-plugin entrypoint=…/fr-opencode-plugin/index.ts`. Same plus the 1.x top-level loader
+`fr-opencode-plugin.ts`: two lines (the directory, and the loader). The live test now asserts one.
+(Under the interactive TUI the same single id is logged at each server reconciliation; that is one plugin, not two.)
+
+<!-- fr:journal kind=decision scope=plan id=p3-tui-inside-the-plugin-dir created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-tui-inside-the-plugin-dir · decision · The TUI entry ships INSIDE the plugin directory (tui/index.tsx), contrary to R12's 'beside, not inside' (phase 3)
+
+R12's premise ("the server loader picks up every top-level file", so the TUI must sit beside it) is false on 2.x:
+the server resolves only `<dir>/server|index` and never imports `tui/`, and the TUI resolves only `<dir>/tui`.
+The plan (P3.T3.S1) already said "into the plugin DIRECTORY (never top level)"; the measurement agrees with the plan.
+A unit test asserts no server source imports `./tui`; the live test proves the server loads index.ts once and the TUI renders.
+Sources live at packages/fr-opencode-plugin/src/tui/ (not the plan's packages/fr-opencode-plugin/tui/) so that
+segment.ts's `../spawn` import resolves identically in the repo and in the delivered directory.
+
+<!-- fr:journal kind=decision scope=plan id=p3-cli-json-lists-the-directory created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-cli-json-lists-the-directory · decision · install lists the plugin DIRECTORY in cli.json's plugins (redundant with discovery, kept for R12 and the probe) (phase 3)
+
+deliver-opencode-plugin.sh install (called by install.sh) appends `<abs plugins>/fr-opencode-plugin` to
+`<config>/opencode/cli.json`'s `plugins` with jq: created when absent; refused with the file named when it is not
+a JSON object with a plugins array (JSONC with comments is refused, never rewritten); idempotent by exact path;
+uninstall removes only that string. On 2.1.0 the TUI already discovers the directory, so the entry changes nothing
+at runtime (de-duplicated, measured) — it is the R12 enablement directive and what the parity probe reads.
+
+<!-- fr:journal kind=decision scope=plan id=p3-segment-uses-cwd-not-session created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-segment-uses-cwd-not-session · decision · The status line runs fr-statusline-segment.sh --format plain --cwd <the slot's session directory>; rule 1 (bound session) never fires (phase 3)
+
+spawn.ts run() takes no stdin, and passing the OpenCode session id would mean a second spawn path, so the script is
+asked by --cwd. The directory is per render: the slot input's `sessionID` is looked up with
+context.data.session.get(id).location.directory (declared in @opencode/plugin dist/tui/context.d.ts and
+@opencode/client SessionInfo.location), falling back to context.location.directory (the TUI's launch dir) for the
+home screen or a session not loaded yet. segment.ts's createSegmentCache keeps one entry per session id, each with
+its own coalesced refresher (250 ms, one read in flight, one queued); a render only reads the cache, so no
+per-render or per-keystroke spawn. Text: `fr ⎇ <branch>` in a workspace, `<branch> · no fr-isolation` outside, an
+em-dash for a missing branch or unreadable output, "" outside a git repo (a filesystem walk, no spawn). Refresh on
+session.execution.{started,succeeded,failed,interrupted} and session.idle via ctx.data.on (the event's sessionID
+when present, else every cached session). Proven: unit tests over the lookup and the cache; the live TUI test
+(launch dir == session dir). Claimed, not live-proven: a session from ANOTHER project shows its own repo — spec
+Test Plan item 5's "outside any repo shows none" for such a session is owed to the post-merge walk.
+
+<!-- fr:journal kind=decision scope=plan id=p3-parity-probe-runs-the-delivery created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-parity-probe-runs-the-delivery · decision · fr.harness.observe's status-line probe runs this checkout's delivery into a temp config and reads it back (phase 3)
+
+opencode_status_line_configured(config_dir): cli.json lists a directory (string or {package}, file:// accepted)
+AND `<dir>/tui/index.tsx` exists; unreadable cli.json raises (unknown state is never absent). observe_interactions(root)
+runs scripts/deliver-opencode-plugin.sh install into a TemporaryDirectory and applies that probe, so the observation
+is derived from the delivery, not transcribed. check() takes it as an optional third argument and compares only probed
+interaction cells (today status-line/opencode); commands/harness_cmd.py passes it (outside the phase's file list,
+necessarily). parity.yaml is untouched: the row's `partial` maps to `present`, which the probe observes.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-tsx-not-typechecked created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-tsx-not-typechecked · discovery · src/tui/index.tsx is excluded from tsc; its proof is the live TUI test (phase 3)
+
+Its JSX types come from @opentui/solid, a peer the binary bundles but node_modules does not carry. tsconfig excludes
+exactly src/tui/index.tsx (pinned by test/tsconfig.test.ts); segment.ts (all the logic) is type-checked and unit-tested. tests/integration/test_opencode_plugin_live.py::
+test_opencode_tui_renders_the_delivered_status_line starts the real TUI on a pty (own session, process group killed
+after) and asserts `frstatusprobe · no fr-isolation` on screen. pty.fork() inside pytest hung in waitpid (pytest is
+multi-threaded; forkpty warns of exactly this), so the probe uses openpty + Popen(start_new_session=True).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r12-text-contradicts-measurement created=2026-10-20T10:44:50+00:00 phase=3 state=open review_scope=in -->
+### p3-r12-text-contradicts-measurement · finding [open] (reviewer: in scope) · Spec R12 says the TUI entry lives 'beside, not inside' the server plugin; the shipped (and only working) layout is inside (phase 3)
+
+See p3-tui-inside-the-plugin-dir. The spec is the contract, so its R12 sentence (and its stated reason) should be
+corrected to the measured layout: one directory, `index.ts` for the server, `tui/` for the TUI, cli.json listing the
+directory (a file path is ignored by 2.1.0). Left open by the implementer because the spec was not in the phase's
+files; the orchestrator edited R12 and section E before review — a contract that states a layout the code must not
+use is worse than no sentence.
+
+<!-- fr:journal kind=finding scope=plan id=p3-package-readme-describes-the-1x-loader created=2026-10-20T10:44:50+00:00 phase=3 state=open review_scope=in -->
+### p3-package-readme-describes-the-1x-loader · finding [open] (reviewer: in scope) · packages/fr-opencode-plugin/README.md still described the 1.x loader, and said the shell is ungated (phase 3)
+
+The delivery no longer writes the loader (and deletes a stale one), so the README's "How consumers get it" block
+described a layout that no longer exists. It also carried a larger falsehood: "Bash is intentionally ungated
+because an OpenCode tool hook cannot inspect filesystem effects performed by a shell command" — phase 2 shipped
+the whole-line shell gate, so the README told a reader the opposite of what the plugin does. Rewritten before
+review: the surface table, the one-directory layout with the cli.json entry and the stale-loader removal, the
+shell gate and the push backstop, the nag, and the status line (including why tui/index.tsx alone is out of tsc).
+R16 gives phase 5 the repo-level prose; this file documents the package and had to move with the code.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-live-test-leaked-a-service created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-live-test-leaked-a-service · discovery · The live test left an OpenCode service behind, and it held the runner's stdout open for three more minutes (phase 3)
+
+`time uv run pytest tests/integration/test_opencode_plugin_live.py` printed "3 passed in 34.19s" and then took
+3m19s of wall clock to exit (175s of system CPU). Cause: OpenCode's service is a detached daemon that inherits the
+stdio of the CLI call that first started it, so a survivor keeps the runner's stdout pipe open — and under a
+`timeout` wrapper that reads as `exit 124` on a run whose tests had all passed (the flake seen during the phase).
+`service stop` deletes service.json when it succeeds, so the fix captures the pid recorded in this environment's
+service.json BEFORE stopping and reaps it (SIGTERM, then SIGKILL, 5s bound) if it is still alive. Same command
+after: 3 passed in 33.09s, 33.8s total.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-review-fix-measurements created=2026-10-20T10:44:50+00:00 phase=3 -->
+### p3-review-fix-measurements · discovery · After the review fixes: live file 3 passed in 34.18s (34.8s wall, no lingering exit), full suite 13026 passed / 108 skipped, exit=0 (phase 3)
+
+`time FR_REQUIRE_OPENCODE=1 uv run pytest -q --no-cov tests/integration/test_opencode_plugin_live.py`: 3 passed in
+34.18s, 34.8s total, so the p3-live-test-leaked-a-service fix still holds (the 33.8s claim is now 34.8s). The only
+opencode processes afterwards were the operator's own pre-existing sessions. Full suite `-n auto` took 21m39s on
+this host (contended). For later phases: deliver-opencode-plugin.sh now validates cli.json before any write, and its
+one writer (write_cli_json) follows symlinks and keeps the mode — any new cli.json edit must go through it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r12-text-contradicts-measurement-resolved created=2026-10-20T10:44:50+00:00 phase=3 state=fixed resolves=p3-r12-text-contradicts-measurement -->
+### p3-r12-text-contradicts-measurement-resolved · finding [fixed] · resolves p3-r12-text-contradicts-measurement: Spec R12 says the TUI entry lives 'beside, not inside' the server plugin; the shipped (and only working) layout is inside (phase 3)
+
+Spec R12 now states the measured layout (the TUI inside the plugin directory as its `tui` entry, cli.json listing
+the DIRECTORY, a file path silently ignored by 2.1.0), records the earlier draft's false premise and the double
+load it caused, and keeps the fallback/partial clause. Section E ("Delivery and configuration") is corrected the
+same way.
+
+<!-- fr:journal kind=finding scope=plan id=p3-package-readme-describes-the-1x-loader-resolved created=2026-10-20T10:44:50+00:00 phase=3 state=fixed resolves=p3-package-readme-describes-the-1x-loader -->
+### p3-package-readme-describes-the-1x-loader-resolved · finding [fixed] · resolves p3-package-readme-describes-the-1x-loader: packages/fr-opencode-plugin/README.md still described the 1.x loader, and said the shell is ungated (phase 3)
+
+packages/fr-opencode-plugin/README.md rewritten against the shipped code: surface table matched to index.ts's
+registrations, one-directory delivery, cli.json semantics (create/refuse-unparsable/idempotent/uninstall),
+stale 1.x loader removed, shell gate and push backstop explained, nag and status line documented, and
+`bunx tsc --noEmit` added to the dev commands.
+
+<!-- fr:journal kind=finding scope=plan id=p1-v2-loads-sources-dir-as-plugin-resolved-2 created=2026-10-20T10:44:50+00:00 phase=3 state=fixed resolves=p1-v2-loads-sources-dir-as-plugin -->
+### p1-v2-loads-sources-dir-as-plugin-resolved-2 · finding [fixed] · resolves p1-v2-loads-sources-dir-as-plugin: OpenCode 2 loads the delivered sources directory as a second plugin (phase 3)
+
+The delivery is now the directory alone (index.ts is the server entry); the top-level loader is no longer written and
+a stale one is deleted on install and uninstall. tests/integration/test_opencode_plugin_live.py asserts exactly one
+`loading plugin` line for super-fr against opencode 2.1.0; the unit tests assert nothing is delivered at the top level.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-10-20T10:44:50+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+The spike's throwaway statusline.tsx was replaced outright by the real src/tui/index.tsx; nothing of it survived to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-10-20T10:44:50+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+segment.ts is new and single-purpose and reuses spawn.ts run(); index.tsx is a 30-line shell over it, so there was no duplication to remove.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-10-20T10:44:50+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+deliver-opencode-plugin.sh got shorter (the generated loader is gone); register/unregister are its only new functions, and observe's probe reuses the delivery script rather than re-describing it.
