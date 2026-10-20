@@ -42,7 +42,7 @@
 // from `@opencode/client` 2.0.32's types; the tests drive this with a fake
 // session API and a scripted event stream. Until a live run shows it (the gh#494
 // standard), `parity.yaml` declares this surface `partial` on OpenCode.
-import { execFile } from "node:child_process";
+import { run } from "./spawn";
 
 export type FrAnswer = { code: number | null; stdout: string };
 
@@ -73,21 +73,10 @@ export function sharedActedOn(): Map<string, string> {
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 function defaultRunFr(timeoutMs: number): (cwd: string) => Promise<FrAnswer> {
-  return (cwd) =>
-    new Promise((resolve) => {
-      execFile(
-        "fr",
-        ["run", "check", "--idle", "--format", "json"],
-        { cwd, timeout: timeoutMs, killSignal: "SIGKILL", windowsHide: true },
-        (error, stdout) => {
-          // `error.code` is the exit status for a process that ran and exited
-          // non-zero, a STRING ("ENOENT") when it never ran, and absent when it
-          // was killed. Only a number is an exit status.
-          const raw = error ? (error as { code?: unknown }).code : 0;
-          resolve({ code: typeof raw === "number" ? raw : null, stdout: String(stdout ?? "") });
-        }
-      );
-    });
+  return async (cwd) => {
+    const { code, stdout } = await run("fr", ["run", "check", "--idle", "--format", "json"], { cwd, timeoutMs });
+    return { code, stdout };
+  };
 }
 
 type Verdict = { position: string; nextCommand: string; run: string; detail: string };

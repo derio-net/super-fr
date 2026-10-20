@@ -5,7 +5,7 @@
 //
 // OpenCode's shell tool (`bash` before 2.0) runs `/bin/zsh -c`, and zsh re-reads ~/.zshenv on
 // every start: a PATH rebuild there can put a different `fr` first than the
-// one this plugin's `execFile("fr")` (claim.ts, idle.ts) resolves from
+// one this plugin's `fr` (spawned through ./spawn) resolves from
 // OpenCode's own PATH. So this exports the plugin's `fr --identity` into every
 // `bash` command as FR_HARNESS_FR — a non-PATH variable `.zshenv` leaves alone
 // — and `fr` refuses at CLI entry when a PATH-reached `fr` disagrees
@@ -14,7 +14,7 @@
 // Transport only, and NEVER THROWS. `fr` is asked ONCE per plugin load, lazily
 // on the first `bash` call; a missing `fr`, one too old to know `--identity`,
 // or a hang pins nothing, which is exactly the behaviour before the pin.
-import { execFile } from "node:child_process";
+import { run } from "./spawn";
 
 /** The `shell` hook's `create.before` event (OpenCode 2) — `env` is merged
  * into the spawned command. */
@@ -35,15 +35,10 @@ export type PinHandlerOptions = {
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 function defaultIdentify(timeoutMs: number): () => Promise<string | undefined> {
-  return () =>
-    new Promise((resolve) => {
-      execFile(
-        "fr",
-        ["--identity"],
-        { timeout: timeoutMs, killSignal: "SIGKILL", windowsHide: true },
-        (error, stdout) => resolve(error ? undefined : String(stdout))
-      );
-    });
+  return async () => {
+    const answer = await run("fr", ["--identity"], { timeoutMs });
+    return answer.code === 0 ? answer.stdout : undefined;
+  };
 }
 
 export function createPinHandler(

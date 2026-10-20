@@ -36,7 +36,7 @@
 // the tests. Until a live run shows the
 // claim landing (the gh#494 standard), `parity.yaml` keeps
 // `dispatch-holder-identity` `partial` on OpenCode.
-import { execFile } from "node:child_process";
+import { run } from "./spawn";
 
 export type ClaimAnswer = { code: number | null };
 
@@ -62,18 +62,7 @@ export function sharedClaimed(): Set<string> {
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 function defaultRunFr(timeoutMs: number): (cwd: string, args: string[]) => Promise<ClaimAnswer> {
-  return (cwd, args) =>
-    new Promise((resolve) => {
-      execFile(
-        "fr",
-        args,
-        { cwd, timeout: timeoutMs, killSignal: "SIGKILL", windowsHide: true },
-        (error) => {
-          const raw = error ? (error as { code?: unknown }).code : 0;
-          resolve({ code: typeof raw === "number" ? raw : null });
-        }
-      );
-    });
+  return async (cwd, args) => ({ code: (await run("fr", args, { cwd, timeoutMs })).code });
 }
 
 type Child = { agent: string; model?: string };
