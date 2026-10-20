@@ -347,3 +347,8 @@ The status line may not be deliverable without consumer-side peer packages. Prov
 ### phase-split-2026-10-20-opencode-2-support-p4 · decision · ask: reading OpenCode 2's store is independent of the plugin
 
 fr must read the 2.0 store whether or not the plugin is installed, and the loud 1.x refusal is its own contract. No other phase can serve it.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p5 created=2026-10-20T05:43:55+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p5 · decision · ask: the published surfaces must describe what actually shipped
+
+Parity rows, the acceptance matrix and its three reports, the canonical rule and its mirrors, the explainer and the release fragment are a distinct ask that no implementation phase serves.
