@@ -327,3 +327,8 @@ R16 lists the rule, its mirror, AGENTS.md, both sync scripts and the bump level,
 ### s16-resolved · finding [fixed] · resolves s16: "A failed live row is a defect" overrules the gate policy
 
 The sentence was removed.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p1 created=2026-10-20T05:43:45+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p1 · decision · review-size: the V2 restore is one ask across the entrypoint, edit gate, pin, idle, claim and export
+
+Phase 5 only records these rows' evidence as matrix bookkeeping; it does not serve the restore ask. Keeping the restore whole makes the diff reviewable as one port, and the enforcement surfaces (sentinel, shell gate, push guard) are a different ask that belongs in its own review.
