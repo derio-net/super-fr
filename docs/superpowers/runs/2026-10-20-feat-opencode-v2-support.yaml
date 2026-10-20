@@ -53,7 +53,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-10-20T07:31:22+00:00'
+    at: '2026-10-20T08:44:44+00:00'
     members:
     - implement-phase
     - review-phase
@@ -100,6 +100,12 @@ steps:
           tests: p2-full-suite.log@d09692b9ea16;tree=73aa03697a9b6f2315a14bb04ad2f66bd2189ab0aa4f0ba502d97c30d34654f7
           visual: none
           unobserved: tests
+      phase/2/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-10-20T08:44:44+00:00'
+          harness: opencode
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
   journal-check:
     state: pending
   deliver:
