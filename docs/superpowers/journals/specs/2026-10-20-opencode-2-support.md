@@ -337,3 +337,8 @@ Phase 5 only records these rows' evidence as matrix bookkeeping; it does not ser
 ### phase-split-2026-10-20-opencode-2-support-p2 · decision · ask: the pipeline sentinel, the shell gate and the push guard are a new enforcement surface
 
 Phase 1's restore does not contain them. Two decision engines must agree on whole-command semantics, and the sentinel is the gate's prerequisite, so they land together as one reviewable enforcement ask.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p3 created=2026-10-20T05:43:53+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p3 · decision · risk-first: the TUI delivery mechanism is the one unproven mechanism in the port
+
+The status line may not be deliverable without consumer-side peer packages. Proving or falling back before the readers keeps the risk early, when the fallback can still shape the parity decision.
