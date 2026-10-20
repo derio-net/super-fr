@@ -14,7 +14,7 @@
     "@opencode/plugin": "*"
   },
   "devDependencies": {
-    "@opencode/plugin": "2.0.32",
+    "@opencode/plugin": "2.1.0",
     "@types/bun": "latest",
     "typescript": "^5.5.0"
   }

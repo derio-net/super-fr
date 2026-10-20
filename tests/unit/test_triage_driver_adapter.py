@@ -32,6 +32,7 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
     _drive,
     _events,
     _lines,
+    _sandbox,
     _state,
     checkout_fixture,
     world_fixture,
@@ -45,7 +46,7 @@ CONFIG = {
 
 
 @pytest.fixture(autouse=True)
-def _sandbox_here(_drive_sandbox: None) -> None:
+def _sandbox_here(_sandbox: None) -> None:  # noqa: F811 - the drive tests' fixture
     """The drive tests' sandbox (HOME, XDG_CONFIG_HOME and the pass clock), which
     autouse does not reach across modules — without it this module read the wall
     clock and its close-out ids were right only on the day they were written."""

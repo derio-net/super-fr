@@ -5,7 +5,8 @@
 OpenCode 2.0 shipped three intentional breaking changes: a new plugin API, new
 server/client contracts, and one global `cli.json` instead of layered
 `tui.json(c)`. Everything else is meant to keep working. Measured on this host
-(OpenCode **2.0.32**, the only binary installed; V1 is not side by side):
+(OpenCode **2.0.32**, the only binary installed; V1 is not side by side — the
+port was then re-measured on **2.1.0**, which CI now probes beside it):
 
 - **The plugin does not load at all.** `~/.local/share/opencode/log/opencode.log`
   records, for both the delivered global copy and this repo's project-local copy,
@@ -50,7 +51,10 @@ Every V2 name in this spec is read from one of: the migration guide
 (`/v2/docs/migrate-v1`), the plugin guide (`/v2/docs/build/plugins`), the plugin
 migration guide (`/v2/docs/build/plugins/migrate-v1`), the CLI-plugin guide
 (`/v2/docs/build/plugins/cli`), the permissions guide (`/v2/docs/permissions`),
-the published typings of `@opencode/plugin@2.0.32` and `@opencode/schema@2.0.32`
+the published typings of `@opencode/plugin` and `@opencode/schema` (2.0.32 when
+this was written; 2.1.0 is API-identical — the delivered plugin is probed against
+both, because a live 2.1.0 load of a 2.0.32-typed plugin is what found the one
+drift that mattered)
 (`dist/promise/{plugin,tool,session,shell,permission,event}.d.ts`), and direct
 reads of `~/.local/share/opencode/opencode.db`. Research notes:
 `docs/superpowers/journals/specs/2026-10-20-opencode-2-support.md`.
@@ -95,7 +99,8 @@ predicate with the same once-per-`position` memory, and nudges with
 `ctx.session.prompt` (V2's replacement for `promptAsync`). Its parity cell stays
 `partial`, and says so.
 
-R6. The session id fr reads is the one OpenCode itself supplies. On 2.0.32,
+R6. The session id fr reads is the one OpenCode itself supplies. On 2.0.32 (and
+2.1.0),
 `create.before`'s `env` carries no session id, but OpenCode places the ISSUING
 session's id in every command it spawns as `OPENCODE_SESSION_ID` — measured by
 printing it from a child's own `echo` (2026-10-20). So fr reads

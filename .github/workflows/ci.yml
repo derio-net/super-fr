@@ -131,6 +131,10 @@ jobs:
 
   opencode-plugin-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        opencode: ["2.0.32", "2.1.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -150,7 +154,9 @@ jobs:
       # against (OpenCode 2 ships as `@opencode/cli`; `opencode-ai` stops at 1.x); FR_REQUIRE_OPENCODE=1 turns a missing binary into a failure,
       # so the probe cannot silently skip here.
       - name: Install OpenCode
-        run: npm install -g @opencode/cli@2.0.32
+        run: npm install -g @opencode/cli@${{ matrix.opencode }}
+        # Measured on 2.0.32 (the port) and 2.1.0 (current); both are the same
+        # V2 API. A drift in either is what this probe exists to catch.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Live delivery probe (real opencode binary)
         env:

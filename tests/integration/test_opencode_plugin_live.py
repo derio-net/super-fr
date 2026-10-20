@@ -172,7 +172,15 @@ async function verdict(directory, target) {{
   const register = (domain) => async (name, cb) => {{ hooks[domain + ":" + name] = cb; }};
   const cleanup = await fr.setup({{
     location: {{ directory }},
-    session: {{}},
+    // setup registers the nag on session.hook (2.x) and the claim/bind/idle
+    // handlers read session.get/prompt when events fire; the fake must carry
+    // every domain setup touches or the plugin fails to load for the wrong
+    // reason (2026-10-20: this probe caught exactly that).
+    session: {{
+      hook: register("session"),
+      get: async () => undefined,
+      prompt: async () => ({{}}),
+    }},
     tool: {{ hook: register("tool") }},
     shell: {{ hook: register("shell") }},
     event: undefined,

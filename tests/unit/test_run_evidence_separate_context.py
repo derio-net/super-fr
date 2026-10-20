@@ -806,7 +806,12 @@ def test_an_unobservable_opencode_reviewer_names_dispatches_not_questions(
     session fr could not read, the reason names the gate's own noun."""
     from fr.commands import run_cmd
 
-    for key in ("CLAUDECODE", "CLAUDE_PLUGIN_ROOT", "FR_OPENCODE_SESSION_ID"):
+    for key in (
+        "CLAUDECODE",
+        "CLAUDE_PLUGIN_ROOT",
+        "FR_OPENCODE_SESSION_ID",
+        "OPENCODE_SESSION_ID",
+    ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("FR_HARNESS", "opencode")
     if exported is not None:
@@ -814,4 +819,4 @@ def test_an_unobservable_opencode_reviewer_names_dispatches_not_questions(
 
     dispatches = run_cmd._why_unobservable("subagent dispatches")
     assert "subagent dispatches" in dispatches and "questions" not in dispatches
-    assert "FR_OPENCODE_SESSION_ID" in dispatches
+    assert "OPENCODE_SESSION_ID" in dispatches
