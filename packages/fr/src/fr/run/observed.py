@@ -242,7 +242,12 @@ def _query(db: Path, sql: str, params: tuple[object, ...]) -> list[tuple[Any, ..
 
 def _messages(db: Path, sql: str, params: tuple[object, ...]) -> list[StoredMessage] | None:
     rows = _query(db, sql, params)
-    return None if rows is None else [stored_message(row) for row in rows]
+    if rows is None:
+        return None
+    stored = [stored_message(row) for row in rows]
+    # p4-r2: a row whose data does not parse could hold the very call being
+    # looked for — the observation is unreadable, never "nothing found".
+    return None if any(m.unreadable for m in stored) else stored
 
 
 def _wrote_windows(

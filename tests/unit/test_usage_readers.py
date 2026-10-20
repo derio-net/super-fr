@@ -279,9 +279,30 @@ def test_opencode_one_bad_row_is_unavailable_or_tolerated_never_a_crash(
     from fr.usage.readers import opencode
 
     record = opencode.read(_db_copy(OC_DB, tmp_path, statement, refold=False), "ses_paid")
-    # a row the reader can read around (a non-numeric time) is tolerated; one it
-    # cannot is `unavailable` — either way a record comes back
-    assert record.unavailable or record.cost.source == "exact"
+    # a row the reader can read around (a non-numeric time) is tolerated and
+    # keeps the whole figure; one it cannot is `unavailable` — never a partial
+    # sum still labelled `exact` (p4-r2)
+    (tmp_path / "ok").mkdir()
+    healthy = opencode.read(_db_copy(OC_DB, tmp_path / "ok", "SELECT 1", refold=False), "ses_paid")
+    if record.unavailable:
+        assert record.cost.usd is None
+    else:
+        assert record.cost.usd == pytest.approx(healthy.cost.usd)
+        assert record.cost.source == healthy.cost.source
+
+
+def test_opencode_an_unparseable_message_row_is_unavailable_naming_it(tmp_path: Path) -> None:
+    from fr.usage.readers import opencode
+
+    db = _db_copy(
+        OC_DB,
+        tmp_path,
+        "UPDATE session_message SET data = '{not json' WHERE id = 'msg_a1'",
+        refold=False,
+    )
+    record = opencode.read(db, "ses_paid")
+    assert record.unavailable and "msg_a1" in record.unavailable
+    assert record.cost.usd is None
 
 
 def test_hermes_unrecorded_per_model_cost_is_omitted_not_priced_at_zero(tmp_path: Path) -> None:

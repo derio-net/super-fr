@@ -127,11 +127,21 @@ def mapping(value: object) -> Mapping[str, Any]:
 
 
 def loads(raw: object) -> Mapping[str, Any]:
+    """`raw` parsed as a JSON object, `{}` when it does not parse. Only for a
+    field whose absence is harmless; a message row's `data` goes through
+    `parse_data`, which keeps "unreadable" apart from "empty" (p4-r2)."""
+    parsed = parse_data(raw)
+    return {} if parsed is None else parsed
+
+
+def parse_data(raw: object) -> Mapping[str, Any] | None:
+    """`raw` as a JSON object, or `None` when it is not one — a row fr could
+    not read, never silently a row that holds nothing (R14, p4-r2)."""
     try:
         data = json.loads(raw) if isinstance(raw, str | bytes) else None
-    except json.JSONDecodeError:
-        return {}
-    return mapping(data)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return data if isinstance(data, Mapping) else None
 
 
 def ms_to_dt(ms: object) -> _dt.datetime | None:
@@ -149,6 +159,10 @@ class StoredMessage:
     type: str
     created_ms: int | None
     data: Mapping[str, Any]
+    unreadable: bool = False
+    """`data` did not parse as a JSON object: `data` is `{}` only so code that
+    reads around it does not crash — every reader that sums or observes must
+    check this flag and degrade (p4-r2), never treat the row as empty."""
 
     @property
     def content(self) -> list[Mapping[str, Any]]:
@@ -163,7 +177,8 @@ def stored_message(row: tuple[Any, ...]) -> StoredMessage:
         session=str(owner),
         type=str(kind),
         created_ms=created if isinstance(created, int) else None,
-        data=loads(raw),
+        data=parsed if (parsed := parse_data(raw)) is not None else {},
+        unreadable=parsed is None,
     )
 
 

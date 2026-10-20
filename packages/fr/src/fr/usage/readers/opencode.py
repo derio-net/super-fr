@@ -133,6 +133,15 @@ def _read(source: Path, session: str) -> UsageRecord:
     with closing(open_ro(source)) as con:
         rows = con.execute(TREE_MESSAGES, (session, session)).fetchall()
     stored = [stored_message(row) for row in rows]
+    bad = [m.id for m in stored if m.unreadable]
+    if bad:
+        # p4-r2: a partial sum labelled `exact` hides what could not be read.
+        return unavailable(
+            session,
+            HARNESS,
+            f"OpenCode message row(s) {', '.join(bad)} have unreadable data, so the "
+            "session's cost, tokens and tool calls cannot be read whole",
+        )
     calls: dict[str, list[ToolCall]] = {}
     briefs: dict[str, int] = {}
     for item in tool_items(stored):

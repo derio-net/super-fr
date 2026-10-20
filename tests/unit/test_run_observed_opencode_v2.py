@@ -112,3 +112,24 @@ def test_the_unscoped_reader_sees_only_2x_top_level_sessions() -> None:
     windows = unscoped.ran_windows(lambda c: c == "true", SINCE)
     # `true` ran only in the 1.x session's legacy `part`, which 2.x never reads.
     assert windows == []
+
+
+def test_an_unparseable_message_row_makes_the_session_unobservable(tmp_path: Path) -> None:
+    """p4-r2: a row whose data does not parse could hold the call being looked
+    for, so the observation is unreadable — never "read, found nothing"."""
+    import shutil
+    import sqlite3
+
+    db = tmp_path / "bad.db"
+    shutil.copy(FIXTURE, db)
+    con = sqlite3.connect(db)
+    con.execute(
+        "UPDATE session_message SET data = '{not json' WHERE session_id = 'ses_v2demo'"
+    )
+    con.commit()
+    con.close()
+    view = observed.observed_session(_env("ses_v2demo", db))
+    assert view is not None
+    healthy = observed.observed_session(_env("ses_v2demo"))
+    assert healthy is not None and healthy.answered_rounds(SINCE)
+    assert view.answered_rounds(SINCE) is None
