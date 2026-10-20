@@ -44,40 +44,65 @@ segment="$root/plugins/super-fr/scripts/fr-statusline-segment.sh"
 name="fr-opencode-plugin"
 cli_json="$(dirname "$plugins")/cli.json"
 
-# The cli.json entry is the plugin directory's absolute path.
+# The cli.json entry is the plugin directory's absolute path. It is derived
+# from the plugins directory's PARENT, so uninstall can still name it after the
+# plugins directory itself was removed by hand or by another tool.
 entry_path() {
-  printf '%s/%s' "$(cd "$plugins" && pwd)" "$name"
+  printf '%s/%s/%s' "$(cd "$(dirname "$plugins")" && pwd)" "$(basename "$plugins")" "$name"
+}
+
+# Refuse BEFORE a byte moves: an existing cli.json that is not a JSON object
+# with a `plugins` array (JSONC with comments, a typo) stops install here, with
+# the file and the remedy named, and nothing on disk changed.
+validate_cli_json() {
+  [ -e "$cli_json" ] || return 0
+  if ! jq -e 'type == "object" and ((.plugins // []) | type == "array")' "$cli_json" >/dev/null 2>&1; then
+    echo "deliver-opencode-plugin: refusing to install: $cli_json is not a plain JSON object with a \`plugins\` array (comments/JSONC are not supported). Nothing was written. Fix that file by hand (or move it aside) and re-run install." >&2
+    exit 1
+  fi
+}
+
+# Write $1 (a jq filter, with --arg e "$entry") into cli.json without breaking
+# it: a symlinked cli.json (dotfiles managers) stays a symlink and its TARGET
+# is rewritten; the target's mode survives (a 0600 file stays 0600).
+write_cli_json() {
+  local filter="$1" entry="$2" real link mode tmp
+  real="$cli_json"
+  while [ -L "$real" ]; do
+    link="$(readlink "$real")"
+    case "$link" in
+      /*) real="$link" ;;
+      *) real="$(dirname "$real")/$link" ;;
+    esac
+  done
+  mode="$(stat -f '%Lp' "$real" 2>/dev/null || stat -c '%a' "$real")"
+  tmp="$real.fr-tmp.$$"
+  if jq --arg e "$entry" "$filter" "$real" >"$tmp"; then
+    chmod "$mode" "$tmp"
+    mv "$tmp" "$real"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
 }
 
 register() {
-  local entry tmp
-  entry="$(entry_path)"
-  if [ -e "$cli_json" ]; then
-    if ! jq -e 'type == "object" and ((.plugins // []) | type == "array")' "$cli_json" >/dev/null 2>&1; then
-      echo "deliver-opencode-plugin: refusing to edit $cli_json: it is not a JSON object with a \`plugins\` array; fix it by hand and re-run" >&2
-      exit 1
-    fi
-  else
-    printf '{}\n' >"$cli_json"
-  fi
-  tmp="$cli_json.fr-tmp.$$"
-  jq --arg e "$entry" '.plugins = ((.plugins // []) | if index($e) then . else . + [$e] end)' \
-    "$cli_json" >"$tmp" && mv "$tmp" "$cli_json"
+  [ -e "$cli_json" ] || printf '{}\n' >"$cli_json"
+  # Drop every exact copy of our entry, then append one (spec §E); any other
+  # entry — strings, objects, numbers, nulls — is kept as it was.
+  write_cli_json '.plugins = (((.plugins // []) | map(select(. != $e))) + [$e])' "$(entry_path)"
 }
 
 unregister() {
-  local entry tmp
+  local entry
   [ -f "$cli_json" ] || return 0
-  [ -d "$plugins" ] || return 0
   entry="$(entry_path)"
   if ! jq -e 'type == "object"' "$cli_json" >/dev/null 2>&1; then
     echo "deliver-opencode-plugin: leaving $cli_json alone: it is not a JSON object" >&2
     return 0
   fi
-  jq -e --arg e "$entry" '(.plugins // []) | index($e)' "$cli_json" >/dev/null 2>&1 || return 0
-  tmp="$cli_json.fr-tmp.$$"
-  jq --arg e "$entry" '.plugins = (.plugins | map(select(. != $e)))' "$cli_json" >"$tmp" \
-    && mv "$tmp" "$cli_json"
+  jq -e --arg e "$entry" '(.plugins // []) | type == "array" and any(. == $e)' "$cli_json" >/dev/null 2>&1 || return 0
+  write_cli_json '.plugins = (.plugins | map(select(. != $e)))' "$entry"
 }
 
 case "$action" in
@@ -85,6 +110,7 @@ case "$action" in
     [ -d "$src" ] || { echo "deliver-opencode-plugin: no plugin sources at $src" >&2; exit 1; }
     [ -f "$segment" ] || { echo "deliver-opencode-plugin: no status-line segment at $segment" >&2; exit 1; }
     command -v jq >/dev/null 2>&1 || { echo "deliver-opencode-plugin: jq is required" >&2; exit 1; }
+    validate_cli_json
     mkdir -p "$plugins"
     rm -rf "${plugins:?}/$name" "${plugins:?}/$name.ts"
     mkdir -p "$plugins/$name/tui"
@@ -94,7 +120,7 @@ case "$action" in
     register
     ;;
   uninstall)
-    unregister
+    command -v jq >/dev/null 2>&1 && unregister
     rm -rf "${plugins:?}/$name" "${plugins:?}/$name.ts"
     ;;
   *)

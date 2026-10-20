@@ -283,10 +283,11 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       fi
     done
   fi
-  if [ -e "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin.ts" ] || [ -d "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin" ]; then
-    bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" uninstall "$OPENCODE_PLUGINS_DIR"
-    echo "  Removed fr-opencode-plugin from $OPENCODE_PLUGINS_DIR"
-  fi
+  # Unconditional: the cli.json entry can outlive the plugin directory (removed
+  # by hand or another tool), and only `deliver uninstall` drops it. It is a
+  # no-op when nothing is installed.
+  bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" uninstall "$OPENCODE_PLUGINS_DIR"
+  echo "  Removed fr-opencode-plugin (if present) from $OPENCODE_PLUGINS_DIR and its cli.json entry"
   # Hermes: run the uninstall from THIS checkout, not whichever `fr` happens
   # to be installed globally. Upgrade removals may rename shipped inputs; a
   # stale binary then cannot parse the new tree and used to fail silently,
@@ -1059,9 +1060,16 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   # this step `fr harness parity` credits both to OpenCode users who never
   # received them. A failure here fails the install: an OpenCode user
   # without the gate is exactly the silent state this step exists to end.
+  # The delivery script refuses (an unparsable cli.json) before it writes a
+  # byte, so a failure here leaves no partial plugin behind; the message
+  # below names what to fix.
   echo ""
   echo "Installing fr-opencode-plugin ($OPENCODE_PLUGINS_DIR)..."
-  bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install "$OPENCODE_PLUGINS_DIR"
+  if ! bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install "$OPENCODE_PLUGINS_DIR"; then
+    echo "ERROR: fr-opencode-plugin was NOT installed (nothing was written); see the message above," >&2
+    echo "       fix $(dirname "$OPENCODE_PLUGINS_DIR")/cli.json and re-run install.sh." >&2
+    exit 1
+  fi
   echo "  Installed $OPENCODE_PLUGINS_DIR/fr-opencode-plugin/ (server plugin + tui/ status line)"
   echo "  Listed it in $HOME/.config/opencode/cli.json's plugins (the status line)"
 else

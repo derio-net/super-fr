@@ -181,3 +181,84 @@ def test_uninstall_removes_only_its_own_entry(tmp_path: Path) -> None:
     assert _run("install", str(plugins)).returncode == 0
     assert _run("uninstall", str(plugins)).returncode == 0
     assert json.loads(cli.read_text()) == {"plugins": ["their-plugin"]}
+
+
+# --- review findings p3-r2..r5 ------------------------------------------------
+
+
+def test_a_refused_cli_json_moves_no_byte(tmp_path: Path) -> None:
+    """p3-r2: the refusal fires before the plugin directory is written."""
+    plugins, cli = _cli(tmp_path)
+    cli.parent.mkdir(parents=True)
+    cli.write_text('{ // jsonc\n "plugins": [] }\n')
+    result = _run("install", str(plugins))
+    assert result.returncode != 0
+    assert str(cli) in result.stderr and "Nothing was written" in result.stderr
+    assert not plugins.exists()
+    assert sorted(p.name for p in cli.parent.iterdir()) == ["cli.json"]
+
+
+def test_install_sh_fails_loudly_when_delivery_refuses() -> None:
+    install = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    assert 'if ! bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install' in install
+    assert "fr-opencode-plugin was NOT installed" in install
+
+
+def test_uninstall_drops_the_entry_after_the_plugins_dir_is_gone(tmp_path: Path) -> None:
+    """p3-r3(a)."""
+    import shutil
+
+    plugins, cli = _cli(tmp_path)
+    assert _run("install", str(plugins)).returncode == 0
+    shutil.rmtree(plugins)
+    assert _run("uninstall", str(plugins)).returncode == 0
+    assert json.loads(cli.read_text()) == {"plugins": []}
+
+
+def test_install_sh_uninstall_calls_delivery_unconditionally() -> None:
+    """p3-r3(b): no existence guard in front of the uninstall call."""
+    install = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    uninstall_block = install.split('"${1:-}" == "--uninstall"', 1)[1].split("\nfi\n", 1)[0]
+    line = next(ln for ln in uninstall_block.splitlines() if "deliver-opencode-plugin.sh" in ln)
+    idx = uninstall_block.splitlines().index(line)
+    assert "fr-opencode-plugin" not in uninstall_block.splitlines()[idx - 1].split("#")[0]
+    assert line.startswith('  bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" uninstall')
+
+
+def test_a_symlinked_cli_json_stays_a_symlink(tmp_path: Path) -> None:
+    """p3-r4: dotfiles managers symlink cli.json; a relative link is followed."""
+    plugins, cli = _cli(tmp_path)
+    cli.parent.mkdir(parents=True)
+    dotfiles = tmp_path / "dotfiles"
+    dotfiles.mkdir()
+    target = dotfiles / "cli.json"
+    target.write_text(json.dumps({"plugins": ["theirs"]}))
+    cli.symlink_to(Path("..") / "dotfiles" / "cli.json")
+    assert _run("install", str(plugins)).returncode == 0
+    assert cli.is_symlink()
+    assert json.loads(target.read_text())["plugins"] == ["theirs", _entry(plugins)]
+    assert _run("uninstall", str(plugins)).returncode == 0
+    assert cli.is_symlink()
+    assert json.loads(target.read_text())["plugins"] == ["theirs"]
+
+
+def test_a_0600_cli_json_keeps_its_mode(tmp_path: Path) -> None:
+    plugins, cli = _cli(tmp_path)
+    cli.parent.mkdir(parents=True)
+    cli.write_text("{}")
+    cli.chmod(0o600)
+    assert _run("install", str(plugins)).returncode == 0
+    assert cli.stat().st_mode & 0o777 == 0o600
+    assert _run("uninstall", str(plugins)).returncode == 0
+    assert cli.stat().st_mode & 0o777 == 0o600
+
+
+def test_register_drops_duplicates_then_appends_and_keeps_non_strings(tmp_path: Path) -> None:
+    """p3-r5: spec §E — drop ours, then append ours."""
+    plugins, cli = _cli(tmp_path)
+    cli.parent.mkdir(parents=True)
+    plugins.mkdir()
+    ours = _entry(plugins)
+    cli.write_text(json.dumps({"plugins": [ours, {"package": "x"}, 3, None, ours, "b"]}))
+    assert _run("install", str(plugins)).returncode == 0
+    assert json.loads(cli.read_text())["plugins"] == [{"package": "x"}, 3, None, "b", ours]
