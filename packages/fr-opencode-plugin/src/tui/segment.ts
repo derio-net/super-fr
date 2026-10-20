@@ -99,3 +99,64 @@ export const REFRESH_EVENTS = [
   "session.execution.interrupted",
   "session.idle",
 ] as const;
+
+/** The directory a session lives in, per the TUI's session data; `fallback`
+ * (the TUI's launch directory) when there is no session or it is not loaded. */
+export function sessionDirectory(
+  sessions: { get(sessionID: string): { location?: { directory?: string } } | undefined } | undefined,
+  sessionID: string | undefined,
+  fallback: string,
+): string {
+  if (!sessionID || !sessions) return fallback;
+  try {
+    return sessions.get(sessionID)?.location?.directory || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** One segment per session id (the home screen is key ""): each key has its
+ * own coalesced refresher, so a render never spawns — it reads the cached
+ * text, and the first read of a key or a moved directory schedules one. */
+export function createSegmentCache(
+  resolveDir: (key: string) => string,
+  read: (cwd: string) => Promise<string>,
+  onChange: () => void,
+  delayMs: number,
+) {
+  type Entry = { text: string; dir: string; refresher: ReturnType<typeof createRefresher> };
+  const entries = new Map<string, Entry>();
+  const entry = (key: string): Entry => {
+    let e = entries.get(key);
+    if (e) return e;
+    const created: Entry = {
+      text: "",
+      dir: resolveDir(key),
+      refresher: createRefresher(async () => {
+        created.dir = resolveDir(key);
+        const next = await read(created.dir);
+        if (next !== created.text) {
+          created.text = next;
+          onChange();
+        }
+      }, delayMs),
+    };
+    entries.set(key, created);
+    created.refresher.schedule();
+    return created;
+  };
+  return {
+    text(key: string): string {
+      const e = entry(key);
+      if (resolveDir(key) !== e.dir) e.refresher.schedule();
+      return e.text;
+    },
+    refresh(key?: string) {
+      if (key !== undefined && entries.has(key)) entries.get(key)!.refresher.schedule();
+      else for (const e of entries.values()) e.refresher.schedule();
+    },
+    cancel() {
+      for (const e of entries.values()) e.refresher.cancel();
+    },
+  };
+}

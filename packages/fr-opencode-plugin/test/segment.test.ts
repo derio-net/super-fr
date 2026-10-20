@@ -3,7 +3,15 @@
 // refreshes that coalesce instead of spawning per request.
 import { describe, expect, test } from "bun:test";
 
-import { createRefresher, formatSegment, inGitRepo, MISSING, readSegment } from "../src/tui/segment";
+import {
+  createRefresher,
+  createSegmentCache,
+  formatSegment,
+  inGitRepo,
+  MISSING,
+  readSegment,
+  sessionDirectory,
+} from "../src/tui/segment";
 
 const repo = (p: string) => p === "/w/repo/.git";
 
@@ -102,5 +110,73 @@ describe("createRefresher", () => {
     r.cancel();
     await new Promise((res) => setTimeout(res, 20));
     expect(reads).toBe(0);
+  });
+});
+
+// p3-r8: each render's directory is its session's, not the TUI's launch dir.
+describe("sessionDirectory", () => {
+  const sessions = { get: (id: string) => (id === "s1" ? { location: { directory: "/other/proj" } } : undefined) };
+  test("a loaded session answers its own directory", () => {
+    expect(sessionDirectory(sessions, "s1", "/launch")).toBe("/other/proj");
+  });
+  test("home, an unknown session, or no session data falls back to launch", () => {
+    expect(sessionDirectory(sessions, undefined, "/launch")).toBe("/launch");
+    expect(sessionDirectory(sessions, "nope", "/launch")).toBe("/launch");
+    expect(sessionDirectory(undefined, "s1", "/launch")).toBe("/launch");
+    expect(sessionDirectory({ get: () => { throw new Error("x"); } }, "s1", "/launch")).toBe("/launch");
+  });
+});
+
+describe("createSegmentCache", () => {
+  const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  test("renders never spawn: one coalesced read per session id, per its own directory", async () => {
+    const reads: string[] = [];
+    const dirs: Record<string, string> = { "": "/launch", a: "/proj/a", b: "/proj/b" };
+    let changes = 0;
+    const cache = createSegmentCache(
+      (k) => dirs[k],
+      async (cwd) => {
+        reads.push(cwd);
+        return `seg:${cwd}`;
+      },
+      () => changes++,
+      5,
+    );
+    for (let i = 0; i < 20; i++) {
+      cache.text("a");
+      cache.text("b");
+      cache.text("");
+    }
+    await tick(30);
+    expect(reads.sort()).toEqual(["/launch", "/proj/a", "/proj/b"]);
+    expect(cache.text("a")).toBe("seg:/proj/a");
+    expect(cache.text("b")).toBe("seg:/proj/b");
+    expect(cache.text("")).toBe("seg:/launch");
+    expect(changes).toBe(3);
+    cache.refresh("a");
+    cache.refresh("a");
+    await tick(30);
+    expect(reads.filter((d) => d === "/proj/a").length).toBe(2);
+    cache.cancel();
+  });
+  test("a session that loads after its first render moves to its own directory", async () => {
+    const reads: string[] = [];
+    let loaded = false;
+    const cache = createSegmentCache(
+      () => (loaded ? "/proj/a" : "/launch"),
+      async (cwd) => {
+        reads.push(cwd);
+        return cwd;
+      },
+      () => {},
+      5,
+    );
+    cache.text("a");
+    await tick(20);
+    loaded = true;
+    cache.text("a");
+    await tick(20);
+    expect(cache.text("a")).toBe("/proj/a");
+    cache.cancel();
   });
 });

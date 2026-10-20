@@ -14,27 +14,34 @@
 import { join } from "node:path";
 import { createSignal } from "solid-js";
 
-import { createRefresher, readSegment, REFRESH_EVENTS } from "./segment";
+import { createSegmentCache, readSegment, REFRESH_EVENTS, sessionDirectory } from "./segment";
 
 const SCRIPT = join(import.meta.dir, "fr-statusline-segment.sh");
 
 export default {
   id: "super-fr.statusline",
   setup(context: any) {
-    const [text, setText] = createSignal("");
-    const cwd: string = context.location?.directory ?? process.cwd();
-    const refresher = createRefresher(async () => {
-      setText(await readSegment(cwd, SCRIPT));
-    }, 250);
-    void refresher.now();
-    const offs: Array<() => void> = REFRESH_EVENTS.map((type) =>
-      context.data.on(type, () => refresher.schedule())
+    // Each render's directory is its SESSION's (slot input `sessionID` ->
+    // context.data.session.get(id).location.directory), falling back to the
+    // TUI's launch directory for the home screen or a session not yet loaded.
+    const [version, setVersion] = createSignal(0);
+    const launch: string = context.location?.directory ?? process.cwd();
+    const cache = createSegmentCache(
+      (key) => sessionDirectory(context.data?.session, key || undefined, launch),
+      (cwd) => readSegment(cwd, SCRIPT),
+      () => setVersion((v) => v + 1),
+      250,
     );
-    const render = () => <text>{text()}</text>;
+    const offs: Array<() => void> = REFRESH_EVENTS.map((type) =>
+      context.data.on(type, (event: any) => cache.refresh(event?.sessionID ?? event?.data?.sessionID))
+    );
+    // Both reads sit inside the JSX expression so Solid tracks them: a new
+    // segment (version) or a slot input naming another session re-renders.
+    const render = (input: any) => <text>{(version(), cache.text(input?.sessionID ?? ""))}</text>;
     offs.push(context.ui.slot({ append: "prompt.footer.status", render }));
     offs.push(context.ui.slot({ append: "home.footer.status", render }));
     return () => {
-      refresher.cancel();
+      cache.cancel();
       for (const off of offs) off();
     };
   },

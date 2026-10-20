@@ -101,7 +101,16 @@ inside an fr workspace, `<branch> · no fr-isolation` outside, nothing outside a
 git repo. It refreshes on `session.execution.*` and `session.idle`, coalesced —
 never per keystroke.
 
-`src/tui/index.tsx` is the only file excluded from `tsc`: its JSX types come
+`<session dir>` is the directory of the session the slot renders for (the
+slot input's `sessionID`, looked up in the TUI's session data), cached per
+session id with one coalesced read each; the home screen, or a session whose
+data has not loaded yet, uses the TUI's launch directory. The lookup is
+unit-tested against the plugin API's declared shape; the live test opens
+sessions in the launch directory only, so a session from another project is
+not yet proven live.
+
+`src/tui/index.tsx` is the only file excluded from `tsc` (pinned by exact
+path, and by `test/tsconfig.test.ts`): its JSX types come
 from `@opentui/solid`, a peer the OpenCode binary bundles but `node_modules`
 does not carry. All the logic lives in `src/tui/segment.ts`, which is
 type-checked and unit-tested; the entry itself is proven by the live TUI test.
