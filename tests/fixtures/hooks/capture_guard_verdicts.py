@@ -199,7 +199,12 @@ HEADER = """\
 
 def main() -> None:
     rows = capture()
-    body = yaml.safe_dump({"placeholders": PLACEHOLDERS, "session": SESSION, "rows": rows}, sort_keys=False, width=100, allow_unicode=True)
+    body = yaml.safe_dump(
+        {"placeholders": PLACEHOLDERS, "session": SESSION, "rows": rows},
+        sort_keys=False,
+        width=100,
+        allow_unicode=True,
+    )
     TABLE.write_text(HEADER + body)
     print(f"captured {len(rows)} rows -> {TABLE.relative_to(REPO)}")
 
