@@ -16,7 +16,16 @@ steps:
         evidence:
           unobserved: operator-gate
   spec-review:
-    state: pending
+    state: running
+    at: '2026-10-20T05:29:57+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-20T05:29:57+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: opencode
+          tier: hard
+          bound: github-copilot/claude-opus-5.5
   plan:
     state: pending
   plan-review:
