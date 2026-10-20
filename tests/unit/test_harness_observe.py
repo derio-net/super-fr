@@ -219,3 +219,62 @@ def test_the_real_repo_observes_isolation_required_present_on_opencode() -> None
     """The one hook the OpenCode plugin ports — it must carry its marker, or
     the `partial` cell `parity.yaml` declares reads as drift on day one."""
     assert observe(REPO_ROOT)["fr-isolation-required.sh"]["opencode"] == "present"
+
+
+# --- the OpenCode status-line config probe (spec 2026-10-20 R12) ------------
+
+
+def _cli_json(config: Path, plugins: list) -> None:
+    config.mkdir(parents=True, exist_ok=True)
+    (config / "cli.json").write_text(json.dumps({"plugins": plugins}))
+
+
+def _tui_dir(root: Path) -> Path:
+    plugin = root / "fr-opencode-plugin"
+    (plugin / "tui").mkdir(parents=True)
+    (plugin / "tui" / "index.tsx").write_text("export default {}\n")
+    return plugin
+
+
+def test_status_line_probe_is_present_when_listed_and_the_entry_exists(tmp_path: Path) -> None:
+    from fr.harness.observe import opencode_status_line_configured
+
+    plugin = _tui_dir(tmp_path / "plugins")
+    _cli_json(tmp_path, [str(plugin)])
+    assert opencode_status_line_configured(tmp_path) == "present"
+    _cli_json(tmp_path, [{"package": f"file://{plugin}"}])
+    assert opencode_status_line_configured(tmp_path) == "present"
+
+
+def test_status_line_probe_needs_both_the_listing_and_the_file(tmp_path: Path) -> None:
+    from fr.harness.observe import opencode_status_line_configured
+
+    assert opencode_status_line_configured(tmp_path) == "absent"  # no cli.json
+    plugin = _tui_dir(tmp_path / "plugins")
+    _cli_json(tmp_path, ["someone-else"])
+    assert opencode_status_line_configured(tmp_path) == "absent"  # not listed
+    _cli_json(tmp_path, [str(plugin / "tui" / "index.tsx")])
+    assert opencode_status_line_configured(tmp_path) == "absent"  # a file path loads nothing
+    (plugin / "tui" / "index.tsx").unlink()
+    _cli_json(tmp_path, [str(plugin)])
+    assert opencode_status_line_configured(tmp_path) == "absent"  # listed, file gone
+
+
+def test_an_unreadable_cli_json_is_an_error_not_absent(tmp_path: Path) -> None:
+    from fr.harness.observe import opencode_status_line_configured
+
+    (tmp_path / "cli.json").write_text("{ nope")
+    with pytest.raises(HarnessError, match="cli.json"):
+        opencode_status_line_configured(tmp_path)
+
+
+def test_this_checkouts_delivery_satisfies_the_status_line_probe() -> None:
+    from fr.harness.observe import observe_interactions
+
+    assert observe_interactions(REPO_ROOT) == {"status-line": {"opencode": "present"}}
+
+
+def test_a_repo_with_no_delivery_script_observes_the_status_line_absent(tmp_path: Path) -> None:
+    from fr.harness.observe import observe_interactions
+
+    assert observe_interactions(tmp_path) == {"status-line": {"opencode": "absent"}}

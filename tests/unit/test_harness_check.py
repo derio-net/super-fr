@@ -423,3 +423,32 @@ def test_a_pairing_finding_survives_the_harness_filter(monkeypatch) -> None:
     result = runner_cli.invoke(app, ["harness", "parity", "--check", "--harness", "hermes"])
     assert result.exit_code == 1, result.output
     assert "zz-undeclared-probe.sh" in result.output
+
+
+# --- interaction cells a probe CAN speak to (spec 2026-10-20 R12) -----------
+
+
+def test_a_probed_interaction_cell_follows_its_probe() -> None:
+    """The status-line row's OpenCode cell is checked against the config
+    probe: a claim (`partial`) with the delivery present is clean; the same
+    claim with the delivery gone is a finding naming the probe."""
+    matrix = _matrix(
+        {"state": "partial", "scope_note": "n"}, harness="opencode", kind="interaction"
+    )
+    assert check(matrix, {}, {"x": {"opencode": "present"}}) == []
+    [finding] = check(matrix, {}, {"x": {"opencode": "absent"}})
+    assert (finding.surface_id, finding.harness, finding.observed) == ("x", "opencode", "absent")
+    assert "config probe" in finding.message
+
+
+def test_an_interaction_cell_with_no_probe_is_still_unchecked() -> None:
+    matrix = _matrix({"state": "enforced"}, harness="hermes", kind="interaction")
+    assert check(matrix, {}, {"x": {"opencode": "absent"}}) == []
+
+
+def test_this_repos_status_line_row_agrees_with_its_probe() -> None:
+    from fr.harness.observe import observe_interactions
+
+    root = Path(__file__).resolve().parents[2]
+    findings = check(load_matrix(), observe(root), observe_interactions(root))
+    assert [f for f in findings if f.surface_id == "status-line"] == []
