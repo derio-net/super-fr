@@ -372,3 +372,8 @@ A slot that never renders looks like a status line that shows nothing. The phase
 ### tier-2026-10-20-opencode-2-support-p4 · decision · hard: every query site moves and a missed one returns empty silently
 
 The loud 1.x refusal is the only thing that makes an omission visible, so the probe and both readers must land together.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p2-1 created=2026-10-20T05:44:47+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p2-1 · decision · review-size: folding the enforcement surfaces into the restore would make a 1600-line diff
+
+Phase 5 re-points these rows' evidence as matrix bookkeeping; it does not serve the enforcement ask. The shell gate and the sentinel are a different review from the hook port.
