@@ -180,3 +180,8 @@ the port changed only each handler's input shape; the gate body moved into one g
 ### no-refactor-p1-t3 · discovery · no-refactor-because P1.T3 (phase 1)
 
 the queue was written, measured redundant against OpenCode's own OPENCODE_SESSION_ID, and deleted with its tests; nothing was left to collapse
+
+<!-- fr:journal kind=finding scope=plan id=p1-v2-loads-sources-dir-as-plugin-resolved created=2026-10-20T07:31:17+00:00 state=open resolves=p1-v2-loads-sources-dir-as-plugin out_of_scope=true -->
+### p1-v2-loads-sources-dir-as-plugin-resolved · finding [out-of-scope] · resolves p1-v2-loads-sources-dir-as-plugin: OpenCode 2 loads the delivered sources directory as a second plugin
+
+Delivery layout is phase 3's subject, and phase 3 now carries it explicitly as P3.T3.S4: V2 scans the plugins directory for directories too, so the 1.x loader+sources pair loads the plugin twice; the phase delivers exactly one entrypoint and asserts a single 'loading plugin' line.
