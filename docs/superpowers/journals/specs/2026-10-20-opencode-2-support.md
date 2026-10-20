@@ -377,3 +377,8 @@ The loud 1.x refusal is the only thing that makes an omission visible, so the pr
 ### phase-split-2026-10-20-opencode-2-support-p2-1 · decision · review-size: folding the enforcement surfaces into the restore would make a 1600-line diff
 
 Phase 5 re-points these rows' evidence as matrix bookkeeping; it does not serve the enforcement ask. The shell gate and the sentinel are a different review from the hook port.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p4-1 created=2026-10-20T05:44:48+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p4-1 · decision · review-size: the readers are an independent contract of their own
+
+Phase 5 only records their evidence. Reading the 2.0 store is 900 lines across two readers, a shared adapter and a fixture; it is reviewable on its own and shares no file with the plugin phases.
