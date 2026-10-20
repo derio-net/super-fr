@@ -34,7 +34,13 @@ steps:
           findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16
           unobserved: reviewer
   plan:
-    state: pending
+    state: running
+    at: '2026-10-20T05:35:48+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-10-20T05:35:48+00:00'
+          harness: opencode
   plan-review:
     state: pending
   implement:
