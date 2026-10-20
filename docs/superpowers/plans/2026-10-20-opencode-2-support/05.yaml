@@ -53,6 +53,11 @@ tasks:
       Move every `opencode-2-*` row with evidence (`fr acceptance set-status --id … --status ci|walk-owed
       --notes … --level …`), and re-point `opencode-isolation-enforcement` off its 1.18.32 note.
       Runs proven only by a live session stay `walk-owed` until the post-merge Test Plan executes.
+      REQUIRED, and red until done (phase-3 review p3-r1): `opencode-run-session` still cites
+      `packages/fr-opencode-plugin/test/session.test.ts`, which phase 1 deleted with the session-export
+      queue, so `fr acceptance check` exits 1 and the acceptance-report gate fails the PR. Re-point that
+      level ref at the session probe phase 4 ships (with its `#test_…` name, never a line number), and
+      rewrite its note, which still describes the removed `shell.env` export.
   - id: P5.T2.S2
     text: |-
       Regenerate the three committed reports (`fr acceptance report --deterministic`) and run

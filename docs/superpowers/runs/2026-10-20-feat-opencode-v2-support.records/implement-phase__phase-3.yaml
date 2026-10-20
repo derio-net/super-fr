@@ -163,48 +163,5 @@ resolves:
       The delivery is now the directory alone (index.ts is the server entry); the top-level loader is no longer written and
       a stale one is deleted on install and uninstall. tests/integration/test_opencode_plugin_live.py asserts exactly one
       `loading plugin` line for super-fr against opencode 2.1.0; the unit tests assert nothing is delivered at the top level.
-  - id: p3-r2
-    state: fixed
-    body: |
-      deliver-opencode-plugin.sh: validate_cli_json runs before mkdir/rm/cp, so a refusal writes nothing and says so
-      ("Nothing was written. Fix that file..."); install.sh wraps the call and exits 1 with "fr-opencode-plugin was NOT
-      installed" naming cli.json. Tests: test_a_refused_cli_json_moves_no_byte, test_install_sh_fails_loudly_when_delivery_refuses.
-  - id: p3-r3
-    state: fixed
-    body: |
-      entry_path derives from dirname/basename of the plugins dir, unregister no longer needs the directory, and
-      install.sh --uninstall calls the delivery unconditionally. Tests: test_uninstall_drops_the_entry_after_the_plugins_dir_is_gone,
-      test_install_sh_uninstall_calls_delivery_unconditionally.
-  - id: p3-r4
-    state: fixed
-    body: |
-      write_cli_json resolves the symlink chain (relative links too), captures the mode (stat -f %Lp / stat -c %a), writes
-      the temp beside the real file, chmods it, then mv. Tests: test_a_symlinked_cli_json_stays_a_symlink,
-      test_a_0600_cli_json_keeps_its_mode (install and uninstall).
-  - id: p3-r5
-    state: fixed
-    body: |
-      register filter is `((.plugins // []) | map(select(. != $e))) + [$e]`; non-string entries are untouched. Test:
-      test_register_drops_duplicates_then_appends_and_keeps_non_strings.
-  - id: p3-r6
-    state: fixed
-    body: |
-      parity.yaml status-line/opencode scope_note now names the shipped TUI entry and cli.json registration, live render
-      proof, and the owed post-merge walks; state stays partial. parity --check and test_tripwire_harness_parity green.
-  - id: p3-r7
-    state: fixed
-    body: |
-      03.yaml: P3.T3.S2 says the plugin DIRECTORY is the registered entry (a file path is ignored, journal p3-tui-spike),
-      plus validate-first, drop-then-append, uninstall without the dir, symlink/mode; files: corrected to src/tui/**.
-  - id: p3-r8
-    state: fixed
-    body: |
-      src/tui/index.tsx renders per slot-input sessionID via segment.ts sessionDirectory + createSegmentCache (launch dir
-      fallback, one coalesced reader per session id). Tests: test/segment.test.ts sessionDirectory and createSegmentCache
-      blocks; live TUI test still green. Another-project session is unit-proven only (decision p3-segment-uses-cwd-not-session).
-  - id: p3-r9
-    state: fixed
-    body: |
-      tsconfig.json excludes exactly "src/tui/index.tsx"; test/tsconfig.test.ts asserts the list is that one path.
 evidence:
   tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p3-review-suite.log
