@@ -1,0 +1,12 @@
+schema_version: 2
+run: 2026-10-20-feat-opencode-v2-support
+captures:
+- host: h-76e631f9
+  harness: opencode
+  mode: devcontainer
+  captured_at: '2026-10-20T05:29:56+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+    unavailable: session not in the OpenCode database

@@ -3,11 +3,18 @@ run: 2026-10-20-feat-opencode-v2-support
 workflow: fr-goal@1
 branch: feat/opencode-v2-support
 started: '2026-10-20T05:10:23+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-10-20T05:10:30+00:00'
+    state: done
+    at: '2026-10-20T05:29:56+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-20-opencode-2-support-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          unobserved: operator-gate
   spec-review:
     state: pending
   plan:
