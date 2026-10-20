@@ -95,17 +95,16 @@ predicate with the same once-per-`position` memory, and nudges with
 `ctx.session.prompt` (V2's replacement for `promptAsync`). Its parity cell stays
 `partial`, and says so.
 
-R6. The session that issues a shell command gets `FR_OPENCODE_SESSION_ID` in that
-command's environment. V2's `ShellCreateBefore` carries no session id, so the id
-is correlated from the `shell` tool call's `execute.before` event to the matching
-`create.before` event (same `command`, short TTL, pending queue). When the
-correlation is ambiguous — two pending entries from different sessions match the
-same command — or absent, nothing is exported: an unscoped reading is a known,
-reported state, a mis-scoped one is a false claim, and
-`deliver-tests-provenance` trusts exactly this attribution. R6 also requires
-`why_unobservable`'s "`FR_OPENCODE_SESSION_ID` is unset" text to name the
-correlation miss as a possible cause, so a current plugin is not told to
-upgrade itself.
+R6. The session id fr reads is the one OpenCode itself supplies. On 2.0.32,
+`create.before`'s `env` carries no session id, but OpenCode places the ISSUING
+session's id in every command it spawns as `OPENCODE_SESSION_ID` — measured by
+printing it from a child's own `echo` (2026-10-20). So fr reads
+`FR_OPENCODE_SESSION_ID` when a wrapper sets it, `OPENCODE_SESSION_ID` otherwise,
+and walks `parent_id` to the root for every transcript read. The plugin exports
+nothing and keeps no correlation queue: one was built, measured, and removed
+because the id already arrives correctly, and carrying two mechanisms for it
+would only be a second thing to get wrong. `why_unobservable`'s unset-id wording
+names the plugin only when NEITHER variable is present.
 
 R7. A child session's first tool call still claims its open unit through
 `fr run claim --open-unit`, unchanged: the V2 event supplies `sessionID`, and
@@ -197,7 +196,7 @@ never its `version`. No artifact shape changes, so no stamp or migration is owed
 | `export async function FrIsolationRequired(ctx)` | `export default { id: "super-fr", async setup(ctx) }` |
 | `"tool.execute.before": ({tool}, output)` | `ctx.tool.hook("execute.before", event)` — `event.tool`, `event.input`, `event.sessionID`; throwing rejects the call |
 | `event` (`session.idle`) | `for await (const event of ctx.event.subscribe({signal}))` |
-| `"shell.env": ({cwd, sessionID})` | `ctx.shell.hook("create.before", event)` — `event.command`, `event.cwd`, `event.env` (no session id) |
+| `"shell.env": ({cwd, sessionID})` | none for the run-session id — OpenCode 2 itself exports `OPENCODE_SESSION_ID` on the command (§C); `create.before` carries `event.env` for the pin |
 | `tool.execute.after` (none) | `ctx.tool.hook("execute.after", event)` — `event.status`, `event.result`, `event.error` |
 | `chat.message` / system transform | `ctx.session.hook("prompt" \| "context", event)`; `context` carries `event.system` |
 | `permission.ask` | `ctx.permission.hook("evaluate", event)` — not used for the shell gate (R3) |
@@ -237,24 +236,21 @@ commands, compound commands (`cd <worktree> && git status`,
 repo's toplevel, a linked worktree, the sentinel heal and the absence of a
 sentinel. A change to one implementation that is not a change to both goes red.
 
-### C. The session id, honestly obtained
+### C. The session id: measured, not correlated
 
-`create.before` gives a command string and an env object, nothing else. The id
-therefore comes from the tool call that produced the command:
+The first cut of this design correlated the id from `execute.before`
+(`sessionID` + `input.command`) to `create.before` (same `command`) through a
+short-TTL pending queue, because `create.before` carries no session id. The
+plan's first phase measured the real thing and found a better answer: the id is
+already there for the only consumer that needs it. OpenCode sets
+`OPENCODE_SESSION_ID` on the spawned command, naming the issuing session; fr
+reads it from its own environment and walks `parent_id` to the root. The queue
+and its tests were removed in the same phase.
 
-1. `execute.before` for `tool === "shell"` records `(sessionID, input.command)`
-   in a short-TTL pending list.
-2. `create.before` pops a matching entry and sets `FR_OPENCODE_SESSION_ID` only
-   when exactly one pending entry from exactly one session matches; anything
-   ambiguous or unmatched exports nothing.
-
-This is exact when the tool's command reaches the shell unmodified, and
-degenerates to today's "no export" when it does not. The alternative
-(most-recently-active session) is rejected: it would attribute a subagent's
-command to its parent, and `deliver-tests-provenance` trusts exactly that
-attribution. The plan's first phase measures the real ordering and the
-command's fidelity, with a stated outcome for "the premise is false" — R6 stays
-omitted and its row and the parity cell stay honest.
+That keeps the property the queue existed to protect — an unscoped reading is a
+known, reported state, a mis-scoped one is a false claim — without a
+correlation that could mis-attribute two identical commands from different
+sessions.
 
 ### D. Python: one adapter, both readers, every query site
 

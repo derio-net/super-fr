@@ -16,7 +16,13 @@
 // or a hang pins nothing, which is exactly the behaviour before the pin.
 import { execFile } from "node:child_process";
 
-import type { ShellCreateEvent } from "./session";
+/** The `shell` hook's `create.before` event (OpenCode 2) — `env` is merged
+ * into the spawned command. */
+export type ShellCreateEvent = {
+  command?: string;
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+};
 
 export const PIN_ENV_KEY = "FR_HARNESS_FR";
 

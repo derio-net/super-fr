@@ -71,22 +71,24 @@ tasks:
       (captured hook map, scripted event iterable, stubbed `session.get`/`session.prompt`).
       `bun test` green; `uv run fr harness parity --check` still reports agreement.
 - number: 3
-  title: Session-id export, measured before it is trusted
+  title: Session identity — measure it, then build only what is missing
   steps:
   - id: P1.T3.S1
     text: |-
-      Red then green: `src/session.ts` keeps a short-TTL pending list; `execute.before` for
-      `tool === "shell"` records `(sessionID, input.command)`; `create.before` sets
-      `FR_OPENCODE_SESSION_ID` only when exactly one pending entry from exactly one session
-      matches the command, and exports nothing on ambiguity or expiry. Tests cover the single
-      match, two sessions with the same command, an unmatched event, and expiry.
+      Measure in a real 2.0 binary: a throwaway probe plugin under a temporary
+      XDG_CONFIG_HOME logs the order of `execute.before` (`tool: "shell"`, `sessionID`,
+      `input.command`) and `create.before` (`command`, `env`), and the child command
+      itself prints `OPENCODE_SESSION_ID` so the value can be compared with the session
+      that issued it. Run a model-driven `opencode run` and a clean launch
+      (`env -u OPENCODE_SESSION_ID -u OPENCODE`), and record the raw lines in the step
+      record.
   - id: P1.T3.S2
     text: |-
-      Measure the premise in a real binary: a throwaway probe plugin under a temporary
-      `XDG_CONFIG_HOME` logs the `execute.before` and `create.before` order and whether
-      `input.command === event.command` for `opencode run --auto "run: git status"`. Record the
-      measurement in the plan journal. If the premise is false, leave the export registered but
-      inert (never guess), and say so in the record and the PR body.
+      Build only what the measurement says is missing. If OpenCode already exports the
+      issuing session's id on the command, the plugin exports nothing and fr reads it
+      (P4); if it does not, implement the pending queue from the spec's first cut (exact
+      single match only, never a most-recent-session guess) and keep its tests. Record
+      which branch shipped.
 - number: 4
   title: Re-pin CI and the live delivery probe to 2.0.x
   steps:

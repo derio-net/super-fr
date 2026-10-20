@@ -28,18 +28,20 @@
 // once), so it has no marker; parity.yaml's `dispatch-holder-identity` row
 // describes it.
 //
-// The shell `create.before` hook carries the run-session export (spec
-// 2026-10-02-opencode-observe-2 §B) — see ./session.ts. It ports no hook script
-// (Claude Code exports its own session key natively), so it has no marker;
-// parity.yaml's `run-session-identity` row describes it.
+// Run-session identity needs no plugin code on OpenCode 2: OpenCode itself
+// places the ISSUING session's id in every spawned command's environment as
+// `OPENCODE_SESSION_ID` (measured 2026-10-20; see spec 2026-10-20-opencode-2
+// R6). fr reads it and walks `parent_id` to the root. A plugin-side export
+// was built and removed: `create.before` never sees the id, and the id the
+// shell receives is already correct.
 //
-// `create.before` also carries the fr-binary pin (super-fr#746) — see ./pin.ts:
+// `create.before` carries the fr-binary pin (super-fr#746) — see ./pin.ts:
 // the fr this plugin spawns, exported for the shell tool as FR_HARNESS_FR. It is
 // the OpenCode half of Claude Code's SessionStart hook:
 // super-fr-parity: fr-binary-pin.sh
 //
 // EXPORT DISCIPLINE: this module's only export is the default definition.
-// Helpers live in ./marker, ./idle, ./claim, ./session and ./pin.
+// Helpers live in ./marker, ./idle, ./claim and ./pin.
 import type { Plugin } from "@opencode/plugin";
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
@@ -47,7 +49,6 @@ import { createClaimHandler, sharedClaimed } from "./claim";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
 import { createPinHandler } from "./pin";
-import { createSessionExport, type ShellCreateEvent, type ToolBeforeEvent } from "./session";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. The shell tool (`shell` in OpenCode 2,
@@ -200,7 +201,6 @@ const plugin: Plugin.Plugin = {
       directory,
       claimed: sharedClaimed(),
     });
-    const sessions = createSessionExport();
     const exportPin = createPinHandler();
     const idle = createIdleHandler({ session: ctx.session, directory, actedOn: sharedActedOn() });
 
@@ -208,11 +208,9 @@ const plugin: Plugin.Plugin = {
       // Before the gate, and whatever the tool: a child's first call of ANY
       // kind is the earliest moment it can be named. Neither throws.
       await claimChild(event);
-      sessions.record(event);
       await gate(directory, event);
     });
     await ctx.shell.hook("create.before", async (event) => {
-      await sessions.apply(event as ShellCreateEvent);
       await exportPin(event as ShellCreateEvent);
     });
 
