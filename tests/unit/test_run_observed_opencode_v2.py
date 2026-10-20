@@ -141,9 +141,7 @@ def test_an_unparseable_message_row_makes_the_session_unobservable(tmp_path: Pat
     db = tmp_path / "bad.db"
     shutil.copy(FIXTURE, db)
     con = sqlite3.connect(db)
-    con.execute(
-        "UPDATE session_message SET data = '{not json' WHERE session_id = 'ses_v2demo'"
-    )
+    con.execute("UPDATE session_message SET data = '{not json' WHERE session_id = 'ses_v2demo'")
     con.commit()
     con.close()
     view = observed.observed_session(_env("ses_v2demo", db))
