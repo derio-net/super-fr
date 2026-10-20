@@ -50,9 +50,13 @@ tasks:
       and that a sentinel older than 48h is replaced.
   - id: P2.T2.S2
     text: |-
-      Green: `src/sentinel.ts` writes the JSON atomically (temp file + rename) with
-      `{repo_root, workspaces: [], session, created}` and the same 48h GC; assert the key set
-      against `fr/isolation/types.py`'s sentinel reader in a Python test so the two cannot drift.
+      Green: `src/sentinel.ts` writes the JSON atomically (temp file + rename) with the shape
+      `fr-pipeline-sentinel.sh` actually writes — `{repo_root, skill, started_at}`, plus
+      `workspaces` only when it carries a live entry (spec R10: "the same JSON shape the guard
+      and fr already read"; a new `session`/`created` contract would break both readers) — and
+      the same 48h GC. Assert the key set against `fr/isolation/types.py`'s sentinel reader in
+      a Python test so the two cannot drift. (Corrected after review p2r-3; the shipped shape
+      is journal decision p2-sentinel-shape-follows-bash.)
 - number: 3
   title: The shell gate on the whole command line
   steps:

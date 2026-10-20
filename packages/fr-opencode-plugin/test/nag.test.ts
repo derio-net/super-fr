@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createNagHandler } from "../src/nag";
+import { createNagHandler, sharedServed } from "../src/nag";
 import type { RunAnswer } from "../src/spawn";
 
 let repo: string;
@@ -32,6 +32,27 @@ function stub(answer: RunAnswer) {
 const ctxEvent = (sessionID = "ses_1") => ({ sessionID, system: [] as { type: "text"; text: string }[] });
 
 describe("acceptance nag", () => {
+  test("shares its once-per-session memory between loaded copies of the plugin", async () => {
+    // OpenCode 2 scans the plugins directory for DIRECTORIES too, so the delivered
+    // plugin can load twice (phase-1 finding p1-v2-loads-sources-dir-as-plugin);
+    // each copy registers its own context hook. Module state is per copy, so only
+    // a process-wide memory keeps R9's "one system part" true.
+    const { calls, runFr } = stub({ code: 0, stdout: "rows\n" });
+    const served = sharedServed();
+    served.clear();
+    const first = createNagHandler({ session: topLevel, directory: repo, runFr, served });
+    const second = createNagHandler({ session: topLevel, directory: repo, runFr, served });
+
+    const a = ctxEvent("ses_shared");
+    await first(a);
+    const b = ctxEvent("ses_shared");
+    await second(b);
+
+    expect(calls).toHaveLength(1);
+    expect(a.system).toHaveLength(1);
+    expect(b.system).toEqual([]);
+  });
+
   test("serves one system part per top-level session, never rewriting the prompt", async () => {
     const { calls, runFr } = stub({ code: 0, stdout: "3 rows owe a walk\n" });
     const nag = createNagHandler({ session: topLevel, directory: join(repo, "docs"), runFr });

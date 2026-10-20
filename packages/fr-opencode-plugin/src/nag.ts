@@ -21,6 +21,14 @@ import { run, type RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/** `globalThis` key for the nag's process-wide once-per-session memory. */
+export const SHARED_SERVED = Symbol.for("super-fr.fr-opencode-plugin.nag.served");
+
+export function sharedServed(): Set<string> {
+  const slot = globalThis as Record<symbol, Set<string> | undefined>;
+  return (slot[SHARED_SERVED] ??= new Set<string>());
+}
+
 export type NagHandlerOptions = {
   /** `ctx.session` — `get({sessionID})`. */
   session: unknown;
@@ -28,6 +36,11 @@ export type NagHandlerOptions = {
   /** Test seam. Default: `fr <args>` in `cwd`, bounded. */
   runFr?: (cwd: string, args: string[]) => Promise<RunAnswer>;
   timeoutMs?: number;
+  /** Once-per-session memory. The plugin passes `sharedServed()`, because
+   * OpenCode 2 can load the delivered plugin twice (phase-1 finding
+   * p1-v2-loads-sources-dir-as-plugin): module state is per copy, globalThis is
+   * not, so each copy would otherwise nag every top-level session again. */
+  served?: Set<string>;
 };
 
 type ContextEvent = { sessionID?: unknown; system?: unknown };
@@ -57,7 +70,7 @@ async function isTopLevel(session: unknown, id: string): Promise<boolean> {
 export function createNagHandler(options: NagHandlerOptions) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const runFr = options.runFr ?? ((cwd: string, args: string[]) => run("fr", args, { cwd, timeoutMs }));
-  const served = new Set<string>();
+  const served = options.served ?? new Set<string>();
 
   return async (event: ContextEvent | null | undefined): Promise<void> => {
     try {

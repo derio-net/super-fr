@@ -67,7 +67,7 @@ import { createClaimHandler, sharedClaimed } from "./claim";
 import { decideShell } from "./guard";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
-import { createNagHandler } from "./nag";
+import { createNagHandler, sharedServed } from "./nag";
 import { createPinHandler, type ShellCreateEvent } from "./pin";
 import { decidePush } from "./push";
 import { writePipelineSentinel } from "./sentinel";
@@ -230,7 +230,7 @@ const plugin: Plugin.Plugin = {
     const idle = createIdleHandler({ session: ctx.session, directory, actedOn: sharedActedOn() });
     const bind = createBindHandler({ session: ctx.session, directory });
     const unbind = createUnbindHandler({ directory });
-    const nag = createNagHandler({ session: ctx.session, directory });
+    const nag = createNagHandler({ session: ctx.session, directory, served: sharedServed() });
 
     await ctx.tool.hook("execute.before", async (event) => {
       // Before the gate, and whatever the tool: a child's first call of ANY

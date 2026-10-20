@@ -92,6 +92,30 @@ def _skip_artifact_migration_gate(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_git_credential_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test may open a credential dialog, or block on the operator's desktop.
+
+    Fixtures routinely `git init` + `remote add origin https://github.com/...`
+    (a URL, never a network clone). Nothing in them should reach GitHub, but a
+    path that resolves the default branch does: `default_branch()` falls back to
+    `git remote set-head origin --auto`, and `ls-remote`/`fetch` do the same,
+    when `origin/HEAD` is unset. With no credentials git then falls back to
+    `SSH_ASKPASS` — on macOS that is a modal "Username for 'https://github.com'"
+    popup, once per shard, raised by a test that meant to stay local.
+
+    `GIT_TERMINAL_PROMPT=0` makes git fail fast instead of asking, and pointing
+    `GIT_ASKPASS` at `true` closes the askpass path; `SSH_ASKPASS` and
+    `SUDO_ASKPASS` are dropped for the same reason. A test that must answer a
+    prompt sets its own values. This does not stop a test from using the
+    network — it stops it from asking a HUMAN.
+    """
+    monkeypatch.setenv("GIT_TERMINAL_PROMPT", "0")
+    monkeypatch.setenv("GIT_ASKPASS", "true")
+    monkeypatch.delenv("SSH_ASKPASS", raising=False)
+    monkeypatch.delenv("SUDO_ASKPASS", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_inherited_fr_binary_pin(monkeypatch: pytest.MonkeyPatch) -> None:
     """Drop the session's `FR_HARNESS_FR` pin (super-fr#746).
 
