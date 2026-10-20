@@ -688,6 +688,14 @@ def why_unobservable(harness: str | None, env: Mapping[str, str], what: str) -> 
                 f"database fr could read ({db} could not be read), so its {what} cannot be read"
                 " — check FR_OPENCODE_DB / XDG_DATA_HOME"
             )
+        if version == "v2":
+            # The store is healthy and the session is in it (p4-r1): what the
+            # call site looked for is simply not there yet. Never point at the
+            # database here — nothing is wrong with it.
+            return (
+                f"the session your harness (opencode) exported in {key} ({sid}) was read, "
+                f"and it holds no {what} yet"
+            )
         return (
             f"the session your harness (opencode) exported ({key}) is not in the "
             f"OpenCode database fr read, so its {what} cannot be read — check "

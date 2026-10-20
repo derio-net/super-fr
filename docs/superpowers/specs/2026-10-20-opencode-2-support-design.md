@@ -285,9 +285,15 @@ disagree about what a session did. The sites that move are, at least:
 
 Field mapping: `data.cost`, `data.tokens.{input,output,reasoning,cache.{read,write}}`,
 `data.model.{id,providerID}`, `data.agent`, `time.{created,ran,completed}`,
-exit from `state.metadata.exit`, output from `state.content[].text`. The legacy
-tables are read for nothing but the 1.x detection that produces R14's message;
-that is what makes "V2-only" loud rather than silent.
+exit from `state.metadata.exit`, output from `state.content[].text`. Two fields
+are COLUMNS on `session_message`, not members of `data`: the role is the row's
+`type` (`assistant`/`user`/`compaction`…), and the row's own `time_created`
+sits beside the per-item `time.*` (measured on 2.1.0 — see the plan journal's
+`p4-store-shape-measured`, which also records the other divergences from this
+table: tool times on the item rather than in `state`, `subagent` carrying a
+capital `sessionID`, integer `0` cost, and `skill` input being `{name}` or
+`{id}`). The legacy tables are read for nothing but the 1.x detection that
+produces R14's message; that is what makes "V2-only" loud rather than silent.
 
 ### E. Delivery and configuration
 

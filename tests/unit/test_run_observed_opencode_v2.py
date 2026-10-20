@@ -55,6 +55,22 @@ def test_an_unreadable_store_says_it_could_not_be_read(tmp_path: Path) -> None:
     assert "1.x" not in why
 
 
+def test_each_of_the_four_answers_words_itself(tmp_path: Path) -> None:
+    """p4-r1: a healthy 2.x session is never described with the absent
+    answer's 'wrong database' voice — each answer has its own sentence."""
+    v2 = observed.why_unobservable("opencode", _env("ses_v2demo"), "questions")
+    assert "was read, and it holds no questions yet" in v2
+    assert "FR_OPENCODE_DB" not in v2 and "not in the OpenCode database" not in v2
+    assert "1.x" not in v2
+    v1 = observed.why_unobservable("opencode", _env("ses_v1only"), "questions")
+    assert "OpenCode 1.x" in v1 and "FR_OPENCODE_DB" not in v1
+    absent = observed.why_unobservable("opencode", _env("ses_nowhere"), "questions")
+    assert "not in the OpenCode database" in absent and "FR_OPENCODE_DB" in absent
+    bad = observed.why_unobservable("opencode", _env("ses_v2demo", tmp_path / "x.db"), "questions")
+    assert "could not be read" in bad and "not in the OpenCode database" not in bad
+    assert len({v2, v1, absent, bad}) == 4
+
+
 def test_no_session_id_names_opencode_session_id() -> None:
     why = observed.why_unobservable("opencode", _env(None), "questions")
     assert "OPENCODE_SESSION_ID" in why
