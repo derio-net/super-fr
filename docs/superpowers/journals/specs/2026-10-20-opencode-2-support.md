@@ -362,3 +362,8 @@ A wrong entrypoint fails silently: the plugin looks installed while every gate i
 ### tier-2026-10-20-opencode-2-support-p2 · decision · hard: two decision engines must agree on whole-command semantics
 
 The sentinel's mtime refresh, shared lock and orphan heal have no TypeScript precedent, and a broader gate would deny commands the Claude path allows.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-10-20-opencode-2-support-p3 created=2026-10-20T05:43:58+00:00 decided_by=agent -->
+### tier-2026-10-20-opencode-2-support-p3 · decision · hard: the delivery mechanism is unproven and its failure mode is silent
+
+A slot that never renders looks like a status line that shows nothing. The phase must decide and record which mechanism shipped.
