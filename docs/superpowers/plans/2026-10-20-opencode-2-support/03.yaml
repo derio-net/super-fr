@@ -69,6 +69,15 @@ tasks:
       `fr.harness.observe` gains a config probe for the status-line row (the entry is listed AND
       the file exists), because a `.tsx` is outside the `src/*.ts` marker scan. Parity test proves
       the row's state follows the probe; `fr harness parity --check` stays green.
+  - id: P3.T3.S4
+    text: |-
+      V2 scans `<config>/opencode/plugins/` for DIRECTORIES too, so the 1.x delivery (a top-level
+      loader plus the sources directory beside it) loads the plugin TWICE — measured in phase 1,
+      plan finding p1-v2-loads-sources-dir-as-plugin. Deliver exactly ONE loadable entrypoint on
+      2.0: either the directory alone (an `index.ts` the scanner finds) or a loader whose sources
+      sit outside the scanned directory. Update `scripts/deliver-opencode-plugin.sh`,
+      `scripts/install.sh` and the delivery tests, and assert the served config yields exactly one
+      `loading plugin` line for super-fr.
 state:
   steps:
     P3.T1.S1:
@@ -96,6 +105,10 @@ state:
       ticked_at: null
       note: null
     P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S4:
       state: ' '
       ticked_at: null
       note: null
