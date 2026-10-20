@@ -132,7 +132,7 @@ journal:
   - kind: finding
     id: p4-r4
     phase: 4
-    review_scope: in
+    review_scope: out
     title: "spec §D's field mapping did not record the measured shape (role = session_message.type column, row time beside item time.*)"
     body: |
       Review: the spec still described data.role and per-state times; the measured divergences are in p4-store-shape-measured.
@@ -204,9 +204,9 @@ resolves:
       written for the message rows; a migrated `task` dispatch is not in the capture (p4-migrated-session-captured).
   - id: p4-compaction-tokens-uncounted
     state: deferred
-    tracked_by: derio-net/super-fr#1225
+    tracked_by: derio-net/super-fr#1222
     body: |
-      Out of scope for phase 4. Tracked by derio-net/super-fr#1225, the issue being filed for it; if the filed number
+      Out of scope for phase 4. Tracked by derio-net/super-fr#1222, the issue being filed for it; if the filed number
       differs the orchestrator corrects it here.
 evidence:
   tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p4-review-full-suite.log

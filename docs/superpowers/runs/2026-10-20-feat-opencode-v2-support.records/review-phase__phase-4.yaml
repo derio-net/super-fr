@@ -1,0 +1,40 @@
+schema_version: 10
+run: 2026-10-20-feat-opencode-v2-support
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+- kind: review
+  id: p4-review
+  phase: 4
+  title: "Phase 4 reviewed by an independent agent: two majors, one of them a silent money bug, found by driving a throwaway store"
+  body: |
+    Reviewer: ses_ea6d1b71fffepKaui9YJGoGmGf (general agent, read-only, its own context). It ran
+    the opencode/usage modules (88 passed), the scenarios (50 passed in 194s), mypy (302 files),
+    ruff, and grep'd every legacy query site: exactly one `FROM session` hit remains, in the R14
+    detection, so "every query site moved" held. It checked the record's evidence log against the
+    commit times (suite born the same second as the last code commit) rather than accepting it.
+
+    Then it did the thing that found the defects: it built its own throwaway stores and BROKE them
+    one way at a time — a corrupt `data` blob, `session_v2` dropped, `session_v2` renamed, a column
+    renamed, a zero-byte file, a session only in `session`, a session in both — and drove the probe,
+    `why_unobservable` and `fr usage collect` against each. Two majors fell out of that matrix:
+    a healthy 2.x session was told its database was wrong (the fall-through to the absent sentence),
+    and one corrupt `session_message.data` row silently turned 0.0143 into 0.002 labelled `exact` —
+    a wrong dollar figure indistinguishable from a measured one, which is precisely the class R14
+    forbids. Neither was reachable from the record's own tests, and both are on the routine path.
+
+    It also found a second alias table this phase had created while editing the first (both
+    docstrings claiming to be the only one, mapping `bash` to different targets), and that the
+    fixture's provenance did not match what R13 promised: the rows were authored to the same mapping
+    the reader encodes, so the "migration lost nothing" pin proved only self-consistency.
+
+    Everything is closed: the two majors by code plus a degradation test, the alias tables by one
+    name per job plus a test tying store names to the activity vocabulary, the provenance by
+    capturing ONE real migrated 1.x row set (redacted) from a copy of the store and labelling
+    exactly what is captured versus constructed, and §D by naming the role COLUMN.
+    The reviewer opened no finding this phase could not fix; its one out-of-scope item (§D) was
+    corrected anyway, because the spec is what phases 5 and 6 read.
+evidence:
+  review: p4-review
+  reviewer: ses_ea6d1b71fffepKaui9YJGoGmGf
