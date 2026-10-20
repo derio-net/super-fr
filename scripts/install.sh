@@ -1062,7 +1062,8 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   echo ""
   echo "Installing fr-opencode-plugin ($OPENCODE_PLUGINS_DIR)..."
   bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install "$OPENCODE_PLUGINS_DIR"
-  echo "  Installed $OPENCODE_PLUGINS_DIR/fr-opencode-plugin.ts (+ fr-opencode-plugin/)"
+  echo "  Installed $OPENCODE_PLUGINS_DIR/fr-opencode-plugin/ (server plugin + tui/ status line)"
+  echo "  Listed it in $HOME/.config/opencode/cli.json's plugins (the status line)"
 else
   echo ""
   echo "Skipping OpenCode skill/command/agent delivery (no ~/.config/opencode found; set"

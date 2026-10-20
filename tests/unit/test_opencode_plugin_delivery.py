@@ -6,10 +6,12 @@ copied that source to a consumer's `~/.config/opencode/plugins/` — every
 OpenCode user outside this repo ran with neither surface while parity said
 both were wired.
 
-OpenCode (verified live on 1.18.32, isolated XDG_CONFIG_HOME) registers and
-imports only TOP-LEVEL `*.ts`/`*.js` files in its global plugins directory;
-subdirectories are not scanned. So the delivered shape is one top-level
-loader plus the sources in a sibling directory the scan skips.
+OpenCode 2 (measured on 2.1.0, isolated XDG dirs) treats each DIRECTORY in its
+plugins directory as one plugin: the server loads `<dir>/index`, the TUI loads
+`<dir>/tui`. So the delivered shape is ONE directory and nothing at the top
+level — the 1.x top-level loader beside it made 2.x load the plugin twice
+(plan finding p1-v2-loads-sources-dir-as-plugin). The directory is also listed
+in `<config>/cli.json`'s `plugins` for the status line (spec R12).
 
 These are behavioural tests of `scripts/deliver-opencode-plugin.sh`, plus
 drift guards that install.sh actually calls it. The live half — the real
@@ -19,52 +21,66 @@ drift guards that install.sh actually calls it. The live half — the real
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "deliver-opencode-plugin.sh"
 PLUGIN_SRC = REPO_ROOT / "packages" / "fr-opencode-plugin" / "src"
+SEGMENT = REPO_ROOT / "plugins" / "super-fr" / "scripts" / "fr-statusline-segment.sh"
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True, check=False)
 
 
-def test_install_writes_a_top_level_loader_and_every_source(tmp_path: Path) -> None:
+def test_install_writes_one_plugin_directory_with_every_source(tmp_path: Path) -> None:
     plugins = tmp_path / "plugins"
     result = _run("install", str(plugins))
     assert result.returncode == 0, result.stderr
 
-    loader = plugins / "fr-opencode-plugin.ts"
-    assert loader.is_file(), "the loader must sit at the TOP level — OpenCode scans nothing deeper"
-    assert 'from "./fr-opencode-plugin/index"' in loader.read_text()
-    # OpenCode 2 loads only a default plugin definition (spec 2026-10-20 R1).
-    assert 'export { default } from "./fr-opencode-plugin/index";' in loader.read_text()
-
+    plugin = plugins / "fr-opencode-plugin"
     sources = sorted(p.name for p in PLUGIN_SRC.glob("*.ts"))
-    assert sources, "no plugin sources found — did packages/fr-opencode-plugin/src move?"
-    delivered = sorted(p.name for p in (plugins / "fr-opencode-plugin").glob("*.ts"))
-    assert delivered == sources
+    assert "index.ts" in sources, (
+        "no plugin sources found — did packages/fr-opencode-plugin/src move?"
+    )
+    assert sorted(p.name for p in plugin.glob("*.ts")) == sources
     for name in sources:
-        assert (plugins / "fr-opencode-plugin" / name).read_bytes() == (
-            PLUGIN_SRC / name
-        ).read_bytes()
+        assert (plugin / name).read_bytes() == (PLUGIN_SRC / name).read_bytes()
+
+    tui = sorted(p.name for p in (plugin / "tui").iterdir())
+    assert tui == ["fr-statusline-segment.sh", "index.tsx", "segment.ts"]
+    assert (plugin / "tui" / "fr-statusline-segment.sh").read_bytes() == SEGMENT.read_bytes()
 
 
-def test_only_the_loader_is_a_top_level_module(tmp_path: Path) -> None:
-    """A support module at the top level would be loaded as a plugin of its own."""
+def test_nothing_is_delivered_at_the_top_level(tmp_path: Path) -> None:
+    """OpenCode 2 loads the directory; any top-level module is a second load."""
     plugins = tmp_path / "plugins"
     assert _run("install", str(plugins)).returncode == 0
-    top_level = sorted(p.name for p in plugins.iterdir() if p.is_file())
-    assert top_level == ["fr-opencode-plugin.ts"]
+    assert sorted(p.name for p in plugins.iterdir()) == ["fr-opencode-plugin"]
+
+
+def test_install_deletes_a_stale_1x_loader(tmp_path: Path) -> None:
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    stale = plugins / "fr-opencode-plugin.ts"
+    stale.write_text('export { default } from "./fr-opencode-plugin/index";\n')
+    assert _run("install", str(plugins)).returncode == 0
+    assert not stale.exists()
+
+
+def test_the_server_entrypoint_never_imports_the_tui(tmp_path: Path) -> None:
+    """The server loads `<dir>/index`; nothing it imports may reach `tui/`."""
+    for source in PLUGIN_SRC.glob("*.ts"):
+        assert "./tui" not in source.read_text(), source.name
 
 
 def test_reinstall_replaces_the_source_dir_wholesale(tmp_path: Path) -> None:
     """A source file removed upstream must not linger on the consumer."""
     plugins = tmp_path / "plugins"
     assert _run("install", str(plugins)).returncode == 0
-    stale = plugins / "fr-opencode-plugin" / "removed-upstream.ts"
+    stale = plugins / "fr-opencode-plugin" / "tui" / "removed-upstream.ts"
     stale.write_text("export const x = 1;\n")
     assert _run("install", str(plugins)).returncode == 0
     assert not stale.exists()
@@ -80,6 +96,7 @@ def test_uninstall_removes_only_what_install_wrote(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert not (plugins / "fr-opencode-plugin.ts").exists()
     assert not (plugins / "fr-opencode-plugin").exists()
+    assert sorted(p.name for p in plugins.iterdir()) == ["someone-elses-plugin.js"]
     assert foreign.read_text() == "export default async () => ({});\n"
 
 
@@ -109,3 +126,58 @@ def test_install_sh_uninstall_removes_the_plugin() -> None:
     uninstall_block = install.split('"${1:-}" == "--uninstall"', 1)[1].split("\nfi\n", 1)[0]
     assert "deliver-opencode-plugin.sh" in uninstall_block
     assert " uninstall " in uninstall_block
+
+
+# --- cli.json: the status line's enablement directive (spec R12) -------------
+
+
+def _cli(tmp_path: Path) -> tuple[Path, Path]:
+    config = tmp_path / "opencode"
+    return config / "plugins", config / "cli.json"
+
+
+def _entry(plugins: Path) -> str:
+    return str(plugins.resolve() / "fr-opencode-plugin")
+
+
+def test_install_creates_cli_json_with_the_plugin_directory(tmp_path: Path) -> None:
+    plugins, cli = _cli(tmp_path)
+    assert _run("install", str(plugins)).returncode == 0
+    assert json.loads(cli.read_text()) == {"plugins": [_entry(plugins)]}
+
+
+def test_install_appends_only_its_own_entry_and_keeps_the_rest(tmp_path: Path) -> None:
+    plugins, cli = _cli(tmp_path)
+    cli.parent.mkdir(parents=True)
+    cli.write_text(json.dumps({"theme": {"name": "x"}, "plugins": ["their-plugin"]}))
+    assert _run("install", str(plugins)).returncode == 0
+    assert json.loads(cli.read_text()) == {
+        "theme": {"name": "x"},
+        "plugins": ["their-plugin", _entry(plugins)],
+    }
+
+
+def test_reinstall_is_idempotent_by_exact_path(tmp_path: Path) -> None:
+    plugins, cli = _cli(tmp_path)
+    assert _run("install", str(plugins)).returncode == 0
+    assert _run("install", str(plugins)).returncode == 0
+    assert json.loads(cli.read_text())["plugins"] == [_entry(plugins)]
+
+
+def test_an_unparsable_cli_json_is_refused_and_left_untouched(tmp_path: Path) -> None:
+    plugins, cli = _cli(tmp_path)
+    cli.parent.mkdir(parents=True)
+    cli.write_text("{ not json\n")
+    result = _run("install", str(plugins))
+    assert result.returncode != 0
+    assert str(cli) in result.stderr
+    assert cli.read_text() == "{ not json\n"
+
+
+def test_uninstall_removes_only_its_own_entry(tmp_path: Path) -> None:
+    plugins, cli = _cli(tmp_path)
+    cli.parent.mkdir(parents=True)
+    cli.write_text(json.dumps({"plugins": ["their-plugin"]}))
+    assert _run("install", str(plugins)).returncode == 0
+    assert _run("uninstall", str(plugins)).returncode == 0
+    assert json.loads(cli.read_text()) == {"plugins": ["their-plugin"]}

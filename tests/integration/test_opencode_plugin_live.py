@@ -7,15 +7,21 @@ probe gives its isolated service its own free port (`opencode service set
 port`) and stops it afterwards — otherwise the CLI would talk to the operator's
 own service and its plugins.
 
-1. The REAL binary loads the delivered loader: its server log records
-   `loading plugin` for it, with no error. This is what #568's compiled
-   executable would have failed: OpenCode never registers an extensionless
-   file. (OpenCode 2's `debug config` lists config sources, not plugins.)
+1. The REAL binary loads the delivered plugin directory: its server log records
+   `loading plugin` for it EXACTLY ONCE, with no error. This is what #568's
+   compiled executable would have failed: OpenCode never registers an
+   extensionless file. Once, because OpenCode 2 scans plugin DIRECTORIES too,
+   so the 1.x top-level loader beside the directory loaded it twice (plan
+   finding p1-v2-loads-sources-dir-as-plugin). (`debug config` lists config
+   sources, not plugins.)
 2. OpenCode's own runtime imports and initialises the delivered loader: a
    sentinel plugin delivered beside it imports its V2 definition, runs its
    `setup` against a context that captures the `tool` `execute.before` hook,
    drives it and records the verdicts. A write into an fr-enabled base clone is
    refused; a write outside any repo is allowed.
+3. The status line (spec R12): the real TUI, started under a pseudo-terminal in
+   a git repo, loads the delivered `tui/` entrypoint and renders the segment
+   script's text for that repo's branch.
 
 What this does NOT prove, stated so a green run is not over-read: that a
 model-driven OpenCode session routes its tool calls through the hook. That
@@ -66,7 +72,7 @@ def _deliver(config_home: Path) -> Path:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    return plugins / "fr-opencode-plugin.ts"
+    return plugins / "fr-opencode-plugin"
 
 
 def _git(*args: str, cwd: Path) -> None:
@@ -132,7 +138,7 @@ def _project(root: Path) -> Path:
     return project
 
 
-def test_opencode_registers_the_delivered_loader(tmp_path: Path) -> None:
+def test_opencode_registers_the_delivered_plugin_exactly_once(tmp_path: Path) -> None:
     opencode = _binary("opencode")
     env = _isolated_env(tmp_path)
     loader = _deliver(Path(env["XDG_CONFIG_HOME"]))
@@ -145,9 +151,9 @@ def test_opencode_registers_the_delivered_loader(tmp_path: Path) -> None:
     log = Path(env["XDG_DATA_HOME"]) / "opencode" / "log" / "opencode.log"
     lines = log.read_text().splitlines() if log.is_file() else []
     loaded = [line for line in lines if 'msg="loading plugin"' in line]
-    assert any(f"id={loader}" in line for line in loaded), (
-        f"opencode did not load the delivered loader; its loads: {loaded}"
-    )
+    ours = [line for line in loaded if "fr-opencode-plugin" in line]
+    assert len(ours) == 1, f"super-fr must load exactly once; its loads: {ours}"
+    assert f"id={loader} " in ours[0], f"opencode did not load the delivered directory: {ours}"
     # A load that fails is logged as a WARN `failed to load plugin`, not an error.
     failed = [
         line
@@ -239,3 +245,89 @@ def test_opencode_runs_the_delivered_gate(tmp_path: Path) -> None:
     assert verdicts["id"] == "super-fr", verdicts
     assert verdicts["base_clone"].startswith("REFUSED fr-isolation"), verdicts
     assert verdicts["outside"] == "ALLOWED", verdicts
+
+
+def _tui_screen(opencode: str, cwd: Path, env: dict[str, str], seconds: float) -> str:
+    """Run the interactive TUI on a pseudo-terminal for `seconds`; return its screen text.
+
+    Its own session and process group, killed as a group on the way out, so
+    nothing it started outlives the probe."""
+    import fcntl
+    import pty
+    import re
+    import select
+    import signal
+    import struct
+    import termios
+    import time
+
+    leader, follower = pty.openpty()
+    fcntl.ioctl(follower, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 160, 0, 0))
+    proc = subprocess.Popen(
+        [opencode],
+        cwd=cwd,
+        env={**env, "TERM": "xterm-256color"},
+        stdin=follower,
+        stdout=follower,
+        stderr=follower,
+        start_new_session=True,
+    )
+    os.close(follower)
+    buf = b""
+    end = time.monotonic() + seconds
+    try:
+        while time.monotonic() < end:
+            ready, _, _ = select.select([leader], [], [], 0.5)
+            if not ready:
+                continue
+            try:
+                chunk = os.read(leader, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf += chunk
+    finally:
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(proc.pid, sig)
+            except ProcessLookupError:
+                break
+            try:
+                proc.wait(timeout=5)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        os.close(leader)
+    text = re.sub(rb"\x1b\[[0-9;?<>=]*[a-zA-Z]|\x1b\][^\x07]*\x07", b"", buf)
+    return text.decode(errors="ignore")
+
+
+def test_opencode_tui_renders_the_delivered_status_line(tmp_path: Path) -> None:
+    opencode = _binary("opencode")
+    env = _isolated_env(tmp_path)
+    env["HOME"] = str(tmp_path / "home")
+    (tmp_path / "home").mkdir()
+    _deliver(Path(env["XDG_CONFIG_HOME"]))
+    project = tmp_path / "project"
+    project.mkdir()
+    _git("init", "--quiet", "-b", "frstatusprobe", cwd=project)
+    _git(
+        "-c",
+        "user.email=t@example.com",
+        "-c",
+        "user.name=T",
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "-m",
+        "x",
+        cwd=project,
+    )
+
+    with _service(opencode, project, env):
+        screen = _tui_screen(opencode, project, env, 30)
+    flat = " ".join(screen.split())
+    assert "frstatusprobe · no fr-isolation" in flat, (
+        f"the TUI did not render the status line; screen tail: {flat[-1500:]}"
+    )
