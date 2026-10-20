@@ -382,3 +382,8 @@ Phase 5 re-points these rows' evidence as matrix bookkeeping; it does not serve 
 ### phase-split-2026-10-20-opencode-2-support-p4-1 · decision · review-size: the readers are an independent contract of their own
 
 Phase 5 only records their evidence. Reading the 2.0 store is 900 lines across two readers, a shared adapter and a fixture; it is reviewable on its own and shares no file with the plugin phases.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-10-20-opencode-2-support-p5-1 created=2026-10-20T05:44:49+00:00 decided_by=agent -->
+### phase-split-2026-10-20-opencode-2-support-p5-1 · decision · tier: phase 5 is mechanical-tier bookkeeping across a dozen published surfaces
+
+It exists to make the published surfaces match the code: parity rows, the matrix and its three reports, the canonical rule and both mirrors, the explainer and the release fragment. Folding it into a hard implementation phase would blur the tier the dispatcher binds.
