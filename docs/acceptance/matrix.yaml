@@ -4063,10 +4063,15 @@ rows:
       by the plugin with the same message the Claude hook gives
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: 'Scenario named at spec review: the delivered plugin''s handlers are driven
-      with a fake context inside the candidate walk.'
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/push.test.ts
+    status: ci
+    notes: 'push.ts refuses a git push on a merged/closed-PR branch from execute.before
+      on shell, with the bash hook''s decision and text: push.test.ts compares 15 commands
+      against the real fr-merged-pr-push-guard.sh (CI). gh pr merge is allowed by both
+      engines, as R4''s today''s decision; the row''s own scenario tests/scenarios/opencode-plugin-v2.sh
+      was never written (plan journal p5-plugin-scenario-missing).'
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-claim
     capability: OpenCode adaptation
