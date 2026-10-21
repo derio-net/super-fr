@@ -4151,8 +4151,11 @@ rows:
     notes: A completed pipeline skill call in a base repo writes the bash writer's sentinel
       keys, never in a linked worktree (sentinel.test.ts, CI); test_sentinel_lifecycle.py
       holds the TS writer to the Python reader and the bash guard. execute.after firing
-      for a live skill call is unobserved; the row's scenario tests/scenarios/opencode-plugin-v2.sh
-      was never written (p5-plugin-scenario-missing).
+      for a live skill call is unobserved; its scenario tests/scenarios/opencode-plugin-v2.sh
+      proves the delivery contract the hook rides on (one directory, cli.json naming
+      the directory, an idempotent reinstall, an unparsable cli.json refused without
+      writing, uninstall leaving foreign entries, and one load of the delivered directory
+      in the real 2.x binary).
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-bind-unbind
     capability: OpenCode adaptation
