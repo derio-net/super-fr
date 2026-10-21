@@ -4127,10 +4127,17 @@ rows:
       isolation workspace
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: 'Scenario named at spec review: the delivered plugin''s handlers are driven
-      with a fake context inside the candidate walk.'
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/sentinel.test.ts
+      - super-fr:tests/unit/test_sentinel_lifecycle.py#test_the_opencode_writer_writes_the_bash_writers_keys
+      - super-fr:tests/unit/test_sentinel_lifecycle.py#test_the_python_reader_stamps_and_the_opencode_writer_carries_it
+    status: ci
+    notes: A completed pipeline skill call in a base repo writes the bash writer's sentinel
+      keys, never in a linked worktree (sentinel.test.ts, CI); test_sentinel_lifecycle.py
+      holds the TS writer to the Python reader and the bash guard. execute.after firing
+      for a live skill call is unobserved; the row's scenario tests/scenarios/opencode-plugin-v2.sh
+      was never written (p5-plugin-scenario-missing).
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-bind-unbind
     capability: OpenCode adaptation
