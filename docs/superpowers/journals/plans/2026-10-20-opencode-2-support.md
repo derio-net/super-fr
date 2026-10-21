@@ -1536,3 +1536,8 @@ Changing the cell would mean editing a test that encodes the operator's decision
 my own edit pass — the failure mode this repo treats as worse than the inconsistency. Reverted
 the experiment and filed #1224 with the two defensible paths (move the cell to `partial` like its
 siblings, or re-observe live on 2.x first) so the choice is the operator's.
+
+<!-- fr:journal kind=finding scope=plan id=p1-v2-loads-sources-dir-as-plugin-resolved-3 created=2026-10-21T14:43:53+00:00 phase=3 state=fixed resolves=p1-v2-loads-sources-dir-as-plugin answered_by=operator -->
+### p1-v2-loads-sources-dir-as-plugin-resolved-3 · finding [fixed] · resolves p1-v2-loads-sources-dir-as-plugin: OpenCode 2 loads the delivered sources directory as a second plugin (phase 3)
+
+Operator authorized recording it (asked and answered in session): phase 3 delivered ONE directory, so OpenCode 2's directory scan loads the plugin exactly once; the 1.x loader+sources layout is gone and tests/scenarios/opencode-plugin-v2.sh asserts the single load.
