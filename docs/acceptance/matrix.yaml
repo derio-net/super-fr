@@ -4110,10 +4110,15 @@ rows:
       operator's prompt
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: 'Scenario named at spec review: the delivered plugin''s handlers are driven
-      with a fake context inside the candidate walk.'
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/nag.test.ts
+    status: ci
+    notes: One system part per top-level session via ctx.session.hook context, never
+      a prompt rewrite, skipped without a matrix, silent on failure (nag.test.ts, CI,
+      fake context - the spec's candidate scope). That it reaches a live model request
+      is Test Plan item 6, post-merge. The row's scenario tests/scenarios/opencode-plugin-v2.sh
+      was never written (p5-plugin-scenario-missing).
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-sentinel
     capability: OpenCode adaptation
