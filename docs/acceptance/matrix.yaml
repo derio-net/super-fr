@@ -4009,8 +4009,9 @@ rows:
     scenario: tests/scenarios/opencode-store-v2.sh
   - id: opencode-2-session-export
     capability: OpenCode adaptation
-    acceptance: FR_OPENCODE_SESSION_ID reaches a shell command issued by the top-level
-      OpenCode 2.x session, so fr names that session and not a child's
+    acceptance: OPENCODE_SESSION_ID, which OpenCode 2.x itself sets on every command
+      it spawns, lets fr name the top-level session that issued the command and not
+      a child's
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R6
     levels:
@@ -6608,7 +6609,7 @@ rows:
       dropped; unconfirmed left byte-identical and reported; RecordV6 source pinned.
   - id: opencode-run-session
     capability: fr-goal on OpenCode
-    acceptance: On OpenCode, the super-fr plugin hands fr the run's session id, advance
+    acceptance: On OpenCode, fr reads the run's session id from the harness's environment, advance
       records the top-level session on the attempt, and fr run cost and the PR's Cost
       table show the run's real figures
     origin:
