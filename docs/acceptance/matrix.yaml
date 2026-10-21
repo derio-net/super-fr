@@ -4145,10 +4145,15 @@ rows:
       bound to that workspace, and a deleted session is unbound
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: 'Scenario named at spec review: the delivered plugin''s handlers are driven
-      with a fake context inside the candidate walk.'
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/bind.test.ts
+    status: ci
+    notes: A completed shell call naming fr isolation up|exec|down or fr run start runs
+      fr isolation attach --harness opencode, and session.deleted runs fr isolation
+      detach, best-effort (bind.test.ts, CI, exact argv). session.deleted's shape is
+      from the client typings, not observed live; the row's scenario tests/scenarios/opencode-plugin-v2.sh
+      was never written (p5-plugin-scenario-missing).
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: isolation-rebuild-keeps-worktree
     capability: Isolation lifecycle
