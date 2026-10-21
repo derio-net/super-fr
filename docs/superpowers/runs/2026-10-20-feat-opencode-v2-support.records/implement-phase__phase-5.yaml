@@ -1,0 +1,110 @@
+schema_version: 10
+run: 2026-10-20-feat-opencode-v2-support
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T2.S1, P5.T2.S2, P5.T3.S1, P5.T3.S2, P5.T4.S1, P5.T4.S2]
+refactor:
+  P5.T1: "Only declarations moved: five one-line parity markers and two stale comments in index.ts; the drift fixture in test_harness_check.py was re-pointed from fr-session-bind (now ported) to fr-worktree-create (still unported). Nothing to clean."
+  P5.T2: "Matrix moved through the CLI; two acceptance strings re-worded by hand because no verb edits them. No code."
+  P5.T3: "Prose and generated mirrors only."
+  P5.T4: "Fragment plus gates; no code."
+journal:
+  - kind: decision
+    id: p5-parity-gates-enforced
+    phase: 5
+    title: "parity: OpenCode edit gate partial→enforced, shell gate (fr-isolation-guard) absent→enforced, push guard absent→enforced"
+    body: |
+      check.py maps both enforced and partial to an observed `present`, so the state is a judgement.
+      All three throw from `execute.before` on a violating call, which is what Claude Code's enforced
+      cells mean. Evidence: the edit gate in index.test.ts/marker.test.ts and the delivered copy
+      refusing a base-clone edit inside the real 2.x binary (test_opencode_runs_the_delivered_gate,
+      CI on 2.0.32 and 2.1.0); the shell gate through the captured verdict table run against both
+      engines; the push guard through push.test.ts, which compares commands against the real
+      script. Each scope note says the model-driven walk is still owed after merge. New markers sit
+      on the handler module each one credits: guard.ts, push.ts, nag.ts, sentinel.ts, bind.ts (bind
+      and unbind).
+  - kind: decision
+    id: p5-parity-advisory-not-inflated
+    phase: 5
+    title: "parity: nag absent→partial, sentinel absent→partial, bind and unbind absent→partial (the plan said enforced); pin and idle stay partial with notes rewritten"
+    body: |
+      The nag cannot be `advisory`: check.py expects `advisory` to observe `absent`, and the nag
+      carries a marker. It is `partial`, because the evidence comes only from a fake context; the
+      live reach is Test Plan item 6. The plan asked for sentinel and bind/unbind `enforced`. I
+      declared them `partial` instead. execute.after firing for a live skill call, and
+      session.deleted arriving, were never observed live (p2-not-proven-live), and bind is
+      best-effort by design. The pin note now names create.before and cites the live echo from
+      p1-v2-hook-order-measured. The idle note now names ctx.event.subscribe/ctx.session.prompt in
+      place of the 1.x SDK endpoint. I also corrected interaction notes that named 1.x mechanics:
+      deliver-tests-provenance (shell items, OPENCODE_SESSION_ID), spec-review-independence
+      (subagent), run-session-identity (1.x refused by name), visual-evidence (shell),
+      dispatch-holder-identity (observed on 1.x, not re-observed on 2.x). The status-line cell
+      stays `partial` and its note is unchanged.
+  - kind: decision
+    id: p5-matrix-ci-rows
+    phase: 5
+    title: "matrix → ci: opencode-2-plugin-loads, store-read, v1-refusal, push-guard, claim, pin, nag, sentinel, bind-unbind; opencode-run-session and opencode-isolation-enforcement re-pointed (stay ci)"
+    body: |
+      plugin-loads: plugin.test.ts and wiring.test.ts, plus int refs to
+      test_opencode_registers_the_delivered_plugin_exactly_once and
+      test_opencode_runs_the_delivered_gate. store-read: test_a_2x_session_is_observed_end_to_end,
+      test_both_readers_see_the_same_tool_calls_of_a_2x_session, int test_scenarios.py#test_opencode_store_v2.
+      v1-refusal: test_a_1x_only_session_is_refused_naming_1x_and_the_upgrade,
+      test_opencode_1x_only_session_is_unavailable_naming_1x_and_the_upgrade,
+      test_both_readers_refuse_a_1x_session_with_the_same_reason, plus the scenario. The plugin rows
+      cite their bun test file (push/claim/pin/nag/sentinel/bind .test.ts); sentinel also cites the
+      two test_sentinel_lifecycle.py OpenCode-writer tests. opencode-run-session: removed the
+      session.test.ts ref, added test_a_session_is_probed_as_v2_v1_only_absent_or_unreadable, and
+      rewrote the note and the acceptance text, which had said "the plugin hands fr the session id".
+      opencode-isolation-enforcement: rewrote the note (the 1.18.32 sessions were on 1.x, now
+      unsupported) and added int test_opencode_runs_the_delivered_gate.
+  - kind: decision
+    id: p5-matrix-walk-owed-rows
+    phase: 5
+    title: "matrix → walk-owed: opencode-2-edit-gate, bash-gate, session-export, idle-nudge, status-line (verify: live, Test Plan items 1-5)"
+    body: |
+      Each row cites the CI evidence for its half that does not need a model (index/marker,
+      guard-verdicts with test_the_verdict_table_covers_what_the_spec_names, idle.test.ts,
+      segment.test.ts with the live TUI test, and the session-id reader tests
+      test_current_session_reads_the_key_its_harness_owns, test_a_child_id_walks_to_its_2x_root,
+      test_no_session_id_names_opencode_session_id). The model-driven half is post-merge at the
+      Tester gate. opencode-2-session-export's acceptance named FR_OPENCODE_SESSION_ID, an export
+      R6 removed. It now names OPENCODE_SESSION_ID, which OpenCode sets itself. The text was edited
+      by hand, string only, because set-status cannot edit acceptance text; the reports were
+      regenerated by the CLI.
+  - kind: finding
+    id: p5-plugin-scenario-missing
+    phase: 5
+    review_scope: in
+    title: "Six matrix rows name scenario tests/scenarios/opencode-plugin-v2.sh, which was never written"
+    body: |
+      opencode-2-push-guard, claim, pin, nag, sentinel and bind-unbind each carry
+      `scenario: tests/scenarios/opencode-plugin-v2.sh`, from spec review. The file does not exist,
+      and `fr acceptance check` does not flag it. The rows are `ci` on their bun tests, which run in
+      CI's opencode-plugin-test job and drive the handlers with a fake context. That is exactly the
+      spec's candidate item 4. But a `fr verification walk` that reads the rows' scenario would find
+      no script. Two ways to close it: write the scenario (outside this phase's files), or move the
+      rows' scenario off it (set-status can replace a scenario but cannot clear one). Each row's
+      note says so.
+  - kind: discovery
+    id: p5-prose-surfaces
+    phase: 5
+    title: "Prose: the rule and its mirror, AGENTS.md, README.md and 01-fr-goal corrected; fr-isolation.html and index.html left as they are, because neither is false"
+    body: |
+      fr-isolation.html describes only the Claude Code PreToolUse hook and makes no OpenCode or bash
+      claim. index.html has no harness text outside its base64. 01-fr-goal.md had two false
+      sentences: "the plugin hands the calling session's identifier" (now OpenCode does it itself)
+      and "an older plugin" (now an OpenCode 1.x session). Re-rendering the UNMODIFIED .md from /
+      with --isolated produced output byte-identical to the committed .html. The edited render then
+      changed exactly those lines. README line 427 ("third harness alongside Claude Code and
+      OpenCode") and line 346 are still true and were not changed.
+resolves: []
+evidence: {}
+# Full suite: owed by the orchestrator (the tests evidence gate credits only the
+# holder session's own log). Phase gates run here, all exit 0: the targeted pytest
+# set (1076 passed, 1 skipped), bunx tsc --noEmit, bun test (219 pass, 0 fail),
+# ruff check, ruff format (unchanged), mypy (342 files clean), fr validate
+# artifacts, fr harness parity --check, fr acceptance check / report --check,
+# bump-version.py --check, check-change-fragment.py origin/main, and
+# tests/integration/test_opencode_plugin_live.py (3 passed, local opencode 2.x).
