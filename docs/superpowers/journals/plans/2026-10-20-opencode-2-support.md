@@ -1392,3 +1392,8 @@ The note read "OpenCode shell.env, bun test/pin.test.ts". `src/pin.ts` now pins 
 ### p5-r5-resolved · finding [fixed] · resolves p5-r5: The plugin README still names 1.x's /session/{id}/prompt_async as the idle-nudge transport (phase 5)
 
 Operator authorized including it (asked and answered in session): the README's idle-guard section now says the nudge uses `ctx.session.prompt` and that the 1.x `/session/{id}/prompt_async` transport is gone.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r6-resolved created=2026-10-21T13:56:43+00:00 phase=5 state=fixed resolves=p5-r6 answered_by=operator -->
+### p5-r6-resolved · finding [fixed] · resolves p5-r6: The fr-binary-identity matrix note still says the OpenCode pin rides shell.env (phase 5)
+
+Operator authorized including it: the `fr-binary-identity` note now reads `ctx.shell.hook("create.before")` and says the 1.x `shell.env` export is gone, re-pointed through `fr acceptance set-status` so the row's notes and the reports stay generated, not hand-edited.
