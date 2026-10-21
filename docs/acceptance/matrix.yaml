@@ -3915,9 +3915,19 @@ rows:
       (id plus setup) and its hooks are registered
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm (2026-10-20).
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/plugin.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/wiring.test.ts
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_registers_the_delivered_plugin_exactly_once
+      - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
+    status: ci
+    notes: 'The delivered plugin directory loads exactly once in the real opencode 2.x
+      binary as a V2 definition (id super-fr) and its edit gate refuses a base-clone
+      edit: tests/integration/test_opencode_plugin_live.py, run by CI''s opencode-plugin-test
+      job against 2.0.32 and 2.1.0 with FR_REQUIRE_OPENCODE=1; setup''s registrations
+      are bun-tested in plugin.test.ts and wiring.test.ts.'
     verify: candidate
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-edit-gate
