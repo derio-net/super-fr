@@ -413,13 +413,15 @@ rows:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/index.test.ts
       - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
     status: ci
-    notes: 'CI pins OpenCode-compatible patch headers (including no-space Add File and
-      Move to), malformed patch denial in every fr-enabled context, recursive known/absolute-path
-      argument discovery, ctx.directory resolution, normalization, symlink escape prevention,
-      and the read-only built-ins. Fresh OpenCode 1.18.32 sessions on 2026-09-22: worktree-launched
-      no-space Add File targeting the base clone blocked; base-clone read allowed; base-clone
-      apply_patch blocked.'
+    notes: 'OpenCode 2 only: the plugin''s execute.before refuses every file-writing
+      tool (nested and absolute paths, patch bodies, symlinks) outside a valid workspace
+      (index.test.ts, marker.test.ts, CI), and the delivered copy refuses a base-clone
+      edit inside the real 2.x binary (test_opencode_runs_the_delivered_gate, CI on
+      2.0.32 and 2.1.0). The 2026-09-22 live sessions were on OpenCode 1.x, now unsupported;
+      the model-driven 2.x walk is owed by opencode-2-edit-gate.'
   - id: opencode-commands-in-repo
     capability: OpenCode adaptation
     acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)
