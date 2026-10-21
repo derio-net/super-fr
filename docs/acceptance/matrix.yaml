@@ -6616,11 +6616,13 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_observed_resolve_opencode.py#test_advance_from_a_child_session_records_the_run_session
       - super-fr:tests/unit/test_run_cost_cmd.py#test_an_opencode_runs_own_session_fills_the_cost_table
-      - super-fr:packages/fr-opencode-plugin/test/session.test.ts
+      - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_session_is_probed_as_v2_v1_only_absent_or_unreadable
     status: ci
-    notes: 'R1/R2: advance records the root OpenCode session (from a child''s id too),
-      plugin shell.env export, real cost on the fixture run (phase 1); live run owed
-      by opencode-observe-take10-rerun'
+    notes: 'R1/R2: advance records the root OpenCode session (from a child''s id too)
+      and real cost fills the Cost table (phase 1 of observe-2). The plugin''s shell.env
+      export it once cited was removed by spec 2026-10-20-opencode-2-support R6: OpenCode
+      2 sets OPENCODE_SESSION_ID itself, and the session is now probed v2 | v1-only
+      | absent | unreadable. Live run owed by opencode-observe-take10-rerun.'
   - id: opencode-child-dispatch
     capability: fr-goal on OpenCode
     acceptance: On OpenCode, fr maps each dispatch to its child session, fills an unclaimed
