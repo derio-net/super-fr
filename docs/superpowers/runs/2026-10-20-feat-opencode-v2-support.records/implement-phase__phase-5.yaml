@@ -87,6 +87,22 @@ journal:
       no script. Two ways to close it: write the scenario (outside this phase's files), or move the
       rows' scenario off it (set-status can replace a scenario but cannot clear one). Each row's
       note says so.
+  - kind: discovery
+    id: p5-suite-evidence-is-two-parts
+    phase: 5
+    title: "The suite is green only as two parts on this host: -n auto busts two pre-existing install-lock bounds"
+    body: |
+      `pytest -n auto` over everything was run twice: both times 2 failed, 13051 passed, and both
+      failures were tests/integration/test_install_atomic.py's two lock-reclaim tests timing out at
+      their hard `communicate(timeout=60)` (they pass serially in ~70s for the whole file, and this
+      branch touches neither them nor the lock). Filed as #1223 with the reproduction shape. CI is
+      unlikely to hit it: it shards four ways, so each job runs a quarter of the suite; the flake
+      needs 12 concurrent sandboxed `install.sh` runs on one busy host.
+
+      So the evidence log is honest rather than lucky: part 1 is the whole suite minus that one file
+      under `-n auto` (13045 passed, exit=0), part 2 is that file alone, serially (8 passed, exit=0),
+      and the log carries both headers and both exit lines. Coverage is complete — 13053 tests, the
+      same count the red run covered — and the split is stated in the log, not hidden in a re-run.
   - kind: decision
     id: p5-plugin-scenario-written
     phase: 5
@@ -137,7 +153,8 @@ resolves:
       every-script-has-a-test tripwire reads). It covers the delivery contract all six rows ride on
       and probes the real binary where present; the rows' notes were re-pointed through
       `fr acceptance set-status` so none of them still claims the scenario was never written.
-evidence: {}
+evidence:
+  tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p5-holder-suite.log
 # Full suite: owed by the orchestrator (the tests evidence gate credits only the
 # holder session's own log). Phase gates run here, all exit 0: the targeted pytest
 # set (1076 passed, 1 skipped), bunx tsc --noEmit, bun test (219 pass, 0 fail),
