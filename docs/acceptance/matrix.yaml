@@ -4091,8 +4091,11 @@ rows:
     status: ci
     notes: A child's first tool call runs fr run claim --open-unit with its id, agent
       and model, once per session (claim.test.ts, CI); fr's side names the holder (test_run_observed_resolve_opencode.py).
-      The row's scenario tests/scenarios/opencode-plugin-v2.sh was never written (plan
-      journal p5-plugin-scenario-missing); a live 2.x claim has not been re-observed.
+      Its scenario tests/scenarios/opencode-plugin-v2.sh proves the delivery contract
+      the hook rides on (one directory, cli.json naming the directory, an idempotent
+      reinstall, an unparsable cli.json refused without writing, uninstall leaving foreign
+      entries, and one load of the delivered directory in the real 2.x binary); a live
+      2.x claim has not been re-observed.
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-pin
     capability: OpenCode adaptation
