@@ -1541,3 +1541,8 @@ siblings, or re-observe live on 2.x first) so the choice is the operator's.
 ### p1-v2-loads-sources-dir-as-plugin-resolved-3 · finding [fixed] · resolves p1-v2-loads-sources-dir-as-plugin: OpenCode 2 loads the delivered sources directory as a second plugin (phase 3)
 
 Operator authorized recording it (asked and answered in session): phase 3 delivered ONE directory, so OpenCode 2's directory scan loads the plugin exactly once; the 1.x loader+sources layout is gone and tests/scenarios/opencode-plugin-v2.sh asserts the single load.
+
+<!-- fr:journal kind=finding scope=plan id=p2-not-proven-live-resolved-2 created=2026-10-21T15:46:14+00:00 phase=2 state=open resolves=p2-not-proven-live tracked_by=https://github.com/derio-net/super-fr/issues/1227 -->
+### p2-not-proven-live-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1227] · resolves p2-not-proven-live: None of the phase-2 handlers has run inside a real OpenCode 2 session (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1227.
