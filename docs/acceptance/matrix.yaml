@@ -4045,7 +4045,7 @@ rows:
   - id: opencode-2-status-line
     capability: OpenCode adaptation
     acceptance: The fr status segment renders in the OpenCode 2.x terminal status area,
-      and a repo without a matrix shows nothing
+      naming the workspace, and a session opened outside any repo shows no segment
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R12
     levels:
@@ -4062,8 +4062,9 @@ rows:
     verify: live
   - id: opencode-2-push-guard
     capability: OpenCode adaptation
-    acceptance: On OpenCode 2.x, a push or gh pr merge on a merged-PR branch is refused
-      by the plugin with the same message the Claude hook gives
+    acceptance: On OpenCode 2.x, a git push from a merged- or closed-PR branch is refused
+      by the plugin with the same message the Claude hook gives (gh pr merge is evaluated
+      with the same decision, which allows it)
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R4
     levels:
@@ -8308,8 +8309,9 @@ rows:
       - super-fr:tests/unit/test_hooks_binary_pin.py#test_the_hook_exports_the_fr_it_resolved
     status: ci
     notes: 'super-fr#746: FR_HARNESS_FR pin (Claude Code SessionStart -> CLAUDE_ENV_FILE;
-      OpenCode shell.env, bun test/pin.test.ts) + CLI-entry check. Identity is version
-      AND package dir: a branch fr and the global fr share a version until release.'
+      OpenCode `ctx.shell.hook("create.before")` (the V2 hook; the 1.x `shell.env` export
+      is gone), bun test/pin.test.ts) + CLI-entry check. Identity is version AND package
+      dir: a branch fr and the global fr share a version until release.'
   - id: fr-binary-pin-live
     capability: harness-parity
     acceptance: In a live Claude Code and OpenCode session the shell tool carries the
