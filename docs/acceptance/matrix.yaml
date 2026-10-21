@@ -3973,9 +3973,17 @@ rows:
       the store holds
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm (2026-10-20).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_2x_session_is_observed_end_to_end
+      - super-fr:tests/unit/test_usage_opencode_store_agreement.py#test_both_readers_see_the_same_tool_calls_of_a_2x_session
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_opencode_store_v2
+    status: ci
+    notes: fr reads session_v2/session_message through the one adapter (fr.run.opencode_store);
+      both readers see the same tool calls of a 2.x session on fixture stores, including
+      a captured, redacted migrated 1.x session; the candidate scenario tests/scenarios/opencode-store-v2.sh
+      runs in CI via test_scenarios.py.
     verify: candidate
     scenario: tests/scenarios/opencode-store-v2.sh
   - id: opencode-2-v1-refusal
