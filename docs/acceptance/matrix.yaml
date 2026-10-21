@@ -4011,9 +4011,18 @@ rows:
       OpenCode 2.x session, so fr names that session and not a child's
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm (2026-10-20).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_opencode.py#test_current_session_reads_the_key_its_harness_owns
+      - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_child_id_walks_to_its_2x_root
+      - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_no_session_id_names_opencode_session_id
+    status: walk-owed
+    notes: 'R6 removed the plugin''s export: OpenCode 2 itself sets OPENCODE_SESSION_ID
+      (the issuing session) on every spawned command (measured 2026-10-20, plan journal
+      p1-clean-launch-opencode-session-id), and fr reads it (FR_OPENCODE_SESSION_ID
+      first when a wrapper sets it) and walks parent_id to the root. Reader and root
+      walk proven in CI by the unit refs; verify: live - fr run status naming the top-level
+      session in a real 2.x session is Test Plan item 3, post-merge at the Tester gate.'
     verify: live
   - id: opencode-2-idle-nudge
     capability: OpenCode adaptation
