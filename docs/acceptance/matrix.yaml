@@ -3992,9 +3992,17 @@ rows:
       and the upgrade, never reported as an empty observation or as zeros
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm (2026-10-20).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_1x_only_session_is_refused_naming_1x_and_the_upgrade
+      - super-fr:tests/unit/test_usage_readers.py#test_opencode_1x_only_session_is_unavailable_naming_1x_and_the_upgrade
+      - super-fr:tests/unit/test_usage_opencode_store_agreement.py#test_both_readers_refuse_a_1x_session_with_the_same_reason
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_opencode_store_v2
+    status: ci
+    notes: A v1-only session is probed as such and refused by both readers with the
+      same reason naming OpenCode 1.x and the upgrade, never as empty or zero; covered
+      by unit tests and the CI-run scenario opencode-store-v2.sh.
     verify: candidate
     scenario: tests/scenarios/opencode-store-v2.sh
   - id: opencode-2-session-export
