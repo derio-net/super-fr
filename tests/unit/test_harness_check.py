@@ -246,13 +246,13 @@ _DRIFTED = parse_matrix(
         "schema": 1,
         "surfaces": [
             {
-                "id": "fr-session-bind",
+                "id": "fr-worktree-create",
                 "kind": "hook",
-                "script": "fr-session-bind.sh",
+                "script": "fr-worktree-create.sh",
                 "summary": "s",
                 # claude-code IS registered for this script, so it must be
                 # declared `enforced` here or it drifts too — leaving exactly
-                # one intended disagreement: opencode, which ports nothing.
+                # one intended disagreement: opencode, which does not port it.
                 "harnesses": {
                     **_BASE,
                     "claude-code": {"state": "enforced"},
@@ -274,7 +274,7 @@ def test_check_on_a_drifted_matrix_exits_one_and_names_the_surface(monkeypatch) 
     _only_cell_drift(monkeypatch)
     result = runner_cli.invoke(app, ["harness", "parity", "--check"])
     assert result.exit_code == 1
-    assert "fr-session-bind" in result.output
+    assert "fr-worktree-create" in result.output
     assert "opencode" in result.output
 
 
@@ -300,7 +300,7 @@ def test_check_json_reports_each_finding_structurally(monkeypatch) -> None:
     assert result.exit_code == 1
     payload = json.loads(result.output)
     assert [(f["surface_id"], f["harness"], f["declared"], f["observed"]) for f in payload] == [
-        ("fr-session-bind", "opencode", "enforced", "absent")
+        ("fr-worktree-create", "opencode", "enforced", "absent")
     ]
 
 

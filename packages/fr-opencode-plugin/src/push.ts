@@ -1,6 +1,8 @@
 // The merged-PR push guard — the OpenCode 2 port of
 // plugins/super-fr/hooks/fr-merged-pr-push-guard.sh (spec 2026-10-20-opencode-2-support R4).
 //
+// super-fr-parity: fr-merged-pr-push-guard.sh
+//
 // While a pipeline sentinel exists for this session, a `git push` from a branch
 // whose PR is already MERGED or CLOSED is refused: pushing there orphans the
 // commit from `main` (#320's merge race).

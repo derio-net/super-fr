@@ -53,8 +53,8 @@
 //     first model request (fr-acceptance-nag.sh);
 //   - ./bind — attach/detach on `fr isolation up|exec|down` / `fr run start`
 //     and on `session.deleted` (fr-session-bind.sh, fr-session-unbind.sh).
-// Their `super-fr-parity:` markers and parity.yaml cells move together in the
-// plan's phase 5, which owns the declared matrix.
+// Each of those modules carries its own `super-fr-parity:` marker, on the
+// handler it credits; parity.yaml declares their OpenCode cells.
 //
 // EXPORT DISCIPLINE: this module's only export is the default definition.
 // Helpers live in ./marker, ./idle, ./claim, ./pin, ./sentinel, ./guard,
@@ -74,8 +74,8 @@ import { writePipelineSentinel } from "./sentinel";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
 // path-carrying tools fail closed. The shell tool (`shell` in OpenCode 2,
-// `bash` before) is separately declared as ungated in parity.yaml; the other
-// built-ins can only read files.
+// `bash` before) is not judged here: the shell gate (./guard) judges its whole
+// command line. The other built-ins can only read files.
 const NON_WRITING_TOOLS = new Set(["bash", "shell", "glob", "grep", "list", "read"]);
 const PATH_KEYS = new Set([
   "filePath",

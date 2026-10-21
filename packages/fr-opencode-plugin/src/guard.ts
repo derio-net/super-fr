@@ -1,6 +1,8 @@
 // The shell gate — the OpenCode 2 port of plugins/super-fr/hooks/fr-isolation-guard.sh
 // (spec 2026-10-20-opencode-2-support R3, §B).
 //
+// super-fr-parity: fr-isolation-guard.sh
+//
 // While a pipeline sentinel exists for this session, a shell command whose cwd
 // resolves inside the pipeline's base repo is refused, except: a leading `cd`
 // into a valid isolation workspace or an allowed prefix, the `fr isolation …`

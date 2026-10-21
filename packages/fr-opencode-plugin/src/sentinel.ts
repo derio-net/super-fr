@@ -4,6 +4,8 @@
 // shares (lib/fr-isolation-decision.sh `fr_sentinel_lock`; in Python
 // `fr.isolation.types._sentinel_lock`).
 //
+// super-fr-parity: fr-pipeline-sentinel.sh
+//
 // The FILE is a contract with three other readers — the bash guard, `fr
 // isolation attach` (stamp_sentinel_workspace) and `fr isolation down`
 // (clear_*_sentinels) — so it is written in exactly the bash writer's shape:

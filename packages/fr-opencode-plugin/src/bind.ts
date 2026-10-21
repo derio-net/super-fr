@@ -1,6 +1,9 @@
 // Session bind/unbind — the OpenCode 2 port of plugins/super-fr/hooks/fr-session-bind.sh
 // and fr-session-unbind.sh (spec 2026-10-20-opencode-2-support R11).
 //
+// super-fr-parity: fr-session-bind.sh
+// super-fr-parity: fr-session-unbind.sh
+//
 // A completed `shell` call whose first line is `fr isolation up|exec|down` or
 // `fr run start` (after an optional leading `cd <dir> &&|;`, env assignments
 // and `uv run`) binds or unbinds this session through `fr isolation

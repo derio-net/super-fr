@@ -1,6 +1,8 @@
 // The acceptance nag — the OpenCode 2 port of plugins/super-fr/hooks/fr-acceptance-nag.sh
 // (spec 2026-10-20-opencode-2-support R9).
 //
+// super-fr-parity: fr-acceptance-nag.sh
+//
 // At a top-level session's FIRST model request, `ctx.session.hook("context")`
 // appends one system part carrying `fr acceptance status --brief` — the open
 // acceptance debt. It never rewrites the operator's prompt text.
