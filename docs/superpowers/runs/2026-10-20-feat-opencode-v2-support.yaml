@@ -199,7 +199,13 @@ steps:
           visual: none
           findings: p5-plugin-scenario-missing,p5-r5,p5-r6,p5-r1,p5-r2,p5-r3,p5-r4
   journal-check:
-    state: pending
+    state: failed
+    at: '2026-10-21T13:56:59+00:00'
+    exit: 1
+    stdout: "4 deferred finding(s): p2-marker-unbounded → derio-net/super-fr#1221,\
+      \ p2r-4 → \nderio-net/super-fr#1221, p4-compaction-tokens-uncounted → \nderio-net/super-fr#1222,\
+      \ p5-r4 → derio-net/super-fr#1224\n2 out-of-scope finding(s): p2-not-proven-live,\
+      \ p3-r1\n"
   deliver:
     state: pending
 fr_version: 5.27.0rc3
