@@ -1387,3 +1387,8 @@ packages/fr-opencode-plugin/README.md's idle-guard section said the nudge is sen
 ### p5-r6 · finding [open] (reviewer: out of scope) · The fr-binary-identity matrix note still says the OpenCode pin rides shell.env (phase 5)
 
 The note read "OpenCode shell.env, bun test/pin.test.ts". `src/pin.ts` now pins through `ctx.shell.hook("create.before")`; `shell.env` is a 1.x export this port deleted. Tagged out because it is not one of the four prose surfaces R16 enumerates.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5-resolved created=2026-10-21T13:56:42+00:00 phase=5 state=fixed resolves=p5-r5 answered_by=operator -->
+### p5-r5-resolved · finding [fixed] · resolves p5-r5: The plugin README still names 1.x's /session/{id}/prompt_async as the idle-nudge transport (phase 5)
+
+Operator authorized including it (asked and answered in session): the README's idle-guard section now says the nudge uses `ctx.session.prompt` and that the 1.x `/session/{id}/prompt_async` transport is gone.
