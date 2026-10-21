@@ -3955,9 +3955,16 @@ rows:
       the isolation worktree is allowed
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm (2026-10-20); closes gh#436 for OpenCode.
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/guard-verdicts.test.ts
+      - super-fr:tests/unit/test_hooks_guard.py#test_the_verdict_table_covers_what_the_spec_names
+    status: walk-owed
+    notes: 'The shell gate''s decision is the bash guard''s: the captured verdict table
+      passes against both engines in CI (guard-verdicts.test.ts; test_hooks_guard.py).
+      verify: live - a model-driven 2.x session''s denied base-clone shell command,
+      and an allowed worktree git status, are Test Plan item 2, post-merge at the Tester
+      gate.'
     verify: live
   - id: opencode-2-store-read
     capability: OpenCode adaptation
