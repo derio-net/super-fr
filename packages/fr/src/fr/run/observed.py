@@ -40,6 +40,7 @@ from fr.run.opencode_store import (
     dispatch_child,
     dispatch_parent,
     final_text,
+    rows_state,
     store_version,
     stored_message,
     tool_items,
@@ -697,6 +698,23 @@ def why_unobservable(harness: str | None, env: Mapping[str, str], what: str) -> 
             # The store is healthy and the session is in it (p4-r1): what the
             # call site looked for is simply not there yet. Never point at the
             # database here — nothing is wrong with it.
+            #
+            # Unless its rows could not be decoded (p4-v1): then the absence
+            # proves nothing, and saying "was read, holds nothing" would be the
+            # same false reassurance p4-r2 exists to prevent one layer down.
+            state = rows_state(db, opencode_root(db, sid))
+            if state == "unreadable":
+                return (
+                    f"the session your harness (opencode) exported in {key} ({sid}) is in the "
+                    "OpenCode database, but its message rows could not be read, so fr cannot "
+                    f"say whether it holds {what}"
+                )
+            if state == "partial":
+                return (
+                    f"the session your harness (opencode) exported in {key} ({sid}) was read, "
+                    "but at least one of its message rows could not be decoded, so fr cannot "
+                    f"say whether it holds {what}"
+                )
             return (
                 f"the session your harness (opencode) exported in {key} ({sid}) was read, "
                 f"and it holds no {what} yet"

@@ -76,6 +76,37 @@ def test_each_of_the_four_answers_words_itself(tmp_path: Path) -> None:
     assert len({v2, v1, absent, bad}) == 4
 
 
+def test_a_v2_store_fr_could_not_decode_is_never_described_as_read_and_empty(
+    tmp_path: Path,
+) -> None:
+    """p4-v1: `store_version` says WHERE the session lives, not whether its rows
+    are readable. A corrupt row (or a table fr cannot query) must not print the
+    healthy sentence — that is the same false reassurance p4-r2 forbids one
+    layer down, and it lands on the routine operator-gate refusal path."""
+    import shutil
+    import sqlite3
+
+    corrupt = tmp_path / "corrupt.db"
+    shutil.copyfile(FIXTURE, corrupt)
+    with sqlite3.connect(corrupt) as con:
+        con.execute("UPDATE session_message SET data = '{not json' WHERE id = 'msg_a1'")
+    part = observed.why_unobservable("opencode", _env("ses_v2demo", corrupt), "questions")
+    assert "could not be decoded" in part
+    assert "holds no questions" not in part
+    assert "FR_OPENCODE_DB" not in part
+
+    dropped = tmp_path / "dropped.db"
+    shutil.copyfile(FIXTURE, dropped)
+    with sqlite3.connect(dropped) as con:
+        con.execute("DROP TABLE session_message")
+    blind = observed.why_unobservable("opencode", _env("ses_v2demo", dropped), "questions")
+    assert "message rows could not be read" in blind
+    assert "holds no questions" not in blind
+    assert "FR_OPENCODE_DB" not in blind
+    healthy = observed.why_unobservable("opencode", _env("ses_v2demo"), "questions")
+    assert len({healthy, part, blind}) == 3
+
+
 def test_no_session_id_names_opencode_session_id() -> None:
     why = observed.why_unobservable("opencode", _env(None), "questions")
     assert "OPENCODE_SESSION_ID" in why
@@ -96,7 +127,11 @@ def test_every_store_tool_name_is_known_to_the_activity_vocabulary() -> None:
     names = set(STORE_TOOLS) | set(STORE_TOOL_ALIASES) | set(STORE_TOOL_ALIASES.values())
     for name in sorted(names):
         assert name in classify._ALIASES, name
-    assert classify.classify("shell", "ls").activity != "other_tool"
+    # p4-v2: the old line compared an Activity to a SUB (`other_tool` lives in
+    # `.sub`), so it passed for every input, including an unknown tool. Pin the
+    # unknown bucket the way classify actually expresses it.
+    assert classify.classify("shell", "ls").sub != "other_tool"
+    assert classify.classify("totally-unknown-tool").sub == "other_tool"
     assert classify.classify("subagent") == classify.classify("Agent")
     assert classify.canonical_tool("shell") == classify.canonical_tool("bash") == "Bash"
 

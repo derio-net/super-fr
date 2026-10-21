@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -42,11 +43,47 @@ def test_the_fixture_holds_one_2x_session_and_one_1x_only_session() -> None:
     assert {"shell", "question", "skill", "subagent", "bash"} <= names
 
 
+_ABS_PATH = re.compile(
+    r"(?:^|[\s\"')(=:])(/(?:Users|home|root|opt|srv|private|var|workspace|tmp)/[^\s\"',)]*)"
+)
+_URL_HOST = re.compile(r"https?://([A-Za-z0-9.\-]+)")
+_EMAIL_DOMAIN = re.compile(r"[\w.+-]+@([A-Za-z0-9.\-]+)")
+_RESERVED_SUFFIXES = (".invalid", ".example", ".test", ".localhost")
+_RESERVED_HOSTS = {"example.com", "example.org", "example.net"}
+
+
+def _fictional(host: str) -> bool:
+    low = host.lower()
+    return low in _RESERVED_HOSTS or low.endswith(_RESERVED_SUFFIXES)
+
+
 def test_the_fixture_carries_no_real_identity() -> None:
+    """p4-v3: this used to assert the DIRECTORY column and nothing else, so a
+    real title, prompt, command, model id or host could be committed here and
+    the test stayed green — in the one file where a leak would land, in a public
+    repo. Now every text value in every table is scanned for the shapes a leak
+    takes: an absolute path outside `/home/u/`, a host that is not a reserved
+    (RFC 2606) name, an email whose domain is not reserved."""
     with closing(sqlite3.connect(f"{FIXTURE.as_uri()}?mode=ro", uri=True)) as con:
         dirs = {r[0] for r in con.execute("SELECT directory FROM session_v2 UNION "
                                           "SELECT directory FROM session")}  # fmt: skip
+        tables = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        values = [
+            value
+            for table in tables
+            for row in con.execute(f"SELECT * FROM {table}")  # noqa: S608 - fixture table names
+            for value in row
+            if isinstance(value, str)
+        ]
     assert all(d.startswith("/home/u/") for d in dirs)
+    assert values, "the scan must actually read the fixture"
+    for value in values:
+        for path in _ABS_PATH.findall(value):
+            assert path.startswith("/home/u/"), (path, value[:120])
+        for host in _URL_HOST.findall(value):
+            assert _fictional(host), (host, value[:120])
+        for domain in _EMAIL_DOMAIN.findall(value):
+            assert _fictional(domain), (domain, value[:120])
 
 
 def test_a_captured_migrated_1x_session_reads_whole() -> None:

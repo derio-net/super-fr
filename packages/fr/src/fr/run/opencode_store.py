@@ -150,6 +150,22 @@ def parse_data(raw: object) -> Mapping[str, Any] | None:
     return data if isinstance(data, Mapping) else None
 
 
+def rows_state(db: Path, session: str) -> str:
+    """Whether `session`'s message rows can be read at all: `"ok"`, `"partial"`
+    (at least one row's `data` does not parse) or `"unreadable"` (the table or a
+    queried column is missing, renamed or denied).
+
+    The one probe "why can fr not observe this?" asks before it says a session
+    "was read and holds nothing" (p4-v1): a store whose rows could not be
+    decoded must not be described by the healthy sentence, or the operator is
+    told their data is intact precisely when fr could not read it."""
+    rows = query(db, "SELECT id, data FROM session_message WHERE session_id = ?", (session,))
+    if rows is None:
+        return "unreadable"
+    unreadable = any(raw is not None and parse_data(raw) is None for _, raw in rows)
+    return "partial" if unreadable else "ok"
+
+
 def ms_to_dt(ms: object) -> _dt.datetime | None:
     if not isinstance(ms, int | float) or isinstance(ms, bool):
         return None
