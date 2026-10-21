@@ -4109,8 +4109,11 @@ rows:
     status: ci
     notes: create.before sets FR_HARNESS_FR from the plugin's fr --identity and never
       throws (pin.test.ts, CI); a model-run echo printed the pin live on OpenCode 2.0.32
-      (plan journal p1-v2-hook-order-measured). The row's scenario tests/scenarios/opencode-plugin-v2.sh
-      was never written (p5-plugin-scenario-missing).
+      (plan journal p1-v2-hook-order-measured). Its scenario tests/scenarios/opencode-plugin-v2.sh
+      proves the delivery contract the hook rides on (one directory, cli.json naming
+      the directory, an idempotent reinstall, an unparsable cli.json refused without
+      writing, uninstall leaving foreign entries, and one load of the delivered directory
+      in the real 2.x binary).
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-nag
     capability: OpenCode adaptation
