@@ -170,6 +170,25 @@ journal:
       redacted and figures rounded to two significant digits. The usage reader reads it whole (cost exact, both calls as
       shell) — test_a_captured_migrated_1x_session_reads_whole. The capture holds no migrated `task` item; a migrated
       dispatch is still pinned only by the constructed fold.
+  - kind: discovery
+    id: p4-full-suite-flake-is-the-install-locks-60s-bound
+    phase: 4
+    title: "A full-suite re-run at HEAD failed two install-lock tests at their hard 60s bound; serially they pass, and the branch does not touch them"
+    body: |
+      Re-running the whole suite (to produce a log this session could itself be credited with) gave
+      2 failed, 13049 passed: both were tests/integration/test_install_atomic.py lock-reclaim tests,
+      each timing out at `p.communicate(timeout=60)` after the sandbox install had printed normally
+      past its marketplace step. They predate this branch (#1088/#946) and this branch touches neither
+      them nor the lock; run alone the file is 8 passed in 70s (~9s per sandbox). They are the last two
+      of their class, i.e. they run after the file's other installs have saturated the disk, and this
+      host was also running two busy OpenCode sessions. Filed as #1223 with the reproduction shape and
+      the observation that the file's process tree burns ~85% of a core in SYSTEM time while its tests
+      finish in 67s — a possible busy-wait worth its own look.
+
+      So the evidence below is a targeted run this session wrote, plus the full suite the phase's own
+      executor ran after the last code commit (13051 passed, exit=0, its log named in that commit's
+      record body); a single full-suite run at the final HEAD is owed before the PR, and it is what the
+      deliver step will read.
 resolves:
   - id: p4-r1
     state: fixed
@@ -209,4 +228,4 @@ resolves:
       Out of scope for phase 4. Tracked by derio-net/super-fr#1222, the issue being filed for it; if the filed number
       differs the orchestrator corrects it here.
 evidence:
-  tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p4-review-full-suite.log
+  tests: /private/var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/opencode/p4-holder-targeted.log
