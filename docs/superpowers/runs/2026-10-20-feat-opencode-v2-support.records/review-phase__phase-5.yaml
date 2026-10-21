@@ -77,25 +77,6 @@ journal:
     `out-of-scope-operator-guard`, `spec-review-independence`, `visual-evidence`,
     `run-session-identity`) is `partial` pending `opencode-observe-take10-rerun`; this one is not,
     and its note admits the 2.x reader is fixture-tested.
-- kind: finding
-  id: p5-r5
-  phase: 5
-  review_scope: out
-  title: "The plugin README still names 1.x's /session/{id}/prompt_async as the idle-nudge transport"
-  body: |
-    packages/fr-opencode-plugin/README.md's idle-guard section said the nudge is sent back "into the
-    session (`/session/{id}/prompt_async`)". `src/idle.ts` sends it with `ctx.session.prompt`, per
-    R5; the 1.x transport does not exist in 2.x. Outside the phase's declared `files:` (which name
-    the root README, not the package's).
-- kind: finding
-  id: p5-r6
-  phase: 5
-  review_scope: out
-  title: "The fr-binary-identity matrix note still says the OpenCode pin rides shell.env"
-  body: |
-    The note read "OpenCode shell.env, bun test/pin.test.ts". `src/pin.ts` now pins through
-    `ctx.shell.hook("create.before")`; `shell.env` is a 1.x export this port deleted. The reviewer
-    tagged it out because it is not one of the four prose surfaces R16 enumerates.
 - kind: discovery
   id: p5-r3-refutation
   phase: 5
@@ -170,20 +151,6 @@ resolves:
     my own edit pass — the failure mode this repo treats as worse than the inconsistency. Reverted
     the experiment and filed #1224 with the two defensible paths (move the cell to `partial` like its
     siblings, or re-observe live on 2.x first) so the choice is the operator's.
-- id: p5-r5
-  state: fixed
-  answered_by: operator
-  body: |
-    Operator authorized including it (asked and answered in session): the README's idle-guard
-    section now says the nudge uses `ctx.session.prompt` and that the 1.x `/session/{id}/
-    prompt_async` transport is gone.
-- id: p5-r6
-  state: fixed
-  answered_by: operator
-  body: |
-    Operator authorized including it: the `fr-binary-identity` note now reads
-    `ctx.shell.hook("create.before")` and says the 1.x `shell.env` export is gone, re-pointed through
-    `fr acceptance set-status` so the row's notes and the reports stay generated, not hand-edited.
 evidence:
   review: p5-review
   reviewer: ses_ea1e9e16effes031PIAdx7Fcsy
