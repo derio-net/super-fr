@@ -4030,9 +4030,14 @@ rows:
       one nudge per run position
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm (2026-10-20).
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
+    status: walk-owed
+    notes: 'session.idle from ctx.event.subscribe() runs fr run check --idle and nudges
+      with ctx.session.prompt at most once per position (bun: idle.test.ts, CI). verify:
+      live - that the nudge is actually submitted and executes in a real 2.x session
+      is Test Plan item 4, post-merge at the Tester gate.'
     verify: live
   - id: opencode-2-status-line
     capability: OpenCode adaptation
