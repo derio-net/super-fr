@@ -4079,10 +4079,14 @@ rows:
       so fr run status names the holder instead of "an unclaimed agent"
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: 'Scenario named at spec review: the delivered plugin''s handlers are driven
-      with a fake context inside the candidate walk.'
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
+    status: ci
+    notes: A child's first tool call runs fr run claim --open-unit with its id, agent
+      and model, once per session (claim.test.ts, CI); fr's side names the holder (test_run_observed_resolve_opencode.py).
+      The row's scenario tests/scenarios/opencode-plugin-v2.sh was never written (plan
+      journal p5-plugin-scenario-missing); a live 2.x claim has not been re-observed.
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-pin
     capability: OpenCode adaptation
