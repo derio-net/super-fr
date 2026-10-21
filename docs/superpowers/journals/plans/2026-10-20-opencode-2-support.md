@@ -1377,3 +1377,8 @@ Prose and generated mirrors only.
 ### no-refactor-p5-t4 · discovery · no-refactor-because P5.T4 (phase 5)
 
 Fragment plus gates; no code.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r5 created=2026-10-21T13:55:53+00:00 phase=5 state=open review_scope=out -->
+### p5-r5 · finding [open] (reviewer: out of scope) · The plugin README still names 1.x's /session/{id}/prompt_async as the idle-nudge transport (phase 5)
+
+packages/fr-opencode-plugin/README.md's idle-guard section said the nudge is sent back "into the session (`/session/{id}/prompt_async`)". `src/idle.ts` sends it with `ctx.session.prompt`, per R5; the 1.x transport does not exist in 2.x. Outside the phase's declared `files:` (which name the root README, not the package's).
