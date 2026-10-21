@@ -4094,10 +4094,14 @@ rows:
       on OpenCode 2.x, and a failed pin never blocks a command
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: 'Scenario named at spec review: the delivered plugin''s handlers are driven
-      with a fake context inside the candidate walk.'
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/pin.test.ts
+    status: ci
+    notes: create.before sets FR_HARNESS_FR from the plugin's fr --identity and never
+      throws (pin.test.ts, CI); a model-run echo printed the pin live on OpenCode 2.0.32
+      (plan journal p1-v2-hook-order-measured). The row's scenario tests/scenarios/opencode-plugin-v2.sh
+      was never written (p5-plugin-scenario-missing).
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-nag
     capability: OpenCode adaptation
