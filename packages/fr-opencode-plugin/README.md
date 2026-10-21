@@ -73,7 +73,8 @@ as the bash hook does. It is a backstop, not a security boundary.
 
 On `session.idle` it runs `fr run check --idle --format json` in the session's
 directory and, when fr says the run is *advanceable with nobody working on it*,
-sends fr's next command back into the session (`/session/{id}/prompt_async`).
+sends fr's next command back into the session with `ctx.session.prompt` (the
+2.x call; 1.x's `/session/{id}/prompt_async` transport is gone).
 Claude Code's counterpart **blocks** the stop; OpenCode cannot refuse a stop, so
 this one **continues** the session instead — a weaker tier, declared `partial`
 in `fr harness parity`.

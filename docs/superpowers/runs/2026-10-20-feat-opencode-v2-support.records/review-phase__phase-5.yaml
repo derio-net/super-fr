@@ -1,0 +1,189 @@
+schema_version: 10
+run: 2026-10-20-feat-opencode-v2-support
+step: review-phase
+item: phase/5
+outcome: done
+journal:
+- kind: review
+  id: p5-review
+  phase: 5
+  title: "Phase 5 reviewed independently: two acceptance sentences contradicted their own cited tests, and four stale claims were dated 1.x"
+  body: |
+    Reviewer: ses_ea1e9e16effes031PIAdx7Fcsy (general agent, read-only, its own context, dispatched
+    after the review unit opened). Phase 5 ships almost no product code, so its defects are claims
+    that are not true, and the reviewer went looking for exactly that: it resolved all sixteen moved
+    rows' level refs BY NAME, read the test bodies behind the ones it doubted, diffed the canonical
+    rule against its hand-maintained mirror, re-rendered `01-fr-goal.md` from /tmp against the
+    committed `.html` (byte-identical), ran the new scenario (3.2s, prints the real 2.1.0 load line,
+    leaves no daemon), checked the fragment against `bump-version.py --check` and
+    `check-change-fragment.py`, scanned the phase diff for third-party identity, and ran the gates
+    (bun 219 pass, mypy 342 files, ruff, `fr validate artifacts`, `fr validate`, live 3 pass).
+
+    It confirmed the two things this phase could most easily have faked: the parity matrix agrees
+    with the registration files, and the evidence log is a complete 13053-test run whose two-part
+    split is stated in the log itself rather than hidden by a re-run.
+
+    Six findings, none of them style: two acceptance SENTENCES described the opposite of what their
+    own cited test asserts (the push guard was said to refuse `gh pr merge`, which its test asserts
+    is allowed; the status line was said to show nothing in a repo without a matrix, which its test
+    renders a segment in), and four claims still carried 1.x or pre-port wording (README's idle
+    transport, the binary-pin matrix note, and the parity cell that says OpenCode enforces
+    deliver-tests-provenance on evidence from the harness this release drops). It also argued that
+    four `ci` rows sit oddly beside `partial` parity cells for the same unproven link; that one is
+    refuted below with the spec's own Test Plan, because the two vocabularies answer different
+    questions — but it is the right question to have asked, and the answer is now written down.
+- kind: finding
+  id: p5-r1
+  phase: 5
+  review_scope: in
+  title: "opencode-2-push-guard's acceptance says a gh pr merge is refused; its own test asserts it is allowed"
+  body: |
+    matrix.yaml's `opencode-2-push-guard` acceptance said "a push or gh pr merge on a merged-PR
+    branch is refused by the plugin with the same message the Claude hook gives". The port's
+    `src/push.ts` records the opposite decision, deliberately (R4 keeps today's decision rather than
+    widening it): the bash hook acts on `git push` only, `gh pr merge` is evaluated with that same
+    decision and allowed, and `test/push.test.ts` asserts `gh pr merge 12` is allowed. The row's own
+    notes already said so, so the acceptance sentence and its evidence disagreed.
+- kind: finding
+  id: p5-r2
+  phase: 5
+  review_scope: in
+  title: "opencode-2-status-line's acceptance says a matrix-less repo shows nothing; the test renders a segment there"
+  body: |
+    The acceptance said "a repo without a matrix shows nothing". `test_opencode_tui_renders_the_
+    delivered_status_line` starts the real TUI on a pty in a repo with no matrix and asserts the
+    segment contains `frstatusprobe · no fr-isolation` — i.e. it renders and says there is no
+    workspace. The "shows nothing" case R12 and Test Plan item 5 name is a session opened outside
+    any repo, not a matrix-less one. Again the note had it right and the sentence did not.
+- kind: finding
+  id: p5-r3
+  phase: 5
+  review_scope: in
+  title: "Four rows are `ci` where the parity cell for the same link is `partial`; and isolation-enforcement is `ci` with its live walk owed"
+  body: |
+    Raised for `opencode-2-nag`, `-sentinel`, `-bind-unbind`, `-claim` (matrix `ci`, parity
+    `partial` for execute.after / event.subscribe / the claim never being re-observed live) and for
+    `opencode-isolation-enforcement` (`ci` while its note says the model-driven 2.x walk is owed by
+    `opencode-2-edit-gate`, which is `walk-owed`).
+- kind: finding
+  id: p5-r4
+  phase: 5
+  review_scope: in
+  title: "deliver-tests-provenance's OpenCode cell is `enforced` on 1.x evidence, beside four siblings that are `partial` on the same 2.x reader"
+  body: |
+    The cell is `enforced` in every mode. Its live evidence is OpenCode 1.x (2026-09-26), which this
+    release drops; on 2.x it reads `shell` tool items through the store reader phase 4 built, which
+    is fixture-tested only. Every sibling row that reads the same store (`operator-gate`,
+    `out-of-scope-operator-guard`, `spec-review-independence`, `visual-evidence`,
+    `run-session-identity`) is `partial` pending `opencode-observe-take10-rerun`; this one is not,
+    and its note admits the 2.x reader is fixture-tested.
+- kind: finding
+  id: p5-r5
+  phase: 5
+  review_scope: out
+  title: "The plugin README still names 1.x's /session/{id}/prompt_async as the idle-nudge transport"
+  body: |
+    packages/fr-opencode-plugin/README.md's idle-guard section said the nudge is sent back "into the
+    session (`/session/{id}/prompt_async`)". `src/idle.ts` sends it with `ctx.session.prompt`, per
+    R5; the 1.x transport does not exist in 2.x. Outside the phase's declared `files:` (which name
+    the root README, not the package's).
+- kind: finding
+  id: p5-r6
+  phase: 5
+  review_scope: out
+  title: "The fr-binary-identity matrix note still says the OpenCode pin rides shell.env"
+  body: |
+    The note read "OpenCode shell.env, bun test/pin.test.ts". `src/pin.ts` now pins through
+    `ctx.shell.hook("create.before")`; `shell.env` is a 1.x export this port deleted. The reviewer
+    tagged it out because it is not one of the four prose surfaces R16 enumerates.
+- kind: discovery
+  id: p5-r3-refutation
+  phase: 5
+  title: "Two vocabularies, two questions: a matrix `ci` row and a parity `partial` cell can both be right"
+  body: |
+    Written down because a careful reviewer asked and will ask again. `docs/acceptance/matrix.yaml`'s
+    `ci` answers "does a test in this repo prove this acceptance sentence on every run?" — a bun test
+    with a fake context qualifies when the sentence is about the command the handler runs.
+    `packages/fr/src/fr/harness/parity.yaml`'s `enforced` answers a narrower question: is the
+    enforcement observed on a LIVE session of that harness, through the delivery path that actually
+    ships? `partial` therefore means "the mechanism exists and is tested, the live delivery is not
+    witnessed", which is exactly the state of `execute.after`, `session.deleted` and the claim on
+    2.x.
+
+    So a row can be `ci` while its parity cell is `partial`, and the four rows the review questioned
+    are. The spec's Test Plan is the tiebreaker on which level a row is meant to rest on: it
+    classifies nag/sentinel/bind-unbind as `candidate` (fake context, asserting the command) and
+    gates only edit-gate, bash-gate, session-export, idle-nudge and status-line to the Tester walk.
+    Moving the four rows to `walk-owed` would not be more honest — it would invent four live gates
+    the spec deliberately did not ask for, and `walk-owed` is a debt status.
+resolves:
+- id: p5-r1
+  state: fixed
+  body: |
+    The acceptance sentence now matches the code and the test: "a git push from a merged- or
+    closed-PR branch is refused by the plugin with the same message the Claude hook gives (gh pr
+    merge is evaluated with the same decision, which allows it)". `fr acceptance` has no verb that
+    edits an acceptance sentence (only status/levels/notes), so the two sentences were corrected in
+    the matrix and the three committed reports regenerated with `fr acceptance report
+    --deterministic`; `fr acceptance check` and `report --check` both exit 0.
+- id: p5-r2
+  state: fixed
+  body: |
+    Same treatment: "The fr status segment renders in the OpenCode 2.x terminal status area, naming
+    the workspace, and a session opened outside any repo shows no segment" — the case the pty test
+    actually exercises and the one R12 promises.
+- id: p5-r3
+  state: refuted
+  body: |
+    Refuted, and the reasoning matters more than the verdict. The matrix's `ci` and parity's
+    `partial` are not two readings of one fact; they answer different questions. `ci` records "a test
+    in this repo proves this acceptance sentence on every run" — and a bun test with a fake context
+    does prove what those four sentences say (the handler runs `fr run claim --open-unit` with the
+    right argv; one system part, never a prompt rewrite; the sentinel keys the bash writer writes;
+    bind/unbind's exact command line). Parity's `partial` records something else: that the DELIVERY
+    path on a live 2.x session is not yet observed, because `execute.after` firing and
+    `session.deleted` arriving have never been witnessed.
+
+    The spec settles which level the four rows are meant to rest on: its Test Plan classifies
+    `opencode-2-nag`, `-sentinel` and `-bind-unbind` as `candidate` — explicitly "driven through the
+    plugin's exported handlers with a fake context, asserting the command each one runs" — and gates
+    only edit-gate, bash-gate, session-export, idle-nudge and status-line to the Tester walk. Moving
+    those rows to `walk-owed` would contradict the spec's own evidence design, and `walk-owed` is a
+    debt status: it would manufacture four live gates the spec deliberately did not ask for. The
+    honest place for "the 2.x delivery path is unproven" is the parity cell, where it now is.
+
+    `opencode-isolation-enforcement` is a different case and also stands: its `int` level is
+    `test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate`, which runs the delivered
+    copy inside the REAL 2.x binary in CI and observes a base-clone edit refused — that is a 2.x
+    observation, not a fake context. The walk its note mentions is extra, not the row's evidence.
+
+    What the finding did change: the phase record now states the two-vocabulary distinction
+    explicitly, so the next reader does not have to re-derive it (p5-r3-refutation).
+- id: p5-r4
+  state: deferred
+  tracked_by: derio-net/super-fr#1224
+  body: |
+    Real, and not a phase-level call. The cell is `enforced` by an OPERATOR DECISION
+    (2026-09-26, gh#638), and `tests/unit/test_harness_parity_modes.py::test_deliver_tests_
+    provenance_is_enforced_on_claude_and_opencode_only` pins it in every mode for both harnesses.
+    Changing the cell would mean editing a test that encodes the operator's decision in order to make
+    my own edit pass — the failure mode this repo treats as worse than the inconsistency. Reverted
+    the experiment and filed #1224 with the two defensible paths (move the cell to `partial` like its
+    siblings, or re-observe live on 2.x first) so the choice is the operator's.
+- id: p5-r5
+  state: fixed
+  answered_by: operator
+  body: |
+    Operator authorized including it (asked and answered in session): the README's idle-guard
+    section now says the nudge uses `ctx.session.prompt` and that the 1.x `/session/{id}/
+    prompt_async` transport is gone.
+- id: p5-r6
+  state: fixed
+  answered_by: operator
+  body: |
+    Operator authorized including it: the `fr-binary-identity` note now reads
+    `ctx.shell.hook("create.before")` and says the 1.x `shell.env` export is gone, re-pointed through
+    `fr acceptance set-status` so the row's notes and the reports stay generated, not hand-edited.
+evidence:
+  review: p5-review
+  reviewer: ses_ea1e9e16effes031PIAdx7Fcsy
