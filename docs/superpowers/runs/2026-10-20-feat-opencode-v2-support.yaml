@@ -207,5 +207,12 @@ steps:
       \ p5-r4 → derio-net/super-fr#1224\n2 out-of-scope finding(s): p2-not-proven-live,\
       \ p3-r1\n"
   deliver:
-    state: pending
+    state: running
+    at: '2026-10-21T14:44:07+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-21T14:44:07+00:00'
+          harness: opencode
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
 fr_version: 5.27.0rc3
