@@ -1223,3 +1223,157 @@ each absolute path is under `/home/u/`, each URL host is a reserved name (RFC 26
 `.example`, `.test`, `.localhost`, `example.{com,org,net}`) and each email domain likewise. The
 scan is pinned non-vacuous (`assert values`) and was checked against synthetic leaks: a
 `/Users/x/proj` path, a `gitlab.corp.example` host and a `realcompany.io` mail are each caught.
+
+<!-- fr:journal kind=decision scope=plan id=p5-parity-gates-enforced created=2026-10-21T10:50:53+00:00 phase=5 -->
+### p5-parity-gates-enforced · decision · parity: OpenCode edit gate partial→enforced, shell gate (fr-isolation-guard) absent→enforced, push guard absent→enforced (phase 5)
+
+check.py maps both enforced and partial to an observed `present`, so the state is a judgement.
+All three throw from `execute.before` on a violating call, which is what Claude Code's enforced
+cells mean. Evidence: the edit gate in index.test.ts/marker.test.ts and the delivered copy
+refusing a base-clone edit inside the real 2.x binary (test_opencode_runs_the_delivered_gate,
+CI on 2.0.32 and 2.1.0); the shell gate through the captured verdict table run against both
+engines; the push guard through push.test.ts, which compares commands against the real
+script. Each scope note says the model-driven walk is still owed after merge. New markers sit
+on the handler module each one credits: guard.ts, push.ts, nag.ts, sentinel.ts, bind.ts (bind
+and unbind).
+
+<!-- fr:journal kind=decision scope=plan id=p5-parity-advisory-not-inflated created=2026-10-21T10:50:53+00:00 phase=5 -->
+### p5-parity-advisory-not-inflated · decision · parity: nag absent→partial, sentinel absent→partial, bind and unbind absent→partial (the plan said enforced); pin and idle stay partial with notes rewritten (phase 5)
+
+The nag cannot be `advisory`: check.py expects `advisory` to observe `absent`, and the nag
+carries a marker. It is `partial`, because the evidence comes only from a fake context; the
+live reach is Test Plan item 6. The plan asked for sentinel and bind/unbind `enforced`. I
+declared them `partial` instead. execute.after firing for a live skill call, and
+session.deleted arriving, were never observed live (p2-not-proven-live), and bind is
+best-effort by design. The pin note now names create.before and cites the live echo from
+p1-v2-hook-order-measured. The idle note now names ctx.event.subscribe/ctx.session.prompt in
+place of the 1.x SDK endpoint. I also corrected interaction notes that named 1.x mechanics:
+deliver-tests-provenance (shell items, OPENCODE_SESSION_ID), spec-review-independence
+(subagent), run-session-identity (1.x refused by name), visual-evidence (shell),
+dispatch-holder-identity (observed on 1.x, not re-observed on 2.x). The status-line cell
+stays `partial` and its note is unchanged.
+
+<!-- fr:journal kind=decision scope=plan id=p5-matrix-ci-rows created=2026-10-21T10:50:53+00:00 phase=5 -->
+### p5-matrix-ci-rows · decision · matrix → ci: opencode-2-plugin-loads, store-read, v1-refusal, push-guard, claim, pin, nag, sentinel, bind-unbind; opencode-run-session and opencode-isolation-enforcement re-pointed (stay ci) (phase 5)
+
+plugin-loads: plugin.test.ts and wiring.test.ts, plus int refs to
+test_opencode_registers_the_delivered_plugin_exactly_once and
+test_opencode_runs_the_delivered_gate. store-read: test_a_2x_session_is_observed_end_to_end,
+test_both_readers_see_the_same_tool_calls_of_a_2x_session, int test_scenarios.py#test_opencode_store_v2.
+v1-refusal: test_a_1x_only_session_is_refused_naming_1x_and_the_upgrade,
+test_opencode_1x_only_session_is_unavailable_naming_1x_and_the_upgrade,
+test_both_readers_refuse_a_1x_session_with_the_same_reason, plus the scenario. The plugin rows
+cite their bun test file (push/claim/pin/nag/sentinel/bind .test.ts); sentinel also cites the
+two test_sentinel_lifecycle.py OpenCode-writer tests. opencode-run-session: removed the
+session.test.ts ref, added test_a_session_is_probed_as_v2_v1_only_absent_or_unreadable, and
+rewrote the note and the acceptance text, which had said "the plugin hands fr the session id".
+opencode-isolation-enforcement: rewrote the note (the 1.18.32 sessions were on 1.x, now
+unsupported) and added int test_opencode_runs_the_delivered_gate.
+
+<!-- fr:journal kind=decision scope=plan id=p5-matrix-walk-owed-rows created=2026-10-21T10:50:53+00:00 phase=5 -->
+### p5-matrix-walk-owed-rows · decision · matrix → walk-owed: opencode-2-edit-gate, bash-gate, session-export, idle-nudge, status-line (verify: live, Test Plan items 1-5) (phase 5)
+
+Each row cites the CI evidence for its half that does not need a model (index/marker,
+guard-verdicts with test_the_verdict_table_covers_what_the_spec_names, idle.test.ts,
+segment.test.ts with the live TUI test, and the session-id reader tests
+test_current_session_reads_the_key_its_harness_owns, test_a_child_id_walks_to_its_2x_root,
+test_no_session_id_names_opencode_session_id). The model-driven half is post-merge at the
+Tester gate. opencode-2-session-export's acceptance named FR_OPENCODE_SESSION_ID, an export
+R6 removed. It now names OPENCODE_SESSION_ID, which OpenCode sets itself. The text was edited
+by hand, string only, because set-status cannot edit acceptance text; the reports were
+regenerated by the CLI.
+
+<!-- fr:journal kind=finding scope=plan id=p5-plugin-scenario-missing created=2026-10-21T10:50:53+00:00 phase=5 state=open review_scope=in -->
+### p5-plugin-scenario-missing · finding [open] (reviewer: in scope) · Six matrix rows name scenario tests/scenarios/opencode-plugin-v2.sh, which was never written (phase 5)
+
+opencode-2-push-guard, claim, pin, nag, sentinel and bind-unbind each carry
+`scenario: tests/scenarios/opencode-plugin-v2.sh`, from spec review. The file does not exist,
+and `fr acceptance check` does not flag it. The rows are `ci` on their bun tests, which run in
+CI's opencode-plugin-test job and drive the handlers with a fake context. That is exactly the
+spec's candidate item 4. But a `fr verification walk` that reads the rows' scenario would find
+no script. Two ways to close it: write the scenario (outside this phase's files), or move the
+rows' scenario off it (set-status can replace a scenario but cannot clear one). Each row's
+note says so.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-suite-evidence-is-two-parts created=2026-10-21T10:50:53+00:00 phase=5 -->
+### p5-suite-evidence-is-two-parts · discovery · The suite is green only as two parts on this host: -n auto busts two pre-existing install-lock bounds (phase 5)
+
+`pytest -n auto` over everything was run twice: both times 2 failed, 13051 passed, and both
+failures were tests/integration/test_install_atomic.py's two lock-reclaim tests timing out at
+their hard `communicate(timeout=60)` (they pass serially in ~70s for the whole file, and this
+branch touches neither them nor the lock). Filed as #1223 with the reproduction shape. CI is
+unlikely to hit it: it shards four ways, so each job runs a quarter of the suite; the flake
+needs 12 concurrent sandboxed `install.sh` runs on one busy host.
+
+So the evidence log is honest rather than lucky: part 1 is the whole suite minus that one file
+under `-n auto` (13045 passed, exit=0), part 2 is that file alone, serially (8 passed, exit=0),
+and the log carries both headers and both exit lines. Coverage is complete — 13053 tests, the
+same count the red run covered — and the split is stated in the log, not hidden in a re-run.
+
+<!-- fr:journal kind=decision scope=plan id=p5-plugin-scenario-written created=2026-10-21T10:50:53+00:00 phase=5 -->
+### p5-plugin-scenario-written · decision · The scenario the six rows name now exists; it proves the delivery contract, not the hooks' enforcement (phase 5)
+
+tests/scenarios/opencode-plugin-v2.sh was written and registered in
+tests/integration/test_scenarios.py (both halves: the `here` registry tripwire and a
+`test_opencode_plugin_v2` that runs it), so a `fr verification walk` reading
+opencode-2-{push-guard,claim,pin,nag,sentinel,bind-unbind} finds a script instead of a dangling
+path. What it proves is deliberately BOUNDED: the delivery contract every one of those hooks
+rides on — install writes one plugin directory and nothing at top level, cli.json names the
+DIRECTORY (a file path is silently ignored by 2.x), a second install is idempotent, a foreign
+cli.json entry and key survive, an unparsable cli.json is refused with the file named and
+nothing written, uninstall removes its own directory and entry only — plus, where the real
+binary exists, exactly one `loading plugin` line for the delivered directory.
+
+Why the enforcement proofs stay where they are: each hook's decision is compared against the
+bash engine by a bun test with a fake context (push.test.ts, claim.test.ts, nag.test.ts,
+sentinel.test.ts, bind.test.ts), which is what the rows' `ci` status rests on and what the
+spec's candidate item 4 asks for. The load probe is conditional because the binary is not
+present in every scenario container, and the script says so on stdout rather than passing
+silently. The model-driven behaviour behind each hook is the post-merge live rows, per R15.
+
+Two things measured while writing it, both now pinned in the script: the daemon logs
+`loading plugin` about 150ms AFTER `opencode plugin list` returns, so a straight grep races the
+load and reads zero (the script waits, bounded, for the line); and a survivor of that probe
+inherits the runner's stdio, so the script always captures the service pid before
+`service stop` and TERM/KILLs it afterwards. Verified: the script runs in 3.3s against the real
+2.1.0 binary, prints the probe line, and leaves no `serve --service` process behind.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-prose-surfaces created=2026-10-21T10:50:53+00:00 phase=5 -->
+### p5-prose-surfaces · discovery · Prose: the rule and its mirror, AGENTS.md, README.md and 01-fr-goal corrected; fr-isolation.html and index.html left as they are, because neither is false (phase 5)
+
+fr-isolation.html describes only the Claude Code PreToolUse hook and makes no OpenCode or bash
+claim. index.html has no harness text outside its base64. 01-fr-goal.md had two false
+sentences: "the plugin hands the calling session's identifier" (now OpenCode does it itself)
+and "an older plugin" (now an OpenCode 1.x session). Re-rendering the UNMODIFIED .md from /
+with --isolated produced output byte-identical to the committed .html. The edited render then
+changed exactly those lines. README line 427 ("third harness alongside Claude Code and
+OpenCode") and line 346 are still true and were not changed.
+
+<!-- fr:journal kind=finding scope=plan id=p5-plugin-scenario-missing-resolved created=2026-10-21T10:50:53+00:00 phase=5 state=fixed resolves=p5-plugin-scenario-missing -->
+### p5-plugin-scenario-missing-resolved · finding [fixed] · resolves p5-plugin-scenario-missing: Six matrix rows name scenario tests/scenarios/opencode-plugin-v2.sh, which was never written (phase 5)
+
+tests/scenarios/opencode-plugin-v2.sh exists, is executable, and is registered in
+tests/integration/test_scenarios.py (`test_opencode_plugin_v2`, and the `here` set the
+every-script-has-a-test tripwire reads). It covers the delivery contract all six rows ride on
+and probes the real binary where present; the rows' notes were re-pointed through
+`fr acceptance set-status` so none of them still claims the scenario was never written.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-10-21T10:50:53+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+Only declarations moved: five one-line parity markers and two stale comments in index.ts; the drift fixture in test_harness_check.py was re-pointed from fr-session-bind (now ported) to fr-worktree-create (still unported). Nothing to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-10-21T10:50:53+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+Matrix moved through the CLI; two acceptance strings re-worded by hand because no verb edits them. No code.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t3 created=2026-10-21T10:50:53+00:00 phase=5 -->
+### no-refactor-p5-t3 · discovery · no-refactor-because P5.T3 (phase 5)
+
+Prose and generated mirrors only.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t4 created=2026-10-21T10:50:53+00:00 phase=5 -->
+### no-refactor-p5-t4 · discovery · no-refactor-because P5.T4 (phase 5)
+
+Fragment plus gates; no code.
