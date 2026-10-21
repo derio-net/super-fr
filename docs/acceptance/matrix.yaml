@@ -4129,8 +4129,11 @@ rows:
     notes: One system part per top-level session via ctx.session.hook context, never
       a prompt rewrite, skipped without a matrix, silent on failure (nag.test.ts, CI,
       fake context - the spec's candidate scope). That it reaches a live model request
-      is Test Plan item 6, post-merge. The row's scenario tests/scenarios/opencode-plugin-v2.sh
-      was never written (p5-plugin-scenario-missing).
+      is Test Plan item 6, post-merge. Its scenario tests/scenarios/opencode-plugin-v2.sh
+      proves the delivery contract the hook rides on (one directory, cli.json naming
+      the directory, an idempotent reinstall, an unparsable cli.json refused without
+      writing, uninstall leaving foreign entries, and one load of the delivered directory
+      in the real 2.x binary).
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-sentinel
     capability: OpenCode adaptation
