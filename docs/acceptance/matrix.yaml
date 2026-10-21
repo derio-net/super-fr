@@ -3936,9 +3936,17 @@ rows:
       2.x outside a valid isolation workspace, matching the Claude Code hook
     origin:
     - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm (2026-10-20); supersedes the 1.18.32 live note on opencode-isolation-enforcement.
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/index.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
+    status: walk-owed
+    notes: 'Verdicts proven in CI (bun: index.test.ts, marker.test.ts) and the delivered
+      copy refuses a base-clone edit inside the real 2.x binary (test_opencode_runs_the_delivered_gate).
+      verify: live - a model-driven 2.x session''s refused edit is Test Plan item 1,
+      post-merge at the Tester gate.'
     verify: live
   - id: opencode-2-bash-gate
     capability: OpenCode adaptation
