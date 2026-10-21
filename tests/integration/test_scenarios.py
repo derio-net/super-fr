@@ -200,6 +200,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "matrix-status-split",
         "debt-report",
         "opencode-store-v2",
+        "opencode-plugin-v2",
         "closeout-owed",
         "triage-closed-in-progress",
         "triage-config-skew",
@@ -385,3 +386,7 @@ def test_triage_retire_sync(installed: Path, tmp_path: Path) -> None:
 
 def test_opencode_store_v2(installed: Path, tmp_path: Path) -> None:
     _scenario("opencode-store-v2", installed, tmp_path)
+
+
+def test_opencode_plugin_v2(installed: Path, tmp_path: Path) -> None:
+    _scenario("opencode-plugin-v2", installed, tmp_path)

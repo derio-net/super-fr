@@ -87,6 +87,35 @@ journal:
       no script. Two ways to close it: write the scenario (outside this phase's files), or move the
       rows' scenario off it (set-status can replace a scenario but cannot clear one). Each row's
       note says so.
+  - kind: decision
+    id: p5-plugin-scenario-written
+    phase: 5
+    title: "The scenario the six rows name now exists; it proves the delivery contract, not the hooks' enforcement"
+    body: |
+      tests/scenarios/opencode-plugin-v2.sh was written and registered in
+      tests/integration/test_scenarios.py (both halves: the `here` registry tripwire and a
+      `test_opencode_plugin_v2` that runs it), so a `fr verification walk` reading
+      opencode-2-{push-guard,claim,pin,nag,sentinel,bind-unbind} finds a script instead of a dangling
+      path. What it proves is deliberately BOUNDED: the delivery contract every one of those hooks
+      rides on — install writes one plugin directory and nothing at top level, cli.json names the
+      DIRECTORY (a file path is silently ignored by 2.x), a second install is idempotent, a foreign
+      cli.json entry and key survive, an unparsable cli.json is refused with the file named and
+      nothing written, uninstall removes its own directory and entry only — plus, where the real
+      binary exists, exactly one `loading plugin` line for the delivered directory.
+
+      Why the enforcement proofs stay where they are: each hook's decision is compared against the
+      bash engine by a bun test with a fake context (push.test.ts, claim.test.ts, nag.test.ts,
+      sentinel.test.ts, bind.test.ts), which is what the rows' `ci` status rests on and what the
+      spec's candidate item 4 asks for. The load probe is conditional because the binary is not
+      present in every scenario container, and the script says so on stdout rather than passing
+      silently. The model-driven behaviour behind each hook is the post-merge live rows, per R15.
+
+      Two things measured while writing it, both now pinned in the script: the daemon logs
+      `loading plugin` about 150ms AFTER `opencode plugin list` returns, so a straight grep races the
+      load and reads zero (the script waits, bounded, for the line); and a survivor of that probe
+      inherits the runner's stdio, so the script always captures the service pid before
+      `service stop` and TERM/KILLs it afterwards. Verified: the script runs in 3.3s against the real
+      2.1.0 binary, prints the probe line, and leaves no `serve --service` process behind.
   - kind: discovery
     id: p5-prose-surfaces
     phase: 5
@@ -99,7 +128,15 @@ journal:
       with --isolated produced output byte-identical to the committed .html. The edited render then
       changed exactly those lines. README line 427 ("third harness alongside Claude Code and
       OpenCode") and line 346 are still true and were not changed.
-resolves: []
+resolves:
+  - id: p5-plugin-scenario-missing
+    state: fixed
+    body: |
+      tests/scenarios/opencode-plugin-v2.sh exists, is executable, and is registered in
+      tests/integration/test_scenarios.py (`test_opencode_plugin_v2`, and the `here` set the
+      every-script-has-a-test tripwire reads). It covers the delivery contract all six rows ride on
+      and probes the real binary where present; the rows' notes were re-pointed through
+      `fr acceptance set-status` so none of them still claims the scenario was never written.
 evidence: {}
 # Full suite: owed by the orchestrator (the tests evidence gate credits only the
 # holder session's own log). Phase gates run here, all exit 0: the targeted pytest
