@@ -1108,3 +1108,118 @@ The fixture builder and its pinning test are new and single-purpose; the one can
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 The adapter was extracted before the reader moved (P4.T3.S3 done first, deliberately): observed.py's ToolPart/tool_part/_final_text JSON handling went into fr.run.opencode_store, leaving observed with queries by name only; nothing further to clean in the observed reader.
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-10-21T08:44:29+00:00 phase=4 -->
+### p4-review · review · Phase 4 reviewed by an independent agent: two majors, one of them a silent money bug, found by driving a throwaway store (phase 4)
+
+Reviewer: ses_ea6d1b71fffepKaui9YJGoGmGf (general agent, read-only, its own context). It ran
+the opencode/usage modules (88 passed), the scenarios (50 passed in 194s), mypy (302 files),
+ruff, and grep'd every legacy query site: exactly one `FROM session` hit remains, in the R14
+detection, so "every query site moved" held. It checked the record's evidence log against the
+commit times (suite born the same second as the last code commit) rather than accepting it.
+
+Then it did the thing that found the defects: it built its own throwaway stores and BROKE them
+one way at a time — a corrupt `data` blob, `session_v2` dropped, `session_v2` renamed, a column
+renamed, a zero-byte file, a session only in `session`, a session in both — and drove the probe,
+`why_unobservable` and `fr usage collect` against each. Two majors fell out of that matrix:
+a healthy 2.x session was told its database was wrong (the fall-through to the absent sentence),
+and one corrupt `session_message.data` row silently turned 0.0143 into 0.002 labelled `exact` —
+a wrong dollar figure indistinguishable from a measured one, which is precisely the class R14
+forbids. Neither was reachable from the record's own tests, and both are on the routine path.
+
+It also found a second alias table this phase had created while editing the first (both
+docstrings claiming to be the only one, mapping `bash` to different targets), and that the
+fixture's provenance did not match what R13 promised: the rows were authored to the same mapping
+the reader encodes, so the "migration lost nothing" pin proved only self-consistency.
+
+Everything is closed: the two majors by code plus a degradation test, the alias tables by one
+name per job plus a test tying store names to the activity vocabulary, the provenance by
+capturing ONE real migrated 1.x row set (redacted) from a copy of the store and labelling
+exactly what is captured versus constructed, and §D by naming the role COLUMN.
+The reviewer opened no finding this phase could not fix; its one out-of-scope item (§D) was
+corrected anyway, because the spec is what phases 5 and 6 read.
+
+<!-- fr:journal kind=review scope=plan id=p4-review-verify created=2026-10-21T08:44:29+00:00 phase=4 -->
+### p4-review-verify · review · Verification round on the fixes: all five hold when driven, and three residuals closed (phase 4)
+
+Reviewer: ses_ea2696a16ffefTjW5oEKjXk42Y (general agent, read-only, its own context,
+dispatched after the fixes because the fixes were written by a different agent than the one
+that found the defects). It re-drove each claim instead of reading the resolve text:
+
+- r1: four stores (healthy v2 with no matching call, fixture session, v1-only, zero-byte,
+  missing) each produced a distinct sentence; the v2 one carries no `FR_OPENCODE_DB`. Held.
+- r2: one row corrupted five ways (`CAST(x'fffe' AS TEXT)`, `'{not json'`, `'[]'`, a child row,
+  a user row) — every case became `usd=None, source=none` or `unavailable` naming the rows, with
+  `—`/`none` rendered and `fr usage collect` exiting 0. No silent `exact` figure survives. Held.
+- r3: one table per job, neither docstring overclaims, and the new test FAILS when a store tool
+  name with no activity mapping is injected (`'webfetch'`). Held.
+- r5: README's CAPTURED/CONSTRUCTED split matches `build.py` and the JSON; the committed `.db`
+  holds only `/home/u/…`, `example-model`, `example-provider` and `redacted text`, is
+  `VACUUM`ed (no stale pages) and exists in exactly one commit, never unredacted. Held.
+- regression risk: a store path that is a directory, a zero-byte file, a missing file and a
+  dropped column raised in `why_unobservable` in no case.
+
+All five fixes hold (283 passed, mypy clean, ruff clean). The round produced three residuals,
+all closed in this phase: the v2 sentence and the unreadable observation contradicted each other
+(a corrupt row printed the identical "was read, holds nothing" sentence — the very reassurance
+r2 exists to prevent), one assertion in the new r3 test could never fail (an Activity compared
+to a sub), and the "no real identity" test asserted directories only.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r1 created=2026-10-21T08:44:29+00:00 phase=4 state=open review_scope=in -->
+### p4b-r1 · finding [open] (reviewer: in scope) · a v2 session whose rows could not be decoded was told "was read, and it holds no questions yet" — identical to a healthy store (phase 4)
+
+packages/fr/src/fr/run/observed.py, the v2 branch of `why_unobservable`: it decided from
+`store_version` alone, which says WHERE the session lives, not whether its messages can be read.
+Measured on a copy of the fixture with `UPDATE session_message SET data = '{not json' WHERE
+id = 'msg_a1'` (the row carrying the answered question): the sentence was byte-identical to the
+healthy store's. Same for a store whose `session_message` table was dropped — `store_version`
+still answers `v2`, `_messages` returns None, and the operator is told the store was read and
+holds nothing. This is the routine operator-gate refusal path (commands/run_cmd.py), and it
+composes badly with p4-r2: that fix makes such a session unobservable precisely so no gate reads
+it as "found nothing", and this sentence then asserts it was read and found nothing.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r2 created=2026-10-21T08:44:29+00:00 phase=4 state=open review_scope=in -->
+### p4b-r2 · finding [open] (reviewer: in scope) · one assertion in the new alias test can never fail: an Activity compared to a sub (phase 4)
+
+tests/unit/test_run_observed_opencode_v2.py,
+`classify.classify("shell", "ls").activity != "other_tool"`: `Classification.activity` is one of
+paperwork/implementation/other while `other_tool` is a `sub`, so the comparison was True for every
+input, including a completely unknown tool name. The test's real pin (membership in
+`classify._ALIASES`) does work — injecting `webfetch` fails it — but the line read as a check on
+the unknown bucket and checked nothing.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r3 created=2026-10-21T08:44:29+00:00 phase=4 state=open review_scope=in -->
+### p4b-r3 · finding [open] (reviewer: in scope) · the fixture's "no real identity" test asserted directories only (phase 4)
+
+tests/unit/test_opencode_store_fixture.py asserted `directory.startswith("/home/u/")` and nothing
+else, so a real title, slug, prompt, command, output, model id or provider could be committed into
+tests/fixtures/opencode/two-sessions.db and the test stayed green — in the one file where a leak
+would land, in a public repo. The fixture is clean today (the verification round dumped every row
+and ran `strings` over the file), so this was a claim wider than its evidence, not a live leak.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r1-resolved created=2026-10-21T08:44:29+00:00 phase=4 state=fixed resolves=p4b-r1 -->
+### p4b-r1-resolved · finding [fixed] · resolves p4b-r1: a v2 session whose rows could not be decoded was told "was read, and it holds no questions yet" — identical to a healthy store (phase 4)
+
+`opencode_store.rows_state(db, session)` is now the one readability probe ("ok" / "partial" /
+"unreadable"), and `why_unobservable`'s v2 branch asks it before it speaks: a session whose rows
+could not be decoded says so and says fr "cannot say whether it holds <what>", and a store whose
+`session_message` cannot be queried says "its message rows could not be read". Neither points at
+`FR_OPENCODE_DB` (the database was found and read). Tested in
+test_a_v2_store_fr_could_not_decode_is_never_described_as_read_and_empty, which corrupts one row
+and, separately, drops the table, and asserts the three sentences are distinct.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r2-resolved created=2026-10-21T08:44:29+00:00 phase=4 state=fixed resolves=p4b-r2 -->
+### p4b-r2-resolved · finding [fixed] · resolves p4b-r2: one assertion in the new alias test can never fail: an Activity compared to a sub (phase 4)
+
+The vacuous line (`classify.classify("shell", "ls").activity != "other_tool"` — `other_tool` is a
+`sub`) is replaced by the assertion it meant: a known store name does not land in the unknown
+sub, and `classify("totally-unknown-tool").sub == "other_tool"`.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r3-resolved created=2026-10-21T08:44:29+00:00 phase=4 state=fixed resolves=p4b-r3 -->
+### p4b-r3-resolved · finding [fixed] · resolves p4b-r3: the fixture's "no real identity" test asserted directories only (phase 4)
+
+test_the_fixture_carries_no_real_identity now reads every text value in every table and asserts
+each absolute path is under `/home/u/`, each URL host is a reserved name (RFC 2606: `.invalid`,
+`.example`, `.test`, `.localhost`, `example.{com,org,net}`) and each email domain likewise. The
+scan is pinned non-vacuous (`assert values`) and was checked against synthetic leaks: a
+`/Users/x/proj` path, a `gitlab.corp.example` host and a `realcompany.io` mail are each caught.
