@@ -9766,7 +9766,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R18
     levels: {}
     status: not-implemented
-    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    notes: candidate scenario written
     verify: candidate
     scenario: tests/scenarios/fr-ops-gate-stage.sh
   - id: fr-ops-live-first-run
