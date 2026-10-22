@@ -12,9 +12,12 @@ strings; the engine runs them, this module only holds them.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
+import yaml
+
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
 
 OpPhase = Literal["pre-merge", "post-merge"]
 PHASES: tuple[OpPhase, ...] = ("pre-merge", "post-merge")
@@ -71,10 +74,36 @@ class Op(_OpFields):
         return self.check == PROOF
 
 
+LegacyState = Literal["done", "n/a"]
+"""What a legacy `status:` closes an op as (R2): DONE (legacy) or N/A (legacy)."""
+
+_FRANK_PROSE = ("layer", "app", "plan", "when", "why_manual", "status", "summary")
+_DONE_RE = re.compile(r"^done\b", re.IGNORECASE)
+_NA_STATUSES = frozenset({"decommissioned", "n/a"})
+
+
+def _as_prose(value: object) -> str:
+    """A non-string YAML value as one line of prose (a mapping in flow style)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return yaml.safe_dump(value, default_flow_style=True, sort_keys=False).strip()
+    return str(value)
+
+
 class LegacyOp(_OpFields):
     """A frank-shaped block (R2): `layer`/`app`/`plan`/`when`/`why_manual`/`status`
     beside any R1 field. `summary` defaults to `why_manual`, `phase` to
-    `post-merge`, and `status: done` reads as DONE (legacy)."""
+    `post-merge`; a `done`/`done …` status reads as DONE (legacy) and
+    `decommissioned`/`n/a` as N/A (legacy).
+
+    Tolerant where `Op` is strict, because the legacy carrier is a convention fr
+    does not own: a key that is neither R1's nor frank's is kept as prose
+    (`prose_keys`, which the loader warns about), non-string `commands`/`verify`
+    items and frank's scalar fields are kept as prose. The R1 fields fr acts on
+    (`check`, `apply`, …) stay typed."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
 
     summary: StrictStr | None = None
     phase: OpPhase | None = None
@@ -85,22 +114,48 @@ class LegacyOp(_OpFields):
     why_manual: StrictStr | None = None
     status: StrictStr | None = None
 
+    @field_validator(*_FRANK_PROSE, mode="before")
+    @classmethod
+    def _scalar_prose(cls, value: object) -> object:
+        return value if value is None else _as_prose(value)
+
+    @field_validator("commands", "verify", mode="before")
+    @classmethod
+    def _items_prose(cls, value: object) -> object:
+        if value is None or isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            return [_as_prose(item) for item in value]
+        return _as_prose(value)
+
     @model_validator(mode="after")
     def _has_a_summary(self) -> LegacyOp:
         if not (self.summary or self.why_manual):
             raise ValueError(f"{self.id}: a legacy op needs `summary` or `why_manual`")
         return self
 
-    def to_op(self) -> tuple[Op, bool]:
-        """`(Op, legacy_done)`: the R1 op this block stands for, and whether it
-        was marked `status: done`."""
+    @property
+    def prose_keys(self) -> tuple[str, ...]:
+        """Keys neither R1 nor frank defines, kept as prose."""
+        return tuple(sorted(self.model_extra or {}))
+
+    @property
+    def legacy_state(self) -> LegacyState | None:
+        status = (self.status or "").strip()
+        if _DONE_RE.match(status):
+            return "done"
+        return "n/a" if status.lower() in _NA_STATUSES else None
+
+    def to_op(self) -> tuple[Op, LegacyState | None]:
+        """`(Op, legacy state)`: the R1 op this block stands for, and what its
+        `status:` closes it as (`None`: not closed)."""
         data = {name: getattr(self, name) for name in _OpFields.model_fields}
         op = Op(
             **data,
             summary=self.summary or self.why_manual or "",
             phase=self.phase or "post-merge",
         )
-        return op, self.status == "done"
+        return op, self.legacy_state
 
 
 class OpsFile(BaseModel):

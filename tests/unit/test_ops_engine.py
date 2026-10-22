@@ -57,10 +57,10 @@ class FakeJournal:
         return self.by_op.get(op_id)
 
 
-def _lo(legacy_done: bool = False, runbook: bool = False, **fields: object) -> LoadedOp:
+def _lo(legacy: str | None = None, runbook: bool = False, **fields: object) -> LoadedOp:
     data: dict[str, object] = {"id": "a", "summary": "s", "phase": "pre-merge"}
     data.update(fields)
-    return LoadedOp(Op.model_validate(data), SRC, 1, legacy_done=legacy_done, runbook=runbook)
+    return LoadedOp(Op.model_validate(data), SRC, 1, legacy=legacy, runbook=runbook)  # type: ignore[arg-type]
 
 
 def _ev(result: str, **kw: str) -> OpEvidence:
@@ -96,8 +96,16 @@ def test_done_attested_for_a_checkless_op() -> None:
     assert (row.state, row.how) == ("DONE", "attested")
 
 
+def test_na_legacy_runs_no_probe() -> None:
+    """p1-r3: a legacy `decommissioned`/`n/a` status reads N/A (legacy)."""
+    runner = FakeRunner({})
+    row = _one(_lo(legacy="n/a", check="probe"), runner)
+    assert (row.state, row.how, row.label) == ("N/A", "legacy", "N/A (legacy)")
+    assert runner.calls == []
+
+
 def test_done_legacy() -> None:
-    row = _one(_lo(legacy_done=True))
+    row = _one(_lo(legacy="done"))
     assert (row.state, row.how) == ("DONE", "legacy")
 
 
@@ -210,11 +218,7 @@ def test_exit_codes() -> None:
     def rows(*states_how: str):
         out = []
         for i, s in enumerate(states_how):
-            lo = (
-                _lo(id=f"o{i}", check="probe")
-                if s != "LEGACY"
-                else _lo(id=f"o{i}", legacy_done=True)
-            )
+            lo = _lo(id=f"o{i}", check="probe") if s != "LEGACY" else _lo(id=f"o{i}", legacy="done")
             runner = FakeRunner({"probe": {"DONE": (0, ""), "OPEN": (1, "x")}.get(s, (0, ""))})
             out.append(_one(lo, runner))
         return out

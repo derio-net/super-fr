@@ -53,7 +53,7 @@ class StatusRow:
     summary: str
     state: State
     how: str | None = None
-    """Why it is DONE: `checked`, `attested`, `legacy` or `proof`."""
+    """Why it is DONE (`checked`, `attested`, `legacy`, `proof`) or N/A (`legacy`)."""
     reason: str | None = None
     identity: str | None = None
     """The identity a failing check ran as."""
@@ -148,8 +148,10 @@ def _evaluate(
         where=lo.where,
         runbook=lo.runbook,
     )
-    if lo.legacy_done:
+    if lo.legacy == "done":
         return replace(row, state="DONE", how="legacy")
+    if lo.legacy == "n/a":
+        return replace(row, state="N/A", how="legacy")
     if op.na_if and not op.disables:
         rc, line = runner(op.na_if, {})
         if rc == 0:

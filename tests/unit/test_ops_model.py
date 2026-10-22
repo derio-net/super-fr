@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+
 import pytest
 from fr.ops.model import LegacyOp, Op, UndoNone
 from pydantic import ValidationError
@@ -101,20 +103,32 @@ FRANK = {
 
 
 def test_legacy_accepts_frank_fields_and_defaults() -> None:
-    op, done = LegacyOp.model_validate(FRANK).to_op()
+    op, legacy = LegacyOp.model_validate(FRANK).to_op()
     assert op.id == "rotate-token"
     assert op.summary == "needs an admin UI click"
     assert op.phase == "post-merge"
     assert op.commands == ("open the admin page", "rotate")
     assert op.verify == "the runner reconnects"
-    assert done is False
+    assert legacy is None
 
 
-def test_legacy_status_done_maps_to_legacy_done() -> None:
-    _, done = LegacyOp.model_validate({**FRANK, "status": "done"}).to_op()
-    assert done is True
-    _, pending = LegacyOp.model_validate({**FRANK, "status": "pending"}).to_op()
-    assert pending is False
+@pytest.mark.parametrize(
+    ("status", "legacy"),
+    [
+        ("done", "done"),
+        ("done 2026-07-27 rotated by hand", "done"),
+        ("Done", "done"),
+        ("decommissioned", "n/a"),
+        ("n/a", "n/a"),
+        ("pending", None),
+        ("deferred", None),
+        ("blocked on the vendor", None),
+        ("donework", None),
+    ],
+)
+def test_legacy_status_maps_per_r2(status: str, legacy: str | None) -> None:
+    _, got = LegacyOp.model_validate({**FRANK, "status": status}).to_op()
+    assert got == legacy
 
 
 def test_legacy_accepts_any_r1_field_and_its_own_phase() -> None:
@@ -137,6 +151,34 @@ def test_legacy_needs_a_summary_or_why_manual() -> None:
         LegacyOp.model_validate(data).to_op()
 
 
-def test_legacy_refuses_an_unknown_key() -> None:
-    with pytest.raises(ValidationError, match="owner"):
-        LegacyOp.model_validate({**FRANK, "owner": "me"})
+def test_legacy_keeps_an_unknown_key_as_prose() -> None:
+    """p1-r3: frank's real runbook carries note/notes/done_note/decommissioned; the
+    legacy carrier is a convention fr does not own, so it never refuses a key."""
+    legacy = LegacyOp.model_validate(
+        {**FRANK, "note": "n", "notes": ["a", "b"], "done_note": "x", "decommissioned": "2026"}
+    )
+    assert legacy.prose_keys == ("decommissioned", "done_note", "note", "notes")
+    assert legacy.to_op()[0].id == "rotate-token"
+    assert LegacyOp.model_validate(FRANK).prose_keys == ()
+
+
+def test_legacy_keeps_non_string_commands_and_verify_as_prose() -> None:
+    op, _ = LegacyOp.model_validate(
+        {
+            **FRANK,
+            "commands": [
+                "open https://registrar.example.com",
+                {"host": "192.0.2.10", "run": "dig"},
+            ],
+            "verify": [{"expect": "192.0.2.10"}],
+            "when": datetime.date(2026, 7, 27),
+        }
+    ).to_op()
+    assert op.commands is not None and op.commands[0] == "open https://registrar.example.com"
+    assert "192.0.2.10" in op.commands[1] and "dig" in op.commands[1]
+    assert op.verify is not None and "192.0.2.10" in op.verify[0]
+
+
+def test_ops_yaml_op_stays_strict() -> None:
+    with pytest.raises(ValidationError, match="note"):
+        Op.model_validate({"id": "a", "summary": "s", "phase": "pre-merge", "note": "x"})

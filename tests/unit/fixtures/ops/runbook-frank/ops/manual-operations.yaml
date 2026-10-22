@@ -1,0 +1,35 @@
+# The shape of frank's manual-operations.yaml (hosts and addresses fictional):
+# a mapping with `operations:`, free-text statuses, mapping-shaped commands, and
+# keys fr does not own.
+operations:
+  - id: rotate-dns
+    layer: network
+    app: dns
+    plan: 2026-07-01-dns
+    why_manual: the registrar has no API
+    when: 2026-07-27
+    commands:
+      - open https://registrar.example.com
+      - {host: 192.0.2.10, run: "dig example.com"}
+    verify:
+      - {expect: 192.0.2.10}
+    status: done 2026-07-27 rotated by hand
+    done_note: rotated in the registrar UI
+  - id: old-backup
+    why_manual: tape rotation
+    status: decommissioned
+    decommissioned: 2026-08-01
+  - id: lb-health
+    why_manual: only on the old cluster
+    status: n/a
+  - id: cert
+    why_manual: manual renewal
+    status: pending
+    note: one
+    notes: [a, b]
+  - id: later
+    why_manual: waits on the vendor
+    status: deferred
+  - id: freeform
+    why_manual: waits on a person
+    status: blocked on vendor ticket

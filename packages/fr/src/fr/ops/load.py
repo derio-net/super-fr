@@ -22,7 +22,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
 
-from fr.ops.model import LegacyOp, Op
+from fr.ops.model import LegacyOp, LegacyState, Op
 
 OPS_FILE = "ops.yaml"
 CONFIG_REL = Path(".fr/ops.yaml")
@@ -40,8 +40,15 @@ class LoadedOp:
     op: Op
     source: Path
     line: int
-    legacy_done: bool = False
+    legacy: LegacyState | None = None
+    """What a legacy `status:` closed the op as (R2); `None` for `ops.yaml` ops."""
     runbook: bool = False
+    prose_keys: tuple[str, ...] = ()
+    """Legacy keys neither R1 nor frank defines, kept as prose (R2)."""
+
+    @property
+    def legacy_done(self) -> bool:
+        return self.legacy == "done"
 
     @property
     def where(self) -> str:
@@ -157,8 +164,10 @@ def _validate(
 
 def _to_loaded(parsed: Op | LegacyOp, path: Path, line: int, *, runbook: bool) -> LoadedOp:
     if isinstance(parsed, LegacyOp):
-        op, done = parsed.to_op()
-        return LoadedOp(op, path, line, legacy_done=done, runbook=runbook)
+        op, legacy = parsed.to_op()
+        return LoadedOp(
+            op, path, line, legacy=legacy, runbook=runbook, prose_keys=parsed.prose_keys
+        )
     return LoadedOp(parsed, path, line, runbook=runbook)
 
 
@@ -329,6 +338,12 @@ def load_ops(
         if missing:
             raise OpsLoadError(f"no op {', '.join(map(repr, missing))} in the plan or runbook")
         selected = [lo for lo in selected if lo.op.id in ids]
+    warnings += [
+        f"op {lo.op.id!r} ({lo.where}): key(s) {', '.join(lo.prose_keys)} are not fr's; "
+        "kept as prose"
+        for lo in selected
+        if lo.prose_keys
+    ]
     return OpSet(tuple(selected), tuple(warnings))
 
 

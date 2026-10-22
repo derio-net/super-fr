@@ -152,3 +152,50 @@ def test_ops_config_reads_runbook_and_identities(tmp_path: Path) -> None:
     assert config.runbook == "ops/manual-operations.yaml"
     assert config.identities["admin"].env["TOKEN"].from_ == "echo admin-token"
     assert load_ops_config(tmp_path).identities == {}
+
+
+def test_frank_runbook_shape_is_read_without_refusal(tmp_path: Path) -> None:
+    """p1-r3: the real runbook shape — `operations:` mapping, extra keys, mapping
+    commands, free-text statuses (R2)."""
+    root = _repo(tmp_path, "runbook-frank")
+    opset = load_ops(root / PLAN, root, runbook=True)
+    legacy = {lo.op.id: lo.legacy for lo in opset.ops}
+    assert legacy == {
+        "rotate-dns": "done",
+        "old-backup": "n/a",
+        "lb-health": "n/a",
+        "cert": None,
+        "later": None,
+        "freeform": None,
+    }
+    rotate = opset.get("rotate-dns")
+    assert rotate is not None and rotate.op.commands is not None
+    assert "192.0.2.10" in rotate.op.commands[1]
+    assert rotate.line == 5
+    kept = " ".join(opset.warnings)
+    for key in ("done_note", "decommissioned", "note", "notes"):
+        assert key in kept
+    assert "rotate-dns" in kept and "prose" in kept
+
+
+def test_self_review_tolerates_frank_keys_in_step_blocks(tmp_path: Path, monkeypatch) -> None:
+    """A plan whose step blocks carry frank's extra keys reviews without an error
+    from the op loader (it still owes the fr ops floor)."""
+    from fr.parser import parse as parse_plan
+    from fr.plan_ops import self_review
+
+    from tests.unit.test_ops_artifacts import _plan
+
+    plan_dir = _plan(tmp_path, monkeypatch)
+    phase = plan_dir / "01.yaml"
+    phase.write_text(
+        phase.read_text().replace(
+            "text: |-\n      s\n",
+            "text: |-\n      ```yaml\n      # manual-operation\n      id: x\n"
+            "      why_manual: needs a click\n      note: kept as prose\n"
+            "      commands:\n        - {host: 192.0.2.10, run: ls}\n"
+            "      status: done 2026-07-27 by hand\n      ```\n",
+        )
+    )
+    errors = [i.message for i in self_review(parse_plan(plan_dir)) if i.severity == "error"]
+    assert not [e for e in errors if "do not load" in e], errors
