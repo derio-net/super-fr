@@ -9634,7 +9634,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R6
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-evidence-attest
     capability: fr ops
     acceptance: Op evidence and operator attestations are durable journal entries visible
