@@ -415,3 +415,10 @@ Evidence: PASS — OPENCODE_SESSION_ID=ses_e9b9e7dd9ffe6xL1FEEpXGl1MK matches th
 Step: Let a run sit advanceable and confirm one idle nudge is submitted, with no second nudge at the same `position`.
 
 Evidence: FAILED on OpenCode 2.1.3 — a synthetic advanceable run returned fr run check --idle exit 3 with next_command, and a fresh top-level session idled (export carries an idle message), but the plugin event stream contained session.execution.succeeded and no session.idle, so idle.ts never fired and no nudge was submitted. Framework fix tracked in #1231.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-10-22T16:35:32+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: Confirm the status line shows the fr segment, and that a session opened outside any repo shows none.
+
+Evidence: PASS — FR_REQUIRE_OPENCODE=1 uv run pytest tests/integration/test_opencode_plugin_live.py::test_opencode_tui_renders_the_delivered_status_line passed on the host OpenCode 2.1.3 (1 passed in 31.59s). The segment script names fr, branch and worktree for the archive workspace and none outside any repo; opencode plugin list registers the delivered plugin directory.
