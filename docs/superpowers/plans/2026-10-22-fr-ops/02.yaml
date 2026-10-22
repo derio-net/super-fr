@@ -42,7 +42,7 @@ tasks:
       GREEN: fr/ops/profile.py `in_ops_profile()` and `refusal_route()` (prints `fr isolation
       up --profile <ops> --branch chore/ops-<slug> --base <ref>` then `fr isolation exec
       --branch chore/ops-<slug> -- fr ops …`); `--ops` on init_cmd scaffold; merge, not
-      replace, in scaffold.py `_update_profiles_yaml`. Wire the status warning to it.
+      replace, in scaffold.py `_update_profiles_yaml`. `--ops` also mounts the operator's ops-trust store (fr.ops.trust's store dir) READ-ONLY into the profile's container and sets FR_OPS_TRUST_DIR to the mount target, so probes there see the operator's grants and can never write one (R19); test it in the scaffold output. Wire the status warning to it.
   - id: P2.T1.S3
     text: |-
       REFACTOR — one container-evidence helper shared with the existing edit-gate notion if a Python one exists (grep first); tests green.
