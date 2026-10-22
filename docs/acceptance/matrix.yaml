@@ -9667,7 +9667,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R12
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    scenario: tests/scenarios/fr-ops-gate-stage.sh
   - id: fr-ops-deliver-section
     capability: deliver
     acceptance: The delivered PR body carries a Manual operations section rendered from
