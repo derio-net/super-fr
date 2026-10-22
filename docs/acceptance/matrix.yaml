@@ -9609,8 +9609,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R9
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
     verify: candidate
+    scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-apply-idempotent
     capability: fr ops
     acceptance: fr ops apply (one op or a phase) runs in dependency order, confirms,
