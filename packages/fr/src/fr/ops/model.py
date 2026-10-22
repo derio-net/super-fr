@@ -16,7 +16,6 @@ import re
 from typing import Literal
 
 import yaml
-
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
 
 OpPhase = Literal["pre-merge", "post-merge"]
