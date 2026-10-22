@@ -48,6 +48,7 @@ PY
 run_fr out init validator-wrapper
 require_exit 0 "$out"
 git add -A && git commit -qm base && git push -q origin main || fail "seed main"
+git remote set-head origin main || fail "origin/HEAD"
 
 # --- the delivered feature: two runs, each with its plan, ops and a [devops] step ----
 git switch -q -c feat/x
@@ -137,6 +138,9 @@ class Forge:
     def pr_view(self, repo, n):
         p = self._pr(n)
         return {**p, "draft": False, "mergeable": "MERGEABLE", "title": "t", "body": "b"}
+
+    def default_branch(self, *, cwd, run=None):
+        return "main"
 
     def pr_required_checks(self, repo, n):
         return [{"name": "ci", "bucket": "pass"}]

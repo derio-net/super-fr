@@ -89,6 +89,7 @@ class FakeTree:
         self.gate_pass_code: int | None = None
         self.rebase_error: str | None = None
         self.push_error: str | None = None
+        self.leases: list[str | None] = []
         self.head_files: dict[str, str] = {}  # what the PR head carries, by path
 
     def snapshot_head(self) -> None:
@@ -152,8 +153,9 @@ class FakeTree:
         if self.rebase_error:
             raise RuntimeError(self.rebase_error)
 
-    def push(self, branch: str) -> None:
+    def push(self, branch: str, lease: str | None = None) -> None:
         self.calls.append(("push", branch))
+        self.leases.append(lease)
         if self.push_error:
             raise RuntimeError(self.push_error)
 
@@ -167,11 +169,15 @@ class FakeHost:
         self.fail_apply: set[str] = set()
         self.ready_code = 0
         self.changed: list[str] = []  # ops-profile files the PR head changes (p4-r1)
+        self.origin_default: str | None = "main"
         self.how: dict[str, str] = {}
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
         self.calls.append((["diff", base, head, *paths], False))
-        return list(self.changed)
+        return [c for c in self.changed if any(c.startswith(p) for p in paths)]
+
+    def origin_head(self) -> str | None:
+        return self.origin_default
 
     def fetch(self, ref: str) -> None:
         self.calls.append((["fetch", ref], False))
@@ -220,6 +226,10 @@ class FakeForge:
         self.calls: list[tuple[str, Any]] = []
         self.unsupported = unsupported
         self.open_prs: dict[str, int] = {}
+        self.default = "main"
+
+    def default_branch(self, *, cwd: Path, run: Any = None) -> str | None:
+        return self.default
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         assert (repo, number) == (REPO, 5)

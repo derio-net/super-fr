@@ -316,6 +316,13 @@ def archived_journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Pa
     return repo_root / IMPLEMENTED_JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
 
 
+def journal_read_candidates(repo_root: Path, scope: JournalScope, slug: str) -> tuple[Path, Path]:
+    """Every place a journal is read from, in the order `resolve_journal_read_path` tries
+    them: active, then archived. One list, so a caller that must see every location the
+    reader could honour (the DevOps stage's PR-carried exclusion) cannot drift from it."""
+    return journal_path(repo_root, scope, slug), archived_journal_path(repo_root, scope, slug)
+
+
 def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     """Path to read a journal from: the active location if present, else the
     archived one.
@@ -326,10 +333,9 @@ def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -
     neither exists the active path is returned (callers treat a missing file as
     an empty journal), keeping behaviour identical for never-written slugs.
     """
-    active = journal_path(repo_root, scope, slug)
+    active, archived = journal_read_candidates(repo_root, scope, slug)
     if active.exists():
         return active
-    archived = archived_journal_path(repo_root, scope, slug)
     if archived.exists():
         return archived
     return active

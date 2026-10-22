@@ -234,13 +234,24 @@ def test_git_revisions_follow_end_of_options(monkeypatch, tmp_path: Path) -> Non
     assert any(a[0] == "rebase" for a in seen) and any(a[0] == "diff" for a in seen)
 
 
-def test_the_ops_branch_is_force_pushed(monkeypatch, tmp_path: Path) -> None:
-    """p4-r11: every stage pushes, and stage 3 rebased the branch: only a forced push of
-    the fr-owned ops branch can follow."""
+def test_the_ops_branch_push_is_leased(monkeypatch, tmp_path: Path) -> None:
+    """p4-r11 correction: the first push creates the branch (refusing one that exists);
+    every later one is leased on the sha fr last pushed, never a bare --force."""
     from fr.commands.ops_gate_cmd import OpsWorkspace
     from fr.triage import gitseam
 
     seen: list[list[str]] = []
+    exists = [False]
     monkeypatch.setattr(gitseam, "git", lambda args, cwd: seen.append(args) or "")
-    OpsWorkspace(tmp_path).push("chore/ops-p")
-    assert seen == [["push", "--force", "origin", "HEAD:refs/heads/chore/ops-p"]]
+    monkeypatch.setattr(gitseam, "git_ok", lambda args, cwd: exists[0])
+    ws = OpsWorkspace(tmp_path)
+    ws.push("chore/ops-p")
+    ws.push("chore/ops-p", lease="a" * 40)
+    assert seen == [
+        ["push", "origin", "HEAD:refs/heads/chore/ops-p"],
+        ["push", f"--force-with-lease=refs/heads/chore/ops-p:{'a' * 40}", "origin",
+         "HEAD:refs/heads/chore/ops-p"],
+    ]  # fmt: skip
+    exists[0] = True
+    with pytest.raises(gitseam.GitError, match="already has"):
+        ws.push("chore/ops-p")

@@ -48,6 +48,8 @@ if TYPE_CHECKING:
 
 STAGE_PREFIX = "gate-stage-"
 PROFILES_FILE = ".devcontainer/fr-profiles.yaml"
+ARCHIVED_JOURNALS = "docs/superpowers/implemented/journals"
+FIRST_PUSHED_STAGE = 3  # the ops branch holds only default-branch code from the rebase on
 GATE_DIR_ENV = "FR_OPS_GATE_DIR"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
 CLOSED_STATES = frozenset({"DONE", "N/A"})
@@ -79,6 +81,10 @@ class GateHost(Protocol):
         checkout (`git diff --name-only --end-of-options <base> <head> -- <paths>`)."""
         ...
 
+    def origin_head(self) -> str | None:
+        """The default branch the base checkout's `origin/HEAD` names, or None."""
+        ...
+
     def workspace(self, branch: str) -> OpsTree | None:
         """The ops workspace of *branch*, or None while it is not up."""
         ...
@@ -101,10 +107,15 @@ class OpsTree(Protocol):
 
     def rebase_onto(self, new_base: str, upstream: str) -> None: ...
 
-    def push(self, branch: str) -> None: ...
+    def push(self, branch: str, lease: str | None = None) -> None:
+        """Push HEAD to *branch*: with *lease*, only while the remote is still at that sha
+        (`--force-with-lease`); without, only as a new branch (refusing an existing one)."""
+        ...
 
 
 class GateForge(Protocol):
+    def default_branch(self, *, cwd: Path, run: Any = None) -> str | None: ...
+
     def pr_view(self, repo: str, number: int) -> dict[str, Any]: ...
 
     def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]: ...
@@ -183,6 +194,10 @@ class GateState(Protocol):
 
     def set_cut(self, sha: str) -> None: ...
 
+    def pushed(self) -> str | None: ...
+
+    def set_pushed(self, sha: str) -> None: ...
+
     def mark(self, n: int, *, head: str | None = None) -> None: ...
 
 
@@ -215,6 +230,14 @@ class HostGateState:
 
     def set_cut(self, sha: str) -> None:
         self._write({**self._data(), "cut": sha})
+
+    def pushed(self) -> str | None:
+        """The ops branch's sha fr last pushed: the lease of the next push."""
+        pushed = self._data().get("pushed")
+        return str(pushed) if pushed is not None else None
+
+    def set_pushed(self, sha: str) -> None:
+        self._write({**self._data(), "pushed": sha})
 
     def mark(self, n: int, *, head: str | None = None) -> None:
         data = self._data()
@@ -277,6 +300,7 @@ class Gate:
     state: GateState
     audit_factory: Callable[[Path, str], AuditLog] = JournalLedger
     _view: dict[str, Any] | None = field(default=None, repr=False)
+    _default: str | None = field(default=None, repr=False)
 
     # -- reads ----------------------------------------------------------------
 
@@ -287,7 +311,44 @@ class Gate:
 
     @property
     def default(self) -> str:
-        return str(self.view().get("base_ref") or "main")
+        """The repo's default branch from TRUSTED sources only (p4-r1 addendum): the
+        forge's repo metadata, cross-checked with the base checkout's `origin/HEAD`;
+        never the PR's own base ref, which its author chooses."""
+        if self._default is None:
+            forge = self.forge.default_branch(cwd=self.target.primary)
+            origin = self.host.origin_head()
+            if not forge or not origin:
+                raise StageFailed(
+                    "cannot establish the default branch (forge: "
+                    f"{forge or 'unknown'}, origin/HEAD: {origin or 'unset'}); run "
+                    "`git remote set-head origin --auto` in the base clone",
+                    code=2,
+                )
+            if forge != origin:
+                raise StageFailed(
+                    f"the forge's default branch {forge} is not origin/HEAD's {origin}; "
+                    "nothing done",
+                    code=2,
+                )
+            self._default = forge
+        return self._default
+
+    def require_default_base(self) -> None:
+        """Refuse a PR whose base is not the trusted default branch: a side branch could
+        carry the very profile the stage compares against."""
+        base = str(self.view().get("base_ref") or "")
+        if base != self.default:
+            raise StageFailed(
+                f"PR #{self.target.pr} is based on {base or 'unknown'}, not the default "
+                f"branch {self.default}; the DevOps stage merges only into it",
+                code=2,
+            )
+
+    def publish(self, tree: OpsTree) -> None:
+        """Push the ops branch (only once stage 3 rebased it onto the default branch, so it
+        never carries unmerged PR code), leased on the sha fr last pushed."""
+        tree.push(self.target.ops_branch, lease=self.state.pushed())
+        self.state.set_pushed(tree.head())
 
     def tree(self) -> OpsTree:
         tree = self.host.workspace(self.target.ops_branch)
@@ -342,16 +403,18 @@ class Gate:
         )
 
     def finish(self, tree: OpsTree, n: int, body: str, *, head: str | None = None) -> None:
-        """Write stage *n*'s audit line, commit the workspace's evidence on the ops branch
-        and push it; only then mark the stage done in the host state (p4-r11), so a failed
-        commit or push leaves it not done and a rerun retries it."""
+        """Write stage *n*'s audit line and commit the workspace's evidence on the ops
+        branch; from stage 3 on, push it too (p4-r11 correction: before the stage-3 rebase
+        the branch holds the UNMERGED PR head, which must never reach a base-repo branch).
+        Only then mark the stage done, so a failed commit or push leaves it to retry."""
         name = STAGE_BY_NUMBER[n].name
         self.audit_factory(tree.path, self.target.slug).record(
             n, f"DevOps stage {n} done: {name}", body
         )
         try:
             tree.commit_paths(["docs"], f"chore(ops): {self.target.slug} DevOps stage {n} — {name}")
-            tree.push(self.target.ops_branch)
+            if n >= FIRST_PUSHED_STAGE:
+                self.publish(tree)
         except Exception as exc:  # noqa: BLE001 — git's own words
             raise StageFailed(
                 f"cannot commit and push stage {n}'s record to {self.target.ops_branch}: {exc}"
@@ -378,16 +441,24 @@ def _ops(tree: OpsTree, plan_rel: str, phase: str) -> list[LoadedOp]:
 def head_entry_ids(tree: OpsTree, head: str, scope: str, slug: str) -> set[str]:
     """The ids of the journal entries the PR head itself carries: PR-controlled, so none
     of them closes anything inside the stage (p4-r2)."""
-    from fr.journal.model import JournalParseError, journal_path, parse_journal
+    from fr.journal.model import JournalParseError, journal_read_candidates, parse_journal
 
-    rel = journal_path(Path("."), scope, slug).as_posix()  # type: ignore[arg-type]
-    text = tree.show(head, rel)
-    if not text:
-        return set()
-    try:
-        return {e.id for e in parse_journal(text)}
-    except JournalParseError:
-        return set()
+    ids: set[str] = set()
+    # every location the evidence readers resolve, never only the live one (p4-r2 addendum)
+    for path in journal_read_candidates(Path("."), scope, slug):  # type: ignore[arg-type]
+        rel = path.as_posix()
+        text = tree.show(head, rel)
+        if not text:
+            continue
+        try:
+            ids |= {e.id for e in parse_journal(text)}
+        except JournalParseError as exc:  # never an empty exclusion: a refusal
+            raise StageFailed(
+                f"the PR head's journal {rel} cannot be read ({exc}); nothing it carries "
+                "can be told apart from the ops branch's own evidence",
+                code=2,
+            ) from exc
+    return ids
 
 
 def _closed(
@@ -489,8 +560,16 @@ def stage_1(gate: Gate) -> None:
     """Bring up (or reuse) the ops workspace, cut from the PR head; pre-merge ops."""
     t = gate.target
     head = valid_sha(str(gate.view(fresh=True).get("head_oid") or ""), f"PR #{t.pr}'s head")
+    gate.require_default_base()
     gate.host.fetch(t.feature)
     gate.host.fetch(gate.default)
+    archived = gate.host.changed_paths(f"origin/{gate.default}", head, [ARCHIVED_JOURNALS])
+    if archived:  # p4-r2 addendum: a feature PR has no business in the archive
+        raise StageFailed(
+            f"PR #{t.pr} adds or changes archived journals ({', '.join(archived)}); "
+            "nothing was brought up",
+            code=2,
+        )
     pinned = [f".devcontainer/{t.profile}", PROFILES_FILE]
     changed = gate.host.changed_paths(f"origin/{gate.default}", head, pinned)
     if changed:  # p4-r1: never bring up a privileged profile the PR itself rewrote
@@ -545,6 +624,7 @@ def stage_2(gate: Gate) -> None:
     state = str(view.get("state") or "")
     if state != "OPEN":
         raise StageFailed(f"PR #{t.pr} is {state or 'UNKNOWN'}, not open: nothing to merge")
+    gate.require_default_base()  # a base retargeted since stage 1
     head = gate.verified_head(tree)
     live = str(view.get("head_oid") or "")
     if live != head:
@@ -743,7 +823,7 @@ def stage_8(gate: Gate) -> None:
             raise StageFailed(f"`fr {shlex.join(argv)}` exited {code}")
         tree.commit_paths(["docs"], f"chore(ops): archive {t.slug}")
     try:
-        tree.push(t.ops_branch)
+        gate.publish(tree)
         if gate.forge.open_pr_for_head(t.repo, t.ops_branch) is None:
             title = f"chore: DevOps stage of {t.slug} (run {t.run.run})"
             body = (

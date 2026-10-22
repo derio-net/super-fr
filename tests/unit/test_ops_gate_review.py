@@ -40,7 +40,7 @@ def test_a_pr_modified_ops_profile_is_refused_before_anything_comes_up(ops_root:
     assert result.failed == 1 and result.code == 2
     assert ".devcontainer/ops/devcontainer.json" in result.why and "own PR" in result.why
     assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
-    diff = next(a for a, _ in host.calls if a[:1] == ["diff"])
+    diff = next(a for a, _ in host.calls if a[:1] == ["diff"] and ".devcontainer/ops" in a)
     assert diff[1:3] == ["origin/main", HEAD]
     assert ".devcontainer/ops" in diff and ".devcontainer/fr-profiles.yaml" in diff
 
@@ -236,16 +236,17 @@ def test_a_ready_refusal_surfaces_as_a_refusal(ops_root: Path) -> None:
 
 
 def test_a_failed_push_leaves_the_stage_not_done(ops_root: Path) -> None:
+    """The first push is stage 3's (p4-r11 correction): it fails, stage 3 stays not done."""
     gate, host, tree, forge, *_ = _gate(ops_root)
     tree.push_error = "rejected"
     result = run(gate)
-    assert result.failed == 1 and "rejected" in result.why
-    assert 1 not in _host(ops_root).stages()
+    assert result.failed == 3 and "rejected" in result.why
+    assert 3 not in _host(ops_root).stages() and {1, 2} <= _host(ops_root).stages()
     tree.push_error = None
     from fr.ops.gate import Gate
 
     again = run(Gate(gate.target, host, forge, FakePrompt(), [].append, _host(ops_root)))
-    assert again.ok and again.ran[0] == 1
+    assert again.ok and again.ran[0] == 3
 
 
 def test_a_stage_is_committed_then_pushed_then_marked(ops_root: Path) -> None:
@@ -259,4 +260,103 @@ def test_a_stage_is_committed_then_pushed_then_marked(ops_root: Path) -> None:
 
     gate.state.mark = mark  # type: ignore[method-assign]
     run(gate)
-    assert seen[0] == "mark 1 after push"
+    assert seen[0] == "mark 1 after commit"  # pre-merge: a local commit only
+    assert "mark 3 after push" in seen and "mark 8 after push" in seen
+
+
+# ---------------- p4-r2 (addendum): every journal location the readers resolve
+
+
+def _checkless(root: Path) -> None:
+    (root / PLAN / "ops.yaml").write_text(
+        "schema_version: 1\nops:\n  - {id: hand, summary: in a UI, phase: pre-merge}\n"
+    )
+
+
+def test_evidence_planted_in_the_archived_journal_closes_nothing(ops_root: Path) -> None:
+    from fr.journal.model import archived_journal_path
+
+    _checkless(ops_root)
+    record_op(ops_root, "p", op="hand", result="attested", phase="pre-merge",
+              attested_by="operator", reason="did it")  # fmt: skip
+    live = journal_path(ops_root, "plan", "p")
+    arch = archived_journal_path(ops_root, "plan", "p")
+    arch.parent.mkdir(parents=True, exist_ok=True)
+    live.rename(arch)  # the reader falls back to it
+    gate, host, tree, *_ = _gate(ops_root)
+    host.live, host.how["hand"], host.fail_apply = {"hand": "DONE"}, "attested", {"hand"}
+    tree.snapshot_head()
+    tree.head_files[arch.relative_to(ops_root).as_posix()] = arch.read_text()
+    result = run(gate)
+    assert result.failed == 1 and "hand" in result.why
+
+
+def test_a_pr_touching_the_archived_journals_is_refused(ops_root: Path) -> None:
+    gate, host, *_ = _gate(ops_root)
+    host.changed = ["docs/superpowers/implemented/journals/plans/p.md"]
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2
+    assert "implemented/journals/plans/p.md" in result.why
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_a_malformed_journal_at_the_head_is_a_refusal(ops_root: Path) -> None:
+    gate, host, tree, *_ = _gate(ops_root)
+    bad = "<!-- fr:journal kind=nope scope=plan id=x created=2026 -->\n### x\n"
+    tree.head_files["docs/superpowers/journals/plans/p.md"] = bad
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2 and "journal" in result.why
+    assert not any("apply" in a for a, _ in host.calls)
+
+
+# ----------------------------- p4-r1 (addendum): the default branch is trusted
+
+
+def test_a_pr_based_on_a_side_branch_is_refused(ops_root: Path) -> None:
+    from tests.unit.test_ops_gate import FakeForge
+
+    forge = FakeForge()
+    forge.pr["base_ref"] = "side"
+    gate, host, *_ = _gate(ops_root, forge=forge)
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2 and "side" in result.why
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_a_forge_and_origin_head_mismatch_is_refused(ops_root: Path) -> None:
+    gate, host, *_ = _gate(ops_root)
+    host.origin_default = "trunk"
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2
+    assert "trunk" in result.why and "main" in result.why
+
+
+def test_the_profile_comparison_uses_the_trusted_branch(ops_root: Path) -> None:
+    from tests.unit.test_ops_gate import FakeForge
+
+    forge = FakeForge()
+    forge.default, forge.pr["base_ref"] = "trunk", "trunk"
+    gate, host, *_ = _gate(ops_root, forge=forge)
+    host.origin_default = "trunk"
+    run(gate)
+    diff = next(a for a, _ in host.calls if a[:1] == ["diff"])
+    assert diff[1] == "origin/trunk"
+
+
+# ------------------------------- p4-r11 (correction): nothing pushed pre-merge
+
+
+def test_nothing_is_pushed_before_the_merge_and_the_rebase(ops_root: Path) -> None:
+    gate, host, tree, forge, *_ = _gate(ops_root)
+    assert run(gate).ok
+    calls = [k for k, _ in tree.calls]
+    assert "push" in calls
+    assert calls.index("push") > calls.index("rebase")
+    assert 1 in _host(ops_root).stages() and 2 in _host(ops_root).stages()
+
+
+def test_pushes_carry_a_lease_on_the_last_pushed_sha(ops_root: Path) -> None:
+    gate, host, tree, *_ = _gate(ops_root)
+    assert run(gate).ok
+    assert tree.leases[0] is None  # the first push creates the branch
+    assert tree.leases[1:] and all(lease == HEAD for lease in tree.leases[1:])

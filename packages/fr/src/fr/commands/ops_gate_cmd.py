@@ -72,9 +72,19 @@ class OpsWorkspace:
         git(["fetch", "--quiet", "origin"], self.path)
         self._tree.rebase_onto(new_base, upstream)
 
-    def push(self, branch: str) -> None:
-        # fr owns the ops branch, and stage 3 rebases it onto the merged default branch
-        self._tree.push(branch, force=True)
+    def push(self, branch: str, lease: str | None = None) -> None:
+        """fr owns the ops branch and stage 3 rebases it, so a later push replaces it, but
+        only while the remote is still at the sha fr last pushed (`--force-with-lease`);
+        the first push creates it, refusing a branch someone else already holds."""
+        from fr.triage.gitseam import GitError, git, git_ok
+
+        ref = f"refs/heads/{branch}"
+        if lease is None:
+            if git_ok(["ls-remote", "--exit-code", "origin", ref], self.path):
+                raise GitError(f"origin already has {branch} and fr never pushed it; refusing")
+            git(["push", "origin", f"HEAD:{ref}"], self.path)
+            return
+        git(["push", f"--force-with-lease={ref}:{lease}", "origin", f"HEAD:{ref}"], self.path)
 
 
 class HostCheckout:
@@ -102,6 +112,16 @@ class HostCheckout:
         out = git(["diff", "--name-only", "--end-of-options", base, head, "--", *paths],
                   self.primary)  # fmt: skip
         return [line for line in out.splitlines() if line]
+
+    def origin_head(self) -> str | None:
+        from fr.triage.gitseam import GitError, git
+
+        try:
+            out = git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], self.primary)
+        except GitError:
+            return None
+        name = out.strip()
+        return name.removeprefix("origin/") or None
 
     def workspace(self, branch: str) -> OpsWorkspace | None:
         from fr.isolation.types import load_state
