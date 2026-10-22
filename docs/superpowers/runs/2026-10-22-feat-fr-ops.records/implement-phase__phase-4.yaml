@@ -1,0 +1,123 @@
+schema_version: 10
+run: 2026-10-22-feat-fr-ops
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T1.S3, P4.T2.S1, P4.T2.S2, P4.T3.S1, P4.T3.S2, P4.T4.S1, P4.T4.S2]
+refactor:
+  P4.T2: "devops_brief/devops_gated are two short functions beside closeout_brief, chosen by one branch in pickup; nothing duplicated to clean"
+  P4.T3: "a new skill file plus one sentence and a listing entry; the mirrors are generated"
+  P4.T4: "docs and a new scenario script; the scenario's fake forge lives in its own driver, nothing shared to fold"
+journal:
+  - kind: decision
+    id: p4-gate-ports
+    phase: 4
+    title: The DevOps stage is a sequencer over host, workspace, forge, prompt and state ports
+    body: |
+      fr/ops/gate.py decides and runs nothing itself (STAGES is a table of number, name,
+      done-predicate, action). GateHost runs this fr in the base checkout (isolation
+      up/exec/verify-merge, fetch); OpsTree is the ops workspace (gitseam.Worktree git, and
+      this fr with the workspace as its checkout: trust, closeout outcome, gate pass,
+      archive); GateForge is the GhClient adapter; GatePrompt the operator's tty. Op stages
+      parse `fr ops status --json` via exec, skip ops the recorded evidence closes, confirm
+      the rest on the host and run `fr isolation exec ... fr ops apply <id> --plan <plan>
+      --yes [--yes-mutating]`, then require every op of the phase closed by recorded
+      evidence. Trust is (re-)checked on the host before every probing stage (1, 3, 4):
+      the stage-3 rebase moves the tree, so the grant must cover the merged revision.
+  - kind: decision
+    id: p4-status-ready
+    phase: 4
+    title: Stage 3's `ready:` check is a new `fr ops status --ready`
+    body: |
+      No CLI evaluated `ready:` alone (apply did, inline), so stage 3 runs
+      `fr ops status --phase post-merge --ready` through exec: each selected op's ready
+      probe, READY / NOT READY with its sanitised reason, exit 0 once every one passes.
+  - kind: decision
+    id: p4-stage5-owed
+    phase: 4
+    title: Stage 5 takes ran/na/owed per devops step; owed completes stage 5 and stage 6 refuses
+    body: |
+      The operator answers each devops Test Plan step `ran <evidence>`, `na <reason>` or
+      `owed <why>`, recorded through `fr closeout outcome`; a blank answer stops stage 5.
+      An owed step is recorded but (R14) does not close it, so stage 6's gate pass refuses:
+      that is the scenario's "stage-6 refusal while a [devops] step has no ran/n/a outcome".
+  - kind: discovery
+    id: p4-confirm-read-nothing
+    phase: 4
+    title: TtyPrompt.confirm read nothing back from a real terminal (phase 2 defect)
+    body: |
+      confirm opened the tty as a text "r+" stream and readline() after its own write
+      returned "" on a pty, so every terminal confirmation (apply without --yes, attest,
+      and the gate's merge) read as "no". Shown red with a pty test, fixed by one fd-level
+      line reader shared with the new `ask` (stage 5). Commit 9d3b1edf.
+  - kind: discovery
+    id: p4-isolated-python
+    phase: 4
+    title: Every `python -m fr` fr starts runs isolated (-I)
+    body: |
+      Coordinator security finding (HIGH). `[sys.executable, "-m", "fr"]` with a PR
+      checkout as cwd put the checkout first on sys.path, so a planted top-level `fr/`
+      package ran instead of fr, with the operator's credentials. All five call sites
+      (gitseam run_fr/run_this_fr, isolation gc, debt archive, the driver's re-exec) now
+      pass `-I`; editable/uv installs still resolve (site-packages .pth files are still
+      processed). Red first: a planted fr/__init__.py writing a marker is not imported, and a
+      tripwire test refuses a bare `-m fr`. Commit a4dcf0cb.
+  - kind: discovery
+    id: p4-merge-head-pinned
+    phase: 4
+    title: Stage 2 merges only the head stage 1 verified
+    body: |
+      Coordinator security finding (MEDIUM). Stage 2 merged the LIVE head_oid, so a push
+      after stage 1 would merge an unverified head. Stage 1 now records the head it cut the
+      workspace from (and refuses a reused workspace not cut from the live head); stage 2
+      refuses (exit 2, nothing merged) when the live head differs, naming the way to redo
+      stage 1, and passes the RECORDED sha to pr_merge; stage 3 rebases from it.
+      Commit 6746fe11; where it is recorded moved in p4-gate-state-host-side.
+  - kind: discovery
+    id: p4-gate-state-host-side
+    phase: 4
+    title: The DevOps stage's state lives host-side; journal decisions are audit only
+    body: |
+      Coordinator security finding (HIGH), R15 amended. The ops workspace is cut from the
+      PR, so its plan journal is PR-controlled: a PR could pre-commit gate-stage-1..5 to
+      skip the pre-merge ops or forge the verified head. Stage completion and the stage-1
+      head now live in HostGateState at $XDG_STATE_HOME/fr/ops-gate/<repo-key>/<run>.json
+      (FR_OPS_GATE_DIR overrides; trust's atomic 0600 writer and repo key); gate-stage-<n>
+      decisions are still written, never read. A recorded or forge sha must be 40/64 hex
+      (exit 2 otherwise); stage 3 refuses when the merged PR's head is not the recorded
+      one; rebase, merge-base and fetch put --end-of-options before every revision. Red
+      first: planted journal stages skip nothing, a planted head is ignored, `--exec=x` is
+      refused, the argv carries --end-of-options. Commit 03cacb40.
+  - kind: discovery
+    id: p4-red-first-caveat
+    phase: 4
+    title: The sequencer and its first tests were written together (P4.T1)
+    body: |
+      gate.py was drafted before test_ops_gate.py; it was moved aside and the new tests
+      run red (import error) before it was restored, so the suite was shown to need the
+      module but no individual test was shown red against a wrong implementation. Every
+      later test (the CLI, --ready, rebase_onto, ask/confirm, the DevOps brief, the three
+      security fixes) was written and shown red before its fix.
+  - kind: discovery
+    id: p4-scenario-in-process-forge
+    phase: 4
+    title: The gate-stage scenario fakes the forge in process; every other fr is real
+    body: |
+      `fr ops gate` builds its forge client (and gate pass, archive and verify-merge build
+      theirs) in process, so the scenario's driver runs the candidate's python, swaps those
+      factories, the prompt and the interactivity seam, and routes the stage's host `fr`
+      calls in process; `fr isolation exec` and the `fr ops` it runs are real processes in a
+      host-worktree workspace. origin is a local bare repo at file://localhost/.../
+      derio-net/fixture.git; the fake merge moves its main. Passed locally against the
+      worktree's venv fr; CI runs it through tests/integration/test_scenarios.py.
+  - kind: discovery
+    id: p4-explainer-html-owed
+    phase: 4
+    title: 01-fr-goal.html regeneration is owed to the orchestrator
+    body: |
+      docs/explainers/01-fr-goal.md gained two paragraphs (manual operations in §8, the
+      DevOps brief in §9); the renderer is not reachable from this sandbox, so the .html
+      was not regenerated and the published page is behind until it is.
+resolves: []
+evidence:
+  tests: ci
