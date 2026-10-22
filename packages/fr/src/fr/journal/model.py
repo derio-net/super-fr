@@ -983,6 +983,15 @@ def _handoff_line(entry: JournalEntry, effective_state: str | None = None) -> st
     return f"- {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
 
 
+OP_TRUST_ID_RE = re.compile(r"^op-trust-(\d+)$")
+"""The id of an `fr ops trust` decision (`fr.ops.trust`, spec 2026-10-22-fr-ops R19)."""
+
+
+def _is_op_record(entry: JournalEntry) -> bool:
+    """An `op` entry, or an `op-trust-<n>` decision (`fr.ops.trust`)."""
+    return entry.kind == "op" or (entry.kind == "decision" and bool(OP_TRUST_ID_RE.match(entry.id)))
+
+
 def compose_handoff(
     entries: list[JournalEntry],
     *,
@@ -1079,6 +1088,12 @@ def compose_handoff(
             speaks_for = e.resolves if e.resolves is not None else e.id
             renders_full = speaks_for in still_open
             section = open_findings
+        elif _is_op_record(e):
+            # `fr ops` evidence and trust (spec 2026-10-22-fr-ops R7, R19): written
+            # unphased, many per run, and machine state rather than context a phase
+            # executor acts on — rendered in full they would land in every handoff.
+            renders_full = False
+            section = context
         else:
             # Dependency rule, deliberately unchanged: decisions and
             # discoveries are never "closed" and carry forward value.

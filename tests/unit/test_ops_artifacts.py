@@ -325,3 +325,24 @@ def test_journal_add_refuses_an_op_entry(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code != 0
     assert "fr ops" in result.output
     assert not journal_path(tmp_path, "plan", "p").exists()
+
+
+def test_a_handoff_collapses_op_and_op_trust_entries(tmp_path: Path) -> None:
+    """p1-r7: op evidence and trust decisions are written unphased; rendered in full
+    they would land in every phase's handoff. They collapse to one line each."""
+    from fr.journal.model import compose_handoff
+    from fr.ops.trust import record_trust
+
+    (tmp_path / "docs/superpowers/plans/p").mkdir(parents=True)
+    record_trust(tmp_path, "p", {"a": "0" * 64})
+    path = journal_path(tmp_path, "plan", "p")
+    append_journal_entry(path, "p", _op_entry())
+    decision = JournalEntry(
+        kind="decision", scope="plan", id="d1", created="2026-10-22T10:00:00+00:00",
+        title="a real decision", body="keep me in full",
+    )  # fmt: skip
+    append_journal_entry(path, "p", decision)
+    text = compose_handoff(parse_journal(path.read_text()), phase=2, scope="plan", slug="p")
+    assert "0" * 64 not in text and "result: done" not in text
+    assert "- op-trust-1 · decision" in text and "- op-a-1 · op" in text
+    assert "keep me in full" in text

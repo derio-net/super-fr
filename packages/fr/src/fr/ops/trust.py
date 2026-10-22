@@ -13,12 +13,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr.journal.model import (
+    OP_TRUST_ID_RE,
     JournalEntry,
     append_journal_entry,
     journal_now,
@@ -27,7 +27,7 @@ from fr.journal.model import (
 )
 from fr.ops.load import LoadedOp, OpsConfig
 
-TRUST_ID_RE = re.compile(r"^op-trust-(\d+)$")
+TRUST_ID_RE = OP_TRUST_ID_RE
 IDENTITY_PREFIX = "identity:"
 PROBE_FIELDS = ("check", "na_if", "ready", "escalate", "apply", "undo")
 """The op fields whose text runs (or is offered to run), shown by `fr ops trust`."""
