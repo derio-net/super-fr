@@ -157,3 +157,4 @@ gate: fr-ops-live-first-run=devops
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-10-22-fr-ops | `derio-net/super-fr` | `2026-10-22-fr-ops` | — |

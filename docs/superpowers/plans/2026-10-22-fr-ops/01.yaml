@@ -1,0 +1,216 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Op model, carriers, evidence and `fr ops status` (R1, R2, R3, R5, R7, R9,
+    R17)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - fr-ops-model-carriers
+  - fr-ops-status
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/ops/**
+  - packages/fr/src/fr/commands/ops_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/journal/model.py
+  - packages/fr/src/fr/journal/*.py
+  - packages/fr/src/fr/record/model.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/journal_op.py
+  - packages/fr/src/fr/artifacts/ops_kind.py
+  - packages/fr/src/fr/plan_ops.py
+  - docs/superpowers/journals/**
+  - tests/unit/test_ops_*.py
+  - tests/unit/test_migration_*.py
+  - tests/unit/test_validate_artifacts.py
+  - tests/unit/test_tripwire_artifact_kinds.py
+  - tests/unit/fixtures/ops/**
+  - .changes/feat-fr-ops.yaml
+  - docs/acceptance/*
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Walking-skeleton smoke — an empty `fr ops` group reaches CI
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_ops_cli.py::test_ops_group_is_registered asserting
+      `CliRunner().invoke(app, ["ops", "--help"])` exits 0 and lists `status`.
+      Run `uv run pytest tests/unit/test_ops_cli.py -q --no-cov` and see it fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/commands/ops_cmd.py with `ops_app = typer.Typer(
+      help="Manual operations: check, apply, attest (spec 2026-10-22-fr-ops).",
+      no_args_is_help=True)` and a stub `status` command; register it in fr/cli.py the way
+      `gate_app` is registered. Do NOT add `ops` to fr.artifacts.trigger.READ_ONLY_COMMANDS
+      (R17: the whole group is gated). Add `.changes/feat-fr-ops.yaml`
+      (`bump: minor`, `summary: fr ops — checkable, runnable manual operations and the
+      interactive DevOps gate stage`). Test passes; commit.
+- number: 2
+  title: The op model and its legacy reader (R1, R2)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_ops_model.py — `Op` requires id/summary/phase; accepts every
+      optional R1 field (needs, check incl. the reserved `proof`, na_if, apply, undo as a
+      command or `{none: <reason>}`, mutating, interactive, side_effects, identities, ready,
+      disables, escalate, vacuous_if, commands, verify); refuses an unknown key naming it.
+      `LegacyOp` accepts frank's layer/app/plan/when/why_manual/status plus any R1 field,
+      defaults summary from why_manual and phase to post-merge, and maps `status: done`
+      to a `legacy_done` flag.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/ops/__init__.py and ops/model.py — frozen pydantic models,
+      extra="forbid" on `Op`, `LegacyOp.to_op()` returning `(Op, legacy_done: bool)`.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR — share the R1 field definitions between `Op` and `LegacyOp` (one mixin), tests green.
+- number: 3
+  title: Carriers — ops.yaml, step-text blocks, runbook selection (R2)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_ops_load.py with fixture plans under tests/unit/fixtures/ops/:
+      ops.yaml only; a phase file whose step text holds an indented ```yaml block starting
+      `# manual-operation` (dedented and read); a step whose prose line merely starts with
+      a backtick fence mid-sentence must not swallow the following block (fence tracking);
+      the same id in both carriers -> error naming both files and lines; malformed YAML ->
+      error naming file and line; `.fr/ops.yaml` runbook ops are absent from the default
+      selection, present with `runbook=True`, and pulled in when a plan op `needs` them;
+      a plan op shadows a runbook op of the same id with a warning.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/ops/load.py — `load_ops(plan_dir, repo_root, *, runbook=False,
+      ids=()) -> OpSet` (ops in carrier order, each with its source path/line and legacy_done);
+      `.fr/ops.yaml` parsed by a small `OpsConfig` model (runbook path, identities).
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR — reuse fr/spec.py's fence regex rather than a second copy; tests green.
+- number: 4
+  title: The `ops` artifact kind and journal kind 3 (R17)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests — `fr validate artifacts` validates `docs/superpowers/plans/*/ops.yaml`
+      (schema_version 1, every op parses) through a registered `ops` ArtifactKind;
+      journal current_version == 3 and a version-2 journal migrates stamp-only
+      (assert the chain `[2, 3]` like the existing journal tests); `JournalKind` contains
+      `op`; `fr.record.model.JournalItem` refuses `kind: op`; `fr journal check` ignores op
+      entries; `fr plan self-review` refuses a plan with ops whose `fr_version` floor is
+      below the predicted release (5.27.0 base + minor = 5.28.0; read the base from
+      packages/fr/pyproject.toml and compute, do not hard-code a guess) — name the floor
+      in the message.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: registry `ArtifactKind(name="ops", current_version=1, locator=
+      "docs/superpowers/plans/*/ops.yaml", ...)` with a validator in structure.py
+      (fr/artifacts/ops_kind.py if it grows); journal current_version 2 -> 3 with
+      `fr.artifacts.journal_op` (stamp-only SchemaMigration, imported from
+      fr/artifacts/__init__.py); `op` added to JournalKind; record JournalItem.kind =
+      JournalKind minus "op"; self-review floor check in plan_ops.py. Then run
+      `uv run fr migrate artifacts --yes` and commit the restamped journals
+      (.claude/rules/artifact-versioning.md: a moved current_version migrates this repo in
+      the same PR).
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR — keep the op body key set in one constant (`OP_BODY_KEYS`) used by the writer and the fold; tests green.
+- number: 5
+  title: Evidence fold and `fr ops status` (R3, R5, R7, R9)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_ops_engine.py over an injected fake Runner and a fake journal:
+      each state — DONE (checked), DONE (attested), DONE (legacy), OPEN with reason, N/A
+      (na_if exit 0), UNVERIFIABLE, CANNOT-VERIFY (exit 127; unreadable identity ref);
+      `check: proof` DONE only from a `result: proof` entry; per-identity runs, all must
+      pass, the failing identity named; identity env values never appear in the report;
+      `disables` makes a failing op OPEN with the consequence and never N/A; a passing
+      `escalate` on a non-DONE op yields ESCALATE; latest journal entry wins; runbook-op
+      evidence is read from live AND archived plan journals.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: fr/ops/engine.py (`Runner` protocol, `order()` topological sort refusing
+      cycles/unknown ids, `status()`), fr/ops/evidence.py (fold of `op` entries; writer
+      appending through fr journal's engine — used by P2), fr/ops/identity.py (resolves
+      `{from: '<cmd>'}` refs live).
+  - id: P1.T5.S3
+    text: |-
+      RED then GREEN: CLI `fr ops status [--plan] [--runbook] [--phase] [<op-id>] [--json]
+      [--explain]` — `--plan` defaults to the plan of the run whose branch is the current
+      branch, refusing (exit 2) with none; exit 0 / 1 / 3 / 2 per R3; a warning line when
+      not in an ops profile (stub `in_ops_profile()` returning False until P2); `--explain`
+      prints `vacuous_if`. Tests in tests/unit/test_ops_cli.py.
+  - id: P1.T5.S4
+    text: |-
+      REFACTOR — one renderer for text and JSON rows (`StatusRow`); tests green; run ruff format, ruff check, mypy over packages/fr/src, then the full suite LAST into a host-visible log.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
