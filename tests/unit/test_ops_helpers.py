@@ -70,10 +70,13 @@ def test_an_empty_out_is_a_failure(repo: Path) -> None:
 
 def test_in_is_a_0600_file_outside_the_repo_holding_stdin(repo: Path, tmp_path: Path) -> None:
     target = repo / "t.enc"
-    probe = (
-        'test "$(stat -f %Lp {in} 2>/dev/null || stat -c %a {in})" = 600 && '
-        "cmp -s {in} " + str(tmp_path / "expected") + " && echo C > {out}"
+    # The mode is read in Python: `stat -f` is filesystem status on GNU coreutils, so a
+    # BSD/GNU `stat` fallback chain never reaches its second arm on Linux.
+    mode_is_0600 = (
+        f"{sys.executable} -c 'import os,sys; "
+        "sys.exit(os.stat(sys.argv[1]).st_mode & 0o777 != 0o600)' {in}"
     )
+    probe = mode_is_0600 + " && cmp -s {in} " + str(tmp_path / "expected") + " && echo C > {out}"
     (tmp_path / "expected").write_bytes(PLAIN)
     assert helpers.seal(probe, target, PLAIN, repo_root=repo) == 0
 
