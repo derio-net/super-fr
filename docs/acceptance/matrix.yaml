@@ -4083,13 +4083,19 @@ rows:
       - super-fr:packages/fr-opencode-plugin/test/segment.test.ts
       int:
       - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_tui_renders_the_delivered_status_line
-    status: walk-owed
-    notes: 'The TUI entry ships inside the plugin directory and renders fr-statusline-segment.sh:
-      segment.test.ts (CI) plus test_opencode_tui_renders_the_delivered_status_line,
-      which starts the real TUI on a pty in CI. verify: live - a session in another
-      repo, and one outside any repo showing none, are Test Plan item 5, post-merge
-      at the Tester gate.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: the delivered TUI rendered the fr segment
+      (real pty test, 1 passed in 31.59s); the segment named fr/branch/worktree for
+      the archive workspace and none outside a repo (Test Plan step 5).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3: test_opencode_tui_renders_the_delivered_status_line
+        passed; segment --cwd workspace shows fr/workspace, --cwd /tmp shows none'
   - id: opencode-2-push-guard
     capability: OpenCode adaptation
     acceptance: On OpenCode 2.x, a git push from a merged- or closed-PR branch is refused
