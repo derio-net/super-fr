@@ -228,7 +228,6 @@ acceptance:
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R1
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R2
   status: not-implemented
-  verify: ci
 - id: fr-ops-status
   capability: fr ops
   acceptance: fr ops status reports every op DONE (checked or attested), OPEN with its reason, N/A, UNVERIFIABLE
@@ -257,7 +256,6 @@ acceptance:
   origin:
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R6
   status: not-implemented
-  verify: ci
 - id: fr-ops-evidence-attest
   capability: fr ops
   acceptance: Op evidence and operator attestations are durable journal entries visible to fr ops status
@@ -267,7 +265,6 @@ acceptance:
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R8
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R17
   status: not-implemented
-  verify: ci
 - id: fr-ops-seal-no-plaintext
   capability: fr ops
   acceptance: fr ops seal never leaves plaintext in the repo or at the target when encryption fails or
@@ -275,7 +272,6 @@ acceptance:
   origin:
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R10
   status: not-implemented
-  verify: ci
 - id: fr-ops-testplan-tags
   capability: Test Plan
   acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; an unknown tag is refused
@@ -283,7 +279,6 @@ acceptance:
   origin:
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R12
   status: not-implemented
-  verify: ci
 - id: fr-ops-deliver-section
   capability: deliver
   acceptance: The delivered PR body carries a Manual operations section rendered from recorded evidence,
@@ -291,7 +286,6 @@ acceptance:
   origin:
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R13
   status: not-implemented
-  verify: ci
 - id: fr-ops-devops-gate-hold
   capability: gates
   acceptance: An un-passed gate:devops holds the PR from the driver's merge, and fr gate pass --gate devops
@@ -299,7 +293,6 @@ acceptance:
   origin:
   - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R14
   status: not-implemented
-  verify: ci
 - id: fr-ops-gate-stage
   capability: DevOps stage
   acceptance: fr ops gate --run runs pre-merge ops, a confirmed merge, readiness, post-merge ops, devops
