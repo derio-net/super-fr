@@ -27,7 +27,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fr.triage.errors import TriageError
 
@@ -54,18 +54,23 @@ def _run(
     env: dict[str, str] | None = None,
     stdin: str | None = None,
     coded: bool = False,
+    passthrough: Literal["none", "stderr", "all"] = "none",
 ) -> Any:
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
     `GitError` with the command's own words. *env* is laid over the process environment;
     *stdin* is fed to the command (text mode only). *coded*: any return code is an answer,
-    `(code, stdout + stderr)`, never a raise (text mode only)."""
+    `(code, stdout + stderr)`, never a raise (text mode only). *passthrough* leaves streams
+    with the operator instead of capturing them: `stderr` (stdout is still captured), or
+    `all` (nothing is, for a command that asks on the terminal)."""
     full_env = {**os.environ, **env} if env else None
+    pipe = subprocess.PIPE
     try:
         result = subprocess.run(
             argv,
             cwd=cwd,
-            capture_output=True,
+            stdout=None if passthrough == "all" else pipe,
+            stderr=pipe if passthrough == "none" else None,
             text=text,
             check=False,
             timeout=timeout,
@@ -951,13 +956,8 @@ def run_this_fr(args: list[str], cwd: Path, *, terminal: bool = False) -> tuple[
     operator's and nothing is captured (`(exit, "")`), for a command that asks there.
     The DevOps stage's host commands (spec 2026-10-22-fr-ops R15)."""
     argv = [sys.executable, "-I", "-m", "fr", *args]
-    try:
-        if terminal:
-            return subprocess.run(argv, cwd=cwd, check=False).returncode, ""
-        done = subprocess.run(argv, cwd=cwd, check=False, stdout=subprocess.PIPE, text=True)
-    except OSError as exc:
-        raise GitError(f"cannot run fr: {exc}") from exc
-    return done.returncode, done.stdout or ""
+    code, out = _run(argv, cwd, coded=True, passthrough="all" if terminal else "stderr")
+    return code, "" if terminal else out
 
 
 def run_publish(argv: list[str], cwd: Path, timeout: float) -> str | None:

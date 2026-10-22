@@ -155,8 +155,19 @@ def _commit(root: Path, name: str, msg: str) -> str:
     ).stdout.strip()
 
 
-def test_rebase_onto_replays_only_the_ops_branch_commits(tmp_path: Path) -> None:
+def test_rebase_onto_replays_only_the_ops_branch_commits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from fr.triage.gitseam import Worktree
+
+    # `git rebase` writes commits: CI runners have no global identity to lend it.
+    for var, value in (
+        ("GIT_COMMITTER_NAME", "t"),
+        ("GIT_COMMITTER_EMAIL", "t@t"),
+        ("GIT_AUTHOR_NAME", "t"),
+        ("GIT_AUTHOR_EMAIL", "t@t"),
+    ):
+        monkeypatch.setenv(var, value)
 
     root = tmp_path / "g"
     root.mkdir()
