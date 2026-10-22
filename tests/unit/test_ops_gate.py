@@ -271,7 +271,7 @@ def test_preview_lists_the_eight_stages_and_changes_nothing(ops_root: Path) -> N
         assert f" {n}. " in text
     assert "[next] 1." in text and "nothing done" in text
     assert host.calls == [] and tree.calls == [] and prompt.asked == []
-    assert [c for c in forge.calls] == []
+    assert forge.calls == []
 
 
 def test_preview_marks_recorded_stages_done(ops_root: Path) -> None:
@@ -361,7 +361,7 @@ def test_pre_merge_evidence_is_never_pushed_to_the_pr_head(ops_root: Path) -> No
     first_push = next(i for i, (k, _) in enumerate(tree.calls) if k == "push")
     rebase = next(i for i, (k, _) in enumerate(tree.calls) if k == "rebase")
     assert first_push > rebase  # nothing published before the merge and the rebase
-    assert not any(a[:1] == ["push"] or "feat/x" in a and a[:1] == ["push"] for a, _ in host.calls)
+    assert not any("push" in a for a, _ in host.calls)
 
 
 def test_each_stage_commits_its_evidence_on_the_ops_branch(ops_root: Path) -> None:
