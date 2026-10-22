@@ -11,6 +11,7 @@ terminal attached (`probe.run_interactive`) and so needs one.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -66,13 +67,32 @@ class TtyPrompt:
         return is_interactive()
 
     def confirm(self, text: str) -> bool:
+        return self._line(f"{text}\nProceed? [y/N] ").lower() in ("y", "yes")
+
+    def ask(self, text: str) -> str:
+        """One line the operator types at the terminal ("" when there is none)."""
+        return self._line(f"{text}\n> ")
+
+    def _line(self, question: str) -> str:
+        """Ask on the tty and read one line back, unbuffered at the descriptor (a text
+        "r+" stream on a tty read nothing back after its own write)."""
         try:
-            with open(self.tty, "r+") as term:
-                term.write(f"{text}\nProceed? [y/N] ")
-                term.flush()
-                return term.readline().strip().lower() in ("y", "yes")
+            fd = os.open(self.tty, os.O_RDWR | os.O_NOCTTY)
         except OSError:
-            return False
+            return ""
+        try:
+            os.write(fd, question.encode())
+            got = bytearray()
+            while not got.endswith(b"\n"):
+                chunk = os.read(fd, 1)
+                if not chunk:
+                    break
+                got += chunk
+            return got.decode("utf-8", "replace").strip()
+        except OSError:
+            return ""
+        finally:
+            os.close(fd)
 
 
 class Record(Protocol):

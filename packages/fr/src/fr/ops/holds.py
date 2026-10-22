@@ -13,6 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.ops.testplan import steps_gated
+from fr.spec import Step, StepGate
+
 if TYPE_CHECKING:
     from fr.run.model import RunState
 
@@ -44,13 +47,9 @@ def _step_outcomes(repo_root: Path, spec: Path) -> dict[str, str]:
 def devops_blockers(repo_root: Path, state: RunState) -> list[str]:
     """One line per thing holding `state`'s devops gate; `[]` when nothing does.
     Raises `fr.ops.load.OpsLoadError` when the plan's ops cannot be read."""
-    from fr.archive import outcome_id
     from fr.ops.evidence import JournalEvidence, recorded_close, recorded_state
     from fr.ops.load import load_ops
-    from fr.ops.testplan import steps_gated
-    from fr.requirements import run_spec
-    from fr.spec import test_plan_steps
-    from fr.verification.exit import run_exit, run_plan_dir
+    from fr.verification.exit import run_plan_dir
 
     out: list[str] = []
     plan_dir = run_plan_dir(repo_root, state)
@@ -62,15 +61,29 @@ def devops_blockers(repo_root: Path, state: RunState) -> list[str]:
             ev = journal.latest(lo.op.id, runbook=False)
             if recorded_close(lo, ev) is None:
                 out.append(f"op {lo.op.id} [{lo.op.phase}]: {recorded_state(lo, ev)}")
+    for step, kind in gated_steps(repo_root, state, "devops"):
+        if kind == "discovery":  # `ran` or `n/a` (R14); `owed` does not close it
+            continue
+        why = "recorded owed, which does not close it" if kind else "no recorded outcome"
+        out.append(f"Test Plan step {step.n} (devops): {why} — {step.text}")
+    return out
+
+
+def gated_steps(repo_root: Path, state: RunState, gate: StepGate) -> list[tuple[Step, str | None]]:
+    """The run's Test Plan steps whose effective gate is `gate`, each with the kind of its
+    recorded outcome (`discovery` for ran and n/a, `owed`), or `None` when it has none."""
+    from fr.archive import outcome_id
+    from fr.requirements import run_spec
+    from fr.spec import test_plan_steps
+    from fr.verification.exit import run_exit
+
     spec_rel = run_spec(state)
     spec = _spec_file(repo_root, spec_rel) if spec_rel else None
-    if spec is not None:
-        gates = run_exit(repo_root, state).gates
-        outcomes = _step_outcomes(repo_root, spec)
-        for step in steps_gated(test_plan_steps(spec.read_text()), gates, "devops"):
-            kind = outcomes.get(outcome_id(step.n))
-            if kind == "discovery":  # `ran` or `n/a` (R14); `owed` does not close it
-                continue
-            why = "recorded owed, which does not close it" if kind else "no recorded outcome"
-            out.append(f"Test Plan step {step.n} (devops): {why} — {step.text}")
-    return out
+    if spec is None:
+        return []
+    gates = run_exit(repo_root, state).gates
+    outcomes = _step_outcomes(repo_root, spec)
+    return [
+        (step, outcomes.get(outcome_id(step.n)))
+        for step in steps_gated(test_plan_steps(spec.read_text()), gates, gate)
+    ]

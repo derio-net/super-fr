@@ -927,11 +927,36 @@ class Worktree:
         git(["commit", "--no-verify", "--quiet", "-m", message], self.path)
         return self.head()
 
+    def rebase_onto(self, new_base: str, upstream: str) -> None:
+        """Replay only the commits after *upstream* onto *new_base* (`git rebase --onto`):
+        the DevOps stage's ops branch, cut from a PR head that was then squash-merged,
+        keeps only its own evidence commits (spec 2026-10-22-fr-ops R15). A conflict
+        aborts the rebase and raises, leaving the branch where it was."""
+        if git_ok(["rebase", "--onto", new_base, upstream], self.path):
+            return
+        git_ok(["rebase", "--abort"], self.path)
+        raise GitError(f"`git rebase --onto {new_base} {upstream}` failed in {self.path}")
+
     def push(self, branch: str, *, force: bool = False) -> None:
         """Push HEAD to *branch*; *force* overwrites it, for a branch fr owns (the
         driver's export branch, which a pass that died may have left behind)."""
         argv = ["push", *(["--force"] if force else []), "origin", f"HEAD:refs/heads/{branch}"]
         git(argv, self.path)
+
+
+def run_this_fr(args: list[str], cwd: Path, *, terminal: bool = False) -> tuple[int, str]:
+    """THIS `fr` (`python -m fr` of the running interpreter) in *cwd*: `(exit, stdout)`,
+    its stderr passed through to the operator. *terminal*: every stream stays the
+    operator's and nothing is captured (`(exit, "")`), for a command that asks there.
+    The DevOps stage's host commands (spec 2026-10-22-fr-ops R15)."""
+    argv = [sys.executable, "-m", "fr", *args]
+    try:
+        if terminal:
+            return subprocess.run(argv, cwd=cwd, check=False).returncode, ""
+        done = subprocess.run(argv, cwd=cwd, check=False, stdout=subprocess.PIPE, text=True)
+    except OSError as exc:
+        raise GitError(f"cannot run fr: {exc}") from exc
+    return done.returncode, done.stdout or ""
 
 
 def run_publish(argv: list[str], cwd: Path, timeout: float) -> str | None:

@@ -298,6 +298,28 @@ def _prompt() -> TtyPrompt:
     return TtyPrompt()
 
 
+def _report_ready(sel: Selection, runner: Any) -> int:
+    """R11, for the DevOps stage's stage 3: each selected op's `ready:` probe (no identity
+    variables, like `apply`'s), READY or NOT READY with its reason; 0 when all pass."""
+    from fr.ops.engine import runner_secrets
+    from fr.ops.mask import sanitise_reason
+
+    probed = [lo for lo in sel.ordered if lo.op.ready]
+    if not probed:
+        typer.echo("no selected op declares `ready:`")
+        return 0
+    failed = 0
+    for lo in probed:
+        rc, line = runner(lo.op.ready, {})
+        if rc == 0:
+            typer.echo(f"READY      {lo.op.id}")
+            continue
+        failed += 1
+        why = sanitise_reason(line, runner_secrets(runner)) or f"exit {rc}"
+        typer.echo(f"NOT READY  {lo.op.id}: {why}")
+    return 1 if failed else 0
+
+
 @ops_app.command("status")
 def status(
     op_id: Annotated[str | None, typer.Argument(help="One op to report.")] = None,
@@ -307,6 +329,13 @@ def status(
     as_json: Annotated[bool, typer.Option("--json", help="One JSON row per op.")] = False,
     explain: Annotated[
         bool, typer.Option("--explain", help="Show what a vacuous probe would look like.")
+    ] = False,
+    ready: Annotated[
+        bool,
+        typer.Option(
+            "--ready",
+            help="Only run each selected op's `ready:` probe: exit 0 once every one passes.",
+        ),
     ] = False,
 ) -> None:
     """Report each selected op's state, running its probes. Writes nothing.
@@ -323,6 +352,8 @@ def status(
     _require_trust("status", sel, runbook)
 
     runner, identities, journal = _runners(sel)
+    if ready:
+        raise typer.Exit(code=_report_ready(sel, runner))
     rows = op_status(sel.ordered, runner=runner, identities=identities, journal=journal)
     payload = [r.as_row() for r in rows]
     if as_json:
@@ -568,3 +599,10 @@ def scratch(
     from fr.ops import helpers
 
     raise typer.Exit(code=helpers.scratch(cleanup, command))
+
+
+# --- the DevOps stage (R15): its own module, registered here ------------------------
+
+from fr.commands.ops_gate_cmd import gate as _gate  # noqa: E402
+
+ops_app.command("gate")(_gate)

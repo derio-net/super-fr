@@ -53,6 +53,26 @@ def _cursors(root: Path) -> list[Path]:
     return [p for d in dirs if d.is_dir() for p in sorted(d.glob("*.yaml"))]
 
 
+class RunLookupError(Exception):
+    """A named run this checkout does not hold, or cannot read."""
+
+
+def find_run(root: Path, run: str) -> RunState:
+    """Run *run*'s cursor, live or archived (R14: archived runs count); `RunLookupError`
+    naming why when it is absent or unreadable. `fr ops gate` reads it too."""
+    from fr.run.model import RunStateError, parse_run_state
+
+    for path in _cursors(root):
+        if path.stem == run:
+            try:
+                return parse_run_state(path.read_text())
+            except (RunStateError, OSError) as exc:
+                raise RunLookupError(
+                    f"cannot read run {run!r} ({path.relative_to(root)}): {exc}"
+                ) from exc
+    raise RunLookupError(f"no run {run!r} in this checkout (live or archived)")
+
+
 def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
     """The run whose devops evidence the pass folds: `--run` (live or archived), else the
     one run whose `branch` is the PR's head ref; `None` when none is. Several matches, or
@@ -60,13 +80,10 @@ def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
     from fr.run.model import RunStateError, parse_run_state
 
     if run is not None:
-        for path in _cursors(root):
-            if path.stem == run:
-                try:
-                    return parse_run_state(path.read_text())
-                except (RunStateError, OSError) as exc:
-                    _refuse(f"cannot read run {run!r} ({path.relative_to(root)}): {exc}")
-        _refuse(f"no run {run!r} in this checkout (live or archived)")
+        try:
+            return find_run(root, run)
+        except RunLookupError as exc:
+            _refuse(str(exc))
     found = []
     for path in _cursors(root):
         try:
