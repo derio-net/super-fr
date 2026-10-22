@@ -666,7 +666,7 @@ def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
         verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
     except (AcceptanceError, SectionError) as e:
-        return f"Not available: {e}"
+        return _unavailable(repo_root, e)
     lines = pre_merge_owed_lines(matrix, spec_ref, verification, state.run, state.branch)
     if not lines:
         return "None."
@@ -730,9 +730,19 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
         verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
     except (AcceptanceError, SectionError) as e:
-        return f"Not available: {e}"
+        return _unavailable(repo_root, e)
     lines = post_merge_owed_lines(matrix, spec_ref, verification)
     return "\n".join(lines) if lines else "None."
+
+
+def _unavailable(repo_root: Path, e: Exception) -> str:
+    """`Not available: <e>` with every path made repo-relative: a PR body is public and
+    must never carry the operator's absolute local path (p3-r5)."""
+    text = str(e)
+    roots = {str(repo_root), str(repo_root.resolve())}
+    for root in sorted(roots, key=len, reverse=True):
+        text = text.replace(root.rstrip("/") + "/", "").replace(root, ".")
+    return f"Not available: {text}"
 
 
 def _op_command(op: Op) -> str:
@@ -757,7 +767,7 @@ def _manual_operations(repo_root: Path, state: RunState) -> str:
     try:
         ops = [lo for lo in load_ops(plan_dir, repo_root).ops if not lo.runbook]
     except OpsLoadError as e:
-        return f"Not available: {e}"
+        return _unavailable(repo_root, e)
     if not ops:
         return "None."
     journal = JournalEvidence(repo_root, plan_dir.name)
@@ -837,7 +847,7 @@ def _proportionality(repo_root: Path, state: RunState) -> str:
     try:
         report = run_report(repo_root, parse(repo_root / plan_rel), None)
     except (PlanSchemaError, OSError) as e:
-        return f"Not available: {e}"
+        return _unavailable(repo_root, e)
     return f"```text\n{report.text.rstrip()}\n```"
 
 

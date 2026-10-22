@@ -119,3 +119,14 @@ def test_deliver_never_refuses_on_open_ops(tmp_path: Path, monkeypatch) -> None:
     rec, out = _deliver(root)
     assert out.exit_code == 0, out.output
     assert load_run_state(root, RUN).steps["deliver"].state == "done"
+
+
+def test_p3_r5_an_unreadable_ops_yaml_names_a_repo_relative_path(tmp_path: Path) -> None:
+    plan = tmp_path / "docs/superpowers/plans/p"
+    plan.mkdir(parents=True)
+    (plan / "ops.yaml").write_text("schema_version: 1\nops: [ {id: \n")
+    section = _section(render_pr_body(tmp_path, _state()))
+    assert "docs/superpowers/plans/p/ops.yaml" in section
+    assert str(tmp_path) not in section
+    for prefix in ("/Users/", "/home/", "/var/folders/", "/private/", "/tmp/"):
+        assert prefix not in section, section
