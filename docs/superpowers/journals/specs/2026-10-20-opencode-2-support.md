@@ -394,3 +394,10 @@ It exists to make the published surfaces match the code: parity rows, the matrix
 Step: Enter a workspace, start a run, ask the model to edit a tracked file in the base clone; expect the plugin's refusal and no file change.
 
 Evidence: PASS — a model-driven edit to docs/superpowers/specs/2026-10-20-opencode-2-support-design.md in the base clone was refused with the fr-isolation blocked message; git status stayed clean and no file changed.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-10-22T16:34:08+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: From the workspace, run `git status` (allowed) and then a base-clone write through `shell` during an active pipeline (denied, with the escape list).
+
+Evidence: PASS — with an active pipeline sentinel for this session, git status from the archive workspace was allowed; a base-clone touch fr-shell-gate-probe was denied with the full escape list and no probe file was created. The sentinel was armed in the equivalent state (the session was not running a pipeline skill) and disarmed after the test.
