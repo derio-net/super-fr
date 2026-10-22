@@ -40,10 +40,12 @@ writes one).
 | 7 | Keeps `gate:tester` and lists the steps the Tester gate owns |
 | 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
 
-Each stage's completion is a `gate-stage-<n>` decision in the plan journal, committed
-on the ops branch, so stopping is always safe: re-run the same command. Pre-merge
-evidence never lands on the PR head, so the reviewed head and its checks stay valid. A
-PR merged by hand in the forge counts as stage 2 done.
+Each stage's completion is recorded in your own state outside every checkout
+(`$XDG_STATE_HOME/fr/ops-gate/`), never read from the ops workspace, which the PR
+controls; the `gate-stage-<n>` journal decisions are an audit trail. So stopping is
+always safe: re-run the same command. Pre-merge evidence never lands on the PR head, so
+the reviewed head and its checks stay valid. A PR merged by hand in the forge counts as
+stage 2 done.
 
 ## Reading an OPEN reason
 
