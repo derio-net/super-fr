@@ -307,3 +307,65 @@ def test_status_asks_the_journal_with_the_ops_runbook_flag() -> None:
     journal = FakeJournal()
     _one(_lo(runbook=True), journal=journal)
     assert journal.asked == [("a", True)]
+
+
+# --- masking (R5, p1-r4) ---------------------------------------------------------
+
+PEM = (
+    "-----BEGIN PRIVATE KEY-----\n"
+    "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n"
+    "q2Lz8xY4w1Vb7RkM0nQe5p0dTq8sJx3Y9bK2LmWzQ1rT6uV4e8\n"
+    "-----END PRIVATE KEY-----"
+)
+
+
+def _as_identity(line: str, secret: str = PEM, rc: int = 1):
+    runner = FakeRunner({"probe": (rc, line)})
+    ids = FakeIdentities({"admin": {"KEY": secret}})
+    return _one(_lo(check="probe", identities=["admin"]), runner, identities=ids)
+
+
+def _leaks(reason: str | None, secret: str = PEM) -> list[str]:
+    import base64
+
+    pieces = [t for t in secret.split() if len(t) >= 6]
+    forms = pieces + [base64.b64encode(secret.encode()).decode()]
+    return [f for f in forms if reason and f in reason]
+
+
+def test_a_secret_line_echoed_alone_is_masked() -> None:
+    row = _as_identity("denied for MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7")
+    assert row.state == "OPEN"
+    assert not _leaks(row.reason), row.reason
+    assert "***" in (row.reason or "")
+
+
+def test_a_base64_echo_of_the_secret_is_masked() -> None:
+    import base64
+
+    echoed = base64.b64encode(PEM.encode()).decode()
+    row = _as_identity(f"got {echoed[:120]}")
+    assert echoed[:120] not in (row.reason or "")
+    row = _as_identity(f"got {base64.b64encode(b'tok-abcdef12').decode()}", "tok-abcdef12")
+    assert base64.b64encode(b"tok-abcdef12").decode() not in (row.reason or "")
+
+
+def test_a_url_encoded_secret_is_masked() -> None:
+    from urllib.parse import quote
+
+    secret = "p@ss/word with+chars"
+    row = _as_identity(f"GET /?t={quote(secret, safe='')} 401", secret)
+    assert quote(secret, safe="") not in (row.reason or "")
+    assert "401" in (row.reason or "")
+
+
+def test_a_token_of_a_secret_is_masked() -> None:
+    row = _as_identity("user longpassword123 refused", "admin longpassword123")
+    assert "longpassword123" not in (row.reason or "")
+
+
+def test_a_body_like_line_as_an_identity_reports_only_the_exit() -> None:
+    assert _as_identity('{"message": "Bad credentials"}', "tok-xyz", rc=22).reason == "exit 22"
+    assert _as_identity("[1, 2]", "tok-xyz", rc=1).reason == "exit 1"
+    assert _as_identity("x" * 201, "tok-xyz", rc=1).reason == "exit 1"
+    assert _as_identity("HTTP 404: missing", "tok-xyz", rc=1).reason == "HTTP 404: missing"

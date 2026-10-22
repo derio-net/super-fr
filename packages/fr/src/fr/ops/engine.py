@@ -24,6 +24,7 @@ from typing import Any, Literal, Protocol
 from fr.ops.evidence import OpEvidence
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
+from fr.ops.mask import looks_like_a_body, mask
 
 State = Literal["DONE", "OPEN", "N/A", "UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"]
 NOT_DONE: frozenset[str] = frozenset({"OPEN", "UNVERIFIABLE", "CANNOT-VERIFY"})
@@ -104,12 +105,13 @@ class ShellRunner:
         return done.returncode, lines[-1].strip() if lines else ""
 
 
-def _clean(line: str, secrets: Iterable[str]) -> str:
-    """A reason line with every identity value masked, cut to one short line."""
-    for secret in secrets:
-        if secret:
-            line = line.replace(secret, "***")
-    line = " ".join(line.split())
+def _clean(line: str, secrets: Iterable[str], *, as_identity: bool = False) -> str:
+    """A reason line with every identity value masked (`fr.ops.mask`), cut to one
+    short line. Run as an identity, a line that still looks like a response body
+    is dropped (`""`): the caller reports only the exit code (R5)."""
+    line = " ".join(mask(line, secrets).split())
+    if as_identity and looks_like_a_body(line, _REASON_MAX):
+        return ""
     return line if len(line) <= _REASON_MAX else line[: _REASON_MAX - 1] + "…"
 
 
@@ -128,9 +130,10 @@ def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityRes
         if rc == 0:
             continue
         if rc == NOT_FOUND:
-            reason = _clean(line, env.values()) or f"the check could not run (exit {rc})"
+            reason = _clean(line, env.values(), as_identity=name is not None)
+            reason = reason or f"the check could not run (exit {rc})"
             return replace(row, state="CANNOT-VERIFY", reason=reason, identity=name)
-        reason = _clean(line, env.values()) or f"exit {rc}"
+        reason = _clean(line, env.values(), as_identity=name is not None) or f"exit {rc}"
         return replace(row, state="OPEN", reason=reason, identity=name)
     return replace(row, state="DONE", how="checked")
 
