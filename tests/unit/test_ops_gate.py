@@ -88,6 +88,10 @@ class FakeTree:
         self.calls: list[tuple[str, Any]] = []
         self.gate_pass_code: int | None = None
         self.rebase_error: str | None = None
+        self.holds_head = True
+
+    def contains(self, sha: str) -> bool:
+        return self.holds_head
 
     def head(self) -> str:
         return HEAD
@@ -250,9 +254,9 @@ def _gate(
     return Gate(target, host, forge, prompt, said.append), host, tree, forge, prompt, said
 
 
-def _record_stages(root: Path, *ns: int) -> None:
+def _record_stages(root: Path, *ns: int, head: str = HEAD) -> None:
     for n in ns:
-        JournalLedger(root, "p").record(n, f"stage {n}", "seeded")
+        JournalLedger(root, "p").record(n, f"stage {n}", f"head: {head}" if n == 1 else "seeded")
 
 
 def _exec(*inner: str) -> list[str]:
@@ -509,3 +513,54 @@ def test_pr_number_reads_a_url_or_a_number() -> None:
     assert gate_mod.pr_number("https://github.com/o/r/pull/12") == 12
     assert gate_mod.pr_number("12") == 12
     assert gate_mod.pr_number(None) is None
+
+
+# ------------------------------------------- p4-merge-head-pinned: the verified head
+
+
+def test_stage_1_records_the_head_it_was_cut_from(ops_root: Path) -> None:
+    gate, *_ = _gate(ops_root)
+    run(gate)
+    assert JournalLedger(ops_root, "p").detail(1, "head") == HEAD
+
+
+def test_a_head_that_moved_after_stage_1_is_refused_and_nothing_merges(ops_root: Path) -> None:
+    old = "b" * 40
+    _record_stages(ops_root, 1, head=old)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True)
+    result = run(gate)
+    assert result.failed == 2 and result.code == 2
+    assert old in result.why and HEAD in result.why and "fr isolation down" in result.why
+    assert not [c for c in forge.calls if c[0] == "merge"]
+    assert not any(a.startswith("MERGE") for a in prompt.asked)
+
+
+def test_the_merge_and_the_rebase_carry_the_recorded_head(ops_root: Path) -> None:
+    _record_stages(ops_root, 1)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    calls: list[str] = []
+    real_view = forge.pr_view
+
+    def view(repo: str, number: int) -> dict[str, Any]:
+        v = real_view(repo, number)
+        if forge.pr["state"] == "MERGED":  # after the merge a forge may report another sha
+            v["head_oid"] = "d" * 40
+        calls.append(v["head_oid"])
+        return v
+
+    forge.pr_view = view  # type: ignore[method-assign]
+    assert run(gate).ok
+    assert ("merge", (5, HEAD, "squash")) in forge.calls
+    assert ("rebase", ("origin/main", HEAD)) in tree.calls
+
+
+def test_a_reused_workspace_not_cut_from_the_live_head_is_refused(ops_root: Path) -> None:
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    tree.holds_head = False
+    result = run(gate)
+    assert result.failed == 1 and "fr isolation down" in result.why
+    assert not any(a[:2] == ["isolation", "exec"] for a, _ in host.calls)

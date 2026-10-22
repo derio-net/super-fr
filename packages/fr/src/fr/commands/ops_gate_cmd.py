@@ -55,6 +55,11 @@ class OpsWorkspace:
     def head(self) -> str:
         return self._tree.head()
 
+    def contains(self, sha: str) -> bool:
+        from fr.triage.gitseam import git_ok
+
+        return git_ok(["merge-base", "--is-ancestor", sha, "HEAD"], self.path)
+
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         from fr.triage.gitseam import run_this_fr
 
@@ -186,4 +191,4 @@ def gate(
             typer.echo(line)
         return
     result = engine.run(g)
-    raise typer.Exit(code=0 if result.ok else 1)
+    raise typer.Exit(code=result.code)
