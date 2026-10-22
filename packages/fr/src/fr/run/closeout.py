@@ -37,6 +37,8 @@ __all__ = [
     "awaiting_live_lines",
     "branch_closeout_brief",
     "closeout_brief",
+    "devops_brief",
+    "devops_gated",
     "primary_checkout",
 ]
 
@@ -483,3 +485,59 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         test_plan_steps=missing,
     )
     return branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)
+
+
+def devops_gated(repo_root: Path, state: RunState) -> bool:
+    """Whether the run's effective gates include `devops` (spec 2026-10-22-fr-ops R13): its
+    spec declares it, or its plan carries ops. An exit that cannot be read is not known to
+    be devops-gated by its spec, but a plan with ops still is (the promotion needs no
+    matrix), so a broken matrix never hides the stage."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.ops.load import OpsLoadError, plan_has_ops
+    from fr.verification.exit import run_exit, run_plan_dir
+    from fr.verification.spec_section import SectionError
+
+    try:
+        return "devops" in run_exit(repo_root, state).gates
+    except (AcceptanceError, OpsLoadError, SectionError, OSError):
+        plan_dir = run_plan_dir(repo_root, state)
+        return plan_dir is not None and plan_has_ops(repo_root, plan_dir)
+
+
+def devops_brief(repo_root: Path, state: RunState) -> str:
+    """The DevOps brief `fr pickup --run` prints instead of the close-out brief for a run
+    whose effective gates include `devops` (R16). The stage owns the merge check and the
+    archive, so this brief has no verify-merge, STOP or archive line: one command."""
+    deliver = state.steps.get("deliver")
+    if deliver is None or deliver.state != "done":
+        raise CloseoutNotReadyError(
+            f"run {state.run!r} is not ready for its DevOps stage — its cursor is "
+            f"{state.cursor!r}, not a done `deliver`"
+        )
+    pr = _emitted(state, "pr") or "(no PR recorded)"
+    lines = [
+        f"# DevOps stage — run {state.run}",
+        "",
+        f"branch: {state.branch}",
+        f"PR: {pr}",
+    ]
+    for name in ("spec", "plan"):
+        value = _emitted(state, name)
+        if value:
+            lines.append(f"{name}: {value}")
+    lines += [
+        "",
+        "This run's effective gates include `devops`, so its DevOps stage replaces the",
+        "close-out: the stage owns the pre-merge ops, the merge, the post-merge ops, the",
+        "devops Test Plan steps, the gate pass, the tester hand-off and the archive. It",
+        "runs before or after the PR merges and resumes where it stopped.",
+        "",
+        "Run, at a terminal on the harness host (it refuses a non-interactive shell; it",
+        "previews without --yes and acts with it):",
+        "",
+        f"    fr ops gate --run {state.run}",
+        "",
+        "Judgement (reading OPEN reasons, attesting vs writing a check, confirming the",
+        "merge): the fr-devops-gate skill.",
+    ]
+    return "\n".join(lines)
