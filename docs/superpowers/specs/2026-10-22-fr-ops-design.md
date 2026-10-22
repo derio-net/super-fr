@@ -147,6 +147,7 @@ refusal at stage 6 while a `[devops]` step has no outcome.
 strategy: candidate
 gate: developer
 gate: fr-ops-live-first-run=devops
+- fr-ops-deliver-section: none — the PR body is rendered by `deliver`, which no installed-CLI scenario runs; unit tests over `render_pr_body` and `deliver`'s required-section check pin it in CI, and this run's own `deliver` renders the section live.
 - fr-ops-live-first-run: live — only a released fr inside a real ops profile, against real credentials, a live system and a real PR merge, can prove the DevOps stage end to end; the candidate scenarios (§J) use local, credential-free checks and a fake forge.
 
 ## Test Plan

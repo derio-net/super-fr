@@ -91,7 +91,7 @@ tasks:
   - id: P4.T4.S1
     text: |-
       Write docs/ops.md: authoring ops (R1 fields, both carriers, runbook selection),
-      identities, exit codes, evidence and attestation, the four helpers with sops/kubectl/
+      identities, exit codes, evidence and attestation, the four helpers with encryption-tool/cluster-CLI/
       forge examples, the ops profile (`fr init scaffold --ops`), and the DevOps stage's
       8 stages. Update docs/explainers/01-fr-goal.md where it describes deliver and the
       close-out (the .html regeneration is done on the host at deliver). Add an `fr/ops`

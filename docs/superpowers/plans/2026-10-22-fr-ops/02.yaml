@@ -86,7 +86,7 @@ tasks:
       (subprocess test); substitutions are shell-quoted; `secret` passes the value on the
       child's stdin and never to stdout; `clip` refuses listing pbcopy/wl-copy/xclip/clip.exe
       when none is on PATH; `scratch` runs cleanup on success, failure and SIGINT.
-      No sops/kubectl string in fr/ops/helpers.py (assert by reading the source).
+      No tool-specific encryption or cluster CLI name in fr/ops/helpers.py (assert by reading the source).
   - id: P2.T4.S2
     text: |-
       GREEN — fr/ops/helpers.py plus the four commands.
