@@ -9709,8 +9709,8 @@ rows:
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-testplan-tags
     capability: Test Plan
-    acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; an
-      unknown tag is refused naming the step
+    acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; any
+      other leading bracket (a checkbox, a link) stays step text
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R12
     levels:
