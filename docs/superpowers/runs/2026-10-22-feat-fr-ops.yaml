@@ -152,7 +152,7 @@ steps:
           visual: none
           findings: p3-na-not-recordable,p3-matrix-testplan-tags-wording,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-22T11:36:19+00:00'
           agent: ac2eacd33611fc59d
@@ -162,6 +162,11 @@ steps:
           tier: hard
           bound: opus
           session: dee186d0-4151-4daa-8429-a4ad2132062e
+          returned: '2026-10-22T12:47:38+00:00'
+          outcome: done
+        evidence:
+          tests: ci:34b84405ae808eb1c2a422b852b9aa395a578021+1d2290f8bde8284e05c27371f0b841cbd7463cc0;tree=fecfe648a0e987713377b6194a494101aaa3325ccf1fba7a3e49beaa74ee8384
+          visual: none
   journal-check:
     state: pending
   deliver:
