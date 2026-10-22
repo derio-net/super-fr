@@ -21,13 +21,23 @@ from fr.ops.engine import OrderError as OrderError  # re-export for callers
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
 from fr.ops.model import UndoNone
-from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_interactive, run_probe
+from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_interactive, run_probe_full
 
 ALREADY_DONE = "already done, nothing written"
 
 
+APPLIED_UNCHECKED = "applied; no check — attest it"
+"""The reason recorded when an op with `apply:` and no `check:` was applied: status
+cannot verify it, so a person attests it; a re-run does not silently re-apply."""
+
+
 class ApplyRefused(Exception):  # noqa: N818
-    """The run cannot proceed at all (exit 2): nothing further is attempted."""
+    """The run cannot proceed at all (exit 2): nothing further is attempted. Carries
+    what already ran, so the caller can report it before the refusal."""
+
+    def __init__(self, message: str, result: ApplyResult | None = None) -> None:
+        super().__init__(message)
+        self.result = result
 
 
 class Applier(Protocol):
@@ -79,7 +89,8 @@ class Record(Protocol):
 @dataclass(frozen=True)
 class ApplyStep:
     op_id: str
-    outcome: str  # skipped | applied | failed | open | declined | not-ready | manual | unverifiable
+    outcome: str
+    """skipped | applied | needs-attestation | failed | open | declined | not-ready | manual"""
     message: str
 
 
@@ -89,7 +100,11 @@ class ApplyResult:
 
     @property
     def ok(self) -> bool:
-        return all(s.outcome in ("skipped", "applied") for s in self.steps)
+        return all(s.outcome in ("skipped", "applied", "needs-attestation") for s in self.steps)
+
+    @property
+    def needs_attestation(self) -> list[str]:
+        return [s.op_id for s in self.steps if s.outcome == "needs-attestation"]
 
 
 class ShellApplier:
@@ -110,15 +125,18 @@ class ShellApplier:
             return run_interactive(
                 command, self.repo_root, extra=env, passthrough=self.passthrough
             ), ""
-        rc, out = run_probe(
+        rc, out, err = run_probe_full(
             command, self.repo_root, extra=env, passthrough=self.passthrough, timeout=self.timeout
         )
         if rc == TIMED_OUT:
             return rc, f"timed out after {self.timeout:g}s"
         if rc == NOT_FOUND and not out.strip():
             return rc, "bash could not run"
-        lines = [line for line in out.splitlines() if line.strip()]
-        return rc, lines[-1].strip() if lines else ""
+        for text in (out, err):  # stderr only when stdout said nothing
+            lines = [line for line in text.splitlines() if line.strip()]
+            if lines:
+                return rc, lines[-1].strip()
+        return rc, ""
 
 
 def undo_text(lo: LoadedOp) -> str:
@@ -137,13 +155,30 @@ def confirmation_text(lo: LoadedOp) -> str:
     return text
 
 
+def _flag_gap(lo: LoadedOp, yes: bool, yes_mutating: bool) -> str | None:
+    """The flag still missing for `lo` to run without a terminal (a mutating op needs
+    BOTH `--yes` and `--yes-mutating`), or `None`."""
+    if not yes:
+        return "--yes --yes-mutating" if lo.op.mutating else "--yes"
+    if lo.op.mutating and not yes_mutating:
+        return "--yes-mutating"
+    return None
+
+
 def _confirmed(lo: LoadedOp, prompt: Prompt, yes: bool, yes_mutating: bool) -> bool:
-    if yes_mutating if lo.op.mutating else yes:
+    if _flag_gap(lo, yes, yes_mutating) is None:
         return True
     if prompt.has_terminal():
         return prompt.confirm(confirmation_text(lo))
-    flag = "--yes-mutating" if lo.op.mutating else "--yes"
-    raise ApplyRefused(f"op {lo.op.id!r} needs confirmation and there is no terminal: pass {flag}")
+    raise ApplyRefused(
+        f"op {lo.op.id!r} needs confirmation and there is no terminal: pass "
+        f"{_flag_gap(lo, yes, yes_mutating)}"
+    )
+
+
+def _already_applied_unchecked(lo: LoadedOp, journal: Journal) -> bool:
+    ev = journal.latest(lo.op.id, runbook=lo.runbook)
+    return lo.op.check is None and ev is not None and ev.reason == APPLIED_UNCHECKED
 
 
 def apply_ops(
@@ -158,10 +193,13 @@ def apply_ops(
     yes: bool = False,
     yes_mutating: bool = False,
     known: set[str] | None = None,
+    outside: Sequence[LoadedOp] = (),
 ) -> ApplyResult:
     """Apply `ops` in dependency order, stopping at the first failure. Raises
     `OrderError` (cycle / unknown need) before anything runs, `ApplyRefused` when a
-    confirmation or terminal is missing."""
+    confirmation or terminal is missing — before the first apply, for every op still
+    to run. `outside` are ops the selection needs but does not include: each must
+    already be DONE or N/A."""
     ordered = order(list(ops), known=known)
     result = ApplyResult()
 
@@ -170,6 +208,26 @@ def apply_ops(
 
     def row_of(lo: LoadedOp) -> StatusRow:
         return status([lo], runner=runner, identities=identities, journal=journal)[0]
+
+    for need in outside:
+        got = row_of(need)
+        if got.state not in ("DONE", "N/A"):
+            raise ApplyRefused(
+                f"op {need.op.id!r} is needed but not selected and reads {got.label}"
+                f"{f' ({got.reason})' if got.reason else ''}; bring it to DONE first"
+            )
+
+    if not prompt.has_terminal():  # nothing may be refused halfway through the run
+        for lo in ordered:
+            if row_of(lo).state in ("DONE", "N/A", "CANNOT-VERIFY") or not lo.op.apply:
+                continue
+            if lo.op.interactive:
+                raise ApplyRefused(f"op {lo.op.id!r} is interactive and needs a terminal")
+            gap = _flag_gap(lo, yes, yes_mutating)
+            if gap is not None and not _already_applied_unchecked(lo, journal):
+                raise ApplyRefused(
+                    f"op {lo.op.id!r} needs confirmation and there is no terminal: pass {gap}"
+                )
 
     for lo in ordered:
         op = lo.op
@@ -197,8 +255,22 @@ def apply_ops(
             )
             break
         if op.interactive and not prompt.has_terminal():
-            raise ApplyRefused(f"op {op.id!r} is interactive and needs a terminal")
-        if not _confirmed(lo, prompt, yes, yes_mutating):
+            raise ApplyRefused(f"op {op.id!r} is interactive and needs a terminal", result)
+        if _already_applied_unchecked(lo, journal):
+            if not prompt.has_terminal():
+                step(
+                    op.id,
+                    "needs-attestation",
+                    f"{op.id}: already applied and there is no check — attest it "
+                    f"(`fr ops attest {op.id}`), or re-run at a terminal to apply again",
+                )
+                continue
+            if not prompt.confirm(
+                f"{op.id} was ALREADY APPLIED (unchecked); apply again?\n" + confirmation_text(lo)
+            ):
+                step(op.id, "declined", f"{op.id}: declined; nothing applied")
+                break
+        elif not _confirmed(lo, prompt, yes, yes_mutating):
             step(op.id, "declined", f"{op.id}: declined; nothing applied")
             break
 
@@ -229,13 +301,15 @@ def apply_ops(
             break
 
         after = row_of(lo)
-        if after.state == "DONE" or after.state == "UNVERIFIABLE":
-            note = None if after.state == "DONE" else "applied; no check to confirm"
-            record(op=op.id, result="done", phase=op.phase, reason=note)
+        if after.state == "DONE":
+            record(op=op.id, result="done", phase=op.phase)
+            step(op.id, "applied", f"{op.id}: applied; {after.label}")
+        elif after.state == "UNVERIFIABLE":
+            record(op=op.id, result="open", phase=op.phase, reason=APPLIED_UNCHECKED)
             step(
                 op.id,
-                "applied",
-                f"{op.id}: applied; {after.label if after.state == 'DONE' else note}",
+                "needs-attestation",
+                f"{op.id}: {APPLIED_UNCHECKED} (`fr ops attest {op.id} --note …`)",
             )
         else:
             record(

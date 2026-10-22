@@ -26,6 +26,8 @@ def attest_op(
     record: Record,
 ) -> StatusRow:
     op = lo.op
+    if "\n" in note or "\r" in note:
+        raise AttestRefused("--note must be a single line")
     if op.check is not None:
         raise AttestRefused(f"op {op.id!r} has a check; it is verified, not attested")
     if not prompt.has_terminal():

@@ -50,8 +50,10 @@ def refusal_route(repo_root: Path, *, slug: str = "<slug>", base: str = "<ref>")
     names = ops_profiles(repo_root)
     profile = names[0] if names else "<ops-profile>"
     branch = f"chore/ops-{slug}"
+    # The ops branch carries no run of its own, so the plan must be named.
+    plan = f" --plan docs/superpowers/plans/{slug}" if slug != "<slug>" else ""
     return (
         "not inside an ops profile; run it in an ops workspace:\n"
         f"  fr isolation up --profile {profile} --branch {branch} --base {base}\n"
-        f"  fr isolation exec --branch {branch} -- fr ops …"
+        f"  fr isolation exec --branch {branch} -- fr ops …{plan}"
     )

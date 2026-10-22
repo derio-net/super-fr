@@ -27,7 +27,7 @@ CLIPBOARD_TOOLS: tuple[tuple[str, ...], ...] = (
     ("xclip", "-selection", "clipboard"),
     ("clip.exe",),
 )
-_SIGNALS = (signal.SIGINT, signal.SIGTERM)
+_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 
 class HelperError(Exception):
@@ -47,6 +47,7 @@ def cleanup_guard() -> Iterator[list[Callable[[], None]]]:
     cleanups: list[Callable[[], None]] = []
 
     def handler(signum: int, _frame: object) -> None:
+        _ignore_signals()  # a second signal must not cut the cleanup short
         raise _Interrupted(signum)
 
     previous = {s: signal.signal(s, handler) for s in _SIGNALS}
@@ -63,7 +64,14 @@ def cleanup_guard() -> Iterator[list[Callable[[], None]]]:
             signal.signal(s, old)
 
 
+def _ignore_signals() -> None:
+    for s in _SIGNALS:
+        signal.signal(s, signal.SIG_IGN)
+
+
 def _run(cleanups: list[Callable[[], None]]) -> None:
+    if cleanups:
+        _ignore_signals()  # restored by cleanup_guard's finally
     while cleanups:
         fn = cleanups.pop()
         try:
@@ -120,6 +128,8 @@ def _checked_target(target: Path, repo_root: Path) -> Path:
         raise HelperError(f"{lexical} is outside the repo ({repo_root}); refusing to seal it")
     if not _inside(lexical, repo_root):
         raise HelperError(f"{lexical} resolves outside the repo; refusing to seal it")
+    if not lexical.parent.is_dir():
+        raise HelperError(f"{lexical.parent} is not an existing directory; refusing to seal")
     return lexical
 
 
@@ -160,13 +170,22 @@ def seal(encrypt: str, target: Path, plaintext: bytes, *, repo_root: Path) -> in
             return 1
         mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o644
         os.chmod(out_path, mode)
+        _checked_target(target, repo_root)  # a link planted while the command ran
         os.replace(out_path, target)
         return 0
 
 
-def read_value(source: str, repo_root: Path, *, timeout: float = DEFAULT_TIMEOUT) -> str:
-    """The value a `--from` command prints, read live; its output is never echoed."""
-    rc, out = run_probe(source, repo_root, timeout=timeout)
+def read_value(
+    source: str,
+    repo_root: Path,
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+    passthrough: Sequence[str] = (),
+) -> str:
+    """The value a `--from` command prints, read live; its output is never echoed.
+    Runs as an identity reference does: `.fr/ops.yaml`'s `env_passthrough` and
+    `timeout_seconds` apply."""
+    rc, out = run_probe(source, repo_root, timeout=timeout, passthrough=passthrough)
     value = out.rstrip("\n")
     if rc == TIMED_OUT:
         raise HelperError("the value could not be read (timed out)")
@@ -175,18 +194,31 @@ def read_value(source: str, repo_root: Path, *, timeout: float = DEFAULT_TIMEOUT
     return value
 
 
-def secret(source: str, command: Sequence[str], *, repo_root: Path) -> int:
+def secret(
+    source: str,
+    command: Sequence[str],
+    *,
+    repo_root: Path,
+    timeout: float = DEFAULT_TIMEOUT,
+    passthrough: Sequence[str] = (),
+) -> int:
     """Run `command` with the value of `source` on its stdin; the value never goes to
     this process's stdout."""
-    value = read_value(source, repo_root)
+    value = read_value(source, repo_root, timeout=timeout, passthrough=passthrough)
     return _run_child(list(command), stdin=value.encode()).returncode
 
 
-def clip(source: str, *, repo_root: Path) -> int:
+def clip(
+    source: str,
+    *,
+    repo_root: Path,
+    timeout: float = DEFAULT_TIMEOUT,
+    passthrough: Sequence[str] = (),
+) -> int:
     """Put the value of `source` on the clipboard, through the first tool found."""
     for tool in CLIPBOARD_TOOLS:
         if shutil.which(tool[0]):
-            value = read_value(source, repo_root)
+            value = read_value(source, repo_root, timeout=timeout, passthrough=passthrough)
             return _run_child(list(tool), stdin=value.encode()).returncode
     names = ", ".join(t[0] for t in CLIPBOARD_TOOLS)
     raise HelperError(f"no clipboard tool on PATH (looked for {names})")

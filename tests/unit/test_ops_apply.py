@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
-from fr.ops.apply import ALREADY_DONE, ApplyRefused, apply_ops
+from fr.ops.apply import ALREADY_DONE, APPLIED_UNCHECKED, ApplyRefused, apply_ops
 from fr.ops.engine import OrderError, order
 from fr.ops.evidence import OpEvidence
 from fr.ops.identity import IdentityError
@@ -289,6 +289,115 @@ def test_run_interactive_uses_the_minimal_env(tmp_path: Path, monkeypatch) -> No
         os.close(slave)
 
 
+class ScriptedPrompt(FakePrompt):
+    """`has_terminal` answers from a script, then repeats the last answer."""
+
+    def __init__(self, seq: list[bool], answers: list[bool] | None = None) -> None:
+        super().__init__(True, answers)
+        self.seq = list(seq)
+
+    def has_terminal(self) -> bool:
+        return self.seq.pop(0) if len(self.seq) > 1 else self.seq[0]
+
+
+class RecordedJournal:
+    """A journal port that answers from what `World.record` wrote (latest wins)."""
+
+    def __init__(self, world: World) -> None:
+        self.world = world
+
+    def latest(self, op_id: str, *, runbook: bool) -> OpEvidence | None:
+        rows = [w for w in self.world.written if w["op"] == op_id]
+        if not rows:
+            return None
+        w = rows[-1]
+        return OpEvidence(
+            result=str(w["result"]),
+            created="2026-10-22T10:00:00+00:00",
+            reason=w.get("reason"),  # type: ignore[arg-type]
+        )
+
+
+def run_j(ops: list[LoadedOp], world: World, prompt: FakePrompt, **kw: object):
+    return apply_ops(
+        ops, runner=world.runner, applier=world.apply, identities=Idents(),
+        journal=RecordedJournal(world), prompt=prompt, record=world.record, **kw,
+    )  # type: ignore[arg-type]  # fmt: skip
+
+
+def test_p2_r2_a_refusal_after_work_carries_what_already_ran() -> None:
+    w = World()
+    prompt = ScriptedPrompt([True, False])  # preflight skipped; b finds no terminal
+    with pytest.raises(ApplyRefused) as e:
+        run([op("a"), op("b", interactive=True, needs=["a"])], w, prompt, yes=True)
+    assert e.value.result is not None and [s.op_id for s in e.value.result.steps] == ["a"]
+    assert w.ran == [("a", "apply", False)]
+
+
+def test_p2_r2_preflight_refuses_before_the_first_apply() -> None:
+    w = World()
+    with pytest.raises(ApplyRefused, match="--yes-mutating"):
+        run([op("a"), op("b", mutating=True, needs=["a"])], w, FakePrompt(terminal=False), yes=True)
+    assert w.ran == [] and w.written == []
+    with pytest.raises(ApplyRefused, match="terminal"):
+        run([op("a"), op("b", interactive=True)], w, FakePrompt(terminal=False), yes=True)
+    assert w.ran == []
+
+
+def test_p2_r3_an_apply_without_a_check_is_flagged_not_recorded_done() -> None:
+    w = World()
+    u = lo("u", apply="apply:u")
+    res = run_j([u], w, FakePrompt(), yes=True)
+    assert res.ok and res.needs_attestation == ["u"]
+    assert w.written[0]["result"] == "open" and w.written[0]["reason"] == APPLIED_UNCHECKED
+    assert res.steps[0].outcome == "needs-attestation"
+
+
+def test_p2_r3_a_rerun_does_not_silently_reapply() -> None:
+    w = World()
+    u = lo("u", apply="apply:u")
+    run_j([u], w, FakePrompt(), yes=True)
+    res = run_j([u], w, FakePrompt(terminal=False), yes=True)
+    assert len(w.ran) == 1 and res.needs_attestation == ["u"]
+    assert "already applied" in res.steps[0].message
+    p = FakePrompt(answers=[True])
+    run_j([u], w, p, yes=True)
+    assert "ALREADY APPLIED" in p.asked[0] and len(w.ran) == 2
+    p2 = FakePrompt(answers=[False])
+    run_j([u], w, p2, yes=True)
+    assert len(w.ran) == 2
+
+
+def test_p2_r6_yes_mutating_alone_does_not_confirm_a_mutating_op() -> None:
+    w = World()
+    with pytest.raises(ApplyRefused, match="--yes"):
+        run([op("m", mutating=True)], w, FakePrompt(terminal=False), yes_mutating=True)
+    assert w.ran == []
+    p = FakePrompt()
+    run([op("m", mutating=True)], w, p, yes_mutating=True)
+    assert p.asked  # with a terminal it is still asked
+
+
+def test_p2_r7_a_need_outside_the_selection_must_be_done() -> None:
+    w = World()
+    need = op("n", phase="pre-merge")
+    with pytest.raises(ApplyRefused, match="'n'"):
+        run([op("a", phase="post-merge", needs=["n"])], w, yes=True, outside=[need], known={"n"})
+    assert w.ran == []
+    w.done.add("n")
+    assert run(
+        [op("a", phase="post-merge", needs=["n"])], w, yes=True, outside=[need], known={"n"}
+    ).ok
+
+
+def test_p2_r13_the_applier_falls_back_to_stderr(tmp_path: Path) -> None:
+    from fr.ops.apply import ShellApplier
+
+    ap = ShellApplier(tmp_path)
+    assert ap(lo("x", apply="echo oops >&2; exit 2"), {}, False) == (2, "oops")
+    assert ap(lo("x", apply="echo out; echo err >&2; exit 2"), {}, False) == (2, "out")
+
+
 # --- the CLI ------------------------------------------------------------------
 
 from fr.cli import app  # noqa: E402
@@ -445,3 +554,36 @@ def test_cli_a_failing_apply_exits_1_and_names_the_op(repo: Path, in_profile) ->
     res = _apply("--phase", "pre-merge", "--yes")
     assert res.exit_code == 1 and "first" in res.output
     assert not (marks(repo) / "made-second").exists()
+
+
+def test_p2_r1_an_unknown_op_is_refused_naming_it(repo: Path, in_profile) -> None:
+    res = _apply("nope", "--yes")
+    assert res.exit_code == 2 and "'nope'" in res.output
+    res = _apply("first", "ghost", "--yes") if False else _apply("ghost", "--yes")
+    assert res.exit_code == 2
+
+
+def test_p2_r1_a_runbook_only_op_says_runbook(repo: Path, in_profile) -> None:
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr/ops.yaml").write_text("runbook: book.yaml\n")
+    (repo / "book.yaml").write_text(
+        "- id: rb\n  summary: rb\n  phase: post-merge\n  commands: [x]\n"
+    )
+    res = _apply("rb", "--yes")
+    assert res.exit_code == 2 and "--runbook" in res.output
+
+
+def test_p2_r2_the_cli_prints_what_ran_before_a_refusal(
+    repo: Path, in_profile, monkeypatch
+) -> None:
+    from fr.ops.apply import ApplyResult, ApplyStep
+
+    res_ = ApplyResult([ApplyStep("first", "applied", "first: applied; DONE (checked)")])
+
+    def boom(*a, **k):
+        raise ApplyRefused("op 'second' is interactive and needs a terminal", res_)
+
+    monkeypatch.setattr("fr.ops.apply.apply_ops", boom)
+    res = _apply("--phase", "pre-merge", "--yes")
+    assert res.exit_code == 2
+    assert res.output.index("first: applied") < res.output.index("interactive")

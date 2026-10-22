@@ -165,3 +165,51 @@ def test_the_cli_flag_reaches_scaffold(repo: Path) -> None:
     )
     assert res.exit_code == 0, res.output
     assert _profiles(repo)["profiles"]["ops"]["ops"] is True
+
+
+def _cfg(repo: Path, name: str = "ops") -> dict:
+    return json.loads((repo / f".devcontainer/{name}/devcontainer.json").read_text())
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"FR_OPS_TRUST_DIR": "/Users/someone/state/ops-trust"}, "${localEnv:FR_OPS_TRUST_DIR}"),
+        ({"XDG_STATE_HOME": "/home/someone/xdg"}, "${localEnv:XDG_STATE_HOME}/fr/ops-trust"),
+        ({}, "${localEnv:HOME}/.local/state/fr/ops-trust"),
+    ],
+)
+def test_p2_r10_the_mount_source_is_never_a_literal_host_path(
+    repo: Path, monkeypatch, tmp_path: Path, env: dict[str, str], expected: str
+) -> None:
+    for k, v in env.items():
+        real = tmp_path / "real" / k
+        monkeypatch.setenv(k, str(real))  # a real, writable dir; the file must not carry it
+    scaffold_profile(repo, "ops", "operate", [], [], ops=True)
+    text = (repo / ".devcontainer/ops/devcontainer.json").read_text()
+    assert f"source={expected}," in text
+    assert str(tmp_path) not in text and "/Users/" not in text and "/home/" not in text
+
+
+def test_p2_r11_rescaffold_without_ops_keeps_the_ops_shape(repo: Path, capfd) -> None:
+    scaffold_profile(repo, "ops", "operate", [], [], ops=True)
+    scaffold_profile(repo, "ops", "operate again", [], [], force=True)
+    assert _profiles(repo)["profiles"]["ops"]["ops"] is True
+    cfg = _cfg(repo)
+    assert cfg["containerEnv"]["FR_PROFILE"] == "ops" and cfg["mounts"]
+    assert "ops profile" in capfd.readouterr().err
+
+
+def test_p2_r11_no_ops_removes_the_key_and_the_shape(repo: Path) -> None:
+    scaffold_profile(repo, "ops", "operate", [], [], ops=True)
+    scaffold_profile(repo, "ops", "operate", [], [], ops=False, force=True)
+    assert "ops" not in _profiles(repo)["profiles"]["ops"]
+    cfg = _cfg(repo)
+    assert "containerEnv" not in cfg and "mounts" not in cfg
+
+
+def test_p2_r12_the_route_names_the_plan_when_known(repo: Path) -> None:
+    _declare(repo)
+    text = refusal_route(repo, slug="my-plan")
+    assert "--plan docs/superpowers/plans/my-plan" in text
+    assert "--plan" not in refusal_route(repo)

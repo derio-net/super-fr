@@ -16,7 +16,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
 import typer
 
@@ -159,6 +159,27 @@ def _closure(ids: Sequence[str], ops: Sequence[LoadedOp]) -> list[LoadedOp]:
     return [lo for lo in ops if lo.op.id in wanted]
 
 
+def _require_known(
+    verb: str, ids: Sequence[str], opset: OpSet, plan_dir: Path, root: Path, runbook: bool
+) -> None:
+    """Refuse (exit 2) naming every requested id no loaded op carries; say `--runbook`
+    for one that exists only in the runbook."""
+    from fr.ops.load import load_ops
+
+    have = {lo.op.id for lo in opset.ops}
+    missing = [i for i in ids if i not in have]
+    if not missing:
+        return
+    in_book = (
+        {lo.op.id for lo in load_ops(plan_dir, root, runbook=True).ops} if not runbook else set()
+    )
+    parts = [
+        f"{i!r} (exists only in the runbook: pass --runbook)" if i in in_book else repr(i)
+        for i in missing
+    ]
+    _refuse(f"no such op: {', '.join(parts)}", verb)
+
+
 def _select(
     verb: str,
     op_id: str | None,
@@ -181,6 +202,7 @@ def _select(
         opset = load_ops(plan_dir, root, runbook=runbook, ids=() if with_needs else ids)
         config = load_ops_config(root)
         if with_needs and ids:
+            _require_known(verb, ids, opset, plan_dir, root, runbook)
             selected = _closure(ids, opset.ops)
         else:
             selected = [lo for lo in opset.ops if phase is None or lo.op.phase == phase]
@@ -236,6 +258,14 @@ def _require_ops_profile(verb: str, plan: Path | None) -> None:
     slug = plan.name if plan is not None else plan_of_current_branch(root)
     slug = slug.name if isinstance(slug, Path) else slug
     _refuse(refusal_route(root, slug=slug or "<slug>"), verb)
+
+
+def _outside_needs(sel: Selection) -> list[LoadedOp]:
+    """Loaded ops the selection needs but does not include (the other phase, the
+    runbook): `apply` checks them and refuses unless they are DONE or N/A."""
+    chosen = {lo.op.id for lo in sel.ordered}
+    needed = {n for lo in sel.ordered for n in lo.op.needs} - chosen
+    return [lo for lo in sel.opset.ops if lo.op.id in needed]
 
 
 def _runners(sel: Selection):  # type: ignore[no-untyped-def]
@@ -347,13 +377,24 @@ def apply(
             yes=yes,
             yes_mutating=yes_mutating,
             known={lo.op.id for lo in sel.opset.ops},
+            outside=_outside_needs(sel),
         )
-    except (ApplyRefused, OrderError) as e:
+    except ApplyRefused as e:
+        for step in e.result.steps if e.result else ():
+            typer.echo(step.message)
+        _refuse(str(e), "apply")
+    except OrderError as e:
         _refuse(str(e), "apply")
     for step in result.steps:
         typer.echo(step.message)
     if not result.steps:
         typer.echo("no ops selected")
+    if result.needs_attestation:
+        typer.echo(
+            "needs attestation (applied, nothing to check): "
+            + ", ".join(result.needs_attestation)
+            + " — run `fr ops attest <op> --note …`"
+        )
     raise typer.Exit(code=0 if result.ok else 1)
 
 
@@ -441,6 +482,17 @@ def _helper_root(verb: str) -> Path:
         _refuse("not inside a git repository", verb)
 
 
+def _read_settings(root: Path) -> dict[str, Any]:
+    """`.fr/ops.yaml`'s probe settings, as `--from` reads them (like an identity's)."""
+    from fr.ops.load import OpsLoadError, load_ops_config
+
+    try:
+        config = load_ops_config(root)
+    except OpsLoadError as e:
+        _refuse(str(e))
+    return {"passthrough": config.env_passthrough, "timeout": config.timeout_seconds}
+
+
 @ops_app.command("seal")
 def seal(
     encrypt: Annotated[
@@ -486,7 +538,7 @@ def secret(
 
     root = _helper_root("secret")
     try:
-        rc = helpers.secret(source, command, repo_root=root)
+        rc = helpers.secret(source, command, repo_root=root, **_read_settings(root))
     except helpers.HelperError as e:
         _refuse(str(e), "secret")
     raise typer.Exit(code=rc)
@@ -501,7 +553,7 @@ def clip(
 
     root = _helper_root("clip")
     try:
-        rc = helpers.clip(source, repo_root=root)
+        rc = helpers.clip(source, repo_root=root, **_read_settings(root))
     except helpers.HelperError as e:
         _refuse(str(e), "clip")
     raise typer.Exit(code=rc)

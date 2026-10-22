@@ -234,6 +234,78 @@ def test_helpers_name_no_tool() -> None:
         assert name not in src, name
 
 
+def test_p2_r4_a_second_signal_during_cleanup_does_not_abort_it(tmp_path: Path) -> None:
+    mark = tmp_path / "cleaned"
+    ready = tmp_path / "ready"
+    proc = subprocess.Popen(
+        [sys.executable, "-c",
+         "import sys; from fr.ops import helpers; "
+         "sys.exit(helpers.scratch('sleep 1; touch ' + sys.argv[1], "
+         "['sh', '-c', 'touch ' + sys.argv[2] + '; sleep 30']))",
+         str(mark), str(ready)],
+        stderr=(tmp_path / "err").open("wb"),
+    )  # fmt: skip
+    for _ in range(100):
+        if ready.exists():
+            break
+        time.sleep(0.1)
+    proc.send_signal(signal.SIGINT)
+    time.sleep(0.4)
+    proc.send_signal(signal.SIGTERM)
+    proc.send_signal(signal.SIGHUP)
+    proc.wait(timeout=20)
+    err = (tmp_path / "err").read_bytes()
+    assert mark.exists(), "the second signal cut the cleanup short"
+    assert proc.returncode == 130 and b"Traceback" not in err
+
+
+def test_p2_r4_sighup_is_handled_like_the_others(tmp_path: Path) -> None:
+    mark, ready = tmp_path / "cleaned", tmp_path / "ready"
+    proc = subprocess.Popen(
+        [sys.executable, "-c",
+         "import sys; from fr.ops import helpers; "
+         "sys.exit(helpers.scratch('touch ' + sys.argv[1], "
+         "['sh', '-c', 'touch ' + sys.argv[2] + '; sleep 30']))",
+         str(mark), str(ready)],
+    )  # fmt: skip
+    for _ in range(100):
+        if ready.exists():
+            break
+        time.sleep(0.1)
+    proc.send_signal(signal.SIGHUP)
+    proc.wait(timeout=15)
+    assert mark.exists() and proc.returncode == 129
+
+
+def test_p2_r5_from_honours_passthrough_and_timeout(repo: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OPS_VAR", "visible")
+    out = repo / "got"
+    cmd = ["sh", "-c", f"cat > {out}"]
+    assert helpers.secret('printf %s "${OPS_VAR:-none}"', cmd, repo_root=repo) == 0
+    assert out.read_text() == "none"
+    helpers.secret('printf %s "${OPS_VAR:-none}"', cmd, repo_root=repo, passthrough=["OPS_VAR"])
+    assert out.read_text() == "visible"
+    with pytest.raises(HelperError, match="timed out"):
+        helpers.secret("sleep 3; echo v", cmd, repo_root=repo, timeout=0.3)
+
+
+def test_p2_r9_a_missing_parent_dir_is_refused_cleanly(repo: Path) -> None:
+    with pytest.raises(HelperError, match="existing directory"):
+        helpers.seal("echo x > {out}", repo / "nodir" / "t.enc", PLAIN, repo_root=repo)
+    assert not _plaintext_anywhere(repo, PLAIN)
+
+
+def test_p2_r9_a_link_planted_while_the_command_runs_is_refused(repo: Path, tmp_path: Path) -> None:
+    victim = tmp_path / "victim"
+    victim.write_bytes(b"victim")
+    target = repo / "t.enc"
+    cmd = f"rm -f {{target}}; ln -s {victim} {{target}}; echo c > {{out}}"
+    with pytest.raises(HelperError, match="symlink"):
+        helpers.seal(cmd, target, PLAIN, repo_root=repo)
+    assert victim.read_bytes() == b"victim"
+    assert not any(p.name.startswith(".seal") for p in repo.iterdir())
+
+
 # --- the CLI ------------------------------------------------------------------
 
 

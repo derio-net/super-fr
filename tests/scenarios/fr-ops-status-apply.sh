@@ -21,7 +21,7 @@ export FR_PROFILE=ops KUBERNETES_SERVICE_HOST=10.0.0.1
 py="$(candidate_python)"
 
 git init -q -b main . || fail "git init"
-mkdir -p .devcontainer .fr docs/superpowers/plans/p docs/superpowers/plans/cyc docs/superpowers/plans/idp
+mkdir -p .devcontainer .fr docs/superpowers/plans/p docs/superpowers/plans/cyc docs/superpowers/plans/idp docs/superpowers/plans/idapply docs/superpowers/plans/mut docs/superpowers/plans/nochk
 cat > .devcontainer/fr-profiles.yaml <<'YAML'
 profiles:
   ops: {purpose: operate, secrets: [], ops: true}
@@ -58,6 +58,28 @@ schema_version: 1
 ops:
   - {id: as-bot, summary: needs the bot, phase: pre-merge, identities: [bot], check: 'true'}
 YAML
+cat > docs/superpowers/plans/idapply/ops.yaml <<'YAML'
+schema_version: 1
+ops:
+  - {id: as-bot-apply, summary: applies as the bot, phase: pre-merge, identities: [bot], check: 'false', apply: 'touch "$MARKS/idapply-ran"'}
+YAML
+cat > docs/superpowers/plans/mut/ops.yaml <<'YAML'
+schema_version: 1
+ops:
+  - id: danger
+    summary: changes something
+    phase: pre-merge
+    mutating: true
+    side_effects: [rewrites the thing]
+    undo: 'rm -f "$MARKS/mut"'
+    check: 'test -f "$MARKS/mut"'
+    apply: 'touch "$MARKS/mut"'
+YAML
+cat > docs/superpowers/plans/nochk/ops.yaml <<'YAML'
+schema_version: 1
+ops:
+  - {id: unchecked, summary: applied but not verifiable, phase: pre-merge, apply: 'touch "$MARKS/nochk"'}
+YAML
 git add -A && git commit -qm seed || fail "seed commit"
 
 trust_plan() {
@@ -83,7 +105,7 @@ expect_grep 'fr ops trust' "$out" "the refusal names fr ops trust"
 run_fr out ops trust --plan "$P"
 require_exit 2 "$out"
 expect_grep 'terminal' "$out" "trust is refused without a terminal"
-trust_plan p; trust_plan cyc; trust_plan idp
+trust_plan p; trust_plan cyc; trust_plan idp; trust_plan idapply; trust_plan mut; trust_plan nochk
 
 # --- status states and exit codes ----------------------------------------------------
 run_fr out ops status --plan "$P"
@@ -131,6 +153,43 @@ run_fr out ops status --plan docs/superpowers/plans/idp
 require_exit 1 "$out"
 expect_grep 'CANNOT-VERIFY' "$out" "an unreadable identity is CANNOT-VERIFY"
 expect_grep 'bot' "$out" "and names the identity"
+
+# --- an identity that cannot be read at apply time names the identity, nothing runs ----------
+run_fr out ops apply --plan docs/superpowers/plans/idapply --phase pre-merge --yes
+require_exit 1 "$out"
+expect_grep 'bot' "$out" "the apply-time identity failure names the identity"
+[ ! -e "$MARKS/idapply-ran" ] || fail "an op ran without its identity"
+
+# --- a mutating op needs --yes AND --yes-mutating ----------------------------------------------------
+run_fr out ops apply --plan docs/superpowers/plans/mut --phase pre-merge --yes
+require_exit 2 "$out"
+expect_grep -- '--yes-mutating' "$out" "a mutating op without --yes-mutating is refused"
+[ ! -e "$MARKS/mut" ] || fail "a refused mutating op ran"
+run_fr out ops apply --plan docs/superpowers/plans/mut --phase pre-merge --yes-mutating
+require_exit 2 "$out"
+[ ! -e "$MARKS/mut" ] || fail "--yes-mutating alone confirmed a mutating op"
+run_fr out ops apply --plan docs/superpowers/plans/mut --phase pre-merge --yes --yes-mutating
+require_exit 0 "$out"
+[ -e "$MARKS/mut" ] || fail "both flags did not run the mutating op"
+
+# --- an apply with no check is flagged, never re-applied silently -----------------------------------
+run_fr out ops apply --plan docs/superpowers/plans/nochk --phase pre-merge --yes
+require_exit 0 "$out"
+expect_grep 'attest' "$out" "an unchecked apply is flagged for attestation"
+[ -e "$MARKS/nochk" ] || fail "the unchecked op did not run"
+rm -f "$MARKS/nochk"
+run_fr out ops apply --plan docs/superpowers/plans/nochk --phase pre-merge --yes
+require_exit 0 "$out"
+expect_grep 'already applied' "$out" "a re-run says it was already applied"
+[ ! -e "$MARKS/nochk" ] || fail "an unchecked op was re-applied silently"
+run_fr out ops status --plan docs/superpowers/plans/nochk
+require_exit 1 "$out"
+expect_grep 'UNVERIFIABLE' "$out" "status still cannot verify it"
+
+# --- an unknown op is refused (exit 2), naming it -------------------------------------------------------
+run_fr out ops apply --plan "$P" no-such-op --yes
+require_exit 2 "$out"
+expect_grep 'no-such-op' "$out" "an unknown op id is refused by name"
 
 # --- attest (R8) ------------------------------------------------------------------------------------
 run_fr out ops attest hand-op --note "saw it" --plan "$P"

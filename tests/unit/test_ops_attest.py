@@ -118,3 +118,17 @@ def test_attest_of_a_runbook_op_needs_plan(repo: Path) -> None:
     _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "book")
     res = runner.invoke(app, ["ops", "attest", "rb", "--note", "x"])
     assert res.exit_code == 2
+
+
+def test_p2_r8_a_multiline_note_is_refused_before_the_prompt(repo: Path, monkeypatch) -> None:
+    asked: list[str] = []
+
+    class Spy(Prompt):
+        def confirm(self, text: str) -> bool:
+            asked.append(text)
+            return True
+
+    monkeypatch.setattr("fr.commands.ops_cmd._prompt", lambda: Spy())
+    res = _attest("click-ui", "--note", "line one\nline two")
+    assert res.exit_code == 2 and "single line" in res.output
+    assert asked == [] and "op click-ui" not in _journal(repo)

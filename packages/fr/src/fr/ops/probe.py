@@ -33,16 +33,16 @@ def probe_env(
     return env
 
 
-def run_probe(
+def run_probe_full(
     command: str,
     cwd: Path,
     *,
     extra: Mapping[str, str] | None = None,
     passthrough: Sequence[str] = (),
     timeout: float = DEFAULT_TIMEOUT,
-) -> tuple[int, str]:
-    """`(exit, stdout)`; `TIMED_OUT` when the timeout expired, `NOT_FOUND` when bash
-    could not start."""
+) -> tuple[int, str, str]:
+    """`(exit, stdout, stderr)`; `TIMED_OUT` when the timeout expired, `NOT_FOUND` when
+    bash could not start."""
     try:
         done = subprocess.run(
             ["bash", "-euo", "pipefail", "-c", command],
@@ -55,10 +55,23 @@ def run_probe(
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return TIMED_OUT, ""
+        return TIMED_OUT, "", ""
     except OSError:
-        return NOT_FOUND, ""
-    return done.returncode, done.stdout
+        return NOT_FOUND, "", ""
+    return done.returncode, done.stdout, done.stderr
+
+
+def run_probe(
+    command: str,
+    cwd: Path,
+    *,
+    extra: Mapping[str, str] | None = None,
+    passthrough: Sequence[str] = (),
+    timeout: float = DEFAULT_TIMEOUT,
+) -> tuple[int, str]:
+    """`(exit, stdout)` — `run_probe_full` without the stderr."""
+    rc, out, _ = run_probe_full(command, cwd, extra=extra, passthrough=passthrough, timeout=timeout)
+    return rc, out
 
 
 def run_interactive(
