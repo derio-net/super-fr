@@ -137,13 +137,20 @@ steps:
           tests: ci:b107903055a5ddbc7e94c83f6d68718c1811479b+1d2290f8bde8284e05c27371f0b841cbd7463cc0;tree=75a8f4cfd4eaa44598a24ce6806e8ee05619e9c726d1f78383cdb4cab3729c51
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-10-22T10:58:14+00:00'
           agent: af456b9ac406243dc
           harness: claude-code
           model: claude-opus-5-5
           session: dee186d0-4151-4daa-8429-a4ad2132062e
+          returned: '2026-10-22T11:36:18+00:00'
+          outcome: done
+        evidence:
+          review: p3-review-1
+          reviewer: af456b9ac406243dc
+          visual: none
+          findings: p3-na-not-recordable,p3-matrix-testplan-tags-wording,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9
   journal-check:
     state: pending
   deliver:
