@@ -387,3 +387,10 @@ Phase 5 only records their evidence. Reading the 2.0 store is 900 lines across t
 ### phase-split-2026-10-20-opencode-2-support-p5-1 · decision · tier: phase 5 is mechanical-tier bookkeeping across a dozen published surfaces
 
 It exists to make the published surfaces match the code: parity rows, the matrix and its three reports, the canonical rule and both mirrors, the explainer and the release fragment. Folding it into a hard implementation phase would blur the tier the dispatcher binds.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-10-22T16:34:02+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Enter a workspace, start a run, ask the model to edit a tracked file in the base clone; expect the plugin's refusal and no file change.
+
+Evidence: PASS — a model-driven edit to docs/superpowers/specs/2026-10-20-opencode-2-support-design.md in the base clone was refused with the fr-isolation blocked message; git status stayed clean and no file changed.
