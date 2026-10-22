@@ -103,7 +103,7 @@ class ShellRunner:
         return rc, lines[-1].strip() if lines else ""
 
 
-def _clean(line: str, secrets: Iterable[str], *, as_identity: bool = False) -> str:
+def clean_reason(line: str, secrets: Iterable[str], *, as_identity: bool = False) -> str:
     """A reason line with every identity value masked (`fr.ops.mask`), cut to one
     short line. Run as an identity, a line that still looks like a response body
     is dropped (`""`): the caller reports only the exit code (R5)."""
@@ -130,10 +130,10 @@ def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityRes
         if rc == TIMED_OUT:
             return replace(row, state="CANNOT-VERIFY", reason="timed out", identity=name)
         if rc == NOT_FOUND:
-            reason = _clean(line, env.values(), as_identity=name is not None)
+            reason = clean_reason(line, env.values(), as_identity=name is not None)
             reason = reason or f"the check could not run (exit {rc})"
             return replace(row, state="CANNOT-VERIFY", reason=reason, identity=name)
-        reason = _clean(line, env.values(), as_identity=name is not None) or f"exit {rc}"
+        reason = clean_reason(line, env.values(), as_identity=name is not None) or f"exit {rc}"
         return replace(row, state="OPEN", reason=reason, identity=name)
     return replace(row, state="DONE", how="checked")
 
@@ -162,7 +162,7 @@ def _evaluate(
         if rc == TIMED_OUT:
             return replace(row, state="CANNOT-VERIFY", reason="na_if: timed out")
         if rc == NOT_FOUND:
-            reason = _clean(line, ()) or "na_if could not run"
+            reason = clean_reason(line, ()) or "na_if could not run"
             return replace(row, state="CANNOT-VERIFY", reason=f"na_if: {reason}")
     if op.is_proof:
         ev = journal.latest(op.id, runbook=lo.runbook)

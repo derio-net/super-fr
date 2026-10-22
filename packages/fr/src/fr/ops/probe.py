@@ -59,3 +59,34 @@ def run_probe(
     except OSError:
         return NOT_FOUND, ""
     return done.returncode, done.stdout
+
+
+def run_interactive(
+    command: str,
+    cwd: Path,
+    *,
+    extra: Mapping[str, str] | None = None,
+    passthrough: Sequence[str] = (),
+    tty: str = "/dev/tty",
+) -> int:
+    """Run an `interactive: true` op's apply with the operator's terminal attached.
+
+    The one deliberate departure from `run_probe`: stdin, stdout and stderr are the
+    terminal (`tty`, never this process's own streams, which an agent's harness may
+    own), there is no timeout (a person is answering), and the output is not
+    captured, so it cannot be masked. The environment is still the minimal one.
+    `NOT_FOUND` when there is no terminal to attach."""
+    try:
+        with open(tty, "r+b", buffering=0) as term:
+            done = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", command],
+                cwd=cwd,
+                env=probe_env(passthrough, extra),
+                stdin=term,
+                stdout=term,
+                stderr=term,
+                check=False,
+            )
+    except OSError:
+        return NOT_FOUND
+    return done.returncode

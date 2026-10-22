@@ -45,7 +45,7 @@ def in_ops_profile(
     return name in ops_profiles(repo_root or Path.cwd())
 
 
-def refusal_route(repo_root: Path, *, slug: str = "<slug>", base: str = "origin/main") -> str:
+def refusal_route(repo_root: Path, *, slug: str = "<slug>", base: str = "<ref>") -> str:
     """The ops-workspace route printed when a verb refuses outside an ops profile."""
     names = ops_profiles(repo_root)
     profile = names[0] if names else "<ops-profile>"
