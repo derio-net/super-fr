@@ -258,13 +258,15 @@ the ops workspace and re-run the stage:
 
 ```bash
 fr isolation exec --branch chore/ops-<slug> -- \
-  fr closeout outcome --run <run-id> --step <n> --ran --evidence "<what it showed>"
+  fr closeout outcome --run <run-id> --step <n> --ran --evidence "<what it showed>" --supersede
 fr ops gate --run <run-id> --yes
 ```
 
-A later `ran` or `n/a` outcome supersedes the owed one (`fr closeout outcome` records
-over an owed step without a flag; over any other it needs `--supersede`), and so does
-resolving the owed entry `fixed` with `fr journal resolve`.
+A later `ran` or `n/a` outcome supersedes the owed one, and so does resolving the owed
+entry `fixed` with `fr journal resolve`. `fr closeout outcome` records over any existing
+outcome, owed included, only with `--supersede`: an owed step may already be filed as an
+`fr:owed` issue, so it is never overwritten silently. Stage 6 prints the command with the
+flag already on it.
 
 ### Test Plan tags
 

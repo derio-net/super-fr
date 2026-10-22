@@ -285,10 +285,10 @@ gate run-q y y "owed later"
 require_exit 1 "$OUT"
 expect_grep 'stage 6 \(gate pass\) failed' "$OUT" "an owed devops step stops stage 6"
 expect_grep 'owed' "$OUT" "the refusal names the owed step"
-expect_grep 'fr closeout outcome --run run-q --step 1 --ran' "$OUT" "the refusal names the recovery command"
+expect_grep 'fr closeout outcome --run run-q --step 1 --ran .*--supersede' "$OUT" "the refusal names the recovery command, flag included"
 
 # --- the owed step recovers: record it in the ops workspace, re-run --------------------
-(unset CI; fr isolation exec --branch chore/ops-q -- fr closeout outcome --run run-q --step 1 --ran --evidence "walked it later") >/dev/null 2>&1 \
+(unset CI; fr isolation exec --branch chore/ops-q -- fr closeout outcome --run run-q --step 1 --ran --evidence "walked it later" --supersede) >/dev/null 2>&1 \
   || fail "could not record the owed step's outcome"
 gate run-q
 require_exit 0 "$OUT"

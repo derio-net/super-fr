@@ -83,17 +83,17 @@ def outcome(
     supersede: bool = typer.Option(
         False,
         "--supersede",
-        help="Record over a step's existing ran/n/a outcome (an owed one needs no flag): "
-        "a new entry the fold reads as latest.",
+        help="Record over a step's existing outcome, owed included: a new entry the fold "
+        "reads as latest (an owed one may already be filed as an fr:owed issue, so it is "
+        "never overwritten silently).",
     ),
 ) -> None:
     """Record one outcome for each Test Plan step in --step (R18).
 
     Exactly one of `--ran --evidence <text>`, `--owed --why <text>` or
     `--na --reason <text>`. A step that already has an outcome is refused, and
-    nothing is written for any step of the range, unless it is only owed (a later outcome
-    supersedes it) or `--supersede` is given; either way a new entry is appended and the
-    old one stays, as a journal is a log.
+    nothing is written for any step of the range, unless `--supersede` is given; then a
+    new entry is appended and the old one stays, as a journal is a log.
     """
     from fr.archive import outcome_id, recorded_outcomes, spec_slug_of
     from fr.journal.model import owed_body, resolve_journal_read_path
@@ -126,9 +126,7 @@ def outcome(
     journal = resolve_journal_read_path(root, "spec", slug)
     done = recorded_outcomes(journal)
     effective = _effective_outcomes(journal)
-    already = [
-        outcome_id(n) for n in numbers if effective.get(n) not in (None, "owed") and not supersede
-    ]
+    already = [outcome_id(n) for n in numbers if effective.get(n) is not None and not supersede]
     if already:
         raise _refuse(f"already recorded: {', '.join(already)} (--supersede records over it)")
     ids: dict[int, str] = {}

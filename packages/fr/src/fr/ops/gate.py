@@ -779,13 +779,18 @@ def _recovery(gate: Gate, tree: OpsTree) -> str:
     from fr.ops.holds import gated_steps
 
     t = gate.target
-    open_steps = [s for s, kind in gated_steps(tree.path, t.run, "devops") if kind != "discovery"]
+    open_steps = [
+        (s, kind) for s, kind in gated_steps(tree.path, t.run, "devops") if kind != "discovery"
+    ]
     if not open_steps:
         return ""
+    # A step already recorded (owed) is recorded over only with --supersede: an owed
+    # outcome may already be filed as an fr:owed issue, so it is never overwritten silently.
     lines = [
         f"  fr isolation exec --repo {t.primary} --branch {t.ops_branch} -- fr closeout "
         f"outcome --run {t.run.run} --step {s.n} --ran --evidence '<what it showed>'"
-        for s in open_steps
+        + (" --supersede" if kind is not None else "")
+        for s, kind in open_steps
     ]
     return (
         "; record each devops step that is not closed (or `--na --reason …`), then re-run "

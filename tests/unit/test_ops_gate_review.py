@@ -187,7 +187,10 @@ def test_closeout_outcome_supersedes_an_owed_step(tmp_path: Path, monkeypatch) -
     cli = CliRunner()
     base = ["closeout", "outcome", "--run", "r1", "--step", "1"]
     assert cli.invoke(app, [*base, "--owed", "--why", "later"]).exit_code == 0
-    done = cli.invoke(app, [*base, "--ran", "--evidence", "walked"])
+    # An owed step may already be filed as an fr:owed issue: never overwritten silently.
+    plain = cli.invoke(app, [*base, "--ran", "--evidence", "walked"])
+    assert plain.exit_code != 0 and "already recorded" in plain.output
+    done = cli.invoke(app, [*base, "--ran", "--evidence", "walked", "--supersede"])
     assert done.exit_code == 0, done.output
     again = cli.invoke(app, [*base, "--ran", "--evidence", "twice"])
     assert again.exit_code != 0 and "already recorded" in again.output
