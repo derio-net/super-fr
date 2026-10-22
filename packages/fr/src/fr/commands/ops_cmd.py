@@ -116,8 +116,11 @@ def status(
     try:
         opset = load_ops(plan_dir, root, runbook=runbook, ids=ids)
         selected = [lo for lo in opset.ops if phase is None or lo.op.phase == phase]
-        # A single op's `needs` may name ops this selection left out.
-        known = {n for lo in selected for n in lo.op.needs} if ids else None
+        # A filter narrows the selection, never what exists: a need on a loaded op
+        # of the other phase, or (for one op id) on any op, is known, not unknown.
+        known = {lo.op.id for lo in opset.ops}
+        if ids:
+            known |= {n for lo in selected for n in lo.op.needs}
         ordered = order(selected, known=known)
         config = load_ops_config(root)
     except (OpsLoadError, OrderError) as e:

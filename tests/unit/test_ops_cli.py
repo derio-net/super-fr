@@ -178,3 +178,14 @@ def test_status_writes_nothing(tmp_path: Path, monkeypatch) -> None:
         ["git", "-C", str(root), "status", "--porcelain"], capture_output=True, text=True
     ).stdout
     assert porcelain == ""
+
+
+def test_status_phase_filter_keeps_a_need_on_an_op_of_the_other_phase(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """p1-r2: `rotate` (post-merge) needs `create-key` (pre-merge); filtering to
+    post-merge must not read that need as unknown."""
+    root = _repo(tmp_path)
+    result = _status(root, monkeypatch, "--plan", PLAN_REL, "--phase", "post-merge", "--json")
+    assert result.exit_code == 1, result.output
+    assert [r["op"] for r in json.loads(result.stdout)] == ["rotate"]
