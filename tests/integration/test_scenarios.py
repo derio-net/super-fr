@@ -230,6 +230,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "batch-merge-skip-held",
         "triage-closed-settle",
         "triage-retire-sync",
+        "fr-ops-status-apply",
+        "fr-ops-seal",
     }
     assert on_disk == here
 
@@ -380,3 +382,11 @@ def test_triage_closed_settle(installed: Path, tmp_path: Path) -> None:
 
 def test_triage_retire_sync(installed: Path, tmp_path: Path) -> None:
     _scenario("triage-retire-sync", installed, tmp_path)
+
+
+def test_fr_ops_status_apply(installed: Path, tmp_path: Path) -> None:
+    _scenario("fr-ops-status-apply", installed, tmp_path)
+
+
+def test_fr_ops_seal(installed: Path, tmp_path: Path) -> None:
+    _scenario("fr-ops-seal", installed, tmp_path)

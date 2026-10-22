@@ -96,6 +96,44 @@ def test_substitutions_are_shell_quoted(repo: Path) -> None:
     assert target.read_text().strip() == str(target)
 
 
+def test_a_symlinked_target_is_refused_and_nothing_is_touched(repo: Path, tmp_path: Path) -> None:
+    victim = tmp_path / "authorized_keys"
+    victim.write_bytes(b"victim")
+    link = repo / "t.enc"
+    link.symlink_to(victim)
+    with pytest.raises(HelperError, match="symlink"):
+        helpers.seal("echo x > {out}", link, PLAIN, repo_root=repo)
+    assert victim.read_bytes() == b"victim" and link.is_symlink()
+    assert not _plaintext_anywhere(repo, PLAIN)
+
+
+def test_a_symlinked_parent_dir_is_refused(repo: Path, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "t.enc").write_bytes(b"victim")
+    (repo / "d").symlink_to(outside)
+    with pytest.raises(HelperError, match="symlink"):
+        helpers.seal("echo x > {out}", repo / "d" / "t.enc", PLAIN, repo_root=repo)
+    assert (outside / "t.enc").read_bytes() == b"victim"
+    assert [p.name for p in outside.iterdir()] == ["t.enc"]
+
+
+def test_an_absolute_target_outside_the_repo_is_refused(repo: Path, tmp_path: Path) -> None:
+    victim = tmp_path / "elsewhere.enc"
+    victim.write_bytes(b"victim")
+    with pytest.raises(HelperError, match="outside the repo"):
+        helpers.seal("echo x > {out}", victim, PLAIN, repo_root=repo)
+    assert victim.read_bytes() == b"victim"
+
+
+def test_a_dotdot_escape_is_refused(repo: Path, tmp_path: Path) -> None:
+    victim = tmp_path / "elsewhere.enc"
+    victim.write_bytes(b"victim")
+    with pytest.raises(HelperError, match="outside the repo"):
+        helpers.seal("echo x > {out}", repo / ".." / "elsewhere.enc", PLAIN, repo_root=repo)
+    assert victim.read_bytes() == b"victim"
+
+
 def test_sigterm_during_the_encrypt_command_removes_both_temps(repo: Path, tmp_path: Path) -> None:
     target = repo / "secrets.enc"
     target.write_bytes(b"old")

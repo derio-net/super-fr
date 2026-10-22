@@ -100,6 +100,29 @@ def _run_child(
     return subprocess.CompletedProcess(list(argv), proc.returncode)
 
 
+def _checked_target(target: Path, repo_root: Path) -> Path:
+    """The target, absolute, refused unless it lies inside the repo with no symlink on
+    the way (the target itself or any parent below the repo root): a planted link
+    would otherwise make the final rename overwrite a file elsewhere."""
+    lexical = Path(os.path.normpath(target if target.is_absolute() else Path.cwd() / target))
+    for base in (repo_root, repo_root.resolve()):
+        try:
+            rel = lexical.relative_to(base)
+        except ValueError:
+            continue
+        walk = base
+        for part in rel.parts:
+            walk = walk / part
+            if walk.is_symlink():
+                raise HelperError(f"{walk} is a symlink; refusing to seal through it")
+        break
+    else:
+        raise HelperError(f"{lexical} is outside the repo ({repo_root}); refusing to seal it")
+    if not _inside(lexical, repo_root):
+        raise HelperError(f"{lexical} resolves outside the repo; refusing to seal it")
+    return lexical
+
+
 def seal(encrypt: str, target: Path, plaintext: bytes, *, repo_root: Path) -> int:
     """Encrypt `plaintext` into `target` through the caller's command.
 
@@ -114,7 +137,7 @@ def seal(encrypt: str, target: Path, plaintext: bytes, *, repo_root: Path) -> in
             f"TMPDIR ({tmp_root}) resolves inside the repo; plaintext must not land there — "
             "point TMPDIR elsewhere"
         )
-    target = target.resolve() if target.is_absolute() else (Path.cwd() / target).resolve()
+    target = _checked_target(target, repo_root)
     with cleanup_guard() as cleanups:
         fd, in_name = tempfile.mkstemp(prefix=".seal-in-", dir=tmp_root)
         in_path = Path(in_name)
