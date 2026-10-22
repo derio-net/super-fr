@@ -30,6 +30,7 @@ from fr.journal.model import (
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Matrix, Row
+    from fr.ops.model import Op
     from fr.run.cost import PhaseRow, Summary
     from fr.run.model import RunState
     from fr.verification.exit import Exit
@@ -67,6 +68,7 @@ REQUIRED_SECTIONS = (
     "## Out-of-scope findings",
     "## Pre-merge verification owed",
     "## Post-merge verification owed",
+    "## Manual operations",
     "## Proportionality",
     "## Cost",
 )
@@ -74,7 +76,9 @@ REQUIRED_SECTIONS = (
 verification owed` (spec 2026-09-28 §F) lists the acceptance rows only a live
 run after merge can move; `Pre-merge verification owed` (spec
 2026-10-06-verification-strategies §D, R12) the operator-driven ones to walk
-before it, each with its exact walk command."""
+before it, each with its exact walk command; `Manual operations` (spec
+2026-10-22-fr-ops R13) the plan's ops with their recorded state, `None.` when
+it has none."""
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
 
@@ -731,6 +735,45 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     return "\n".join(lines) if lines else "None."
 
 
+def _op_command(op: Op) -> str:
+    if op.apply:
+        return f"fr ops apply {op.id}"
+    if op.check is None:
+        return f"fr ops attest {op.id} --note '<what you did>'"
+    return f"fr ops status {op.id}"
+
+
+def _manual_operations(repo_root: Path, state: RunState) -> str:
+    """The plan's ops (spec 2026-10-22-fr-ops R13): each with its phase, its last
+    RECORDED state (or "never checked") and its command, then who owns them, or
+    `None.`. Folds the journal; never runs a probe; never refuses `deliver`."""
+    from fr.ops.evidence import JournalEvidence, recorded_state
+    from fr.ops.load import OpsLoadError, load_ops
+    from fr.verification.exit import run_plan_dir
+
+    plan_dir = run_plan_dir(repo_root, state)
+    if plan_dir is None:
+        return "None."
+    try:
+        ops = [lo for lo in load_ops(plan_dir, repo_root).ops if not lo.runbook]
+    except OpsLoadError as e:
+        return f"Not available: {e}"
+    if not ops:
+        return "None."
+    journal = JournalEvidence(repo_root, plan_dir.name)
+    lines = [
+        f"- `{lo.op.id}` [{lo.op.phase}] — {lo.op.summary} — "
+        f"{recorded_state(lo, journal.latest(lo.op.id, runbook=False))} — "
+        f"`{_op_command(lo.op)}`"
+        for lo in ops
+    ]
+    lines.append(
+        f"\nThe DevOps stage owns these (`fr ops gate --run {state.run}`): the PR holds on "
+        "`gate:devops` until it passes, and `deliver` does not wait for them."
+    )
+    return "\n".join(lines)
+
+
 def _ci_line(repo_root: Path, witness: str) -> str:
     """A `ci:<ci sha>+<base>;tree=<tree>` witness as the PR body says it (spec
     2026-10-07-cloud-triage §I step 6, p2-r8): what CI proved, never a local
@@ -922,6 +965,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         _pre_merge_owed(repo_root, state),
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
+        "## Manual operations",
+        _manual_operations(repo_root, state),
     ]
     tests = _tests(repo_root, state)
     if tests is not None:

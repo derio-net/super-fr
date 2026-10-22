@@ -193,6 +193,7 @@ def test_the_required_sections_carry_no_input_section() -> None:
         "## Out-of-scope findings",
         "## Pre-merge verification owed",
         "## Post-merge verification owed",
+        "## Manual operations",
         "## Proportionality",
         "## Cost",
     )
