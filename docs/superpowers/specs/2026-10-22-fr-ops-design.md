@@ -68,8 +68,8 @@ sees frank-only keys. Its `status:` is ignored, because evidence lives in the jo
 ### B. Carriers (`fr/ops/load.py`)
 
 `load_ops(plan_dir, repo_root) -> OpSet` reads `ops.yaml` (`schema_version: 1`,
-`ops: [...]`), then every phase file's step text. For each step it finds fenced
-```` ```yaml ```` blocks whose first non-blank line is `# manual-operation`, dedents
+`ops: [...]`), then every phase file's step text. For each step it finds fenced YAML code
+blocks whose first non-blank line is `# manual-operation`, dedents
 them, and parses them (fence-aware, reusing `spec.py`'s fence regex). Then it reads
 the runbook from `.fr/ops.yaml` when one is declared. A duplicate id across the plan
 carriers is an error. A runbook op with a plan's id is shadowed by the plan's op,
