@@ -9600,8 +9600,7 @@ rows:
       - super-fr:tests/unit/test_ops_load.py#test_the_same_id_in_both_carriers_is_an_error_naming_both
       - super-fr:tests/unit/test_ops_load.py#test_step_text_blocks_are_dedented_and_read_through_the_legacy_model
     status: ci
-    notes: unit tests over the op model and both carriers run in CI (plan 2026-10-22-fr-ops
-      phase 1); the candidate scenario lands in phase 2
+    notes: unit tests run in CI; candidate scenario written (phase 2)
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-status
     capability: fr ops
