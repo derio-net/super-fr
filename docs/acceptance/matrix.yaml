@@ -9680,7 +9680,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R19
     levels: {}
     status: not-implemented
-    notes: 'added at phase-1 review (p1-r5): spec gap'
+    notes: added at phase-1 review (p1-r5); candidate scenario planned
+    scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-testplan-tags
     capability: Test Plan
     acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; an
