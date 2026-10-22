@@ -122,7 +122,7 @@ def status(
     from fr.ops.identity import LiveIdentities
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
     from fr.ops.profile import in_ops_profile
-    from fr.ops.trust import diff, fingerprint, plan_trust
+    from fr.ops.trust import diff, fingerprint, load_trust
 
     if phase is not None and phase not in PHASES:
         _refuse(f"--phase must be one of {', '.join(PHASES)} (got {phase!r})")
@@ -146,10 +146,10 @@ def status(
     for warning in opset.warnings:
         typer.echo(f"fr ops status: warning: {warning}", err=True)
 
-    trusted = plan_trust(root, plan_dir.name)
-    changes = diff(fingerprint(opset.ops, config), trusted)
+    trusted = load_trust(root, plan_dir.name)
+    changes = diff(fingerprint(opset.ops, config, root), trusted)
     if changes.untrusted:
-        since = f"since {trusted.entry_id}" if trusted else "never trusted"
+        since = f"changed since the grant of {trusted.granted}" if trusted else "never trusted"
         _refuse(
             f"the op set is not trusted ({since}); no probe ran.\n  "
             + "\n  ".join(changes.lines())
@@ -182,10 +182,11 @@ def trust(
     runbook: Annotated[bool, RUNBOOK_OPTION] = False,
 ) -> None:
     """Show every probe and command of the selected ops and, confirmed at a
-    terminal, record that you trust this exact set (an `op-trust-<n>` decision in
-    the plan journal). Probes are repo-authored code; nothing runs them until then."""
+    terminal, record that you trust this exact set — in your own store outside the
+    repo (a plan-journal line records it for audit). Probes are repo-authored code;
+    nothing runs them until then."""
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
-    from fr.ops.trust import describe, diff, fingerprint, plan_trust, record_trust, set_hash
+    from fr.ops.trust import describe, diff, fingerprint, grant_trust, load_trust, set_hash
 
     root, plan_dir = _plan_dir("trust", plan)
     try:
@@ -193,19 +194,19 @@ def trust(
         config = load_ops_config(root)
     except OpsLoadError as e:
         _refuse(str(e), "trust")
-    fp = fingerprint(opset.ops, config)
-    trusted = plan_trust(root, plan_dir.name)
+    fp = fingerprint(opset.ops, config, root)
+    trusted = load_trust(root, plan_dir.name)
     if trusted is not None and trusted.sha256 == set_hash(fp):
-        typer.echo(f"already trusted ({trusted.entry_id}); nothing written")
+        typer.echo(f"already trusted (granted {trusted.granted}); nothing written")
         return
-    typer.echo(describe(opset.ops, config) or "no ops selected")
+    typer.echo(describe(opset.ops, config, root))
     changes = diff(fp, trusted)
     if trusted is not None:
-        typer.echo(f"since {trusted.entry_id}: " + "; ".join(changes.lines()))
+        typer.echo(f"since the grant of {trusted.granted}: " + "; ".join(changes.lines()))
     if not _interactive():
         _refuse("trust is granted only at a terminal; nothing written", "trust")
     if not typer.confirm(f"Trust these {len(opset.ops)} op(s) to run on this machine?"):
         typer.echo("not trusted; nothing written")
         raise typer.Exit(code=1)
-    entry = record_trust(root, plan_dir.name, fp)
-    typer.echo(f"trusted: {entry.id} (sha256 {set_hash(fp)})")
+    entry = grant_trust(root, plan_dir.name, fp)
+    typer.echo(f"trusted: {entry.id} (sha256 {set_hash(fp)}); the grant is yours, not the repo's")

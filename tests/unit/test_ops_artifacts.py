@@ -331,10 +331,10 @@ def test_a_handoff_collapses_op_and_op_trust_entries(tmp_path: Path) -> None:
     """p1-r7: op evidence and trust decisions are written unphased; rendered in full
     they would land in every phase's handoff. They collapse to one line each."""
     from fr.journal.model import compose_handoff
-    from fr.ops.trust import record_trust
+    from fr.ops.trust import grant_trust
 
     (tmp_path / "docs/superpowers/plans/p").mkdir(parents=True)
-    record_trust(tmp_path, "p", {"a": "0" * 64})
+    grant_trust(tmp_path, "p", {"a": "0" * 64})
     path = journal_path(tmp_path, "plan", "p")
     append_journal_entry(path, "p", _op_entry())
     decision = JournalEntry(
@@ -343,6 +343,6 @@ def test_a_handoff_collapses_op_and_op_trust_entries(tmp_path: Path) -> None:
     )  # fmt: skip
     append_journal_entry(path, "p", decision)
     text = compose_handoff(parse_journal(path.read_text()), phase=2, scope="plan", slug="p")
-    assert "0" * 64 not in text and "result: done" not in text
+    assert "sha256:" not in text and "result: done" not in text
     assert "- op-trust-1 · decision" in text and "- op-a-1 · op" in text
     assert "keep me in full" in text
