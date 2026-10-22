@@ -9782,6 +9782,7 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R15
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: the surface ships in this PR; only the post-merge live walk under a real
+      ops profile remains, held by the row's devops gate (spec Verification)
     verify: live
