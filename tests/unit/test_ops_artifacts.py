@@ -259,3 +259,18 @@ def test_self_review_counts_step_text_ops_too(tmp_path: Path, monkeypatch) -> No
         )
     )
     assert len(_floor_errors(plan_dir)) == 1
+
+
+def test_journal_add_refuses_an_op_entry(tmp_path: Path, monkeypatch) -> None:
+    """`op` entries are written only by `fr ops` (R17), never by `fr journal add`."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "docs/superpowers/plans/p").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        ["journal", "add", "--scope", "plan", "--slug", "p", "--kind", "op", "--title", "t"]
+        + ["--global"],
+    )
+    assert result.exit_code != 0
+    assert "fr ops" in result.output
+    assert not journal_path(tmp_path, "plan", "p").exists()
