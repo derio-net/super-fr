@@ -18,7 +18,7 @@ what this checkout recorded. It never runs a probe.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, NoReturn
 
 import typer
 
@@ -41,24 +41,41 @@ DEFAULT_HOST = "github.com"
 _FORGE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
 
 
-def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
-    """The run whose devops evidence the pass folds: `--run`, else the one run whose
-    `branch` is the PR's head ref (`None` when none is; refused when several are)."""
+NO_RUN_EVIDENCE = "--no-run-evidence"
+
+
+def _cursors(root: Path) -> list[Path]:
+    """Every run cursor this checkout holds, live then archived (R14: archived runs count)."""
     from fr.record.model import RUNS_REL
-    from fr.run.model import RunStateError, load_run_state, parse_run_state
+    from fr.run.model import IMPLEMENTED_RUNS_REL
+
+    dirs = (root / RUNS_REL, root / IMPLEMENTED_RUNS_REL)
+    return [p for d in dirs if d.is_dir() for p in sorted(d.glob("*.yaml"))]
+
+
+def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
+    """The run whose devops evidence the pass folds: `--run` (live or archived), else the
+    one run whose `branch` is the PR's head ref; `None` when none is. Several matches, or
+    a cursor that cannot be read, are refusals: an unreadable cursor may be the run."""
+    from fr.run.model import RunStateError, parse_run_state
 
     if run is not None:
-        try:
-            return load_run_state(root, run)
-        except (RunStateError, OSError) as exc:
-            _refuse(f"cannot read run {run!r}: {exc}")
-    runs_dir = root / RUNS_REL
+        for path in _cursors(root):
+            if path.stem == run:
+                try:
+                    return parse_run_state(path.read_text())
+                except (RunStateError, OSError) as exc:
+                    _refuse(f"cannot read run {run!r} ({path.relative_to(root)}): {exc}")
+        _refuse(f"no run {run!r} in this checkout (live or archived)")
     found = []
-    for path in sorted(runs_dir.glob("*.yaml")) if runs_dir.is_dir() else []:
+    for path in _cursors(root):
         try:
             state = parse_run_state(path.read_text())
-        except (RunStateError, OSError):
-            continue
+        except (RunStateError, OSError) as exc:
+            _refuse(
+                f"cannot read run cursor {path.relative_to(root)}: {exc}; it may be this PR's "
+                "run, so no run is assumed: fix it, or pass --run <id>"
+            )
         if head_ref and state.branch == head_ref:
             found.append(state)
     if len(found) > 1:
@@ -66,20 +83,42 @@ def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
     return found[0] if found else None
 
 
-def _devops_evidence(root: Path, run: str | None, head_ref: str) -> None:
-    """R14: refuse (exit 2, listing them) while recorded evidence leaves anything open."""
+def _devops_evidence(run: str | None, head_ref: str, *, no_run_evidence: bool) -> bool:
+    """R14: refuse (exit 2, listing them) while recorded evidence leaves anything open, and
+    whenever no run resolves unless `--no-run-evidence` says the gate is row-only. Returns
+    whether the escape was used, for the pass comment."""
+    from fr.acceptance.model import AcceptanceError
     from fr.ops.holds import devops_blockers
     from fr.ops.load import OpsLoadError
+    from fr.verification.spec_section import SectionError
 
+    if no_run_evidence and run is not None:
+        _refuse(f"--run and {NO_RUN_EVIDENCE} contradict each other: give one")
+    root = _repo_root()
+    if root is None:
+        _refuse(
+            "not inside a checkout, so no run's op evidence can be folded: run this from the "
+            f"repo with --run <id> (or {NO_RUN_EVIDENCE} for a row-only devops gate)"
+        )
     state = _run_for(root, run, head_ref)
     if state is None:
-        typer.echo(f"no run here names branch {head_ref!r}: no op evidence folded (pass --run)")
-        return
+        if no_run_evidence:
+            typer.echo(f"{NO_RUN_EVIDENCE}: no run's op evidence folded (a row-only devops gate)")
+            return True
+        _refuse(
+            f"no run here names the PR's head ref {head_ref or '(none)'!r}: pass --run <id> "
+            f"(or {NO_RUN_EVIDENCE} for a row-only devops gate on a repo with no run)"
+        )
+    if no_run_evidence:
+        _refuse(
+            f"run {state.run} names this branch: its evidence is folded, drop {NO_RUN_EVIDENCE}"
+        )
     try:
         blockers = devops_blockers(root, state)
     except OpsLoadError as exc:
         _refuse(f"run {state.run}: the plan's ops cannot be read: {exc}")
-        return
+    except (SectionError, AcceptanceError, OSError) as exc:
+        _refuse(f"run {state.run}: its exit cannot be read: {exc}")
     if blockers:
         lines = "\n".join(f"  {b}" for b in blockers)
         _refuse(
@@ -88,20 +127,22 @@ def _devops_evidence(root: Path, run: str | None, head_ref: str) -> None:
             f"DevOps stage (`fr ops gate --run {state.run}`), then pass again"
         )
     typer.echo(f"run {state.run}: every op and devops step is recorded closed")
+    return False
 
 
-def _refuse(message: str) -> None:
+def _refuse(message: str) -> NoReturn:
     typer.echo(f"fr gate pass: {message}", err=True)
     raise typer.Exit(code=2)
 
 
-def _repo_root() -> Path:
+def _repo_root() -> Path | None:
+    """The checkout's root, or `None` outside one (a refusal for a devops pass)."""
     from fr.git import repo_root
 
     try:
         return repo_root(Path.cwd())
-    except Exception:  # noqa: BLE001 — outside a checkout there is no evidence to fold
-        return Path.cwd()
+    except Exception:  # noqa: BLE001 — any git failure means "no checkout here"
+        return None
 
 
 def release_command(repo: str) -> str:
@@ -149,6 +190,13 @@ def pass_command(
             "(default: the run whose branch is the PR's head ref).",
         ),
     ] = None,
+    no_run_evidence: Annotated[
+        bool,
+        typer.Option(
+            NO_RUN_EVIDENCE,
+            help="devops: pass a row-only gate on a repo with no run (recorded in the comment).",
+        ),
+    ] = False,
     yes: Annotated[bool, typer.Option("--yes", help="Write to the forge.")] = False,
 ) -> None:
     """Comment why PR <n>'s gate <g> passed, then swap gate:<g> for gate:<g>-passed (R14)."""
@@ -175,7 +223,9 @@ def pass_command(
         have = ", ".join(sorted(n for n in labels if n.startswith("gate:"))) or "no gate label"
         _refuse(f"PR #{pr} of {repo} does not carry {held} ({have}): nothing to pass")
     if gate == "devops":
-        _devops_evidence(_repo_root(), run, str(view.get("head_ref") or ""))
+        head_ref = str(view.get("head_ref") or "")
+        if _devops_evidence(run, head_ref, no_run_evidence=no_run_evidence):
+            notes = f"{notes} (passed with {NO_RUN_EVIDENCE}: no run's op evidence was folded)"
     left = sorted(held_gates((labels - {held}) | {passed}))
     typer.echo(f"PR #{pr} ({repo}): {held} -> {passed}")
     typer.echo(f"comment: {gate_pass_comment(gate, notes)}")

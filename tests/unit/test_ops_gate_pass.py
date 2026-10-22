@@ -157,11 +157,90 @@ def test_without_run_it_matches_the_pr_head_ref_to_a_run_branch(repo: Path, forg
     assert res.exit_code == 2 and "run-1" in res.output
 
 
-def test_without_run_and_no_matching_branch_it_behaves_as_today(repo: Path, forge: Any) -> None:
+def test_p3_r1_no_matching_run_refuses_naming_run(repo: Path, forge: Any) -> None:
     forge(["gate:devops"], head_ref="feat/elsewhere")
     res = _pass("--gate", "devops")
+    assert res.exit_code == 2 and "--run" in res.output
+
+
+def test_p3_r1_an_empty_head_ref_refuses(repo: Path, forge: Any) -> None:
+    forge(["gate:devops"], head_ref="")
+    res = _pass("--gate", "devops")
+    assert res.exit_code == 2 and "--run" in res.output
+
+
+def test_p3_r1_an_unreadable_cursor_is_a_refusal_not_no_run(repo: Path, forge: Any) -> None:
+    (repo / "docs/superpowers/runs/broken.yaml").write_text("run: [\n")
+    forge(["gate:devops"], head_ref="feat/elsewhere")
+    res = _pass("--gate", "devops")
+    assert res.exit_code == 2 and "broken.yaml" in res.output
+
+
+def test_p3_r1_outside_a_checkout_refuses(
+    repo: Path, forge: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outside = tmp_path / "nowhere"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    forge(["gate:devops"], head_ref="feat/elsewhere")
+    res = _pass("--gate", "devops")
+    assert res.exit_code == 2 and "--run" in res.output
+
+
+def test_p3_r1_no_run_evidence_passes_a_row_only_gate_and_says_so(repo: Path, forge: Any) -> None:
+    fake = forge(["gate:devops"], head_ref="feat/elsewhere")
+    res = _pass("--gate", "devops", "--no-run-evidence", "--yes")
     assert res.exit_code == 0, res.output
-    assert "no run" in res.output
+    comments = [str(c[1]) for c in fake.calls if c[0] == "comment_pr"]
+    assert comments and "--no-run-evidence" in comments[0]
+
+
+def test_p3_r1_no_run_evidence_is_refused_when_a_run_names_the_branch(
+    repo: Path, forge: Any
+) -> None:
+    forge(["gate:devops"])
+    res = _pass("--gate", "devops", "--no-run-evidence")
+    assert res.exit_code == 2 and "run-1" in res.output
+
+
+def test_p3_r4_an_owed_devops_step_does_not_close(repo: Path, forge: Any) -> None:
+    from fr.journal.model import owed_body
+
+    record_op(repo, "p", op="checked", result="done", phase="pre-merge")
+    record_op(
+        repo, "p", op="by-hand", result="attested", phase="post-merge", attested_by="operator"
+    )
+    slug = "2026-10-22-s"
+    body = owed_body(what="walk the stage", why="later", how="x", key=f"spec:{slug}#step1")
+    owed = JournalEntry(
+        kind="owed", scope="spec", id="test-plan-step-1",
+        created="2026-10-22T10:00:00+00:00", title="Test Plan step 1 owed", body=body,
+    )  # fmt: skip
+    append_journal_entry(journal_path(repo, "spec", slug), slug, owed)
+    forge(["gate:devops"])
+    res = _pass("--gate", "devops", "--run", "run-1")
+    assert res.exit_code == 2 and "step 1" in res.output and "owed" in res.output
+
+
+def test_p3_r6_an_unreadable_section_is_a_refusal_not_a_traceback(repo: Path, forge: Any) -> None:
+    _all_recorded(repo)
+    text = (repo / SPEC).read_text().replace("gate: developer", "gate: developer\ngate: tester")
+    (repo / SPEC).write_text(text)
+    forge(["gate:devops"])
+    res = _pass("--gate", "devops", "--run", "run-1")
+    assert res.exit_code == 2, res.output
+    assert res.exception is None or isinstance(res.exception, SystemExit)
+
+
+def test_p3_r7_an_archived_run_is_found(repo: Path, forge: Any) -> None:
+    _all_recorded(repo)
+    src = repo / "docs/superpowers/runs/run-1.yaml"
+    dst = repo / "docs/superpowers/implemented/runs/run-1.yaml"
+    dst.parent.mkdir(parents=True)
+    src.rename(dst)
+    forge(["gate:devops"])
+    assert _pass("--gate", "devops", "--run", "run-1").exit_code == 0
+    assert _pass("--gate", "devops").exit_code == 0
 
 
 def test_an_unknown_run_is_refused(repo: Path, forge: Any) -> None:
