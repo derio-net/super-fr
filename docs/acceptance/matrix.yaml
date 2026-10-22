@@ -9702,10 +9702,10 @@ rows:
       - super-fr:tests/unit/test_ops_trust.py#test_trust_refuses_without_a_terminal
       - super-fr:tests/unit/test_ops_runner.py#test_a_probe_gets_only_the_minimal_env
       - super-fr:tests/unit/test_ops_runner.py#test_a_probe_that_hangs_times_out
+      - super-fr:tests/unit/test_ops_trust.py#test_exclusion_is_the_exact_file_shapes_fr_writes
     status: ci
-    notes: added at phase-1 review (p1-r5); unit tests over trust, the status trust
-      gate, the minimal probe env, closed stdin and the timeout run in CI; candidate
-      scenario planned in phase 2
+    notes: scenario now exercises the trust gate with a grant written through fr.ops.trust.grant_trust;
+      exclusion narrowed to exact file shapes (phase 2)
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-testplan-tags
     capability: Test Plan
