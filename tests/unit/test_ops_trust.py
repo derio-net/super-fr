@@ -68,7 +68,21 @@ def _repo(tmp_path: Path) -> Path:
 
 def _commit(root: Path, message: str = "seed") -> None:
     subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(root), "commit", "-qm", message], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            message,
+        ],
+        check=True,
+    )
 
 
 def _lo(**fields: object) -> LoadedOp:

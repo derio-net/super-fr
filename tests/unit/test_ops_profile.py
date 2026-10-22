@@ -109,7 +109,21 @@ def test_rescaffold_keeps_keys_it_does_not_own(repo: Path) -> None:
     data = yaml.safe_load(path.read_text())
     data["profiles"]["ops"]["custom"] = "keep me"
     path.write_text(yaml.safe_dump(data))
-    subprocess.run(["git", "-C", str(repo), "commit", "-qam", "x"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qam",
+            "x",
+        ],
+        check=True,
+    )
     scaffold_profile(repo, "ops", "operate again", [], [], ops=True, force=True)
     entry = _profiles(repo)["profiles"]["ops"]
     assert entry["custom"] == "keep me" and entry["ops"] is True
