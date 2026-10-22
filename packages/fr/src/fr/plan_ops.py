@@ -39,7 +39,7 @@ from fr.plan_validator_wrapper import (
 )
 from fr.render import plan_locally_complete
 from fr.types import PHASE_TIERS, PhaseDoc, Step
-from fr.version_floor import CEILING_VERSION, PRE_4_20_PROBES, admits, admits_below
+from fr.version_floor import CEILING_VERSION, PRE_4_20_PROBES, admits
 
 
 class StepSpec(TypedDict):
@@ -1788,16 +1788,32 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     return out
 
 
-OPS_FR_FLOOR = "5.28.0"
-"""The release that ships `fr ops` (spec 2026-10-22-fr-ops R17): 5.27.0 plus this
-change's minor bump. `tests/unit/test_ops_artifacts.py` recomputes it from
-`packages/fr/pyproject.toml`."""
+OPS_FR_FLOOR = "5.27.0rc4"
+"""The first release that ships `fr ops` (spec 2026-10-22-fr-ops R17).
+`scripts/release.py` cuts 5.27.0 (last final 5.26.0 plus a minor), but 5.27.0rc1-rc3
+were cut before `fr ops` existed, and `fr.version_floor.admits` lets an RC of a named
+final pass, so `>=5.27.0` would admit them. `tests/unit/test_ops_artifacts.py` pins
+this to the next release cut from this tree and above every `v*` tag."""
 
 _PRE_OPS_PROBES: tuple[str, ...] = (
     *PRE_4_20_PROBES,
     *(f"4.{minor}.{patch}" for minor in range(20, 100) for patch in (0, 1, 99)),
-    *(f"5.{minor}.{patch}" for minor in range(28) for patch in (0, 1, 99)),
+    *(f"5.{minor}.{patch}" for minor in range(27) for patch in (0, 1, 99)),
+    *(f"5.27.0rc{n}" for n in range(1, 4)),
 )
+
+
+def _admits_pre_ops(constraint: str) -> bool:
+    """Does `constraint` admit an fr without `fr ops`? Asked through `admits`, so an
+    RC of a named final counts (an `admits_below` filter would miss rc1-rc3)."""
+    from packaging.specifiers import InvalidSpecifier
+    from packaging.version import Version
+
+    floor = Version(OPS_FR_FLOOR)
+    try:
+        return any(admits(constraint, p) for p in _PRE_OPS_PROBES if Version(p) < floor)
+    except InvalidSpecifier:
+        return False  # the parser fails a malformed constraint loudly
 
 
 def _ops_floor_issues(plan: Plan) -> list[ReviewIssue]:
@@ -1813,7 +1829,7 @@ def _ops_floor_issues(plan: Plan) -> list[ReviewIssue]:
         return []
     wanted = f">={OPS_FR_FLOOR},<{CEILING_VERSION}"
     constraint = plan.meta.fr_version
-    if constraint and not admits_below(constraint, OPS_FR_FLOOR, _PRE_OPS_PROBES):
+    if constraint and not _admits_pre_ops(constraint):
         return []
     shown = repr(constraint) if constraint else "(none)"
     return [

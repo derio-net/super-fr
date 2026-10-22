@@ -32,7 +32,8 @@ from fr.journal.model import (
 from fr.parser import parse as parse_plan
 from fr.plan_ops import OPS_FR_FLOOR, self_review
 from fr.record.model import JournalItem
-from fr.version_floor import CEILING_VERSION
+from fr.version_floor import CEILING_VERSION, admits
+from packaging.version import InvalidVersion, Version
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
@@ -182,17 +183,67 @@ def test_journal_check_ignores_op_entries(tmp_path: Path, monkeypatch) -> None:
 # --- the self-review floor -----------------------------------------------------
 
 
-def _predicted_release() -> str:
-    """The base version in packages/fr/pyproject.toml plus this PR's minor bump."""
+def _cut_versions() -> list[Version]:
+    """Every `v*` tag reachable here, as a PEP 440 version (unparseable tags skipped)."""
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "tag", "-l", "v*"], capture_output=True, text=True
+    ).stdout
+    found = []
+    for tag in out.split():
+        try:
+            found.append(Version(tag[1:]))
+        except InvalidVersion:
+            continue
+    return found
+
+
+def _predicted_release() -> Version:
+    """The next release `scripts/release.py` cuts from this tree: the next RC of the
+    final packages/fr/pyproject.toml is an RC of (`X.Y.ZrcN` -> `X.Y.Zrc(N+1)`), or
+    that final plus this PR's minor bump when the tree sits on a final."""
     text = (REPO / "packages/fr/pyproject.toml").read_text()
-    m = re.search(r'^version = "(\d+)\.(\d+)\.(\d+)', text, re.MULTILINE)
+    m = re.search(r'^version = "([^"]+)"', text, re.MULTILINE)
     assert m is not None
-    major, minor = int(m.group(1)), int(m.group(2))
-    return f"{major}.{minor + 1}.0"
+    current = Version(m.group(1))
+    if current.pre is not None and current.pre[0] == "rc":
+        return Version(f"{current.base_version}rc{current.pre[1] + 1}")
+    return Version(f"{current.major}.{current.minor + 1}.0")
 
 
 def test_the_ops_floor_is_the_predicted_release() -> None:
-    assert OPS_FR_FLOOR == _predicted_release()
+    """p1-r1: rc1..rc3 of 5.27.0 shipped without fr ops, and `admits` lets an RC of a
+    named final pass, so a `>=5.27.0` floor would admit them."""
+    assert Version(OPS_FR_FLOOR) == _predicted_release()
+
+
+def test_the_ops_floor_is_above_every_cut_release() -> None:
+    """A release cut before this merges ships without fr ops: the floor must move."""
+    cut = _cut_versions()
+    if not cut:
+        pytest.skip("no v* tags in this checkout")
+    newest = max(cut)
+    assert Version(OPS_FR_FLOOR) > newest, (
+        f"OPS_FR_FLOOR {OPS_FR_FLOOR} does not exclude the cut release {newest}: raise it"
+    )
+
+
+@pytest.mark.parametrize(
+    ("version", "admitted"),
+    [("5.27.0rc3", False), ("5.27.0rc1", False), ("5.26.0", False), ("5.27.0rc4", True),
+     ("5.27.0", True), ("5.28.0", True)],
+)  # fmt: skip
+def test_the_ops_floor_admits_only_fr_ops_releases(version: str, admitted: bool) -> None:
+    assert admits(f">={OPS_FR_FLOOR},<{CEILING_VERSION}", version) is admitted
+
+
+def test_self_review_refuses_a_floor_that_admits_an_earlier_rc(tmp_path: Path, monkeypatch) -> None:
+    """`>=5.27.0` admits 5.27.0rc3 through the RC rule, which lacks fr ops."""
+    plan_dir = _plan(tmp_path, monkeypatch)
+    (plan_dir / "ops.yaml").write_text(GOOD_OPS)
+    plan = parse_plan(plan_dir)
+    loose = f">=5.27.0,<{CEILING_VERSION}"
+    plan = dataclasses.replace(plan, meta=plan.meta.model_copy(update={"fr_version": loose}))
+    assert [i for i in self_review(plan) if "fr ops" in i.message]
 
 
 def _plan(tmp_path: Path, monkeypatch) -> Path:
