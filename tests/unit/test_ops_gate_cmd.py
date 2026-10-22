@@ -205,3 +205,19 @@ def test_confirm_reads_the_answer_from_the_terminal() -> None:
         finally:
             os.close(master)
             os.close(slave)
+
+
+def test_git_revisions_follow_end_of_options(monkeypatch, tmp_path: Path) -> None:
+    """p4-gate-state-host-side: a revision is never read as a git option."""
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+    from fr.triage import gitseam
+
+    seen: list[list[str]] = []
+    monkeypatch.setattr(gitseam, "git_ok", lambda args, cwd: seen.append(args) or True)
+    monkeypatch.setattr(gitseam, "git", lambda args, cwd: seen.append(args) or "")
+    gitseam.Worktree(tmp_path).rebase_onto("origin/main", "a" * 40)
+    OpsWorkspace(tmp_path).contains("a" * 40)
+    for argv in seen:
+        if "a" * 40 in argv:
+            assert argv.index("--end-of-options") < argv.index("a" * 40), argv
+    assert any(a[0] == "rebase" for a in seen) and any(a[0] == "merge-base" for a in seen)

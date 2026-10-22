@@ -58,7 +58,7 @@ class OpsWorkspace:
     def contains(self, sha: str) -> bool:
         from fr.triage.gitseam import git_ok
 
-        return git_ok(["merge-base", "--is-ancestor", sha, "HEAD"], self.path)
+        return git_ok(["merge-base", "--is-ancestor", "--end-of-options", sha, "HEAD"], self.path)
 
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         from fr.triage.gitseam import run_this_fr
@@ -93,7 +93,7 @@ class HostCheckout:
         from fr.triage.gitseam import GitError, git
 
         try:
-            git(["fetch", "--quiet", "origin", ref], self.primary)
+            git(["fetch", "--quiet", "origin", "--end-of-options", ref], self.primary)
         except GitError as exc:  # a deleted branch: the PR head may still be here
             typer.echo(f"fr ops gate: warning: {exc}", err=True)
 
@@ -185,6 +185,7 @@ def gate(
         _forge(f"https://{host}/{repo}"),
         _prompt(),
         typer.echo,
+        engine.HostGateState(engine.gate_state_path(target.primary, state.run)),
     )
     if not yes:
         for line in engine.preview(g):

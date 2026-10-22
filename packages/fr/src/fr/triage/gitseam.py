@@ -932,7 +932,8 @@ class Worktree:
         the DevOps stage's ops branch, cut from a PR head that was then squash-merged,
         keeps only its own evidence commits (spec 2026-10-22-fr-ops R15). A conflict
         aborts the rebase and raises, leaving the branch where it was."""
-        if git_ok(["rebase", "--onto", new_base, upstream], self.path):
+        argv = ["rebase", f"--onto={new_base}", "--end-of-options", upstream]
+        if git_ok(argv, self.path):
             return
         git_ok(["rebase", "--abort"], self.path)
         raise GitError(f"`git rebase --onto {new_base} {upstream}` failed in {self.path}")

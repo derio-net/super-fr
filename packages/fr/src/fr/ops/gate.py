@@ -10,11 +10,14 @@ the next stage and runs nothing itself. Its ports run everything:
   outcome`, `fr gate pass`, `fr archive`);
 - `GateForge` is the `GhClient` adapter (another forge's merge raises
   `UnsupportedForgeOperation`, which names the manual merge);
-- `GatePrompt` is the operator's terminal, and `Ledger` the ops workspace's plan journal.
+- `GatePrompt` is the operator's terminal; `GateState` the operator's host-side record of
+  the stages done and the head stage 1 verified (`HostGateState`).
 
-The eight stages (`STAGES`) run in order. Each one's completion is a `gate-stage-<n>`
-decision in the plan journal, committed on the ops branch, so a rerun resumes at the
-first unrecorded stage; a forge-MERGED PR counts as stage 2 done even without one. The
+The eight stages (`STAGES`) run in order. Each one's completion is recorded host-side,
+per operator, outside every checkout (`gate_state_path`), so a rerun resumes at the
+first stage that state does not record; a forge-MERGED PR counts as stage 2 done. The
+`gate-stage-<n>` decisions in the plan journal are an audit trail and are NEVER read:
+the ops workspace is cut from the PR, so whatever it carries is PR-controlled. The
 first failure stops the run, naming the stage. Pre-merge evidence is committed on the ops
 branch and never pushed to the PR head, so the reviewed head and its checks stay valid.
 """
@@ -22,6 +25,7 @@ branch and never pushed to the PR head, so the reviewed head and its checks stay
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 from collections.abc import Callable, Mapping, Sequence
@@ -32,10 +36,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 from fr.ghclient import UnsupportedForgeOperation
 from fr.journal.model import (
     JournalEntry,
-    JournalParseError,
     append_journal_entry,
     journal_now,
-    parse_journal,
     resolve_journal_read_path,
 )
 
@@ -45,6 +47,8 @@ if TYPE_CHECKING:
     from fr.spec import Step as TestPlanStep
 
 STAGE_PREFIX = "gate-stage-"
+GATE_DIR_ENV = "FR_OPS_GATE_DIR"
+SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
 CLOSED_STATES = frozenset({"DONE", "N/A"})
 STATUS_OK_CODES = (0, 1, 3)  # every op reported; 2 is a refusal (`fr ops status`, R3)
 
@@ -116,50 +120,19 @@ class GatePrompt(Protocol):
     def ask(self, text: str) -> str: ...
 
 
-class Ledger(Protocol):
-    def stages(self) -> set[int]: ...
-
-    def detail(self, n: int, key: str) -> str | None: ...
-
+class AuditLog(Protocol):
     def record(self, n: int, title: str, body: str) -> None: ...
 
 
 class JournalLedger:
-    """The `gate-stage-<n>` decisions in the ops workspace's plan journal (live, or
-    archived once stage 8 moved it)."""
+    """The `gate-stage-<n>` decisions written to the ops workspace's plan journal (live, or
+    archived once stage 8 moved it). AUDIT ONLY: the workspace is cut from the PR, so
+    anything it carries is PR-controlled and is never read back (p4-gate-state-host-side).
+    The stage state is `HostGateState`."""
 
     def __init__(self, root: Path, slug: str) -> None:
         self.root = root
         self.slug = slug
-
-    def _path(self) -> Path:
-        return resolve_journal_read_path(self.root, "plan", self.slug)
-
-    def _entries(self) -> dict[int, JournalEntry]:
-        path = self._path()
-        if not path.is_file():
-            return {}
-        try:
-            entries = parse_journal(path.read_text())
-        except JournalParseError:
-            return {}
-        return {
-            int(e.id.removeprefix(STAGE_PREFIX)): e
-            for e in entries
-            if e.kind == "decision" and re.fullmatch(rf"{STAGE_PREFIX}\d+", e.id)
-        }
-
-    def stages(self) -> set[int]:
-        return set(self._entries())
-
-    def detail(self, n: int, key: str) -> str | None:
-        """A `key: value` line of stage *n*'s decision body (stage 1's `head`)."""
-        entry = self._entries().get(n)
-        for line in (entry.body if entry else "").splitlines():
-            k, sep, v = line.partition(":")
-            if sep and k.strip() == key:
-                return v.strip()
-        return None
 
     def record(self, n: int, title: str, body: str) -> None:
         entry = JournalEntry(
@@ -170,7 +143,73 @@ class JournalLedger:
             title=title,
             body=body,
         )
-        append_journal_entry(self._path(), self.slug, entry)
+        append_journal_entry(
+            resolve_journal_read_path(self.root, "plan", self.slug), self.slug, entry
+        )
+
+
+def gate_state_dir() -> Path:
+    """`$FR_OPS_GATE_DIR`, else `$XDG_STATE_HOME/fr/ops-gate`, else
+    `~/.local/state/fr/ops-gate`: beside the trust store, outside every checkout."""
+    override = os.environ.get(GATE_DIR_ENV)
+    if override:
+        return Path(override)
+    state = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(state) / "fr" / "ops-gate"
+
+
+def gate_state_path(repo_root: Path, run_id: str) -> Path:
+    from fr.ops import trust
+
+    return gate_state_dir() / trust.repo_key(repo_root) / f"{run_id}.json"
+
+
+class GateState(Protocol):
+    def stages(self) -> set[int]: ...
+
+    def head(self) -> str | None: ...
+
+    def mark(self, n: int, *, head: str | None = None) -> None: ...
+
+
+class HostGateState:
+    """The operator's own record of a run's DevOps stage (R15): the stages done and the PR
+    head stage 1 verified, as JSON written atomically 0600 (`fr.ops.trust`'s writer)."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def _data(self) -> dict[str, Any]:
+        try:
+            data = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def stages(self) -> set[int]:
+        raw = self._data().get("stages") or []
+        return {n for n in raw if isinstance(n, int) and not isinstance(n, bool)}
+
+    def head(self) -> str | None:
+        head = self._data().get("head")
+        return str(head) if head is not None else None
+
+    def mark(self, n: int, *, head: str | None = None) -> None:
+        from fr.ops.trust import _write_private
+
+        data = self._data()
+        data["stages"] = sorted(self.stages() | {n})
+        if head is not None:
+            data["head"] = head
+        _write_private(self.path, json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def valid_sha(sha: str, what: str) -> str:
+    """*sha* when it is a full hex object id; a refusal (exit 2) otherwise, so nothing a
+    forge or a file says reaches git as an option."""
+    if not SHA_RE.match(sha or ""):
+        raise StageFailed(f"{what} {sha!r} is not a full commit sha; nothing done", code=2)
+    return sha
 
 
 # ------------------------------------------------------------------------- context
@@ -210,11 +249,9 @@ class Gate:
     forge: GateForge
     prompt: GatePrompt
     say: Callable[[str], None]
-    ledger_factory: Callable[[Path, str], Ledger] = JournalLedger
+    state: GateState
+    audit_factory: Callable[[Path, str], AuditLog] = JournalLedger
     _view: dict[str, Any] | None = field(default=None, repr=False)
-
-    def ledger_for(self, tree: OpsTree) -> Ledger:
-        return self.ledger_factory(tree.path, self.target.slug)
 
     # -- reads ----------------------------------------------------------------
 
@@ -234,8 +271,8 @@ class Gate:
         return tree
 
     def recorded(self) -> set[int]:
-        tree = self.host.workspace(self.target.ops_branch)
-        return self.ledger_for(tree).stages() if tree is not None else set()
+        """The stages done, by the HOST state only: never by the ops workspace."""
+        return self.state.stages()
 
     # -- helpers the stages share ---------------------------------------------
 
@@ -258,10 +295,10 @@ class Gate:
     def verified_head(self, tree: OpsTree) -> str:
         """The PR head stage 1 cut the ops workspace from and verified the pre-merge ops
         on (p4-merge-head-pinned): the only head stage 2 merges and stage 3 rebases from."""
-        head = self.ledger_for(tree).detail(1, "head")
+        head = self.state.head()
         if not head:
             raise StageFailed(f"stage 1 recorded no PR head; {self.redo_stage_1()}", code=2)
-        return head
+        return valid_sha(head, "the recorded PR head")
 
     def redo_stage_1(self) -> str:
         t = self.target
@@ -271,10 +308,14 @@ class Gate:
             "re-cuts the ops workspace and re-checks trust)"
         )
 
-    def finish(self, tree: OpsTree, n: int, body: str) -> None:
-        """Record stage *n* and commit the workspace's evidence on the ops branch."""
+    def finish(self, tree: OpsTree, n: int, body: str, *, head: str | None = None) -> None:
+        """Record stage *n* in the host state (and, for audit, the plan journal) and
+        commit the workspace's evidence on the ops branch."""
         name = STAGE_BY_NUMBER[n].name
-        self.ledger_for(tree).record(n, f"DevOps stage {n} done: {name}", body)
+        self.state.mark(n, head=head)
+        self.audit_factory(tree.path, self.target.slug).record(
+            n, f"DevOps stage {n} done: {name}", body
+        )
         tree.commit_paths(["docs"], f"chore(ops): {self.target.slug} DevOps stage {n} — {name}")
         self.say(f"stage {n} ({name}): done")
 
@@ -368,9 +409,7 @@ def apply_phase(gate: Gate, phase: str) -> None:
 def stage_1(gate: Gate) -> None:
     """Bring up (or reuse) the ops workspace, cut from the PR head; pre-merge ops."""
     t = gate.target
-    head = str(gate.view(fresh=True).get("head_oid") or "")
-    if not head:
-        raise StageFailed(f"PR #{t.pr} reports no head commit")
+    head = valid_sha(str(gate.view(fresh=True).get("head_oid") or ""), f"PR #{t.pr}'s head")
     reused = gate.host.workspace(t.ops_branch)
     if reused is not None and not reused.contains(head):
         raise StageFailed(
@@ -385,7 +424,7 @@ def stage_1(gate: Gate) -> None:
             raise StageFailed(f"`fr isolation up --branch {t.ops_branch}` exited {code}")
         gate.say(f"ops workspace {t.ops_branch} up on profile {t.profile}, from {head[:12]}")
     apply_phase(gate, "pre-merge")
-    gate.finish(gate.tree(), 1, f"head: {head}\npre-merge ops closed on {t.ops_branch}")
+    gate.finish(gate.tree(), 1, f"head: {head}\npre-merge ops closed on {t.ops_branch}", head=head)
 
 
 def _checks_green(gate: Gate) -> None:
@@ -455,6 +494,13 @@ def stage_3(gate: Gate) -> None:
         raise StageFailed(f"`fr isolation verify-merge --branch {t.feature}` exited {code}")
     tree = gate.tree()
     head = gate.verified_head(tree)
+    merged = str(gate.view(fresh=True).get("head_oid") or "")
+    if merged != head:
+        raise StageFailed(
+            f"the merged PR #{t.pr}'s head {merged or 'unknown'} is not the head stage 1 "
+            f"verified ({head}); nothing rebased",
+            code=2,
+        )
     try:
         tree.rebase_onto(f"origin/{gate.default}", head)
     except Exception as exc:  # noqa: BLE001 — git's own words

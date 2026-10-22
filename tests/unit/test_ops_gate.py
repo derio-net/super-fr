@@ -23,7 +23,7 @@ from fr.journal.model import (
 )
 from fr.ops import gate as gate_mod
 from fr.ops.evidence import record_op
-from fr.ops.gate import Gate, GateTarget, JournalLedger, preview, run
+from fr.ops.gate import Gate, GateTarget, HostGateState, JournalLedger, preview, run
 from fr.run.model import RunState, StepRecord, save_run_state
 
 from tests.unit.requirements_support import row, write_matrix
@@ -251,12 +251,18 @@ def _gate(
     said: list[str] = []
     target = GateTarget(run=_state(), repo=REPO, pr=5, plan_rel=PLAN, profile="ops",
                         primary=PRIMARY)  # fmt: skip
-    return Gate(target, host, forge, prompt, said.append), host, tree, forge, prompt, said
+    gate = Gate(target, host, forge, prompt, said.append, _host(ops_root))
+    return gate, host, tree, forge, prompt, said
+
+
+def _host(root: Path) -> HostGateState:
+    """The operator's host-side stage state, outside the ops workspace (p4-gate-state)."""
+    return HostGateState(root.parent / "gate-state" / "run-1.json")
 
 
 def _record_stages(root: Path, *ns: int, head: str = HEAD) -> None:
     for n in ns:
-        JournalLedger(root, "p").record(n, f"stage {n}", f"head: {head}" if n == 1 else "seeded")
+        _host(root).mark(n, head=head if n == 1 else None)
 
 
 def _exec(*inner: str) -> list[str]:
@@ -293,7 +299,7 @@ def test_a_full_run_walks_every_stage_in_order(ops_root: Path) -> None:
     result = run(gate)
     assert result.ok, said
     assert result.ran == (1, 2, 3, 4, 5, 6, 7, 8)
-    assert JournalLedger(ops_root, "p").stages() == set(range(1, 9))
+    assert _host(ops_root).stages() == set(range(1, 9))
 
     argvs = [a for a, _ in host.calls]
     # stage 1: the ops workspace is cut from the PR head on the ops profile
@@ -408,7 +414,7 @@ def test_a_declined_merge_merges_nothing(ops_root: Path) -> None:
     result = run(gate)
     assert result.failed == 2 and "not confirmed" in result.why
     assert not [c for c in forge.calls if c[0] == "merge"]
-    assert 2 not in JournalLedger(ops_root, "p").stages()
+    assert 2 not in _host(ops_root).stages()
 
 
 def test_a_non_github_forge_names_the_manual_merge(ops_root: Path) -> None:
@@ -448,9 +454,9 @@ def test_it_stops_at_the_first_failure_naming_the_stage_then_resumes(ops_root: P
     first = run(gate)
     assert not first.ok and first.failed == 4
     assert "stage 4 (post-merge ops) failed" in first.why and "op post" in first.why
-    assert JournalLedger(ops_root, "p").stages() == {1, 2, 3}
+    assert _host(ops_root).stages() == {1, 2, 3}
     host.fail_apply = set()
-    gate2 = Gate(gate.target, host, forge, FakePrompt(), [].append)
+    gate2 = Gate(gate.target, host, forge, FakePrompt(), [].append, _host(ops_root))
     second = run(gate2)
     assert second.ok and second.ran == (4, 5, 6, 7, 8)
     assert len([c for c in forge.calls if c[0] == "merge"]) == 1
@@ -467,7 +473,7 @@ def test_a_rerun_of_a_complete_stage_does_nothing(ops_root: Path) -> None:
     gate, host, tree, forge, *_ = _gate(ops_root)
     assert run(gate).ok
     n_host, n_tree = len(host.calls), len(tree.calls)
-    again = run(Gate(gate.target, host, forge, FakePrompt(), [].append))
+    again = run(Gate(gate.target, host, forge, FakePrompt(), [].append, _host(ops_root)))
     assert again.ok and again.ran == ()
     assert len(host.calls) == n_host and len(tree.calls) == n_tree
 
@@ -480,7 +486,7 @@ def test_an_owed_devops_step_is_refused_at_stage_6(ops_root: Path) -> None:
     tree.gate_pass_code = 2
     result = run(gate)
     assert result.failed == 6 and "gate pass" in result.why
-    assert 5 in JournalLedger(ops_root, "p").stages()
+    assert 5 in _host(ops_root).stages()
 
 
 def test_an_unanswered_devops_step_stops_stage_5(ops_root: Path) -> None:
@@ -521,7 +527,7 @@ def test_pr_number_reads_a_url_or_a_number() -> None:
 def test_stage_1_records_the_head_it_was_cut_from(ops_root: Path) -> None:
     gate, *_ = _gate(ops_root)
     run(gate)
-    assert JournalLedger(ops_root, "p").detail(1, "head") == HEAD
+    assert _host(ops_root).head() == HEAD
 
 
 def test_a_head_that_moved_after_stage_1_is_refused_and_nothing_merges(ops_root: Path) -> None:
@@ -547,8 +553,6 @@ def test_the_merge_and_the_rebase_carry_the_recorded_head(ops_root: Path) -> Non
 
     def view(repo: str, number: int) -> dict[str, Any]:
         v = real_view(repo, number)
-        if forge.pr["state"] == "MERGED":  # after the merge a forge may report another sha
-            v["head_oid"] = "d" * 40
         calls.append(v["head_oid"])
         return v
 
@@ -564,3 +568,76 @@ def test_a_reused_workspace_not_cut_from_the_live_head_is_refused(ops_root: Path
     result = run(gate)
     assert result.failed == 1 and "fr isolation down" in result.why
     assert not any(a[:2] == ["isolation", "exec"] for a, _ in host.calls)
+
+
+# ------------------------- p4-gate-state-host-side: nothing the PR carries is read
+
+
+def _plant(root: Path, n: int, body: str) -> None:
+    JournalLedger(root, "p").record(n, f"stage {n}", body)
+
+
+def test_journal_planted_stages_skip_nothing(ops_root: Path) -> None:
+    for n in range(1, 6):
+        _plant(ops_root, n, f"head: {HEAD}" if n == 1 else "forged")
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    result = run(gate)
+    assert result.ran[0] == 1
+    argvs = [a for a, _ in host.calls]
+    assert _exec("ops", "apply", "pre", "--plan", PLAN, "--yes") in argvs
+
+
+def test_a_journal_planted_head_is_ignored(ops_root: Path) -> None:
+    _host(ops_root).mark(1, head=HEAD)
+    _plant(ops_root, 1, "head: " + "e" * 40)
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    assert run(gate).ok
+    assert ("merge", (5, HEAD, "squash")) in forge.calls
+
+
+def test_a_malformed_recorded_sha_is_refused(ops_root: Path) -> None:
+    path = ops_root.parent / "gate-state" / "run-1.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"stages": [1], "head": "--exec=x"}))
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    result = run(gate)
+    assert result.failed == 2 and result.code == 2 and "sha" in result.why
+    assert not [c for c in forge.calls if c[0] == "merge"]
+
+
+def test_stage_1_refuses_a_malformed_forge_head(ops_root: Path) -> None:
+    forge = FakeForge()
+    forge.pr["head_oid"] = "--upload-pack=x"
+    gate, host, *_ = _gate(ops_root, forge=forge)
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_stage_3_refuses_when_the_merged_head_differs(ops_root: Path) -> None:
+    _record_stages(ops_root, 1, 2)
+    forge = FakeForge(state="MERGED")
+    forge.pr["head_oid"] = "f" * 40
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=forge)
+    result = run(gate)
+    assert result.failed == 3 and result.code == 2 and HEAD in result.why
+    assert not [c for c in tree.calls if c[0] == "rebase"]
+
+
+def test_host_state_lives_outside_every_checkout(monkeypatch, tmp_path: Path) -> None:
+    from fr.ops.gate import gate_state_path
+
+    monkeypatch.setenv("FR_OPS_GATE_DIR", str(tmp_path / "gs"))
+    monkeypatch.setattr("fr.ops.trust.repo_key", lambda root: "derio-net--super-fr")
+    assert gate_state_path(tmp_path / "repo", "run-1") == (
+        tmp_path / "gs" / "derio-net--super-fr" / "run-1.json"
+    )
+    monkeypatch.delenv("FR_OPS_GATE_DIR")
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
+    assert gate_state_path(tmp_path / "repo", "r").parent.parent == tmp_path / "xdg/fr/ops-gate"
+    HostGateState(tmp_path / "s" / "r.json").mark(1, head=HEAD)
+    assert oct((tmp_path / "s" / "r.json").stat().st_mode & 0o777) == "0o600"
