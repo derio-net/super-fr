@@ -41,8 +41,11 @@ writes one).
 | 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
 
 Each stage's completion is recorded in your own state outside every checkout
-(`~/.local/state/fr/ops-gate/` by default), and only once its record is pushed to the
-ops branch; the `gate-stage-<n>` journal decisions are an audit trail. The PR controls
+(`~/.local/state/fr/ops-gate/` by default); before the merge the ops branch is only
+committed locally (it still holds the unmerged PR), and from stage 3 on a stage counts
+only once its record is pushed. The `gate-stage-<n>` journal decisions are an audit
+trail. The default branch is the forge's, checked against `origin/HEAD`; a PR based
+elsewhere, or touching the archived journals, is refused. The PR controls
 the ops workspace, so inside the stage an op closes only by its live check, and an
 attestation or Test Plan outcome only when added on the ops branch, never one the PR
 already carries. A PR that changes the ops profile itself is refused before anything

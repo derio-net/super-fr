@@ -231,9 +231,19 @@ close anything:
   added on the ops branch after the recorded head, never one the PR already carries.
 - **A Test Plan outcome** counts the same way: one the PR carries is asked for again.
 
-Each stage is committed and pushed to the ops branch (fr owns it, so the push is forced
-after the stage-3 rebase), and only then marked done; a failed push leaves the stage to
-retry. A rerun resumes at the first stage the host state does not record, and a PR the
+- **The default branch** comes from the forge's repo metadata, cross-checked with the
+  base clone's `origin/HEAD` (refused when they disagree), never from the PR's base ref;
+  a PR based on any other branch is refused, and so is one that adds or changes files
+  under `docs/superpowers/implemented/journals/`.
+- **A PR-carried journal that cannot be parsed** is a refusal, never an empty exclusion.
+
+Before the merge, each stage commits on the ops branch LOCALLY only: until stage 3
+rebases it onto the default branch it holds the unmerged PR head, which must never reach
+a branch of the base repo (an `on: push` workflow there would run it with the repo's
+secrets). From stage 3 on, each stage is committed and pushed, and only then marked
+done; a failed push leaves the stage to retry. The first push creates the branch,
+refusing one that already exists; every later one is leased on the sha fr last pushed
+(`--force-with-lease`), recorded in the host state. A rerun resumes at the first stage the host state does not record, and a PR the
 forge reports MERGED counts as stage 2 done. Stage 2 merges only the recorded head, and
 stage 3 checks the merged PR's head is that one. The first failure stops the run, naming
 the stage (exit 1; a refusal such as a moved head, a changed ops profile or an untrusted
