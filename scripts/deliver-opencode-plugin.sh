@@ -75,7 +75,12 @@ write_cli_json() {
       *) real="$(dirname "$real")/$link" ;;
     esac
   done
-  mode="$(stat -f '%Lp' "$real" 2>/dev/null || stat -c '%a' "$real")"
+  # GNU first, BSD second. The order matters: `stat -f` is a VALID GNU flag
+  # (filesystem status), so probing macOS-style first SUCCEEDS on Linux and
+  # returns a block of filesystem text ending in the mode, which `chmod`
+  # rejects — the delivery then fails on every Linux runner (CI) while
+  # passing on macOS. `stat -c` is the one that fails cleanly off GNU.
+  mode="$(stat -c '%a' "$real" 2>/dev/null || stat -f '%Lp' "$real")"
   tmp="$real.fr-tmp.$$"
   if jq --arg e "$entry" "$filter" "$real" >"$tmp"; then
     chmod "$mode" "$tmp"
