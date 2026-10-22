@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: 2026-10-14-closed-session-batch-recovery
 
 <!-- fr:journal kind=discovery scope=spec id=operator-goal created=2026-10-14T17:53:47+00:00 input=true -->

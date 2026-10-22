@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: 2026-10-14-closed-session-batch-recovery
 
 <!-- fr:journal kind=decision scope=plan id=one-coherent-recovery-phase created=2026-10-14T18:03:10+00:00 -->

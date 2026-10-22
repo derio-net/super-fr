@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: 2026-10-06-triage-batch-adopt
 
 <!-- fr:journal kind=discovery scope=plan id=p1-herdr-renames-hand-started-agent created=2026-10-06T20:08:58+00:00 phase=1 -->

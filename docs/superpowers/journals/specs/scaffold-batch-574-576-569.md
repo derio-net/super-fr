@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: scaffold-batch-574-576-569
 
 <!-- fr:journal kind=decision scope=spec id=d1-feature-escape created=2026-09-23T01:00:05 -->
