@@ -220,15 +220,27 @@ def test_confirm_reads_the_answer_from_the_terminal() -> None:
 
 def test_git_revisions_follow_end_of_options(monkeypatch, tmp_path: Path) -> None:
     """p4-gate-state-host-side: a revision is never read as a git option."""
-    from fr.commands.ops_gate_cmd import OpsWorkspace
+    from fr.commands.ops_gate_cmd import HostCheckout
     from fr.triage import gitseam
 
     seen: list[list[str]] = []
     monkeypatch.setattr(gitseam, "git_ok", lambda args, cwd: seen.append(args) or True)
     monkeypatch.setattr(gitseam, "git", lambda args, cwd: seen.append(args) or "")
     gitseam.Worktree(tmp_path).rebase_onto("origin/main", "a" * 40)
-    OpsWorkspace(tmp_path).contains("a" * 40)
+    HostCheckout(tmp_path).changed_paths("origin/main", "a" * 40, [".devcontainer/ops"])
     for argv in seen:
         if "a" * 40 in argv:
             assert argv.index("--end-of-options") < argv.index("a" * 40), argv
-    assert any(a[0] == "rebase" for a in seen) and any(a[0] == "merge-base" for a in seen)
+    assert any(a[0] == "rebase" for a in seen) and any(a[0] == "diff" for a in seen)
+
+
+def test_the_ops_branch_is_force_pushed(monkeypatch, tmp_path: Path) -> None:
+    """p4-r11: every stage pushes, and stage 3 rebased the branch: only a forced push of
+    the fr-owned ops branch can follow."""
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+    from fr.triage import gitseam
+
+    seen: list[list[str]] = []
+    monkeypatch.setattr(gitseam, "git", lambda args, cwd: seen.append(args) or "")
+    OpsWorkspace(tmp_path).push("chore/ops-p")
+    assert seen == [["push", "--force", "origin", "HEAD:refs/heads/chore/ops-p"]]

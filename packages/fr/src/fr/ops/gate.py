@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from fr.spec import Step as TestPlanStep
 
 STAGE_PREFIX = "gate-stage-"
+PROFILES_FILE = ".devcontainer/fr-profiles.yaml"
 GATE_DIR_ENV = "FR_OPS_GATE_DIR"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
 CLOSED_STATES = frozenset({"DONE", "N/A"})
@@ -73,6 +74,11 @@ class GateHost(Protocol):
 
     def fetch(self, ref: str) -> None: ...
 
+    def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
+        """The *paths* (pathspecs) that differ between *base* and *head*, in the base
+        checkout (`git diff --name-only --end-of-options <base> <head> -- <paths>`)."""
+        ...
+
     def workspace(self, branch: str) -> OpsTree | None:
         """The ops workspace of *branch*, or None while it is not up."""
         ...
@@ -83,8 +89,8 @@ class OpsTree(Protocol):
 
     def head(self) -> str: ...
 
-    def contains(self, sha: str) -> bool:
-        """Whether *sha* is the workspace's HEAD or one of its ancestors."""
+    def show(self, ref: str, path: str) -> str | None:
+        """*path*'s text at *ref*, or None when it does not exist there."""
         ...
 
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
@@ -135,17 +141,21 @@ class JournalLedger:
         self.slug = slug
 
     def record(self, n: int, title: str, body: str) -> None:
+        path = resolve_journal_read_path(self.root, "plan", self.slug)
+        text = path.read_text() if path.is_file() else ""
+        sid, k = f"{STAGE_PREFIX}{n}", 1
+        while f"id={sid} " in text:  # a retried stage writes a second audit line
+            k += 1
+            sid = f"{STAGE_PREFIX}{n}-{k}"
         entry = JournalEntry(
             kind="decision",
             scope="plan",
-            id=f"{STAGE_PREFIX}{n}",
+            id=sid,
             created=journal_now(),
             title=title,
             body=body,
         )
-        append_journal_entry(
-            resolve_journal_read_path(self.root, "plan", self.slug), self.slug, entry
-        )
+        append_journal_entry(path, self.slug, entry)
 
 
 def gate_state_dir() -> Path:
@@ -168,6 +178,10 @@ class GateState(Protocol):
     def stages(self) -> set[int]: ...
 
     def head(self) -> str | None: ...
+
+    def cut(self) -> str | None: ...
+
+    def set_cut(self, sha: str) -> None: ...
 
     def mark(self, n: int, *, head: str | None = None) -> None: ...
 
@@ -194,13 +208,24 @@ class HostGateState:
         head = self._data().get("head")
         return str(head) if head is not None else None
 
-    def mark(self, n: int, *, head: str | None = None) -> None:
-        from fr.ops.trust import _write_private
+    def cut(self) -> str | None:
+        """The PR head the ops workspace was cut from (p4-r5)."""
+        cut = self._data().get("cut")
+        return str(cut) if cut is not None else None
 
+    def set_cut(self, sha: str) -> None:
+        self._write({**self._data(), "cut": sha})
+
+    def mark(self, n: int, *, head: str | None = None) -> None:
         data = self._data()
         data["stages"] = sorted(self.stages() | {n})
         if head is not None:
             data["head"] = head
+        self._write(data)
+
+    def _write(self, data: dict[str, Any]) -> None:
+        from fr.ops.trust import _write_private
+
         _write_private(self.path, json.dumps(data, indent=2, sort_keys=True) + "\n")
 
 
@@ -300,6 +325,14 @@ class Gate:
             raise StageFailed(f"stage 1 recorded no PR head; {self.redo_stage_1()}", code=2)
         return valid_sha(head, "the recorded PR head")
 
+    def pinned_head(self) -> str:
+        """The PR head this run of the stage is pinned to: stage 1's recorded head, else
+        the head the ops workspace was cut from."""
+        head = self.state.cut() or self.state.head()
+        if not head:
+            raise StageFailed(f"no PR head is recorded; {self.redo_stage_1()}", code=2)
+        return valid_sha(head, "the recorded PR head")
+
     def redo_stage_1(self) -> str:
         t = self.target
         return (
@@ -309,14 +342,21 @@ class Gate:
         )
 
     def finish(self, tree: OpsTree, n: int, body: str, *, head: str | None = None) -> None:
-        """Record stage *n* in the host state (and, for audit, the plan journal) and
-        commit the workspace's evidence on the ops branch."""
+        """Write stage *n*'s audit line, commit the workspace's evidence on the ops branch
+        and push it; only then mark the stage done in the host state (p4-r11), so a failed
+        commit or push leaves it not done and a rerun retries it."""
         name = STAGE_BY_NUMBER[n].name
-        self.state.mark(n, head=head)
         self.audit_factory(tree.path, self.target.slug).record(
             n, f"DevOps stage {n} done: {name}", body
         )
-        tree.commit_paths(["docs"], f"chore(ops): {self.target.slug} DevOps stage {n} — {name}")
+        try:
+            tree.commit_paths(["docs"], f"chore(ops): {self.target.slug} DevOps stage {n} — {name}")
+            tree.push(self.target.ops_branch)
+        except Exception as exc:  # noqa: BLE001 — git's own words
+            raise StageFailed(
+                f"cannot commit and push stage {n}'s record to {self.target.ops_branch}: {exc}"
+            ) from exc
+        self.state.mark(n, head=head)
         self.say(f"stage {n} ({name}): done")
 
 
@@ -335,16 +375,56 @@ def _ops(tree: OpsTree, plan_rel: str, phase: str) -> list[LoadedOp]:
         raise StageFailed(f"the plan's ops cannot be read: {exc}") from exc
 
 
-def _unclosed(tree: OpsTree, slug: str, ops: Sequence[LoadedOp]) -> list[str]:
-    """Each op the RECORDED evidence does not close, with its recorded state."""
-    from fr.ops.evidence import JournalEvidence, recorded_close, recorded_state
+def head_entry_ids(tree: OpsTree, head: str, scope: str, slug: str) -> set[str]:
+    """The ids of the journal entries the PR head itself carries: PR-controlled, so none
+    of them closes anything inside the stage (p4-r2)."""
+    from fr.journal.model import JournalParseError, journal_path, parse_journal
 
-    journal = JournalEvidence(tree.path, slug)
+    rel = journal_path(Path("."), scope, slug).as_posix()  # type: ignore[arg-type]
+    text = tree.show(head, rel)
+    if not text:
+        return set()
+    try:
+        return {e.id for e in parse_journal(text)}
+    except JournalParseError:
+        return set()
+
+
+def _closed(
+    lo: LoadedOp,
+    row: Mapping[str, Any] | None,
+    tree: OpsTree,
+    slug: str,
+    at_head: set[str],
+) -> str | None:
+    """The op's closing label, or None (R15, p4-r2): its LIVE status row must read DONE or
+    N/A; a closure that comes from the journal (an attestation, a proof, a recorded n/a)
+    counts only when its entry was added on the ops branch, never one the PR carries."""
+    from fr.ops.evidence import JournalEvidence
+
+    if row is None or str(row.get("state")) not in CLOSED_STATES:
+        return None
+    label = str(row.get("label") or row.get("state"))
+    how = str(row.get("how") or "")
+    from_journal = how in ("attested", "proof") or "recorded" in label
+    if from_journal:
+        ev = JournalEvidence(tree.path, slug).latest(lo.op.id, runbook=False)
+        if ev is None or ev.entry_id in at_head:
+            return None
+    return label
+
+
+def _unclosed(
+    gate: Gate, tree: OpsTree, ops: Sequence[LoadedOp], rows: Mapping[str, Mapping[str, Any]]
+) -> list[str]:
+    """Each op the live status and the ops branch's own evidence do not close."""
+    at_head = head_entry_ids(tree, gate.pinned_head(), "plan", gate.target.slug)
     out = []
     for lo in ops:
-        ev = journal.latest(lo.op.id, runbook=False)
-        if recorded_close(lo, ev) is None:
-            out.append(f"{lo.op.id}: {recorded_state(lo, ev)}")
+        row = rows.get(lo.op.id)
+        if _closed(lo, row, tree, gate.target.slug, at_head) is None:
+            live = str(row.get("label") or row.get("state")) if row else "not reported"
+            out.append(f"{lo.op.id}: {live}")
     return out
 
 
@@ -368,7 +448,6 @@ def apply_phase(gate: Gate, phase: str) -> None:
     """Status, then each op not closed by recorded evidence: confirmed on the host,
     applied through `fr isolation exec … fr ops apply <id> --yes [--yes-mutating]`."""
     from fr.ops.apply import confirmation_text
-    from fr.ops.evidence import JournalEvidence, recorded_close
 
     t = gate.target
     tree = gate.tree()
@@ -376,10 +455,10 @@ def apply_phase(gate: Gate, phase: str) -> None:
     ops = _ops(tree, t.plan_rel, phase)
     gate.say(f"{phase} ops of {t.slug}: {len(ops)}")
     rows = _status_rows(gate, phase)
-    journal = JournalEvidence(tree.path, t.slug)
+    at_head = head_entry_ids(tree, gate.pinned_head(), "plan", t.slug)
     for lo in ops:
         op = lo.op
-        if recorded_close(lo, journal.latest(op.id, runbook=False)) is not None:
+        if _closed(lo, rows.get(op.id), tree, t.slug, at_head) is not None:
             continue
         state = str(rows.get(op.id, {}).get("state") or "")
         flags = ["--yes"]
@@ -393,12 +472,12 @@ def apply_phase(gate: Gate, phase: str) -> None:
             gate.say(out.rstrip())
         if code != 0:
             raise StageFailed(f"op {op.id}: `fr ops apply {op.id}` exited {code}")
-    left = _unclosed(tree, t.slug, ops)
+    left = _unclosed(gate, tree, ops, _status_rows(gate, phase))
     if left:
         attest = " ".join(shlex.quote(a) for a in gate.exec_args(
             "ops", "attest", "<op>", "--plan", t.plan_rel, "--note", "<what you did>"))  # fmt: skip
         raise StageFailed(
-            f"{phase} ops not closed by recorded evidence: {'; '.join(left)} — an op with no "
+            f"{phase} ops not closed: {'; '.join(left)} — an op with no "
             f"check closes by attestation (`fr {attest}`), any other by a passing check"
         )
 
@@ -410,18 +489,29 @@ def stage_1(gate: Gate) -> None:
     """Bring up (or reuse) the ops workspace, cut from the PR head; pre-merge ops."""
     t = gate.target
     head = valid_sha(str(gate.view(fresh=True).get("head_oid") or ""), f"PR #{t.pr}'s head")
-    reused = gate.host.workspace(t.ops_branch)
-    if reused is not None and not reused.contains(head):
+    gate.host.fetch(t.feature)
+    gate.host.fetch(gate.default)
+    pinned = [f".devcontainer/{t.profile}", PROFILES_FILE]
+    changed = gate.host.changed_paths(f"origin/{gate.default}", head, pinned)
+    if changed:  # p4-r1: never bring up a privileged profile the PR itself rewrote
         raise StageFailed(
-            f"the ops workspace {t.ops_branch} was not cut from PR #{t.pr}'s head {head}; "
-            + gate.redo_stage_1()
+            f"PR #{t.pr} changes the ops profile ({', '.join(changed)}); its devcontainer "
+            "runs with the ops credentials, so a profile change must merge in its own PR "
+            "first. Nothing was brought up",
+            code=2,
+        )
+    reused = gate.host.workspace(t.ops_branch)
+    if reused is not None and gate.state.cut() != head:  # p4-r5: exactly the PR head
+        raise StageFailed(
+            f"the ops workspace {t.ops_branch} was cut from {gate.state.cut() or 'unknown'}, "
+            f"not PR #{t.pr}'s head {head}; " + gate.redo_stage_1()
         )
     if reused is None:
-        gate.host.fetch(t.feature)
         code, _ = gate.host.fr(["isolation", "up", "--repo", str(t.primary), "--profile",
                                 t.profile, "--branch", t.ops_branch, "--base", head])  # fmt: skip
         if code != 0 or gate.host.workspace(t.ops_branch) is None:
             raise StageFailed(f"`fr isolation up --branch {t.ops_branch}` exited {code}")
+        gate.state.set_cut(head)
         gate.say(f"ops workspace {t.ops_branch} up on profile {t.profile}, from {head[:12]}")
     apply_phase(gate, "pre-merge")
     gate.finish(gate.tree(), 1, f"head: {head}\npre-merge ops closed on {t.ops_branch}", head=head)
@@ -464,11 +554,15 @@ def stage_2(gate: Gate) -> None:
             code=2,
         )
     pre = _ops(tree, t.plan_rel, "pre-merge")
-    left = _unclosed(tree, t.slug, pre)
+    gate.trust(tree)
+    rows = _status_rows(gate, "pre-merge")  # live, never the PR-controlled journal (p4-r2)
+    left = _unclosed(gate, tree, pre, rows)
     if left:
         raise StageFailed("pre-merge ops are still open: " + "; ".join(left))
     _checks_green(gate)
-    lines = [f"  {lo.op.id}: closed" for lo in pre] or ["  (no pre-merge op)"]
+    lines = [f"  {lo.op.id}: {rows[lo.op.id].get('label')}" for lo in pre] or [
+        "  (no pre-merge op)"
+    ]
     text = f"MERGE PR #{t.pr} of {t.repo} at head {head}\npre-merge state:\n" + "\n".join(lines)
     if not gate.prompt.confirm(text):  # its own confirmation, --yes or not
         raise StageFailed(f"the merge of PR #{t.pr} was not confirmed; nothing merged")
@@ -511,6 +605,12 @@ def stage_3(gate: Gate) -> None:
     )
     if out.strip():
         gate.say(out.rstrip())
+    if code == 2:  # p4-r10: a refusal (an untrusted set, a bad carrier), not "not ready"
+        raise StageFailed(
+            "`fr ops status --ready` refused (exit 2; its reason is printed above); "
+            "no ready probe ran",
+            code=2,
+        )
     if code != 0:
         raise StageFailed("a post-merge op's `ready:` does not pass yet; re-run once it does")
     gate.finish(tree, 3, f"merge verified; {t.ops_branch} rebased onto {gate.default}; ready")
@@ -531,8 +631,12 @@ def stage_5(gate: Gate) -> None:
 
     t = gate.target
     tree = gate.tree()
-    for step, kind in gated_steps(tree.path, t.run, "devops"):
-        if kind is not None:
+    spec_slug = _spec_slug(t.run)
+    at_head = head_entry_ids(tree, gate.pinned_head(), "spec", spec_slug) if spec_slug else set()
+    every = gated_steps(tree.path, t.run, "devops")
+    trusted = gated_steps(tree.path, t.run, "devops", exclude=at_head)
+    for (step, kind), (_, mine) in zip(every, trusted, strict=True):
+        if mine is not None:
             continue
         answer = gate.prompt.ask(
             f"Test Plan step {step.n} (devops): {step.text}\n"
@@ -545,11 +649,22 @@ def stage_5(gate: Gate) -> None:
         flag = {"ran": ("--ran", "--evidence"), "owed": ("--owed", "--why")}.get(
             how, ("--na", "--reason")
         )
-        code, out = tree.fr(["closeout", "outcome", "--run", t.run.run, "--step", str(step.n),
-                             flag[0], flag[1], text])  # fmt: skip
+        argv = ["closeout", "outcome", "--run", t.run.run, "--step", str(step.n),
+                flag[0], flag[1], text]  # fmt: skip
+        if kind is not None:  # an outcome the PR carries, or an owed one: record over it
+            argv.append("--supersede")
+        code, out = tree.fr(argv)
         if code != 0:
             raise StageFailed(f"`fr closeout outcome --step {step.n}` exited {code}: {out}")
     gate.finish(tree, 5, "devops Test Plan steps recorded")
+
+
+def _spec_slug(run: RunState) -> str | None:
+    from fr.archive import spec_slug_of
+    from fr.requirements import run_spec
+
+    spec = run_spec(run)
+    return spec_slug_of(Path(spec)) if spec else None
 
 
 def tester_steps(gate: Gate, tree: OpsTree) -> list[TestPlanStep]:
@@ -572,8 +687,30 @@ def stage_6(gate: Gate) -> None:
     if out.strip():
         gate.say(out.rstrip())
     if code != 0:
-        raise StageFailed(f"`fr gate pass --gate devops --run {t.run.run}` exited {code}")
+        raise StageFailed(
+            f"`fr gate pass --gate devops --run {t.run.run}` exited {code}" + _recovery(gate, tree)
+        )
     gate.finish(tree, 6, "gate:devops passed")
+
+
+def _recovery(gate: Gate, tree: OpsTree) -> str:
+    """p4-r3: for each devops step that is not closed, the command that records it in the
+    ops workspace; a rerun then retries the gate pass."""
+    from fr.ops.holds import gated_steps
+
+    t = gate.target
+    open_steps = [s for s, kind in gated_steps(tree.path, t.run, "devops") if kind != "discovery"]
+    if not open_steps:
+        return ""
+    lines = [
+        f"  fr isolation exec --repo {t.primary} --branch {t.ops_branch} -- fr closeout "
+        f"outcome --run {t.run.run} --step {s.n} --ran --evidence '<what it showed>'"
+        for s in open_steps
+    ]
+    return (
+        "; record each devops step that is not closed (or `--na --reason …`), then re-run "
+        "`fr ops gate`:\n" + "\n".join(lines)
+    )
 
 
 def stage_7(gate: Gate) -> None:
@@ -591,15 +728,19 @@ def stage_7(gate: Gate) -> None:
 
 
 def stage_8(gate: Gate) -> None:
-    """`fr archive --branch <feature>`, then the ops branch as the housekeeping PR."""
+    """`fr archive --branch <feature>` filing the run's out-of-scope findings as the
+    close-out brief would (p4-r4), then the ops branch as the housekeeping PR."""
+    from fr.run.closeout import archive_issue_args
+
     t = gate.target
     tree = gate.tree()
     if (tree.path / t.plan_rel).is_dir():
-        code, out = tree.fr(["archive", "--branch", t.feature])
+        argv = ["archive", "--branch", t.feature, *archive_issue_args(tree.path, t.run)]
+        code, out = tree.fr(argv)
         if out.strip():
             gate.say(out.rstrip())
         if code != 0:
-            raise StageFailed(f"`fr archive --branch {t.feature}` exited {code}")
+            raise StageFailed(f"`fr {shlex.join(argv)}` exited {code}")
         tree.commit_paths(["docs"], f"chore(ops): archive {t.slug}")
     try:
         tree.push(t.ops_branch)
@@ -607,7 +748,7 @@ def stage_8(gate: Gate) -> None:
             title = f"chore: DevOps stage of {t.slug} (run {t.run.run})"
             body = (
                 f"The DevOps stage's evidence and archive for PR #{t.pr} (run {t.run.run}): "
-                f"the op evidence, the gate-stage decisions and `fr archive --branch "
+                f"the op evidence, the gate-stage audit decisions and `fr archive --branch "
                 f"{t.feature}`."
             )
             number = gate.forge.pr_create(t.repo, head=t.ops_branch, base=gate.default,
@@ -616,10 +757,6 @@ def stage_8(gate: Gate) -> None:
     except Exception as exc:  # noqa: BLE001 — git's or the forge's own words
         raise StageFailed(f"cannot publish {t.ops_branch}: {exc}") from exc
     gate.finish(tree, 8, f"archived; housekeeping PR from {t.ops_branch}")
-    try:
-        tree.push(t.ops_branch)
-    except Exception as exc:  # noqa: BLE001
-        raise StageFailed(f"cannot push the stage-8 record to {t.ops_branch}: {exc}") from exc
 
 
 # ------------------------------------------------------------------- the table
@@ -638,6 +775,17 @@ def _recorded(n: int) -> Callable[[Gate, set[int]], bool]:
     return lambda gate, recorded: n in recorded
 
 
+def _cut(gate: Gate, recorded: set[int]) -> bool:
+    """Stage 1 is done while its record stands AND its workspace does: an operator who
+    took the workspace down to re-cut it from a moved head (`redo_stage_1`) gets stage 1
+    again, as long as nothing was merged yet."""
+    if 1 not in recorded:
+        return False
+    if 2 in recorded or str(gate.view().get("state") or "") == "MERGED":
+        return True
+    return gate.host.workspace(gate.target.ops_branch) is not None
+
+
 def _merged(gate: Gate, recorded: set[int]) -> bool:
     return 2 in recorded or str(gate.view().get("state") or "") == "MERGED"
 
@@ -650,7 +798,7 @@ def _passed(gate: Gate, recorded: set[int]) -> bool:
 
 STAGES: tuple[Stage, ...] = (
     Stage(1, "pre-merge ops", "bring up or reuse the ops workspace from the PR head; "
-          "trust; pre-merge status and apply", _recorded(1), stage_1),
+          "trust; pre-merge status and apply", _cut, stage_1),
     Stage(2, "merge", "merge the PR after a terminal confirmation naming it, its head "
           "and the pre-merge state (no open pre-merge op, required checks green)",
           _merged, stage_2),

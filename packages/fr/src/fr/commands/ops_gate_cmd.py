@@ -55,10 +55,8 @@ class OpsWorkspace:
     def head(self) -> str:
         return self._tree.head()
 
-    def contains(self, sha: str) -> bool:
-        from fr.triage.gitseam import git_ok
-
-        return git_ok(["merge-base", "--is-ancestor", "--end-of-options", sha, "HEAD"], self.path)
+    def show(self, ref: str, path: str) -> str | None:
+        return self._tree.show(ref, path)
 
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         from fr.triage.gitseam import run_this_fr
@@ -75,7 +73,8 @@ class OpsWorkspace:
         self._tree.rebase_onto(new_base, upstream)
 
     def push(self, branch: str) -> None:
-        self._tree.push(branch)
+        # fr owns the ops branch, and stage 3 rebases it onto the merged default branch
+        self._tree.push(branch, force=True)
 
 
 class HostCheckout:
@@ -96,6 +95,13 @@ class HostCheckout:
             git(["fetch", "--quiet", "origin", "--end-of-options", ref], self.primary)
         except GitError as exc:  # a deleted branch: the PR head may still be here
             typer.echo(f"fr ops gate: warning: {exc}", err=True)
+
+    def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
+        from fr.triage.gitseam import git
+
+        out = git(["diff", "--name-only", "--end-of-options", base, head, "--", *paths],
+                  self.primary)  # fmt: skip
+        return [line for line in out.splitlines() if line]
 
     def workspace(self, branch: str) -> OpsWorkspace | None:
         from fr.isolation.types import load_state

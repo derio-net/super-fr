@@ -466,13 +466,7 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
 
             missing = [(s.n, s.text) for s in missing_outcomes(repo_root, spec_file)]
 
-    out_of_scope: list[tuple[str, str]] = []
-    if spec_path:
-        out_of_scope += _out_of_scope_findings(
-            repo_root, "spec", spec_journal_slug(Path(spec_path).stem)
-        )
-    if plan_path:
-        out_of_scope += _out_of_scope_findings(repo_root, "plan", Path(plan_path).name)
+    out_of_scope = run_out_of_scope(repo_root, state)
 
     run_extras = RunExtras(
         run_id=state.run,
@@ -485,6 +479,30 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         test_plan_steps=missing,
     )
     return branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)
+
+
+def run_out_of_scope(repo_root: Path, state: RunState) -> list[tuple[str, str]]:
+    """`(qualified id, title)` of the run's out-of-scope findings, spec journal then plan
+    journal: the ids the close-out brief's `fr archive --issues` line names."""
+    spec_path = _emitted(state, "spec")
+    plan_path = _emitted(state, "plan")
+    out: list[tuple[str, str]] = []
+    if spec_path:
+        out += _out_of_scope_findings(repo_root, "spec", spec_journal_slug(Path(spec_path).stem))
+    if plan_path:
+        out += _out_of_scope_findings(repo_root, "plan", Path(plan_path).name)
+    return out
+
+
+def archive_issue_args(repo_root: Path, state: RunState) -> list[str]:
+    """The `fr archive` filing flags the DevOps stage's stage 8 passes (spec
+    2026-10-22-fr-ops R15, p4-r4): `--issues <qids>` for the run's out-of-scope findings,
+    exactly as the close-out brief names them, or `--no-issues` when there are none or no
+    tracker is configured (`tracking: none`), so the archive never stops to ask."""
+    qids = [q for q, _ in run_out_of_scope(repo_root, state)]
+    if not qids or _tracker_note(repo_root) == _NO_TRACKER:
+        return ["--no-issues"]
+    return ["--issues", ",".join(qids)]
 
 
 def devops_gated(repo_root: Path, state: RunState) -> bool:

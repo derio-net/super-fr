@@ -80,12 +80,20 @@ def outcome(
     evidence: str | None = typer.Option(None, "--evidence", help="--ran: what it showed."),
     why: str | None = typer.Option(None, "--why", help="--owed: why it is not done now."),
     reason: str | None = typer.Option(None, "--reason", help="--na: why it does not apply."),
+    supersede: bool = typer.Option(
+        False,
+        "--supersede",
+        help="Record over a step's existing ran/n/a outcome (an owed one needs no flag): "
+        "a new entry the fold reads as latest.",
+    ),
 ) -> None:
     """Record one outcome for each Test Plan step in --step (R18).
 
     Exactly one of `--ran --evidence <text>`, `--owed --why <text>` or
     `--na --reason <text>`. A step that already has an outcome is refused, and
-    nothing is written for any step of the range.
+    nothing is written for any step of the range, unless it is only owed (a later outcome
+    supersedes it) or `--supersede` is given; either way a new entry is appended and the
+    old one stays, as a journal is a log.
     """
     from fr.archive import outcome_id, recorded_outcomes, spec_slug_of
     from fr.journal.model import owed_body, resolve_journal_read_path
@@ -117,14 +125,24 @@ def outcome(
     slug = spec_slug_of(spec_path)
     journal = resolve_journal_read_path(root, "spec", slug)
     done = recorded_outcomes(journal)
-    already = [outcome_id(n) for n in numbers if outcome_id(n) in done]
+    effective = _effective_outcomes(journal)
+    already = [
+        outcome_id(n) for n in numbers if effective.get(n) not in (None, "owed") and not supersede
+    ]
     if already:
-        raise _refuse(f"already recorded: {', '.join(already)}")
+        raise _refuse(f"already recorded: {', '.join(already)} (--supersede records over it)")
+    ids: dict[int, str] = {}
+    for n in numbers:
+        sid, k = outcome_id(n), 1
+        while sid in done:  # an owed, or superseded, outcome keeps its entry
+            k += 1
+            sid = f"{outcome_id(n)}-{k}"
+        ids[n] = sid
 
     items = []
     for n in numbers:
         what = steps[n - 1].text
-        sid = outcome_id(n)
+        sid = ids[n]
         if kind == "owed":
             how = (
                 f"fr journal resolve --scope spec --slug {slug} --id {sid} --state fixed "
@@ -164,7 +182,7 @@ def outcome(
     except engine.RecordRefusedError as e:
         raise _refuse(str(e)) from e
     for n in numbers:
-        typer.echo(f"{outcome_id(n)}: {'n/a' if kind == 'na' else kind}")
+        typer.echo(f"{ids[n]}: {'n/a' if kind == 'na' else kind}")
     if not applied.committed:
         # Review p3-r3(b): the outcome is written but git does not hold it, and
         # `fr archive` refuses to move a spec journal with uncommitted outcomes.
@@ -173,3 +191,16 @@ def outcome(
             f"warning: {rel} is uncommitted — fr archive will hold the plan until it is "
             "committed (commit it on a branch, not the default branch)"
         )
+
+
+def _effective_outcomes(journal: Path) -> dict[int, str]:
+    """Step number -> its effective outcome kind (`fr.ops.holds.fold_step_outcomes`)."""
+    from fr.journal.model import JournalParseError, parse_journal
+    from fr.ops.holds import fold_step_outcomes
+
+    if not journal.is_file():
+        return {}
+    try:
+        return fold_step_outcomes(parse_journal(journal.read_text()))
+    except (JournalParseError, OSError):
+        return {}

@@ -88,10 +88,17 @@ class FakeTree:
         self.calls: list[tuple[str, Any]] = []
         self.gate_pass_code: int | None = None
         self.rebase_error: str | None = None
-        self.holds_head = True
+        self.push_error: str | None = None
+        self.head_files: dict[str, str] = {}  # what the PR head carries, by path
 
-    def contains(self, sha: str) -> bool:
-        return self.holds_head
+    def snapshot_head(self) -> None:
+        """Freeze the tree's current journals as what the PR head carries (p4-r2)."""
+        for path in self.path.glob("docs/superpowers/journals/**/*.md"):
+            self.head_files[path.relative_to(self.path).as_posix()] = path.read_text()
+
+    def show(self, ref: str, path: str) -> str | None:
+        assert ref == HEAD
+        return self.head_files.get(path)
 
     def head(self) -> str:
         return HEAD
@@ -102,17 +109,29 @@ class FakeTree:
         if args[:2] == ["closeout", "outcome"]:
             n = int(args[args.index("--step") + 1])
             kind = "owed" if "--owed" in args else "discovery"
+            jp = journal_path(self.path, "spec", SPEC_SLUG)
+            taken = jp.read_text() if jp.exists() else ""
+            sid, k = f"test-plan-step-{n}", 1
+            while f"id={sid} " in taken:
+                k += 1
+                sid = f"test-plan-step-{n}-{k}"
             entry = JournalEntry(
                 kind=kind,
                 scope="spec",
-                id=f"test-plan-step-{n}",
+                id=sid,
                 created="2026-10-22T10:00:00+00:00",
                 title=f"step {n}",
                 body="x" if kind == "discovery" else "why: later\nhow: later",
             )
             append_journal_entry(journal_path(self.path, "spec", SPEC_SLUG), SPEC_SLUG, entry)
-        if args[:2] == ["gate", "pass"] and self.gate_pass_code is not None:
-            return self.gate_pass_code, "fr gate pass: still held"
+        if args[:2] == ["gate", "pass"]:
+            from fr.ops.holds import devops_blockers
+
+            if self.gate_pass_code is not None:
+                return self.gate_pass_code, "fr gate pass: still held"
+            steps = [b for b in devops_blockers(self.path, _state()) if b.startswith("Test Plan")]
+            if steps:
+                return 2, "fr gate pass: still held by its recorded evidence"
         if args[:1] == ["archive"]:
             dest = self.path / "docs/superpowers/implemented/plans/p"
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -135,6 +154,8 @@ class FakeTree:
 
     def push(self, branch: str) -> None:
         self.calls.append(("push", branch))
+        if self.push_error:
+            raise RuntimeError(self.push_error)
 
 
 class FakeHost:
@@ -145,6 +166,12 @@ class FakeHost:
         self.live: dict[str, str] = {"pre": "OPEN", "mut": "OPEN", "post": "OPEN"}
         self.fail_apply: set[str] = set()
         self.ready_code = 0
+        self.changed: list[str] = []  # ops-profile files the PR head changes (p4-r1)
+        self.how: dict[str, str] = {}
+
+    def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
+        self.calls.append((["diff", base, head, *paths], False))
+        return list(self.changed)
 
     def fetch(self, ref: str) -> None:
         self.calls.append((["fetch", ref], False))
@@ -168,10 +195,11 @@ class FakeHost:
             if verb == ["ops", "status"]:
                 phase = inner[inner.index("--phase") + 1]
                 rows = [
-                    {"op": o, "state": s, "label": s, "reason": "", "summary": o, "identity": None}
+                    {"op": o, "state": s, "label": s, "reason": "", "summary": o,
+                     "identity": None, "how": self.how.get(o, "checked" if s == "DONE" else None)}
                     for o, s in self.live.items()
                     if (o == "post") == (phase == "post-merge")
-                ]
+                ]  # fmt: skip
                 return 1, json.dumps(rows)
             if verb == ["ops", "apply"]:
                 op = inner[3]
@@ -243,14 +271,19 @@ def _gate(
     up: bool = False,
     forge: FakeForge | None = None,
     prompt: FakePrompt | None = None,
+    live_closed: bool = False,
 ) -> tuple[Gate, FakeHost, FakeTree, FakeForge, FakePrompt, list[str]]:
     tree = FakeTree(ops_root)
     host = FakeHost(tree, up=up)
+    if live_closed:  # the pre-merge ops' LIVE status rows read DONE (p4-r2)
+        host.live.update(pre="DONE", mut="DONE")
     forge = forge or FakeForge()
     prompt = prompt or FakePrompt()
     said: list[str] = []
     target = GateTarget(run=_state(), repo=REPO, pr=5, plan_rel=PLAN, profile="ops",
                         primary=PRIMARY)  # fmt: skip
+    if up:  # a workspace stage 1 cut from the verified head (p4-r5)
+        _host(ops_root).set_cut(HEAD)
     gate = Gate(target, host, forge, prompt, said.append, _host(ops_root))
     return gate, host, tree, forge, prompt, said
 
@@ -324,7 +357,7 @@ def test_a_full_run_walks_every_stage_in_order(ops_root: Path) -> None:
     tree_args = [a for k, (a, _) in ((k, v) for k, v in tree.calls if k == "fr")]
     gp = next(a for a in tree_args if a[:2] == ["gate", "pass"])
     assert gp[gp.index("--gate") + 1] == "devops" and gp[gp.index("--run") + 1] == "run-1"
-    assert ["archive", "--branch", "feat/x"] in tree_args
+    assert ["archive", "--branch", "feat/x", "--no-issues"] in tree_args
     assert ("pr_create", {"head": "chore/ops-p", "base": "main"}) in forge.calls
 
 
@@ -368,9 +401,6 @@ def test_pre_merge_evidence_is_never_pushed_to_the_pr_head(ops_root: Path) -> No
     run(gate)
     pushes = [b for k, b in tree.calls if k == "push"]
     assert pushes and set(pushes) == {"chore/ops-p"}
-    first_push = next(i for i, (k, _) in enumerate(tree.calls) if k == "push")
-    rebase = next(i for i, (k, _) in enumerate(tree.calls) if k == "rebase")
-    assert first_push > rebase  # nothing published before the merge and the rebase
     assert not any("push" in a for a, _ in host.calls)
 
 
@@ -400,7 +430,7 @@ def test_the_merge_refuses_on_red_required_checks(ops_root: Path) -> None:
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
     forge = FakeForge()
     forge.required = [{"name": "ci", "bucket": "fail"}]
-    gate, *_ = _gate(ops_root, up=True, forge=forge)
+    gate, *_ = _gate(ops_root, up=True, live_closed=True, forge=forge)
     result = run(gate)
     assert result.failed == 2 and "failing" in result.why and "ci" in result.why
     assert not [c for c in forge.calls if c[0] == "merge"]
@@ -410,7 +440,9 @@ def test_a_declined_merge_merges_nothing(ops_root: Path) -> None:
     _record_stages(ops_root, 1)
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
-    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, prompt=FakePrompt([False]))
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, live_closed=True, prompt=FakePrompt([False])
+    )
     result = run(gate)
     assert result.failed == 2 and "not confirmed" in result.why
     assert not [c for c in forge.calls if c[0] == "merge"]
@@ -421,7 +453,7 @@ def test_a_non_github_forge_names_the_manual_merge(ops_root: Path) -> None:
     _record_stages(ops_root, 1)
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
-    gate, *_ = _gate(ops_root, up=True, forge=FakeForge(unsupported=True))
+    gate, *_ = _gate(ops_root, up=True, live_closed=True, forge=FakeForge(unsupported=True))
     result = run(gate)
     assert result.failed == 2
     assert "by hand" in result.why and "#5" in result.why and HEAD in result.why
@@ -535,7 +567,7 @@ def test_a_head_that_moved_after_stage_1_is_refused_and_nothing_merges(ops_root:
     _record_stages(ops_root, 1, head=old)
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
-    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True)
+    gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, live_closed=True)
     result = run(gate)
     assert result.failed == 2 and result.code == 2
     assert old in result.why and HEAD in result.why and "fr isolation down" in result.why
@@ -547,7 +579,7 @@ def test_the_merge_and_the_rebase_carry_the_recorded_head(ops_root: Path) -> Non
     _record_stages(ops_root, 1)
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
-    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True)
     calls: list[str] = []
     real_view = forge.pr_view
 
@@ -563,11 +595,21 @@ def test_the_merge_and_the_rebase_carry_the_recorded_head(ops_root: Path) -> Non
 
 
 def test_a_reused_workspace_not_cut_from_the_live_head_is_refused(ops_root: Path) -> None:
+    """p4-r5: a workspace cut from any other commit (a descendant included) is refused."""
     gate, host, tree, forge, *_ = _gate(ops_root, up=True)
-    tree.holds_head = False
+    _host(ops_root).set_cut("b" * 40)
     result = run(gate)
     assert result.failed == 1 and "fr isolation down" in result.why
+    assert "b" * 40 in result.why and HEAD in result.why
     assert not any(a[:2] == ["isolation", "exec"] for a, _ in host.calls)
+
+
+def test_a_reused_workspace_with_no_recorded_cut_is_refused(ops_root: Path) -> None:
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    path = ops_root.parent / "gate-state" / "run-1.json"
+    path.unlink()
+    result = run(gate)
+    assert result.failed == 1 and "unknown" in result.why
 
 
 # ------------------------- p4-gate-state-host-side: nothing the PR carries is read
@@ -592,7 +634,7 @@ def test_a_journal_planted_head_is_ignored(ops_root: Path) -> None:
     _plant(ops_root, 1, "head: " + "e" * 40)
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
-    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True)
     assert run(gate).ok
     assert ("merge", (5, HEAD, "squash")) in forge.calls
 
@@ -603,7 +645,7 @@ def test_a_malformed_recorded_sha_is_refused(ops_root: Path) -> None:
     path.write_text(json.dumps({"stages": [1], "head": "--exec=x"}))
     for op in ("pre", "mut"):
         record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
-    gate, host, tree, forge, *_ = _gate(ops_root, up=True)
+    gate, host, tree, forge, *_ = _gate(ops_root, up=True, live_closed=True)
     result = run(gate)
     assert result.failed == 2 and result.code == 2 and "sha" in result.why
     assert not [c for c in forge.calls if c[0] == "merge"]
