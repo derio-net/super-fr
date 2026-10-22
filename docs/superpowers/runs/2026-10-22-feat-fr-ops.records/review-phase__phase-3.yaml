@@ -1,0 +1,124 @@
+schema_version: 10
+run: 2026-10-22-feat-fr-ops
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: finding
+  id: p3-r1
+  phase: 3
+  review_scope: in
+  title: '`fr gate pass --gate devops` failed open when no run resolved'
+  body: With no matching run, an unreadable cursor, a repo-root fallback or an empty head ref, the pass
+    went through; a hand pass from main before merge lifted the hold with every op unchecked.
+- kind: finding
+  id: p3-r2
+  phase: 3
+  review_scope: in
+  title: The triage driver passed gate:devops by walked rows without folding op evidence
+  body: _gate_actions passed any gate whose rows were all walked, and the ledger never promoted because
+    EXIT_INPUTS omitted plans.
+- kind: finding
+  id: p3-r3
+  phase: 3
+  review_scope: in
+  title: The recorded-only fold never closed an op that was already DONE or N/A
+  body: Status writes nothing and apply skipped with 'nothing written', so gate pass refused forever.
+    This includes the known p3-na-not-recordable.
+- kind: finding
+  id: p3-r4
+  phase: 3
+  review_scope: in
+  title: An owed devops Test Plan step let the gate pass
+  body: missing_outcomes counted `owed` as recorded.
+- kind: finding
+  id: p3-r5
+  phase: 3
+  review_scope: in
+  title: The PR body could embed an absolute local path
+  body: '`Not available: {e}` carried the full ops.yaml path into a public PR body.'
+- kind: finding
+  id: p3-r6
+  phase: 3
+  review_scope: in
+  title: gate pass could crash with a traceback
+  body: run_exit's SectionError/AcceptanceError escaped.
+- kind: finding
+  id: p3-r7
+  phase: 3
+  review_scope: in
+  title: gate pass could not find an archived run
+  body: Only live cursors were read.
+- kind: finding
+  id: p3-r8
+  phase: 3
+  review_scope: in
+  title: attest refused notes starting with [ or {
+  body: The body heuristic was applied to operator-typed text.
+- kind: finding
+  id: p3-r9
+  phase: 3
+  review_scope: in
+  title: Planner and board were unaware of the devops pre-merge hold
+  body: The planner planned a merge every pass and the board showed the PR as ready.
+- kind: review
+  id: p3-review-1
+  phase: 3
+  title: 'Phase 3 review: Test Plan tags, devops promotion, holds, PR body'
+  body: 'Dispatched reviewer (separate context, opus) over 58fe6253..HEAD against R12-R14 and the sanitiser
+    commit. Back-compat confirmed: untagged steps parse unchanged, a run with no ops has an identical
+    Exit and labels, and old PR bodies get a refusal with the edit command. 9 findings, all in scope,
+    all fixed with tests; none refuted. The known items (p3-na-not-recordable, the testplan-tags row wording)
+    are closed by p3-r3 and a matrix text fix with regenerated reports. Spec R7/R13/R14 were amended.
+    Red-first held for every new test except a scenario expected-line edit and two pre-existing apply
+    tests, which went red only together with the new r3 tests. Verified: 4168 targeted tests pass; ruff,
+    mypy, validate, self-review and acceptance check are clean.'
+resolves:
+- id: p3-r1
+  state: fixed
+  body: 'Each of those cases now refuses (exit 2), naming --run; `--no-run-evidence` is the explicit escape
+    and is recorded in the pass comment. Tests: test_p3_r1_no_matching_run_refuses_naming_run, test_p3_r1_an_empty_head_ref_refuses,
+    test_p3_r1_an_unreadable_cursor_is_a_refusal_not_no_run, test_p3_r1_outside_a_checkout_refuses, test_p3_r1_no_run_evidence_passes_a_row_only_gate_and_says_so,
+    test_p3_r1_no_run_evidence_is_refused_when_a_run_names_the_branch.'
+- id: p3-r2
+  state: fixed
+  body: 'The ledger copies the run''s plan dir and carries ops_promoted; the rows route skips an ops-promoted
+    devops gate, while a devops gate with no ops passes by rows as before. Tests: test_p3_r2_the_ledger_reads_the_plan_and_says_whether_ops_promoted,
+    test_p3_r2_a_devops_gate_ops_promoted_is_never_passed_by_walked_rows, test_p3_r2_a_devops_gate_with_no_ops_still_passes_by_walked_rows.'
+- id: p3-r3
+  state: fixed
+  body: 'Apply records one done/na entry for a skipped op whose latest entry does not close it, and a
+    re-run writes nothing; a recorded `na` closes an op only while it carries na_if (spec R7). Tests:
+    test_p3_r3_a_closure_is_recorded_once_then_nothing_is_written, test_p3_r3_an_na_closure_is_recorded_once,
+    test_p3_r3_a_check_but_no_apply_op_done_by_hand_records_done_once, test_p3_r3_a_recorded_na_closes_an_op_only_while_it_carries_na_if.'
+- id: p3-r4
+  state: fixed
+  body: 'Devops steps close only on ran or n/a. Test: test_p3_r4_an_owed_devops_step_does_not_close.'
+- id: p3-r5
+  state: fixed
+  body: 'Paths are made repo-relative. Test: test_p3_r5_an_unreadable_ops_yaml_names_a_repo_relative_path.'
+- id: p3-r6
+  state: fixed
+  body: 'They are refused with exit 2. Test: test_p3_r6_an_unreadable_section_is_a_refusal_not_a_traceback.'
+- id: p3-r7
+  state: fixed
+  body: 'Lookup falls back to IMPLEMENTED_RUNS_REL. Test: test_p3_r7_an_archived_run_is_found.'
+- id: p3-r8
+  state: fixed
+  body: 'Typed mode applies only the length rule, with an accurate message. Tests: test_p3_r8_a_note_may_start_with_a_bracket_or_brace,
+    test_p3_r8_an_overlong_note_is_refused_with_the_length_rule.'
+- id: p3-r9
+  state: fixed
+  body: 'One predicate (fr.labels.pre_merge_held) and one message serve merge, planner and board: a held
+    action plus a needs-devops lane. Tests: test_p3_r9_the_planner_never_merges_a_pr_held_by_gate_devops,
+    test_p3_r9_a_pr_held_by_gate_devops_is_awaiting_devops_on_the_board, test_p3_r9_a_passed_devops_gate_merges_as_before.'
+- id: p3-na-not-recordable
+  state: fixed
+  body: 'Closed by p3-r3: the `na` result value, recorded once by apply.'
+- id: p3-matrix-testplan-tags-wording
+  state: fixed
+  body: Row text now says any other leading bracket stays step text, matching R12; reports regenerated.
+evidence:
+  review: p3-review-1
+  reviewer: af456b9ac406243dc
+  model: claude-opus-5-5
