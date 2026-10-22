@@ -232,6 +232,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "triage-retire-sync",
         "fr-ops-status-apply",
         "fr-ops-seal",
+        "fr-ops-gate-stage",
     }
     assert on_disk == here
 
@@ -390,3 +391,7 @@ def test_fr_ops_status_apply(installed: Path, tmp_path: Path) -> None:
 
 def test_fr_ops_seal(installed: Path, tmp_path: Path) -> None:
     _scenario("fr-ops-seal", installed, tmp_path)
+
+
+def test_fr_ops_gate_stage(installed: Path, tmp_path: Path) -> None:
+    _scenario("fr-ops-gate-stage", installed, tmp_path)
