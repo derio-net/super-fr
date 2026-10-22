@@ -41,7 +41,8 @@ import os
 import shutil
 import socket
 import subprocess
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -120,6 +121,25 @@ def _opencode(opencode: str, *args: str, cwd: Path, env: dict[str, str]):
     )
 
 
+def _wait_for(predicate: Callable[[], bool], seconds: float = 15.0) -> bool:
+    """Bounded wait for the DAEMON's side of a probe.
+
+    OpenCode 2 runs every CLI command through a background service, and
+    `plugin list` RETURNS before that service has finished loading the plugins
+    it was started for: both the sentinel's verdict file (written from a
+    plugin's `setup`) and the service log's `loading plugin` line can arrive
+    AFTER the CLI exits. Asserting straight after `plugin list` won the race on
+    macOS and on 2.1.x, and lost it on the slower 2.0.32 CI runner — the
+    failure reads "OpenCode never initialised the probe" for a probe that was
+    simply still loading."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.1)
+    return predicate()
+
+
 @contextmanager
 def _service(opencode: str, project: Path, env: dict[str, str]) -> Iterator[None]:
     """An isolated OpenCode 2 background service, stopped on the way out.
@@ -185,12 +205,20 @@ def test_opencode_registers_the_delivered_plugin_exactly_once(tmp_path: Path) ->
     loader = _deliver(Path(env["XDG_CONFIG_HOME"]))
     project = _project(tmp_path)
 
+    log = Path(env["XDG_DATA_HOME"]) / "opencode" / "log" / "opencode.log"
+
+    def _lines() -> list[str]:
+        return log.read_text().splitlines() if log.is_file() else []
+
+    # Inside the `with`: the service must be ALIVE for the load it started to
+    # finish; `_service` stops it on the way out.
     with _service(opencode, project, env):
         result = _opencode(opencode, "plugin", "list", cwd=project, env=env)
+        if result.returncode == 0:
+            _wait_for(lambda: any('msg="loading plugin"' in line for line in _lines()))
     assert result.returncode == 0, result.stderr
 
-    log = Path(env["XDG_DATA_HOME"]) / "opencode" / "log" / "opencode.log"
-    lines = log.read_text().splitlines() if log.is_file() else []
+    lines = _lines()
     loaded = [line for line in lines if 'msg="loading plugin"' in line]
     ours = [line for line in loaded if "fr-opencode-plugin" in line]
     assert len(ours) == 1, f"super-fr must load exactly once; its loads: {ours}"
@@ -277,6 +305,10 @@ def test_opencode_runs_the_delivered_gate(tmp_path: Path) -> None:
 
     with _service(opencode, project, env):
         result = _opencode(opencode, "plugin", "list", cwd=project, env=env)
+        # Inside the `with`: the probe runs in the service's own `setup`, and
+        # `_service` stops the service on the way out.
+        if result.returncode == 0:
+            _wait_for(out.is_file)
     assert result.returncode == 0, result.stderr
     assert out.is_file(), (
         "OpenCode never initialised the probe, so it never imported the delivered "
