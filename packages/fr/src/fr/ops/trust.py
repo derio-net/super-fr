@@ -38,6 +38,10 @@ from fr.journal.model import (
 from fr.ops.load import LoadedOp, OpsConfig
 
 CONFIG_KEY = "settings:.fr/ops.yaml"
+CODE_KEY = "code:tree"
+"""The repo's committed code tree (`fr.run.code_tree.code_tree`, fr's artifact trees
+left out): a probe can reach code no token names — `make check`, `python -m pkg`, a
+sourced script — so any committed code change invalidates trust."""
 FILE_PREFIX = "file:"
 PROBE_FIELDS = ("check", "na_if", "ready", "escalate", "apply", "undo")
 """The op fields whose text runs (or is offered to run), shown by `fr ops trust`."""
@@ -105,10 +109,19 @@ def settings_dump(config: OpsConfig) -> dict[str, object]:
     }
 
 
-def fingerprint(ops: Sequence[LoadedOp], config: OpsConfig, repo_root: Path) -> dict[str, str]:
-    """`{op id: hash, CONFIG_KEY: hash, file:<path>: hash}`, sorted."""
+def fingerprint(
+    ops: Sequence[LoadedOp],
+    config: OpsConfig,
+    repo_root: Path,
+    *,
+    code_tree: str | None = None,
+) -> dict[str, str]:
+    """`{op id: hash, CONFIG_KEY: hash, file:<path>: hash}` plus `CODE_KEY` when a
+    `code_tree` is given (`head_code`), sorted."""
     out: dict[str, str] = {lo.op.id: _sha(lo.op.model_dump(mode="json")) for lo in ops}
     out[CONFIG_KEY] = _sha(settings_dump(config))
+    if code_tree is not None:
+        out[CODE_KEY] = code_tree
     for rel in referenced_files(_texts(ops, config), repo_root):
         content = (repo_root / rel).read_bytes()
         out[f"{FILE_PREFIX}{rel}"] = hashlib.sha256(rel.encode() + b"\0" + content).hexdigest()
@@ -124,6 +137,47 @@ class Trusted:
     sha256: str
     ops: dict[str, str]
     granted: str
+    commit: str | None = None
+    """HEAD when the grant was made, to name the code paths changed since."""
+
+
+# --- the committed code -------------------------------------------------------
+
+UNBORN_CODE_TREE = hashlib.sha256(b"").hexdigest()
+"""`code_tree` of a commit holding no code — and of an unborn HEAD."""
+
+
+def head_code(repo_root: Path) -> tuple[str, str | None]:
+    """`(code tree, commit)` of HEAD; an unborn HEAD has no code and no commit."""
+    from fr.git import git_answer
+    from fr.run.code_tree import code_tree
+
+    head = git_answer(repo_root, "rev-parse", "--verify", "-q", "HEAD")
+    if head.returncode != 0:
+        return UNBORN_CODE_TREE, None
+    return code_tree(repo_root, "HEAD"), head.stdout.strip()
+
+
+def dirty_code(repo_root: Path) -> list[str]:
+    """Uncommitted code paths (`fr.run.code_tree.dirty_code_paths`)."""
+    from fr.run.code_tree import dirty_code_paths
+
+    return dirty_code_paths(repo_root)
+
+
+def code_paths_since(repo_root: Path, trusted: Trusted) -> list[str] | None:
+    """Code paths changed between the trusted commit and HEAD; `None` when the
+    trusted commit is unknown here."""
+    from fr.git import git_answer
+    from fr.run.code_tree import is_code_path
+
+    if trusted.commit is None:
+        res = git_answer(repo_root, "ls-tree", "-r", "--name-only", "--full-tree", "HEAD")
+    else:
+        res = git_answer(repo_root, "diff", "--name-only", trusted.commit, "HEAD")
+    if res.returncode != 0:
+        return None
+    return sorted(p for p in res.stdout.splitlines() if p and is_code_path(p))
 
 
 @dataclass(frozen=True)
@@ -182,8 +236,12 @@ def load_trust(repo_root: Path, plan_slug: str) -> Trusted | None:
     path = store_path(repo_root, plan_slug)
     try:
         data = json.loads(path.read_text())
+        commit = data.get("commit")
         return Trusted(
-            sha256=str(data["sha256"]), ops=dict(data["ops"]), granted=str(data["granted"])
+            sha256=str(data["sha256"]),
+            ops=dict(data["ops"]),
+            granted=str(data["granted"]),
+            commit=str(commit) if commit else None,
         )
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -203,12 +261,19 @@ def _write_private(path: Path, text: str) -> None:
         raise
 
 
-def grant_trust(repo_root: Path, plan_slug: str, fp: Mapping[str, str]) -> JournalEntry:
+def grant_trust(
+    repo_root: Path, plan_slug: str, fp: Mapping[str, str], *, commit: str | None = None
+) -> JournalEntry:
     """Store the grant for this operator, then append the audit decision."""
     if not (repo_root / _PLANS_REL / plan_slug).is_dir():
         raise ValueError(f"no plan {plan_slug!r} to record trust against")
     now = journal_now()
-    record = {"sha256": set_hash(fp), "ops": dict(sorted(fp.items())), "granted": now}
+    record = {
+        "sha256": set_hash(fp),
+        "ops": dict(sorted(fp.items())),
+        "granted": now,
+        "commit": commit,
+    }
     _write_private(store_path(repo_root, plan_slug), json.dumps(record, indent=2) + "\n")
     path = journal_path(repo_root, "plan", plan_slug)
     prior = parse_journal(path.read_text()) if path.is_file() else []

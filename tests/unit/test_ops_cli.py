@@ -66,13 +66,15 @@ def _trust_all(root: Path) -> None:
     does once confirmed — so these tests exercise status, not the trust gate
     (`test_ops_trust.py` owns that)."""
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
-    from fr.ops.trust import fingerprint, grant_trust
+    from fr.ops.trust import fingerprint, grant_trust, head_code
 
     try:
         ops = load_ops(root / PLAN_REL, root).ops
     except OpsLoadError:
         return  # a test of the carrier refusal; nothing to trust
-    grant_trust(root, "p", fingerprint(ops, load_ops_config(root), root))
+    tree, commit = head_code(root)
+    fp = fingerprint(ops, load_ops_config(root), root, code_tree=tree)
+    grant_trust(root, "p", fp, commit=commit)
 
 
 def _run_on_branch(root: Path, branch: str = "feat/x") -> None:

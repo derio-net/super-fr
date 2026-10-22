@@ -13,12 +13,17 @@ ESCALATEs, 2 on a refusal.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated, NoReturn
 
 import typer
 
 from fr.ops.model import PHASES
+from fr.ops.trust import CODE_KEY, code_paths_since, diff
+
+if TYPE_CHECKING:
+    from fr.ops.load import LoadedOp, OpsConfig
 
 ops_app = typer.Typer(
     help="Manual operations: check, apply, attest (spec 2026-10-22-fr-ops).",
@@ -101,6 +106,25 @@ def _plan_dir(verb: str, plan: Path | None) -> tuple[Path, Path]:
     return root, plan_dir
 
 
+def _current_fingerprint(
+    verb: str, ops: Sequence[LoadedOp], config: OpsConfig, root: Path
+) -> tuple[dict[str, str], str | None]:
+    """The op set's fingerprint with HEAD's committed code tree, and HEAD. Refuses
+    (exit 2) while any code path is uncommitted: a probe runs only against code a
+    commit pins, so a grant always names exactly what it trusted."""
+    from fr.ops.trust import dirty_code, fingerprint, head_code
+
+    dirty = dirty_code(root)
+    if dirty:
+        _refuse(
+            "code paths have uncommitted changes; probes run only against committed "
+            "code: " + ", ".join(dirty),
+            verb,
+        )
+    tree, commit = head_code(root)
+    return fingerprint(ops, config, root, code_tree=tree), commit
+
+
 @ops_app.command("status")
 def status(
     op_id: Annotated[str | None, typer.Argument(help="One op to report.")] = None,
@@ -122,7 +146,7 @@ def status(
     from fr.ops.identity import LiveIdentities
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
     from fr.ops.profile import in_ops_profile
-    from fr.ops.trust import diff, fingerprint, load_trust
+    from fr.ops.trust import load_trust
 
     if phase is not None and phase not in PHASES:
         _refuse(f"--phase must be one of {', '.join(PHASES)} (got {phase!r})")
@@ -146,13 +170,18 @@ def status(
     for warning in opset.warnings:
         typer.echo(f"fr ops status: warning: {warning}", err=True)
 
+    fp, commit = _current_fingerprint("status", opset.ops, config, root)
     trusted = load_trust(root, plan_dir.name)
-    changes = diff(fingerprint(opset.ops, config, root), trusted)
+    changes = diff(fp, trusted)
     if changes.untrusted:
         since = f"changed since the grant of {trusted.granted}" if trusted else "never trusted"
+        lines = changes.lines()
+        if trusted is not None and CODE_KEY in changes.changed:
+            paths = code_paths_since(root, trusted)
+            lines.append("code paths changed: " + (", ".join(paths) if paths else "(unknown)"))
         _refuse(
             f"the op set is not trusted ({since}); no probe ran.\n  "
-            + "\n  ".join(changes.lines())
+            + "\n  ".join(lines)
             + f"\nReview the probes, then run `fr ops trust --plan {plan_dir.relative_to(root)}"
             + (" --runbook" if runbook else "")
             + "`."
@@ -186,7 +215,7 @@ def trust(
     repo (a plan-journal line records it for audit). Probes are repo-authored code;
     nothing runs them until then."""
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
-    from fr.ops.trust import describe, diff, fingerprint, grant_trust, load_trust, set_hash
+    from fr.ops.trust import describe, grant_trust, load_trust, set_hash
 
     root, plan_dir = _plan_dir("trust", plan)
     try:
@@ -194,7 +223,7 @@ def trust(
         config = load_ops_config(root)
     except OpsLoadError as e:
         _refuse(str(e), "trust")
-    fp = fingerprint(opset.ops, config, root)
+    fp, commit = _current_fingerprint("trust", opset.ops, config, root)
     trusted = load_trust(root, plan_dir.name)
     if trusted is not None and trusted.sha256 == set_hash(fp):
         typer.echo(f"already trusted (granted {trusted.granted}); nothing written")
@@ -208,5 +237,5 @@ def trust(
     if not typer.confirm(f"Trust these {len(opset.ops)} op(s) to run on this machine?"):
         typer.echo("not trusted; nothing written")
         raise typer.Exit(code=1)
-    entry = grant_trust(root, plan_dir.name, fp)
+    entry = grant_trust(root, plan_dir.name, fp, commit=commit)
     typer.echo(f"trusted: {entry.id} (sha256 {set_hash(fp)}); the grant is yours, not the repo's")
