@@ -1546,3 +1546,8 @@ Operator authorized recording it (asked and answered in session): phase 3 delive
 ### p2-not-proven-live-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1227] · resolves p2-not-proven-live: None of the phase-2 handlers has run inside a real OpenCode 2 session (phase 2)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1227.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved-2 created=2026-10-22T13:07:57+00:00 phase=5 state=fixed resolves=p3-r1 answered_by=operator -->
+### p3-r1-resolved-2 · finding [fixed] · resolves p3-r1: fr acceptance check is red on the branch: a matrix row cites a test phase 1 deleted (phase 5)
+
+Phase 5 discharged the P5.T2.S1 obligation the finding named: row `opencode-run-session` now cites tests/unit/test_run_observed_opencode_v2.py#test_a_session_is_probed_as_v2_v1_only_absent_or_unreadable instead of the phase-1-deleted session.test.ts, its note describes the removed shell.env export as gone, and `fr acceptance check` is green. Recorded under the operator's standing instruction on this run to include the out-of-scope repairs it authorized.
