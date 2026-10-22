@@ -196,7 +196,9 @@ def scratch(cleanup: str, command: Sequence[str]) -> int:
     """Run `command`, then `cleanup`, whatever the command's end (success, failure,
     SIGINT, SIGTERM). Returns the command's exit status."""
     with cleanup_guard() as cleanups:
-        cleanups.append(
-            lambda: subprocess.run(["bash", "-c", cleanup], stdin=subprocess.DEVNULL, check=False)
-        )
+
+        def run_cleanup() -> None:
+            subprocess.run(["bash", "-c", cleanup], stdin=subprocess.DEVNULL, check=False)
+
+        cleanups.append(run_cleanup)
         return _run_child(list(command)).returncode

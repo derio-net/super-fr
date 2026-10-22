@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -448,7 +448,7 @@ def env_file_path(repo_root: Path, profile: str) -> Path:
 OPS_TRUST_MOUNT_TARGET = "/run/fr-ops-trust"
 
 
-def _add_ops(config: dict[str, object], profile: str) -> None:
+def _add_ops(config: dict[str, Any], profile: str) -> None:
     """The ops profile's container config (R6, R19): `FR_PROFILE`, and the operator's
     ops-trust store mounted READ-ONLY with `FR_OPS_TRUST_DIR` pointing at it, so a probe
     there sees the grants and can never write one. The host dir is created so the
@@ -459,11 +459,11 @@ def _add_ops(config: dict[str, object], profile: str) -> None:
     store.mkdir(parents=True, exist_ok=True)
     default = Path.home() / ".local" / "state" / "fr" / "ops-trust"
     source = "${localEnv:HOME}/.local/state/fr/ops-trust" if store == default else str(store)
-    env = dict(config.get("containerEnv") or {})  # type: ignore[call-overload]
+    env = dict(config.get("containerEnv") or {})
     env["FR_PROFILE"] = profile
     env["FR_OPS_TRUST_DIR"] = OPS_TRUST_MOUNT_TARGET
     config["containerEnv"] = env
-    mounts = list(config.get("mounts") or [])  # type: ignore[call-overload]
+    mounts = list(config.get("mounts") or [])
     mounts.append(f"source={source},target={OPS_TRUST_MOUNT_TARGET},type=bind,readonly")
     config["mounts"] = mounts
 

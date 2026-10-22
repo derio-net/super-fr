@@ -24,6 +24,7 @@ from fr.ops.model import PHASES
 from fr.ops.trust import CODE_KEY, diff, tree_changes
 
 if TYPE_CHECKING:
+    from fr.ops.apply import TtyPrompt
     from fr.ops.load import LoadedOp, OpsConfig, OpSet
 
 ops_app = typer.Typer(
@@ -260,7 +261,7 @@ def _recorder(sel: Selection):  # type: ignore[no-untyped-def]
     return record
 
 
-def _prompt():  # type: ignore[no-untyped-def]
+def _prompt() -> TtyPrompt:
     """The operator's terminal; a seam for tests."""
     from fr.ops.apply import TtyPrompt
 
@@ -342,7 +343,7 @@ def apply(
             identities=identities,
             journal=journal,
             prompt=_prompt(),
-            record=_recorder(sel),  # type: ignore[arg-type]
+            record=_recorder(sel),
             yes=yes,
             yes_mutating=yes_mutating,
             known={lo.op.id for lo in sel.opset.ops},
@@ -385,7 +386,7 @@ def attest(
             identities=identities,
             journal=journal,
             prompt=_prompt(),
-            record=_recorder(sel),  # type: ignore[arg-type]
+            record=_recorder(sel),
         )
     except AttestRefused as e:
         _refuse(str(e), "attest")

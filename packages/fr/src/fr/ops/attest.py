@@ -6,7 +6,8 @@ from __future__ import annotations
 from dataclasses import replace
 
 from fr.ops.apply import Prompt, Record
-from fr.ops.engine import IdentityResolver, Journal, Runner, StatusRow, status
+from fr.ops.engine import Journal, Runner, StatusRow, status
+from fr.ops.identity import IdentityResolver
 from fr.ops.load import LoadedOp
 
 
