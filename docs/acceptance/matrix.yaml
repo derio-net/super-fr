@@ -9726,9 +9726,15 @@ rows:
       recorded evidence, and a plan with pre-merge ops labels the PR gate:devops
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_pr_body.py#test_each_op_shows_its_phase_last_recorded_state_and_command
+      - super-fr:tests/unit/test_ops_pr_body.py#test_deliver_never_refuses_on_open_ops
+      - super-fr:tests/unit/test_ops_exit_promotion.py#test_any_op_adds_devops_beside_the_declared_gate
+    status: ci
+    notes: 'R13 implemented in phase 3: run_exit promotes devops when the plan has ops
+      (labels follow), and deliver renders Manual operations from recorded evidence
+      without refusing on open ops; unit tests in CI'
   - id: fr-ops-devops-gate-hold
     capability: gates
     acceptance: An un-passed gate:devops holds the PR from the driver's merge, and fr
