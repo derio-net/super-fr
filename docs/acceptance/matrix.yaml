@@ -9681,9 +9681,13 @@ rows:
       secret
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_helpers.py#test_a_failing_encrypt_leaves_the_target_byte_identical_and_no_plaintext
+      - super-fr:tests/unit/test_ops_helpers.py#test_sigterm_during_the_encrypt_command_removes_both_temps
+      - super-fr:tests/unit/test_ops_helpers.py#test_a_symlinked_target_is_refused_and_nothing_is_touched
+    status: ci
+    notes: helper unit tests and the candidate scenario run in CI (phase 2)
     scenario: tests/scenarios/fr-ops-seal.sh
   - id: fr-ops-probe-trust
     capability: fr ops
