@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import shlex
+import stat
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -45,16 +46,18 @@ names — `make check`, `python -m pkg`, a sourced script, even a script under
 invalidates trust. Deliberately NOT `fr.run.code_tree.code_tree`, which drops all of
 `docs/superpowers/` and `docs/acceptance/`."""
 TRUST_EXCLUDED: tuple[str, ...] = (
-    "docs/superpowers/journals/**/*.md",
-    "docs/superpowers/runs/**",
+    "docs/superpowers/journals/<scope>/<slug>.md",
+    "docs/superpowers/runs/<run-id>.yaml",
+    "docs/superpowers/runs/<run-id>.records/*.yaml",
+    "docs/superpowers/runs/<run-id>.records/pr-body.md",
     "docs/acceptance/matrix.yaml",
     "docs/acceptance/report_local.html",
     "docs/acceptance/report_linked.html",
     "docs/acceptance/report_linked.md",
 )
-"""Exactly fr's evidence files: what fr itself commits while a plan runs (journal and
-op entries, run cursors and step records, the acceptance matrix and its reports). Only
-these may change without invalidating trust."""
+"""Exactly the file SHAPES fr writes as evidence while a plan runs: a journal one level
+under specs|plans|debug, a run cursor, a step record, a PR body, the acceptance matrix
+and its reports. Never a whole prefix, and never an executable or a symlink."""
 FILE_PREFIX = "file:"
 PROBE_FIELDS = ("check", "na_if", "ready", "escalate", "apply", "undo")
 """The op fields whose text runs (or is offered to run), shown by `fr ops trust`."""
@@ -158,13 +161,35 @@ class Trusted:
 # --- the committed tree -------------------------------------------------------
 
 
-def is_trust_excluded(path: str) -> bool:
-    """`path` (repo-relative, `/`-separated) is one of fr's evidence files."""
-    if path.startswith("docs/superpowers/journals/") and path.endswith(".md"):
+_ACCEPTANCE = frozenset(
+    {
+        "docs/acceptance/matrix.yaml",
+        "docs/acceptance/report_local.html",
+        "docs/acceptance/report_linked.html",
+        "docs/acceptance/report_linked.md",
+    }
+)
+_JOURNAL_SCOPES = frozenset({"specs", "plans", "debug"})
+_RISKY_MODES = frozenset({"120000", "100755"})
+
+
+def is_trust_excluded(path: str, mode: str | None = None) -> bool:
+    """`path` (repo-relative, `/`-separated) is a file of a shape fr writes as evidence,
+    and (when its git `mode` is known) is neither a symlink nor executable."""
+    if mode in _RISKY_MODES:
+        return False
+    if path in _ACCEPTANCE:
         return True
-    if path.startswith("docs/superpowers/runs/"):
-        return True
-    return path in TRUST_EXCLUDED
+    parts = path.split("/")
+    if parts[:2] == ["docs", "superpowers"] and len(parts) >= 4:
+        if parts[2] == "journals":
+            return len(parts) == 5 and parts[3] in _JOURNAL_SCOPES and parts[4].endswith(".md")
+        if parts[2] == "runs":
+            if len(parts) == 4:
+                return parts[3].endswith(".yaml")
+            if len(parts) == 5 and parts[3].endswith(".records"):
+                return parts[4].endswith(".yaml") or parts[4] == "pr-body.md"
+    return False
 
 
 def head_tree(repo_root: Path) -> dict[str, str]:
@@ -180,7 +205,7 @@ def head_tree(repo_root: Path) -> dict[str, str]:
     tree: dict[str, str] = {}
     for entry in res.stdout.split("\0"):
         meta, _, path = entry.partition("\t")
-        if path and not is_trust_excluded(path):
+        if path and not is_trust_excluded(path, meta.split()[0]):
             tree[path] = meta.split()[-1]
     return dict(sorted(tree.items()))
 
@@ -189,6 +214,17 @@ def tree_digest(tree: Mapping[str, str]) -> str:
     """sha256 over the sorted `(path, oid)` pairs."""
     pairs = "\0".join(f"{path} {oid}" for path, oid in sorted(tree.items()))
     return hashlib.sha256(pairs.encode()).hexdigest()
+
+
+def _disk_mode(repo_root: Path, path: str) -> str | None:
+    """The git-style mode of what is on disk now (`None` when the path is gone)."""
+    try:
+        st = (repo_root / path).lstat()
+    except OSError:
+        return None
+    if stat.S_ISLNK(st.st_mode):
+        return "120000"
+    return "100755" if st.st_mode & 0o111 else "100644"
 
 
 def dirty_paths(repo_root: Path) -> list[str]:
@@ -202,7 +238,7 @@ def dirty_paths(repo_root: Path) -> list[str]:
     if res.returncode != 0:
         raise GitUnavailableError(f"`git status` failed: {res.stderr.strip()}")
     paths = {e[3:] for e in res.stdout.split("\0") if len(e) > 3}
-    return sorted(p for p in paths if not is_trust_excluded(p))
+    return sorted(p for p in paths if not is_trust_excluded(p, _disk_mode(repo_root, p)))
 
 
 def tree_changes(old: Mapping[str, str], new: Mapping[str, str]) -> list[str]:

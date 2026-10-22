@@ -439,3 +439,69 @@ def test_a_token_referenced_excluded_file_is_still_hashed(tmp_path: Path) -> Non
     (tmp_path / "docs/superpowers/runs/probe.sh").write_text("true\n")
     fp = fingerprint([_lo(check="bash docs/superpowers/runs/probe.sh")], OpsConfig(), tmp_path)
     assert "file:docs/superpowers/runs/probe.sh" in fp
+
+
+def test_exclusion_is_the_exact_file_shapes_fr_writes() -> None:
+    from fr.ops.trust import is_trust_excluded
+
+    for path in (
+        "docs/superpowers/journals/plans/p.md",
+        "docs/superpowers/runs/2026-10-22-feat-x.yaml",
+        "docs/superpowers/runs/2026-10-22-feat-x.records/implement-phase__phase-2.yaml",
+        "docs/superpowers/runs/2026-10-22-feat-x.records/pr-body.md",
+    ):
+        assert is_trust_excluded(path), path
+    for path in (
+        "docs/superpowers/runs/evil.sh",
+        "docs/superpowers/runs/x/y.yaml",
+        "docs/superpowers/runs/r.records/x.sh",
+        "docs/superpowers/runs/r.records/sub/a.yaml",
+        "docs/superpowers/journals/plans/sub/x.md",
+        "docs/superpowers/journals/other/x.md",
+        "docs/superpowers/journals/x.md",
+        "docs/superpowers/journals/plans/x.sh",
+    ):
+        assert not is_trust_excluded(path), path
+
+
+def test_an_executable_or_symlink_is_never_excluded() -> None:
+    from fr.ops.trust import is_trust_excluded
+
+    path = "docs/superpowers/journals/plans/x.md"
+    assert is_trust_excluded(path, mode="100644")
+    assert not is_trust_excluded(path, mode="100755")
+    assert not is_trust_excluded("docs/superpowers/runs/r.yaml", mode="120000")
+
+
+def test_head_tree_and_dirty_paths_apply_the_mode_predicate(tmp_path: Path) -> None:
+    import os
+    import subprocess
+
+    from fr.ops.trust import dirty_paths, head_tree
+
+    root = _repo(tmp_path)
+    runs = root / "docs/superpowers/runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "ok.yaml").write_text("a: 1\n")
+    (runs / "link.yaml").symlink_to("ok.yaml")
+    jd = root / "docs/superpowers/journals/plans"
+    jd.mkdir(parents=True, exist_ok=True)
+    (jd / "x.md").write_text("x\n")
+    os.chmod(jd / "x.md", 0o755)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "m"],
+        cwd=root,
+        check=True,
+    )
+    tree = head_tree(root)
+    assert "docs/superpowers/runs/link.yaml" in tree
+    assert "docs/superpowers/journals/plans/x.md" in tree
+    assert "docs/superpowers/runs/ok.yaml" not in tree
+    (runs / "ok.yaml").write_text("a: 2\n")
+    (runs / "evil.sh").write_text("x\n")
+    (jd / "x.md").write_text("y\n")
+    dirty = dirty_paths(root)
+    assert "docs/superpowers/runs/evil.sh" in dirty
+    assert "docs/superpowers/journals/plans/x.md" in dirty
+    assert "docs/superpowers/runs/ok.yaml" not in dirty
