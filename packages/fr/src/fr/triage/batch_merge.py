@@ -13,7 +13,7 @@ on an earlier run drops out and a re-run resumes at the first unmerged batch.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -426,6 +426,24 @@ class MergeAttempt:
     reason: str = ""
 
 
+def pre_merge_hold(labels: Iterable[object] | None) -> str | None:
+    """Why a PR's labels hold its merge (spec 2026-10-22-fr-ops R14), else None: a
+    `PRE_MERGE_HOLD_GATES` gate held without its `-passed` label. The DevOps stage
+    owns that merge."""
+    from fr.gates import PRE_MERGE_HOLD_GATES
+    from fr.labels import gate_label
+
+    names = {str(n) for n in labels or ()}
+    for gate in sorted(PRE_MERGE_HOLD_GATES):
+        held, passed = gate_label(gate).name, gate_label(gate, passed=True).name
+        if held in names and passed not in names:
+            return (
+                f"is held by {held} until {passed}: the DevOps stage owns its merge "
+                "(`fr ops gate --run <id>`)"
+            )
+    return None
+
+
 def _approved_and_ready(
     ctx: MergeContext, slot: Slot, view: dict[str, Any], *, wait: bool
 ) -> MergeAttempt | None:
@@ -436,6 +454,9 @@ def _approved_and_ready(
     as `merge_one` does, else a non-green draft returns its checks' outcome."""
     pr, batch = slot.step.pr, slot.step.batch
     head = str(view.get("head_oid") or "")
+    hold = pre_merge_hold(view.get("labels"))
+    if hold is not None:
+        return MergeAttempt("unapproved", head=head, reason=hold)
     events = [*batch.events, *ctx.recorded.get(batch.id, [])]
     verdict = approval_verdict(events, pr.number, head, view.get("labels"))
     if isinstance(verdict, Void):

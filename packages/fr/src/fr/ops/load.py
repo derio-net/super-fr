@@ -305,6 +305,20 @@ def _runbook(repo_root: Path, config: OpsConfig) -> list[LoadedOp]:
 # --- selection ---------------------------------------------------------------
 
 
+def plan_has_ops(repo_root: Path, plan_dir: Path) -> bool:
+    """Whether the plan carries any op, of either phase, in either plan carrier
+    (`ops.yaml`, a `# manual-operation` step block); never the runbook. An ops
+    carrier that cannot be read counts as ops: the R13 promotion then holds the
+    run rather than silently dropping its `devops` gate."""
+    plan_dir = plan_dir if plan_dir.is_absolute() else repo_root / plan_dir
+    if not plan_dir.is_dir():
+        return False
+    try:
+        return bool(_ops_yaml(plan_dir) or _step_blocks(plan_dir))
+    except OpsLoadError:
+        return True
+
+
 def load_ops(
     plan_dir: Path, repo_root: Path, *, runbook: bool = False, ids: tuple[str, ...] = ()
 ) -> OpSet:
