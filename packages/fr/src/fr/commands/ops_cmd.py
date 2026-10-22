@@ -3,8 +3,9 @@
 The whole group is gated by the artifact trigger (R17): it is deliberately NOT in
 `fr.artifacts.trigger.READ_ONLY_COMMANDS`, `status` included.
 
-`status` (R3) reads: it runs each op's probes against the live system and folds
-the plan journal's recorded evidence, and it writes nothing. Exit 0 when every
+`status` (R3) runs each op's probes against the live system and folds the plan
+journal's recorded evidence, and it writes nothing. Probes are repo-authored code
+and run only once `fr ops trust` (R19) accepted the exact op set. Exit 0 when every
 op is DONE or N/A, 1 when any is OPEN, UNVERIFIABLE or CANNOT-VERIFY, 3 when any
 ESCALATEs, 2 on a refusal.
 """
@@ -30,8 +31,8 @@ PROFILE_WARNING = (
 )
 
 
-def _refuse(message: str) -> NoReturn:
-    typer.echo(f"fr ops status: {message}", err=True)
+def _refuse(message: str, verb: str = "status") -> NoReturn:
+    typer.echo(f"fr ops {verb}: {message}", err=True)
     raise typer.Exit(code=2)
 
 
@@ -73,42 +74,59 @@ def render_text(rows: list[dict[str, object]], *, explain: bool) -> str:
     return "\n".join(lines)
 
 
+PLAN_OPTION = typer.Option("--plan", help="Plan dir (default: the plan of this branch's run).")
+RUNBOOK_OPTION = typer.Option("--runbook", help="Also select every op in the repo runbook.")
+
+
+def _interactive() -> bool:
+    """An operator at a terminal (the artifact gate's predicate); a seam for tests."""
+    from fr.artifacts.trigger import is_interactive
+
+    return is_interactive()
+
+
+def _plan_dir(verb: str, plan: Path | None) -> tuple[Path, Path]:
+    """`(repo root, plan dir)`, refusing (exit 2) when either cannot be found."""
+    from fr.git import repo_root as git_repo_root
+
+    try:
+        root = git_repo_root(Path.cwd())
+    except Exception:  # noqa: BLE001 — any git failure means "not in a repo"
+        _refuse("not inside a git repository", verb)
+    plan_dir = (root / plan) if plan is not None else plan_of_current_branch(root)
+    if plan_dir is None:
+        _refuse("no run on this branch records a plan; pass --plan <dir>", verb)
+    if not plan_dir.is_dir():
+        _refuse(f"no plan at {plan_dir}", verb)
+    return root, plan_dir
+
+
 @ops_app.command("status")
 def status(
     op_id: Annotated[str | None, typer.Argument(help="One op to report.")] = None,
-    plan: Annotated[
-        Path | None,
-        typer.Option("--plan", help="Plan dir (default: the plan of this branch's run)."),
-    ] = None,
-    runbook: Annotated[
-        bool, typer.Option("--runbook", help="Also select every op in the repo runbook.")
-    ] = False,
+    plan: Annotated[Path | None, PLAN_OPTION] = None,
+    runbook: Annotated[bool, RUNBOOK_OPTION] = False,
     phase: Annotated[str | None, typer.Option("--phase", help="pre-merge | post-merge")] = None,
     as_json: Annotated[bool, typer.Option("--json", help="One JSON row per op.")] = False,
     explain: Annotated[
         bool, typer.Option("--explain", help="Show what a vacuous probe would look like.")
     ] = False,
 ) -> None:
-    """Report each selected op's state. Reads only; never writes."""
-    from fr.git import repo_root as git_repo_root
+    """Report each selected op's state, running its probes. Writes nothing.
+
+    Probes are repo-authored code: they run only once `fr ops trust` accepted
+    this exact op set, and status refuses (exit 2) while it differs."""
     from fr.ops.engine import OrderError, ShellRunner, exit_code, order
     from fr.ops.engine import status as op_status
     from fr.ops.evidence import JournalEvidence
     from fr.ops.identity import LiveIdentities
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
     from fr.ops.profile import in_ops_profile
+    from fr.ops.trust import diff, fingerprint, plan_trust
 
     if phase is not None and phase not in PHASES:
         _refuse(f"--phase must be one of {', '.join(PHASES)} (got {phase!r})")
-    try:
-        root = git_repo_root(Path.cwd())
-    except Exception:  # noqa: BLE001 — any git failure means "not in a repo"
-        _refuse("not inside a git repository")
-    plan_dir = (root / plan) if plan is not None else plan_of_current_branch(root)
-    if plan_dir is None:
-        _refuse("no run on this branch records a plan; pass --plan <dir>")
-    if not plan_dir.is_dir():
-        _refuse(f"no plan at {plan_dir}")
+    root, plan_dir = _plan_dir("status", plan)
     if not in_ops_profile():
         typer.echo(PROFILE_WARNING, err=True)
 
@@ -128,6 +146,18 @@ def status(
     for warning in opset.warnings:
         typer.echo(f"fr ops status: warning: {warning}", err=True)
 
+    trusted = plan_trust(root, plan_dir.name)
+    changes = diff(fingerprint(opset.ops, config), trusted)
+    if changes.untrusted:
+        since = f"since {trusted.entry_id}" if trusted else "never trusted"
+        _refuse(
+            f"the op set is not trusted ({since}); no probe ran.\n  "
+            + "\n  ".join(changes.lines())
+            + f"\nReview the probes, then run `fr ops trust --plan {plan_dir.relative_to(root)}"
+            + (" --runbook" if runbook else "")
+            + "`."
+        )
+
     rows = op_status(
         ordered,
         runner=ShellRunner(
@@ -144,3 +174,38 @@ def status(
     else:
         typer.echo("no ops selected")
     raise typer.Exit(code=exit_code(rows))
+
+
+@ops_app.command("trust")
+def trust(
+    plan: Annotated[Path | None, PLAN_OPTION] = None,
+    runbook: Annotated[bool, RUNBOOK_OPTION] = False,
+) -> None:
+    """Show every probe and command of the selected ops and, confirmed at a
+    terminal, record that you trust this exact set (an `op-trust-<n>` decision in
+    the plan journal). Probes are repo-authored code; nothing runs them until then."""
+    from fr.ops.load import OpsLoadError, load_ops, load_ops_config
+    from fr.ops.trust import describe, diff, fingerprint, plan_trust, record_trust, set_hash
+
+    root, plan_dir = _plan_dir("trust", plan)
+    try:
+        opset = load_ops(plan_dir, root, runbook=runbook)
+        config = load_ops_config(root)
+    except OpsLoadError as e:
+        _refuse(str(e), "trust")
+    fp = fingerprint(opset.ops, config)
+    trusted = plan_trust(root, plan_dir.name)
+    if trusted is not None and trusted.sha256 == set_hash(fp):
+        typer.echo(f"already trusted ({trusted.entry_id}); nothing written")
+        return
+    typer.echo(describe(opset.ops, config) or "no ops selected")
+    changes = diff(fp, trusted)
+    if trusted is not None:
+        typer.echo(f"since {trusted.entry_id}: " + "; ".join(changes.lines()))
+    if not _interactive():
+        _refuse("trust is granted only at a terminal; nothing written", "trust")
+    if not typer.confirm(f"Trust these {len(opset.ops)} op(s) to run on this machine?"):
+        typer.echo("not trusted; nothing written")
+        raise typer.Exit(code=1)
+    entry = record_trust(root, plan_dir.name, fp)
+    typer.echo(f"trusted: {entry.id} (sha256 {set_hash(fp)})")

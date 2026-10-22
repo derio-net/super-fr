@@ -57,7 +57,22 @@ def _repo(tmp_path: Path, ops: str = OPS, branch: str = "feat/x") -> Path:
     plan = tmp_path / PLAN_REL
     plan.mkdir(parents=True)
     (plan / "ops.yaml").write_text(ops)
+    _trust_all(tmp_path)
     return tmp_path
+
+
+def _trust_all(root: Path) -> None:
+    """Record the operator's trust in the fixture's op set (R19), as `fr ops trust`
+    does once confirmed — so these tests exercise status, not the trust gate
+    (`test_ops_trust.py` owns that)."""
+    from fr.ops.load import OpsLoadError, load_ops, load_ops_config
+    from fr.ops.trust import fingerprint, record_trust
+
+    try:
+        ops = load_ops(root / PLAN_REL, root).ops
+    except OpsLoadError:
+        return  # a test of the carrier refusal; nothing to trust
+    record_trust(root, "p", fingerprint(ops, load_ops_config(root)))
 
 
 def _run_on_branch(root: Path, branch: str = "feat/x") -> None:

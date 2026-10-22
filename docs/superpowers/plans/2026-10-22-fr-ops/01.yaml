@@ -9,6 +9,7 @@ phase:
   acceptance:
   - fr-ops-model-carriers
   - fr-ops-status
+  - fr-ops-probe-trust
   skeleton: true
   tier: hard
   files:

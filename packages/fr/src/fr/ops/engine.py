@@ -9,7 +9,8 @@ Pure over three injected ports, so its tests run no subprocess:
 `status` evaluates, per op: a legacy `status: done`; `na_if` (skipped for an op
 that `disables` something, which is never N/A); then `check` once per identity,
 every identity having to pass; then, for an op that is not DONE, `escalate`.
-It never writes. `order` is the `needs` topological sort `apply` runs in.
+It writes nothing; the probes it runs are repo-authored code, run only after `fr ops
+trust` (R19). `order` is the `needs` topological sort `apply` runs in.
 """
 
 from __future__ import annotations
@@ -194,7 +195,7 @@ def status(
     identities: IdentityResolver,
     journal: Journal,
 ) -> list[StatusRow]:
-    """Each op's status, in the order given. Reads only."""
+    """Each op's status, in the order given. Writes nothing; runs the probes."""
     return [_evaluate(lo, runner, identities, journal) for lo in ops]
 
 
