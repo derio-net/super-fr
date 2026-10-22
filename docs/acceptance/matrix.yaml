@@ -9586,3 +9586,121 @@ rows:
       instruction test is not live evidence.
     verify: live
     scenario: tests/scenarios/herdr-closed-recovery-live.sh
+  - id: fr-ops-model-carriers
+    capability: fr ops
+    acceptance: A plan's ops are read from ops.yaml and from legacy manual-operation
+      blocks in step text, strictly typed, a duplicate id or unknown key refused naming
+      file and line
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-ops-status
+    capability: fr ops
+    acceptance: fr ops status reports every op DONE (checked or attested), OPEN with
+      its reason, N/A, UNVERIFIABLE or CANNOT-VERIFY, runs checks per declared identity,
+      surfaces a disabled requirement as OPEN with its consequence and escalates when
+      the guarded condition already happens
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: fr-ops-apply-idempotent
+    capability: fr ops
+    acceptance: fr ops apply (one op or a phase) runs in dependency order, confirms,
+      stops on the first failure naming the op and its undo, waits for a post-merge
+      op's ready probe, and a second run writes nothing and says so
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: fr-ops-profile-guard
+    capability: fr ops
+    acceptance: fr ops apply refuses outside a declared ops profile and names the exec
+      command; status only warns
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-ops-evidence-attest
+    capability: fr ops
+    acceptance: Op evidence and operator attestations are durable journal entries visible
+      to fr ops status from any checkout, attested never shown as checked
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R17
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-ops-seal-no-plaintext
+    capability: fr ops
+    acceptance: fr ops seal never leaves plaintext in the repo or at the target when
+      encryption fails or the process is interrupted, and the helpers never print a
+      secret
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-ops-testplan-tags
+    capability: Test Plan
+    acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; an
+      unknown tag is refused naming the step
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-ops-deliver-section
+    capability: deliver
+    acceptance: The delivered PR body carries a Manual operations section rendered from
+      recorded evidence, and a plan with pre-merge ops labels the PR gate:devops
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-ops-devops-gate-hold
+    capability: gates
+    acceptance: An un-passed gate:devops holds the PR from the driver's merge, and fr
+      gate pass --gate devops refuses while an op or devops Test Plan step is open
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-ops-gate-stage
+    capability: DevOps stage
+    acceptance: fr ops gate --run runs pre-merge ops, a confirmed merge, readiness,
+      post-merge ops, devops Test Plan steps, the gate pass and the tester hand-off
+      in order, resumable from what it recorded; pickup points devops-gated runs at
+      it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R15
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R18
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: fr-ops-live-first-run
+    capability: DevOps stage
+    acceptance: With a released fr, a real ops profile and a real PR, the DevOps stage
+      carries a plan's pre- and post-merge ops through merge to a passed devops gate
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
