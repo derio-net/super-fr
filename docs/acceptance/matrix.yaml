@@ -3916,7 +3916,7 @@ rows:
     acceptance: The delivered super-fr plugin loads in OpenCode 2.x as a V2 plugin definition
       (id plus setup) and its hooks are registered
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R1
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/plugin.test.ts
@@ -3937,26 +3937,33 @@ rows:
     acceptance: Edits to tracked source in an fr-enabled repo are blocked from OpenCode
       2.x outside a valid isolation workspace, matching the Claude Code hook
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R2
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/index.test.ts
       - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
       int:
       - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
-    status: walk-owed
-    notes: 'Verdicts proven in CI (bun: index.test.ts, marker.test.ts) and the delivered
-      copy refuses a base-clone edit inside the real 2.x binary (test_opencode_runs_the_delivered_gate).
-      verify: live - a model-driven 2.x session''s refused edit is Test Plan item 1,
-      post-merge at the Tester gate.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: a model-driven edit to a tracked spec
+      in the base clone was refused with the fr-isolation message and git status stayed
+      clean (Test Plan step 1).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3 this session: edit tool on docs/superpowers/specs/2026-10-20-opencode-2-support-design.md
+        refused; no file change'
   - id: opencode-2-bash-gate
     capability: OpenCode adaptation
     acceptance: During an active fr pipeline in OpenCode 2.x, a shell command whose
       cwd is inside the pipeline's base repo is denied, while the same command from
       the isolation worktree is allowed
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R3
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/guard-verdicts.test.ts
@@ -3974,7 +3981,7 @@ rows:
       and the transcript gates and usage reports see the same tool calls and figures
       the store holds
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_2x_session_is_observed_end_to_end
@@ -3993,7 +4000,7 @@ rows:
     acceptance: An OpenCode 1.x session is refused with a reason naming OpenCode 1.x
       and the upgrade, never reported as an empty observation or as zeros
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_1x_only_session_is_refused_naming_1x_and_the_upgrade
@@ -4013,7 +4020,7 @@ rows:
       it spawns, lets fr name the top-level session that issued the command and not
       a child's
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_opencode.py#test_current_session_reads_the_key_its_harness_owns
@@ -4032,7 +4039,7 @@ rows:
     acceptance: An advanceable fr run in an idle OpenCode 2.x session receives exactly
       one nudge per run position
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R5
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
@@ -4058,7 +4065,7 @@ rows:
     acceptance: The fr status segment renders in the OpenCode 2.x terminal status area,
       naming the workspace, and a session opened outside any repo shows no segment
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R12
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/segment.test.ts
@@ -4077,7 +4084,7 @@ rows:
       by the plugin with the same message the Claude hook gives (gh pr merge is evaluated
       with the same decision, which allows it)
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R4
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/push.test.ts
@@ -4096,7 +4103,7 @@ rows:
     acceptance: A child session's first tool call claims its open unit on OpenCode 2.x,
       so fr run status names the holder instead of "an unclaimed agent"
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R7
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
@@ -4114,7 +4121,7 @@ rows:
     acceptance: The fr binary the plugin resolved is pinned into shell commands as FR_HARNESS_FR
       on OpenCode 2.x, and a failed pin never blocks a command
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R8
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/pin.test.ts
@@ -4133,7 +4140,7 @@ rows:
       the acceptance nag once, in the system context, and never as a rewrite of the
       operator's prompt
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R9
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/nag.test.ts
@@ -4153,7 +4160,7 @@ rows:
       pipeline sentinel in the shape the guard and fr read, and never inside a valid
       isolation workspace
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R10
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/sentinel.test.ts
@@ -4174,7 +4181,7 @@ rows:
     acceptance: An OpenCode 2.x session that runs fr isolation up or fr run start is
       bound to that workspace, and a deleted session is unbound
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R11
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/bind.test.ts
