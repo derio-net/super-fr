@@ -145,6 +145,7 @@ def test_no_out_of_scope_findings_renders_none(tmp_path: Path) -> None:
     assert missing_sections("## Findings\n## Out-of-scope findings\nNone.\n") == [
         "## Pre-merge verification owed",
         "## Post-merge verification owed",
+        "## Manual operations",
         "## Proportionality",
         "## Cost",
     ]
