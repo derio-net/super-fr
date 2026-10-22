@@ -2004,3 +2004,20 @@ def test_a_conflicting_export_pr_is_its_own_export_conflict_kind() -> None:
     assert (action.kind, action.pr, action.head) == ("export-conflict", 40, "export-head-40")
     assert "export-conflict" not in EXPORT_KINDS  # the driver records a stop, nothing more
     assert got.summary.blocked == 1
+
+
+# ------------------------------------------- fr-ops R14 (p3-r9): the devops pre-merge hold
+
+
+@pytest.mark.parametrize("queue_mode", [False, True])
+def test_p3_r9_the_planner_never_merges_a_pr_held_by_gate_devops(queue_mode: bool) -> None:
+    b = _dispatched("x", 1)
+    snap0 = _snap([b], {"x": "pr-open"})
+    entry = snap0.queue[0]
+    live = {"x": _live(entry.pr.number, entry.pr.head_oid, labels=("gate:devops",))}
+    extra = {"queue_repos": frozenset({REPO})} if queue_mode else {}
+    plan = drive_pass(_snap([b], {"x": "pr-open"}, live=live, **extra))
+    kinds = [k for k, _ in _kinds(plan.actions)]
+    assert "merge" not in kinds and "enqueue" not in kinds
+    (held,) = [a for a in plan.actions if a.kind == "held"]
+    assert "awaiting DevOps" in held.detail and "gate:devops-passed" in held.detail

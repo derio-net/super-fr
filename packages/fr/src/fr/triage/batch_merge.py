@@ -426,22 +426,13 @@ class MergeAttempt:
     reason: str = ""
 
 
-def pre_merge_hold(labels: Iterable[object] | None) -> str | None:
+def pre_merge_hold(labels: Iterable[object] | None, number: int = 0) -> str | None:
     """Why a PR's labels hold its merge (spec 2026-10-22-fr-ops R14), else None: a
     `PRE_MERGE_HOLD_GATES` gate held without its `-passed` label. The DevOps stage
     owns that merge."""
-    from fr.gates import PRE_MERGE_HOLD_GATES
-    from fr.labels import gate_label
+    from fr.labels import awaiting_devops, pre_merge_held
 
-    names = {str(n) for n in labels or ()}
-    for gate in sorted(PRE_MERGE_HOLD_GATES):
-        held, passed = gate_label(gate).name, gate_label(gate, passed=True).name
-        if held in names and passed not in names:
-            return (
-                f"is held by {held} until {passed}: the DevOps stage owns its merge "
-                "(`fr ops gate --run <id>`)"
-            )
-    return None
+    return awaiting_devops(number) if pre_merge_held(labels) else None
 
 
 def _approved_and_ready(
@@ -454,7 +445,7 @@ def _approved_and_ready(
     as `merge_one` does, else a non-green draft returns its checks' outcome."""
     pr, batch = slot.step.pr, slot.step.batch
     head = str(view.get("head_oid") or "")
-    hold = pre_merge_hold(view.get("labels"))
+    hold = pre_merge_hold(view.get("labels"), pr.number)
     if hold is not None:
         return MergeAttempt("unapproved", head=head, reason=hold)
     events = [*batch.events, *ctx.recorded.get(batch.id, [])]

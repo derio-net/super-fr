@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from fr.labels import held_gates
+from fr.labels import awaiting_devops, held_gates, pre_merge_held
 from fr.triage.approval import approval_verdict, is_approved
 from fr.triage.batch import batch_pr, derive_batch_stage
 from fr.triage.batch_drive import LANDED, closeout_event, fact_ledgers
@@ -49,6 +49,8 @@ def lane_of(batch: Batch, facts: Facts, stop: MergeStop | None = None) -> LaneVe
             )
         if stop is not None:
             return LaneVerdict("needs-reviewer", f"merge stopped: {stop.reason}")
+        if pre_merge_held(pr.labels):  # fr-ops R14: the DevOps stage owns the merge
+            return LaneVerdict("needs-devops", awaiting_devops(pr.number))
         if cursor is not None and cursor.kind == "deliver-done":
             verdict = approval_verdict(batch.events, pr.number, pr.head_oid, pr.labels)
             if not is_approved(verdict):

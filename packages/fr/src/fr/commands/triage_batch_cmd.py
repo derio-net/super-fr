@@ -4177,6 +4177,7 @@ class _Driver:
                     failing=failing,
                     head_ref=e.pr.head_ref,
                     trusted=True,  # the queue holds `batch_pr`s only (gh#936)
+                    labels=tuple(str(n) for n in view.get("labels") or ()),
                 )
             # Every landed batch, selected or not: adopting a finished close-out is
             # bookkeeping (gh#990). Only the selection is read further.

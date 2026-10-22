@@ -251,3 +251,23 @@ def test_p5_r7_the_conflicting_hint_replaces_merge_and_enqueue(
         lambda plan: {"a": Action(kind, "a", "", pr=11)},  # type: ignore[arg-type]
     )
     assert build_board(f, jd, {}).card("a").hint == CONFLICT_HINT
+
+
+# ------------------------------------------- fr-ops R14 (p3-r9): the devops pre-merge hold
+
+
+def test_p3_r9_a_pr_held_by_gate_devops_is_awaiting_devops_on_the_board() -> None:
+    from fr.triage.kanban import first_actions
+
+    f, jd = _open(_cursor("none"), labels=["approved-fr", "gate:devops"])
+    assert _col(f, jd) == "needs-devops"
+    (need,) = [n for n in needs_you(f, jd) if n.ref == "a"]
+    assert need.kind == "needs-devops" and "awaiting DevOps" in need.text
+    assert first_actions(f, jd)["a"].kind == "held"
+
+
+def test_p3_r9_a_passed_devops_gate_merges_as_before() -> None:
+    from fr.triage.kanban import first_actions
+
+    f, jd = _open(_cursor("none"), labels=["approved-fr", "gate:devops", "gate:devops-passed"])
+    assert _col(f, jd) == "pr-open" and first_actions(f, jd)["a"].kind == "merge"

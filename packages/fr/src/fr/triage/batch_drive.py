@@ -24,7 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from fr.ghclient import QueueState
-from fr.labels import held_gates
+from fr.labels import awaiting_devops, held_gates, pre_merge_held
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
@@ -157,6 +157,9 @@ class LivePr:
     # The branch the PR merges into, as the forge says now; "" when not read. An export
     # PR is reused or merged only into the default branch (p4-r15).
     base: str = ""
+    # Its labels as read now; None when not read. `gate:devops` without `-passed` holds
+    # the merge (fr-ops R14): the planner plans no merge or enqueue for it.
+    labels: tuple[str, ...] | None = None
     # GitHub's `mergeable` (MERGEABLE | CONFLICTING | UNKNOWN) and `mergeStateStatus`, ""
     # when not read. A CONFLICTING archive or export PR is never merged (merge-truth R12);
     # a collected close-out's PR merges only once `MERGEABLE` (exit-gates R15).
@@ -1554,6 +1557,10 @@ def _walk_queue(
         if not approved:
             awaiting.append(bid)
             continue
+        if pre_merge_held(pr.labels):  # fr-ops R14: the DevOps stage merges it
+            awaiting.append(bid)
+            actions.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
+            continue
         if hold is not None:
             queued.append(bid)
             continue
@@ -1637,6 +1644,10 @@ def _walk_merge_train(
             continue
         if not approved:  # never the head, never a stop
             awaiting.append(bid)
+            continue
+        if pre_merge_held(pr.labels):  # fr-ops R14: the DevOps stage merges it
+            awaiting.append(bid)
+            merges.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
             continue
         if waiting is not None or queued:
             queued.append(bid)
