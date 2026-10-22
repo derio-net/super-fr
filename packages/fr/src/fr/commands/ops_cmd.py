@@ -426,3 +426,92 @@ def trust(
         raise typer.Exit(code=1)
     entry = grant_trust(root, plan_dir.name, fp, tree=tree)
     typer.echo(f"trusted: {entry.id} (sha256 {set_hash(fp)}); the grant is yours, not the repo's")
+
+
+# --- safety helpers (R10): generic, tool-neutral ---------------------------------
+
+
+def _helper_root(verb: str) -> Path:
+    from fr.git import repo_root as git_repo_root
+
+    try:
+        return git_repo_root(Path.cwd())
+    except Exception:  # noqa: BLE001
+        _refuse("not inside a git repository", verb)
+
+
+@ops_app.command("seal")
+def seal(
+    encrypt: Annotated[
+        str,
+        typer.Option(
+            "--encrypt",
+            help="Command that writes ciphertext to {out}; {in} is a 0600 plaintext temp "
+            "file outside the repo (filled from stdin), {target} the target's name.",
+        ),
+    ],
+    target: Annotated[Path, typer.Option("--target", help="The file to replace with {out}.")],
+) -> None:
+    """Encrypt stdin into --target without ever leaving plaintext behind.
+
+    The target changes only when the command exits 0 and wrote a non-empty {out}.
+    Runs only in an ops profile."""
+    import sys
+
+    from fr.ops import helpers
+
+    _require_ops_profile("seal", None)
+    root = _helper_root("seal")
+    try:
+        rc = helpers.seal(encrypt, target, sys.stdin.buffer.read(), repo_root=root)
+    except helpers.HelperError as e:
+        _refuse(str(e), "seal")
+    if rc != 0:
+        typer.echo(
+            f"fr ops seal: the encrypt command failed (exit {rc}); {target} is unchanged", err=True
+        )
+    raise typer.Exit(code=rc)
+
+
+@ops_app.command("secret")
+def secret(
+    source: Annotated[str, typer.Option("--from", help="Command that prints the value.")],
+    command: Annotated[
+        list[str], typer.Argument(help="Command to run; it reads the value on stdin.")
+    ],
+) -> None:
+    """Read a value live and pass it to COMMAND on stdin; never to stdout."""
+    from fr.ops import helpers
+
+    root = _helper_root("secret")
+    try:
+        rc = helpers.secret(source, command, repo_root=root)
+    except helpers.HelperError as e:
+        _refuse(str(e), "secret")
+    raise typer.Exit(code=rc)
+
+
+@ops_app.command("clip")
+def clip(
+    source: Annotated[str, typer.Option("--from", help="Command that prints the value.")],
+) -> None:
+    """Put a value on the clipboard."""
+    from fr.ops import helpers
+
+    root = _helper_root("clip")
+    try:
+        rc = helpers.clip(source, repo_root=root)
+    except helpers.HelperError as e:
+        _refuse(str(e), "clip")
+    raise typer.Exit(code=rc)
+
+
+@ops_app.command("scratch")
+def scratch(
+    cleanup: Annotated[str, typer.Option("--cleanup", help="Command run on any exit.")],
+    command: Annotated[list[str], typer.Argument(help="Command to run.")],
+) -> None:
+    """Run COMMAND, then --cleanup on success, failure, Ctrl-C or SIGTERM."""
+    from fr.ops import helpers
+
+    raise typer.Exit(code=helpers.scratch(cleanup, command))
