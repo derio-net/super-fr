@@ -9646,7 +9646,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R17
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-seal-no-plaintext
     capability: fr ops
     acceptance: fr ops seal never leaves plaintext in the repo or at the target when
