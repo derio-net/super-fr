@@ -9618,8 +9618,11 @@ rows:
       - super-fr:tests/unit/test_ops_engine.py#test_disables_reports_open_with_its_consequence_and_is_never_na
       - super-fr:tests/unit/test_ops_engine.py#test_a_passing_escalate_on_a_non_done_op_escalates
       - super-fr:tests/unit/test_ops_cli.py#test_status_reports_each_op_and_exits_1_on_an_open_op
+      - super-fr:tests/unit/test_ops_reason.py#test_a_passthrough_value_on_stderr_never_reaches_the_journal
+      - super-fr:tests/unit/test_ops_reason.py#test_a_json_stderr_body_on_a_non_identity_op_records_only_the_exit_code
     status: ci
-    notes: unit tests run in CI; candidate scenario written (phase 2)
+    notes: 'phase 3: every printed or recorded reason goes through one sanitiser (passthrough
+      values masked, body lines dropped for every op)'
     verify: candidate
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-apply-idempotent
