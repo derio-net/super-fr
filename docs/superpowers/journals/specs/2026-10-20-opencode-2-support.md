@@ -408,3 +408,10 @@ Evidence: PASS — with an active pipeline sentinel for this session, git status
 Step: In the same session run `fr run status` and confirm `OPENCODE_SESSION_ID` resolved to the top-level session, not a child's.
 
 Evidence: PASS — OPENCODE_SESSION_ID=ses_e9b9e7dd9ffe6xL1FEEpXGl1MK matches the session_v2 row whose parent_id is NULL (top-level), and fr run status 2026-10-20-feat-opencode-v2-support reads the cursor correctly in this session.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-10-22T16:35:20+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: Let a run sit advanceable and confirm one idle nudge is submitted, with no second nudge at the same `position`.
+
+Evidence: FAILED on OpenCode 2.1.3 — a synthetic advanceable run returned fr run check --idle exit 3 with next_command, and a fresh top-level session idled (export carries an idle message), but the plugin event stream contained session.execution.succeeded and no session.idle, so idle.ts never fired and no nudge was submitted. Framework fix tracked in #1231.
