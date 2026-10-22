@@ -211,8 +211,8 @@ def _predicted_release() -> Version:
 
 
 def test_the_ops_floor_is_the_predicted_release() -> None:
-    """p1-r1: rc1..rc3 of 5.27.0 shipped without fr ops, and `admits` lets an RC of a
-    named final pass, so a `>=5.27.0` floor would admit them."""
+    """p1-r1: the RCs cut before fr ops merged (5.27.0rc1-3, 6.0.0rc1-2) ship without it,
+    and `admits` lets an RC of a named final pass, so a `>=6.0.0` floor would admit them."""
     assert Version(OPS_FR_FLOOR) == _predicted_release()
 
 
@@ -229,19 +229,19 @@ def test_the_ops_floor_is_above_every_cut_release() -> None:
 
 @pytest.mark.parametrize(
     ("version", "admitted"),
-    [("5.27.0rc3", False), ("5.27.0rc1", False), ("5.26.0", False), ("5.27.0rc4", True),
-     ("5.27.0", True), ("5.28.0", True)],
+    [("6.0.0rc2", False), ("6.0.0rc1", False), ("5.27.0rc3", False), ("5.26.0", False),
+     ("6.0.0rc3", True), ("6.0.0", True), ("6.1.0", True)],
 )  # fmt: skip
 def test_the_ops_floor_admits_only_fr_ops_releases(version: str, admitted: bool) -> None:
     assert admits(f">={OPS_FR_FLOOR},<{CEILING_VERSION}", version) is admitted
 
 
 def test_self_review_refuses_a_floor_that_admits_an_earlier_rc(tmp_path: Path, monkeypatch) -> None:
-    """`>=5.27.0` admits 5.27.0rc3 through the RC rule, which lacks fr ops."""
+    """`>=6.0.0` admits 6.0.0rc2 through the RC rule, which lacks fr ops."""
     plan_dir = _plan(tmp_path, monkeypatch)
     (plan_dir / "ops.yaml").write_text(GOOD_OPS)
     plan = parse_plan(plan_dir)
-    loose = f">=5.27.0,<{CEILING_VERSION}"
+    loose = f">=6.0.0,<{CEILING_VERSION}"
     plan = dataclasses.replace(plan, meta=plan.meta.model_copy(update={"fr_version": loose}))
     assert [i for i in self_review(plan) if "fr ops" in i.message]
 

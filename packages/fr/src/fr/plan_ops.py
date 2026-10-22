@@ -1788,18 +1788,19 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     return out
 
 
-OPS_FR_FLOOR = "5.27.0rc4"
+OPS_FR_FLOOR = "6.0.0rc3"
 """The first release that ships `fr ops` (spec 2026-10-22-fr-ops R17).
-`scripts/release.py` cuts 5.27.0 (last final 5.26.0 plus a minor), but 5.27.0rc1-rc3
-were cut before `fr ops` existed, and `fr.version_floor.admits` lets an RC of a named
-final pass, so `>=5.27.0` would admit them. `tests/unit/test_ops_artifacts.py` pins
-this to the next release cut from this tree and above every `v*` tag."""
+`main` went to 6.0.0 while this was in review, and 6.0.0rc1-rc2 were cut before `fr ops`
+merged; `fr.version_floor.admits` lets an RC of a named final pass, so `>=6.0.0` would
+admit them. `tests/unit/test_ops_artifacts.py` pins this to the next release cut from
+this tree and above every `v*` tag, so a release cut before this merges fails CI here."""
 
 _PRE_OPS_PROBES: tuple[str, ...] = (
     *PRE_4_20_PROBES,
     *(f"4.{minor}.{patch}" for minor in range(20, 100) for patch in (0, 1, 99)),
-    *(f"5.{minor}.{patch}" for minor in range(27) for patch in (0, 1, 99)),
+    *(f"5.{minor}.{patch}" for minor in range(100) for patch in (0, 1, 99)),
     *(f"5.27.0rc{n}" for n in range(1, 4)),
+    *(f"6.0.0rc{n}" for n in range(1, 3)),
 )
 
 
