@@ -300,9 +300,7 @@ def load_ops(
     for lo in plan_ops:
         prior = seen.get(lo.op.id)
         if prior is not None:
-            raise OpsLoadError(
-                f"op {lo.op.id!r} is defined twice: {prior.where} and {lo.where}"
-            )
+            raise OpsLoadError(f"op {lo.op.id!r} is defined twice: {prior.where} and {lo.where}")
         seen[lo.op.id] = lo
 
     wanted_from_runbook = {n for lo in plan_ops for n in lo.op.needs if n not in seen}

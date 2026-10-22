@@ -101,3 +101,12 @@ class LegacyOp(_OpFields):
             phase=self.phase or "post-merge",
         )
         return op, self.status == "done"
+
+
+class OpsFile(BaseModel):
+    """`ops.yaml` in a plan folder: the `ops` artifact kind (R17)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: int = 1
+    ops: tuple[Op, ...] = ()

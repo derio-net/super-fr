@@ -456,10 +456,11 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
         if name in ("run", "matrix", "journal"):
             continue  # stamped on purpose — see the block comment above
         assert _unchanged(p, frozen[name]), f"the runner wrote to a {name} artifact"
-    # The journal moved 1 -> 2 (spec 2026-10-11-debt-engine §E): a stamp line
-    # is prepended, and nothing else of the body moves.
+    # The journal moved 1 -> 2 (spec 2026-10-11-debt-engine §E) and 2 -> 3
+    # (spec 2026-10-22-fr-ops §D): a stamp line is prepended, and nothing else
+    # of the body moves.
     assert paths["journal"].read_text() == (
-        "<!-- fr:journal-schema=2 -->\n"
+        "<!-- fr:journal-schema=3 -->\n"
         "<!-- fr:journal kind=discovery scope=plan id=d created=2026-08-30 -->\n"
     )
     # And the closed-world models still parse — the failure mode the finding

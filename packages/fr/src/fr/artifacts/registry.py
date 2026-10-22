@@ -45,6 +45,7 @@ from fr.artifacts.structure import (
     validate_agents,
     validate_journal,
     validate_matrix,
+    validate_ops,
     validate_plan,
     validate_profiles,
     validate_record,
@@ -410,7 +411,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             name="journal",
             # 2: the `owed` entry kind (spec `2026-10-11-debt-engine-design` §E,
             # R20), migration `fr.artifacts.journal_owed` — stamp-only.
-            current_version=2,
+            # 3: the `op` entry kind (spec `2026-10-22-fr-ops-design` §D, R17),
+            # migration `fr.artifacts.journal_op` — stamp-only.
+            current_version=3,
             locator="docs/superpowers/journals/**/*.md",
             stamp="`<!-- fr:journal-schema=N -->` header comment",
             read_stamp=_read_journal_stamp,
@@ -566,6 +569,17 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_profiles,
+        ),
+        ArtifactKind(
+            name="ops",
+            # A plan's manual operations, canonical carrier (spec
+            # `2026-10-22-fr-ops-design` R1, R2, R17). Born at 1.
+            current_version=1,
+            locator="docs/superpowers/plans/*/ops.yaml",
+            stamp="`schema_version` in `ops.yaml`",
+            read_stamp=_read_yaml_stamp,
+            write_version=_write_yaml_stamp,
+            validate=validate_ops,
         ),
         ArtifactKind(
             name="agents",

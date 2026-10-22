@@ -39,7 +39,7 @@ from fr.plan_validator_wrapper import (
 )
 from fr.render import plan_locally_complete
 from fr.types import PHASE_TIERS, PhaseDoc, Step
-from fr.version_floor import CEILING_VERSION, admits
+from fr.version_floor import CEILING_VERSION, PRE_4_20_PROBES, admits, admits_below
 
 
 class StepSpec(TypedDict):
@@ -1478,6 +1478,11 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # fr_version floor, and the no-`files` agentic-phase nudge.
     issues.extend(_scope_field_issues(plan))
 
+    # fr ops (2026-10-22 spec R17): a plan carrying ops floors fr_version at the
+    # release that ships `fr ops`, so an older fr refuses it rather than
+    # silently ignoring its ops.
+    issues.extend(_ops_floor_issues(plan))
+
     # The refactor-or-justify gate moved to `fr run resolve` (spec 2026-09-25
     # §5.C.2.2, `fr.record.gates.refactor_gaps`): at plan time "nothing to
     # clean" is a guess; at resolve the executor knows.
@@ -1781,6 +1786,46 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
         if floor is not None:
             out.append(floor)
     return out
+
+
+OPS_FR_FLOOR = "5.28.0"
+"""The release that ships `fr ops` (spec 2026-10-22-fr-ops R17): 5.27.0 plus this
+change's minor bump. `tests/unit/test_ops_artifacts.py` recomputes it from
+`packages/fr/pyproject.toml`."""
+
+_PRE_OPS_PROBES: tuple[str, ...] = (
+    *PRE_4_20_PROBES,
+    *(f"4.{minor}.{patch}" for minor in range(20, 100) for patch in (0, 1, 99)),
+    *(f"5.{minor}.{patch}" for minor in range(28) for patch in (0, 1, 99)),
+)
+
+
+def _ops_floor_issues(plan: Plan) -> list[ReviewIssue]:
+    """An error when the plan carries ops (either carrier) and its `fr_version`
+    admits an fr older than `OPS_FR_FLOOR`, or when its ops do not load."""
+    from fr.ops.load import OpsLoadError, load_ops
+
+    try:
+        ops = load_ops(plan.dir, plan.repo_root or plan.dir).ops
+    except OpsLoadError as e:
+        return [ReviewIssue(severity="error", message=f"plan's fr ops do not load: {e}")]
+    if not ops:
+        return []
+    wanted = f">={OPS_FR_FLOOR},<{CEILING_VERSION}"
+    constraint = plan.meta.fr_version
+    if constraint and not admits_below(constraint, OPS_FR_FLOOR, _PRE_OPS_PROBES):
+        return []
+    shown = repr(constraint) if constraint else "(none)"
+    return [
+        ReviewIssue(
+            severity="error",
+            message=(
+                f"the plan carries fr ops ({len(ops)}) but fr_version {shown} admits an fr "
+                f"older than {OPS_FR_FLOOR}, which would silently ignore them — floor it "
+                f"at '{wanted}'."
+            ),
+        )
+    ]
 
 
 def _version_floor_issue(

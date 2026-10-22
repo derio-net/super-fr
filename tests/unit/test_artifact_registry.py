@@ -26,6 +26,7 @@ from fr.artifacts.registry import (
 EXPECTED_KINDS = {
     "plan",
     "journal",
+    "ops",
     "run",
     "matrix",
     "spec",

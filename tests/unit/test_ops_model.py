@@ -12,7 +12,7 @@ FULL: dict[str, object] = {
     "phase": "pre-merge",
     "needs": ["create-key"],
     "check": "test -s secrets/ci.enc",
-    "na_if": "test -n \"$NO_CI\"",
+    "na_if": 'test -n "$NO_CI"',
     "apply": "fr ops seal --encrypt 'sops -e {in} > {out}' --target secrets/ci.enc",
     "undo": "git checkout secrets/ci.enc",
     "mutating": True,
