@@ -3,12 +3,12 @@
 // through `fr run claim --open-unit`. WHICH unit that is stays fr's verdict.
 //
 // WHAT THIS FILE DOES NOT PROVE: that the claim lands in a live OpenCode
-// session. The session shape was read off a live 1.18 server; everything here
-// drives the handler with a fake client, so the parity cell stays `partial`.
+// session. The session shape was read off `@opencode/client` 2.0.32's
+// `SessionInfo`; everything here drives the handler with a fake session API, so the parity cell stays `partial`.
 import { describe, expect, test } from "bun:test";
 
 import { createClaimHandler, SHARED_CLAIMED, type ClaimAnswer } from "../src/claim";
-import { FrIsolationRequired } from "../src/index";
+import { load } from "./fake";
 
 const CHILD = {
   id: "ses_child",
@@ -19,14 +19,14 @@ const CHILD = {
 
 function fakeClient(opts: { data?: unknown; getThrows?: boolean; error?: unknown } = {}) {
   const looked: string[] = [];
+  // OpenCode 2's `ctx.session`: `get({sessionID})` resolves to the info itself
+  // and throws on a failed lookup.
   const client = {
-    session: {
-      get: async (req: { path: { id: string } }) => {
-        looked.push(req.path.id);
-        if (opts.getThrows) throw new Error("boom");
-        if (opts.error) return { error: opts.error };
-        return { data: "data" in opts ? opts.data : CHILD };
-      },
+    get: async (req: { sessionID: string }) => {
+      looked.push(req.sessionID);
+      if (opts.getThrows) throw new Error("boom");
+      if (opts.error) throw Object.assign(new Error("lookup failed"), opts.error as object);
+      return "data" in opts ? opts.data : CHILD;
     },
   };
   return { client, looked };
@@ -46,7 +46,7 @@ describe("child claim (OpenCode): names the holder while it holds", () => {
   test("a child's first tool call claims its open unit with its id, agent and model", async () => {
     const { client } = fakeClient();
     const { runFr, calls } = fr();
-    const handler = createClaimHandler({ client, directory: "/work/tree", runFr });
+    const handler = createClaimHandler({ session: client, directory: "/work/tree", runFr });
 
     await handler({ sessionID: "ses_child" });
 
@@ -73,7 +73,7 @@ describe("child claim (OpenCode): names the holder while it holds", () => {
   test("once per session: later tool calls do not look up or claim again", async () => {
     const { client, looked } = fakeClient();
     const { runFr, calls } = fr();
-    const handler = createClaimHandler({ client, directory: "/w", runFr });
+    const handler = createClaimHandler({ session: client, directory: "/w", runFr });
 
     await handler({ sessionID: "ses_child" });
     await handler({ sessionID: "ses_child" });
@@ -85,7 +85,7 @@ describe("child claim (OpenCode): names the holder while it holds", () => {
   test("a refused claim (exit 2) is not retried", async () => {
     const { client } = fakeClient();
     const { runFr, calls } = fr({ code: 2 });
-    const handler = createClaimHandler({ client, directory: "/w", runFr });
+    const handler = createClaimHandler({ session: client, directory: "/w", runFr });
 
     await handler({ sessionID: "ses_child" });
     await handler({ sessionID: "ses_child" });
@@ -97,7 +97,7 @@ describe("child claim (OpenCode): names the holder while it holds", () => {
     const { client } = fakeClient({ data: { ...CHILD, model: undefined } });
     const { runFr, calls } = fr();
 
-    await createClaimHandler({ client, directory: "/w", runFr })({ sessionID: "ses_child" });
+    await createClaimHandler({ session: client, directory: "/w", runFr })({ sessionID: "ses_child" });
 
     expect(calls[0]!.args).not.toContain("--model");
   });
@@ -109,10 +109,10 @@ describe("child claim (OpenCode): names the holder while it holds", () => {
     const { runFr, calls } = fr();
     const { sharedClaimed } = await import("../src/claim");
 
-    await createClaimHandler({ client, directory: "/w", runFr, claimed: sharedClaimed() })({
+    await createClaimHandler({ session: client, directory: "/w", runFr, claimed: sharedClaimed() })({
       sessionID: "ses_child",
     });
-    await createClaimHandler({ client, directory: "/w", runFr, claimed: sharedClaimed() })({
+    await createClaimHandler({ session: client, directory: "/w", runFr, claimed: sharedClaimed() })({
       sessionID: "ses_child",
     });
 
@@ -133,7 +133,7 @@ describe("child claim (OpenCode): silent", () => {
       const { client } = fakeClient(opts);
       const { runFr, calls } = fr();
 
-      await createClaimHandler({ client, directory: "/w", runFr })({ sessionID: "ses_child" });
+      await createClaimHandler({ session: client, directory: "/w", runFr })({ sessionID: "ses_child" });
 
       expect(calls).toHaveLength(0);
     });
@@ -143,7 +143,7 @@ describe("child claim (OpenCode): silent", () => {
     const { client, looked } = fakeClient();
     const { runFr, calls } = fr();
 
-    await createClaimHandler({ client, directory: "/w", runFr })({});
+    await createClaimHandler({ session: client, directory: "/w", runFr })({});
 
     expect(looked).toHaveLength(0);
     expect(calls).toHaveLength(0);
@@ -154,7 +154,7 @@ describe("child claim (OpenCode): silent", () => {
     const { runFr } = fr();
 
     await expect(
-      createClaimHandler({ client, directory: "/w", runFr })({ sessionID: "ses_child" })
+      createClaimHandler({ session: client, directory: "/w", runFr })({ sessionID: "ses_child" })
     ).resolves.toBeUndefined();
   });
 
@@ -163,33 +163,27 @@ describe("child claim (OpenCode): silent", () => {
     const { runFr } = fr(new Error("ENOENT"));
 
     await expect(
-      createClaimHandler({ client, directory: "/w", runFr })({ sessionID: "ses_child" })
+      createClaimHandler({ session: client, directory: "/w", runFr })({ sessionID: "ses_child" })
     ).resolves.toBeUndefined();
   });
 
   test("when the client is not what it should be", async () => {
     const { runFr, calls } = fr();
 
-    await createClaimHandler({ client: null, directory: "/w", runFr })({ sessionID: "ses_child" });
+    await createClaimHandler({ session: null, directory: "/w", runFr })({ sessionID: "ses_child" });
 
     expect(calls).toHaveLength(0);
   });
 });
 
 describe("child claim (OpenCode): wired into the plugin", () => {
-  test("tool.execute.before looks the calling session up before the edit gate", async () => {
+  test("execute.before looks the calling session up before the edit gate", async () => {
     const slot = globalThis as Record<symbol, unknown>;
     delete slot[SHARED_CLAIMED];
     const { client, looked } = fakeClient({ data: { ...CHILD, parentID: undefined } });
-    const plugin = await FrIsolationRequired({
-      project: {},
-      client,
-      $: {},
-      directory: "/nonexistent",
-      worktree: "/nonexistent",
-    });
+    const { executeBefore } = await load({ session: client, directory: "/nonexistent" });
 
-    await plugin["tool.execute.before"]({ tool: "read", sessionID: "ses_wired" }, { args: {} });
+    await executeBefore({ tool: "read", sessionID: "ses_wired", input: {} });
 
     expect(looked).toEqual(["ses_wired"]);
     delete slot[SHARED_CLAIMED];

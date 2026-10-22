@@ -15,6 +15,9 @@ from pathlib import Path
 import pytest
 from fr.usage.readers import claude_code
 
+from tests.unit.opencode_fixture import DB as OC_DB_V2
+from tests.unit.opencode_v2 import to_v2
+
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "usage"
 CC_SESSION = "145101c9-bdfc-4f5d-a8be-617eeced7485"
 CC_MAIN = FIXTURES / "claude-code" / f"{CC_SESSION}.jsonl"
@@ -108,7 +111,11 @@ def test_claude_code_unreadable_source_is_unavailable_never_zero(tmp_path: Path)
 
 # --- OpenCode and Hermes, behind one protocol (P1.T2) ---------------------
 
-OC_DB = FIXTURES / "opencode" / "opencode.db"
+OC_V1_DB = FIXTURES / "opencode" / "opencode.db"
+"""The 1.x-shaped fixture: what a 1.x store holds — refused by name (R14)."""
+OC_DB = OC_DB_V2
+"""`OC_V1_DB` carried into OpenCode 2's tables (`tests.unit.opencode_v2`)."""
+OC2_DB = Path(__file__).resolve().parents[1] / "fixtures" / "opencode" / "two-sessions.db"
 HERMES_DB = FIXTURES / "hermes" / "state.db"
 
 
@@ -137,7 +144,7 @@ def test_opencode_paid_session_cost_is_exact() -> None:
         10000,
     )
     assert message.tokens.cache_write_5m + message.tokens.cache_write_1h == 2000
-    assert [(c.name, c.target) for c in message.tool_calls] == [("bash", "uv run pytest -q")]
+    assert [(c.name, c.target) for c in message.tool_calls] == [("shell", "uv run pytest -q")]
 
 
 def test_opencode_free_model_has_no_dollar_figure_not_zero() -> None:
@@ -224,7 +231,7 @@ def test_opencode_session_is_exact_only_if_every_priced_message_is() -> None:
     assert opencode.read(OC_DB, "ses_paid").cost.source == "exact"
 
 
-def _db_copy(src: Path, tmp_path: Path, *statements: str) -> Path:
+def _db_copy(src: Path, tmp_path: Path, *statements: str, refold: bool = True) -> Path:
     import sqlite3
 
     db = tmp_path / src.name
@@ -233,8 +240,9 @@ def _db_copy(src: Path, tmp_path: Path, *statements: str) -> Path:
     for statement in statements:
         con.execute(statement)
     con.commit()
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     con.close()
-    return db
+    return to_v2(db) if refold and "session_message" in tables else db
 
 
 @pytest.mark.parametrize(
@@ -260,9 +268,9 @@ def test_hermes_one_bad_row_is_unavailable_never_a_crash(tmp_path: Path, stateme
 @pytest.mark.parametrize(
     "statement",
     [
-        "UPDATE message SET time_created = 99999999999999999999 WHERE id = 'msg_a1'",
-        "UPDATE message SET data = CAST(x'fffe' AS TEXT) WHERE id = 'msg_a1'",
-        "UPDATE message SET time_created = 'noon' WHERE id = 'msg_a1'",
+        "UPDATE session_message SET time_created = 99999999999999999999 WHERE id = 'msg_a1'",
+        "UPDATE session_message SET data = CAST(x'fffe' AS TEXT) WHERE id = 'msg_a1'",
+        "UPDATE session_message SET time_created = 'noon' WHERE id = 'msg_a1'",
     ],
 )
 def test_opencode_one_bad_row_is_unavailable_or_tolerated_never_a_crash(
@@ -270,10 +278,31 @@ def test_opencode_one_bad_row_is_unavailable_or_tolerated_never_a_crash(
 ) -> None:
     from fr.usage.readers import opencode
 
-    record = opencode.read(_db_copy(OC_DB, tmp_path, statement), "ses_paid")
-    # a row the reader can read around (a non-numeric time) is tolerated; one it
-    # cannot is `unavailable` — either way a record comes back
-    assert record.unavailable or record.cost.source == "exact"
+    record = opencode.read(_db_copy(OC_DB, tmp_path, statement, refold=False), "ses_paid")
+    # a row the reader can read around (a non-numeric time) is tolerated and
+    # keeps the whole figure; one it cannot is `unavailable` — never a partial
+    # sum still labelled `exact` (p4-r2)
+    (tmp_path / "ok").mkdir()
+    healthy = opencode.read(_db_copy(OC_DB, tmp_path / "ok", "SELECT 1", refold=False), "ses_paid")
+    if record.unavailable:
+        assert record.cost.usd is None
+    else:
+        assert record.cost.usd == pytest.approx(healthy.cost.usd)
+        assert record.cost.source == healthy.cost.source
+
+
+def test_opencode_an_unparseable_message_row_is_unavailable_naming_it(tmp_path: Path) -> None:
+    from fr.usage.readers import opencode
+
+    db = _db_copy(
+        OC_DB,
+        tmp_path,
+        "UPDATE session_message SET data = '{not json' WHERE id = 'msg_a1'",
+        refold=False,
+    )
+    record = opencode.read(db, "ses_paid")
+    assert record.unavailable and "msg_a1" in record.unavailable
+    assert record.cost.usd is None
 
 
 def test_hermes_unrecorded_per_model_cost_is_omitted_not_priced_at_zero(tmp_path: Path) -> None:
@@ -379,3 +408,50 @@ def test_opencode_child_messages_carry_the_child_session_id(tmp_path: Path) -> N
     )
     record = opencode.read(db, "ses_mixed")
     assert sorted(str(m.agent_id) for m in record.messages) == ["None", "ses_child"]
+
+
+# --- OpenCode 2 (spec 2026-10-20-opencode-2-support R13, R14) ---------------
+
+
+def test_opencode_2_session_figures_are_the_stores_own() -> None:
+    from fr.usage.readers import opencode
+
+    record = opencode.read(OC2_DB, "ses_v2demo")
+    assert record.unavailable is None
+    assert record.cost.source == "exact"
+    assert record.cost.usd == pytest.approx(0.0123 + 0.002)
+    assert record.cost.by_model == {"example-model": pytest.approx(0.0143)}
+    main = [m for m in record.messages if m.agent == "main"]
+    child = [m for m in record.messages if m.agent_id == "ses_v2child"]
+    assert len(main) == 2 and len(child) == 1
+    assert child[0].agent == "general"
+    first = main[0]
+    assert first.model == "example-model"
+    assert (first.tokens.input, first.tokens.output, first.tokens.cache_read) == (1200, 350, 4000)
+    assert first.tokens.cache_write_5m == 600
+    assert [c.name for c in first.tool_calls] == ["skill", "question", "shell", "subagent"]
+    # a migrated 1.x `bash` item reads as `shell` (the one alias table)
+    assert [c.name for c in main[1].tool_calls] == ["shell"]
+    assert record.briefs == {"ses_v2child": len("do the demo")}
+
+
+def test_opencode_2_session_with_no_priced_message_renders_a_dash_not_zero() -> None:
+    from fr.usage.readers import opencode
+    from fr.usage.render import _usd
+
+    free = opencode.read(OC_DB, "ses_free")
+    assert free.unavailable is None
+    assert free.cost.usd is None and free.cost.source == "none"
+    assert _usd(free.cost.usd) == "—"
+
+
+def test_opencode_1x_only_session_is_unavailable_naming_1x_and_the_upgrade() -> None:
+    from fr.usage.readers import opencode
+
+    for db, session in ((OC2_DB, "ses_v1only"), (OC_V1_DB, "ses_paid")):
+        record = opencode.read(db, session)
+        assert record.unavailable is not None
+        assert "OpenCode 1.x" in record.unavailable
+        assert "upgrade opencode; super-fr supports 2.0 only" in record.unavailable
+        assert record.cost.usd is None
+        assert record.messages == ()

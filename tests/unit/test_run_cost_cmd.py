@@ -30,6 +30,8 @@ from fr.usage.file import (
 )
 from typer.testing import CliRunner
 
+from tests.unit.opencode_fixture import DB as OPENCODE_DB
+
 runner = CliRunner()
 RUN = "r1"
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "usage"
@@ -367,7 +369,7 @@ def test_an_opencode_runs_own_session_fills_the_cost_table(tmp_path: Path, expor
 
     env = {
         "FR_HARNESS": "opencode",
-        "FR_OPENCODE_DB": str(FIXTURES / "opencode" / "opencode.db"),
+        "FR_OPENCODE_DB": str(OPENCODE_DB),
         "FR_OPENCODE_SESSION_ID": exported,
         "CLAUDE_CODE_SESSION_ID": "stale-claude-session",
     }
@@ -390,7 +392,7 @@ def test_recompute_on_the_opencode_run_reads_its_attempt_session(
 ) -> None:
     """`advance` recorded `ses_run` on the attempt, so a post-hoc `--recompute`
     from any process prints the run's real figures."""
-    monkeypatch.setenv("FR_OPENCODE_DB", str(FIXTURES / "opencode" / "opencode.db"))
+    monkeypatch.setenv("FR_OPENCODE_DB", str(OPENCODE_DB))
     save_run_state(tmp_path, _run_with_attempt_session("ses_run", harness="opencode"))
 
     result = _invoke(tmp_path, RUN, "--recompute")

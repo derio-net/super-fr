@@ -5,7 +5,7 @@
 # pre_llm_call):
 #   - claude-code: plugins/super-fr/hooks/hooks.json
 #   - hermes:      .hermes/config.snippet.yaml
-#   - opencode:    packages/fr-opencode-plugin/src/index.ts
+#   - opencode:    packages/fr-opencode-plugin/src/*.ts (`// super-fr-parity:` markers)
 #
 # Every codex/copilot-cli cell is `unsupported` (spec non-goals — neither
 # harness is supported yet). Every `partial`/`advisory` cell carries a
@@ -22,7 +22,15 @@ surfaces:
     summary: Nags the operator toward `fr acceptance status` at session start.
     harnesses:
       claude-code: {state: enforced}
-      opencode: {state: absent}
+      opencode:
+        state: partial
+        scope_note: >-
+          nag.ts appends one system part (`fr acceptance status --brief`) at a
+          top-level session's first model request through
+          `ctx.session.hook("context")`, at most once per session, bounded and
+          silent on failure (bun-tested over a fake context, test/nag.test.ts).
+          That the part reaches a live model request is owed to the post-merge
+          walk (spec 2026-10-20-opencode-2-support Test Plan item 6).
       hermes: {state: enforced}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
@@ -46,9 +54,12 @@ surfaces:
       opencode:
         state: partial
         scope_note: >-
-          pin.ts adds FR_HARNESS_FR via `shell.env`, from the plugin's own
-          `fr --identity` (bun-tested, test/pin.test.ts); not live-proven, and,
-          as on Claude Code, an fr older than the check does not refuse.
+          pin.ts sets FR_HARNESS_FR on every shell command through OpenCode 2's
+          `create.before`, from the plugin's own `fr --identity`
+          (bun-tested, test/pin.test.ts); a model-run `echo` printed the pin
+          live on OpenCode 2.0.32 (plan journal p1-v2-hook-order-measured).
+          Partial because, as on Claude Code, an fr older than the check does
+          not refuse.
       hermes:
         state: absent
         scope_note: >-
@@ -63,7 +74,16 @@ surfaces:
     summary: Gates Bash commands to keep a live pipeline inside its own repo/worktree.
     harnesses:
       claude-code: {state: enforced}
-      opencode: {state: absent}
+      opencode:
+        state: enforced
+        scope_note: >-
+          guard.ts refuses a `shell` call from `execute.before` (a throw) on
+          the WHOLE command line and the call's workdir, with the bash guard's
+          decision: the captured verdict table
+          tests/fixtures/hooks/guard-verdicts.yaml passes against both engines
+          (test/guard-verdicts.test.ts, tests/unit/test_hooks_guard.py). Armed
+          by the pipeline sentinel (`fr-pipeline-sentinel`). A model-driven
+          OpenCode 2 session's refused command is the post-merge walk.
       hermes:
         state: partial
         scope_note: >-
@@ -81,18 +101,18 @@ surfaces:
     harnesses:
       claude-code: {state: enforced}
       opencode:
-        state: partial
+        state: enforced
         scope_note: >-
-          All file-writing tools, including nested arguments and patch-body
-          targets, are gated (index.test.ts); bash remains ungated (#436).
-          Delivered to consumers by install.sh
-          (scripts/deliver-opencode-plugin.sh, gh#563); the real opencode
-          binary loads the delivered copy and that copy refuses a base-clone
-          edit (tests/integration/test_opencode_plugin_live.py, CI). A
-          model-driven session's tool call reaching the hook was shown live
-          on 1.18.32 through the project-local copy (acceptance row
-          opencode-isolation-enforcement); the delivered copy is the same
-          module, and only its load path is new.
+          OpenCode 2 `execute.before` (a throw rejects the call): every
+          file-writing tool, including nested arguments, absolute paths and
+          patch-body targets, is gated (test/index.test.ts); the `shell` tool
+          is judged by the shell gate instead (`fr-isolation-guard`), as on
+          Claude Code. Delivered as one plugin directory by install.sh
+          (scripts/deliver-opencode-plugin.sh); the real opencode 2.x binary
+          loads it once and the delivered copy refuses a base-clone edit
+          (tests/integration/test_opencode_plugin_live.py, CI on 2.0.32 and
+          2.1.0). A model-driven 2.x session's refused edit is the post-merge
+          walk. OpenCode 1.x is not supported.
       hermes:
         state: partial
         scope_note: >-
@@ -109,7 +129,13 @@ surfaces:
     summary: Refuses a push/commit against a branch whose PR already merged.
     harnesses:
       claude-code: {state: enforced}
-      opencode: {state: absent}
+      opencode:
+        state: enforced
+        scope_note: >-
+          push.ts refuses a `git push` from `execute.before` on `shell` while a
+          pipeline sentinel is armed, with the bash hook's decision and message
+          (test/push.test.ts compares 15 commands against the real script);
+          fail-open on every ambiguity, as the bash hook is.
       hermes: {state: enforced}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
@@ -131,7 +157,14 @@ surfaces:
     summary: Marks a session as running an fr pipeline after a Skill invocation.
     harnesses:
       claude-code: {state: enforced}
-      opencode: {state: absent}
+      opencode:
+        state: partial
+        scope_note: >-
+          sentinel.ts writes the bash writer's sentinel shape on a completed
+          `skill` call (`execute.after`), held to the Python reader and the bash
+          guard by tests/unit/test_sentinel_lifecycle.py. Partial because
+          `execute.after` firing for a live `skill` call has not been observed
+          in a real OpenCode 2 session (plan journal p2-not-proven-live).
       hermes: {state: absent}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
@@ -149,16 +182,11 @@ surfaces:
         state: partial
         scope_note: >-
           CONTINUES rather than blocks — OpenCode cannot refuse a stop, so on
-          `session.idle` the plugin sends the next command back into the
-          session (`/session/{id}/prompt_async`). The event and the endpoint
-          were verified in `@opencode-ai/sdk` type definitions on the authoring
-          machine — versions 1.17.15, 1.1.27 and 1.0.23, all three carrying
-          both. 1.18.31 is the opencode BINARY's version, not an SDK copy on
-          disk here; this note said "the installed 1.18.31 SDK types" until
-          phase 6 went looking. That a plugin-originated prompt on idle
-          actually EXECUTES is NOT live-proven (the gh#494 standard) — a green
-          `bun test` does not show it. Delivered to consumers by install.sh
-          since gh#563, as the same module as the edit gate.
+          `session.idle` from `ctx.event.subscribe()` the plugin sends the next
+          command back into the session with `ctx.session.prompt`, once per run
+          `position` (bun-tested, test/idle.test.ts). That a plugin-originated
+          prompt on idle actually EXECUTES in a live OpenCode 2 session is NOT
+          proven (the gh#494 standard) — it is the post-merge walk.
       hermes:
         state: absent
         scope_note: >-
@@ -185,7 +213,13 @@ surfaces:
     summary: Binds a harness session id to the isolation workspace it is using, on `fr isolation up|exec` and on `fr run start`.
     harnesses:
       claude-code: {state: enforced}
-      opencode: {state: absent}
+      opencode:
+        state: partial
+        scope_note: >-
+          bind.ts runs `fr isolation attach --harness opencode` after a
+          completed `shell` call naming `fr isolation up|exec|down` or `fr run
+          start` (test/bind.test.ts); best-effort, and not yet observed in a
+          live OpenCode 2 session.
       hermes: {state: absent}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
@@ -196,7 +230,12 @@ surfaces:
     summary: Releases a session's isolation-workspace binding at session end.
     harnesses:
       claude-code: {state: enforced}
-      opencode: {state: absent}
+      opencode:
+        state: partial
+        scope_note: >-
+          bind.ts runs `fr isolation detach` on a `session.deleted` event from
+          the subscription (test/bind.test.ts); the event's shape was read from
+          the 2.0.32 client typings, not observed live.
       hermes: {state: absent}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
@@ -303,8 +342,8 @@ surfaces:
       opencode:
         state: partial
         scope_note: >-
-          `reviewer=<agent-id>` is checked against the `task` parts of the run
-          session in opencode.db (a tiered `fr-spec-reviewer-hard` counts;
+          `reviewer=<agent-id>` is checked against the `subagent` dispatches
+          (`task` in migrated 1.x history) of the run session in opencode.db (a tiered `fr-spec-reviewer-hard` counts;
           fixture tests tests/unit/test_run_observed_resolve_opencode.py).
           Stays `partial` until the post-merge row
           `opencode-observe-take10-rerun` runs live
@@ -343,12 +382,14 @@ surfaces:
               is — the host-side rule refuses it inside the container
           external: {state: enforced, scope_note: "harness and fr share the container, and its database"}
         scope_note: >-
-          `bash` tool parts in opencode.db, status completed and exit 0, in a
-          top-level session (a `task` subagent is a child session). Pinned to
-          the run session when the plugin exports its id
-          (`run-session-identity`); without it ANY top-level session active
-          since the unit opened counts, as before. Live-verified 2026-09-26 on 1.18.32 (a
-          bash-redirect log matched, a write-tool log did not). A suite the
+          `shell` tool items in opencode.db's `session_message` (`bash` in
+          migrated 1.x history), status completed and exit 0, in a top-level
+          session (a `subagent` dispatch is a child session). Pinned to the run
+          session when fr has its id (`OPENCODE_SESSION_ID`,
+          `run-session-identity`); without it ANY top-level session active
+          since the unit opened counts, as before. Live-verified 2026-09-26 on
+          OpenCode 1.x (a bash-redirect log matched, a write-tool log did not);
+          the 2.x store reader is fixture-tested (plan journal p4-*). A suite the
           long-command rule detached with `&` is windowed until the first later
           command of the orchestrator's that names the log prints its `exit=N`
           line, and only when N is 0 (gh#719): OpenCode records no completion
@@ -385,7 +426,7 @@ surfaces:
       opencode:
         state: partial
         scope_note: >-
-          `read` and `bash` parts of the owing session (the reviewer's or
+          `read` and `shell` (`bash` in 1.x history) items of the owing session (the reviewer's or
           holder's child, else the run session) in opencode.db witness the
           image reads and the capture script (fixture tests in
           tests/unit/test_run_evidence_visual.py). Stays `partial` until the
@@ -448,6 +489,9 @@ surfaces:
           claim's session is now the TOP-LEVEL run session (`run-session-identity`):
           a claim made from a child still lands on the run's own record
           (fixture tests: tests/unit/test_run_observed_resolve_opencode.py).
+          These observations are OpenCode 1.x's; on 2.x the dispatch tool is
+          `subagent` and the claim path is unchanged, but neither the blocking
+          behaviour nor the claim has been re-observed live.
       hermes:
         state: partial
         scope_note: >-
@@ -459,16 +503,17 @@ surfaces:
 
   - id: run-session-identity
     kind: interaction
-    summary: Which session is "the run's" (spec 2026-10-02-opencode-observe-2 §B). `fr run start`/`advance` record the TOP-LEVEL session of the calling process, and every gate that reads a transcript or session store (`operator-gate`, `spec-review-independence`, `visual-evidence`, `deliver-tests-provenance`) reads that session — never a child's, even when a subagent runs the command. Claude Code names its session in the environment; OpenCode's super-fr plugin exports it into `bash` (`FR_OPENCODE_SESSION_ID`, via `shell.env`) and fr walks `parent_id` up to the root. Not a hook, so `fr harness parity` observes nothing for it and `session.ts` carries no parity marker.
+    summary: Which session is "the run's" (spec 2026-10-02-opencode-observe-2 §B). `fr run start`/`advance` record the TOP-LEVEL session of the calling process, and every gate that reads a transcript or session store (`operator-gate`, `spec-review-independence`, `visual-evidence`, `deliver-tests-provenance`) reads that session — never a child's, even when a subagent runs the command. Claude Code names its session in the environment; OpenCode 2 sets `OPENCODE_SESSION_ID` on every command it spawns (no plugin code), and fr walks `parent_id` up to the root. Not a hook, so `fr harness parity` observes nothing for it.
     harnesses:
       claude-code: {state: enforced}
       opencode:
         state: partial
         scope_note: >-
           verified in fixture tests, not yet live (tests/unit/test_run_observed_opencode.py,
-          test_run_observed_resolve_opencode.py); a plugin older than this
-          release exports no id, and the gates then read as unobserved or
-          fall back to the unscoped reading. Stays `partial` until the
+          test_run_observed_resolve_opencode.py, test_run_observed_opencode_v2.py);
+          an OpenCode 1.x session is reported unobservable by name, with the
+          upgrade as the fix, and a missing id reads as unobserved or falls
+          back to the unscoped reading. Stays `partial` until the
           post-merge row `opencode-observe-take10-rerun` runs live
       hermes:
         state: absent
@@ -483,7 +528,7 @@ surfaces:
       claude-code: {state: enforced}
       opencode:
         state: partial
-        scope_note: fr-statusline-segment.sh is harness-neutral (stdin or --cwd) and callable today; no renderer/registration ships for OpenCode
+        scope_note: fr-opencode-plugin ships a TUI entry (tui/index.tsx, slots prompt.footer.status and home.footer.status) rendering fr-statusline-segment.sh --cwd <session dir>, and install.sh lists the plugin directory in cli.json; render is proven by a live TUI test, the post-merge walks are still owed
       hermes:
         state: partial
         scope_note: same segment script callable; no renderer/registration ships for Hermes

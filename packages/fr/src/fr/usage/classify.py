@@ -59,6 +59,7 @@ NARRATION = _of("narration")
 _ALIASES: dict[str, str] = {
     # shell
     "bash": "Bash",
+    "shell": "Bash",
     "terminal": "Bash",
     "execute_code": "Bash",
     # reads
@@ -81,6 +82,7 @@ _ALIASES: dict[str, str] = {
     "list": "Glob",
     # orchestration
     "task": "Agent",
+    "subagent": "Agent",
     "Task": "Agent",
     "delegate_task": "Agent",
     "SendMessage": "Agent",
@@ -88,6 +90,8 @@ _ALIASES: dict[str, str] = {
     "TaskStop": "Agent",
     "skill": "Skill",
     "todowrite": "TodoWrite",
+    # questions (OpenCode's `question` tool)
+    "question": "AskUserQuestion",
 }
 
 _ORCHESTRATION = frozenset({"Agent", "Skill", "TodoWrite", "ToolSearch"})
@@ -212,8 +216,10 @@ def _bash(command: str) -> Classification:
 
 def canonical_tool(name: str) -> str:
     """`name` normalised to its Claude Code spelling (`read_file`/`view` ->
-    `Read`, `terminal` -> `Bash`, ...) — the ONE alias table, also read by the
-    `visual` evidence transcript predicates (`fr.run.telemetry`)."""
+    `Read`, `terminal` -> `Bash`, ...) — the activity vocabulary, also read by
+    the `visual` evidence transcript predicates (`fr.run.telemetry`). The
+    OpenCode store readers keep their own 1.x -> 2.x table
+    (`fr.run.opencode_store.store_tool_name`); every name it yields is a key here."""
     return _ALIASES.get(name, name)
 
 

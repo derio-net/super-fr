@@ -1,0 +1,368 @@
+# CAPTURED from plugins/super-fr/hooks/fr-isolation-guard.sh — do not edit by hand.
+# Regenerate: uv run python tests/fixtures/hooks/capture_guard_verdicts.py
+# placeholders: each {name} is <world root>/<path> (in this order, longest first).
+# Inputs: id, command, cwd, sentinel (the session sentinel before the call, null =
+# none), env. Captured: expected, reason (the deny text, paths as placeholders),
+# sentinel_after. Placeholders and the sandbox: guard-world.sh. Loaded by
+# tests/unit/test_hooks_guard.py (against the bash script) and by
+# packages/fr-opencode-plugin/test/guard-verdicts.test.ts (against the port).
+placeholders:
+  '{wt}': home/.cache/fr/worktrees/base/feat
+  '{wt_unmarked}': base-wt-unmarked
+  '{home}': home
+  '{base}': base
+  '{other}': other
+  '{plain}': plain
+  '{scratch}': scratch
+  '{elsewhere}': elsewhere
+  '{root}': ''
+session: sess-1
+rows:
+- id: no-sentinel
+  command: git status
+  cwd: '{base}'
+  sentinel: null
+  expected: allow
+  reason: null
+  sentinel_after: null
+- id: base-plain-command
+  command: git status
+  cwd: '{base}'
+  sentinel: &id001
+    repo_root: '{base}'
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: base-subdir
+  command: ls
+  cwd: '{base}/sub'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: cwd-linked-worktree
+  command: git status
+  cwd: '{wt}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cwd-outside-base
+  command: ls
+  cwd: '{elsewhere}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-worktree-compound
+  command: cd {wt} && git status
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-worktree-quoted
+  command: cd "{wt}" && git status
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-worktree-tilde
+  command: cd ~/.cache/fr/worktrees/base/feat && git status
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-allowed-prefix
+  command: cd {scratch} && rm -rf x
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-prefix-then-anywhere
+  command: cd {scratch} && cd {base} && rm f
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-not-allowed-dir
+  command: cd {elsewhere} && ls
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: cd-other-repo-isolation-up
+  command: cd {other} && fr isolation up --branch x
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-other-repo-general
+  command: cd {other} && make
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr-isolation: `{other}` is not an fr isolation workspace (no valid `.fr-isolation` marker),
+    so a live pipeline elsewhere does not open it for general work — reaching another repo is for entering
+    ITS isolation, not for running anything there. Do: `cd {other} && fr isolation up --branch <branch>`
+    (allowed from here; prefix `FR_ISOLATION_TARGET=worktree` if that repo has no devcontainer profile),
+    then run the command from the worktree it reports. See plugins/super-fr/rules/fr-isolation-required.md
+    (#421).'
+  sentinel_after: present
+- id: cd-other-repo-base-ok
+  command: cd {other} && make
+  cwd: '{base}'
+  sentinel: *id001
+  env:
+    FR_BASE_OK: '1'
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-plain-repo
+  command: cd {plain} && ls
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr-isolation: `{plain}` is not fr-managed, so there is no isolation to enter and this hook
+    has no opinion about that repo''s own tooling — the deny is only about a live pipeline in `{base}`
+    reaching sideways mid-run. Finish or end this pipeline (`fr isolation down`), or run the command from
+    a session that holds no pipeline. FR_BASE_OK=1 also disables the gate, but the hook reads it from
+    its OWN environment: an inline `FR_BASE_OK=1 <cmd>` is not parsed, so it has to be set where the harness
+    is launched. See plugins/super-fr/rules/fr-isolation-required.md (#421).'
+  sentinel_after: present
+- id: cd-plain-subdir-rider
+  command: cd {plain}/sub && fr isolation status && cat id_ed25519
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr-isolation: `{plain}` is not fr-managed, so there is no isolation to enter and this hook
+    has no opinion about that repo''s own tooling — the deny is only about a live pipeline in `{base}`
+    reaching sideways mid-run. Finish or end this pipeline (`fr isolation down`), or run the command from
+    a session that holds no pipeline. FR_BASE_OK=1 also disables the gate, but the hook reads it from
+    its OWN environment: an inline `FR_BASE_OK=1 <cmd>` is not parsed, so it has to be set where the harness
+    is launched. See plugins/super-fr/rules/fr-isolation-required.md (#421).'
+  sentinel_after: present
+- id: cd-same-repo-unmarked-worktree
+  command: cd {wt_unmarked} && ls
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr-isolation: `{wt_unmarked}` is a linked worktree of THIS repo, but it carries no valid `.fr-isolation`
+    marker, so it is not an isolation workspace. Run `fr isolation up --branch <branch>` (allowed from
+    here) and work from the workspace it reports, or add this path to FR_CD_ALLOW_PREFIXES if it is a
+    worktree you manage yourself. See plugins/super-fr/rules/fr-isolation-required.md.'
+  sentinel_after: present
+- id: cd-gone-path
+  command: cd {root}/gone && ls
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr-isolation: `{root}/gone` no longer exists, so this `cd` cannot succeed — an fr workspace
+    is removed once its branch merges, and unused ones are GC''d after 48h. Where are this session''s
+    live workspaces? `fr isolation status`. Start a fresh one with `fr isolation up --branch <name>` (prefix
+    `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer profile) and work from the path it
+    reports; `fr isolation exec -- …` runs a one-off there. A live pipeline still gates base-repo commands
+    — that part is unchanged. See plugins/super-fr/rules/fr-isolation-required.md (#432).'
+  sentinel_after: present
+- id: cd-relative-subdir-then-fr
+  command: cd sub && fr isolation down
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: cd-base-then-git
+  command: cd {base} && git status
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: fr-isolation-status-rider
+  command: fr isolation status && make
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: fr-isolation-env-prefix
+  command: FR_ISOLATION_TARGET=worktree fr isolation up --branch x
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: fr-run-start-uv
+  command: uv run fr run start fr-goal --branch x
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: fr-run-advance
+  command: fr run advance
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: fr-init
+  command: fr init scaffold
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: fr-version
+  command: fr --version
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: fr-skills
+  command: fr skills
+  cwd: '{base}'
+  sentinel: *id001
+  expected: allow
+  reason: null
+  sentinel_after: present
+- id: fr-plan
+  command: fr plan list
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: fr-substring
+  command: echo fr isolation status
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: multiline-later-allowance
+  command: 'echo hi
+
+    fr isolation status'
+  cwd: '{base}'
+  sentinel: *id001
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: sentinel-live-workspace
+  command: ls
+  cwd: '{base}'
+  sentinel:
+    repo_root: '{base}'
+    workspaces:
+    - worktrees/base/feat
+  expected: deny
+  reason: 'fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the
+    isolation worktree. Where is this session''s workspace? `fr isolation status`. No workspace yet? `fr
+    isolation up --branch <name>` (prefix `FR_ISOLATION_TARGET=worktree` if this repo has no devcontainer
+    profile). Then run via `fr isolation exec -- …`, or lead with `cd <worktree> && …` to work from the
+    worktree cwd. Working in a DIFFERENT repo? `cd <other-repo> && fr isolation up` is allowed from here
+    — enter that repo''s isolation and work from its worktree. LAST RESORT, and rarely right: `fr isolation
+    down --all` acts on EVERY workspace in this repo, including other sessions'' — a workspace with no
+    PR yet is torn down with whatever was uncommitted in it. `fr isolation down --all --dry-run` shows
+    its blast radius first (what it would tear down or keep, and whose sessions are bound), and tearing
+    down another session''s workspace needs `--yes`. See plugins/super-fr/skills/fr-isolation (exec-bridge
+    discipline, #265/#279/#329/#421/#432).'
+  sentinel_after: present
+- id: sentinel-orphaned-heals
+  command: ls
+  cwd: '{base}'
+  sentinel:
+    repo_root: '{base}'
+    workspaces:
+    - worktrees/base/gone
+  expected: allow
+  reason: null
+  sentinel_after: absent

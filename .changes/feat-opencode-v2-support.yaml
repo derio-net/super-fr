@@ -1,0 +1,2 @@
+bump: major
+summary: OpenCode support moves to OpenCode 2.0 — the plugin is a V2 plugin that now also gates the shell, guards pushes, nags, nudges idle runs and renders a status line, fr reads the 2.0 session store, and OpenCode 1.x is no longer supported

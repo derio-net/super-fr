@@ -106,4 +106,4 @@ def test_no_exported_session_names_the_missing_export(
     res = _fix(opencode_env(tmp_path / "no-such.db", session=None), "resolve")
 
     assert res.exit_code == 0, res.output
-    assert "FR_OPENCODE_SESSION_ID is unset" in " ".join(res.output.split())
+    assert "OPENCODE_SESSION_ID is unset" in " ".join(res.output.split())

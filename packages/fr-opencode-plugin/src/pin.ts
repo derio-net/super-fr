@@ -1,8 +1,11 @@
 // The fr-binary pin — super-fr#746; the OpenCode half of fr-binary-pin.sh.
 //
-// OpenCode's `bash` tool runs `/bin/zsh -c`, and zsh re-reads ~/.zshenv on
+// OpenCode 2 (V2 plugin API): the transport is `ctx.shell.hook("create.before")`,
+// whose event carries a mutable `env` merged into the spawned shell.
+//
+// OpenCode's shell tool (`bash` before 2.0) runs `/bin/zsh -c`, and zsh re-reads ~/.zshenv on
 // every start: a PATH rebuild there can put a different `fr` first than the
-// one this plugin's `execFile("fr")` (claim.ts, idle.ts) resolves from
+// one this plugin's `fr` (spawned through ./spawn) resolves from
 // OpenCode's own PATH. So this exports the plugin's `fr --identity` into every
 // `bash` command as FR_HARNESS_FR — a non-PATH variable `.zshenv` leaves alone
 // — and `fr` refuses at CLI entry when a PATH-reached `fr` disagrees
@@ -11,9 +14,15 @@
 // Transport only, and NEVER THROWS. `fr` is asked ONCE per plugin load, lazily
 // on the first `bash` call; a missing `fr`, one too old to know `--identity`,
 // or a hang pins nothing, which is exactly the behaviour before the pin.
-import { execFile } from "node:child_process";
+import { run } from "./spawn";
 
-import type { ShellEnvInput, ShellEnvOutput } from "./session";
+/** The `shell` hook's `create.before` event (OpenCode 2) — `env` is merged
+ * into the spawned command. */
+export type ShellCreateEvent = {
+  command?: string;
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+};
 
 export const PIN_ENV_KEY = "FR_HARNESS_FR";
 
@@ -26,24 +35,19 @@ export type PinHandlerOptions = {
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 function defaultIdentify(timeoutMs: number): () => Promise<string | undefined> {
-  return () =>
-    new Promise((resolve) => {
-      execFile(
-        "fr",
-        ["--identity"],
-        { timeout: timeoutMs, killSignal: "SIGKILL", windowsHide: true },
-        (error, stdout) => resolve(error ? undefined : String(stdout))
-      );
-    });
+  return async () => {
+    const answer = await run("fr", ["--identity"], { timeoutMs });
+    return answer.code === 0 ? answer.stdout : undefined;
+  };
 }
 
 export function createPinHandler(
   options: PinHandlerOptions = {}
-): (input: ShellEnvInput, output: ShellEnvOutput) => Promise<void> {
+): (event: ShellCreateEvent) => Promise<void> {
   const identify = options.identify ?? defaultIdentify(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   let pinned: Promise<string | undefined> | undefined;
 
-  return async (_input, output) => {
+  return async (event) => {
     try {
       pinned ??= identify().then(
         (raw) => (raw ?? "").split("\n")[0]?.trim() || undefined,
@@ -51,8 +55,8 @@ export function createPinHandler(
       );
       const identity = await pinned;
       if (!identity) return;
-      output.env ??= {};
-      output.env[PIN_ENV_KEY] = identity;
+      event.env ??= {};
+      event.env[PIN_ENV_KEY] = identity;
     } catch {
       // Attribution, not a gate: a failure here must never fail the command.
     }

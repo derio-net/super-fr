@@ -387,7 +387,7 @@ def test_advance_on_opencode_without_a_session_says_the_claim_is_owed(tmp_path: 
     assert result.exit_code == 0, result.output
     flat = " ".join(result.output.split())
     assert "opencode" in flat
-    assert "FR_OPENCODE_SESSION_ID is unset" in flat
+    assert "OPENCODE_SESSION_ID is unset" in flat
     assert _owes_a_claim(flat), flat
     assert "--state done --answered-by" in flat
 

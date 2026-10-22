@@ -33,6 +33,7 @@ from fr.harness.observe import (
     OBSERVABLE_HARNESSES,
     is_super_fr_checkout,
     observe,
+    observe_interactions,
     shipped_scripts,
 )
 
@@ -169,6 +170,7 @@ def _run_check(matrix: Matrix, output_format: str, harness: str | None) -> None:
 
     try:
         observed = observe(root)
+        interactions = observe_interactions(root)
     except HarnessError as exc:
         # `typer.echo`, not `err_console` (review r2-m3): this message names a
         # file path, and rich wrapped one mid-path into something neither
@@ -177,7 +179,7 @@ def _run_check(matrix: Matrix, output_format: str, harness: str | None) -> None:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(2) from exc
 
-    findings = check(matrix, observed) + pairing(matrix, shipped_scripts(root))
+    findings = check(matrix, observed, interactions) + pairing(matrix, shipped_scripts(root))
     if harness is not None:
         # A pairing finding is not about one harness (`harness="-"`), so it
         # survives the filter — a row missing entirely is everyone's problem.

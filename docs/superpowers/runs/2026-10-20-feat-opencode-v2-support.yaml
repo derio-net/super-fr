@@ -1,0 +1,227 @@
+schema_version: 10
+run: 2026-10-20-feat-opencode-v2-support
+workflow: fr-goal@1
+branch: feat/opencode-v2-support
+started: '2026-10-20T05:10:23+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-10-20T05:29:56+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-10-20-opencode-2-support-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          unobserved: operator-gate
+  spec-review:
+    state: done
+    at: '2026-10-20T05:35:47+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-10-20T05:29:57+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: opencode
+          tier: hard
+          bound: github-copilot/claude-opus-5.5
+          returned: '2026-10-20T05:35:47+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ses_ea8361939ffejsV6ZUu4xcfvfY
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16
+          unobserved: reviewer
+  plan:
+    state: done
+    at: '2026-10-20T05:45:16+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-10-20-opencode-2-support
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-10-20T05:35:48+00:00'
+          harness: opencode
+          returned: '2026-10-20T05:45:16+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-10-20T05:45:18+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-10-21T13:56:57+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-20T05:45:18+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          tier: hard
+          bound: github-copilot/claude-opus-5.5
+          returned: '2026-10-20T06:58:28+00:00'
+          outcome: done
+        evidence:
+          tests: p1-suite-final.log@641912e05612;tree=0538dbf06419dedafc0411e3636260ce7e98caad0d62b9461b93241e8b9cb51b
+          visual: none
+          unobserved: tests
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-20T06:58:29+00:00'
+          harness: opencode
+          returned: '2026-10-20T07:31:21+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: ses_ea7e51e67ffe3eJ0m8pXOhZ7HN
+          visual: none
+          findings: p1-v2-loads-sources-dir-as-plugin,p1-suite-harness-env-leak,p1-r1,p1-r2,p1-r3
+          unobserved: reviewer,reviewer-return
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-20T07:31:22+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          tier: hard
+          bound: github-copilot/claude-opus-5.5
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-20T08:44:42+00:00'
+          outcome: done
+        evidence:
+          tests: p2-full-suite.log@d09692b9ea16;tree=73aa03697a9b6f2315a14bb04ad2f66bd2189ab0aa4f0ba502d97c30d34654f7
+          visual: none
+          unobserved: tests
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-20T08:44:44+00:00'
+          harness: opencode
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-20T08:44:54+00:00'
+          outcome: done
+        evidence:
+          review: p2r-review
+          reviewer: ses_ea7a1e857ffeH3VpiFAWn8ns2S
+          visual: none
+          findings: p2-marker-unbounded,p2-not-proven-live,p2-full-suite-preexisting-failures,p2r-1,p2r-2,p2r-3,p2r-4
+          unobserved: reviewer,reviewer-return
+      phase/3/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-20T08:44:55+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          tier: hard
+          bound: github-copilot/claude-opus-5.5
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-20T10:44:51+00:00'
+          outcome: done
+        evidence:
+          tests: p3-review-suite.log@065ba784caee;tree=8206658c6d6d9eaf95b4f3c8fadfb39b1da2e74fbcac062c6e74963fabe8b019
+          visual: none
+          unobserved: tests
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-20T10:44:52+00:00'
+          harness: opencode
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-20T10:44:56+00:00'
+          outcome: done
+        evidence:
+          review: p3-review
+          reviewer: ses_ea738c8b4ffeMnME45Y0tkt4bk
+          visual: none
+          findings: p3-r12-text-contradicts-measurement,p3-package-readme-describes-the-1x-loader,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9,p3-r10
+          unobserved: reviewer,reviewer-return
+      phase/4/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-20T10:44:56+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          tier: hard
+          bound: github-copilot/claude-opus-5.5
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-21T08:31:36+00:00'
+          outcome: done
+        evidence:
+          tests: p4-holder-targeted.log@f8e6285b208e;tree=162ff0faa95b4c377da0d34eb53354c5c0ff3f7f468be278610582d2d1f7ee84
+          visual: none
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-21T08:31:36+00:00'
+          harness: opencode
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-21T08:44:29+00:00'
+          outcome: done
+        evidence:
+          review: p4-review-verify
+          reviewer: ses_ea2696a16ffefTjW5oEKjXk42Y
+          visual: none
+          findings: p4-compaction-tokens-uncounted,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4b-r1,p4b-r2,p4b-r3
+      phase/5/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-21T08:44:30+00:00'
+          agent: ses_ea25d56b5ffeRBRv734j0JNwsu
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          tier: mechanical
+          bound: github-copilot/claude-haiku-5.5
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-21T10:50:54+00:00'
+          outcome: done
+        evidence:
+          tests: p5-holder-suite.log@8a0d92438fb0;tree=3e2b7bbf9a1fa37410613c227a25da0fe654b90cb94107375d2a8ea26bc98e0f
+          visual: none
+      phase/5/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-10-21T10:50:55+00:00'
+          harness: opencode
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-21T13:56:57+00:00'
+          outcome: done
+        evidence:
+          review: p5-review
+          reviewer: ses_ea1e9e16effes031PIAdx7Fcsy
+          visual: none
+          findings: p5-plugin-scenario-missing,p5-r5,p5-r6,p5-r1,p5-r2,p5-r3,p5-r4
+  journal-check:
+    state: done
+    at: '2026-10-21T14:44:07+00:00'
+    exit: 0
+    stdout: "4 deferred finding(s): p2-marker-unbounded → derio-net/super-fr#1221,\
+      \ p2r-4 → \nderio-net/super-fr#1221, p4-compaction-tokens-uncounted → \nderio-net/super-fr#1222,\
+      \ p5-r4 → derio-net/super-fr#1224\n2 out-of-scope finding(s): p2-not-proven-live,\
+      \ p3-r1\n"
+  deliver:
+    state: done
+    at: '2026-10-22T13:08:21+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1226
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-10-21T14:44:07+00:00'
+          harness: opencode
+          session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-22T13:08:07+00:00'
+          outcome: done
+        evidence:
+          tests: .fr-deliver/deliver-suite.log@f8118dac7ecf
+          walk: 20261021T154524Z.log@ac090e7ed869
+          proportionality: 1d2290f8bde8284e05c27371f0b841cbd7463cc0:2d1564f5515f672c674db5a90a78fe59bade0a1150342777711cd14a3e7196af
+          visual: none
+fr_version: 5.27.0rc3

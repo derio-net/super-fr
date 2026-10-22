@@ -1,0 +1,338 @@
+schema_version: 2
+run: 2026-10-20-feat-opencode-v2-support
+captures:
+- host: h-76e631f9
+  harness: opencode
+  mode: devcontainer
+  captured_at: '2026-10-22T13:08:21+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+    role: main
+    models:
+      deepseek-v4.1-flash-free:
+        input: 6163091
+        cache_write: 0
+        cache_read: 107440896
+        output: 698900
+        usd: 0.0
+        usd_source: estimated
+      claude-opus-5.5:
+        input: 1020
+        cache_write: 4769758
+        cache_read: 67650548
+        output: 354432
+        usd: 20.62282959999998
+        usd_source: estimated
+    activity:
+      implementation:
+        usd: 9.251415147312334
+        turns: 806
+      other:
+        usd: 8.034540777953925
+        turns: 370
+      paperwork:
+        usd: 3.336873674733711
+        turns: 387
+    steps:
+      (outside run):
+        usd: 0.0
+        turns: 24
+        input: 296395
+        cache_write: 0
+        cache_read: 2046336
+        output: 16134
+      brainstorm:
+        usd: 0.0
+        turns: 37
+        input: 269193
+        cache_write: 0
+        cache_read: 4911744
+        output: 41449
+      spec-review:
+        usd: 0.4904395028550861
+        turns: 33
+        input: 50486
+        cache_write: 104074
+        cache_read: 3723549
+        output: 35464
+      plan:
+        usd: 0.0
+        turns: 23
+        input: 222414
+        cache_write: 0
+        cache_read: 2569984
+        output: 22203
+      plan-review:
+        usd: 0.0
+        turns: 1
+        input: 1610
+        cache_write: 0
+        cache_read: 117504
+        output: 1094
+      implement:
+        usd: 20.132390097144885
+        turns: 1298
+        input: 4976731
+        cache_write: 4665684
+        cache_read: 154204119
+        output: 895481
+      journal-check:
+        usd: 0.0
+        turns: 9
+        input: 35692
+        cache_write: 0
+        cache_read: 1028224
+        output: 2600
+      deliver:
+        usd: 0.0
+        turns: 77
+        input: 311590
+        cache_write: 0
+        cache_read: 6489984
+        output: 38907
+    steps_by_role:
+      main:
+        (outside run):
+          usd: 0.0
+          turns: 24
+          input: 296395
+          cache_write: 0
+          cache_read: 2046336
+          output: 16134
+        brainstorm:
+          usd: 0.0
+          turns: 37
+          input: 269193
+          cache_write: 0
+          cache_read: 4911744
+          output: 41449
+        spec-review:
+          usd: 0.0
+          turns: 15
+          input: 50448
+          cache_write: 0
+          cache_read: 2288000
+          output: 21233
+        plan:
+          usd: 0.0
+          turns: 23
+          input: 222414
+          cache_write: 0
+          cache_read: 2569984
+          output: 22203
+        plan-review:
+          usd: 0.0
+          turns: 1
+          input: 1610
+          cache_write: 0
+          cache_read: 117504
+          output: 1094
+        implement:
+          usd: 0.0
+          turns: 373
+          input: 2967402
+          cache_write: 0
+          cache_read: 46882816
+          output: 258286
+        journal-check:
+          usd: 0.0
+          turns: 9
+          input: 35692
+          cache_write: 0
+          cache_read: 1028224
+          output: 2600
+        deliver:
+          usd: 0.0
+          turns: 77
+          input: 311590
+          cache_write: 0
+          cache_read: 6489984
+          output: 38907
+      subagent:
+        spec-review:
+          usd: 0.49043950285508603
+          turns: 18
+          input: 38
+          cache_write: 104074
+          cache_read: 1435549
+          output: 14231
+        implement:
+          usd: 20.1323900971449
+          turns: 925
+          input: 2009329
+          cache_write: 4665684
+          cache_read: 107321303
+          output: 637195
+    units:
+      step/spec-review:
+        orchestrator:
+          usd: 0.0
+          turns: 14
+          input: 48108
+          cache_write: 0
+          cache_read: 2155520
+          output: 20382
+        agent:
+          usd: 0.49043950285508603
+          turns: 18
+          input: 38
+          cache_write: 104074
+          cache_read: 1435549
+          output: 14231
+      step/plan:
+        orchestrator:
+          usd: 0.0
+          turns: 22
+          input: 203850
+          cache_write: 0
+          cache_read: 2418816
+          output: 21813
+      phase/1/implement-phase:
+        orchestrator:
+          usd: 0.0
+          turns: 48
+          input: 394725
+          cache_write: 0
+          cache_read: 6723200
+          output: 33884
+      (unattributed):
+        subagent:
+          usd: 17.514309336119204
+          turns: 501
+          input: 287984
+          cache_write: 4075312
+          cache_read: 64447232
+          output: 365971
+      phase/1/review-phase:
+        reviewer:
+          usd: 0.0
+          turns: 116
+          input: 582513
+          cache_write: 0
+          cache_read: 11074432
+          output: 56746
+        orchestrator:
+          usd: 0.0
+          turns: 53
+          input: 500163
+          cache_write: 0
+          cache_read: 5357440
+          output: 27163
+      phase/2/implement-phase:
+        orchestrator:
+          usd: 0.0
+          turns: 63
+          input: 962594
+          cache_write: 0
+          cache_read: 7873280
+          output: 43934
+      phase/2/review-phase:
+        reviewer:
+          usd: 0.0
+          turns: 91
+          input: 451748
+          cache_write: 0
+          cache_read: 8495488
+          output: 52624
+        orchestrator:
+          usd: 0.0
+          turns: 1
+          input: 3193
+          cache_write: 0
+          cache_read: 147712
+          output: 517
+      phase/3/implement-phase:
+        orchestrator:
+          usd: 0.0
+          turns: 51
+          input: 273124
+          cache_write: 0
+          cache_read: 6069632
+          output: 39780
+      phase/3/review-phase:
+        reviewer:
+          usd: 0.0
+          turns: 45
+          input: 180927
+          cache_write: 0
+          cache_read: 4798592
+          output: 46982
+      phase/4/implement-phase:
+        orchestrator:
+          usd: 0.0
+          turns: 41
+          input: 254338
+          cache_write: 0
+          cache_read: 5398144
+          output: 29856
+      phase/4/review-phase:
+        orchestrator:
+          usd: 0.0
+          turns: 26
+          input: 112352
+          cache_write: 0
+          cache_read: 3484288
+          output: 18167
+        reviewer:
+          usd: 0.0
+          turns: 39
+          input: 126711
+          cache_write: 0
+          cache_read: 3420928
+          output: 31552
+      phase/5/implement-phase:
+        orchestrator:
+          usd: 0.0
+          turns: 38
+          input: 104664
+          cache_write: 0
+          cache_read: 4534016
+          output: 29809
+        executor:
+          usd: 2.618080761025688
+          turns: 64
+          input: 132
+          cache_write: 590372
+          cache_read: 9073367
+          output: 39081
+      phase/5/review-phase:
+        reviewer:
+          usd: 0.0
+          turns: 69
+          input: 379314
+          cache_write: 0
+          cache_read: 6011264
+          output: 44239
+        orchestrator:
+          usd: 0.0
+          turns: 48
+          input: 357602
+          cache_write: 0
+          cache_read: 6738432
+          output: 30213
+      step/deliver:
+        orchestrator:
+          usd: 0.0
+          turns: 77
+          input: 311590
+          cache_write: 0
+          cache_read: 6489984
+          output: 38907
+    briefs:
+      step/spec-review: 3543
+      ses_ea827d280ffecSMc19wQ19QfcB: 2456
+      phase/1/review-phase: 217
+      ses_ea7c6d9adffeTEJGuaazSaX6p5: 2321
+      phase/2/review-phase: 6109
+      ses_ea76fc246ffe7ONdX0wM75ohqr: 7656
+      phase/3/review-phase: 5143
+      ses_ea732665cffeGDemBOGp6DpZh5: 8806
+      ses_ea715b0bcffeHb60Az6EdIAeUx: 6897
+      ses_ea6d1b71fffepKaui9YJGoGmGf: 5866
+      ses_ea6be632effe0L3eUf6Yv8PXmw: 7214
+      phase/4/review-phase: 697
+      phase/5/implement-phase: 2220
+      phase/5/review-phase: 7531

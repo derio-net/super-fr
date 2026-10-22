@@ -72,6 +72,14 @@ def _checkout(tmp_path: Path, origin: str, rows: dict[str, str]) -> Path:
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     subprocess.run(["git", "remote", "add", "origin", origin], cwd=repo, check=True)
+    # A real clone records origin/HEAD. Without it `Checkout.default_branch()` falls
+    # back to `git remote set-head origin --auto`, so any code path that resolves the
+    # default branch would ask github.com for credentials — from a test.
+    subprocess.run(
+        ["git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+        cwd=repo,
+        check=True,
+    )
     _matrix(repo / "docs" / "acceptance" / "matrix.yaml", rows)
     return repo
 

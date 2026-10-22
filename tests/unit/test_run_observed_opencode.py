@@ -14,7 +14,8 @@ from pathlib import Path
 
 from fr.run import observed
 
-DB = Path(__file__).parents[1] / "fixtures" / "usage" / "opencode" / "opencode.db"
+from tests.unit.opencode_fixture import DB, V1_DB
+from tests.unit.opencode_v2 import to_v2
 
 
 def _env(session: str | None = "ses_run", db: Path = DB) -> dict[str, str]:
@@ -98,6 +99,7 @@ def test_returned_falls_back_to_the_task_result_body(tmp_path: Path) -> None:
     with closing(sqlite3.connect(db)) as con:
         con.execute("DELETE FROM part WHERE id = 'prt_gen2_1'")
         con.commit()
+    to_v2(db)
     view = observed.observed_session(_env(db=db))
     assert view is not None
     by_id = {d.agent_id: d for d in view.dispatches(SINCE) or []}
@@ -189,6 +191,11 @@ def test_current_session_reads_the_key_its_harness_owns() -> None:
     assert current_session({"FR_HARNESS": "opencode", "CLAUDE_CODE_SESSION_ID": "x"}) is None
     assert current_session({"FR_HARNESS": "hermes", **both}) is None
     assert current_session({"FR_HARNESS": "not-a-harness", **both}) is None
+    # OpenCode 2 sets its own key on every command it spawns (measured on
+    # 2.0.32), so no plugin export is needed; the FR_ override still wins.
+    native = {"FR_HARNESS": "opencode", "OPENCODE_SESSION_ID": "ses_native"}
+    assert current_session(native) == "ses_native"
+    assert current_session({**native, **both}) == "ses_run"
 
 
 # --- review p1-r2 / p1-r4 ---------------------------------------------------
@@ -214,13 +221,14 @@ def test_a_session_the_database_does_not_hold_is_unobserved() -> None:
 
 def test_a_non_mapping_part_does_not_break_the_final_text(tmp_path: Path) -> None:
     db = tmp_path / "opencode.db"
-    shutil.copy(DB, db)
+    shutil.copy(V1_DB, db)
     with closing(sqlite3.connect(db)) as con:
         con.execute(
             "INSERT INTO part VALUES ('prt_gen2_9', 'msg_gen2', 'ses_gen2', ?, ?, '[1, 2]')",
             (TR + 164_500, TR + 164_500),
         )
         con.commit()
+    to_v2(db)
     view = observed.observed_session(_env(db=db))
     assert view is not None
     by_id = {d.agent_id: d for d in view.dispatches(SINCE) or []}

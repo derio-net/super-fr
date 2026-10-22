@@ -14,14 +14,16 @@ repo toplevel, checked by the marker's `mode`:
   so a marker forged on a bare host or copied to the base clone never validates.
 
 **Harness — edit gate:** Claude Code runs it as the PreToolUse hook
-`fr-isolation-required.sh` on Edit / Write / MultiEdit / NotebookEdit. OpenCode
-runs it as the `fr-opencode-plugin` `tool.execute.before` plugin on the `edit` /
-`write` / `patch` / `multiedit` tool calls (not `bash` — a known gap, not a
-sanctioned bypass). Hermes
+`fr-isolation-required.sh` on Edit / Write / MultiEdit / NotebookEdit (Bash is
+the sibling `fr-isolation-guard.sh`'s, while a pipeline is live). OpenCode (2.x
+only) runs it in the `fr-opencode-plugin`'s `execute.before` hook on every
+file-writing tool call, and judges the `shell` tool's whole command line there
+with the bash guard's decision: a base-repo command during a live pipeline is
+refused. Hermes
 runs it as a `pre_tool_call` hook on `write_file` / `patch`, installed by
 `fr hermes install` — not on `terminal` / `execute_code`, whose writes only the
-sibling bash guard sees (git/gh mutations alone). On every harness, shell writes
-are the gap: make edits with the edit tools.
+sibling bash guard sees (git/gh mutations alone). Outside a live pipeline, shell
+writes are the gap on every harness: make edits with the edit tools.
 
 `fr isolation up` selects the mode (`FR_ISOLATION_TARGET=worktree` for a
 docker-less host; a preparer-written `external` marker is adopted as-is) and
@@ -65,7 +67,7 @@ each enters isolation there itself with `fr isolation up --repo <path>`.
 tool's `isolation: "worktree"` argument: dispatch the executor without it, and
 `fr-phase-executor-guard.sh` refuses it if you do not (it refuses the flag for
 the read-only `fr-spec-reviewer` too: the spec it reviews is invisible from
-`main`). OpenCode's task tool and
+`main`). OpenCode's `subagent` tool and
 Hermes' `delegate_task` take no isolation argument, so there is nothing to
 refuse: dispatch the executor as any subagent, into the existing workspace.
 

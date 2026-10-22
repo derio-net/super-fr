@@ -31,6 +31,7 @@ from fr.artifacts.validate import validate_repo
 from fr.harness.long_commands import LONG_COMMAND_RULES
 from fr.run.telemetry import _detaches, orchestrator_wrote_since
 
+from tests.unit.opencode_v2 import to_v2
 from tests.unit.test_run_cli import _invoke_as_harness, _squash
 from tests.unit.test_run_evidence_separate_context import _at_deliver
 
@@ -90,6 +91,7 @@ def _db(path: Path, parts: list[tuple[str, str]], *, session_updated: int | None
     con.executemany("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)", rows)
     con.commit()
     con.close()
+    to_v2(path)
     return path
 
 

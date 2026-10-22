@@ -246,13 +246,13 @@ _DRIFTED = parse_matrix(
         "schema": 1,
         "surfaces": [
             {
-                "id": "fr-session-bind",
+                "id": "fr-worktree-create",
                 "kind": "hook",
-                "script": "fr-session-bind.sh",
+                "script": "fr-worktree-create.sh",
                 "summary": "s",
                 # claude-code IS registered for this script, so it must be
                 # declared `enforced` here or it drifts too — leaving exactly
-                # one intended disagreement: opencode, which ports nothing.
+                # one intended disagreement: opencode, which does not port it.
                 "harnesses": {
                     **_BASE,
                     "claude-code": {"state": "enforced"},
@@ -274,7 +274,7 @@ def test_check_on_a_drifted_matrix_exits_one_and_names_the_surface(monkeypatch) 
     _only_cell_drift(monkeypatch)
     result = runner_cli.invoke(app, ["harness", "parity", "--check"])
     assert result.exit_code == 1
-    assert "fr-session-bind" in result.output
+    assert "fr-worktree-create" in result.output
     assert "opencode" in result.output
 
 
@@ -300,7 +300,7 @@ def test_check_json_reports_each_finding_structurally(monkeypatch) -> None:
     assert result.exit_code == 1
     payload = json.loads(result.output)
     assert [(f["surface_id"], f["harness"], f["declared"], f["observed"]) for f in payload] == [
-        ("fr-session-bind", "opencode", "enforced", "absent")
+        ("fr-worktree-create", "opencode", "enforced", "absent")
     ]
 
 
@@ -423,3 +423,32 @@ def test_a_pairing_finding_survives_the_harness_filter(monkeypatch) -> None:
     result = runner_cli.invoke(app, ["harness", "parity", "--check", "--harness", "hermes"])
     assert result.exit_code == 1, result.output
     assert "zz-undeclared-probe.sh" in result.output
+
+
+# --- interaction cells a probe CAN speak to (spec 2026-10-20 R12) -----------
+
+
+def test_a_probed_interaction_cell_follows_its_probe() -> None:
+    """The status-line row's OpenCode cell is checked against the config
+    probe: a claim (`partial`) with the delivery present is clean; the same
+    claim with the delivery gone is a finding naming the probe."""
+    matrix = _matrix(
+        {"state": "partial", "scope_note": "n"}, harness="opencode", kind="interaction"
+    )
+    assert check(matrix, {}, {"x": {"opencode": "present"}}) == []
+    [finding] = check(matrix, {}, {"x": {"opencode": "absent"}})
+    assert (finding.surface_id, finding.harness, finding.observed) == ("x", "opencode", "absent")
+    assert "config probe" in finding.message
+
+
+def test_an_interaction_cell_with_no_probe_is_still_unchecked() -> None:
+    matrix = _matrix({"state": "enforced"}, harness="hermes", kind="interaction")
+    assert check(matrix, {}, {"x": {"opencode": "absent"}}) == []
+
+
+def test_this_repos_status_line_row_agrees_with_its_probe() -> None:
+    from fr.harness.observe import observe_interactions
+
+    root = Path(__file__).resolve().parents[2]
+    findings = check(load_matrix(), observe(root), observe_interactions(root))
+    assert [f for f in findings if f.surface_id == "status-line"] == []
