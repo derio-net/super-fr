@@ -3916,7 +3916,7 @@ rows:
     acceptance: The delivered super-fr plugin loads in OpenCode 2.x as a V2 plugin definition
       (id plus setup) and its hooks are registered
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R1
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/plugin.test.ts
@@ -3937,44 +3937,58 @@ rows:
     acceptance: Edits to tracked source in an fr-enabled repo are blocked from OpenCode
       2.x outside a valid isolation workspace, matching the Claude Code hook
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R2
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/index.test.ts
       - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
       int:
       - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
-    status: walk-owed
-    notes: 'Verdicts proven in CI (bun: index.test.ts, marker.test.ts) and the delivered
-      copy refuses a base-clone edit inside the real 2.x binary (test_opencode_runs_the_delivered_gate).
-      verify: live - a model-driven 2.x session''s refused edit is Test Plan item 1,
-      post-merge at the Tester gate.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: a model-driven edit to a tracked spec
+      in the base clone was refused with the fr-isolation message and git status stayed
+      clean (Test Plan step 1).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3 this session: edit tool on docs/superpowers/specs/2026-10-20-opencode-2-support-design.md
+        refused; no file change'
   - id: opencode-2-bash-gate
     capability: OpenCode adaptation
     acceptance: During an active fr pipeline in OpenCode 2.x, a shell command whose
       cwd is inside the pipeline's base repo is denied, while the same command from
       the isolation worktree is allowed
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R3
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/guard-verdicts.test.ts
       - super-fr:tests/unit/test_hooks_guard.py#test_the_verdict_table_covers_what_the_spec_names
-    status: walk-owed
-    notes: 'The shell gate''s decision is the bash guard''s: the captured verdict table
-      passes against both engines in CI (guard-verdicts.test.ts; test_hooks_guard.py).
-      verify: live - a model-driven 2.x session''s denied base-clone shell command,
-      and an allowed worktree git status, are Test Plan item 2, post-merge at the Tester
-      gate.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: with an active pipeline sentinel, a
+      base-clone shell write was denied with the full escape list while git status from
+      the archive workspace was allowed, and no probe file was created (Test Plan step
+      2).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3 this session: sentinel active; base-clone touch denied
+        with escapes; workspace git status allowed; probe absent'
   - id: opencode-2-store-read
     capability: OpenCode adaptation
     acceptance: fr reads an OpenCode 2.0 session from session_v2 and session_message,
       and the transcript gates and usage reports see the same tool calls and figures
       the store holds
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_2x_session_is_observed_end_to_end
@@ -3993,7 +4007,7 @@ rows:
     acceptance: An OpenCode 1.x session is refused with a reason naming OpenCode 1.x
       and the upgrade, never reported as an empty observation or as zeros
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_1x_only_session_is_refused_naming_1x_and_the_upgrade
@@ -4013,60 +4027,82 @@ rows:
       it spawns, lets fr name the top-level session that issued the command and not
       a child's
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_run_observed_opencode.py#test_current_session_reads_the_key_its_harness_owns
       - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_a_child_id_walks_to_its_2x_root
       - super-fr:tests/unit/test_run_observed_opencode_v2.py#test_no_session_id_names_opencode_session_id
-    status: walk-owed
-    notes: 'R6 removed the plugin''s export: OpenCode 2 itself sets OPENCODE_SESSION_ID
-      (the issuing session) on every spawned command (measured 2026-10-20, plan journal
-      p1-clean-launch-opencode-session-id), and fr reads it (FR_OPENCODE_SESSION_ID
-      first when a wrapper sets it) and walks parent_id to the root. Reader and root
-      walk proven in CI by the unit refs; verify: live - fr run status naming the top-level
-      session in a real 2.x session is Test Plan item 3, post-merge at the Tester gate.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: OPENCODE_SESSION_ID matched the session_v2
+      row with parent_id NULL (top-level), and fr run status read the cursor in this
+      session (Test Plan step 3).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3 this session: OPENCODE_SESSION_ID=ses_e9b9e7dd9ffe6xL1FEEpXGl1MK,
+        parent_id NULL, fr run status OK'
   - id: opencode-2-idle-nudge
     capability: OpenCode adaptation
     acceptance: An advanceable fr run in an idle OpenCode 2.x session receives exactly
       one nudge per run position
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R5
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
     status: walk-owed
-    notes: 'session.idle from ctx.event.subscribe() runs fr run check --idle and nudges
-      with ctx.session.prompt at most once per position (bun: idle.test.ts, CI). verify:
-      live - that the nudge is actually submitted and executes in a real 2.x session
-      is Test Plan item 4, post-merge at the Tester gate.'
+    notes: 'Live walk on OpenCode 2.1.3 FAILED: the server emits session.execution.succeeded
+      and records an idle message but never emits session.idle, so idle.ts never fires;
+      fr run check --idle returned exit 3 with next_command, yet no nudge was submitted.
+      Fix tracked in #1231; the row remains debt (not passing) until a live walk passes.'
     verify: live
+    issues:
+    - derio-net/super-fr#1231
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: fail
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3 fresh session, synthetic advanceable run: fr run check
+        --idle exit 3/next_command; no session.idle event in the plugin event stream
+        (session.execution.succeeded only); no nudge in the session export'
   - id: opencode-2-status-line
     capability: OpenCode adaptation
     acceptance: The fr status segment renders in the OpenCode 2.x terminal status area,
       naming the workspace, and a session opened outside any repo shows no segment
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R12
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/segment.test.ts
       int:
       - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_tui_renders_the_delivered_status_line
-    status: walk-owed
-    notes: 'The TUI entry ships inside the plugin directory and renders fr-statusline-segment.sh:
-      segment.test.ts (CI) plus test_opencode_tui_renders_the_delivered_status_line,
-      which starts the real TUI on a pty in CI. verify: live - a session in another
-      repo, and one outside any repo showing none, are Test Plan item 5, post-merge
-      at the Tester gate.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: the delivered TUI rendered the fr segment
+      (real pty test, 1 passed in 31.59s); the segment named fr/branch/worktree for
+      the archive workspace and none outside a repo (Test Plan step 5).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3: test_opencode_tui_renders_the_delivered_status_line
+        passed; segment --cwd workspace shows fr/workspace, --cwd /tmp shows none'
   - id: opencode-2-push-guard
     capability: OpenCode adaptation
     acceptance: On OpenCode 2.x, a git push from a merged- or closed-PR branch is refused
       by the plugin with the same message the Claude hook gives (gh pr merge is evaluated
       with the same decision, which allows it)
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R4
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/push.test.ts
@@ -4085,7 +4121,7 @@ rows:
     acceptance: A child session's first tool call claims its open unit on OpenCode 2.x,
       so fr run status names the holder instead of "an unclaimed agent"
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R7
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
@@ -4103,7 +4139,7 @@ rows:
     acceptance: The fr binary the plugin resolved is pinned into shell commands as FR_HARNESS_FR
       on OpenCode 2.x, and a failed pin never blocks a command
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R8
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/pin.test.ts
@@ -4122,27 +4158,30 @@ rows:
       the acceptance nag once, in the system context, and never as a rewrite of the
       operator's prompt
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R9
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/nag.test.ts
-    status: ci
-    notes: One system part per top-level session via ctx.session.hook context, never
-      a prompt rewrite, skipped without a matrix, silent on failure (nag.test.ts, CI,
-      fake context - the spec's candidate scope). That it reaches a live model request
-      is Test Plan item 6, post-merge. Its scenario tests/scenarios/opencode-plugin-v2.sh
-      proves the delivery contract the hook rides on (one directory, cli.json naming
-      the directory, an idempotent reinstall, an unparsable cli.json refused without
-      writing, uninstall leaving foreign entries, and one load of the delivered directory
-      in the real 2.x binary).
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: a fresh top-level session replied NAG=YES
+      and quoted the acceptance-debt block; the operator prompt did not contain it,
+      so the nag arrived in system context (Test Plan step 6).'
     scenario: tests/scenarios/opencode-plugin-v2.sh
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3 fresh top-level session: NAG=YES, exact block quoted
+        from system context, absent from the operator prompt'
   - id: opencode-2-sentinel
     capability: OpenCode adaptation
     acceptance: Invoking an fr pipeline skill in an OpenCode 2.x session writes the
       pipeline sentinel in the shape the guard and fr read, and never inside a valid
       isolation workspace
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R10
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/sentinel.test.ts
@@ -4163,7 +4202,7 @@ rows:
     acceptance: An OpenCode 2.x session that runs fr isolation up or fr run start is
       bound to that workspace, and a deleted session is unbound
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-20-opencode-2-support-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R11
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/bind.test.ts
