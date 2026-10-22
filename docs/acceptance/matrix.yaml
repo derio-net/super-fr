@@ -9741,9 +9741,15 @@ rows:
       gate pass --gate devops refuses while an op or devops Test Plan step is open
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_exit_promotion.py#test_the_merge_path_holds_a_pr_labelled_gate_devops
+      - super-fr:tests/unit/test_ops_gate_pass.py#test_it_refuses_listing_every_open_op_and_unrecorded_devops_step
+      - super-fr:tests/unit/test_ops_gate_pass.py#test_it_passes_once_everything_is_recorded
+    status: ci
+    notes: 'R14 implemented in phase 3: the triage merge path holds gate:devops without
+      -passed, and fr gate pass --gate devops --run folds recorded evidence only (no
+      probe); unit tests in CI'
     scenario: tests/scenarios/fr-ops-gate-stage.sh
   - id: fr-ops-gate-stage
     capability: DevOps stage
