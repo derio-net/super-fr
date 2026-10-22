@@ -9764,9 +9764,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R15
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R16
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R18
-    levels: {}
-    status: not-implemented
-    notes: candidate scenario written
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_full_run_walks_every_stage_in_order
+      - super-fr:tests/unit/test_ops_devops_brief.py#test_every_other_run_prints_todays_brief_byte_for_byte
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_stage
+    status: ci
+    notes: 'phase 4 shipped: the 8-stage sequencer, the DevOps pickup brief and the
+      gate-stage candidate scenario run in CI'
     verify: candidate
     scenario: tests/scenarios/fr-ops-gate-stage.sh
   - id: fr-ops-live-first-run
