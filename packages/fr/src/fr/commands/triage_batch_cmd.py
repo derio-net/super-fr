@@ -7252,7 +7252,7 @@ def batch_drive_command(
         _say(f"restart: post_merge installed fr {restart} (this driver runs {__version__}); "
              "restarting on it")  # fmt: skip
         try:
-            _exec([sys.executable, "-m", "fr", *sys.argv[1:]])
+            _exec([sys.executable, "-I", "-m", "fr", *sys.argv[1:]])
         except OSError as exc:  # the interpreter moved under a reinstall: say so, not a trace
             _fail(
                 f"could not restart on fr {restart} ({exc}); every pass so far is saved, "

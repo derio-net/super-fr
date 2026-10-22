@@ -629,8 +629,8 @@ def test_a_post_merge_that_installs_a_newer_fr_restarts_the_driver_on_it(
     assert isinstance(result.exception, _StopError), result.output
     assert len(runner.dispatched) == 1  # the pass that ran post_merge finished first
     (argv,) = execs
-    assert argv[:3] == [triage_batch_cmd.sys.executable, "-m", "fr"]
-    assert argv[3:] == triage_batch_cmd.sys.argv[1:]  # the same command, same arguments
+    assert argv[:4] == [triage_batch_cmd.sys.executable, "-I", "-m", "fr"]
+    assert argv[4:] == triage_batch_cmd.sys.argv[1:]  # the same command, same arguments
     assert held == [False]  # the lock is released for the new process to take
     assert "99.0.0" in result.output
 

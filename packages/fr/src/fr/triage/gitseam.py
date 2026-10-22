@@ -906,7 +906,7 @@ class Worktree:
         PATH) with *args* in this worktree: `(exit code, its words)`. The collected
         close-out's verbs: verify-merge, closeout outcome, archive. An argument list,
         never a shell string."""
-        code, out = _run([sys.executable, "-m", "fr", *args], self.path, coded=True)
+        code, out = _run([sys.executable, "-I", "-m", "fr", *args], self.path, coded=True)
         return int(code), str(out)
 
     def reset_hard(self, sha: str) -> None:
@@ -949,7 +949,7 @@ def run_this_fr(args: list[str], cwd: Path, *, terminal: bool = False) -> tuple[
     its stderr passed through to the operator. *terminal*: every stream stays the
     operator's and nothing is captured (`(exit, "")`), for a command that asks there.
     The DevOps stage's host commands (spec 2026-10-22-fr-ops R15)."""
-    argv = [sys.executable, "-m", "fr", *args]
+    argv = [sys.executable, "-I", "-m", "fr", *args]
     try:
         if terminal:
             return subprocess.run(argv, cwd=cwd, check=False).returncode, ""
