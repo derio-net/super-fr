@@ -9666,9 +9666,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R7
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R8
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R17
-    levels: {}
-    status: not-implemented
-    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_attest.py#test_attest_closes_an_unverifiable_op_as_attested
+      - super-fr:tests/unit/test_ops_attest.py#test_attest_is_refused_for_an_op_with_a_check
+    status: ci
+    notes: attest and recorded apply evidence tested in CI (phase 2); journal kind 3
+      lands in a later phase
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-seal-no-plaintext
     capability: fr ops
