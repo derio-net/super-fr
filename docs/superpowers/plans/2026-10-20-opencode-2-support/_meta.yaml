@@ -2,5 +2,5 @@ schema_version: 2
 plan: 2026-10-20-opencode-2-support
 spec: 2026-10-20-opencode-2-support-design.md
 target_repo: derio-net/super-fr
-fr_version: '>=4.20.0,<6.0.0'
+fr_version: '>=4.20.0,<7.0.0'
 created: '2026-10-20'
