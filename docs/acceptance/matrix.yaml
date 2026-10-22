@@ -9596,7 +9596,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R2
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-status
     capability: fr ops
     acceptance: fr ops status reports every op DONE (checked or attested), OPEN with
