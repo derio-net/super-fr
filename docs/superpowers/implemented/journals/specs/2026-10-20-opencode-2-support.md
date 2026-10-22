@@ -387,3 +387,45 @@ Phase 5 only records their evidence. Reading the 2.0 store is 900 lines across t
 ### phase-split-2026-10-20-opencode-2-support-p5-1 · decision · tier: phase 5 is mechanical-tier bookkeeping across a dozen published surfaces
 
 It exists to make the published surfaces match the code: parity rows, the matrix and its three reports, the canonical rule and both mirrors, the explainer and the release fragment. Folding it into a hard implementation phase would blur the tier the dispatcher binds.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-10-22T16:34:02+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Enter a workspace, start a run, ask the model to edit a tracked file in the base clone; expect the plugin's refusal and no file change.
+
+Evidence: PASS — a model-driven edit to docs/superpowers/specs/2026-10-20-opencode-2-support-design.md in the base clone was refused with the fr-isolation blocked message; git status stayed clean and no file changed.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-10-22T16:34:08+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: From the workspace, run `git status` (allowed) and then a base-clone write through `shell` during an active pipeline (denied, with the escape list).
+
+Evidence: PASS — with an active pipeline sentinel for this session, git status from the archive workspace was allowed; a base-clone touch fr-shell-gate-probe was denied with the full escape list and no probe file was created. The sentinel was armed in the equivalent state (the session was not running a pipeline skill) and disarmed after the test.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-10-22T16:35:10+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: In the same session run `fr run status` and confirm `OPENCODE_SESSION_ID` resolved to the top-level session, not a child's.
+
+Evidence: PASS — OPENCODE_SESSION_ID=ses_e9b9e7dd9ffe6xL1FEEpXGl1MK matches the session_v2 row whose parent_id is NULL (top-level), and fr run status 2026-10-20-feat-opencode-v2-support reads the cursor correctly in this session.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-10-22T16:35:20+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: Let a run sit advanceable and confirm one idle nudge is submitted, with no second nudge at the same `position`.
+
+Evidence: FAILED on OpenCode 2.1.3 — a synthetic advanceable run returned fr run check --idle exit 3 with next_command, and a fresh top-level session idled (export carries an idle message), but the plugin event stream contained session.execution.succeeded and no session.idle, so idle.ts never fired and no nudge was submitted. Framework fix tracked in #1231.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-10-22T16:35:32+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: Confirm the status line shows the fr segment, and that a session opened outside any repo shows none.
+
+Evidence: PASS — FR_REQUIRE_OPENCODE=1 uv run pytest tests/integration/test_opencode_plugin_live.py::test_opencode_tui_renders_the_delivered_status_line passed on the host OpenCode 2.1.3 (1 passed in 31.59s). The segment script names fr, branch and worktree for the archive workspace and none outside any repo; opencode plugin list registers the delivered plugin directory.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-10-22T16:35:40+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: Open a session in a repo with an acceptance matrix and confirm the nag appears once, in the system context, not in the operator's prompt.
+
+Evidence: PASS — a fresh top-level OpenCode 2.1.3 session (same repo and plugin) replied NAG=YES and quoted the acceptance-debt block; the operator prompt did not contain it, proving the nag arrives in system context. At most once per top-level session is covered by the unit tests.
