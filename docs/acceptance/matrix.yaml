@@ -9619,9 +9619,7 @@ rows:
       - super-fr:tests/unit/test_ops_engine.py#test_a_passing_escalate_on_a_non_done_op_escalates
       - super-fr:tests/unit/test_ops_cli.py#test_status_reports_each_op_and_exits_1_on_an_open_op
     status: ci
-    notes: unit tests over the status engine (every state, identities, disables, escalate)
-      and the fr ops status CLI run in CI (plan 2026-10-22-fr-ops phase 1); the candidate
-      scenario lands in phase 2
+    notes: unit tests run in CI; candidate scenario written (phase 2)
     verify: candidate
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-apply-idempotent
