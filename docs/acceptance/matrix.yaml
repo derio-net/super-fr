@@ -9710,9 +9710,15 @@ rows:
       unknown tag is refused naming the step
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_testplan.py#test_a_literal_devops_or_tester_tag_takes_the_gate_and_leaves_the_text
+      - super-fr:tests/unit/test_ops_testplan.py#test_any_other_leading_bracket_stays_text
+      - super-fr:tests/unit/test_ops_testplan.py#test_effective_gate_tag_wins_then_devops_then_tester_then_none
+    status: ci
+    notes: 'R12 implemented in phase 3: literal [devops]/[tester] tags and effective_step_gate,
+      unit tests in CI; any other leading bracket stays text per R12 (the acceptance
+      wording about refusing an unknown tag is finding p3-matrix-testplan-tags-wording)'
     scenario: tests/scenarios/fr-ops-gate-stage.sh
   - id: fr-ops-deliver-section
     capability: deliver
