@@ -1566,3 +1566,8 @@ Probe order reversed (GNU `stat -c '%a'` first, BSD `stat -f '%Lp'` as the fallb
 ### p5-live-probe-races-the-daemon · finding [open] · The live probe asserts before the OpenCode service has finished loading plugins (phase 5)
 
 On the 2.0.32 CI runner `test_opencode_runs_the_delivered_gate` failed with 'OpenCode never initialised the probe', while 2.1.0 and every local run passed. `plugin list` returns before the background service finishes loading plugins, so the sentinel's verdict file (written from a plugin's `setup`) is not there yet; the same race applies to the service log's `loading plugin` line the registration probe reads. Reproduced locally on the same 2.0.32 binary only as a pass — the runner is slower, which is why it lost the race there.
+
+<!-- fr:journal kind=finding scope=plan id=p5-live-probe-races-the-daemon-resolved created=2026-10-22T13:45:31+00:00 phase=5 state=fixed resolves=p5-live-probe-races-the-daemon -->
+### p5-live-probe-races-the-daemon-resolved · finding [fixed] · resolves p5-live-probe-races-the-daemon: The live probe asserts before the OpenCode service has finished loading plugins (phase 5)
+
+Both probes now wait, bounded at 15s and INSIDE the service context (the daemon must be alive for the load to finish), for the verdict file and for the log's first 'loading plugin' line. Re-ran the file against a locally installed 2.0.32 and against 2.1.3: 3 passed each.
