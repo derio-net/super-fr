@@ -369,3 +369,18 @@ def test_a_body_like_line_as_an_identity_reports_only_the_exit() -> None:
     assert _as_identity("[1, 2]", "tok-xyz", rc=1).reason == "exit 1"
     assert _as_identity("x" * 201, "tok-xyz", rc=1).reason == "exit 1"
     assert _as_identity("HTTP 404: missing", "tok-xyz", rc=1).reason == "HTTP 404: missing"
+
+
+def test_p3_r3_a_recorded_na_closes_an_op_only_while_it_carries_na_if() -> None:
+    from fr.ops.evidence import recorded_close
+
+    na = _ev("na")
+    assert recorded_close(_lo(na_if="probe", check="c"), na) == "N/A (recorded)"
+    assert recorded_close(_lo(check="c"), na) is None
+    assert recorded_close(_lo(na_if="probe"), _ev("done")) is None  # checkless: attest only
+
+
+def test_p3_r3_op_body_takes_the_na_result() -> None:
+    from fr.journal.model import op_body
+
+    assert "result: na" in op_body(op="a", result="na", phase="pre-merge")

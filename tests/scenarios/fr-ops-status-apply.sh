@@ -131,7 +131,7 @@ expect_grep '--yes' "$out" "no terminal and no --yes is refused"
 run_fr out ops apply --plan "$P" --phase pre-merge --yes
 require_exit 0 "$out"
 [ -e "$MARKS/open" ] || fail "apply did not run open-op"
-expect_grep 'done-op.*already done, nothing written' "$out" "a done op is skipped"
+expect_grep 'done-op.*already done; recorded it' "$out" "a done op is skipped and its closure recorded once (R7)"
 expect_grep 'open-op: applied' "$out" "the open op was applied"
 snapshot="$(find docs/superpowers/journals -type f -exec cat {} + | cksum)"
 run_fr out ops apply --plan "$P" --phase pre-merge --yes

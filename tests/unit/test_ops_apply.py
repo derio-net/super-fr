@@ -110,19 +110,44 @@ def test_order_is_dependency_order_and_a_cycle_is_refused_before_anything_runs()
     assert w.ran == []
 
 
-def test_done_ops_are_skipped_and_nothing_is_written() -> None:
+def test_done_ops_are_skipped_and_their_closure_recorded() -> None:
+    """R7 (p3-r3): a DONE op nothing recorded closed gets one `done` entry."""
     w = World(done={"a"})
     res = run([op("a")], w)
-    assert res.ok and w.ran == [] and w.written == []
-    assert "already done, nothing written" in res.steps[0].message
+    assert res.ok and w.ran == []
+    assert w.written == [{"op": "a", "result": "done", "phase": "pre-merge"}]
+    assert "already done" in res.steps[0].message and "recorded" in res.steps[0].message
 
 
-def test_na_ops_are_skipped() -> None:
+def test_na_ops_are_skipped_and_recorded_na() -> None:
     w = World()
     w.runner = lambda c, e: (0, "")  # type: ignore[method-assign]
     res = run([op("a", na_if="na:a")], w)
-    assert res.ok and w.ran == [] and w.written == []
-    assert ALREADY_DONE in res.steps[0].message
+    assert res.ok and w.ran == []
+    assert w.written == [{"op": "a", "result": "na", "phase": "pre-merge"}]
+
+
+def test_p3_r3_a_closure_is_recorded_once_then_nothing_is_written() -> None:
+    w = World(done={"a"})
+    first = run_j([op("a")], w, FakePrompt())
+    second = run_j([op("a")], w, FakePrompt())
+    assert len(w.written) == 1 and first.ok and second.ok
+    assert ALREADY_DONE in second.steps[0].message
+
+
+def test_p3_r3_an_na_closure_is_recorded_once() -> None:
+    w = World()
+    w.runner = lambda c, e: (0, "")  # type: ignore[method-assign]
+    run_j([op("a", na_if="na:a")], w, FakePrompt())
+    res = run_j([op("a", na_if="na:a")], w, FakePrompt())
+    assert [x["result"] for x in w.written] == ["na"] and ALREADY_DONE in res.steps[0].message
+
+
+def test_p3_r3_a_check_but_no_apply_op_done_by_hand_records_done_once() -> None:
+    w = World(done={"a"})
+    run_j([lo("a", check="check:a")], w, FakePrompt())
+    run_j([lo("a", check="check:a")], w, FakePrompt())
+    assert w.written == [{"op": "a", "result": "done", "phase": "pre-merge"}]
 
 
 def test_apply_runs_in_order_and_records_the_recheck() -> None:
@@ -187,9 +212,9 @@ def test_a_recheck_that_stays_open_is_recorded_open() -> None:
 
 def test_a_second_run_over_a_done_phase_writes_nothing() -> None:
     w = World()
-    run([op("a"), op("b")], w, yes=True)
+    run_j([op("a"), op("b")], w, FakePrompt(), yes=True)
     n = len(w.written)
-    res = run([op("a"), op("b")], w, yes=True)
+    res = run_j([op("a"), op("b")], w, FakePrompt(), yes=True)
     assert res.ok and len(w.written) == n and all("nothing written" in s.message for s in res.steps)
 
 

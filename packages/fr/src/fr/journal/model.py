@@ -80,8 +80,9 @@ OP_BODY_KEYS = ("op", "result", "identity", "reason", "phase", "attested_by")
 """The body lines an `op` entry may carry, in this order (spec 2026-10-22-fr-ops
 R7). The ONE key set: `op_body` writes it and `op_fields` folds it, so the writer
 and the fold cannot disagree. Never secret material."""
-OP_RESULTS = ("done", "open", "failed", "attested", "proof")
-"""The values `result:` takes (R7)."""
+OP_RESULTS = ("done", "na", "open", "failed", "attested", "proof")
+"""The values `result:` takes (R7). `na` records an op `apply` found N/A by its
+`na_if`; it closes the op only while the op carries `na_if`."""
 # Entry kinds a journal stamped below the current version cannot hold: the write
 # that appends one stamps the journal in the same write (`_at_current_stamp`).
 _STAMPING_KINDS = frozenset({"owed", "op"})

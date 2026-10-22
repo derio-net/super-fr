@@ -81,9 +81,10 @@ def fold(entries: Iterable[JournalEntry]) -> dict[str, OpEvidence]:
 
 def recorded_close(lo: LoadedOp, ev: OpEvidence | None) -> str | None:
     """The DONE/N/A label the RECORDED evidence alone gives `lo`, or `None` when nothing
-    recorded closes it. Runs no probe (R13, R14): a legacy `status:` closes the op; a
-    `proof` op only a `proof` entry; a checkless op only an `attested` one (an apply-only
-    op's `result: open` "applied; no check" never does); any other op a `done` entry."""
+        recorded closes it. Runs no probe (R13, R14): a legacy `status:` closes the op; an
+    `na` entry while the op still carries `na_if` (R7); a
+        `proof` op only a `proof` entry; a checkless op only an `attested` one (an apply-only
+        op's `result: open` "applied; no check" never does); any other op a `done` entry."""
     if lo.legacy == "done":
         return "DONE (legacy)"
     if lo.legacy == "n/a":
@@ -91,6 +92,8 @@ def recorded_close(lo: LoadedOp, ev: OpEvidence | None) -> str | None:
     if ev is None:
         return None
     op = lo.op
+    if ev.result == "na":
+        return "N/A (recorded)" if op.na_if else None
     if op.is_proof:
         return "DONE (proof)" if ev.result == "proof" else None
     if op.check is None:

@@ -18,6 +18,7 @@ from typing import Protocol
 
 from fr.ops.engine import Journal, Runner, StatusRow, order, runner_secrets, status
 from fr.ops.engine import OrderError as OrderError  # re-export for callers
+from fr.ops.evidence import recorded_close
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
 from fr.ops.mask import sanitise_reason
@@ -234,7 +235,12 @@ def apply_ops(
         op = lo.op
         row = row_of(lo)
         if row.state in ("DONE", "N/A"):
-            step(op.id, "skipped", f"{op.id}: {row.label} — {ALREADY_DONE}")
+            if recorded_close(lo, journal.latest(op.id, runbook=lo.runbook)) is None:
+                # R7: record the closure observed, once; a rerun then writes nothing.
+                record(op=op.id, result="done" if row.state == "DONE" else "na", phase=op.phase)
+                step(op.id, "skipped", f"{op.id}: {row.label} — already done; recorded it")
+            else:
+                step(op.id, "skipped", f"{op.id}: {row.label} — {ALREADY_DONE}")
             continue
         if row.state == "CANNOT-VERIFY":
             step(op.id, "failed", f"{op.id}: cannot verify ({row.reason}); not applied")
