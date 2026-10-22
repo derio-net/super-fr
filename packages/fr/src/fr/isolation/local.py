@@ -149,7 +149,7 @@ def _detached_gc_spawn(repo_root: Path, mode: str) -> None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log = open(log_path, "a")  # noqa: SIM115 — handed to the child; not ours to close
         subprocess.Popen(
-            [sys.executable, "-I", "-m", "fr", "isolation", "gc", "--repo", str(repo_root)],
+            [sys.executable, "-P", "-m", "fr", "isolation", "gc", "--repo", str(repo_root)],
             cwd=str(repo_root) if repo_root.is_dir() else None,
             env={**os.environ, "FR_ISOLATION_TARGET": mode},
             start_new_session=True,

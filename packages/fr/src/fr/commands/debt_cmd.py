@@ -307,7 +307,7 @@ def _archive_one(root: Path, name: str, env: dict[str, str]) -> tuple[bool, str]
     import sys
 
     done = subprocess.run(
-        [sys.executable, "-I", "-m", "fr", "archive", f"docs/superpowers/plans/{name}"],
+        [sys.executable, "-P", "-m", "fr", "archive", f"docs/superpowers/plans/{name}"],
         cwd=root,
         env=env,
         capture_output=True,

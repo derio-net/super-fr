@@ -304,7 +304,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     host-side (`HostGateState`, never read from the PR-controlled workspace). CLI:
     `fr ops {status,apply,attest,trust,seal,secret,clip,scratch,gate}`
     (`commands/ops_cmd.py`, `commands/ops_gate_cmd.py`); the whole group is gated by the
-    artifact trigger. Every `python -m fr` fr starts runs with `-I`. Driver skill:
+    artifact trigger. Every `python -m fr` fr starts runs with `-P` (no cwd on sys.path). Driver skill:
     `fr-devops-gate`; author doc: `docs/ops.md`.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
