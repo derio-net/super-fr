@@ -1,0 +1,12 @@
+schema_version: 10
+run: 2026-10-22-feat-fr-ops
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2]
+refactor:
+  P1.T1: "a stub group and one registration line; nothing to clean"
+journal: []
+resolves: []
+evidence:
+  tests: ci
