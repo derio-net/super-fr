@@ -205,6 +205,12 @@ def test_a_refused_batch_takes_no_in_flight_slot_from_the_next(
 # ------------------------------------------------------------ post_merge (R20)
 
 
+def _today() -> str:
+    """The collected close-out is named from the pass's clock (`_now`), not the fixture's
+    `NOW`: pinning a literal date passed only on the day it was written."""
+    return triage_batch_cmd._now().date().isoformat()
+
+
 def test_the_host_runs_post_merge_and_restarts_after_it(
     tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners
 ) -> None:
@@ -215,7 +221,7 @@ def test_the_host_runs_post_merge_and_restarts_after_it(
     assert code == 0, out
     assert checkout.commands == [["./scripts/install.sh"]]
     assert _events(tmp_path, "b1") == ["dispatch", "post_merge"]  # the marker, not an event
-    assert runners.dispatched() == {"herdr": [f"{REPO}/run/closeout-2026-10-14-1"]}
+    assert runners.dispatched() == {"herdr": [f"{REPO}/run/closeout-{_today()}-1"]}
 
 
 def test_the_cloud_runs_neither_post_merge_nor_its_restart(
@@ -232,7 +238,7 @@ def test_the_cloud_runs_neither_post_merge_nor_its_restart(
     assert acted
     assert checkout.commands == []
     assert _events(tmp_path, "b1") == ["dispatch"]  # the marker, not an event
-    assert runners.dispatched() == {"claude-cloud": [f"{REPO}/run/closeout-2026-10-14-1"]}
+    assert runners.dispatched() == {"claude-cloud": [f"{REPO}/run/closeout-{_today()}-1"]}
     assert "restart" not in capsys.readouterr().out
 
 

@@ -267,5 +267,5 @@ def test_an_owed_entry_written_to_an_old_stamp_journal_restamps_it(repo: Path) -
     )
     res = _outcome("--step", "4", "--owed", "--why", "later")
     assert res.exit_code == 0, res.output
-    assert ARTIFACT_KINDS["journal"].read_version(path) == 2
+    assert ARTIFACT_KINDS["journal"].read_version(path) == ARTIFACT_KINDS["journal"].current_version
     assert [e.id for e in _entries(repo)] == ["d1", "test-plan-step-4"]
