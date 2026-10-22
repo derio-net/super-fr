@@ -135,7 +135,19 @@ def test_the_cli_flag_reaches_scaffold(repo: Path) -> None:
 
     res = CliRunner().invoke(
         app,
-        ["init", "scaffold", "--repo", str(repo), "--profile", "ops", "--purpose", "o", "--ops", "--tracking", "none"],
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "ops",
+            "--purpose",
+            "o",
+            "--ops",
+            "--tracking",
+            "none",
+        ],
     )
     assert res.exit_code == 0, res.output
     assert _profiles(repo)["profiles"]["ops"]["ops"] is True

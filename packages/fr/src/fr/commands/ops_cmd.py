@@ -155,7 +155,7 @@ def status(
     if phase is not None and phase not in PHASES:
         _refuse(f"--phase must be one of {', '.join(PHASES)} (got {phase!r})")
     root, plan_dir = _plan_dir("status", plan)
-    if not in_ops_profile():
+    if not in_ops_profile(root):
         typer.echo(PROFILE_WARNING, err=True)
 
     ids = (op_id,) if op_id else ()
