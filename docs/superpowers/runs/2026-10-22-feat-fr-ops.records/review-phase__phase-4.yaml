@@ -1,0 +1,158 @@
+schema_version: 10
+run: 2026-10-22-feat-fr-ops
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+- kind: finding
+  id: p4-r1
+  phase: 4
+  review_scope: in
+  title: Stage 1 built the ops container from the PR head's own devcontainer config before trust
+  body: A hostile PR's initializeCommand would run on the host, or its postCreateCommand with ops secrets,
+    before any trust prompt (R19). A follow-up security review found the comparison base came from the
+    PR's own base_ref.
+- kind: finding
+  id: p4-r2
+  phase: 4
+  review_scope: in
+  title: Op closure and step outcomes were read from the PR-controlled journal
+  body: A PR could pre-commit done/attested entries or ran outcomes. A follow-up review found the head
+    exclusion read only the live journal path while readers fall back to archived ones.
+- kind: finding
+  id: p4-r3
+  phase: 4
+  review_scope: in
+  title: An owed stage-5 answer was unrecoverable
+  body: 'Stage 6 refused forever: closeout outcome refused a re-record, and resolutions were ignored.'
+- kind: finding
+  id: p4-r4
+  phase: 4
+  review_scope: in
+  title: Stage 8 archive filed nothing for out-of-scope findings
+  body: It was captured, with no --issues.
+- kind: finding
+  id: p4-r5
+  phase: 4
+  review_scope: in
+  title: Workspace reuse accepted a descendant head
+  body: Stage 3's rebase would then carry unpinned PR commits.
+- kind: finding
+  id: p4-r6
+  phase: 4
+  review_scope: in
+  title: Spec §I contradicted the amended R15
+  body: §I still named the journal as the stage's state.
+- kind: finding
+  id: p4-r7
+  phase: 4
+  review_scope: in
+  title: -I broke --user and PYTHONPATH installs
+  body: -I drops the user site and PYTHONPATH; only the cwd entry is the threat. A follow-up review found
+    that empty or relative PYTHONPATH entries reopen the cwd hole under -P.
+- kind: finding
+  id: p4-r8
+  phase: 4
+  review_scope: in
+  title: fr-goal's hand-off told the operator to merge in every mode
+  body: A devops run merged by hand would run pre-merge ops after the merge.
+- kind: finding
+  id: p4-r9
+  phase: 4
+  review_scope: in
+  title: docs/ops.md omitted operator essentials
+  body: --profile/--method, the state path, recovery and which checkout to run from were missing.
+- kind: finding
+  id: p4-r10
+  phase: 4
+  review_scope: in
+  title: Stage 3 misread a trust refusal as 'not ready'
+  body: Exit 2 was mapped to not-ready.
+- kind: finding
+  id: p4-r11
+  phase: 4
+  review_scope: in
+  title: A stage could be marked done with its record unpushed
+  body: Host state was marked before the commit and push. A follow-up security review found that the first
+    fix (push before marking) pushed the unmerged PR head to a base-repo branch pre-merge, a pwn-request
+    risk.
+- kind: finding
+  id: p4-r12
+  phase: 4
+  review_scope: out
+  title: file_lock.py and fr_herdr managed.py spawn python -c 'import fcntl' with an inherited cwd
+  body: A planted fcntl.py in the cwd would be imported (no -I/-P). True, but this change does not touch
+    either spawn; filed at deliver.
+- kind: review
+  id: p4-review-1
+  phase: 4
+  title: 'Phase 4 review: DevOps stage, pickup, skill, docs'
+  body: 'Dispatched reviewer (separate context, opus) over 92a8c76d..HEAD against R15, R16, R18 and the
+    amended R7/R13/R14/R19. 12 findings: 11 in scope, all fixed with tests; 1 out of scope (p4-r12, filed
+    at deliver). Six follow-up automated security reviews hardened the fixes (planted-module isolation,
+    merge-head pinning, host-side stage state, trusted default branch, evidence-resolver parity, no push
+    before merge); one corrected a regression introduced by the orchestrator''s own p4-r11 instruction.
+    Red-first held for every new test except test_the_ops_branch_push_is_leased and a guard that already
+    passed. Verified: 1815 targeted tests pass, the scenario passes, ruff/mypy/validate/self-review/acceptance/parity
+    clean.'
+resolves:
+- id: p4-r1
+  state: fixed
+  body: 'Stage 1 refuses before any isolation up when .devcontainer/<ops>/** or fr-profiles.yaml differ
+    from the TRUSTED default branch, which is taken from forge repo metadata, cross-checked with origin/HEAD;
+    a PR based elsewhere is refused. Tests: test_a_pr_modified_ops_profile_is_refused_before_anything_comes_up,
+    test_a_reused_workspace_is_checked_too, test_a_pr_based_on_a_side_branch_is_refused, test_a_forge_and_origin_head_mismatch_is_refused,
+    test_the_profile_comparison_uses_the_trusted_branch.'
+- id: p4-r2
+  state: fixed
+  body: 'Checked ops close only by live status; attestations and outcomes count only when absent at the
+    recorded head, resolved through journal_read_candidates (live and archived, shared with the readers).
+    A head journal that fails to parse refuses, and a PR touching archived journals is refused. Docs corrected.
+    Tests: test_pre_committed_done_entries_close_no_checked_op, test_the_merge_gate_reads_live_status_not_the_journal,
+    test_a_pre_committed_attestation_closes_nothing, test_evidence_planted_in_the_archived_journal_closes_nothing,
+    test_a_pr_touching_the_archived_journals_is_refused, test_a_malformed_journal_at_the_head_is_a_refusal.'
+- id: p4-r3
+  state: fixed
+  body: 'One outcome fold: a later outcome supersedes owed, and an owed entry resolved fixed closes it;
+    stage 6 names the recovery command. Tests: test_an_owed_step_then_a_ran_outcome_closes_it, test_an_owed_step_resolved_fixed_closes_it,
+    test_stage_6_names_the_recovery_command_and_a_rerun_completes, test_closeout_outcome_supersedes_an_owed_step,
+    plus the scenario.'
+- id: p4-r4
+  state: fixed
+  body: 'It passes --issues from run_out_of_scope (shared with closeout_brief), or --no-issues. Tests:
+    test_stage_8_archives_with_the_out_of_scope_ids, test_stage_8_files_nothing_without_a_tracker_or_findings.'
+- id: p4-r5
+  state: fixed
+  body: 'The cut sha is kept in host state and must equal the head. Tests: test_a_reused_workspace_not_cut_from_the_live_head_is_refused,
+    test_a_reused_workspace_with_no_recorded_cut_is_refused.'
+- id: p4-r6
+  state: fixed
+  body: §I now says progress and the verified head live in host state (spec commit).
+- id: p4-r7
+  state: fixed
+  body: '-P everywhere, through fr.safe_spawn (fr_argv, safe_fr_env), which keeps only absolute PYTHONPATH
+    entries; _run gained exact_env and keeps two builders. Tests: test_every_python_m_fr_in_the_source_is_safe_path,
+    test_a_relative_pythonpath_never_imports_a_planted_fr[: . lib a::b], test_safe_fr_env_keeps_only_absolute_pythonpath_entries,
+    test_every_python_m_fr_spawn_goes_through_the_helper.'
+- id: p4-r8
+  state: fixed
+  body: Qualified with the fr ops gate route (119 lines); both mirrors regenerated.
+- id: p4-r9
+  state: fixed
+  body: All added, plus a 'What the stage trusts' section.
+- id: p4-r10
+  state: fixed
+  body: 'Exit 2 surfaces as a refusal. Test: test_a_ready_refusal_surfaces_as_a_refusal.'
+- id: p4-r11
+  state: fixed
+  body: 'Pre-merge stages commit locally only and nothing is pushed until stage 3 has rebased onto the
+    trusted default; afterwards a stage is marked only after commit and push, each push --force-with-lease
+    on the last pushed sha. Tests: test_a_failed_push_leaves_the_stage_not_done, test_nothing_is_pushed_before_the_merge_and_the_rebase,
+    test_pushes_carry_a_lease_on_the_last_pushed_sha, test_the_ops_branch_push_is_leased.'
+- id: p4-r12
+  state: out-of-scope
+  body: Neither spawn is touched by this change; both predate it. It is filed as its own issue at deliver.
+evidence:
+  review: p4-review-1
+  reviewer: a4153fff54596bf11
+  model: claude-opus-5-5
