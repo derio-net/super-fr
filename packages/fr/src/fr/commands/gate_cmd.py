@@ -8,12 +8,17 @@ the default branch; `fr gate pass` is the route for a gate with no row (a run-le
 `gate: devops`) or a pass the operator records by hand. The merged PR's labels are the
 ledger, so a pass needs no commit: this group touches no registered artifact and is in
 `fr.artifacts.trigger.READ_ONLY_COMMANDS`. Dry-run without `--yes`.
+
+`--gate devops` also folds the run's recorded op evidence (spec 2026-10-22-fr-ops R14):
+the run is `--run <id>`, else the one whose `branch` is the PR's head ref. It refuses
+while any plan op, or Test Plan step whose effective gate is devops, is not closed by
+what this checkout recorded. It never runs a probe.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -22,6 +27,9 @@ from fr.ghclient import UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.labels import gate_label, held_gates
 from fr.verification.labels import gate_pass_comment, pass_gate
+
+if TYPE_CHECKING:
+    from fr.run.model import RunState
 
 gate_app = typer.Typer(
     help="Post-merge gates: record that a gate passed on its PR (the gate ledger).",
@@ -33,9 +41,67 @@ DEFAULT_HOST = "github.com"
 _FORGE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
 
 
+def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
+    """The run whose devops evidence the pass folds: `--run`, else the one run whose
+    `branch` is the PR's head ref (`None` when none is; refused when several are)."""
+    from fr.record.model import RUNS_REL
+    from fr.run.model import RunStateError, load_run_state, parse_run_state
+
+    if run is not None:
+        try:
+            return load_run_state(root, run)
+        except (RunStateError, OSError) as exc:
+            _refuse(f"cannot read run {run!r}: {exc}")
+    runs_dir = root / RUNS_REL
+    found = []
+    for path in sorted(runs_dir.glob("*.yaml")) if runs_dir.is_dir() else []:
+        try:
+            state = parse_run_state(path.read_text())
+        except (RunStateError, OSError):
+            continue
+        if head_ref and state.branch == head_ref:
+            found.append(state)
+    if len(found) > 1:
+        _refuse(f"runs {', '.join(s.run for s in found)} all name branch {head_ref!r}: pass --run")
+    return found[0] if found else None
+
+
+def _devops_evidence(root: Path, run: str | None, head_ref: str) -> None:
+    """R14: refuse (exit 2, listing them) while recorded evidence leaves anything open."""
+    from fr.ops.holds import devops_blockers
+    from fr.ops.load import OpsLoadError
+
+    state = _run_for(root, run, head_ref)
+    if state is None:
+        typer.echo(f"no run here names branch {head_ref!r}: no op evidence folded (pass --run)")
+        return
+    try:
+        blockers = devops_blockers(root, state)
+    except OpsLoadError as exc:
+        _refuse(f"run {state.run}: the plan's ops cannot be read: {exc}")
+        return
+    if blockers:
+        lines = "\n".join(f"  {b}" for b in blockers)
+        _refuse(
+            f"run {state.run}'s devops gate is still held by its recorded evidence "
+            f"(nothing was probed):\n{lines}\nbring them to DONE/N/A through the "
+            f"DevOps stage (`fr ops gate --run {state.run}`), then pass again"
+        )
+    typer.echo(f"run {state.run}: every op and devops step is recorded closed")
+
+
 def _refuse(message: str) -> None:
     typer.echo(f"fr gate pass: {message}", err=True)
     raise typer.Exit(code=2)
+
+
+def _repo_root() -> Path:
+    from fr.git import repo_root
+
+    try:
+        return repo_root(Path.cwd())
+    except Exception:  # noqa: BLE001 — outside a checkout there is no evidence to fold
+        return Path.cwd()
 
 
 def release_command(repo: str) -> str:
@@ -75,6 +141,14 @@ def pass_command(
         str | None,
         typer.Option("--host", help="The forge host; default: the origin's, else github.com."),
     ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option(
+            "--run",
+            help="devops: the run whose recorded op evidence must be closed "
+            "(default: the run whose branch is the PR's head ref).",
+        ),
+    ] = None,
     yes: Annotated[bool, typer.Option("--yes", help="Write to the forge.")] = False,
 ) -> None:
     """Comment why PR <n>'s gate <g> passed, then swap gate:<g> for gate:<g>-passed (R14)."""
@@ -100,6 +174,8 @@ def pass_command(
     if held not in labels:
         have = ", ".join(sorted(n for n in labels if n.startswith("gate:"))) or "no gate label"
         _refuse(f"PR #{pr} of {repo} does not carry {held} ({have}): nothing to pass")
+    if gate == "devops":
+        _devops_evidence(_repo_root(), run, str(view.get("head_ref") or ""))
     left = sorted(held_gates((labels - {held}) | {passed}))
     typer.echo(f"PR #{pr} ({repo}): {held} -> {passed}")
     typer.echo(f"comment: {gate_pass_comment(gate, notes)}")

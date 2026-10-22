@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fr.journal.model import (
     IMPLEMENTED_JOURNALS_REL,
@@ -31,6 +32,9 @@ from fr.journal.model import (
     resolve_journal_read_path,
 )
 from fr.ops.mask import passthrough_values, sanitise_reason
+
+if TYPE_CHECKING:
+    from fr.ops.load import LoadedOp
 
 PLANS_REL = Path("docs/superpowers/plans")
 WITHHELD = "reason withheld: it looked like a response body"
@@ -73,6 +77,35 @@ def fold(entries: Iterable[JournalEntry]) -> dict[str, OpEvidence]:
     found = [e for e in (_evidence(entry) for entry in entries) if e is not None]
     found.sort(key=lambda pair: journal_stamp_as_utc(pair[1].created))
     return dict(found)
+
+
+def recorded_close(lo: LoadedOp, ev: OpEvidence | None) -> str | None:
+    """The DONE/N/A label the RECORDED evidence alone gives `lo`, or `None` when nothing
+    recorded closes it. Runs no probe (R13, R14): a legacy `status:` closes the op; a
+    `proof` op only a `proof` entry; a checkless op only an `attested` one (an apply-only
+    op's `result: open` "applied; no check" never does); any other op a `done` entry."""
+    if lo.legacy == "done":
+        return "DONE (legacy)"
+    if lo.legacy == "n/a":
+        return "N/A (legacy)"
+    if ev is None:
+        return None
+    op = lo.op
+    if op.is_proof:
+        return "DONE (proof)" if ev.result == "proof" else None
+    if op.check is None:
+        return "DONE (attested)" if ev.result == "attested" else None
+    return "DONE (checked)" if ev.result == "done" else None
+
+
+def recorded_state(lo: LoadedOp, ev: OpEvidence | None) -> str:
+    """One op's last recorded state, as the PR body and `fr gate pass` show it."""
+    closed = recorded_close(lo, ev)
+    if closed is not None:
+        return closed
+    if ev is None:
+        return "never checked"
+    return f"{ev.result}" + (f": {ev.reason}" if ev.reason else "")
 
 
 def _entries(path: Path) -> list[JournalEntry]:
