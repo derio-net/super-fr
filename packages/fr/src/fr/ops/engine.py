@@ -14,8 +14,6 @@ It never writes. `order` is the `needs` topological sort `apply` runs in.
 
 from __future__ import annotations
 
-import os
-import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -25,11 +23,10 @@ from fr.ops.evidence import OpEvidence
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
 from fr.ops.mask import looks_like_a_body, mask
+from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_probe
 
 State = Literal["DONE", "OPEN", "N/A", "UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"]
 NOT_DONE: frozenset[str] = frozenset({"OPEN", "UNVERIFIABLE", "CANNOT-VERIFY"})
-NOT_FOUND = 127
-"""A probe's exit when its command could not run (bash: command not found)."""
 _REASON_MAX = 200
 
 
@@ -83,26 +80,26 @@ class StatusRow:
 
 
 class ShellRunner:
-    """Runs a probe via `bash -euo pipefail -c` in the repo root, with the
-    process env plus the identity's."""
+    """Runs a probe through `fr.ops.probe.run_probe`: minimal env plus
+    `passthrough` plus the identity's, stdin closed, bounded by `timeout`."""
 
-    def __init__(self, repo_root: Path) -> None:
+    def __init__(
+        self, repo_root: Path, *, passthrough: Sequence[str] = (), timeout: float = DEFAULT_TIMEOUT
+    ) -> None:
         self.repo_root = repo_root
+        self.passthrough = tuple(passthrough)
+        self.timeout = timeout
 
     def __call__(self, command: str, env: Mapping[str, str]) -> tuple[int, str]:
-        try:
-            done = subprocess.run(
-                ["bash", "-euo", "pipefail", "-c", command],
-                cwd=self.repo_root,
-                env={**os.environ, **env},
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except OSError:
-            return NOT_FOUND, "bash could not run"
-        lines = [line for line in done.stdout.splitlines() if line.strip()]
-        return done.returncode, lines[-1].strip() if lines else ""
+        rc, out = run_probe(
+            command, self.repo_root, extra=env, passthrough=self.passthrough, timeout=self.timeout
+        )
+        if rc == TIMED_OUT:
+            return rc, f"timed out after {self.timeout:g}s"
+        if rc == NOT_FOUND and not out.strip():
+            return rc, "bash could not run"
+        lines = [line for line in out.splitlines() if line.strip()]
+        return rc, lines[-1].strip() if lines else ""
 
 
 def _clean(line: str, secrets: Iterable[str], *, as_identity: bool = False) -> str:
@@ -129,6 +126,8 @@ def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityRes
         rc, line = runner(check, env)
         if rc == 0:
             continue
+        if rc == TIMED_OUT:
+            return replace(row, state="CANNOT-VERIFY", reason="timed out", identity=name)
         if rc == NOT_FOUND:
             reason = _clean(line, env.values(), as_identity=name is not None)
             reason = reason or f"the check could not run (exit {rc})"
@@ -159,6 +158,8 @@ def _evaluate(
         rc, line = runner(op.na_if, {})
         if rc == 0:
             return replace(row, state="N/A")
+        if rc == TIMED_OUT:
+            return replace(row, state="CANNOT-VERIFY", reason="na_if: timed out")
         if rc == NOT_FOUND:
             reason = _clean(line, ()) or "na_if could not run"
             return replace(row, state="CANNOT-VERIFY", reason=f"na_if: {reason}")

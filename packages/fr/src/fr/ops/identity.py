@@ -9,13 +9,12 @@ command's output, which may hold the very value it failed to produce.
 
 from __future__ import annotations
 
-import os
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
 from fr.ops.load import OpsConfig
+from fr.ops.probe import TIMED_OUT, run_probe
 
 
 class IdentityError(Exception):
@@ -27,33 +26,38 @@ class IdentityResolver(Protocol):
 
 
 class LiveIdentities:
-    """Resolves an identity's env by running each `from` command now."""
+    """Resolves an identity's env by running each `from` command, through
+    `fr.ops.probe.run_probe` (minimal env, stdin closed, bounded). Each identity is
+    resolved once per invocation (memoised), so two ops run as one identity read
+    its references once."""
 
-    def __init__(self, config: OpsConfig, repo_root: Path) -> None:
+    def __init__(self, config: OpsConfig, repo_root: Path, *, timeout: float | None = None) -> None:
         self.config = config
         self.repo_root = repo_root
+        self.timeout = timeout if timeout is not None else config.timeout_seconds
+        self._resolved: dict[str, Mapping[str, str]] = {}
 
     def __call__(self, name: str) -> Mapping[str, str]:
+        if name not in self._resolved:
+            self._resolved[name] = self._resolve(name)
+        return self._resolved[name]
+
+    def _resolve(self, name: str) -> Mapping[str, str]:
         identity = self.config.identities.get(name)
         if identity is None:
             raise IdentityError(f"identity {name!r} is not declared in .fr/ops.yaml")
         env: dict[str, str] = {}
         for var, ref in identity.env.items():
-            try:
-                done = subprocess.run(
-                    ["bash", "-euo", "pipefail", "-c", ref.from_],
-                    cwd=self.repo_root,
-                    env=dict(os.environ),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-            except OSError:
-                raise IdentityError(f"identity {name!r}: {var} could not be read") from None
-            value = done.stdout.rstrip("\n")
-            if done.returncode != 0 or not value:
-                raise IdentityError(
-                    f"identity {name!r}: {var} could not be read (exit {done.returncode})"
-                )
+            rc, out = run_probe(
+                ref.from_,
+                self.repo_root,
+                passthrough=self.config.env_passthrough,
+                timeout=self.timeout,
+            )
+            if rc == TIMED_OUT:
+                raise IdentityError(f"identity {name!r}: {var} could not be read (timed out)")
+            value = out.rstrip("\n")
+            if rc != 0 or not value:
+                raise IdentityError(f"identity {name!r}: {var} could not be read (exit {rc})")
             env[var] = value
         return env

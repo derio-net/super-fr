@@ -90,6 +90,10 @@ class OpsConfig(BaseModel):
 
     runbook: StrictStr | None = None
     identities: dict[StrictStr, Identity] = {}
+    env_passthrough: tuple[StrictStr, ...] = ()
+    """Variables a probe receives beyond the minimal env (R5)."""
+    timeout_seconds: int = Field(default=60, gt=0)
+    """A probe's bound; a timeout reads CANNOT-VERIFY (R5)."""
 
 
 def load_ops_config(repo_root: Path) -> OpsConfig:

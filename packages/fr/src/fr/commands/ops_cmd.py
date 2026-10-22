@@ -130,7 +130,9 @@ def status(
 
     rows = op_status(
         ordered,
-        runner=ShellRunner(root),
+        runner=ShellRunner(
+            root, passthrough=config.env_passthrough, timeout=config.timeout_seconds
+        ),
         identities=LiveIdentities(config, root),
         journal=JournalEvidence(root, plan_dir.name),
     )

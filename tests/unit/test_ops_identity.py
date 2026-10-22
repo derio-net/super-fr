@@ -34,3 +34,23 @@ def test_an_unknown_identity_is_an_error(tmp_path: Path) -> None:
 def test_an_empty_value_is_unreadable(tmp_path: Path) -> None:
     with pytest.raises(IdentityError):
         LiveIdentities(_config("true"), tmp_path)("admin")
+
+
+def test_a_reference_runs_with_the_minimal_env_and_no_stdin(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FR_TEST_LEAK", "leaked")
+    resolve = LiveIdentities(_config('cat; echo "${FR_TEST_LEAK:-unset}"'), tmp_path)
+    assert resolve("admin") == {"TOKEN": "unset"}
+
+
+def test_a_reference_that_hangs_times_out(tmp_path: Path) -> None:
+    resolve = LiveIdentities(_config("sleep 5; echo x"), tmp_path, timeout=1)
+    with pytest.raises(IdentityError, match="timed out"):
+        resolve("admin")
+
+
+def test_resolution_is_memoised_per_invocation(tmp_path: Path) -> None:
+    """p1-r8: two ops run as one identity read its references once."""
+    counter = tmp_path / "count"
+    resolve = LiveIdentities(_config(f"echo x >> {counter}; echo tok"), tmp_path)
+    assert resolve("admin") == resolve("admin") == {"TOKEN": "tok"}
+    assert counter.read_text().count("x") == 1
