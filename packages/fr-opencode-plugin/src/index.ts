@@ -1,9 +1,15 @@
 // OpenCode plugin: deny Edit/Write-class tool calls targeting tracked
 // source in an fr-enabled repo unless a valid .fr-isolation marker is
 // present. Ports plugins/super-fr/hooks/fr-isolation-required.sh (a Claude
-// Code PreToolUse hook) to OpenCode's tool.execute.before hook — see that
+// Code PreToolUse hook) to OpenCode's tool `execute.before` hook — see that
 // script for the authoritative decision-logic comments; this file mirrors
 // its behavior exactly (fail-closed on ambiguity, same two escape hatches).
+//
+// OpenCode 2 loads a plugin only as a DEFINITION — `export default { id, setup }`
+// — and registers every hook through the context `setup` receives
+// (spec 2026-10-20-opencode-2-support §A). A 1.x hook object is refused at load
+// ("Plugin must export a default definition with an id and an effect or setup
+// function"), which left every gate below inert.
 //
 // The `super-fr-parity:` marker below is how `fr harness parity --check`
 // observes what this plugin ports: OpenCode has no registration file, only
@@ -12,41 +18,65 @@
 // names a script absent from plugins/super-fr/hooks/.
 // super-fr-parity: fr-isolation-required.sh
 //
-// The `event` hook below is the OpenCode half of the idle guard (gh#518) — see
-// ./idle.ts. It CONTINUES an idle run where Claude Code's Stop hook blocks the
-// stop, which is why parity.yaml declares it `partial`, not `enforced`.
+// The event subscription below is the OpenCode half of the idle guard (gh#518)
+// — see ./idle.ts. It CONTINUES an idle run where Claude Code's Stop hook
+// blocks the stop, which is why parity.yaml declares it `partial`, not `enforced`.
 // super-fr-parity: fr-run-idle-guard.sh
 //
-// `tool.execute.before` also carries the child-session claim (gh#530) — see
+// `execute.before` also carries the child-session claim (gh#530) — see
 // ./claim.ts. It ports no hook script (a Claude Code dispatch returns its id at
 // once), so it has no marker; parity.yaml's `dispatch-holder-identity` row
 // describes it.
 //
-// `shell.env` carries the run-session export (spec 2026-10-02-opencode-observe-2
-// §B) — see ./session.ts. It ports no hook script (Claude Code exports its own
-// session key natively), so it has no marker; parity.yaml's
-// `run-session-identity` row describes it.
+// Run-session identity needs no plugin code on OpenCode 2: OpenCode itself
+// places the ISSUING session's id in every spawned command's environment as
+// `OPENCODE_SESSION_ID` (measured 2026-10-20; see spec 2026-10-20-opencode-2
+// R6). fr reads it and walks `parent_id` to the root. A plugin-side export
+// was built and removed: `create.before` never sees the id, and the id the
+// shell receives is already correct.
 //
-// `shell.env` also carries the fr-binary pin (super-fr#746) — see ./pin.ts:
-// the fr this plugin spawns, exported for `bash` as FR_HARNESS_FR. It is the
-// OpenCode half of Claude Code's SessionStart hook:
+// `create.before` carries the fr-binary pin (super-fr#746) — see ./pin.ts:
+// the fr this plugin spawns, exported for the shell tool as FR_HARNESS_FR. It is
+// the OpenCode half of Claude Code's SessionStart hook:
 // super-fr-parity: fr-binary-pin.sh
 //
-// EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
-// plugin. Helpers live in ./marker, ./idle, ./claim, ./session and ./pin; this
-// file exports plugins only.
+// Phase 2 of the OpenCode 2 port (spec 2026-10-20-opencode-2-support R3, R4,
+// R9, R10, R11) adds the bash enforcement around a live pipeline:
+//   - ./sentinel — `execute.after` on a completed `skill` call arms the session's
+//     pipeline sentinel (fr-pipeline-sentinel.sh);
+//   - ./guard — `execute.before` on `shell` refuses base-repo commands while it
+//     is armed, judging the WHOLE command line (fr-isolation-guard.sh); its
+//     contract with the bash script is the captured verdict table
+//     tests/fixtures/hooks/guard-verdicts.yaml;
+//   - ./push — the merged-PR push guard on the same hook (fr-merged-pr-push-guard.sh);
+//   - ./nag — the acceptance nag, one system part at a top-level session's
+//     first model request (fr-acceptance-nag.sh);
+//   - ./bind — attach/detach on `fr isolation up|exec|down` / `fr run start`
+//     and on `session.deleted` (fr-session-bind.sh, fr-session-unbind.sh).
+// Each of those modules carries its own `super-fr-parity:` marker, on the
+// handler it credits; parity.yaml declares their OpenCode cells.
+//
+// EXPORT DISCIPLINE: this module's only export is the default definition.
+// Helpers live in ./marker, ./idle, ./claim, ./pin, ./sentinel, ./guard,
+// ./push, ./nag, ./bind and ./spawn.
+import type { Plugin } from "@opencode/plugin";
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { createBindHandler, createUnbindHandler, shellCwd } from "./bind";
 import { createClaimHandler, sharedClaimed } from "./claim";
-import { createIdleHandler, sharedActedOn } from "./idle";
+import { decideShell } from "./guard";
+import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
-import { createPinHandler } from "./pin";
-import { createShellEnvHandler, type ShellEnvInput, type ShellEnvOutput } from "./session";
+import { createNagHandler, sharedServed } from "./nag";
+import { createPinHandler, type ShellCreateEvent } from "./pin";
+import { decidePush } from "./push";
+import { writePipelineSentinel } from "./sentinel";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
-// path-carrying tools fail closed. Bash is separately declared as ungated in
-// parity.yaml; these built-ins can only read files.
-const NON_WRITING_TOOLS = new Set(["bash", "glob", "grep", "list", "read"]);
+// path-carrying tools fail closed. The shell tool (`shell` in OpenCode 2,
+// `bash` before) is not judged here: the shell gate (./guard) judges its whole
+// command line. The other built-ins can only read files.
+const NON_WRITING_TOOLS = new Set(["bash", "shell", "glob", "grep", "list", "read"]);
 const PATH_KEYS = new Set([
   "filePath",
   "path",
@@ -90,9 +120,9 @@ function collectPathValues(value: unknown, key: string | undefined, targets: Set
   }
 }
 
-function extractTargets(output: unknown): Targets {
-  const args = (output as { args?: Record<string, unknown> } | undefined)?.args;
-  if (!args) return { paths: [], unresolvablePatch: false };
+function extractTargets(input: unknown): Targets {
+  if (!input || typeof input !== "object") return { paths: [], unresolvablePatch: false };
+  const args = input as Record<string, unknown>;
 
   const targets = new Set<string>();
   collectPathValues(args, undefined, targets);
@@ -129,83 +159,119 @@ function normalizeTarget(directory: string, target: string): string {
   throw new Error("fr-isolation: target symlink chain exceeds 40 hops");
 }
 
-export async function FrIsolationRequired(ctx: {
-  project: unknown;
-  client: unknown;
-  $: unknown;
-  directory: string;
-  worktree: string;
-}) {
-  const claimChild = createClaimHandler({
-    client: ctx.client,
-    directory: ctx.worktree || ctx.directory,
-    claimed: sharedClaimed(),
-  });
-  const exportSession = createShellEnvHandler();
-  const exportPin = createPinHandler();
-  return {
-    event: createIdleHandler({
-      client: ctx.client,
-      directory: ctx.worktree || ctx.directory,
-      actedOn: sharedActedOn(),
-    }),
-    "shell.env": async (input: ShellEnvInput, output: ShellEnvOutput) => {
-      await exportSession(input, output);
-      await exportPin(input, output);
-    },
-    "tool.execute.before": async (input: { tool: string; sessionID?: string }, output: unknown) => {
-      // Before the gate, and whatever the tool: a child's first call of ANY
-      // kind is the earliest moment it can be named. Never throws.
-      await claimChild(input);
+// The event is NOT annotated here with a hand-copied OpenCode type: the call
+// site passes the real `execute.before` event, so a renamed field is a compile
+// error there (the gate's one assumption is that the tool name is `tool`).
+type GateEvent = { tool: string; input?: unknown };
 
-      // OpenCode cannot intercept filesystem effects of Bash. Other known
-      // read-only tools are excluded; every remaining tool is inspected.
-      if (NON_WRITING_TOOLS.has(input.tool)) return;
+/** The edit gate: throws to reject the call, which OpenCode 2 allows from
+ * `execute.before` alone. */
+async function gate(directory: string, event: GateEvent): Promise<void> {
+  // OpenCode cannot intercept filesystem effects of Bash. Other known
+  // read-only tools are excluded; every remaining tool is inspected.
+  if (typeof event.tool === "string" && NON_WRITING_TOOLS.has(event.tool)) return;
 
-      // Deliberate base-clone edit — the documented escape hatch.
-      if (process.env.FR_BASE_OK === "1") return;
+  // Deliberate base-clone edit — the documented escape hatch.
+  if (process.env.FR_BASE_OK === "1") return;
 
-      const targets = extractTargets(output);
-      if (targets.unresolvablePatch) {
-        const resolution = resolveMarker(normalizeTarget(ctx.directory, ".fr-unresolvable-patch-target"));
-        if (resolution.toplevel && resolution.frEnabled && !resolution.hasValidMarker) {
-          throw new Error(
-            "fr-isolation: edit with an unresolvable patch target blocked — not inside an fr-isolation " +
-              "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the worktree; " +
-              "or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for a deliberate " +
-              "base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
-          );
-        }
-        // A malformed patch is ambiguous even in an isolated worktree.
-        if (resolution.toplevel && resolution.frEnabled) {
-          throw new Error("fr-isolation: edit with an unresolvable patch target blocked");
-        }
-      }
-      if (targets.paths.length === 0) return;
+  const targets = extractTargets(event.input);
+  if (targets.unresolvablePatch) {
+    const resolution = resolveMarker(normalizeTarget(directory, ".fr-unresolvable-patch-target"));
+    if (resolution.toplevel && resolution.frEnabled && !resolution.hasValidMarker) {
+      throw new Error(
+        "fr-isolation: edit with an unresolvable patch target blocked — not inside an fr-isolation " +
+          "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the worktree; " +
+          "or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for a deliberate " +
+          "base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
+      );
+    }
+    // A malformed patch is ambiguous even in an isolated worktree.
+    if (resolution.toplevel && resolution.frEnabled) {
+      throw new Error("fr-isolation: edit with an unresolvable patch target blocked");
+    }
+  }
+  if (targets.paths.length === 0) return;
 
-      for (const target of targets.paths) {
-        const file = normalizeTarget(ctx.directory, target);
-        const resolution = resolveMarker(file);
-        if (!resolution.toplevel || !resolution.frEnabled) continue; // not fr-enabled — allow
-        if (resolution.hasValidMarker) continue; // valid isolation workspace — allow
-        if (matchesAllowlist(resolution.toplevel, file)) continue;
+  for (const target of targets.paths) {
+    const file = normalizeTarget(directory, target);
+    const resolution = resolveMarker(file);
+    if (!resolution.toplevel || !resolution.frEnabled) continue; // not fr-enabled — allow
+    if (resolution.hasValidMarker) continue; // valid isolation workspace — allow
+    if (matchesAllowlist(resolution.toplevel, file)) continue;
 
-        if (resolution.drift) {
-          const { marker, head } = resolution.drift;
-          throw new Error(
-            `fr-isolation: edit to \`${target}\` blocked — this workspace was registered for ` +
-              `${marker} but has ${head} checked out, so fr's state no longer describes it. ` +
-              `Switch back with \`git switch ${marker}\`; to keep working on ${head}, then give ` +
-              `it its own workspace with \`fr isolation up --branch ${head}\` (#553).`
-          );
-        }
-        throw new Error(
-          `fr-isolation: edit to \`${target}\` blocked — not inside an fr-isolation ` +
-            "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the " +
-            "worktree; or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for " +
-            "a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
-        );
-      }
-    },
-  };
+    if (resolution.drift) {
+      const { marker, head } = resolution.drift;
+      throw new Error(
+        `fr-isolation: edit to \`${target}\` blocked — this workspace was registered for ` +
+          `${marker} but has ${head} checked out, so fr's state no longer describes it. ` +
+          `Switch back with \`git switch ${marker}\`; to keep working on ${head}, then give ` +
+          `it its own workspace with \`fr isolation up --branch ${head}\` (#553).`
+      );
+    }
+    throw new Error(
+      `fr-isolation: edit to \`${target}\` blocked — not inside an fr-isolation ` +
+        "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the " +
+        "worktree; or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for " +
+        "a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
+    );
+  }
 }
+
+const plugin: Plugin.Plugin = {
+  id: "super-fr",
+  async setup(ctx) {
+    const directory = ctx.location.directory;
+    const claimChild = createClaimHandler({
+      session: ctx.session,
+      directory,
+      claimed: sharedClaimed(),
+    });
+    const exportPin = createPinHandler();
+    const idle = createIdleHandler({ session: ctx.session, directory, actedOn: sharedActedOn() });
+    const bind = createBindHandler({ session: ctx.session, directory });
+    const unbind = createUnbindHandler({ directory });
+    const nag = createNagHandler({ session: ctx.session, directory, served: sharedServed() });
+
+    await ctx.tool.hook("execute.before", async (event) => {
+      // Before the gate, and whatever the tool: a child's first call of ANY
+      // kind is the earliest moment it can be named. Neither throws.
+      await claimChild(event);
+      if (event.tool === "shell") {
+        // The shell gate decides on the WHOLE command line, before any path
+        // inspection (R3); a refusal rejects this call alone.
+        const input = (event.input ?? {}) as { command?: unknown; workdir?: unknown };
+        const command = typeof input.command === "string" ? input.command : "";
+        const cwd = shellCwd(directory, input.workdir);
+        const refusal = decideShell(command, cwd, event.sessionID);
+        if (refusal) throw new Error(refusal);
+        const pushRefusal = await decidePush(command, cwd, event.sessionID);
+        if (pushRefusal) throw new Error(pushRefusal);
+      }
+      await gate(directory, event);
+    });
+    await ctx.tool.hook("execute.after", async (event) => {
+      // Neither throws: they follow a call that already ran.
+      writePipelineSentinel(event, directory);
+      await bind(event);
+    });
+    await ctx.session.hook("context", async (event) => {
+      await nag(event);
+    });
+    await ctx.shell.hook("create.before", async (event) => {
+      await exportPin(event as ShellCreateEvent);
+    });
+
+    const controller = new AbortController();
+    void runIdleLoop(
+      ctx.event,
+      async (event) => {
+        await unbind(event);
+        await idle(event);
+      },
+      controller.signal
+    );
+    return () => controller.abort();
+  },
+};
+
+export default plugin;

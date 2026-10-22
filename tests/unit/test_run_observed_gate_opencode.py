@@ -13,6 +13,7 @@ from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
 
 from tests.unit.opencode_fixture import opencode_env, shifted
+from tests.unit.opencode_v2 import to_v2
 from tests.unit.test_run_cli import (
     _RESOLVE_BRAINSTORM,
     _gated_agent_blocked,
@@ -73,6 +74,7 @@ def test_a_declined_only_round_is_no_answer(tmp_path: Path) -> None:
             if data.get("tool") == "question" and data.get("callID") in {"call_q1", "call_q2"}:
                 con.execute("DELETE FROM part WHERE id = ?", (part_id,))
         con.commit()
+    to_v2(db)
 
     result = _resolve(repo, shipped, db)
 

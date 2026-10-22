@@ -7,18 +7,21 @@
 In an **fr-enabled** repo, edits to tracked source/docs must happen **inside an
 fr-isolation workspace**, never the base clone. Every supported harness gates
 its edit tools at the tool layer, before the edit lands — you can't commit what
-you can't write through them. Shell writes are the gap on every harness (below):
-make your edits with the edit tools.
+you can't write through them. Outside a live pipeline, shell writes are the gap
+on every harness (below): make your edits with the edit tools.
 
 **Harness — edit gate:** On Claude Code the PreToolUse hook
 `fr-isolation-required.sh` (shipped by super-fr, registered via the plugin's
-`hooks.json`) gates **Edit / Write / MultiEdit / NotebookEdit**. On OpenCode the
-`fr-opencode-plugin` runs the same decision as a `tool.execute.before` plugin on
-the `edit` / `write` / `patch` / `multiedit` tool calls — **not** `bash`, a known
-gap (#436), not a sanctioned bypass: make your edits with the edit tools. On
-Hermes `plugins/super-fr/hooks/hermes/fr-isolation-required.sh` runs as a
-`pre_tool_call` hook on `write_file` / `patch`, merged into `~/.hermes/config.yaml`
-by `fr hermes install` — and, as on OpenCode, **not** on `terminal` /
+`hooks.json`) gates **Edit / Write / MultiEdit / NotebookEdit**; Bash is judged
+by the sibling `fr-isolation-guard.sh` while a pipeline is live. On OpenCode
+(2.x only — 1.x is not supported) the `fr-opencode-plugin` runs the same decision
+from its `execute.before` hook on every file-writing tool call (`edit` / `write`
+/ `patch` / `multiedit` and any tool carrying a path), and judges the `shell`
+tool's WHOLE command line there too, with `fr-isolation-guard.sh`'s decision:
+while a pipeline is live, a base-repo shell command is refused, as on Claude
+Code. On Hermes `plugins/super-fr/hooks/hermes/fr-isolation-required.sh` runs as
+a `pre_tool_call` hook on `write_file` / `patch`, merged into
+`~/.hermes/config.yaml` by `fr hermes install` — **not** on `terminal` /
 `execute_code`, whose writes only the sibling `fr-isolation-guard.sh` sees, and
 it catches git/gh mutations alone: make your edits with `write_file` / `patch`.
 
@@ -177,7 +180,7 @@ tool's `isolation: "worktree"` argument: dispatch a phase executor **without**
 it. `plugins/super-fr/hooks/fr-phase-executor-guard.sh` (PreToolUse, matcher
 `Agent|Task`) refuses the combination outright — for `fr-spec-reviewer` too,
 which reviews the feature branch's spec and would find none in a worktree cut
-from `main`. OpenCode's task tool and
+from `main`. OpenCode's `subagent` tool and
 Hermes' `delegate_task` take no isolation argument at all, so the poisoned
 shape cannot be expressed there and no hook is needed: dispatch the executor
 as you would any subagent, and it runs in the workspace it was sent into.

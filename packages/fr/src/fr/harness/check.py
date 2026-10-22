@@ -128,7 +128,11 @@ def pairing(matrix: Matrix, shipped: frozenset[str]) -> list[Finding]:
     return findings
 
 
-def check(matrix: Matrix, observed: dict[str, dict[str, Observation]]) -> list[Finding]:
+def check(
+    matrix: Matrix,
+    observed: dict[str, dict[str, Observation]],
+    interactions: dict[str, dict[str, Observation]] | None = None,
+) -> list[Finding]:
     """Every disagreement between `matrix` and `observed`, ordered.
 
     Only `kind: hook` rows are checked: an interaction surface is not a
@@ -141,8 +145,36 @@ def check(matrix: Matrix, observed: dict[str, dict[str, Observation]]) -> list[F
     `absent` everywhere — nothing named it, so nothing wires it. (That its
     script exists on disk at all is the structural tripwire's job, not
     this function's: `check` compares two readings of the world, it does
-    not validate the file.)"""
+    not validate the file.)
+
+    `interactions` (`observe_interactions`) extends the same comparison to
+    the few `kind: interaction` cells a probe can speak to — OpenCode's
+    status line (spec 2026-10-20-opencode-2-support R12). A cell with no
+    probe is still unchecked."""
     findings: list[Finding] = []
+    for surface in sorted(matrix.surfaces, key=lambda s: s.id):
+        if surface.kind != "interaction":
+            continue
+        for harness, probed in sorted((interactions or {}).get(surface.id, {}).items()):
+            if harness not in surface.harnesses:
+                continue
+            declared = surface.harnesses[harness].state
+            expected = _EXPECTED_OBSERVATION.get(declared)
+            if expected is not None and probed != expected:
+                findings.append(
+                    Finding(
+                        surface_id=surface.id,
+                        harness=harness,
+                        declared=declared,
+                        observed=probed,
+                        message=(
+                            f"{surface.id} / {harness}: declared {declared!r} but the "
+                            f"config probe on this checkout's delivery observed {probed!r} "
+                            f"(fr.harness.observe.observe_interactions) — fix the "
+                            f"delivery or {PARITY_FILE}"
+                        ),
+                    )
+                )
     for surface in sorted(matrix.surfaces, key=lambda s: s.id):
         if surface.kind != "hook" or surface.script is None:
             continue

@@ -11,7 +11,7 @@ reported (`warn`) and not dispatched. The world, clone and runner fakes are
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,7 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - fixtures
     _drive,
     _events,
     _lines,
+    _sandbox,
     _state,
     checkout_fixture,
     world_fixture,
@@ -42,6 +43,13 @@ CONFIG = {
     "post_merge": ["./scripts/install.sh"],
     "post_merge_restart": "idle",
 }
+
+
+@pytest.fixture(autouse=True)
+def _sandbox_here(_sandbox: None) -> None:  # noqa: F811 - the drive tests' fixture
+    """The drive tests' sandbox (HOME, XDG_CONFIG_HOME and the pass clock), which
+    autouse does not reach across modules — without it this module read the wall
+    clock and its close-out ids were right only on the day they were written."""
 
 
 class Runners:
@@ -205,20 +213,8 @@ def test_a_refused_batch_takes_no_in_flight_slot_from_the_next(
 # ------------------------------------------------------------ post_merge (R20)
 
 
-PASS_CLOCK = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
-"""The pass's clock in the two close-out tests (p1-r9). The collected close-out is
-named from the pass's clock (`triage_batch_cmd._now`), not the fixture's `NOW`;
-reading the real clock in the test raced the pass across midnight."""
-
-
-@pytest.fixture
-def pass_clock(monkeypatch: pytest.MonkeyPatch) -> datetime:
-    monkeypatch.setattr(triage_batch_cmd, "_now", lambda: PASS_CLOCK)
-    return PASS_CLOCK
-
-
 def test_the_host_runs_post_merge_and_restarts_after_it(
-    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners, pass_clock: datetime
+    tmp_path: Path, world: World, checkout: DriveCheckout, runners: Runners
 ) -> None:
     _merged(world, tmp_path, checkout, "herdr")
 
@@ -227,7 +223,7 @@ def test_the_host_runs_post_merge_and_restarts_after_it(
     assert code == 0, out
     assert checkout.commands == [["./scripts/install.sh"]]
     assert _events(tmp_path, "b1") == ["dispatch", "post_merge"]  # the marker, not an event
-    assert runners.dispatched() == {"herdr": [f"{REPO}/run/closeout-2026-10-22-1"]}
+    assert runners.dispatched() == {"herdr": [f"{REPO}/run/closeout-{NOW.date().isoformat()}-1"]}
 
 
 def test_the_cloud_runs_neither_post_merge_nor_its_restart(
@@ -236,7 +232,6 @@ def test_the_cloud_runs_neither_post_merge_nor_its_restart(
     checkout: DriveCheckout,
     runners: Runners,
     capsys: pytest.CaptureFixture[str],
-    pass_clock: datetime,
 ) -> None:
     _merged(world, tmp_path, checkout, "claude-cloud")
 
@@ -245,7 +240,9 @@ def test_the_cloud_runs_neither_post_merge_nor_its_restart(
     assert acted
     assert checkout.commands == []
     assert _events(tmp_path, "b1") == ["dispatch"]  # the marker, not an event
-    assert runners.dispatched() == {"claude-cloud": [f"{REPO}/run/closeout-2026-10-22-1"]}
+    assert runners.dispatched() == {
+        "claude-cloud": [f"{REPO}/run/closeout-{NOW.date().isoformat()}-1"]
+    }
     assert "restart" not in capsys.readouterr().out
 
 

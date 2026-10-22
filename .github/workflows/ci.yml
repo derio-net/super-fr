@@ -131,21 +131,32 @@ jobs:
 
   opencode-plugin-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        opencode: ["2.0.32", "2.1.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - name: Install dependencies
         working-directory: packages/fr-opencode-plugin
         run: bun install --frozen-lockfile
+      # `bun test` transpiles and never typechecks, so a hook event read through
+      # the wrong field name would ship green (found reviewing the V2 port).
+      - name: Typecheck the plugin
+        working-directory: packages/fr-opencode-plugin
+        run: bunx tsc --noEmit
       - name: Run OpenCode plugin tests
         working-directory: packages/fr-opencode-plugin
         run: bun test
       # gh#563: the plugin install.sh DELIVERS must be one the real OpenCode
       # binary loads and runs. Pinned to the version the probe was written
-      # against; FR_REQUIRE_OPENCODE=1 turns a missing binary into a failure,
+      # against (OpenCode 2 ships as `@opencode/cli`; `opencode-ai` stops at 1.x); FR_REQUIRE_OPENCODE=1 turns a missing binary into a failure,
       # so the probe cannot silently skip here.
       - name: Install OpenCode
-        run: npm install -g opencode-ai@1.18.32
+        run: npm install -g @opencode/cli@${{ matrix.opencode }}
+        # Measured on 2.0.32 (the port) and 2.1.0 (current); both are the same
+        # V2 API. A drift in either is what this probe exists to catch.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Live delivery probe (real opencode binary)
         env:

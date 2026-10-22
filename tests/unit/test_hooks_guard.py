@@ -1297,3 +1297,64 @@ class TestOnlyTheFirstLineNamesTheCdTarget:
         cmd = f"cd {gone} && ls\ncd {tmp_path} && ls"
         reason = reason_of(run_hook(payload(cmd, repo), sentinels, env))
         assert f"`{gone}` no longer exists" in reason
+
+
+# --- the verdict table (spec 2026-10-20-opencode-2-support §B) --------------
+#
+# tests/fixtures/hooks/guard-verdicts.yaml is the contract between this bash
+# guard and the OpenCode 2 port (packages/fr-opencode-plugin/src/guard.ts). Its
+# verdicts were CAPTURED from this script by capture_guard_verdicts.py; this
+# loader re-runs every row through the same `judge`, so the table is proven to
+# describe today's behaviour — a change to the script that is not re-captured
+# goes red here, and a re-capture that changes a verdict goes red in the port.
+
+_CAPTURE = REPO_ROOT / "tests" / "fixtures" / "hooks" / "capture_guard_verdicts.py"
+
+
+def _load_capture():  # type: ignore[no-untyped-def]
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("capture_guard_verdicts", _CAPTURE)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_capture = _load_capture()
+_VERDICT_ROWS = __import__("yaml").safe_load(_capture.TABLE.read_text())["rows"]
+
+
+@pytest.fixture(scope="module")
+def guard_world(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _capture.build_world(tmp_path_factory.mktemp("guard") / "world")
+
+
+def test_the_verdict_table_covers_what_the_spec_names() -> None:
+    ids = {row["id"] for row in _VERDICT_ROWS}
+    for needed in (
+        "no-sentinel",
+        "base-plain-command",
+        "cd-worktree-compound",
+        "cd-other-repo-isolation-up",
+        "fr-isolation-status-rider",
+        "cwd-linked-worktree",
+        "cd-plain-repo",
+        "sentinel-orphaned-heals",
+    ):
+        assert needed in ids
+    assert ids == {rid for rid, *_ in _capture.ROWS}, "table is stale: re-run the capture"
+    table = __import__("yaml").safe_load(_capture.TABLE.read_text())
+    # The TS loader expands paths from the table's own map; it must be this one.
+    assert table["placeholders"] == _capture.PLACEHOLDERS
+    assert table["session"] == _capture.SESSION
+
+
+@pytest.mark.parametrize("row", _VERDICT_ROWS, ids=[r["id"] for r in _VERDICT_ROWS])
+def test_the_bash_guard_still_decides_every_captured_row(row: dict, guard_world: Path) -> None:
+    got = _capture.judge(row, guard_world)
+    assert got == {
+        "expected": row["expected"],
+        "reason": row["reason"],
+        "sentinel_after": row["sentinel_after"],
+    }

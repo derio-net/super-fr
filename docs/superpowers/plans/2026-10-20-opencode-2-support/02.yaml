@@ -1,0 +1,148 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Pipeline sentinel, shell gate and push guard (R3, R4, R9, R10, R11)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-2-bash-gate
+  - opencode-2-push-guard
+  - opencode-2-sentinel
+  - opencode-2-nag
+  - opencode-2-bind-unbind
+  tier: hard
+  files:
+  - packages/fr-opencode-plugin/src/**
+  - packages/fr-opencode-plugin/test/**
+  - tests/fixtures/hooks/**
+  - tests/unit/test_hooks_guard.py
+  - tests/unit/test_sentinel_lifecycle.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: One verdict table, two implementations
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Capture `tests/fixtures/hooks/guard-verdicts.yaml` from the current bash guard: rows of
+      `{id, command, cwd, sentinel: {repo_root} | null, expected: allow|deny, reason}` covering a
+      plain base-repo command, `cd <worktree> && git status`, `cd <other-repo> && fr isolation up`,
+      `fr isolation status && make`, a linked worktree cwd, another repo's toplevel, the sentinel
+      heal, and no sentinel at all. Derive each verdict by RUNNING
+      `plugins/super-fr/hooks/fr-isolation-guard.sh` with a synthesized payload — capture, never
+      construct.
+  - id: P2.T1.S2
+    text: |-
+      Green: extend `tests/unit/test_hooks_guard.py` with a loader that runs every row against the
+      bash script and asserts the recorded verdict, so the table is proven to describe today's
+      behaviour before anything else consumes it.
+- number: 2
+  title: Sentinel writer (the gate's prerequisite)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Red: `test/sentinel.test.ts` asserts that an `execute.after` event for `tool === "skill"`
+      naming `fr-goal`/`fr-brainstorming`/`fr-execute` in a base-repo cwd writes
+      `~/.cache/fr/sentinels/<sessionID>.json` with the keys `fr-pipeline-sentinel.sh` writes, that
+      a valid `.fr-isolation` workspace writes nothing, that a non-pipeline skill writes nothing,
+      and that a sentinel older than 48h is replaced.
+  - id: P2.T2.S2
+    text: |-
+      Green: `src/sentinel.ts` writes the JSON atomically (temp file + rename) with the shape
+      `fr-pipeline-sentinel.sh` actually writes — `{repo_root, skill, started_at}`, plus
+      `workspaces` only when it carries a live entry (spec R10: "the same JSON shape the guard
+      and fr already read"; a new `session`/`created` contract would break both readers) — and
+      the same 48h GC. Assert the key set against `fr/isolation/types.py`'s sentinel reader in
+      a Python test so the two cannot drift. (Corrected after review p2r-3; the shipped shape
+      is journal decision p2-sentinel-shape-follows-bash.)
+- number: 3
+  title: The shell gate on the whole command line
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Red: `test/guard.test.ts` loads `tests/fixtures/hooks/guard-verdicts.yaml` through the
+      TypeScript implementation and fails on every row the port does not yet decide.
+  - id: P2.T3.S2
+    text: |-
+      Green: `src/guard.ts` reproduces the bash entrypoint's whole-command decision (sentinel
+      present and live, cwd inside the base repo, leading `cd` fold into an allowed prefix or a
+      valid workspace, `fr isolation …` allowances, the three escape names), refreshes the
+      sentinel's mtime, and retires an orphaned sentinel under the same lock file
+      `fr isolation attach` takes. It returns a refusal message, never throws itself; the handler
+      in `index.ts` throws it.
+  - id: P2.T3.S3
+    text: |-
+      Wire it: in `execute.before`, when `event.tool === "shell"`, run the guard on
+      `(event.input.command, ctx.location.directory, event.sessionID)` BEFORE any path inspection,
+      and `throw new Error(message)` on refusal. Add the push guard (`src/push.ts`,
+      `test/push.test.ts`) for `git push`/`gh pr merge` with today's decision, and keep the
+      `fr isolation …` and worktree-cwd allowances. Both suites green, plus the Python loader.
+- number: 4
+  title: Nag, bind and unbind
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Red then green: `src/nag.ts` registers `ctx.session.hook("context", …)`, skips child sessions
+      (`ctx.session.get(sessionID)?.parentID`), serves one system part per top-level session via
+      `event.system.push({type: "text", text})`, returns immediately when the cwd has no
+      `docs/acceptance/matrix.yaml`, bounds the subprocess, and never throws. Test with a fake
+      context and a stub runner.
+  - id: P2.T4.S2
+    text: |-
+      Red then green: `src/bind.ts` attaches on a completed `shell` call whose first line is
+      `fr isolation up|exec|down` or `fr run start` (`execute.after`), and detaches on
+      `session.deleted` from the subscription. Both spawn `fr isolation attach|detach` with
+      `--harness opencode`, are best-effort, and never block. Tests assert the exact argv.
+  - id: P2.T4.S3
+    text: |-
+      Refactor: move the shared "spawn fr, never throw, bounded" helper the pin/claim/idle/bind
+      handlers now repeat into one module, and run `bun test` plus
+      `uv run pytest -q --no-cov tests/unit/test_hooks_guard.py tests/unit/test_sentinel_lifecycle.py`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-10-20T08:44:41+00:00'
+      note: null
+  completion:
+    at: '2026-10-20T08:44:41+00:00'
+    note: null
+    observed_prs: []

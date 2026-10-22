@@ -20,6 +20,8 @@ the two through each hook row's `script` field.
 from __future__ import annotations
 
 import json
+import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -180,6 +182,80 @@ REGISTRATION_FILES: dict[str, str] = {o.harness: o.registration_file for o in _O
 every finding `check.py` emits."""
 
 
+STATUS_LINE_SURFACE = "status-line"
+"""The interaction row the OpenCode config probe speaks to (spec
+2026-10-20-opencode-2-support R12)."""
+
+OPENCODE_DELIVERY_RELPATH = Path("scripts/deliver-opencode-plugin.sh")
+OPENCODE_TUI_ENTRY = PurePosixPath("tui/index.tsx")
+"""The TUI entrypoint inside a delivered plugin directory. OpenCode 2.1.0
+resolves `<dir>/tui` for a plugin directory listed in `cli.json`; a FILE path
+listed there is silently ignored (measured live, plan journal p3-tui-spike)."""
+
+
+def opencode_status_line_configured(config_dir: Path) -> Observation:
+    """The config probe: `<config_dir>/cli.json` lists a plugin directory AND
+    that directory carries the TUI entrypoint.
+
+    A `.tsx` TUI entry is outside the `src/*.ts` marker scan, and a listing
+    alone proves nothing (a stale entry for a removed directory loads
+    nothing), so both halves are required. An absent `cli.json` is `absent`;
+    one that exists but cannot be read is unknown state and raises."""
+    cli = config_dir / "cli.json"
+    if not cli.is_file():
+        return "absent"
+    try:
+        data = json.loads(cli.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HarnessError(f"cannot read {cli}: {exc}") from exc
+    plugins = data.get("plugins") if isinstance(data, dict) else None
+    if not isinstance(plugins, list):
+        return "absent"
+    for entry in plugins:
+        target = entry.get("package") if isinstance(entry, dict) else entry
+        if not isinstance(target, str) or not target:
+            continue
+        if target.startswith("file://"):
+            target = target[len("file://") :]
+        if (Path(target) / OPENCODE_TUI_ENTRY).is_file():
+            return "present"
+    return "absent"
+
+
+def _observe_opencode_status_line(repo_root: Path) -> Observation:
+    """What a consumer gets: run this checkout's own delivery into a throwaway
+    config dir and point the config probe at it. Derived from the delivery,
+    never from `parity.yaml` — no delivery script, nothing delivered."""
+    script = repo_root / OPENCODE_DELIVERY_RELPATH
+    if not script.is_file():
+        return "absent"
+    with tempfile.TemporaryDirectory(prefix="fr-parity-opencode-") as tmp:
+        config = Path(tmp) / "opencode"
+        try:
+            result = subprocess.run(
+                ["bash", str(script), "install", str(config / "plugins")],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HarnessError(f"cannot run {OPENCODE_DELIVERY_RELPATH}: {exc}") from exc
+        if result.returncode != 0:
+            raise HarnessError(
+                f"{OPENCODE_DELIVERY_RELPATH} install failed: {result.stderr.strip()[-500:]}"
+            )
+        return opencode_status_line_configured(config)
+
+
+def observe_interactions(repo_root: Path) -> dict[str, dict[str, Observation]]:
+    """`{interaction surface id: {harness: observation}}`, for the few
+    interaction rows something on disk can speak to. Today: OpenCode's status
+    line. A harness absent from a surface's map is not probed, and `check`
+    makes no claim about it."""
+    return {STATUS_LINE_SURFACE: {"opencode": _observe_opencode_status_line(repo_root)}}
+
+
 def observe(repo_root: Path) -> dict[str, dict[str, Observation]]:
     """`{script filename: {harness: "present" | "absent"}}`.
 
@@ -205,6 +281,9 @@ __all__ = [
     "REGISTRATION_FILES",
     "Observation",
     "is_super_fr_checkout",
+    "STATUS_LINE_SURFACE",
     "observe",
+    "observe_interactions",
+    "opencode_status_line_configured",
     "shipped_scripts",
 ]

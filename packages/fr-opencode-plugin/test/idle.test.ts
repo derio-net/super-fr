@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 import { createIdleHandler, SHARED_ACTED_ON, type FrAnswer } from "../src/idle";
-import { FrIsolationRequired } from "../src/index";
+import { load } from "./fake";
 
 const IDLE = {
   idle: true,
@@ -32,26 +32,26 @@ const IDLE = {
   stalled: [],
 };
 
-type Sent = { path: { id: string }; body: { parts: { type: string; text: string }[] }; query?: { directory?: string } };
+type Sent = { sessionID: string; text: string };
 
 function fakeClient(
   opts: { parentID?: string; getThrows?: boolean; promptThrows?: boolean; getReturns?: unknown } = {}
 ) {
   const sent: Sent[] = [];
   const attempted: string[] = [];
+  // OpenCode 2's `ctx.session`: `get({sessionID})` resolves to the info itself
+  // (throwing on a failed lookup); `prompt({sessionID, text})` sends.
   const client = {
-    session: {
-      get: async (_: unknown) => {
-        if (opts.getThrows) throw new Error("boom");
-        if ("getReturns" in opts) return opts.getReturns;
-        return { data: { id: "ses_1", parentID: opts.parentID } };
-      },
-      promptAsync: async (req: Sent) => {
-        attempted.push(req.path.id);
-        if (opts.promptThrows) throw new Error("boom");
-        sent.push(req);
-        return { data: undefined };
-      },
+    get: async (req: { sessionID: string }) => {
+      if (opts.getThrows) throw new Error("boom");
+      if ("getReturns" in opts) return opts.getReturns;
+      return { id: req.sessionID, parentID: opts.parentID };
+    },
+    prompt: async (req: Sent) => {
+      attempted.push(req.sessionID);
+      if (opts.promptThrows) throw new Error("boom");
+      sent.push(req);
+      return {};
     },
   };
   return { client, sent, attempted };
@@ -69,7 +69,7 @@ function answers(...queue: (FrAnswer | Error)[]) {
 }
 
 const idleEvent = (sessionID: unknown = "ses_1") =>
-  ({ event: { type: "session.idle", properties: { sessionID } } }) as never;
+  ({ type: "session.idle", data: { sessionID } }) as never;
 
 const ok = (body: unknown, code: number | null = 3): FrAnswer => ({
   code,
@@ -80,28 +80,28 @@ describe("idle guard (OpenCode): continues an idle run", () => {
   test("on session.idle it asks fr in the session's directory and sends the next command back in", async () => {
     const { client, sent } = fakeClient();
     const { runFr, calls } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/work/tree", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/work/tree", runFr });
 
     await handler(idleEvent());
 
     expect(calls).toEqual(["/work/tree"]);
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.path).toEqual({ id: "ses_1" });
-    expect(sent[0]!.query).toEqual({ directory: "/work/tree" });
-    expect(sent[0]!.body.parts).toHaveLength(1);
-    expect(sent[0]!.body.parts[0]!.type).toBe("text");
-    expect(sent[0]!.body.parts[0]!.text).toContain("fr run advance r1");
+    // V2's prompt takes the session and the text; the directory is the
+    // plugin's location, so there is no per-call directory to assert.
+    expect(sent[0]!.sessionID).toBe("ses_1");
+    expect(typeof sent[0]!.text).toBe("string");
+    expect(sent[0]!.text).toContain("fr run advance r1");
     // fr's own words, not the plugin's: the plugin holds no opinion about runs.
-    expect(sent[0]!.body.parts[0]!.text).toContain(IDLE.detail);
+    expect(sent[0]!.text).toContain(IDLE.detail);
   });
 
   test("ignores every other event", async () => {
     const { client, sent } = fakeClient();
     const { runFr, calls } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
-    await handler({ event: { type: "session.updated", properties: { sessionID: "ses_1" } } } as never);
-    await handler({ event: { type: "message.updated", properties: {} } } as never);
+    await handler({ type: "session.updated", data: { sessionID: "ses_1" } } as never);
+    await handler({ type: "message.updated", data: {} } as never);
 
     expect(calls).toEqual([]);
     expect(sent).toEqual([]);
@@ -129,7 +129,7 @@ describe("idle guard (OpenCode): silent otherwise", () => {
     test(`silent: ${label}`, async () => {
       const { client, sent } = fakeClient();
       const { runFr, calls } = answers(answer);
-      const handler = createIdleHandler({ client, directory: "/w", runFr });
+      const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
       await expect(handler(idleEvent())).resolves.toBeUndefined();
 
@@ -141,7 +141,7 @@ describe("idle guard (OpenCode): silent otherwise", () => {
   test("silent for a CHILD session: a subagent going idle is not the run's owner stalling", async () => {
     const { client, sent } = fakeClient({ parentID: "ses_parent" });
     const { runFr, calls } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await handler(idleEvent());
 
@@ -152,25 +152,27 @@ describe("idle guard (OpenCode): silent otherwise", () => {
   test("silent when the session cannot be looked up — unknown is not 'top-level'", async () => {
     const { client, sent } = fakeClient({ getThrows: true });
     const { runFr } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await expect(handler(idleEvent())).resolves.toBeUndefined();
 
     expect(sent).toEqual([]);
   });
 
-  // The SDK client does not throw by default: a failed lookup comes back as
-  // `{ error }` with no `data`. Found by mutation — the throwing case alone left
-  // "unknown means top-level" unkilled, because the catch-all silenced it.
+  // OpenCode 2's session.get throws on a failed lookup, but anything that is not
+  // the session asked for is still unknown, never top-level. Found by mutation
+  // (1.x) — the throwing case alone left "unknown means top-level" unkilled,
+  // because the catch-all silenced it.
   for (const [label, getReturns] of [
     ["an { error } response", { error: { name: "NotFoundError" } }],
     ["a response with no data", {}],
+    ["a different session", { id: "ses_other" }],
     ["null", null],
   ] as const) {
     test(`silent when the session lookup comes back as ${label}`, async () => {
       const { client, sent } = fakeClient({ getReturns });
       const { runFr, calls } = answers(ok(IDLE));
-      const handler = createIdleHandler({ client, directory: "/w", runFr });
+      const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
       await expect(handler(idleEvent())).resolves.toBeUndefined();
 
@@ -182,14 +184,14 @@ describe("idle guard (OpenCode): silent otherwise", () => {
   test("silent on an event with no usable session id", async () => {
     const { client, sent } = fakeClient();
     const { runFr, calls } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     // (not `idleEvent(undefined)` — a default parameter turns that back into "ses_1")
-    await handler({ event: { type: "session.idle", properties: {} } } as never);
+    await handler({ type: "session.idle", data: {} } as never);
     await handler(idleEvent(null));
     await handler(idleEvent(7));
     await handler(idleEvent(""));
-    await handler({ event: { type: "session.idle" } } as never);
+    await handler({ type: "session.idle" } as never);
     await handler({} as never);
     await handler(undefined as never);
 
@@ -202,7 +204,7 @@ describe("idle guard (OpenCode): never throws", () => {
   test("when running fr throws", async () => {
     const { client, sent } = fakeClient();
     const { runFr } = answers(new Error("spawn fr ENOENT"));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await expect(handler(idleEvent())).resolves.toBeUndefined();
     expect(sent).toEqual([]);
@@ -211,15 +213,15 @@ describe("idle guard (OpenCode): never throws", () => {
   test("when sending the prompt throws", async () => {
     const { client } = fakeClient({ promptThrows: true });
     const { runFr } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await expect(handler(idleEvent())).resolves.toBeUndefined();
   });
 
   test("when the client is not what it should be", async () => {
     const { runFr } = answers(ok(IDLE));
-    for (const client of [undefined, null, {}, { session: {} }, { session: { get: 1, promptAsync: 2 } }]) {
-      const handler = createIdleHandler({ client, directory: "/w", runFr });
+    for (const client of [undefined, null, {}, { get: 1, prompt: 2 }, { get: async () => ({}) }]) {
+      const handler = createIdleHandler({ session: client, directory: "/w", runFr });
       await expect(handler(idleEvent())).resolves.toBeUndefined();
     }
   });
@@ -229,7 +231,7 @@ describe("idle guard (OpenCode): at most once per run position", () => {
   test("a second idle at the same position is let through", async () => {
     const { client, sent } = fakeClient();
     const { runFr, calls } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await handler(idleEvent());
     await handler(idleEvent());
@@ -242,7 +244,7 @@ describe("idle guard (OpenCode): at most once per run position", () => {
   test("it acts again once the position has moved", async () => {
     const { client, sent } = fakeClient();
     const { runFr } = answers(ok(IDLE), ok(IDLE), ok({ ...IDLE, position: "fedcba9876543210" }));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await handler(idleEvent());
     await handler(idleEvent());
@@ -254,19 +256,19 @@ describe("idle guard (OpenCode): at most once per run position", () => {
   test("one session's memory is not another's", async () => {
     const { client, sent } = fakeClient();
     const { runFr } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await handler(idleEvent("ses_1"));
     await handler(idleEvent("ses_2"));
     await handler(idleEvent("ses_1"));
 
-    expect(sent.map((s) => s.path.id)).toEqual(["ses_1", "ses_2"]);
+    expect(sent.map((s) => s.sessionID)).toEqual(["ses_1", "ses_2"]);
   });
 
   test("a prompt that failed to send is still remembered — a broken endpoint must not become a retry loop", async () => {
     const { client, attempted } = fakeClient({ promptThrows: true });
     const { runFr, calls } = answers(ok(IDLE));
-    const handler = createIdleHandler({ client, directory: "/w", runFr });
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
     await handler(idleEvent());
     await handler(idleEvent());
@@ -303,14 +305,12 @@ describe("idle guard (OpenCode): wired into the plugin, running a real process",
     rmSync(dir, { recursive: true, force: true });
   });
 
-  async function plugin(client: unknown) {
-    return FrIsolationRequired({
-      project: undefined as never,
-      client: client as never,
-      $: undefined as never,
-      directory: dir,
-      worktree: dir,
-    });
+  // Loads the plugin on a fake context whose event stream yields `events`, and
+  // waits until every one of them has been handled.
+  async function plugin(client: unknown, events: unknown[] = []) {
+    const loaded = await load({ session: client, directory: dir, events });
+    await loaded.drained;
+    return loaded;
   }
 
   // gh#563: install.sh delivers a GLOBAL copy of this plugin, and a repo that
@@ -321,55 +321,46 @@ describe("idle guard (OpenCode): wired into the plugin, running a real process",
   test("two loaded copies send ONE nudge per run position, not two", async () => {
     stubFr(`printf '%s\\n' '${JSON.stringify(IDLE)}'\nexit 3`);
     const { client, sent } = fakeClient();
-    const project = await plugin(client);
-    const global = await plugin(client);
-
-    await project.event!(idleEvent());
-    await global.event!(idleEvent());
+    await plugin(client, [idleEvent()]);
+    await plugin(client, [idleEvent()]);
 
     expect(sent).toHaveLength(1);
   });
 
-  test("the plugin exposes an `event` hook beside tool.execute.before", async () => {
+  test("the plugin subscribes to events beside its execute.before hook", async () => {
     const hooks = await plugin(fakeClient().client);
-    expect(typeof hooks.event).toBe("function");
-    expect(typeof hooks["tool.execute.before"]).toBe("function");
+    expect(hooks.subscribed).toHaveLength(1);
+    expect(typeof hooks.executeBefore).toBe("function");
   });
 
   test("exit 3 + idle JSON from the process → the next command is sent", async () => {
     stubFr(`printf '%s\\n' '${JSON.stringify(IDLE)}'\nexit 3`);
     const { client, sent } = fakeClient();
-    const hooks = await plugin(client);
-
-    await hooks.event!(idleEvent());
+    await plugin(client, [idleEvent()]);
 
     expect(readFileSync(join(dir, "fr.log"), "utf8")).toBe(`${dir}|run check --idle --format json\n`);
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.body.parts[0]!.text).toContain("fr run advance r1");
+    expect(sent[0]!.text).toContain("fr run advance r1");
   });
 
   test("exit 2 from the process → silent", async () => {
     stubFr(`echo 'fr: artifacts must be migrated' >&2\nexit 2`);
     const { client, sent } = fakeClient();
-    const hooks = await plugin(client);
-
-    await expect(hooks.event!(idleEvent())).resolves.toBeUndefined();
+    await expect(plugin(client, [idleEvent()])).resolves.toBeDefined();
     expect(sent).toEqual([]);
   });
 
   test("no fr on PATH at all → silent", async () => {
     process.env.PATH = dir; // nothing in it
     const { client, sent } = fakeClient();
-    const hooks = await plugin(client);
-
-    await expect(hooks.event!(idleEvent())).resolves.toBeUndefined();
+    await expect(plugin(client, [idleEvent()])).resolves.toBeDefined();
     expect(sent).toEqual([]);
   });
 
   test("a hung fr is abandoned, not waited on", async () => {
     stubFr("exec sleep 30");
     const { client, sent } = fakeClient();
-    const handler = createIdleHandler({ client, directory: dir, timeoutMs: 500 });
+    const handler = createIdleHandler({ session: client, directory: dir, timeoutMs: 500 });
 
     const began = Date.now();
     await expect(handler(idleEvent())).resolves.toBeUndefined();

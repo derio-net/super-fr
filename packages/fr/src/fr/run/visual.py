@@ -487,7 +487,8 @@ def _unobservable(env: Mapping[str, str]) -> str:
     if harness == "opencode":
         return (
             "no readable OpenCode session to find the screenshot reads in "
-            "(FR_OPENCODE_SESSION_ID is unset, or names a session the database does not hold)"
+            "(OPENCODE_SESSION_ID is unset — fr must run inside the OpenCode 2.x "
+            "shell — or names a session the database does not hold)"
         )
     if harness != "claude-code":
         return f"fr cannot yet read file opens from {harness}'s transcripts"

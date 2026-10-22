@@ -341,9 +341,15 @@ uv workspace monorepo, version lockstepped across every manifest (see
   in the scope's state (`requests.yaml`, `sessions.yaml`) that the cloud driver's
   agent executes with its session tools and records back (`fr triage drive record`);
   re-homing is its restart. Like `fr-herdr`, it never imports `fr.triage`.
-- `fr-opencode-plugin` — **the one non-Python package**: TypeScript/Bun,
-  ports the `fr-isolation-required` Claude Code hook to an OpenCode
-  `tool.execute.before` plugin. Excluded from the uv workspace
+- `fr-opencode-plugin` — **the one non-Python package**: TypeScript/Bun, an
+  OpenCode **2.x** plugin definition (`export default { id, setup }`; 1.x is not
+  supported) porting the Claude Code hooks: the edit gate and the whole-line
+  shell gate (`fr-isolation-guard`) on `execute.before`, the merged-PR push
+  guard, the pipeline sentinel, session bind/unbind, the acceptance nag, the
+  idle nudge, the `fr` binary pin, the child-session claim, and a TUI status
+  line (`src/tui/`). Each ported hook carries a `// super-fr-parity:` marker
+  `fr harness parity` reads. `install.sh` delivers it as ONE plugin directory
+  (`scripts/deliver-opencode-plugin.sh`). Excluded from the uv workspace
   (`pyproject.toml`'s `[tool.uv.workspace].exclude`) and has its own
   `package.json`/version, so `uv run pytest` does not cover it — but it IS
   wired into CI, as the `opencode-plugin-test` job (`bun test`). Run that
@@ -492,8 +498,8 @@ tripwire will catch drift anyway:
 super-fr is itself fr-enabled — `.devcontainer/dev` + `.devcontainer/admin`
 profiles exist, and `docs/superpowers/plans/` currently holds three live plans.
 Either alone qualifies it. Both the Claude Code PreToolUse hook and
-the OpenCode plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
-re-export of `packages/fr-opencode-plugin`) block Edit/Write/MultiEdit
+the OpenCode 2 plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
+re-export of `packages/fr-opencode-plugin`) block file-writing tools
 outside a valid `.fr-isolation` workspace — editing this repo's own source is
 not exempt. Escapes, in preference order: enter isolation (`fr isolation up`),
 add an operator-managed path to `.fr-isolation-allow`, or set `FR_BASE_OK=1`
@@ -501,10 +507,10 @@ for one deliberate base-clone edit. Two docker-less modes now exist alongside
 the default devcontainer mode: **host-worktree** (`FR_ISOLATION_TARGET=worktree`
 — fr worktree in the host env, no profile) and **external** (a preparer-written
 `mode: external` marker fr adopts, validated by container evidence). Full
-decision tree in `plugins/super-fr/rules/fr-isolation-required.md`. (The
-OpenCode port only
-gates the `edit`/`write`/`patch`/`multiedit` tool calls, not `bash` — a known
-gap, not a sanctioned bypass.)
+decision tree in `plugins/super-fr/rules/fr-isolation-required.md`. (On both
+harnesses the shell is judged by the bash guard's decision while a pipeline is
+live — the OpenCode port judges the `shell` tool's whole command line in
+`execute.before`; outside a live pipeline a shell write is not gated.)
 
 ## Release / version bumping
 

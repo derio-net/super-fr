@@ -32,12 +32,17 @@
 //     finishes; it does not own the run. A session that cannot be looked up is
 //     not assumed to be top-level.
 //
+// OpenCode 2 (V2 plugin API): events arrive from `ctx.event.subscribe({signal})`,
+// an async iterable (`runIdleLoop`), each `{type, data}`; a `session.idle`
+// names its session as `data.sessionID`. The lookup is `ctx.session.get({sessionID})`
+// (the info itself, throwing on failure) and the nudge `ctx.session.prompt`.
+//
 // NOT PROVEN: that a prompt sent from a plugin on `session.idle` actually
-// EXECUTES in a live OpenCode session. `session.idle` and
-// `/session/{id}/prompt_async` were read from the installed SDK's types; the
-// tests drive this with a fake client. Until a live run shows it (the gh#494
+// EXECUTES in a live OpenCode session. The event and session shapes were read
+// from `@opencode/client` 2.0.32's types; the tests drive this with a fake
+// session API and a scripted event stream. Until a live run shows it (the gh#494
 // standard), `parity.yaml` declares this surface `partial` on OpenCode.
-import { execFile } from "node:child_process";
+import { run } from "./spawn";
 
 export type FrAnswer = { code: number | null; stdout: string };
 
@@ -45,7 +50,8 @@ export type FrAnswer = { code: number | null; stdout: string };
 export const SHARED_ACTED_ON = Symbol.for("super-fr.fr-opencode-plugin.idle.actedOn");
 
 export type IdleHandlerOptions = {
-  client: unknown;
+  /** `ctx.session` — `get({sessionID})` and `prompt({sessionID, text})`. */
+  session: unknown;
   directory: string;
   /** Test seam. Default: `fr run check --idle --format json` in `cwd`. */
   runFr?: (cwd: string) => Promise<FrAnswer>;
@@ -67,21 +73,10 @@ export function sharedActedOn(): Map<string, string> {
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 function defaultRunFr(timeoutMs: number): (cwd: string) => Promise<FrAnswer> {
-  return (cwd) =>
-    new Promise((resolve) => {
-      execFile(
-        "fr",
-        ["run", "check", "--idle", "--format", "json"],
-        { cwd, timeout: timeoutMs, killSignal: "SIGKILL", windowsHide: true },
-        (error, stdout) => {
-          // `error.code` is the exit status for a process that ran and exited
-          // non-zero, a STRING ("ENOENT") when it never ran, and absent when it
-          // was killed. Only a number is an exit status.
-          const raw = error ? (error as { code?: unknown }).code : 0;
-          resolve({ code: typeof raw === "number" ? raw : null, stdout: String(stdout ?? "") });
-        }
-      );
-    });
+  return async (cwd) => {
+    const { code, stdout } = await run("fr", ["run", "check", "--idle", "--format", "json"], { cwd, timeoutMs });
+    return { code, stdout };
+  };
 }
 
 type Verdict = { position: string; nextCommand: string; run: string; detail: string };
@@ -109,46 +104,37 @@ function parseVerdict(answer: FrAnswer): Verdict | undefined {
 }
 
 type SessionApi = {
-  get: (req: { path: { id: string }; query?: { directory?: string } }) => Promise<unknown>;
-  promptAsync: (req: {
-    path: { id: string };
-    body: { parts: { type: "text"; text: string }[] };
-    query?: { directory?: string };
-  }) => Promise<unknown>;
+  get: (req: { sessionID: string }) => Promise<unknown>;
+  prompt: (req: { sessionID: string; text: string }) => Promise<unknown>;
 };
 
-function sessionApi(client: unknown): SessionApi | undefined {
-  const session = (client as { session?: Partial<SessionApi> } | null | undefined)?.session;
-  if (!session || typeof session.get !== "function" || typeof session.promptAsync !== "function") {
-    return undefined;
-  }
-  return session as SessionApi;
+function sessionApi(session: unknown): SessionApi | undefined {
+  const api = session as Partial<SessionApi> | null | undefined;
+  if (!api || typeof api.get !== "function" || typeof api.prompt !== "function") return undefined;
+  return api as SessionApi;
 }
 
 /** True only when the lookup SUCCEEDED and named no parent. */
-async function isTopLevel(api: SessionApi, id: string, directory: string): Promise<boolean> {
-  const response = (await api.get({ path: { id }, query: { directory } })) as
-    | { data?: { parentID?: unknown } | null; error?: unknown }
-    | null
-    | undefined;
-  if (!response || response.error || !response.data) return false;
-  return response.data.parentID === undefined || response.data.parentID === null;
+async function isTopLevel(api: SessionApi, id: string): Promise<boolean> {
+  const info = (await api.get({ sessionID: id })) as { id?: unknown; parentID?: unknown } | null | undefined;
+  // A successful lookup names the session it found; anything else is unknown.
+  if (!info || typeof info !== "object" || info.id !== id) return false;
+  return info.parentID === undefined || info.parentID === null;
 }
 
 export function createIdleHandler(options: IdleHandlerOptions) {
   const runFr = options.runFr ?? defaultRunFr(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const actedOn = options.actedOn ?? new Map<string, string>();
 
-  return async (input: { event?: { type?: unknown; properties?: unknown } }): Promise<void> => {
+  return async (event: { type?: unknown; data?: unknown } | null | undefined): Promise<void> => {
     try {
-      const event = input?.event;
       if (!event || event.type !== "session.idle") return;
-      const sessionID = (event.properties as { sessionID?: unknown } | undefined)?.sessionID;
+      const sessionID = (event.data as { sessionID?: unknown } | undefined)?.sessionID;
       if (typeof sessionID !== "string" || sessionID === "") return;
 
-      const api = sessionApi(options.client);
+      const api = sessionApi(options.session);
       if (!api) return;
-      if (!(await isTopLevel(api, sessionID, options.directory))) return;
+      if (!(await isTopLevel(api, sessionID))) return;
 
       const verdict = parseVerdict(await runFr(options.directory));
       if (!verdict) return;
@@ -156,25 +142,40 @@ export function createIdleHandler(options: IdleHandlerOptions) {
       if (actedOn.get(sessionID) === verdict.position) return;
       actedOn.set(sessionID, verdict.position);
 
-      await api.promptAsync({
-        path: { id: sessionID },
-        query: { directory: options.directory },
-        body: {
-          parts: [
-            {
-              type: "text",
-              text:
-                `fr run ${verdict.run} is idle — ${verdict.detail} (gh#518). Nothing is ` +
-                `blocking it: run \`${verdict.nextCommand}\` now and act on what it prints — ` +
-                "a dispatch brief means dispatch that unit, then report. If you stopped on " +
-                "purpose (the operator asked, or you are waiting on something fr cannot " +
-                "see), say so and stop: this nudge is sent once per run position.",
-            },
-          ],
-        },
+      await api.prompt({
+        sessionID,
+        text:
+          `fr run ${verdict.run} is idle — ${verdict.detail} (gh#518). Nothing is ` +
+          `blocking it: run \`${verdict.nextCommand}\` now and act on what it prints — ` +
+          "a dispatch brief means dispatch that unit, then report. If you stopped on " +
+          "purpose (the operator asked, or you are waiting on something fr cannot " +
+          "see), say so and stop: this nudge is sent once per run position.",
       });
     } catch {
       // Fail open, always. See the header.
     }
   };
+}
+
+type EventSource = { subscribe?: (options?: { signal?: AbortSignal }) => AsyncIterable<unknown> };
+
+/** Feed `ctx.event.subscribe({signal})` to `handle` until `signal` aborts. Never
+ * throws: a stream that fails or ends just stops the guard. */
+export async function runIdleLoop(
+  events: unknown,
+  handle: (event: { type?: unknown; data?: unknown }) => Promise<void>,
+  signal: AbortSignal
+): Promise<void> {
+  try {
+    const source = events as EventSource | null | undefined;
+    if (!source || typeof source.subscribe !== "function") return;
+    for await (const event of source.subscribe({ signal })) {
+      if (signal.aborted) return;
+      // Awaited, so two idle events never race the once-per-position memory.
+      // `handle` never throws.
+      await handle(event as { type?: unknown; data?: unknown });
+    }
+  } catch {
+    // Fail open, always. See the header.
+  }
 }

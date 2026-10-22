@@ -19,6 +19,8 @@ from fr.acceptance.model import Matrix, Row, Visual
 from fr.record.model import VisualEvidence, VisualShot
 from fr.run.visual import check_visual, owed_rows
 
+from tests.unit.opencode_v2 import to_v2
+
 OPENED = _dt.datetime(2026, 9, 28, 10, 0, 0, tzinfo=_dt.UTC)
 
 
@@ -1208,6 +1210,7 @@ def _opencode_visual(
                 continue
             con.execute("UPDATE part SET data = ? WHERE id = ?", (json.dumps(data), part_id))
         con.commit()
+    to_v2(db)
     repo = tmp_path / "repo"
     repo.mkdir(exist_ok=True)
     return derive_visual(

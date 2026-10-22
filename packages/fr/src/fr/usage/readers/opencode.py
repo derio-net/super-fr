@@ -1,11 +1,14 @@
-"""OpenCode: `opencode.db` (`session`, `message`, `part`) — located by
+"""OpenCode 2: `opencode.db` (`session_v2`, `session_message`) — located by
 `fr.run.telemetry.OpenCodeReader.database` (`$XDG_DATA_HOME/opencode/`, else
-`~/.local/share/opencode/`).
+`~/.local/share/opencode/`), read through the one adapter the run reader also
+uses, `fr.run.opencode_store` (spec 2026-10-20-opencode-2-support R13, R14, §D).
 
 Opened read-only (`mode=ro` URI), so a missing database is an error — never a
 new empty file — and nothing here can write the harness's own store. One
-session's record includes its child sessions (a `task` subagent is a child
-session, `parent_id` = the session), each message tagged with its agent.
+session's record includes its child sessions (a subagent is a child session,
+`parent_id` = the session), each message tagged with its agent. A session the
+store holds only in OpenCode 1.x's legacy tables is `unavailable` with R14's
+reason: never zeros, never an empty record.
 
 Dollars are OpenCode's own per-message `data.cost`, summed: `exact` only when
 every priced message is billed, `estimated` when any is Copilot-routed
@@ -17,7 +20,6 @@ reported no meter at all.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Mapping
 from contextlib import closing
@@ -25,6 +27,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from fr.run.opencode_store import (
+    DISPATCH_TOOL,
+    TREE_MESSAGES,
+    V1_ONLY_REASON,
+    ToolItem,
+    dispatch_child,
+    dispatch_parent,
+    dispatch_prompt,
+    mapping,
+    open_ro,
+    store_version,
+    stored_message,
+    tool_items,
+)
 from fr.usage.model import Cost, Message, Tokens, ToolCall, UsageRecord, unavailable
 
 HARNESS: Final = "opencode"
@@ -57,17 +73,7 @@ def tokens_of(data: Mapping[str, Any]) -> Tokens:
     )
 
 
-def open_ro(db: Path) -> sqlite3.Connection:
-    """`db` opened read-only; raises `sqlite3.Error` when it does not exist."""
-    return sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
-
-
-def _json(raw: object) -> Mapping[str, Any]:
-    try:
-        data = json.loads(raw) if isinstance(raw, str | bytes) else None
-    except json.JSONDecodeError:
-        return {}
-    return data if isinstance(data, Mapping) else {}
+__all__ = ["HARNESS", "ESTIMATED_PROVIDERS", "open_ro", "read", "tokens_of"]
 
 
 def _iso(ms: object) -> str | None:
@@ -76,35 +82,22 @@ def _iso(ms: object) -> str | None:
     return datetime.fromtimestamp(ms / 1000, tz=UTC).isoformat()
 
 
-def _tool_call(part: Mapping[str, Any]) -> ToolCall | None:
-    if part.get("type") != "tool":
-        return None
-    state = part.get("state")
-    raw = state.get("input") if isinstance(state, Mapping) else None
-    inp: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
-    target = next((inp[k] for k in _TARGET_KEYS if isinstance(inp.get(k), str)), "")
-    return ToolCall(name=str(part.get("tool") or ""), target=target)
+def _tool_call(item: ToolItem) -> ToolCall:
+    target = next((item.input[k] for k in _TARGET_KEYS if isinstance(item.input.get(k), str)), "")
+    return ToolCall(name=item.tool, target=target)
 
 
-def _brief(part: Mapping[str, Any], session: str) -> tuple[str, int] | None:
-    """`(child session, prompt chars)` of a `task` dispatch this session made —
-    `state.input.prompt`, keyed by `state.metadata.sessionId` (else the part's
-    `callID`). A task a child session dispatched is not this session's brief."""
-    if part.get("tool") != "task":
+def _brief(item: ToolItem, session: str) -> tuple[str, int] | None:
+    """`(child session, prompt chars)` of a dispatch this session made —
+    `state.input.prompt`, keyed by the child session (else the item's `id`). A
+    dispatch a child session made is not this session's brief."""
+    if item.tool != DISPATCH_TOOL:
         return None
-    state = part.get("state")
-    state = state if isinstance(state, Mapping) else {}
-    raw_input = state.get("input")
-    prompt = raw_input.get("prompt") if isinstance(raw_input, Mapping) else None
-    if not isinstance(prompt, str):
+    prompt = dispatch_prompt(item)
+    if prompt is None or dispatch_parent(item) != session:
         return None
-    raw_meta = state.get("metadata")
-    meta: Mapping[str, Any] = raw_meta if isinstance(raw_meta, Mapping) else {}
-    parent = meta.get("parentSessionId")
-    if isinstance(parent, str) and parent != session:
-        return None
-    key = meta.get("sessionId") if isinstance(meta.get("sessionId"), str) else part.get("callID")
-    return (key, len(prompt)) if isinstance(key, str) else None
+    key = dispatch_child(item) or item.call_id
+    return (key, len(prompt)) if key is not None else None
 
 
 ESTIMATED_PROVIDERS: Final = ("github-copilot",)
@@ -130,54 +123,58 @@ def read(source: Path, session: str | None = None) -> UsageRecord:
 
 
 def _read(source: Path, session: str) -> UsageRecord:
+    version = store_version(source, session)
+    if version == "v1-only":
+        return unavailable(session, HARNESS, f"session {session}: {V1_ONLY_REASON}")
+    if version == "unreadable":
+        return unavailable(session, HARNESS, "OpenCode database unreadable")
+    if version == "absent":
+        return unavailable(session, HARNESS, "session not in the OpenCode database")
     with closing(open_ro(source)) as con:
-        if con.execute("SELECT 1 FROM session WHERE id = ?", (session,)).fetchone() is None:
-            return unavailable(session, HARNESS, "session not in the OpenCode database")
-        rows = con.execute(
-            "SELECT m.id, m.session_id, m.time_created, m.data FROM message m JOIN session s "
-            "ON s.id = m.session_id WHERE s.id = ? OR s.parent_id = ? "
-            "ORDER BY m.time_created, m.id",
-            (session, session),
-        ).fetchall()
-        parts = con.execute(
-            "SELECT p.message_id, p.data FROM part p JOIN session s ON s.id = p.session_id "
-            "WHERE s.id = ? OR s.parent_id = ? ORDER BY p.time_created, p.id",
-            (session, session),
-        ).fetchall()
+        rows = con.execute(TREE_MESSAGES, (session, session)).fetchall()
+    stored = [stored_message(row) for row in rows]
+    bad = [m.id for m in stored if m.unreadable]
+    if bad:
+        # p4-r2: a partial sum labelled `exact` hides what could not be read.
+        return unavailable(
+            session,
+            HARNESS,
+            f"OpenCode message row(s) {', '.join(bad)} have unreadable data, so the "
+            "session's cost, tokens and tool calls cannot be read whole",
+        )
     calls: dict[str, list[ToolCall]] = {}
     briefs: dict[str, int] = {}
-    for message_id, raw in parts:
-        part = _json(raw)
-        call = _tool_call(part)
-        if call is not None:
-            calls.setdefault(message_id, []).append(call)
-            brief = _brief(part, session)
-            if brief is not None:
-                briefs[brief[0]] = brief[1]
+    for item in tool_items(stored):
+        calls.setdefault(item.message, []).append(_tool_call(item))
+        brief = _brief(item, session)
+        if brief is not None:
+            briefs[brief[0]] = brief[1]
     messages: list[Message] = []
     total = 0.0
     exact = True
     by_model: dict[str, float] = {}
-    for message_id, owner, created, raw in rows:
-        data = _json(raw)
-        if data.get("role") != "assistant":
+    for message in stored:
+        if message.type != "assistant":
             continue
-        model = str(data.get("modelID") or "unknown")
+        own = message.session == session
+        data = message.data
+        model_of: Mapping[str, Any] = mapping(data.get("model"))
+        model = str(model_of.get("id") or "unknown")
         messages.append(
             Message(
-                ts=_iso(created),
+                ts=_iso(data_time(data) or message.created_ms),
                 model=model,
                 tokens=tokens_of(data),
-                tool_calls=tuple(calls.get(message_id, ())),
-                agent="main" if owner == session else str(data.get("agent") or "subagent"),
-                agent_id=None if owner == session else str(owner),
+                tool_calls=tuple(calls.get(message.id, ())),
+                agent="main" if own else str(data.get("agent") or "subagent"),
+                agent_id=None if own else message.session,
             )
         )
         cost = data.get("cost")
         if isinstance(cost, int | float) and not isinstance(cost, bool) and cost > 0:
             total += float(cost)
             by_model[model] = by_model.get(model, 0.0) + float(cost)
-            exact = exact and not _estimated(data.get("providerID"))
+            exact = exact and not _estimated(model_of.get("providerID"))
     if total > 0:
         return UsageRecord(
             session=session,
@@ -187,3 +184,8 @@ def _read(source: Path, session: str) -> UsageRecord:
             briefs=briefs,
         )
     return UsageRecord(session=session, harness=HARNESS, messages=tuple(messages), briefs=briefs)
+
+
+def data_time(data: Mapping[str, Any]) -> object:
+    """`data.time.created` — when the message began."""
+    return mapping(data.get("time")).get("created")
