@@ -207,12 +207,21 @@ steps:
       \ p5-r4 → derio-net/super-fr#1224\n2 out-of-scope finding(s): p2-not-proven-live,\
       \ p3-r1\n"
   deliver:
-    state: running
-    at: '2026-10-21T14:44:07+00:00'
+    state: done
+    at: '2026-10-22T13:08:21+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1226
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-10-21T14:44:07+00:00'
           harness: opencode
           session: ses_ea84bbe78ffeiMyh5hwiJoOOcg
+          returned: '2026-10-22T13:08:07+00:00'
+          outcome: done
+        evidence:
+          tests: .fr-deliver/deliver-suite.log@f8118dac7ecf
+          walk: 20261021T154524Z.log@ac090e7ed869
+          proportionality: 1d2290f8bde8284e05c27371f0b841cbd7463cc0:2d1564f5515f672c674db5a90a78fe59bade0a1150342777711cd14a3e7196af
+          visual: none
 fr_version: 5.27.0rc3
