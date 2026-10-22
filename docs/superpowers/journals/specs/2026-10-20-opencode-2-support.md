@@ -422,3 +422,10 @@ Evidence: FAILED on OpenCode 2.1.3 — a synthetic advanceable run returned fr r
 Step: Confirm the status line shows the fr segment, and that a session opened outside any repo shows none.
 
 Evidence: PASS — FR_REQUIRE_OPENCODE=1 uv run pytest tests/integration/test_opencode_plugin_live.py::test_opencode_tui_renders_the_delivered_status_line passed on the host OpenCode 2.1.3 (1 passed in 31.59s). The segment script names fr, branch and worktree for the archive workspace and none outside any repo; opencode plugin list registers the delivered plugin directory.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-10-22T16:35:40+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: Open a session in a repo with an acceptance matrix and confirm the nag appears once, in the system context, not in the operator's prompt.
+
+Evidence: PASS — a fresh top-level OpenCode 2.1.3 session (same repo and plugin) replied NAG=YES and quoted the acceptance-debt block; the operator prompt did not contain it, proving the nag arrives in system context. At most once per top-level session is covered by the unit tests.
