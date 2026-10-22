@@ -189,8 +189,10 @@ steps:
     stdout: |
       1 out-of-scope finding(s): p4-r12
   deliver:
-    state: running
-    at: '2026-10-22T13:29:00+00:00'
+    state: done
+    at: '2026-10-22T16:03:39+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1228
     units:
       step/deliver:
         attempts:
@@ -198,4 +200,11 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: dee186d0-4151-4daa-8429-a4ad2132062e
+          returned: '2026-10-22T16:03:11+00:00'
+          outcome: done
+        evidence:
+          tests: ci:947e65c021c0484e12525e65851dd887f6361986+unknown;tree=70a0833bf20054c6012174ff9aa41103f655c7928194d33d81168b41c42c4a68
+          walk: 20261022T155804Z.log@32af6cf5dc03
+          proportionality: 0cbdc9b0ce9b865712c5365ffd46913120748a0d:e8b88854bb84448018026a855d2abc75070bfe967b626779453d30a5b0248bbb
+          visual: none
 fr_version: 5.27.0rc3
