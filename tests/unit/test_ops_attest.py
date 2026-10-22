@@ -132,3 +132,10 @@ def test_p2_r8_a_multiline_note_is_refused_before_the_prompt(repo: Path, monkeyp
     res = _attest("click-ui", "--note", "line one\nline two")
     assert res.exit_code == 2 and "single line" in res.output
     assert asked == [] and "op click-ui" not in _journal(repo)
+
+
+def test_a_body_looking_note_is_refused_and_nothing_is_written(repo: Path) -> None:
+    """The note is a reason like any other: it goes through the one sanitiser."""
+    res = _attest("click-ui", "--note", '{"pasted": "an API response"}')
+    assert res.exit_code == 2 and "short line" in res.output
+    assert "op click-ui" not in _journal(repo)

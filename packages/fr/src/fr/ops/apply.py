@@ -16,10 +16,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from fr.ops.engine import Journal, Runner, StatusRow, clean_reason, order, status
+from fr.ops.engine import Journal, Runner, StatusRow, order, runner_secrets, status
 from fr.ops.engine import OrderError as OrderError  # re-export for callers
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
+from fr.ops.mask import sanitise_reason
 from fr.ops.model import UndoNone
 from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_interactive, run_probe_full
 
@@ -241,7 +242,7 @@ def apply_ops(
         if op.phase == "post-merge" and op.ready:
             rc, line = runner(op.ready, {})
             if rc != 0:
-                why = clean_reason(line, ()) or f"exit {rc}"
+                why = sanitise_reason(line, runner_secrets(runner)) or f"exit {rc}"
                 step(
                     op.id, "not-ready", f"{op.id}: `ready:` does not pass yet ({why}); not applied"
                 )
@@ -287,7 +288,8 @@ def apply_ops(
                 secrets += list(env.values())
             rc, line = applier(lo, env, op.interactive)
             if rc != 0:
-                reason = clean_reason(line, secrets, as_identity=name is not None) or f"exit {rc}"
+                masked = [*secrets, *runner_secrets(applier)]
+                reason = sanitise_reason(line, masked) or f"exit {rc}"
                 record(op=op.id, result="failed", phase=op.phase, identity=name, reason=reason)
                 step(
                     op.id,

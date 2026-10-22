@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from urllib.parse import quote, quote_plus
 
 MASK = "***"
 MIN_TOKEN = 6
+REASON_MAX = 200
 _B64_RUN = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,2}")
 
 
@@ -66,3 +68,19 @@ def looks_like_a_body(line: str, limit: int = 200) -> bool:
     """A reason line that is a response body rather than a status: JSON-shaped, or long."""
     stripped = line.strip()
     return stripped.startswith(("{", "[")) or len(stripped) > limit
+
+
+def passthrough_values(names: Sequence[str], environ: Mapping[str, str] | None = None) -> list[str]:
+    """The values `env_passthrough` hands a probe, as secrets to mask. A value under
+    `MIN_TOKEN` characters (`DEBUG=1`) is not one: masking it would mask every `1`."""
+    env = os.environ if environ is None else environ
+    return [v for n in names if len(v := env.get(n, "").strip()) >= MIN_TOKEN]
+
+
+def sanitise_reason(line: str, secrets: Iterable[str]) -> str:
+    """THE one sanitiser for an op reason that is printed or recorded (R5, R7): every
+    secret (identity and `env_passthrough` values) masked, whitespace collapsed to one
+    line, and `""` for a line that looks like a response body, whoever the probe ran
+    as; the caller then reports only the exit code."""
+    line = " ".join(mask(line, secrets).split())
+    return "" if looks_like_a_body(line, REASON_MAX) else line

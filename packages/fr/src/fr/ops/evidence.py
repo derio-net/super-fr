@@ -30,8 +30,10 @@ from fr.journal.model import (
     parse_journal,
     resolve_journal_read_path,
 )
+from fr.ops.mask import passthrough_values, sanitise_reason
 
 PLANS_REL = Path("docs/superpowers/plans")
+WITHHELD = "reason withheld: it looked like a response body"
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,16 @@ class JournalEvidence:
         return self._plan.get(op_id)
 
 
+def _config_secrets(repo_root: Path) -> list[str]:
+    from fr.ops.load import OpsLoadError, load_ops_config
+
+    try:
+        names = load_ops_config(repo_root).env_passthrough
+    except OpsLoadError:
+        names = ()
+    return passthrough_values(names)
+
+
 def record_op(
     repo_root: Path,
     plan_slug: str,
@@ -123,10 +135,14 @@ def record_op(
     created: str | None = None,
 ) -> JournalEntry:
     """Append one `op` entry to the plan's journal and return it. Refuses a plan
-    that does not exist (R7: a runbook op's evidence needs a named plan)."""
+    that does not exist (R7: a runbook op's evidence needs a named plan). The
+    reason goes through `sanitise_reason` once more, with the repo's
+    `env_passthrough` values, so no write path can record one unsanitised."""
     if not (repo_root / PLANS_REL / plan_slug).is_dir():
         raise ValueError(f"no plan {plan_slug!r} to record op {op!r} against")
     path = journal_path(repo_root, "plan", plan_slug)
+    if reason:
+        reason = sanitise_reason(reason, _config_secrets(repo_root)) or WITHHELD
     taken = {e.id for e in _entries(path)}
     n = 1
     while f"op-{op}-{n}" in taken:

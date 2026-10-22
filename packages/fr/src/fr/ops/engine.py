@@ -23,12 +23,11 @@ from typing import Any, Literal, Protocol
 from fr.ops.evidence import OpEvidence
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
-from fr.ops.mask import looks_like_a_body, mask
+from fr.ops.mask import passthrough_values, sanitise_reason
 from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_probe
 
 State = Literal["DONE", "OPEN", "N/A", "UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"]
 NOT_DONE: frozenset[str] = frozenset({"OPEN", "UNVERIFIABLE", "CANNOT-VERIFY"})
-_REASON_MAX = 200
 
 
 class Runner(Protocol):
@@ -103,14 +102,11 @@ class ShellRunner:
         return rc, lines[-1].strip() if lines else ""
 
 
-def clean_reason(line: str, secrets: Iterable[str], *, as_identity: bool = False) -> str:
-    """A reason line with every identity value masked (`fr.ops.mask`), cut to one
-    short line. Run as an identity, a line that still looks like a response body
-    is dropped (`""`): the caller reports only the exit code (R5)."""
-    line = " ".join(mask(line, secrets).split())
-    if as_identity and looks_like_a_body(line, _REASON_MAX):
-        return ""
-    return line if len(line) <= _REASON_MAX else line[: _REASON_MAX - 1] + "…"
+def runner_secrets(runner: object) -> list[str]:
+    """The `env_passthrough` values a runner (or applier) hands its probes: a reason
+    masks them as it masks identity values. A fake with no `passthrough` has none."""
+    names: Sequence[str] = getattr(runner, "passthrough", ())
+    return passthrough_values(names)
 
 
 def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityResolver) -> StatusRow:
@@ -125,15 +121,15 @@ def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityRes
             except IdentityError as e:
                 return replace(row, state="CANNOT-VERIFY", reason=str(e), identity=name)
         rc, line = runner(check, env)
+        secrets = [*env.values(), *runner_secrets(runner)]
         if rc == 0:
             continue
         if rc == TIMED_OUT:
             return replace(row, state="CANNOT-VERIFY", reason="timed out", identity=name)
         if rc == NOT_FOUND:
-            reason = clean_reason(line, env.values(), as_identity=name is not None)
-            reason = reason or f"the check could not run (exit {rc})"
+            reason = sanitise_reason(line, secrets) or f"the check could not run (exit {rc})"
             return replace(row, state="CANNOT-VERIFY", reason=reason, identity=name)
-        reason = clean_reason(line, env.values(), as_identity=name is not None) or f"exit {rc}"
+        reason = sanitise_reason(line, secrets) or f"exit {rc}"
         return replace(row, state="OPEN", reason=reason, identity=name)
     return replace(row, state="DONE", how="checked")
 
@@ -162,7 +158,7 @@ def _evaluate(
         if rc == TIMED_OUT:
             return replace(row, state="CANNOT-VERIFY", reason="na_if: timed out")
         if rc == NOT_FOUND:
-            reason = clean_reason(line, ()) or "na_if could not run"
+            reason = sanitise_reason(line, runner_secrets(runner)) or "na_if could not run"
             return replace(row, state="CANNOT-VERIFY", reason=f"na_if: {reason}")
     if op.is_proof:
         ev = journal.latest(op.id, runbook=lo.runbook)
