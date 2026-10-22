@@ -178,7 +178,8 @@ def record_op(
         raise ValueError(f"no plan {plan_slug!r} to record op {op!r} against")
     path = journal_path(repo_root, "plan", plan_slug)
     if reason:
-        reason = sanitise_reason(reason, _config_secrets(repo_root)) or WITHHELD
+        typed = result == "attested"  # the operator's note, not a probe's output (p3-r8)
+        reason = sanitise_reason(reason, _config_secrets(repo_root), typed=typed) or WITHHELD
     taken = {e.id for e in _entries(path)}
     n = 1
     while f"op-{op}-{n}" in taken:

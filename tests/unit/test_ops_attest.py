@@ -134,8 +134,15 @@ def test_p2_r8_a_multiline_note_is_refused_before_the_prompt(repo: Path, monkeyp
     assert asked == [] and "op click-ui" not in _journal(repo)
 
 
-def test_a_body_looking_note_is_refused_and_nothing_is_written(repo: Path) -> None:
-    """The note is a reason like any other: it goes through the one sanitiser."""
-    res = _attest("click-ui", "--note", '{"pasted": "an API response"}')
-    assert res.exit_code == 2 and "short line" in res.output
+def test_p3_r8_a_note_may_start_with_a_bracket_or_brace(repo: Path) -> None:
+    """An operator-typed note is not a probe's response body: only length and lines count."""
+    res = _attest("click-ui", "--note", "[x] toggled it {prod}")
+    assert res.exit_code == 0, res.output
+    assert "[x] toggled it {prod}" in _journal(repo)
+
+
+def test_p3_r8_an_overlong_note_is_refused_with_the_length_rule(repo: Path) -> None:
+    res = _attest("click-ui", "--note", "y" * 201)
+    assert res.exit_code == 2 and "200 characters" in res.output
+    assert "response body" not in res.output
     assert "op click-ui" not in _journal(repo)

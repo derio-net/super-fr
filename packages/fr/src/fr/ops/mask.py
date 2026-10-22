@@ -77,10 +77,13 @@ def passthrough_values(names: Sequence[str], environ: Mapping[str, str] | None =
     return [v for n in names if len(v := env.get(n, "").strip()) >= MIN_TOKEN]
 
 
-def sanitise_reason(line: str, secrets: Iterable[str]) -> str:
+def sanitise_reason(line: str, secrets: Iterable[str], *, typed: bool = False) -> str:
     """THE one sanitiser for an op reason that is printed or recorded (R5, R7): every
     secret (identity and `env_passthrough` values) masked, whitespace collapsed to one
     line, and `""` for a line that looks like a response body, whoever the probe ran
-    as; the caller then reports only the exit code."""
+    as; the caller then reports only the exit code. A `typed` reason (an operator's
+    attest note, not a probe's output) is judged by its length alone (p3-r8)."""
     line = " ".join(mask(line, secrets).split())
+    if typed:
+        return "" if len(line) > REASON_MAX else line
     return "" if looks_like_a_body(line, REASON_MAX) else line

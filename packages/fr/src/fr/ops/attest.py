@@ -9,7 +9,7 @@ from fr.ops.apply import Prompt, Record
 from fr.ops.engine import Journal, Runner, StatusRow, runner_secrets, status
 from fr.ops.identity import IdentityResolver
 from fr.ops.load import LoadedOp
-from fr.ops.mask import sanitise_reason
+from fr.ops.mask import REASON_MAX, sanitise_reason
 
 
 class AttestRefused(Exception):  # noqa: N818
@@ -35,9 +35,9 @@ def attest_op(
         raise AttestRefused("attesting needs a terminal; nothing written")
     if not note.strip():
         raise AttestRefused("--note must say what you did or saw")
-    clean = sanitise_reason(note, runner_secrets(runner))
+    clean = sanitise_reason(note, runner_secrets(runner), typed=True)
     if not clean:
-        raise AttestRefused("--note must be one short line (200 characters, not a response body)")
+        raise AttestRefused(f"--note must be at most {REASON_MAX} characters")
     row = status([lo], runner=runner, identities=identities, journal=journal)[0]
     if row.state != "UNVERIFIABLE":
         raise AttestRefused(f"op {op.id!r} is {row.label}; only an UNVERIFIABLE op is attested")
