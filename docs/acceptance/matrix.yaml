@@ -3968,13 +3968,20 @@ rows:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/guard-verdicts.test.ts
       - super-fr:tests/unit/test_hooks_guard.py#test_the_verdict_table_covers_what_the_spec_names
-    status: walk-owed
-    notes: 'The shell gate''s decision is the bash guard''s: the captured verdict table
-      passes against both engines in CI (guard-verdicts.test.ts; test_hooks_guard.py).
-      verify: live - a model-driven 2.x session''s denied base-clone shell command,
-      and an allowed worktree git status, are Test Plan item 2, post-merge at the Tester
-      gate.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: with an active pipeline sentinel, a
+      base-clone shell write was denied with the full escape list while git status from
+      the archive workspace was allowed, and no probe file was created (Test Plan step
+      2).'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-22T00:00:00Z'
+      evidence: 'OpenCode 2.1.3 this session: sentinel active; base-clone touch denied
+        with escapes; workspace git status allowed; probe absent'
   - id: opencode-2-store-read
     capability: OpenCode adaptation
     acceptance: fr reads an OpenCode 2.0 session from session_v2 and session_message,
