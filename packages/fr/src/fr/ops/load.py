@@ -100,24 +100,26 @@ def load_ops_config(repo_root: Path) -> OpsConfig:
 # --- helpers -----------------------------------------------------------------
 
 
+def _yaml_error(e: yaml.YAMLError, path: Path, line_offset: int) -> OpsLoadError:
+    mark = getattr(e, "problem_mark", None)
+    line = line_offset + (mark.line + 1 if mark is not None else 1)
+    problem = getattr(e, "problem", None) or str(e)
+    return OpsLoadError(f"{path}:{line}: malformed YAML: {problem}")
+
+
 def _safe_load(text: str, path: Path, line_offset: int) -> Any:
     try:
         return yaml.safe_load(text)
     except yaml.YAMLError as e:
-        mark = getattr(e, "problem_mark", None)
-        line = line_offset + (mark.line + 1 if mark is not None else 1)
-        problem = getattr(e, "problem", None) or str(e)
-        raise OpsLoadError(f"{path}:{line}: malformed YAML: {problem}") from None
+        raise _yaml_error(e, path, line_offset) from None
 
 
 def _compose(text: str, path: Path) -> yaml.Node | None:
     try:
-        return yaml.compose(text, Loader=yaml.SafeLoader)
+        node: yaml.Node | None = yaml.compose(text, Loader=yaml.SafeLoader)
     except yaml.YAMLError as e:
-        mark = getattr(e, "problem_mark", None)
-        line = mark.line + 1 if mark is not None else 1
-        problem = getattr(e, "problem", None) or str(e)
-        raise OpsLoadError(f"{path}:{line}: malformed YAML: {problem}") from None
+        raise _yaml_error(e, path, 0) from None
+    return node
 
 
 def _first_error(e: ValidationError) -> str:
@@ -193,7 +195,8 @@ def _value_node(node: yaml.Node | None, key: str) -> yaml.Node | None:
     if isinstance(node, yaml.MappingNode):
         for k, v in node.value:
             if k.value == key:
-                return v
+                found: yaml.Node = v
+                return found
     return None
 
 
