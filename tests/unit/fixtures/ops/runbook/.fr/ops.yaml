@@ -1,0 +1,5 @@
+runbook: ops/manual-operations.yaml
+identities:
+  admin:
+    env:
+      TOKEN: {from: 'echo admin-token'}

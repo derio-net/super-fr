@@ -477,7 +477,8 @@ EMPTY_TEST_PLAN = "(Test Plan section has no steps)"
 _SECTION_RE = re.compile(r"^## Test Plan\s*$", re.MULTILINE)
 _NEXT_SECTION_RE = re.compile(r"^#{1,2} ", re.MULTILINE)
 _ITEM_RE = re.compile(r"^(?:\d+[.)]|[-*])\s+(.*)$")
-_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
+"""A line that opens or closes a code fence: anchored, so a fence mid-prose never does."""
 
 
 @dataclass(frozen=True)
@@ -498,7 +499,7 @@ def test_plan_section(text: str) -> str | None:
     fenced = False
     start: int | None = None
     for i, line in enumerate(lines):
-        if _FENCE_RE.match(line):
+        if FENCE_RE.match(line):
             fenced = not fenced
             continue
         if fenced:
@@ -529,7 +530,7 @@ def test_plan_steps(text: str) -> list[Step]:
     blank = False
     fenced = False
     for line in section.splitlines():
-        if _FENCE_RE.match(line):
+        if FENCE_RE.match(line):
             fenced = not fenced
         stripped = line.strip()
         if not stripped:
