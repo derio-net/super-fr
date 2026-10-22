@@ -9678,9 +9678,16 @@ rows:
       op set refuses and shows what changed
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R19
-    levels: {}
-    status: not-implemented
-    notes: added at phase-1 review (p1-r5); candidate scenario planned
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_trust.py#test_status_refuses_after_a_probe_changes_and_names_it
+      - super-fr:tests/unit/test_ops_trust.py#test_trust_refuses_without_a_terminal
+      - super-fr:tests/unit/test_ops_runner.py#test_a_probe_gets_only_the_minimal_env
+      - super-fr:tests/unit/test_ops_runner.py#test_a_probe_that_hangs_times_out
+    status: ci
+    notes: added at phase-1 review (p1-r5); unit tests over trust, the status trust
+      gate, the minimal probe env, closed stdin and the timeout run in CI; candidate
+      scenario planned in phase 2
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-testplan-tags
     capability: Test Plan
