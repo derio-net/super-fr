@@ -189,6 +189,8 @@ class GateLedger:
     # inherits is never passed by walked rows, only by `fr gate pass`.
     run_gate: str = "none"
     run_gate_inherited: bool = False
+    # fr-ops R13: `devops` holds because the run's plan has ops, so walked rows never pass it.
+    ops_promoted: bool = False
 
 
 def is_gated(batch: Batch, snap: Snapshot) -> bool:
@@ -1704,6 +1706,8 @@ def _gate_actions(batch: Batch, snap: Snapshot, labelled: set[str]) -> list[Acti
     for gate in sorted(held):
         if gate == ledger.run_gate and not ledger.run_gate_inherited:
             continue  # p4-r3: no row stands for the run gate, so no walk passes it
+        if gate == "devops" and ledger.ops_promoted:
+            continue  # fr-ops R13: the ops' evidence passes it, through `fr gate pass`
         mine = [r for r in rows if r.gate == gate]
         if mine and all(r.walked for r in mine):
             ids = ", ".join(r.id for r in mine)

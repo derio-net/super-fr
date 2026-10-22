@@ -4356,6 +4356,7 @@ class _Driver:
                     rows=read.rows,
                     run_gate=read.run_gate,
                     run_gate_inherited=read.run_gate_inherited,
+                    ops_promoted=read.ops_promoted,
                 )
         return ledgers
 
