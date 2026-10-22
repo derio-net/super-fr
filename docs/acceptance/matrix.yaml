@@ -9649,9 +9649,14 @@ rows:
       command; status only warns
     origin:
     - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: candidate scenario planned (plan 2026-10-22-fr-ops)
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_profile.py#test_in_ops_profile_needs_the_declaration_and_container_evidence
+      - super-fr:tests/unit/test_ops_apply.py#test_cli_refuses_outside_an_ops_profile
+      - super-fr:tests/unit/test_ops_profile.py#test_scaffold_ops_mounts_the_trust_store_read_only
+    status: ci
+    notes: unit tests over in_ops_profile, scaffold --ops and the apply refusal run
+      in CI (phase 2); candidate scenario covers the out-of-profile refusal
     scenario: tests/scenarios/fr-ops-status-apply.sh
   - id: fr-ops-evidence-attest
     capability: fr ops
