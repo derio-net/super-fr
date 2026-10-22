@@ -24,11 +24,11 @@ import re
 import shlex
 import stat
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from fr.safe_spawn import fr_argv, safe_fr_env
 from fr.triage.errors import TriageError
 
 
@@ -55,6 +55,7 @@ def _run(
     stdin: str | None = None,
     coded: bool = False,
     passthrough: Literal["none", "stderr", "all"] = "none",
+    exact_env: bool = False,
 ) -> Any:
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
@@ -62,8 +63,10 @@ def _run(
     *stdin* is fed to the command (text mode only). *coded*: any return code is an answer,
     `(code, stdout + stderr)`, never a raise (text mode only). *passthrough* leaves streams
     with the operator instead of capturing them: `stderr` (stdout is still captured), or
-    `all` (nothing is, for a command that asks on the terminal)."""
-    full_env = {**os.environ, **env} if env else None
+    `all` (nothing is, for a command that asks on the terminal). *exact_env*: *env* is
+    the child's WHOLE environment, not laid over this one, so a variable can be removed
+    (`fr.safe_spawn.safe_fr_env` drops a relative `PYTHONPATH`)."""
+    full_env = dict(env or {}) if exact_env else ({**os.environ, **env} if env else None)
     pipe = subprocess.PIPE
     try:
         result = subprocess.run(
@@ -911,7 +914,7 @@ class Worktree:
         PATH) with *args* in this worktree: `(exit code, its words)`. The collected
         close-out's verbs: verify-merge, closeout outcome, archive. An argument list,
         never a shell string."""
-        code, out = _run([sys.executable, "-P", "-m", "fr", *args], self.path, coded=True)
+        code, out = _run(fr_argv(*args), self.path, coded=True, env=safe_fr_env(), exact_env=True)
         return int(code), str(out)
 
     def reset_hard(self, sha: str) -> None:
@@ -955,8 +958,14 @@ def run_this_fr(args: list[str], cwd: Path, *, terminal: bool = False) -> tuple[
     its stderr passed through to the operator. *terminal*: every stream stays the
     operator's and nothing is captured (`(exit, "")`), for a command that asks there.
     The DevOps stage's host commands (spec 2026-10-22-fr-ops R15)."""
-    argv = [sys.executable, "-P", "-m", "fr", *args]
-    code, out = _run(argv, cwd, coded=True, passthrough="all" if terminal else "stderr")
+    code, out = _run(
+        fr_argv(*args),
+        cwd,
+        coded=True,
+        passthrough="all" if terminal else "stderr",
+        env=safe_fr_env(),
+        exact_env=True,
+    )
     return code, "" if terminal else out
 
 

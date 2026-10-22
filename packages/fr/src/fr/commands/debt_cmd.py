@@ -304,12 +304,13 @@ def _held(root: Path, name: str) -> list[str]:
 def _archive_one(root: Path, name: str, env: dict[str, str]) -> tuple[bool, str]:
     """`fr archive <plan-dir>` as a subprocess; (ok, last stderr/stdout line)."""
     import subprocess
-    import sys
+
+    from fr.safe_spawn import fr_argv, safe_fr_env
 
     done = subprocess.run(
-        [sys.executable, "-P", "-m", "fr", "archive", f"docs/superpowers/plans/{name}"],
+        fr_argv("archive", f"docs/superpowers/plans/{name}"),
         cwd=root,
-        env=env,
+        env=safe_fr_env(env),
         capture_output=True,
         text=True,
         check=False,

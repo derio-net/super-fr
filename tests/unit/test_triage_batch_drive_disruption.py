@@ -674,10 +674,10 @@ def test_a_restart_that_cannot_exec_says_why_and_how_to_resume(
     checkout.released = True
     monkeypatch.setattr(triage_batch_cmd, "_installed_version", lambda: "99.0.0")
 
-    def _execv(path: str, argv: list[str]) -> None:
+    def _execve(path: str, argv: list[str], env: dict[str, str]) -> None:
         raise FileNotFoundError(2, "No such file or directory", path)
 
-    monkeypatch.setattr(triage_batch_cmd.os, "execv", _execv)
+    monkeypatch.setattr(triage_batch_cmd.os, "execve", _execve)
     result = _drive_named(tmp_path, "--yes")
     assert result.exit_code == 1, result.output
     assert "could not restart" in result.output
