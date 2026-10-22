@@ -1,0 +1,260 @@
+schema_version: 10
+run: 2026-10-22-feat-fr-ops
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-1
+  title: '`fr isolation exec --profile <ops>` names a flag that does not exist'
+  review_scope: in
+  body: 'R6 and §I named `fr isolation exec --profile`; exec (isolation_cmd.py:334-340) takes only --repo/--branch,
+    and a profile is chosen at `up --profile` (isolation_cmd.py:251-255). Fix: route through an ops workspace
+    (`up --profile <ops> --branch chore/ops-<slug> --base <ref>`, then `exec --branch`). Scope: the spec
+    built its refusal and stage engine on a nonexistent flag.'
+- kind: finding
+  id: sr-2
+  title: Post-merge evidence has no defined commit location, and `fr gate pass` reads the default branch
+  review_scope: in
+  body: 'Stages 3-6 write after the merge, when direct commits to the default branch are forbidden; `fr
+    gate pass` was to read the default branch, so stage 6 could never pass; `fr closeout outcome` writes
+    the spec journal (closeout_cmd.py:90-94). Fix: name the post-merge branch, make gate pass read it,
+    and define resume-after-merge. Scope: the stage as specified could not complete.'
+- kind: finding
+  id: sr-3
+  title: Pushing pre-merge evidence to the feature branch moves the PR head after review and checks
+  review_scope: in
+  body: 'Evidence pushes create new heads, which invalidates checks and approvals (batch_merge.py:60 HeadMovedError,
+    :429). Fix: wait for checks on the new head, or keep evidence off the PR head. Scope: the spec''s
+    own ordering was under-specified.'
+- kind: finding
+  id: sr-4
+  title: The devops promotion living only in the label sync makes `run_exit` readers disagree with the
+    PR label
+  review_scope: in
+  body: 'sync_exit_labels builds from run_exit (verification/labels.py:133,144), and run_exit is read
+    by the ledger, fr verification, baseline and deliver. Fix: promote inside run_exit and say whether
+    devops adds to or replaces the declared gate. Scope: the divergence came from where this spec put
+    the promotion.'
+- kind: finding
+  id: sr-5
+  title: A plan with only post-merge ops gets no devops gate
+  review_scope: in
+  body: 'R13 promoted only on pre-merge ops, while apply needs an ops profile and q7 gives post-merge
+    ops to the DevOps gate. Fix: promote on any op. Scope: a gap in this spec''s gate rule.'
+- kind: finding
+  id: sr-6
+  title: Untagged Test Plan steps in a devops-gated run fall through every stage
+  review_scope: in
+  body: 'R14, stage 5 and stage 7 named only tagged steps, and the developer-run case was undefined. Fix:
+    define one effective gate per step and use it everywhere. Scope: internal contradiction.'
+- kind: finding
+  id: sr-7
+  title: The error on any other leading `[word]` breaks checkbox Test Plans and Markdown links
+  review_scope: in
+  body: 'Existing Test Plans use `- [ ]` and `- [x]` (implemented/specs/2026-05-17-dispatch-reachability-gate-design.md:280);
+    test_plan_steps feeds closeout, archive and debt. Fix: recognise only the two literal tags. Scope:
+    this spec introduced the refusal.'
+- kind: finding
+  id: sr-8
+  title: 'An attestation with `answered_by: operator` is refused by the journal validator'
+  review_scope: in
+  body: 'JournalEntry refuses answered_by outside resolution records (journal/model.py:276-280). Fix:
+    carry it in body key lines. Scope: the spec relied on a refused field.'
+- kind: finding
+  id: sr-9
+  title: '`ops.yaml` self-stamps outside the artifact registry, with no migration path'
+  review_scope: in
+  body: 'validate_plan reads only _meta/NN.yaml (structure.py:130-160), an older fr ignores ops.yaml (parser.py:225-228),
+    and kinds are enumerated only in the registry (test_tripwire_artifact_kinds.py). Fix: register an
+    `ops` kind or bump the plan kind, and address the fr_version floor. Scope: artifact-versioning compliance
+    belongs to this spec.'
+- kind: finding
+  id: sr-10
+  title: Adding `op` to JournalKind widens the record kind's JournalItem.kind
+  review_scope: in
+  body: 'record/model.py:29,132 imports the live literal, so a record carrying kind op would be unreadable
+    by an older fr. Fix: state the record-kind decision. Scope: in, unsure (precedent).'
+- kind: finding
+  id: sr-11
+  title: The gate exemption is per group, and R17's "writes only plan-journal entries" was false
+  review_scope: in
+  body: 'is_exempt matches the top-level group only (trigger.py:241), and seal and gate write more than
+    journals. Fix: gate the whole group and list what each verb writes. Scope: the spec''s claim did not
+    fit the mechanism.'
+- kind: finding
+  id: sr-12
+  title: 'The ops: true scaffold path is unspecified, and re-scaffolding drops the key'
+  review_scope: in
+  body: 'Only `fr init scaffold` exists (init_cmd.py:27), with no ops option; _update_profiles_yaml replaces
+    entries (scaffold.py:720-721); containerEnv is written only for uv profiles (:544-550). Fix: add `--ops`,
+    preserve unknown keys, use one command name, and give the existing-profile route. Scope: the R6 precondition
+    could not be set up.'
+- kind: finding
+  id: sr-13
+  title: Legacy blocks and runbook entries have no phase, carry status, and the required fields were unstated
+  review_scope: in
+  body: 'frank''s required fields (repo-manual-ops.md:10) have no phase; ignoring status: done made historic
+    ops UNVERIFIABLE and could block the gate. Fix: required vs optional fields, legacy defaults, explicit
+    runbook selection, a meaning for legacy status. Scope: back-compat is a stated requirement.'
+- kind: finding
+  id: sr-14
+  title: N/A, OPEN's exit code, the default plan and the runbook-op journal were undefined
+  review_scope: in
+  body: 'No rule produced N/A, OPEN had no exit code, there was no `--plan` default, and runbook-op evidence
+    had no destination. Fix: define each. Scope: untestable as written.'
+- kind: finding
+  id: sr-15
+  title: seal's `{target}` substitution conflicted with atomic install
+  review_scope: in
+  body: 'Writing to `{target}` breaks byte-identical-on-failure, and write_text_atomic is text-only (atomic.py:41-53).
+    Fix: define the output contract. Scope: the helper''s safety depended on it.'
+- kind: finding
+  id: sr-16
+  title: Per-op TTY confirmation conflicted with exec inside `fr ops gate`, and "never the delivering
+    agent" was untestable
+  review_scope: in
+  body: 'The TTY path through exec was not established, and `--yes` bypassed R4''s confirmations. Fix:
+    say how confirmations travel and enforce the agent exclusion. Scope: an R4/R15 interaction.'
+- kind: finding
+  id: sr-17
+  title: '`fr pickup --run` still framed the brief as post-merge while the DevOps stage owns the merge'
+  review_scope: in
+  body: 'branch_closeout_brief (run/closeout.py:203-247) says "after the PR above has merged" and STOPs
+    on verify-merge. Fix: replace the framing for devops runs. Scope: R16 left it contradictory.'
+- kind: finding
+  id: sr-18
+  title: '`fr gate pass --gate devops` had no PR-to-run lookup and no live/recorded rule'
+  review_scope: in
+  body: 'pass takes only --pr (gate_cmd.py:65-79), RunState has no PR field, and a live probe outside
+    the ops profile reads CANNOT-VERIFY. Fix: fold recorded evidence only, and add a run lookup. Scope:
+    behaviour this spec adds.'
+- kind: finding
+  id: sr-19
+  title: Test Plan/Verification covered only the live walk; the tested-helper acceptance had no scenario
+  review_scope: in
+  body: 'Candidate-provable behaviour (seal failure, idempotence, cycles, R14 refusal, driver hold) had
+    no named scenario. Fix: name a scenario set. Scope: promised behaviour went untested.'
+- kind: finding
+  id: sr-20
+  title: Context cited the wrong profile function and left the POST_MERGE_GATES change undesigned
+  review_scope: in
+  body: 'discover_profiles globs devcontainer.json (types.py:504-506); the yaml reader is profiles_config
+    (:509-513); the docstring and label rules needed a line. Fix: correct the citation and add a gate-vocabulary
+    line. Scope: surfaces this spec changes.'
+- kind: finding
+  id: sr-21
+  title: R1's field list omitted later fields, and `vacuous_if` had no behaviour
+  review_scope: in
+  body: 'disables, escalate and ready were missing from R1, and vacuous_if was required prose with no
+    behaviour. Fix: list every field and make vacuous_if optional and displayed. Scope: internal inconsistency.'
+- kind: finding
+  id: sr-22
+  title: gate:devops stops only the triage driver; a person can still merge on the forge
+  review_scope: out
+  body: 'Labels never block a forge-UI merge; a required status check would. Scope: out, because labels
+    never blocked forge merges (pre-existing exit-gates design).'
+- kind: review
+  id: spec-review-1
+  title: Spec review of 2026-10-22-fr-ops-design
+  body: 'Dispatched fr-spec-reviewer (read-only, separate context). It checked the 14 operator decisions
+    against R1-R18 (all honoured; q7''s post-merge half was only partly honoured, see sr-5), every named
+    surface against the code with file:line, and artifact-versioning compliance (journal 2->3 per the
+    owed precedent is correct; the profiles claim is true; ops.yaml self-stamping was non-compliant, sr-9).
+    22 findings: 21 in scope, all fixed in the spec rewrite; 1 out of scope (sr-22).'
+resolves:
+- id: sr-1
+  state: fixed
+  body: R6 now prints the ops-workspace route (up --profile/--base, then exec --branch); R15 stage 1 brings
+    up `chore/ops-<slug>` and runs ops via `exec --branch`.
+- id: sr-2
+  state: fixed
+  body: All stage evidence lands on the ops branch, which is rebased onto the default branch after merge
+    and opened as the housekeeping PR at stage 8 (with `fr archive`). `fr gate pass --run` folds the evidence
+    in the current checkout (the ops workspace). A rerun treats a forge-MERGED PR as stage 2 done (R14,
+    R15).
+- id: sr-3
+  state: fixed
+  body: 'R15: pre-merge evidence never lands on the PR head; it is committed on the ops branch, so the
+    reviewed head and its checks stay valid.'
+- id: sr-4
+  state: fixed
+  body: 'R13 and §H: the promotion lives in run_exit/Exit, and devops is added beside a declared gate,
+    never replacing it.'
+- id: sr-5
+  state: fixed
+  body: R13 promotes on any op, of either phase.
+- id: sr-6
+  state: fixed
+  body: R12 defines the effective step gate (tag, else devops/tester by the run's effective gates, else
+    ungated as today); R14 and stages 5 and 7 use it; §G adds `effective_step_gate`.
+- id: sr-7
+  state: fixed
+  body: 'R12: only the exact `[devops]`/`[tester]` tags are recognised; any other leading bracket stays
+    text, and the error is gone.'
+- id: sr-8
+  state: fixed
+  body: 'R7/R8: the attestation is the body line `attested_by: operator`, written only from a terminal;
+    there is no answered_by field.'
+- id: sr-9
+  state: fixed
+  body: 'R17: `ops` is a registered ArtifactKind (locator plans/*/ops.yaml, version 1, validator), and
+    self-review refuses a plan carrying ops whose fr_version floor predates fr ops.'
+- id: sr-10
+  state: fixed
+  body: 'R17 and §D: op entries are written only by `fr ops`, never through a record; JournalItem.kind
+    becomes JournalKind minus op, so the record kind is unchanged.'
+- id: sr-11
+  state: fixed
+  body: 'R17: the whole ops group, status included, is gated; each verb''s writes are listed.'
+- id: sr-12
+  state: fixed
+  body: 'R6/§E: `fr init scaffold --ops` writes ops: true and FR_PROFILE; _update_profiles_yaml merges
+    instead of replacing; an existing profile is upgraded via `--ops --force` then `fr isolation rebuild`;
+    the command is named the same way throughout.'
+- id: sr-13
+  state: fixed
+  body: 'R1 lists required vs optional fields. R2 gives LegacyOp''s defaults (summary from why_manual,
+    phase post-merge), reads legacy status: done as DONE (legacy), and limits runbook ops to an explicit
+    selection (--runbook or needs), never the default or the R14 set.'
+- id: sr-14
+  state: fixed
+  body: R1 adds `na_if`; R3 fixes exit codes (0/1/3/2) and makes `--plan` default to the current branch's
+    run plan, else refuse; R7 sends runbook-op evidence to the `--plan` journal and refuses a write with
+    no plan.
+- id: sr-15
+  state: fixed
+  body: 'R10/§F: the command writes ciphertext to `{out}` (a 0600 temp beside the target), `{target}`
+    is a name only, and fr os.replace''s the bytes on exit 0 with non-empty output.'
+- id: sr-16
+  state: fixed
+  body: 'R15: confirmations are taken on the host terminal, then `exec … fr ops apply <id> --yes [--yes-mutating]`;
+    interactive ops get a terminal; `fr ops gate` refuses non-interactive contexts (is_interactive), which
+    keeps agents out.'
+- id: sr-17
+  state: fixed
+  body: 'R16: devops runs get a DevOps brief (before or after merge) whose single command is `fr ops gate
+    --run`; verify-merge, STOP and archive move into stages 3 and 8.'
+- id: sr-18
+  state: fixed
+  body: 'R14: `--run`, else match RunState.branch to the PR head ref; folds recorded evidence in the current
+    checkout only, never probing live.'
+- id: sr-19
+  state: fixed
+  body: §J names three candidate scenarios (status/apply, seal, gate-stage) covering those cases; rows
+    get them via set-status --scenario once the plan creates them.
+- id: sr-20
+  state: fixed
+  body: Context cites profiles_config; §H adds PRE_MERGE_HOLD_GATES beside an unchanged POST_MERGE_GATES
+    and updates the docstring.
+- id: sr-21
+  state: fixed
+  body: R1 lists every field (ready, disables, escalate, na_if, interactive included); vacuous_if is optional
+    and shown by `status --explain`.
+- id: sr-22
+  state: out-of-scope
+  body: 'Out of scope: the label ledger has never blocked a forge-UI merge (spec 2026-10-14-exit-gates).
+    R14 now says so explicitly; a required status check from `fr ops gate` would be a separate change.'
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a85b7a2e4f7cdd8e9

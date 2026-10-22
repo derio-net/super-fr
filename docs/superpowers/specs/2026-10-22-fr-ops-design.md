@@ -22,138 +22,136 @@ that the delivering agent does not have, so they run under an **ops profile**.
 And the **DevOps gate stops being a post-merge label only**. It becomes an
 interactive stage, run on the ops profile, that owns pre-merge ops, the merge
 itself and post-merge ops, then hands the Test Plan's tester part to the Tester
-gate. The delivering agent's job ends at a PR plus the list of owed ops. Today
-`fr.gates.POST_MERGE_GATES` holds only the close-out.
+gate. The delivering agent's job ends at a PR plus the list of owed ops. Today the
+gate vocabulary's post-merge gates (`fr/gates.py:16`, `POST_MERGE_GATES = {tester,
+devops}`) hold only a merge's close-out (`gates.py:3-5`).
 
 Today's surfaces this changes: `fr/record/pr_body.py` (`REQUIRED_SECTIONS`,
-`render_pr_body`), `fr/run/closeout.py` (`branch_closeout_brief`),
-`fr/commands/gate_cmd.py` (`fr gate pass`), `fr/spec.py` (`test_plan_steps`),
-`fr/journal/model.py` (`JournalKind`), `fr/artifacts/registry.py` (journal kind at 2),
-`.devcontainer/fr-profiles.yaml` profile entries (`fr/isolation/types.py`
-`discover_profiles`).
+`render_pr_body`), `fr/verification/exit.py` (`run_exit`, `Exit`),
+`fr/run/closeout.py` (`branch_closeout_brief`), `fr/commands/gate_cmd.py` (`fr gate
+pass`), `fr/triage/batch_merge.py` (`_approved_and_ready`), `fr/spec.py`
+(`test_plan_steps`), `fr/journal/model.py` (`JournalKind`), `fr/artifacts/registry.py`
+(journal kind at 2, a new `ops` kind), `fr/isolation/scaffold.py`
+(`_update_profiles_yaml`, `containerEnv`), `fr/commands/init_cmd.py` (`fr init
+scaffold`), and the `.devcontainer/fr-profiles.yaml` profile entries read by
+`fr/isolation/types.py` `profiles_config`.
 
 ## Requirements
 
-R1. An op is a typed record with `id`, `summary`, `phase: pre-merge|post-merge`, optional `needs: [<op-id>]`, `check:` (a read-only probe; exit 0 = done, otherwise open, its last stdout line the reason), `apply:` (idempotent automation; absent for UI-only ops), `undo:` (or an explicit `undo: none` with a reason), `mutating: true|false`, `side_effects:` (prose list), `identities: [<name>]` (the consumer identities the check runs as), `vacuous_if:` (what the probe would look like if it proved nothing), and human `commands`/`verify` prose. Unknown keys are refused, naming the key.
-R2. Ops are read from two carriers in one plan: an optional `ops.yaml` in the plan folder (canonical) and `# manual-operation` fenced YAML blocks inside step text, dedented (back-compat, frank's existing blocks, whose own fields `layer`/`app`/`plan`/`when`/`why_manual`/`status` are accepted and ignored). An op id defined in both carriers is an error. Ops also come from a repo runbook named by `.fr/ops.yaml` `runbook: <path>` (frank's `manual-operations.yaml` shape), so ops from earlier plans are checkable.
-R3. `fr ops status [--plan <dir>] [--phase pre-merge|post-merge] [<op-id>] [--json]` reports each op as DONE (checked), DONE (attested), OPEN (with the check's reason), N/A, UNVERIFIABLE (no `check:`, never attested), or CANNOT-VERIFY (the check could not run: missing tool or credential, distinct from OPEN). It never mutates the target system. It runs anywhere and warns when not inside an ops profile. Exit 0 iff nothing is OPEN, UNVERIFIABLE or CANNOT-VERIFY in the selection.
-R4. `fr ops apply <op-id>` and `fr ops apply --phase pre-merge|post-merge` run in `needs` dependency order (a cycle or an unknown `needs` id is refused before anything runs). They check first and skip a DONE op, reporting "already done, nothing written". They confirm each op on the TTY, and a `mutating: true` op names its side effects and undo in the prompt. They stop at the first failure, naming the op and its undo. After an apply they re-run the check and record evidence. A second run over a done phase writes nothing and says so. `apply` refuses (exit 2) outside an ops profile.
-R5. A check runs once per declared identity: `identities:` names entries of `.fr/ops.yaml` `identities: {<name>: {env: {...}}}`. The check runs with that identity's environment (a credential reference read live, never inlined), and every identity must pass for DONE. The report names the failing identity. A check's reason line keeps a status code and never echoes a forge or API response body.
-R6. An op is "ops-profile"-bound: a profile entry in `fr-profiles.yaml` may declare `ops: true`, and `fr init scaffold` gives such a profile `FR_PROFILE=<name>` in its container env. `fr ops apply` (and `fr ops gate`'s op stages) pass only when `FR_PROFILE` names a profile declared `ops: true` and container evidence is present. Otherwise they refuse, naming the `fr isolation exec --profile <ops>` command.
-R7. Evidence is durable and shared. Every apply result, every check outcome recorded by `apply`/`gate`, every one-off proof and every attestation is a plan-journal entry of a new `op` kind (`op: <id>`, `result`, `identity`, `at`, the check's reason; never secret material). `fr ops status` reads the latest entry per op across the plan's journal and, for runbook ops, every live and archived plan journal. A one-off proof (an op whose `check:` is `proof`) reads DONE only from a recorded entry.
-R8. `fr ops attest <op-id> --note <text>` closes an UNVERIFIABLE op as DONE (attested) with `answered_by: operator`. Status and the PR body always show attested apart from checked. An op that has a `check:` cannot be attested.
-R9. An op that only gates a requirement, an optional dependency whose absence silently disables behaviour, declares `disables: <consequence>`. When its check fails, it reports OPEN with that consequence and is never N/A. `escalate:` (an optional probe) turns status into an ESCALATE line when the condition a pending op protects against is already happening, and `fr ops status` exits 3 on any ESCALATE.
-R10. Generic, tool-neutral safety helpers ship as fr subcommands, with no sops/kubectl/forge names in code. `fr ops seal --encrypt '<cmd with {in} and {target}>' --target <path>` takes plaintext from stdin into a 0600 temp file outside the repo, removed on every exit path including signals, and installs the target only after the encrypt command succeeds, atomically. On failure no plaintext exists in the repo or at the target, and the exit is non-zero. `fr ops secret --from '<cmd>'` reads a value live and passes it to a child via env or stdin, never to stdout. `fr ops clip --from '<cmd>'` puts a value on the clipboard. `fr ops scratch --cleanup '<cmd>' -- <command>` runs a command and its cleanup on any exit.
-R11. A post-merge op may declare `ready:`, a probe of a live artifact that only the merged revision produces. Post-merge apply refuses until `ready:` passes, and a forge's merged state alone never satisfies it.
-R12. The Test Plan splits by step tag. A Test Plan item may start `[devops]` or `[tester]`, and an untagged item takes the run's gate. `fr closeout`/`fr archive` outcome recording is unchanged. The tag is parsed, removed from the step text everywhere it is shown, and a tag outside the two names is an error naming the step.
-R13. `deliver` renders a new required `## Manual operations` PR-body section from the plan's ops and recorded evidence, with no live probes. It lists each op's phase, last recorded state (or "never checked") and its `fr ops apply`/`attest` command, plus a Ready-checklist line saying the DevOps stage owns them. `deliver` does not refuse on OPEN ops. A plan with any pre-merge op gives the run gate `devops`, synced as the `gate:devops` label at deliver, whatever the spec's `## Verification` says.
-R14. `gate: devops` holds a PR before merge as well as its close-out: a PR carrying `gate:devops` without `gate:devops-passed` is not mergeable by the triage driver, and `fr gate pass --gate devops` refuses while any op of the run's plan, or any `[devops]` Test Plan step, is OPEN, UNVERIFIABLE, CANNOT-VERIFY or without an outcome.
-R15. `fr ops gate --run <run-id>` is the DevOps stage's engine. It is interactive, previews by default, `--yes` acts, and it is resumable from what it recorded. Its stages run in order: (1) pre-merge `status` then `apply --phase pre-merge`, inside an ops workspace `chore/ops-<slug>` cut from the PR head on the ops profile, with evidence pushed to the feature branch as `chore(fr):` commits; (2) the merge, executed by the session through the forge adapter only after an explicit operator confirmation, and only when pre-merge shows nothing OPEN and the PR's required checks pass; (3) `fr isolation verify-merge` and every `ready:`; (4) `apply --phase post-merge` then `status`; (5) the `[devops]` Test Plan steps, each recorded with `fr closeout outcome`; (6) `fr gate pass --gate devops`; (7) when `[tester]` steps remain, the `gate:tester` label with those steps listed in its comment. It stops at the first failure naming the stage and resumes there. The delivering agent never runs it.
-R16. A thin `fr-devops-gate` skill (canonical plus the OpenCode and Hermes mirrors, and install.sh) drives `fr ops gate` and holds only the judgement: reading OPEN reasons, choosing attest vs. writing a check, confirming the merge. `fr pickup --run` for a devops-gated run prints `fr ops gate --run <id>` as its first close-out step instead of the generic Test Plan line. `fr ops status` follows it for runs with post-merge ops.
-R17. `fr ops` is a CLI surface every harness drives identically. The `ops` group writes only plan-journal entries through `fr journal`'s engine, and the artifact gate treats it as a mutating command (not in `READ_ONLY_COMMANDS`), except `status`, which writes nothing. The journal kind moves 2 → 3 for the `op` entry kind with a stamp-only migration. The profiles kind is unchanged, because `ops: true` is a per-profile key the current reader already accepts. The `ops.yaml` file carries its own `schema_version: 1` and is validated by `fr validate artifacts` as part of the plan kind.
-R18. Documentation: `docs/ops.md` (authoring ops, identities, helpers, the DevOps stage) and the fr-goal/explainer prose where `deliver` and the close-out are described. frank's adoption (replacing `scripts/ci-budget-ops.sh` with `check`/`apply` fields and carrying them through `/sync-runbook`) is a follow-up frank issue, not part of this change.
+R1. An op is a typed record. **Required:** `id`, `summary`, `phase: pre-merge|post-merge`. **Optional:** `needs: [<op-id>]`; `check:` (a read-only probe: exit 0 = done, any other exit = open, its last stdout line the reason; the reserved value `proof` means "done only once a recorded proof says so", R7); `na_if:` (a probe; exit 0 = not applicable here); `apply:` (idempotent automation; absent for UI-only ops); `undo:` (a command, or `none: <reason>`); `mutating: true|false` (default false); `interactive: true|false` (default false: apply needs a terminal for authorisations); `side_effects:` (prose list); `identities: [<name>]`; `ready:` (R11); `disables:` and `escalate:` (R9); `vacuous_if:` (prose naming what the probe would look like if it proved nothing, shown by `fr ops status --explain`); and the human prose `commands`/`verify`. Unknown keys are refused, naming the key and its file and line.
+R2. A plan's ops come from two carriers: an optional `ops.yaml` in the plan folder (canonical) and `# manual-operation` fenced YAML blocks inside step text, dedented (back-compat). An op id defined in both carriers is an error. A legacy block is read through its own model. frank's fields `layer`/`app`/`plan`/`when`/`why_manual` are accepted; `summary` defaults to `why_manual`; `phase` defaults to `post-merge` unless the block sets it; and a legacy `status: done` reads as DONE (legacy), a closed state shown apart from checked and attested. The block may also carry any R1 field. Ops from a repo runbook (`.fr/ops.yaml` `runbook: <path>`, frank's `manual-operations.yaml` shape) are read through the same legacy model, but only into an explicit selection (`--runbook`, or an id a plan op names in `needs`). Never a plan's default selection or the R14 set.
+R3. `fr ops status [--plan <dir>] [--runbook] [--phase pre-merge|post-merge] [<op-id>] [--json] [--explain]` reports each selected op as DONE (checked), DONE (attested), DONE (legacy), OPEN with the check's reason, N/A (`na_if` passed), UNVERIFIABLE (no `check:` and not closed), or CANNOT-VERIFY (the check could not run: exit 127, or an identity's credential reference could not be read; distinct from OPEN). It never mutates the target system and never writes. `--plan` defaults to the plan of the run whose `branch` is the current branch, and it refuses when there is none. It runs anywhere and warns when not inside an ops profile. Exit codes: 0 when everything is DONE or N/A, 1 when anything is OPEN, UNVERIFIABLE or CANNOT-VERIFY, 3 when anything ESCALATEs (R9; it outranks 1), 2 on refusal.
+R4. `fr ops apply <op-id>` and `fr ops apply --phase pre-merge|post-merge` run in `needs` dependency order. A cycle or an unknown `needs` id is refused before anything runs. Each op is checked first, and a DONE or N/A op is skipped, reporting "already done, nothing written". Each op is confirmed on the terminal, and a `mutating: true` op's prompt names its side effects and its undo. Without a terminal, `--yes` confirms non-mutating ops, and mutating ops also need `--yes-mutating`. The run stops at the first failure, naming the op and its undo. After an apply it re-runs the check and records the result (R7). A second run over a done phase writes nothing and says so. `apply` refuses (exit 2) outside an ops profile (R6).
+R5. A check runs once per declared identity. `identities:` names entries of `.fr/ops.yaml` `identities: {<name>: {env: {<VAR>: {from: '<cmd>'}}}}`. Each reference is read live at check time and never inlined, logged or recorded. Every identity must pass for DONE, and the report names the failing identity. One identity list drives both `check` and `apply` loops, so the two cannot drift. A reason line keeps a status code and never echoes a forge or API response body.
+R6. An ops profile is a `fr-profiles.yaml` profile entry declaring `ops: true`. `fr init scaffold --ops` writes that key and gives the profile `containerEnv.FR_PROFILE=<name>`. Re-scaffolding preserves every existing entry key it does not own. An existing profile gains the key and `FR_PROFILE` by re-running `fr init scaffold --ops --force`, then `fr isolation rebuild`. `in_ops_profile()` holds when `FR_PROFILE` names a profile declared `ops: true` and container evidence is present (`/.dockerenv`, `/run/.containerenv`, or `$KUBERNETES_SERVICE_HOST`). `apply`, `attest` and `seal` refuse outside it, printing the ops-workspace route: `fr isolation up --profile <ops> --branch chore/ops-<slug> --base <ref>`, then `fr isolation exec --branch chore/ops-<slug> -- fr ops …`.
+R7. Evidence is durable and shared. Every apply result, every check outcome recorded by `apply`, every proof and every attestation is a plan-journal entry of a new `op` kind. Its body holds `key: value` lines (`op`, `result: done|open|failed|attested|proof`, `identity`, `reason`, `phase`, `attested_by`) and never secret material. `fr ops status` folds the latest entry per op, and the latest entry wins. An op whose `check:` is `proof` reads DONE only from a recorded `result: proof` entry. Evidence for a runbook op is written to the journal of the plan named by `--plan`, and a write with no plan is refused. `status` reads every live and archived plan journal for runbook ops.
+R8. `fr ops attest <op-id> --note <text>` closes an UNVERIFIABLE op as DONE (attested). It needs a terminal, and records `attested_by: operator` and the note in the entry's body. Status and the PR body always show attested apart from checked. An op that has a `check:` cannot be attested.
+R9. An op that only gates a requirement (an optional dependency whose absence silently disables behaviour) declares `disables: <consequence>`. When its check fails it reports OPEN with that consequence, and it is never N/A. `escalate:` is an optional probe: while the op is not DONE, a passing `escalate` turns its line into ESCALATE ("the condition this op guards against is already happening"), and `status` exits 3.
+R10. Generic, tool-neutral safety helpers ship as fr subcommands, with no sops/kubectl/forge names in code. `fr ops seal --encrypt '<cmd>' --target <path>` substitutes `{in}` (a 0600 plaintext temp file outside the repo, filled from stdin), `{out}` (an empty 0600 temp file beside the target) and `{target}` (the target's path, as a name only, e.g. for `sops --filename-override`). The command must write ciphertext to `{out}`. fr then renames `{out}` over the target as bytes, but only when the command exited 0 and `{out}` is non-empty. Both temps are removed on every exit path, signals included. On failure the target is byte-identical to before, no plaintext exists in the repo, and the exit is non-zero. `fr ops secret --from '<cmd>' -- <command>` reads a value live and passes it to `<command>` on stdin, never to stdout. `fr ops clip --from '<cmd>'` puts a value on the clipboard. `fr ops scratch --cleanup '<cmd>' -- <command>` runs a command, then its cleanup on any exit.
+R11. A post-merge op may declare `ready:`, a probe of a live artifact that only the merged revision produces. Post-merge `apply` refuses an op until its `ready:` passes, and a forge's merged state alone never satisfies it.
+R12. Test Plan steps carry an effective gate. A Test Plan item whose text starts with exactly `[devops]` or `[tester]` takes that gate, and the tag is removed from the step text wherever it is shown. Any other leading bracket (a `[ ]`/`[x]` checkbox, a Markdown link) stays text. An untagged step takes `devops` when the run's effective gates (R13) include it, else `tester` when they include that, else it stays ungated, handled exactly as today.
+R13. A run's effective gates are its spec's gates plus `devops` whenever its plan has any op, of either phase. That promotion lives in `run_exit`/`Exit`, so the PR labels, the triage ledger, `fr verification`, `deliver` and the baseline all agree. `devops` is added beside a declared gate; it never replaces it. `deliver` renders a new required `## Manual operations` PR-body section from the plan's ops and recorded evidence, with no live probes. The section lists each op's phase, its last recorded state (or "never checked") and its command, and says the DevOps stage owns them. `deliver` never refuses on OPEN ops.
+R14. `devops` holds a PR before merge as well as at close-out. A pre-merge hold predicate (beside `POST_MERGE_GATES`, which keeps its label and pass rules) makes the triage driver's merge path refuse a PR carrying `gate:devops` without `gate:devops-passed`. `fr gate pass --gate devops --run <id>` finds the run (or matches `RunState.branch` to the PR's head ref) and folds only the recorded evidence in the current checkout, never probing live. It refuses while any plan op, or any Test Plan step whose effective gate is `devops`, is not DONE/N/A or has no recorded outcome. A forge-UI merge is not blocked (labels never were).
+R15. `fr ops gate --run <run-id>` is the DevOps stage's engine. It runs on the harness host, refuses in a non-interactive context (the artifact gate's `is_interactive`: no terminal on stdin and stdout, or `CI` set, which is how a delivering agent is kept out), previews by default and acts with `--yes`. Its stages run in order: (1) bring up or reuse the ops workspace `chore/ops-<slug>` on the ops profile, cut from the PR head, then pre-merge status and apply; (2) the merge, through the forge adapter, only after an explicit terminal confirmation naming the PR, its head sha and the pre-merge state, and only when no pre-merge op is open and the PR's required checks pass on that head; (3) `fr isolation verify-merge`, then rebase the ops workspace onto the default branch (it then carries only its own evidence commits), then every `ready:`; (4) post-merge apply and status; (5) each Test Plan step whose effective gate is `devops`, recorded with `fr closeout outcome`; (6) `fr gate pass --gate devops --run <id>` from the ops workspace; (7) when steps whose effective gate is `tester` remain, those steps are listed in the gate-pass comment and the `gate:tester` label is kept; (8) `fr archive --branch <feature>`, then commit, push and open the ops branch as the housekeeping PR. Pre-merge evidence never lands on the PR head. All stage evidence is committed on the ops branch, so the reviewed head stays untouched and the merge's checks stay valid. Each op's confirmation is taken on the host terminal, then the op runs through `fr isolation exec --branch chore/ops-<slug> -- fr ops apply <id> --yes [--yes-mutating]`. An `interactive: true` op runs with a terminal attached. Each stage's completion is a `gate-stage-<n>` decision in the plan journal. A rerun resumes at the first unrecorded stage, and it treats a forge-MERGED PR as stage 2 done even without that decision. It stops at the first failure, naming the stage.
+R16. A thin `fr-devops-gate` skill (canonical, plus the OpenCode and Hermes mirrors and install.sh) drives `fr ops gate`. It holds only the judgement: reading OPEN reasons, choosing between attesting and writing a check, and confirming the merge. For a run whose effective gates include `devops`, `fr pickup --run` prints a DevOps brief instead of the close-out brief. That brief says it runs before or after merge, and drops the verify-merge/STOP and archive lines, because the stage owns them. Its one command is `fr ops gate --run <id>`.
+R17. Artifact compliance. The journal kind moves 2 → 3 for the `op` entry kind, with a stamp-only migration; `fr journal check` ignores `op` entries. `op` entries are written only by `fr ops`, never through a step record: the record kind's `JournalItem.kind` refuses `op`, and the record kind is unchanged. `ops.yaml` is a new registered artifact kind `ops` (locator `docs/superpowers/plans/*/ops.yaml`, `schema_version` stamp, version 1, a structure validator). `fr plan self-review` refuses a plan carrying ops whose `fr_version` floor predates the release that ships `fr ops`, so an older fr refuses that plan rather than silently ignoring its ops. The profiles kind is unchanged, because per-profile keys are not validated by any reader (`services/legacy.py:31`, `structure.py:550`). The whole `ops` group, `status` included, is gated by the artifact trigger. What each verb writes: `status` nothing; `apply`/`attest` plan-journal entries; `seal` the named target; `gate` the ops branch, the forge merge, and labels and comments.
+R18. Documentation: `docs/ops.md` (authoring ops, identities, helpers, the DevOps stage), the fr-goal skill's `deliver`/close-out prose, and any explainer that describes them. frank's adoption (replacing `scripts/ci-budget-ops.sh` with `check`/`apply` fields and carrying them through `/sync-runbook`) is a follow-up frank issue, not this change.
 
 ## Design
 
 ### A. The op model (`fr/ops/model.py`)
 
-`Op` is a frozen pydantic model, `extra="forbid"`, with the R1 fields. `check`, `apply`,
-`undo`, `ready` and `escalate` are shell strings run via `bash -euo pipefail -c` with the
-repo root as cwd and the op's identity environment. `check: proof` is a reserved
-value: the check is satisfied only by a recorded `op` journal entry with
-`result: done` (R7). A legacy frank block is parsed through `LegacyBlock`, which
-accepts frank's fields and maps `commands`/`verify` across, so the strict model never
-sees frank-only keys. Its `status:` is ignored, because evidence lives in the journal.
+`Op` is a frozen pydantic model, `extra="forbid"`, with R1's fields. `LegacyOp` is the
+R2 reader: it accepts frank's keys plus every R1 key, applies R2's defaults, and maps
+`commands`/`verify` across. Probes are shell strings, run via `bash -euo pipefail -c`
+with the repo root as cwd and the identity's environment.
 
 ### B. Carriers (`fr/ops/load.py`)
 
-`load_ops(plan_dir, repo_root) -> OpSet` reads `ops.yaml` (`schema_version: 1`,
-`ops: [...]`), then every phase file's step text. For each step it finds fenced YAML code
-blocks whose first non-blank line is `# manual-operation`, dedents
-them, and parses them (fence-aware, reusing `spec.py`'s fence regex). Then it reads
-the runbook from `.fr/ops.yaml` when one is declared. A duplicate id across the plan
-carriers is an error. A runbook op with a plan's id is shadowed by the plan's op,
-with a warning. Errors name file and line.
+`load_ops(plan_dir, repo_root, *, runbook=False, ids=()) -> OpSet` reads `ops.yaml`
+(`schema_version: 1`, `ops: [...]`), then each phase file's step text. In step text it
+looks for fenced YAML code blocks whose first non-blank line is `# manual-operation`,
+dedents them, and parses them with fence tracking. A step-text line that merely looks
+like a fence mid-prose must not open one; this spec's own first draft hid its
+`## Verification` that way. It reads the runbook only for an explicit selection
+(R2). Errors name file and line.
 
 ### C. Status and apply (`fr/ops/engine.py`)
 
 The engine is pure over an injected `Runner` (which runs a shell string with an env and
-returns `(exit, last_line)`) and an injected journal reader/writer, so tests need no
-subprocesses. `order(ops)` is a topological sort that refuses cycles and unknown ids.
-`status` evaluates `check` once per identity. Identity env values are
-`{from: '<cmd>'}` references resolved through the same live reader as `fr ops
-secret`, and they never enter the report. A check that exits 127, or whose identity
-reference cannot be read, is CANNOT-VERIFY. `apply` follows the R4 algorithm. The
-confirmation prompt reads `/dev/tty`, and with no TTY `apply` refuses unless `--yes`
-is passed. Even with `--yes`, a `mutating: true` op still needs `--yes-mutating`.
+returns `(exit, last_line)`), an identity resolver and a journal port, so tests run
+no subprocesses. `order(ops)` is a topological sort that refuses cycles and unknown
+ids. `status` evaluates `na_if`, then `check` per identity, then `escalate`. `apply`
+follows R4. The terminal prompt reads `/dev/tty`.
 
 ### D. Evidence (`op` journal kind)
 
-An `op` entry is written through `fr journal`'s engine. Its body holds `key: value`
-lines (`op`, `result: done|open|failed|attested|proof`, `identity`, `reason`,
-`phase`), and its title is `op <id>: <result>`. Journal kind 3 adds `op` to
-`JournalKind`. Migration `fr.artifacts.journal_op` is stamp-only and registered in
-`MIGRATIONS`. `fr journal check` ignores `op` entries (they are never findings).
-`fr ops status` folds the entries per op, and the last one wins.
+`op` entries are appended through `fr journal`'s engine. Their title is `op <id>:
+<result>` and their body is R7's key lines. Journal kind 3 adds `op` to `JournalKind`.
+Migration `fr.artifacts.journal_op` is stamp-only, registered in `MIGRATIONS`, and
+imported from `fr/artifacts/__init__.py`. `fr/record/model.py`'s `JournalItem.kind`
+becomes `JournalKind` minus `op`, so a record can never carry one.
 
 ### E. Profiles
 
-`ops: true` is an optional key on a profile entry. `fr isolation scaffold` writes
-`containerEnv.FR_PROFILE` for every profile it scaffolds (harmless for the rest) and
-`fr init` asks about an ops profile only when the repo has ops. `in_ops_profile()`
-checks `FR_PROFILE`, the declaration in `fr-profiles.yaml`, and container evidence
-(`/.dockerenv`, `/run/.containerenv`, `$KUBERNETES_SERVICE_HOST`, as the edit gate
-does). `status` warns and `apply` refuses when it fails.
+`ops: true` is a profile entry key. `fr init scaffold --ops` sets it and writes
+`containerEnv.FR_PROFILE`. `_update_profiles_yaml` (`isolation/scaffold.py:704-721`)
+merges into the existing entry instead of replacing it. Profiles without `--ops` keep
+today's `containerEnv` behaviour (`scaffold.py:544-550`). `fr init` asks about an ops
+profile when the repo has ops.
 
-### F. Helpers (`fr/ops/helpers.py`, `fr ops seal|secret|clip|scratch`)
+### F. Helpers (`fr/ops/helpers.py`)
 
-`seal`: `tempfile.mkstemp(dir=<$TMPDIR outside repo>)` with mode 0600, an
-`atomic` install via `fr.artifacts.atomic.write_text_atomic`'s rename discipline,
-and cleanup in `finally` plus SIGINT/SIGTERM handlers. `{in}`/`{target}` are
-substituted `shlex.quote`d. A target inside the repo whose encrypt command fails
-leaves the pre-existing target byte-identical. `clip` picks `pbcopy`, `wl-copy`,
-`xclip` or `clip.exe`, and refuses with the list when none exists. The docs
-(`docs/ops.md`) show sops (`--filename-override {target}`), kubectl and forge
-probes only as examples.
+`seal` follows R10. `{in}` lives under `$TMPDIR` (refused if that resolves inside the
+repo), `{out}` sits beside the target so `os.replace` is atomic, and every
+substitution is `shlex.quote`d. Cleanup runs in `finally` and in SIGINT/SIGTERM
+handlers. `clip` picks `pbcopy`, `wl-copy`, `xclip` or `clip.exe`, and refuses with
+that list when none exists. `docs/ops.md` shows sops (`--filename-override
+{target}`), kubectl and forge probes as examples only.
 
-### G. Test Plan tags (`fr/spec.py`)
+### G. Test Plan gates (`fr/spec.py`)
 
-`test_plan_steps` returns `Step(n, text, gate)`, where `gate` is `devops`, `tester`
-or `None`. `_ITEM_RE` keeps matching. A leading `[devops]`/`[tester]` is stripped
-into `gate`, and any other leading `[word]` is an error naming the step. Every
-current caller keeps reading `.text`.
+`Step` gains `gate: Literal["devops","tester"] | None` from the literal tag (R12). The
+effective gate is resolved against a run's `Exit` by `fr/ops/testplan.py`
+`effective_step_gate`. Every current caller keeps reading `.text`.
 
-### H. Deliver and gates
+### H. Gates, deliver, labels
 
-`render_pr_body` gains `## Manual operations`, inserted after `## Post-merge
-verification owed` and added to `REQUIRED_SECTIONS` in that position. The section
-reads "None." for a plan with no ops, so older runs re-render compliant. The run gate
-promotion to `devops` (R13) happens in the existing label sync at deliver, through
-`fr.verification.labels`. `fr gate pass --gate devops` (R14) loads the run's plan via
-the PR's run file on the default branch and refuses with the open list. The triage
-driver's merge step (`batch_merge`) treats an un-passed `gate:devops` as a hold.
+`Exit` gains the R13 promotion inside `run_exit`. `fr.gates` gains
+`PRE_MERGE_HOLD_GATES = frozenset({"devops"})`, used by `batch_merge._approved_and_ready`.
+`POST_MERGE_GATES` and its pass and label rules stay as they are, and its docstring
+says `devops` also holds pre-merge. `render_pr_body` inserts `## Manual operations`
+after `## Post-merge verification owed`, and `REQUIRED_SECTIONS` gains it in that
+position. A plan with no ops renders "None.". `fr gate pass` gains `--run` (R14).
 
 ### I. The DevOps stage (`fr ops gate`, `fr/ops/gate.py`)
 
-A sequenced engine in the `batch_closeout` style: it decides and sequences, while a
-`Worktree` seam runs git and `fr`, and the forge adapter merges (`GhClient`; another
-forge's merge raises `UnsupportedForgeOperation` naming the manual step). Its
-progress is the `op` entries plus `gate-stage` journal decisions, so a rerun resumes
-at the first stage not recorded as done. The engine itself runs on the harness host,
-like `fr run`. Op stages execute through `fr isolation exec --profile <ops>` in the
-ops workspace (R15). The merge confirmation is a TTY prompt naming the PR, its head
-sha and the pre-merge state, and `--yes` alone never merges without it.
+A sequencer in the `batch_closeout` style: it decides the next stage and runs nothing
+itself. A `gitseam.Worktree` seam runs git and `fr`, and the forge adapter merges
+(`GhClient.pr_merge`; another forge raises `UnsupportedForgeOperation` naming the manual
+merge). State is the ops workspace's plan journal plus the forge's PR state (R15).
+
+### J. Candidate scenarios
+
+`tests/scenarios/fr-ops-status-apply.sh`: a fixture plan with one op per state,
+including a cycle refusal; `apply --phase` twice, where the second run writes nothing;
+the profile refusal; an identity failure that names the identity.
+`tests/scenarios/fr-ops-seal.sh`: a failing encrypt command leaves the target
+byte-identical and no plaintext anywhere in the repo, and an interrupted seal cleans
+up. `tests/scenarios/fr-ops-gate-stage.sh`: a fake forge and a fake ops profile carry
+a run through stages 1–8, including a resume after an interrupted stage 4 and a
+refusal at stage 6 while a `[devops]` step has no outcome.
 
 ## Verification
 
 strategy: candidate
 gate: developer
 gate: fr-ops-live-first-run=devops
-- fr-ops-live-first-run: live — only a released fr inside a real ops profile, against real credentials, a live system and a real PR merge, can prove the DevOps stage end to end; candidate scenarios use local, credential-free checks and a fake forge.
+- fr-ops-live-first-run: live — only a released fr inside a real ops profile, against real credentials, a live system and a real PR merge, can prove the DevOps stage end to end; the candidate scenarios (§J) use local, credential-free checks and a fake forge.
 
 ## Test Plan
 
-- [devops] Post-merge — operator-driven: with the released fr, scaffold an ops profile in a disposable repo (or frank, once its follow-up issue lands), write a plan with one pre-merge and one post-merge op (`check`, `apply`, `ready`, one identity), deliver a PR, and run `fr ops gate --run <id>` through every stage: pre-merge apply, confirmed merge, `ready`, post-merge apply, the `[devops]` step, and the gate pass. Confirm a second `fr ops gate` writes nothing and that `fr ops status` from a fresh checkout shows the recorded evidence. Record the walk for `fr-ops-live-first-run`.
+- [devops] Post-merge — operator-driven: with the released fr, scaffold an ops profile (`fr init scaffold --ops`) in a disposable repo (or frank, once its follow-up issue lands), write a plan with one pre-merge and one post-merge op (`check`, `apply`, `ready`, one identity), deliver a PR, and run `fr ops gate --run <id>` through every stage: pre-merge apply, the confirmed merge, `ready`, post-merge apply, the `[devops]` step, the gate pass and the housekeeping PR. Confirm a second `fr ops gate` writes nothing, and that `fr ops status` from a fresh checkout of the merged housekeeping PR shows the recorded evidence. Record the walk for `fr-ops-live-first-run`.
 
 ## Implementation Plans
 
