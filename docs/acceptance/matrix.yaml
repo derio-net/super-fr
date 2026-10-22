@@ -9671,6 +9671,16 @@ rows:
     status: not-implemented
     notes: candidate scenario planned (plan 2026-10-22-fr-ops)
     scenario: tests/scenarios/fr-ops-seal.sh
+  - id: fr-ops-probe-trust
+    capability: fr ops
+    acceptance: Repo-authored probes run only after the operator trusts the exact op
+      set by hash, with a minimal environment, closed stdin and a timeout; a changed
+      op set refuses and shows what changed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R19
+    levels: {}
+    status: not-implemented
+    notes: 'added at phase-1 review (p1-r5): spec gap'
   - id: fr-ops-testplan-tags
     capability: Test Plan
     acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; an
