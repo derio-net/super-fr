@@ -1072,7 +1072,28 @@ delivery — but it is not optional either: marking <code>deliver</code> done ru
 report itself and records a fingerprint of it, so the one in the pull request
 can be checked against the one the tool saw. The second is the <code>fr run cost</code>
 table, so what the run spent is written down beside what it produced.</p>
+<p>Some changes cannot be finished by code alone: a deploy key to create, a token to
+rotate once the merge lands, a setting only a person with the right credentials
+can flip. When the plan declares those as <strong>manual operations</strong> (<code>fr ops</code>, see
+<code>docs/ops.md</code>), each with a check that says whether it is done, the description
+gains a <strong>Manual operations</strong> section listing each one, its phase and its last
+recorded state. <code>deliver</code> never waits on them, because the agent that delivers
+does not hold those credentials. Instead the run is held by the <code>devops</code> gate,
+before the merge as well as after it, and the operations belong to the DevOps
+stage described next.</p>
 <h3>9. Confirm the merge, then close out in a new session</h3>
+<p>A run whose plan carries manual operations, or whose specification declares
+<code>gate: devops</code>, is closed out differently. Its <code>fr pickup --run &lt;run-id&gt;</code> brief
+is a <strong>DevOps brief</strong> with one command, <code>fr ops gate --run &lt;run-id&gt;</code>, which you
+run yourself at a terminal (it refuses anywhere else, so an agent cannot run it
+for you). It works through eight recorded stages: apply the pre-merge operations
+in a separate workspace on a profile that holds the credentials, merge the pull
+request once you confirm its exact head, verify the merge, apply the post-merge
+operations, record the specification's devops steps, pass the gate, hand any
+tester steps to the Tester gate, and archive. It records each stage in your own
+state outside the repository, so stopping is safe and a rerun picks up where it
+stopped. The rest of this section describes the ordinary close-out, which every
+other run gets.</p>
 <p>Resolving <code>deliver</code> prints a handoff line —
 <code>closeout: after the PR merges, start a NEW session in &lt;workspace&gt; and run
 fr pickup --run &lt;run-id&gt;</code> — because the session that opens the PR is not the
