@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Row fr-ops-gate-stage: `fr ops gate --run <id>` carries a delivered run through the
 # DevOps stage's eight stages (spec 2026-10-22-fr-ops R15, §J): a resume after an
-# interrupted stage 4, and a refusal at stage 6 while a [devops] step is only owed.
+# interrupted stage 4, a refusal at stage 6 while a [devops] step is only owed, and its
+# recovery (a later outcome recorded in the ops workspace supersedes the owed one).
 #
 # Credential free and forge free. The forge is a fake inside a small driver that runs the
 # candidate's own python: it imports fr, swaps the forge factories, the operator's
@@ -280,5 +281,14 @@ gate run-q y y "owed later"
 require_exit 1 "$OUT"
 expect_grep 'stage 6 \(gate pass\) failed' "$OUT" "an owed devops step stops stage 6"
 expect_grep 'owed' "$OUT" "the refusal names the owed step"
+expect_grep 'fr closeout outcome --run run-q --step 1 --ran' "$OUT" "the refusal names the recovery command"
+
+# --- the owed step recovers: record it in the ops workspace, re-run --------------------
+(unset CI; fr isolation exec --branch chore/ops-q -- fr closeout outcome --run run-q --step 1 --ran --evidence "walked it later") >/dev/null 2>&1 \
+  || fail "could not record the owed step's outcome"
+gate run-q
+require_exit 0 "$OUT"
+expect_grep 'stage 6 \(gate pass\): done' "$OUT" "a recorded outcome supersedes the owed one"
+expect_grep 'DevOps stage is complete' "$OUT" "the recovered run completes"
 
 echo "ok: fr-ops-gate-stage"

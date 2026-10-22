@@ -301,7 +301,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     profiles), `helpers.py` (`seal`/`secret`/`clip`/`scratch`), `holds.py` (what still
     holds a devops gate, by recorded evidence) and `gate.py`, the DevOps stage's
     sequencer: eight stages as data over host/workspace/forge/prompt ports, its state
-    host-side (`HostGateState`, never read from the PR-controlled workspace). CLI:
+    host-side (`HostGateState`); the ops workspace is PR-controlled, so an op closes
+    there only by its live status and a journal closure or Test Plan outcome only when
+    added on the ops branch after the recorded head. CLI:
     `fr ops {status,apply,attest,trust,seal,secret,clip,scratch,gate}`
     (`commands/ops_cmd.py`, `commands/ops_gate_cmd.py`); the whole group is gated by the
     artifact trigger. Every `python -m fr` fr starts runs with `-P` (no cwd on sys.path). Driver skill:

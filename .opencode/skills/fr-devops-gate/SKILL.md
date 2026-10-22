@@ -41,9 +41,13 @@ writes one).
 | 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
 
 Each stage's completion is recorded in your own state outside every checkout
-(`$XDG_STATE_HOME/fr/ops-gate/`), never read from the ops workspace, which the PR
-controls; the `gate-stage-<n>` journal decisions are an audit trail. So stopping is
-always safe: re-run the same command. Pre-merge evidence never lands on the PR head, so
+(`~/.local/state/fr/ops-gate/` by default), and only once its record is pushed to the
+ops branch; the `gate-stage-<n>` journal decisions are an audit trail. The PR controls
+the ops workspace, so inside the stage an op closes only by its live check, and an
+attestation or Test Plan outcome only when added on the ops branch, never one the PR
+already carries. A PR that changes the ops profile itself is refused before anything
+comes up: that change merges in its own PR first. So stopping is always safe: re-run
+the same command. Pre-merge evidence never lands on the PR head, so
 the reviewed head and its checks stay valid. A PR merged by hand in the forge counts as
 stage 2 done.
 
@@ -84,7 +88,8 @@ naming the manual merge; merge in the forge at that head, then re-run.
 
 Stage 5 asks for each devops Test Plan step: walk it, then answer `ran <evidence>`,
 `na <reason>` or `owed <why>`. An `owed` answer is recorded but does not close the step,
-so stage 6 refuses: owe a step only when you mean to stop here. Steps the Tester gate
+so stage 6 refuses and prints the `fr closeout outcome` command that records it once you
+have walked it (a later `ran`/`na` supersedes the owed one); then re-run the stage. Steps the Tester gate
 owns are listed in the gate-pass comment and keep `gate:tester` on the PR; they are not
 this stage's to walk.
 

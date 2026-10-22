@@ -192,32 +192,69 @@ brief for it, and its one command is:
 ```bash
 fr ops gate --run <run-id>          # preview the 8 stages
 fr ops gate --run <run-id> --yes    # act
+fr ops gate --run <run-id> --yes --profile <ops-profile> --method squash
 ```
 
+`--profile` names the ops profile when the repo declares more than one (`ops: true`);
+`--method` picks the merge method (`merge`, `squash` or `rebase`; default: the repo's).
+
 It runs on the harness host at a terminal and refuses a non-interactive context (no
-terminal, or `CI` set), which is how a delivering agent is kept out. The skill
-`fr-devops-gate` holds the judgement it needs from you.
+terminal, or `CI` set), which is how a delivering agent is kept out. Run it from a
+checkout that holds the run's cursor: before the merge, that is the feature workspace
+(`fr isolation status` names it); after the merge, the base clone on the default branch
+holds it too. The skill `fr-devops-gate` holds the judgement it needs from you.
 
 | Stage | |
 |---|---|
-| 1 | Bring up or reuse the ops workspace `chore/ops-<slug>`, cut from the PR head, on the ops profile; grant trust on the host if the op set changed; pre-merge status, then each open op, confirmed on the host terminal and run as `fr isolation exec --branch chore/ops-<slug> -- fr ops apply <id> --yes [--yes-mutating]`. Records the head it cut from. |
+| 1 | Refuse, before anything comes up, a PR that changes the ops profile itself (`.devcontainer/<ops>/**` or `.devcontainer/fr-profiles.yaml` differs from the default branch): that change must merge in its own PR first. Bring up or reuse the ops workspace `chore/ops-<slug>`, cut from exactly the PR head, on the ops profile; grant trust on the host if the op set changed; pre-merge status, then each open op, confirmed on the host terminal and run as `fr isolation exec --branch chore/ops-<slug> -- fr ops apply <id> --yes [--yes-mutating]`. Records the head it cut from. |
 | 2 | Merge through the forge, only with no open pre-merge op, the PR's required checks green on that head, the head unchanged since stage 1, and a terminal confirmation naming the PR, its head and the pre-merge state (asked even under `--yes`). A forge fr cannot merge through stops the stage naming the manual merge. |
 | 3 | `fr isolation verify-merge`, then rebase the ops branch onto the default branch (it then carries only its own evidence commits), then every `ready:`. |
 | 4 | Post-merge status and apply. |
-| 5 | Each Test Plan step whose effective gate is `devops`, recorded with `fr closeout outcome` (`ran`, `na`, or `owed`, which stage 6 then refuses). |
+| 5 | Each Test Plan step whose effective gate is `devops`, recorded with `fr closeout outcome` (`ran`, `na`, or `owed`, which stage 6 then refuses; see below). |
 | 6 | `fr gate pass --gate devops --run <id>` from the ops workspace: it folds only recorded evidence. |
 | 7 | Steps whose gate is `tester` are listed in the gate-pass comment, and `gate:tester` stays. |
-| 8 | `fr archive --branch <feature>`, then push the ops branch and open it as the housekeeping PR. |
+| 8 | `fr archive --branch <feature>` (filing the run's out-of-scope findings with `--issues`, as the close-out brief would, or `--no-issues` under `tracking: none`), then open the ops branch as the housekeeping PR. |
 
-Each stage's completion, and the PR head stage 1 verified, are recorded host-side, per
-operator, outside every checkout (`$XDG_STATE_HOME/fr/ops-gate/<repo-key>/<run-id>.json`,
-beside the trust store): the ops workspace is cut from the PR, so nothing it carries is
-read back. A `gate-stage-<n>` decision is still committed to the plan journal on the ops
-branch, as an audit trail. A rerun resumes at the first stage the host state does not
-record, and a PR the forge reports MERGED counts as stage 2 done. Stage 2 merges only the
-recorded head, and stage 3 checks the merged PR's head is that one. The first failure stops the run, naming the
-stage (exit 1; a refusal such as a moved head exits 2). Pre-merge evidence never lands
-on the PR head, so the reviewed head and its checks stay valid.
+### What the stage trusts
+
+The ops workspace is cut from the PR, so anything it carries is written by the PR's
+author. The stage therefore keeps its own progress elsewhere and never lets the PR
+close anything:
+
+- **Its state** (each stage's completion, and the PR head stage 1 cut from) lives
+  host-side, per operator, outside every checkout:
+  `$XDG_STATE_HOME/fr/ops-gate/<repo-key>/<run-id>.json`, by default
+  `~/.local/state/fr/ops-gate/` (`FR_OPS_GATE_DIR` overrides). A `gate-stage-<n>`
+  decision is still committed to the plan journal, as an audit trail no one reads back.
+- **An op** closes only by its live status row (DONE or N/A). A closure that comes from
+  the journal (an attestation, a proof, a recorded N/A) counts only when its entry was
+  added on the ops branch after the recorded head, never one the PR already carries.
+- **A Test Plan outcome** counts the same way: one the PR carries is asked for again.
+
+Each stage is committed and pushed to the ops branch (fr owns it, so the push is forced
+after the stage-3 rebase), and only then marked done; a failed push leaves the stage to
+retry. A rerun resumes at the first stage the host state does not record, and a PR the
+forge reports MERGED counts as stage 2 done. Stage 2 merges only the recorded head, and
+stage 3 checks the merged PR's head is that one. The first failure stops the run, naming
+the stage (exit 1; a refusal such as a moved head, a changed ops profile or an untrusted
+op set exits 2). Pre-merge evidence never lands on the PR head, so the reviewed head and
+its checks stay valid.
+
+### When a devops step is owed
+
+An `owed` answer at stage 5 is recorded, but it does not close the step, so stage 6's
+gate pass refuses and prints the command to close it. Walk the step, then record it in
+the ops workspace and re-run the stage:
+
+```bash
+fr isolation exec --branch chore/ops-<slug> -- \
+  fr closeout outcome --run <run-id> --step <n> --ran --evidence "<what it showed>"
+fr ops gate --run <run-id> --yes
+```
+
+A later `ran` or `n/a` outcome supersedes the owed one (`fr closeout outcome` records
+over an owed step without a flag; over any other it needs `--supersede`), and so does
+resolving the owed entry `fixed` with `fr journal resolve`.
 
 ### Test Plan tags
 
