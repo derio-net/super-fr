@@ -57,6 +57,10 @@ def _repo(tmp_path: Path, ops: str = OPS, branch: str = "feat/x") -> Path:
     plan = tmp_path / PLAN_REL
     plan.mkdir(parents=True)
     (plan / "ops.yaml").write_text(ops)
+    # Committed: a probe runs only against committed paths (R19), and a plan's
+    # ops.yaml is not one of fr's evidence files.
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed")
     _trust_all(tmp_path)
     return tmp_path
 
@@ -66,15 +70,15 @@ def _trust_all(root: Path) -> None:
     does once confirmed — so these tests exercise status, not the trust gate
     (`test_ops_trust.py` owns that)."""
     from fr.ops.load import OpsLoadError, load_ops, load_ops_config
-    from fr.ops.trust import fingerprint, grant_trust, head_code
+    from fr.ops.trust import fingerprint, grant_trust, head_tree, tree_digest
 
     try:
         ops = load_ops(root / PLAN_REL, root).ops
     except OpsLoadError:
         return  # a test of the carrier refusal; nothing to trust
-    tree, commit = head_code(root)
-    fp = fingerprint(ops, load_ops_config(root), root, code_tree=tree)
-    grant_trust(root, "p", fp, commit=commit)
+    tree = head_tree(root)
+    fp = fingerprint(ops, load_ops_config(root), root, code_tree=tree_digest(tree))
+    grant_trust(root, "p", fp, tree=tree)
 
 
 def _run_on_branch(root: Path, branch: str = "feat/x") -> None:

