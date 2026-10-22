@@ -1556,3 +1556,8 @@ Phase 5 discharged the P5.T2.S1 obligation the finding named: row `opencode-run-
 ### p5-ci-stat-portability · finding [open] · The cli.json mode probe works only on BSD stat, so delivery fails on every Linux runner (phase 5)
 
 `write_cli_json` read the target's mode with `stat -f '%Lp' ... || stat -c '%a' ...`. `-f` is a VALID GNU flag (filesystem status), so on Linux the first branch SUCCEEDS and returns a filesystem block ending in the mode; `chmod` rejects it and the delivery refuses. CI is Linux: 9 failures in test shard 1, 7 in shard 2 (`test_opencode_plugin_delivery`, `test_install_sh`, `test_harness_check`) and all three live-probe tests, while every macOS run passed.
+
+<!-- fr:journal kind=finding scope=plan id=p5-ci-stat-portability-resolved created=2026-10-22T13:24:10+00:00 phase=5 state=fixed resolves=p5-ci-stat-portability -->
+### p5-ci-stat-portability-resolved · finding [fixed] · resolves p5-ci-stat-portability: The cli.json mode probe works only on BSD stat, so delivery fails on every Linux runner (phase 5)
+
+Probe order reversed (GNU `stat -c '%a'` first, BSD `stat -f '%Lp'` as the fallback) with a comment naming the trap. Verified locally against a GNU-like `stat` shim: delivery installs and a 0600 cli.json stays 0600; the 22 delivery tests still pass.
