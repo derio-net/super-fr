@@ -68,3 +68,10 @@ Evidence:
 - `test/git.test.ts` (10 cases): candidate order pinned against the bash list; null with nothing executable; an absolute candidate survives a stripped PATH; cache-per-env; `undefined` for non-repo, unresolvable and empty answers.
 - `test/guard-verdicts.test.ts` + `tests/fixtures/hooks/guard-verdicts.yaml`: new captured row `git-unresolvable` (`PATH` = `{bin}/bin-no-git`, `FR_GIT_CANDIDATES` = nothing) — both engines DENY the base-repo command rather than allowing it; `guard-world.sh` builds the shim from the caller's PATH minus `git*`, so the row removes git and nothing else; `capture_guard_verdicts.py` now expands placeholders inside a row's `env` and runs bash by absolute path.
 - `tests/unit/test_hooks_guard.py` 139 passed; `bun test` 232 passed; `bunx tsc --noEmit` clean.
+
+<!-- fr:journal kind=finding scope=debug id=5d21c8be0a4e created=2026-10-23T05:43:13+00:00 state=fixed -->
+### 5d21c8be0a4e · finding [fixed] · Found while fixing #1221: the edit gate read `write` CONTENT as an absolute path when it began with `//`
+
+`index.ts`'s `collectPathValues` treats any unkeyed string that `path.isAbsolute` accepts as a possible target, so that an unknown path-carrying tool still fails closed. `write`'s `content` is an unkeyed string: a file whose first bytes are `//` (a licence header, a commented-out include) was therefore probed as a path, and the refusal named the CONTENT — `fr-isolation: cannot inspect target symlink: // …  …`, with ENAMETOOLONG for a real file. Observed when writing the TypeScript test files for #1221; the running plugin still refuses those calls.
+
+Fix: a string is only a path target when it is ONE LINE and at most `MAX_PATH_BYTES = 4096` (`looksLikePath`) — the `PATH_KEYS` branch (`filePath`, `path`, …) is unchanged and still absolute-or-relative by key, and patch bodies keep their own parser. `test/index.test.ts` pins three cases: a `//`-headed `write` in the base clone is denied naming the FILE and never the content; the same write inside a valid workspace is allowed; a 5000-character single-line absolute string is content, not a probe.
