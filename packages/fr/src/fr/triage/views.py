@@ -130,6 +130,7 @@ def drive_snapshot(
             failing=failing,
             head_ref=entry.pr.head_ref,
             trusted=True,  # the queue holds `batch_pr`s only (gh#936)
+            labels=tuple(entry.pr.labels) if entry.pr.labels is not None else None,
         )
     merged_at: dict[str, datetime] = {}
     for b in batches:

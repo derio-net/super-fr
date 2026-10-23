@@ -1,0 +1,149 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The DevOps stage engine, pickup brief, skill and docs (R15, R16, R18)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - fr-ops-gate-stage
+  - fr-ops-live-first-run
+  tier: hard
+  files:
+  - packages/fr/src/fr/ops/gate.py
+  - packages/fr/src/fr/commands/ops_cmd.py
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/commands/pickup_cmd.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - plugins/super-fr/skills/fr-devops-gate/SKILL.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/skills/**
+  - .hermes/skills/**
+  - .opencode/instructions/*.md
+  - .hermes/SOUL.d/*.md
+  - scripts/install.sh
+  - packages/fr/src/fr/harness/parity.yaml
+  - docs/ops.md
+  - docs/explainers/01-fr-goal.md
+  - AGENTS.md
+  - tests/unit/test_ops_gate*.py
+  - tests/unit/test_*closeout*.py
+  - tests/unit/test_install*.py
+  - tests/scenarios/fr-ops-gate-stage.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: The stage sequencer (R15)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_ops_gate.py over a fake Worktree seam, fake forge and fake
+      prompt — refuses when not interactive (fr.artifacts.trigger.is_interactive false or
+      CI set); preview prints the 8 stages and changes nothing; with --yes runs them in
+      order; stage 2 merges only after the terminal confirmation naming PR, head sha and
+      pre-merge state, and only when no pre-merge op is open and required checks pass on
+      that head; each op confirmation is taken on the host and the op runs as
+      `fr isolation exec --branch chore/ops-<slug> -- fr ops apply <id> --yes
+      [--yes-mutating]`; pre-merge evidence commits stay on the ops branch (never pushed to
+      the PR head); after merge the ops branch is rebased onto the default branch; each
+      stage records a `gate-stage-<n>` decision; a rerun resumes at the first unrecorded
+      stage; a forge-MERGED PR counts as stage 2 done; stops at the first failure naming
+      the stage; stage 7 keeps gate:tester and lists the tester steps in the pass comment;
+      stage 8 runs `fr archive --branch <feature>` and opens the ops branch as the
+      housekeeping PR; a non-GitHub forge's merge raises UnsupportedForgeOperation naming
+      the manual merge.
+  - id: P4.T1.S2
+    text: |-
+      GREEN — fr/ops/gate.py sequencer (decides, runs nothing itself) plus the `gate` command wiring the real gitseam Worktree and GhClient.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR — stage table as data (number, name, predicate, action); tests green.
+- number: 2
+  title: The DevOps pickup brief (R16)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED — `fr pickup --run` for a run whose effective gates include devops prints the DevOps brief (runs before or after merge, single command `fr ops gate --run <id>`, no verify-merge/STOP/archive lines); other runs print today's brief byte-identically.
+  - id: P4.T2.S2
+    text: |-
+      GREEN — run/closeout.py `devops_brief()` chosen by pickup via `plan_has_ops`/run_exit.
+- number: 3
+  title: The fr-devops-gate skill and mirrors (R16)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Write plugins/super-fr/skills/fr-devops-gate/SKILL.md (≤120 lines, tool-neutral per
+      the harness-parity prose scanner): when to use, `fr ops gate --run <id>`, reading OPEN
+      reasons, attest-vs-write-a-check, the merge confirmation, the tester hand-off. Add a
+      one-line pointer in fr-goal's deliver/close-out prose (fr-goal is at its 120-line cap:
+      compress an existing sentence to fit). Wire install.sh as for other skills; add any
+      parity.yaml row the tripwire asks for.
+  - id: P4.T3.S2
+    text: |-
+      Run `uv run --no-project python scripts/sync-opencode.py` AND `uv run --no-project python scripts/sync-hermes.py`; then the three opencode guards, the hermes tripwire, test_install_copies_*, test_skill_validation and test_tripwire_skill_tool_neutrality.
+- number: 4
+  title: Docs and the gate-stage scenario (R18)
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Write docs/ops.md: authoring ops (R1 fields, both carriers, runbook selection),
+      identities, exit codes, evidence and attestation, the four helpers with encryption-tool/cluster-CLI/
+      forge examples, the ops profile (`fr init scaffold --ops`), and the DevOps stage's
+      8 stages. Update docs/explainers/01-fr-goal.md where it describes deliver and the
+      close-out (the .html regeneration is done on the host at deliver). Add an `fr/ops`
+      paragraph to AGENTS.md's repo-shape list.
+  - id: P4.T4.S2
+    text: |-
+      Write tests/scenarios/fr-ops-gate-stage.sh (fake forge and fake ops profile as in
+      P2's scenarios) covering stages 1-8, a resume after an interrupted stage 4 and a
+      stage-6 refusal while a [devops] step has no outcome; wire it into
+      tests/integration/test_scenarios.py; `uv run fr acceptance set-status --id
+      fr-ops-gate-stage --status not-implemented --scenario tests/scenarios/fr-ops-gate-stage.sh
+      --notes "candidate scenario written"`. Run ruff/mypy and the full suite LAST into a
+      host-visible log.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+    P4.T4.S2:
+      state: x
+      ticked_at: '2026-10-22T12:47:31+00:00'
+      note: null
+  completion:
+    at: '2026-10-22T12:47:31+00:00'
+    note: null
+    observed_prs: []

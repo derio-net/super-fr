@@ -202,16 +202,39 @@ def validate_journal(path: Path) -> list[str]:
                 f"owed entry `{entry.id}` has no well-formed `owed_key:` line — every owed "
                 "item carries exactly one key (spec:<slug>#step<n>, plan:<name>#p<n>, row:<id>)"
             )
-    if owed:
-        try:
-            version = _read_journal_stamp(path) or 1
-        except Exception:  # noqa: BLE001 — the stamp check reports an unreadable stamp
-            version = None
-        if version is not None and version < 2:
+    try:
+        version: int | None = _read_journal_stamp(path) or 1
+    except Exception:  # noqa: BLE001 — the stamp check reports an unreadable stamp
+        version = None
+    for kind, needs in (("owed", 2), ("op", 3)):
+        ids = [e.id for e in entries if e.kind == kind]
+        if ids and version is not None and version < needs:
             problems.append(
-                f"carries `owed` entr(ies) {', '.join(e.id for e in owed)} but is stamped "
-                f"journal schema {version} — the `owed` kind needs schema 2"
+                f"carries `{kind}` entr(ies) {', '.join(ids)} but is stamped "
+                f"journal schema {version} — the `{kind}` kind needs schema {needs}"
             )
+    return problems
+
+
+# --- ops -----------------------------------------------------------------
+
+
+def validate_ops(path: Path) -> list[str]:
+    """A plan's `ops.yaml` (spec `2026-10-22-fr-ops-design` R1, R17) against
+    `OpsFile`: every op parses as an `Op`, and no op id appears twice."""
+    from fr.ops.model import OpsFile
+
+    data, problems = _load_mapping(path)
+    if problems or data is None:
+        return problems
+    problems = _model_problems(OpsFile, data)
+    if problems:
+        return problems
+    seen: set[str] = set()
+    for op in OpsFile.model_validate(data).ops:
+        if op.id in seen:
+            problems.append(f"op `{op.id}` is defined twice")
+        seen.add(op.id)
     return problems
 
 

@@ -275,7 +275,7 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 def _ledger_repo(tmp_path: Path, *, walked: bool, section: str | None = None,
-                 other: bool = True) -> Any:  # fmt: skip
+                 other: bool = True, ops: bool | None = None) -> Any:  # fmt: skip
     """A clone whose `origin/main` holds a run on feat/batch-b1, its spec and the matrix."""
     from fr.run.model import RunState, StepRecord, dump_run_state, run_path
     from fr.triage.gitseam import Checkout
@@ -299,9 +299,19 @@ def _ledger_repo(tmp_path: Path, *, walked: bool, section: str | None = None,
                           "outcome": "pass", "at": "2026-10-02", "evidence": "log"}]  # fmt: skip
     write_matrix(clone, [live, *([row(spec, rid="r-other")] if other else [])])
     brainstorm = StepRecord(state="done", emitted={"spec": spec})
+    steps = {"brainstorm": brainstorm}
+    if ops is not None:  # a plan, with or without one op (fr-ops R13)
+        plan = clone / "docs/superpowers/plans/p"
+        plan.mkdir(parents=True)
+        (plan / "_prose.md").write_text("# p\n")
+        if ops:
+            (plan / "ops.yaml").write_text(
+                "schema_version: 1\nops:\n  - id: k\n    summary: s\n    phase: post-merge\n"
+            )
+        steps["plan"] = StepRecord(state="done", emitted={"plan": "docs/superpowers/plans/p"})
     state = RunState(run="r1", workflow="fr-goal@1", branch="feat/batch-b1",
                      started="2026-10-01T00:00:00Z", cursor="deliver",
-                     steps={"brainstorm": brainstorm})  # fmt: skip
+                     steps=steps)  # fmt: skip
     path = run_path(clone, "r1")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(dump_run_state(state))
@@ -489,3 +499,32 @@ def test_p4_r7_a_pass_fetches_each_repo_once_however_many_batches_are_gated(
 
     assert code == 0, out
     assert fetches == [1]
+
+
+# ------------------------------------- fr-ops R13 (p3-r2): ops own the devops pass
+
+
+@pytest.mark.parametrize("ops", [True, False])
+def test_p3_r2_the_ledger_reads_the_plan_and_says_whether_ops_promoted(
+    tmp_path: Path, ops: bool
+) -> None:
+    from fr.triage.ledger import gated_rows_at
+
+    checkout = _ledger_repo(tmp_path, walked=True, ops=ops)
+    assert gated_rows_at(checkout, "origin/main", "feat/batch-b1").ops_promoted is ops
+
+
+def test_p3_r2_a_devops_gate_ops_promoted_is_never_passed_by_walked_rows() -> None:
+    rows = (GatedRow("row-d", "devops", walked=True),)
+    ledger = {"b1": GateLedger(pr=101, labels=frozenset({"gate:devops"}), rows=rows,
+                               run_gate="developer", ops_promoted=True)}  # fmt: skip
+    plan = drive_pass(_landed(ledgers=ledger))
+    assert [a for a in plan.actions if a.kind == "gate-pass"] == []
+
+
+def test_p3_r2_a_devops_gate_with_no_ops_still_passes_by_walked_rows() -> None:
+    rows = (GatedRow("row-d", "devops", walked=True),)
+    ledger = {"b1": GateLedger(pr=101, labels=frozenset({"gate:devops"}), rows=rows,
+                               run_gate="developer")}  # fmt: skip
+    (passing,) = [a for a in drive_pass(_landed(ledgers=ledger)).actions if a.kind == "gate-pass"]
+    assert passing.gate == "devops"

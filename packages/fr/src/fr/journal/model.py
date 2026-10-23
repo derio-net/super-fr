@@ -40,6 +40,10 @@ JournalKind = Literal[
     # (`owed_body`). It folds apart from findings — see `open_owed_ids`.
     # Journal kind 2: an fr that predates it cannot parse the entry at all.
     "owed",
+    # One manual operation's recorded outcome (spec 2026-10-22-fr-ops §D, R7):
+    # `key: value` body lines (`op_body`), folded latest-wins by `fr ops status`.
+    # Written only by `fr ops`, never through a step record. Journal kind 3.
+    "op",
 ]
 JournalScope = Literal["spec", "plan", "debug"]
 FindingState = Literal["fixed", "refuted", "open"]
@@ -71,6 +75,17 @@ OWED_KEY_RE = re.compile(
 )
 OWED_FIELDS = ("what", "why", "how", "owed_key")
 """The body lines an `owed` entry carries, in this order (spec §E)."""
+
+OP_BODY_KEYS = ("op", "result", "identity", "reason", "phase", "attested_by")
+"""The body lines an `op` entry may carry, in this order (spec 2026-10-22-fr-ops
+R7). The ONE key set: `op_body` writes it and `op_fields` folds it, so the writer
+and the fold cannot disagree. Never secret material."""
+OP_RESULTS = ("done", "na", "open", "failed", "attested", "proof")
+"""The values `result:` takes (R7). `na` records an op `apply` found N/A by its
+`na_if`; it closes the op only while the op carries `na_if`."""
+# Entry kinds a journal stamped below the current version cannot hold: the write
+# that appends one stamps the journal in the same write (`_at_current_stamp`).
+_STAMPING_KINDS = frozenset({"owed", "op"})
 
 JOURNALS_REL = Path("docs/superpowers/journals")
 IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
@@ -301,6 +316,13 @@ def archived_journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Pa
     return repo_root / IMPLEMENTED_JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
 
 
+def journal_read_candidates(repo_root: Path, scope: JournalScope, slug: str) -> tuple[Path, Path]:
+    """Every place a journal is read from, in the order `resolve_journal_read_path` tries
+    them: active, then archived. One list, so a caller that must see every location the
+    reader could honour (the DevOps stage's PR-carried exclusion) cannot drift from it."""
+    return journal_path(repo_root, scope, slug), archived_journal_path(repo_root, scope, slug)
+
+
 def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     """Path to read a journal from: the active location if present, else the
     archived one.
@@ -311,10 +333,9 @@ def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -
     neither exists the active path is returned (callers treat a missing file as
     an empty journal), keeping behaviour identical for never-written slugs.
     """
-    active = journal_path(repo_root, scope, slug)
+    active, archived = journal_read_candidates(repo_root, scope, slug)
     if active.exists():
         return active
-    archived = archived_journal_path(repo_root, scope, slug)
     if archived.exists():
         return archived
     return active
@@ -753,6 +774,40 @@ def owed_key(entry: JournalEntry) -> str | None:
     return key if key and OWED_KEY_RE.match(key) else None
 
 
+def op_body(**values: str | None) -> str:
+    """The body of an `op` entry — one `key: value` line per given key, in
+    `OP_BODY_KEYS` order. Raises `ValueError` on an unknown key, a missing `op`
+    or `result`, an unknown result, or a value spanning lines."""
+    unknown = sorted(set(values) - set(OP_BODY_KEYS))
+    if unknown:
+        raise ValueError(f"unknown op body key(s): {', '.join(unknown)}")
+    if not values.get("op"):
+        raise ValueError("an op entry names its `op`")
+    if values.get("result") not in OP_RESULTS:
+        raise ValueError(
+            f"op result {values.get('result')!r} is not one of {', '.join(OP_RESULTS)}"
+        )
+    lines = []
+    for name in OP_BODY_KEYS:
+        value = values.get(name)
+        if value is None:
+            continue
+        if "\n" in value or "\r" in value:
+            raise ValueError(f"op body `{name}` must be one line")
+        lines.append(f"{name}: {value.strip()}")
+    return "\n".join(lines)
+
+
+def op_fields(entry: JournalEntry) -> dict[str, str]:
+    """The `op_body` fields of an entry (missing ones absent, first one wins)."""
+    found: dict[str, str] = {}
+    for line in entry.body.splitlines():
+        name, sep, value = line.partition(": ")
+        if sep and name in OP_BODY_KEYS and name not in found:
+            found[name] = value.strip()
+    return found
+
+
 def phase_finding_states(
     entries: list[JournalEntry], phase: int
 ) -> dict[str, EffectiveFindingState]:
@@ -795,17 +850,17 @@ def appended_journal_text(prior: str | None, slug: str, entry: JournalEntry) -> 
     block = serialize_entry(entry)
     if prior is None:
         return f"{journal_header(slug)}\n{block}"
-    if entry.kind == "owed":
-        prior = _at_owed_stamp(prior)
+    if entry.kind in _STAMPING_KINDS:
+        prior = _at_current_stamp(prior)
     sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
     return prior + sep + block
 
 
-def _at_owed_stamp(text: str) -> str:
+def _at_current_stamp(text: str) -> str:
     """`text` stamped at the journal kind's current version when it is stamped
-    below it (review p3-r7): an `owed` entry needs journal schema 2, and an
-    archived journal is never migrated, so the write that adds one stamps it —
-    in the same write, never a second one."""
+    below it (review p3-r7): an `owed` entry needs journal schema 2 and an `op`
+    entry schema 3, and an archived journal is never migrated, so the write that
+    adds one stamps it — in the same write, never a second one."""
     from fr.artifacts.registry import (
         _journal_stamp_line,
         _journal_stamp_match,
@@ -935,6 +990,15 @@ def _handoff_line(entry: JournalEntry, effective_state: str | None = None) -> st
     return f"- {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
 
 
+OP_TRUST_ID_RE = re.compile(r"^op-trust-(\d+)$")
+"""The id of an `fr ops trust` decision (`fr.ops.trust`, spec 2026-10-22-fr-ops R19)."""
+
+
+def _is_op_record(entry: JournalEntry) -> bool:
+    """An `op` entry, or an `op-trust-<n>` decision (`fr.ops.trust`)."""
+    return entry.kind == "op" or (entry.kind == "decision" and bool(OP_TRUST_ID_RE.match(entry.id)))
+
+
 def compose_handoff(
     entries: list[JournalEntry],
     *,
@@ -1031,6 +1095,12 @@ def compose_handoff(
             speaks_for = e.resolves if e.resolves is not None else e.id
             renders_full = speaks_for in still_open
             section = open_findings
+        elif _is_op_record(e):
+            # `fr ops` evidence and trust (spec 2026-10-22-fr-ops R7, R19): written
+            # unphased, many per run, and machine state rather than context a phase
+            # executor acts on — rendered in full they would land in every handoff.
+            renders_full = False
+            section = context
         else:
             # Dependency rule, deliberately unchanged: decisions and
             # discoveries are never "closed" and carry forward value.

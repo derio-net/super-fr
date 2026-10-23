@@ -232,6 +232,30 @@ def held_gates(labels: Iterable[str]) -> frozenset[str]:
     )
 
 
+def pre_merge_held(labels: Iterable[object] | None) -> frozenset[str]:
+    """The `PRE_MERGE_HOLD_GATES` a PR's *labels* hold unpassed (fr-ops R14): `gate:<g>`
+    with no `gate:<g>-passed`. The one predicate the merge path, the planner and the board
+    read."""
+    from fr.gates import PRE_MERGE_HOLD_GATES
+
+    names = {str(n) for n in labels or ()}
+    return frozenset(
+        g
+        for g in PRE_MERGE_HOLD_GATES
+        if gate_label(g).name in names and gate_label(g, passed=True).name not in names
+    )
+
+
+def awaiting_devops(number: int) -> str:
+    """The one line the planner, the board and the merge path say for a PR the devops
+    gate holds before merge (fr-ops R14)."""
+    held, passed = gate_label("devops").name, gate_label("devops", passed=True).name
+    return (
+        f"PR #{number} is awaiting DevOps: {held} holds its merge until {passed} "
+        "(the DevOps stage merges it: `fr ops gate --run <id>`)"
+    )
+
+
 def passed_gates(labels: Iterable[str]) -> frozenset[str]:
     """The post-merge gates a PR's *labels* record as passed (`gate:<g>-passed`): the
     gates whose rows the collected close-out records and whose issues it closes (R15)."""

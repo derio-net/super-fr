@@ -11,6 +11,7 @@ Writes three things per profile:
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -19,7 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -445,6 +446,54 @@ def env_file_path(repo_root: Path, profile: str) -> Path:
     return secrets_env_file(repo_root.name, profile)
 
 
+OPS_TRUST_MOUNT_TARGET = "/run/fr-ops-trust"
+
+
+def _resolve_ops(repo_root: Path, profile: str, ops: bool | None) -> bool | None:
+    """`--ops` / `--no-ops` as given; unset keeps an existing ops profile an ops profile
+    (re-scaffolding must not silently drop FR_PROFILE and the trust mount)."""
+    if ops is not None:
+        return ops
+    from fr.isolation.types import profiles_config
+
+    entry = ((profiles_config(repo_root) or {}).get("profiles") or {}).get(profile)
+    if isinstance(entry, dict) and entry.get("ops") is True:
+        print(
+            f"fr init scaffold: profile {profile!r} is an ops profile; keeping it one "
+            "(pass --no-ops to remove)",
+            file=sys.stderr,
+        )
+        return True
+    return None
+
+
+def _trust_source() -> str:
+    """The trust store's host path as devcontainer variable syntax, never a literal host
+    path (the file is committed, and a literal carries the operator's username)."""
+    if os.environ.get("FR_OPS_TRUST_DIR"):
+        return "${localEnv:FR_OPS_TRUST_DIR}"
+    if os.environ.get("XDG_STATE_HOME"):
+        return "${localEnv:XDG_STATE_HOME}/fr/ops-trust"
+    return "${localEnv:HOME}/.local/state/fr/ops-trust"
+
+
+def _add_ops(config: dict[str, Any], profile: str) -> None:
+    """The ops profile's container config (R6, R19): `FR_PROFILE`, and the operator's
+    ops-trust store mounted READ-ONLY with `FR_OPS_TRUST_DIR` pointing at it, so a probe
+    there sees the grants and can never write one. The host dir is created so the
+    bind mount has a source."""
+    from fr.ops.trust import trust_dir
+
+    trust_dir().mkdir(parents=True, exist_ok=True)
+    env = dict(config.get("containerEnv") or {})
+    env["FR_PROFILE"] = profile
+    env["FR_OPS_TRUST_DIR"] = OPS_TRUST_MOUNT_TARGET
+    config["containerEnv"] = env
+    mounts = list(config.get("mounts") or [])
+    mounts.append(f"source={_trust_source()},target={OPS_TRUST_MOUNT_TARGET},type=bind,readonly")
+    config["mounts"] = mounts
+
+
 def scaffold_profile(
     repo_root: Path,
     profile: str,
@@ -459,6 +508,7 @@ def scaffold_profile(
     features: list[str] | None = None,
     ci: str = "auto",
     tracking: str = "auto",
+    ops: bool | None = None,
 ) -> Path:
     """Write the profile and (by default) commit it. Returns the devcontainer.json path.
 
@@ -489,6 +539,7 @@ def scaffold_profile(
         )
     feature_backend: HostBackend = backend or "github"
     # Before ANY write (gh#574): an unknown tool must leave no file behind.
+    ops = _resolve_ops(repo_root, profile, ops)
     resolved = resolve_tools(tools, list(features or []))
     tool_names = {parse_tool(t)[0] for t in tools}
 
@@ -548,10 +599,12 @@ def scaffold_profile(
         # `remoteEnv` reaches only what the devcontainer CLI launches. Absent
         # rather than empty for every other profile.
         config["containerEnv"] = {"UV_PROJECT_ENVIRONMENT": UV_CONTAINER_PROJECT_ENV}
+    if ops is True:
+        _add_ops(config, profile)
     profile_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
-    _update_profiles_yaml(repo_root, profile, purpose, secrets, default, services)
+    _update_profiles_yaml(repo_root, profile, purpose, secrets, default, services, ops=ops)
     _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
     include_validator_wrapper = False
     if plans_dir_exists(repo_root):
@@ -708,6 +761,7 @@ def _update_profiles_yaml(
     secrets: list[str],
     default: bool,
     services: dict[str, dict[str, str]],
+    ops: bool | None = None,
 ) -> None:
     from fr.artifacts.registry import artifact_kind, read_verbatim
     from fr.services.render import SERVICE_ORDER, render_services
@@ -717,7 +771,14 @@ def _update_profiles_yaml(
     bom, text = read_verbatim(path) if path.is_file() else ("", "")
     data = (yaml.safe_load(text) if text else {}) or {}
     data.setdefault("profiles", {})
-    entry: dict[str, object] = {"purpose": purpose, "secrets": secrets}
+    # Merge, never replace: keys this scaffold does not own survive a re-scaffold.
+    existing = data["profiles"].get(profile)
+    entry: dict[str, object] = dict(existing) if isinstance(existing, dict) else {}
+    entry.update({"purpose": purpose, "secrets": secrets})
+    if ops is True:
+        entry["ops"] = True
+    elif ops is False:
+        entry.pop("ops", None)
     data["profiles"][profile] = entry
     if default or "default" not in data:
         data["default"] = profile if default else data.get("default", profile)

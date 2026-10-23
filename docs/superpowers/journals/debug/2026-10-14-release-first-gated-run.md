@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: 2026-10-14-release-first-gated-run
 
 <!-- fr:journal kind=repro scope=debug id=repro-rc-suite-red created=2026-10-14T11:54:28+00:00 -->

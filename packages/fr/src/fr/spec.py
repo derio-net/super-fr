@@ -477,15 +477,31 @@ EMPTY_TEST_PLAN = "(Test Plan section has no steps)"
 _SECTION_RE = re.compile(r"^## Test Plan\s*$", re.MULTILINE)
 _NEXT_SECTION_RE = re.compile(r"^#{1,2} ", re.MULTILINE)
 _ITEM_RE = re.compile(r"^(?:\d+[.)]|[-*])\s+(.*)$")
-_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
+"""A line that opens or closes a code fence: anchored, so a fence mid-prose never does."""
+
+
+StepGate = Literal["devops", "tester"]
+_TAG_RE = re.compile(r"^\[(devops|tester)\]\s+(\S.*)$")
+"""A step's gate tag (spec 2026-10-22-fr-ops R12): exactly `[devops]` or `[tester]`
+leading the item, then whitespace. A checkbox or a Markdown link is not one."""
 
 
 @dataclass(frozen=True)
 class Step:
-    """One Test Plan step: its position (1-based) and its text, one line."""
+    """One Test Plan step: its position (1-based), its text (one line, the gate tag
+    removed) and the gate its literal tag names, if any (R12)."""
 
     n: int
     text: str
+    gate: StepGate | None = None
+
+
+def _step(n: int, text: str) -> Step:
+    m = _TAG_RE.match(text)
+    if m is None:
+        return Step(n, text)
+    return Step(n, m.group(2), m.group(1))  # type: ignore[arg-type]
 
 
 def test_plan_section(text: str) -> str | None:
@@ -498,7 +514,7 @@ def test_plan_section(text: str) -> str | None:
     fenced = False
     start: int | None = None
     for i, line in enumerate(lines):
-        if _FENCE_RE.match(line):
+        if FENCE_RE.match(line):
             fenced = not fenced
             continue
         if fenced:
@@ -529,7 +545,7 @@ def test_plan_steps(text: str) -> list[Step]:
     blank = False
     fenced = False
     for line in section.splitlines():
-        if _FENCE_RE.match(line):
+        if FENCE_RE.match(line):
             fenced = not fenced
         stripped = line.strip()
         if not stripped:
@@ -548,7 +564,7 @@ def test_plan_steps(text: str) -> list[Step]:
         blank = False
     if not items:
         return [Step(1, " ".join(" ".join(prose).split()) or EMPTY_TEST_PLAN)]
-    return [Step(i, " ".join(" ".join(parts).split())) for i, parts in enumerate(items, 1)]
+    return [_step(i, " ".join(" ".join(parts).split())) for i, parts in enumerate(items, 1)]
 
 
 test_plan_steps.__test__ = False  # type: ignore[attr-defined]  # not a pytest test

@@ -290,6 +290,24 @@ uv workspace monorepo, version lockstepped across every manifest (see
     rendered from the wheel copy (`scripts/sync-agents-data.py`, tripwire
     `test_tripwire_agents_data.py`, whose sha pin makes an agent edit move the kind's
     version) by `fr init agents`. Operator doc: `docs/cloud-setup.md`.
+  - **`fr/ops`** (2026-10-22 spec, `fr-ops`) — a plan's manual operations as typed,
+    checkable, runnable records. `model.py` (`Op`, strict; `LegacyOp`, the
+    `# manual-operation` step-block reader), `load.py` (`ops.yaml` plus step blocks plus
+    the `.fr/ops.yaml` runbook; `plan_has_ops`, which `fr.verification.exit` reads to add
+    `devops` to a run's gates), `engine.py` (`status`/`order` over an injected runner),
+    `apply.py`, `attest.py`, `evidence.py` (`op` plan-journal entries, `recorded_close`),
+    `trust.py` (R19: the operator's grant, OUTSIDE the repo), `probe.py`/`mask.py`
+    (minimal-env, bounded probes; every reason sanitised), `profile.py` (`ops: true`
+    profiles), `helpers.py` (`seal`/`secret`/`clip`/`scratch`), `holds.py` (what still
+    holds a devops gate, by recorded evidence) and `gate.py`, the DevOps stage's
+    sequencer: eight stages as data over host/workspace/forge/prompt ports, its state
+    host-side (`HostGateState`); the ops workspace is PR-controlled, so an op closes
+    there only by its live status and a journal closure or Test Plan outcome only when
+    added on the ops branch after the recorded head. CLI:
+    `fr ops {status,apply,attest,trust,seal,secret,clip,scratch,gate}`
+    (`commands/ops_cmd.py`, `commands/ops_gate_cmd.py`); the whole group is gated by the
+    artifact trigger. Every `python -m fr` fr starts runs with `-P` (no cwd on sys.path). Driver skill:
+    `fr-devops-gate`; author doc: `docs/ops.md`.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)

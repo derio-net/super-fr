@@ -227,6 +227,14 @@ def add(
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
+    if kind == "op":
+        # spec 2026-10-22-fr-ops R17: evidence is recorded by `fr ops`, which
+        # checks what it records; a hand-added op entry would read as DONE.
+        err_console.print(
+            "[red]--kind op is written only by `fr ops`[/red] (apply, attest), "
+            "which records an op's outcome after checking it"
+        )
+        raise typer.Exit(2)
     # spec §5.A2: an untagged plan-scope entry hits `compose_handoff`'s
     # `e.phase is None` branch and renders in full at EVERY phase forever —
     # measured cost: 16 untagged discoveries / 13,281 chars at phase 6 of a

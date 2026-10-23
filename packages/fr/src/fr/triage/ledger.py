@@ -33,8 +33,9 @@ EXIT_INPUTS = (
     "docs/superpowers/verifications",
     "docs/superpowers/workflows",
 )
-"""What `run_exit` reads besides the spec: the matrix, the remap and the install contract
-(`.fr/`), and the repo's own strategy and workflow manifests."""
+"""What `run_exit` reads besides the spec and the run's plan: the matrix, the remap and the
+install contract (`.fr/`), and the repo's own strategy and workflow manifests. The plan
+dir (live and archived) is added per run, so the fr-ops R13 promotion reads its ops."""
 
 
 @dataclass(frozen=True)
@@ -45,9 +46,25 @@ class LedgerRead:
     rows: tuple[GatedRow, ...]
     run_gate: str
     run_gate_inherited: bool
+    ops_promoted: bool = False
+    """`devops` holds because the run's plan has ops (fr-ops R13): its pass is `fr gate
+    pass`'s, which folds the op evidence, never the walked rows'."""
 
 
 NO_RUN = LedgerRead((), "none", False)
+
+
+def _plan_paths(state: object) -> tuple[str, ...]:
+    """The run's emitted plan dir and its archived twin, as snapshot paths."""
+    from fr.verification.exit import IMPLEMENTED_PLANS_REL
+
+    steps = getattr(state, "steps", {})
+    plan = next(
+        (r.emitted["plan"] for r in steps.values() if r.emitted and "plan" in r.emitted), None
+    )
+    if not plan:
+        return ()
+    return (plan.rstrip("/"), (IMPLEMENTED_PLANS_REL / Path(plan).name).as_posix())
 
 
 def _run_text(checkout: Checkout, ref: str, branch: str) -> tuple[str, str] | None:
@@ -95,7 +112,7 @@ def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
         state = parse_run_state(text)
         spec = run_spec(state)
         twin = archive_twin(spec) if spec else None
-        paths = (*EXIT_INPUTS, *(p for p in (spec, twin) if p))
+        paths = (*EXIT_INPUTS, *(p for p in (spec, twin) if p), *_plan_paths(state))
         with tempfile.TemporaryDirectory(prefix="fr-ledger-") as tmp:
             root = Path(tmp) / "tree"
             checkout.snapshot_paths(ref, paths, root)
@@ -116,7 +133,7 @@ def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
         GatedRow(r.id, exit_.row_gates[r.id], r.status == "walked", tuple(r.issues))
         for r in exit_.gated_rows
     )
-    return LedgerRead(rows, exit_.run_gate, inherited)
+    return LedgerRead(rows, exit_.run_gate, inherited, exit_.ops_promoted)
 
 
 @dataclass(frozen=True)

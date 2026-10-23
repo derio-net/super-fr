@@ -30,6 +30,7 @@ from fr.journal.model import (
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Matrix, Row
+    from fr.ops.model import Op
     from fr.run.cost import PhaseRow, Summary
     from fr.run.model import RunState
     from fr.verification.exit import Exit
@@ -67,6 +68,7 @@ REQUIRED_SECTIONS = (
     "## Out-of-scope findings",
     "## Pre-merge verification owed",
     "## Post-merge verification owed",
+    "## Manual operations",
     "## Proportionality",
     "## Cost",
 )
@@ -74,7 +76,9 @@ REQUIRED_SECTIONS = (
 verification owed` (spec 2026-09-28 §F) lists the acceptance rows only a live
 run after merge can move; `Pre-merge verification owed` (spec
 2026-10-06-verification-strategies §D, R12) the operator-driven ones to walk
-before it, each with its exact walk command."""
+before it, each with its exact walk command; `Manual operations` (spec
+2026-10-22-fr-ops R13) the plan's ops with their recorded state, `None.` when
+it has none."""
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
 
@@ -662,7 +666,7 @@ def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
         verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
     except (AcceptanceError, SectionError) as e:
-        return f"Not available: {e}"
+        return _unavailable(repo_root, e)
     lines = pre_merge_owed_lines(matrix, spec_ref, verification, state.run, state.branch)
     if not lines:
         return "None."
@@ -726,9 +730,58 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
         verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
     except (AcceptanceError, SectionError) as e:
-        return f"Not available: {e}"
+        return _unavailable(repo_root, e)
     lines = post_merge_owed_lines(matrix, spec_ref, verification)
     return "\n".join(lines) if lines else "None."
+
+
+def _unavailable(repo_root: Path, e: Exception) -> str:
+    """`Not available: <e>` with every path made repo-relative: a PR body is public and
+    must never carry the operator's absolute local path (p3-r5)."""
+    text = str(e)
+    roots = {str(repo_root), str(repo_root.resolve())}
+    for root in sorted(roots, key=len, reverse=True):
+        text = text.replace(root.rstrip("/") + "/", "").replace(root, ".")
+    return f"Not available: {text}"
+
+
+def _op_command(op: Op) -> str:
+    if op.apply:
+        return f"fr ops apply {op.id}"
+    if op.check is None:
+        return f"fr ops attest {op.id} --note '<what you did>'"
+    return f"fr ops status {op.id}"
+
+
+def _manual_operations(repo_root: Path, state: RunState) -> str:
+    """The plan's ops (spec 2026-10-22-fr-ops R13): each with its phase, its last
+    RECORDED state (or "never checked") and its command, then who owns them, or
+    `None.`. Folds the journal; never runs a probe; never refuses `deliver`."""
+    from fr.ops.evidence import JournalEvidence, recorded_state
+    from fr.ops.load import OpsLoadError, load_ops
+    from fr.verification.exit import run_plan_dir
+
+    plan_dir = run_plan_dir(repo_root, state)
+    if plan_dir is None:
+        return "None."
+    try:
+        ops = [lo for lo in load_ops(plan_dir, repo_root).ops if not lo.runbook]
+    except OpsLoadError as e:
+        return _unavailable(repo_root, e)
+    if not ops:
+        return "None."
+    journal = JournalEvidence(repo_root, plan_dir.name)
+    lines = [
+        f"- `{lo.op.id}` [{lo.op.phase}] — {lo.op.summary} — "
+        f"{recorded_state(lo, journal.latest(lo.op.id, runbook=False))} — "
+        f"`{_op_command(lo.op)}`"
+        for lo in ops
+    ]
+    lines.append(
+        f"\nThe DevOps stage owns these (`fr ops gate --run {state.run}`): the PR holds on "
+        "`gate:devops` until it passes, and `deliver` does not wait for them."
+    )
+    return "\n".join(lines)
 
 
 def _ci_line(repo_root: Path, witness: str) -> str:
@@ -794,7 +847,7 @@ def _proportionality(repo_root: Path, state: RunState) -> str:
     try:
         report = run_report(repo_root, parse(repo_root / plan_rel), None)
     except (PlanSchemaError, OSError) as e:
-        return f"Not available: {e}"
+        return _unavailable(repo_root, e)
     return f"```text\n{report.text.rstrip()}\n```"
 
 
@@ -922,6 +975,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         _pre_merge_owed(repo_root, state),
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
+        "## Manual operations",
+        _manual_operations(repo_root, state),
     ]
     tests = _tests(repo_root, state)
     if tests is not None:
