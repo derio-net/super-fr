@@ -9902,8 +9902,8 @@ rows:
       blocks in step text, strictly typed, a duplicate id or unknown key refused naming
       file and line
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R2
     levels:
       unit:
       - super-fr:tests/unit/test_ops_model.py#test_an_op_refuses_an_unknown_key_naming_it
@@ -9919,9 +9919,9 @@ rows:
       surfaces a disabled requirement as OPEN with its consequence and escalates when
       the guarded condition already happens
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_ops_engine.py#test_the_check_runs_once_per_identity_and_all_must_pass
@@ -9941,8 +9941,8 @@ rows:
       stops on the first failure naming the op and its undo, waits for a post-merge
       op's ready probe, and a second run writes nothing and says so
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_ops_apply.py#test_a_second_run_over_a_done_phase_writes_nothing
@@ -9958,7 +9958,7 @@ rows:
     acceptance: fr ops apply refuses outside a declared ops profile and names the exec
       command; status only warns
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_ops_profile.py#test_in_ops_profile_needs_the_declaration_and_container_evidence
@@ -9973,9 +9973,9 @@ rows:
     acceptance: Op evidence and operator attestations are durable journal entries visible
       to fr ops status from any checkout, attested never shown as checked
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R17
     levels:
       unit:
       - super-fr:tests/unit/test_ops_attest.py#test_attest_closes_an_unverifiable_op_as_attested
@@ -9990,7 +9990,7 @@ rows:
       encryption fails or the process is interrupted, and the helpers never print a
       secret
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_ops_helpers.py#test_a_failing_encrypt_leaves_the_target_byte_identical_and_no_plaintext
@@ -10005,7 +10005,7 @@ rows:
       set by hash, with a minimal environment, closed stdin and a timeout; a changed
       op set refuses and shows what changed
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R19
     levels:
       unit:
       - super-fr:tests/unit/test_ops_trust.py#test_status_refuses_after_a_probe_changes_and_names_it
@@ -10022,7 +10022,7 @@ rows:
     acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; any
       other leading bracket (a checkbox, a link) stays step text
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_ops_testplan.py#test_a_literal_devops_or_tester_tag_takes_the_gate_and_leaves_the_text
@@ -10038,7 +10038,7 @@ rows:
     acceptance: The delivered PR body carries a Manual operations section rendered from
       recorded evidence, and a plan with pre-merge ops labels the PR gate:devops
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_ops_pr_body.py#test_each_op_shows_its_phase_last_recorded_state_and_command
@@ -10053,7 +10053,7 @@ rows:
     acceptance: An un-passed gate:devops holds the PR from the driver's merge, and fr
       gate pass --gate devops refuses while an op or devops Test Plan step is open
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_ops_exit_promotion.py#test_the_merge_path_holds_a_pr_labelled_gate_devops
@@ -10071,9 +10071,9 @@ rows:
       in order, resumable from what it recorded; pickup points devops-gated runs at
       it
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R15
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R16
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R18
     levels:
       unit:
       - super-fr:tests/unit/test_ops_gate.py#test_a_full_run_walks_every_stage_in_order
@@ -10090,7 +10090,7 @@ rows:
     acceptance: With a released fr, a real ops profile and a real PR, the DevOps stage
       carries a plan's pre- and post-merge ops through merge to a passed devops gate
     origin:
-    - super-fr:docs/superpowers/specs/2026-10-22-fr-ops-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R15
     levels: {}
     status: walk-owed
     notes: the surface ships in this PR; only the post-merge live walk under a real
