@@ -23,3 +23,10 @@ Operator decisions (recorded before code): #1224 keeps `enforced` and is re-obse
 `fr/usage/readers/opencode.py` builds `UsageRecord.messages` from `type == "assistant"` rows only. OpenCode 2 writes a compaction summary as its own `session_message` of `type: "compaction"`, carrying `data.tokens` and `data.model` (and `data.cost: 0`).
 
 Measured in the operator's live 2.1.3 store (copy read read-only, 2026-10-23): 29 compaction rows; 14 carry `tokens` + `model` + `cost: 0`, 15 (migrated older sessions) carry none. So the defect both under-counts (tokens present, unread) and would mis-report if fixed by assuming zero (the 15 with no tokens).
+
+<!-- fr:journal kind=finding scope=debug id=c4fa5d9437de created=2026-10-23T05:09:37+00:00 state=fixed -->
+### c4fa5d9437de · finding [fixed] · #1222 fixed: a compaction row carrying tokens is one message; one without adds nothing
+
+Failing test first: `test_opencode_compaction_turn_tokens_are_counted_not_zero` (a `compaction` row inserted into the `ses_paid` fixture with `tokens`, `model`, `cost: 0`) saw 1 message where 2 belong. Companion: `test_opencode_compaction_row_without_tokens_adds_no_zero_turn` pins the 15-row case — unknown tokens are not a zero-token turn.
+
+Fix: `_read` accepts `compaction` rows that carry a `tokens` mapping alongside `assistant` rows (`data.model` names the model, `data.agent` is absent so the row reads as the session's own thread). `cost` stays assistant-only: OpenCode records none for a compaction, and the harness dollar total is unaffected. Module docstring records the live measurement. `tests/unit/test_usage_readers.py` + the store-agreement/rollup/report suites: 116 passed, 4 skipped.
