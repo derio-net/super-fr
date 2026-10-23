@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: 2026-10-23-opencode-2-followups
 
 <!-- fr:journal kind=repro scope=debug id=77c388113584 created=2026-10-23T05:07:57+00:00 -->
