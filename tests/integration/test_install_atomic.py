@@ -11,24 +11,46 @@ install, overlapped them.
 
 Every test runs install.sh against a fake HOME with a `uv` stub, so nothing
 touches the real user directory or the real uv.
+
+**Why one install at a time (gh#1223).** Each sandboxed install rsyncs the whole
+tracked tree (~166 MB, 3300 files, `.git`/`.venv` excluded) twice — the
+marketplace copy and the per-plugin cache sync — and eight of those running at
+once while the rest of the suite saturates the disk pushed the last two tests of
+`TestInstallLock` past their 60 s bound under `pytest -n auto` on a 12-core host
+(never serially, where the file is 8 passed in ~28 s). The file therefore holds
+one cross-process advisory lock across each test, so its installs are the only
+ones on the machine: peak load is bounded without weakening an assertion. The
+60 s bounds become 180 s for the same reason the issue gives — it is a sandbox,
+not a latency assertion — so a genuine hang is still caught, on a much quieter
+disk. `fcntl.flock` degrades to no lock on a host-share FUSE mount (see
+`tests/conftest.py`'s `native_herdr_cache` note); the raised bound is the
+backstop there.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
+
+INSTALL_BOUND_S = 180
+"""A sandbox install's hard bound (gh#1223). Serially the whole file is 8 passed
+in ~28 s; on a loaded machine the copy — not the install logic — is what grows,
+so this catches a hang without re-creating the 60 s flake."""
 
 # A uv stub that behaves like uv where it matters here: honours UV_TOOL_DIR /
 # UV_TOOL_BIN_DIR, and `tool install --force` DELETES the env, takes a while,
@@ -120,6 +142,23 @@ def _install(sb: dict[str, Path], **extra: str) -> subprocess.Popen[str]:
     )
 
 
+_INSTALL_GATE = Path(tempfile.gettempdir()) / "fr-install-atomic-tests.lock"
+"""One machine-local advisory lock every worker running this file shares, so the
+eight sandboxed installs never overlap (gh#1223, module docstring)."""
+
+
+@pytest.fixture(autouse=True)
+def _one_install_at_a_time() -> Iterator[None]:
+    """Hold the cross-process gate for the whole test: the installs inside it are
+    what saturate the disk, so waiting for them to start is not enough."""
+    with _INSTALL_GATE.open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def _intervals(state: Path) -> list[tuple[float, float]]:
     starts: dict[str, float] = {}
     out = []
@@ -157,7 +196,7 @@ class TestInstallLock:
         try:
             (lock / "pid").write_text(f"{holder.pid}\n")
             p = _install(sandbox, FR_INSTALL_LOCK_TIMEOUT="1")
-            _, err = p.communicate(timeout=60)
+            _, err = p.communicate(timeout=INSTALL_BOUND_S)
         finally:
             holder.send_signal(signal.SIGKILL)
             holder.wait()
@@ -173,7 +212,7 @@ class TestInstallLock:
         lock.mkdir(parents=True)
         os.utime(lock, (1, 1))  # no pid file, long after its mkdir
         p = _install(sandbox, FR_INSTALL_LOCK_TIMEOUT="5")
-        _, err = p.communicate(timeout=60)
+        _, err = p.communicate(timeout=INSTALL_BOUND_S)
         assert p.returncode == 0, err
         assert "stale" in err
 
@@ -184,7 +223,7 @@ class TestInstallLock:
         dead.wait()
         (lock / "pid").write_text(f"{dead.pid}\n")
         p = _install(sandbox, FR_INSTALL_LOCK_TIMEOUT="5")
-        _, err = p.communicate(timeout=60)
+        _, err = p.communicate(timeout=INSTALL_BOUND_S)
         assert p.returncode == 0, err
         assert "stale" in err
 
