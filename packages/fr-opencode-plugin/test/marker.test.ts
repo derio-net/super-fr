@@ -168,3 +168,31 @@ describe("resolveMarker", () => {
     }
   });
 });
+
+// gh#1221: with git unreachable there is no toplevel, so there is no verdict
+// at all — `toplevel: null`, `frEnabled: false`. The caller allows; that is the
+// bash guard's documented posture, and the plugin says so at load (setup's one
+// warning) rather than letting an allow read as a decision.
+describe("fail-open when git is unreachable (gh#1221)", () => {
+  test("no toplevel, no fr-enabled answer, no marker", () => {
+    mkdirSync(join(repo, ".devcontainer", "dev"), { recursive: true });
+    writeFileSync(join(repo, ".devcontainer", "dev", "devcontainer.json"), "{}\n");
+    const savedPath = process.env.PATH;
+    const savedCandidates = process.env.FR_GIT_CANDIDATES;
+    const empty = mkdtempSync(join(tmpdir(), "fr-opencode-nogit-"));
+    try {
+      process.env.PATH = empty;
+      process.env.FR_GIT_CANDIDATES = join(empty, "no-such-git");
+      expect(resolveMarker(join(repo, "README.md"))).toEqual({
+        toplevel: null,
+        frEnabled: false,
+        hasValidMarker: false,
+      });
+    } finally {
+      process.env.PATH = savedPath;
+      if (savedCandidates === undefined) delete process.env.FR_GIT_CANDIDATES;
+      else process.env.FR_GIT_CANDIDATES = savedCandidates;
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+});

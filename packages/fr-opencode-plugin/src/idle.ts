@@ -4,8 +4,16 @@
 //
 // OpenCode cannot refuse a stop (Claude Code can: see
 // plugins/super-fr/hooks/fr-run-idle-guard.sh, whose contract this mirrors).
-// It can CONTINUE a session. So on `session.idle` this asks fr whether the run
+// It can CONTINUE a session. So when a turn ENDS this asks fr whether the run
 // is idle and, if it is, sends fr's next command back into the session.
+//
+// WHICH event "a turn ended" is moved under us (gh#1231). 2.0.32 shipped
+// `session.idle` (ephemeral, `data.sessionID`); 2.1.x removed it and ends an
+// execution with `session.execution.succeeded` (durable, the same
+// `data.sessionID`). A handler matching only the first is inert on every 2.1
+// server, and it fails SILENTLY — the event is simply never seen, so nothing
+// errors and the run sits there. Both names are accepted; that is a two-string
+// set, not an abstraction, because those are the two shapes that exist.
 //
 // Transport only. WHETHER a run is idle is `fr run check --idle`'s verdict
 // (`fr.run.liveness.is_idle`, Python) and nobody else's. This file knows a
@@ -33,18 +41,33 @@
 //     not assumed to be top-level.
 //
 // OpenCode 2 (V2 plugin API): events arrive from `ctx.event.subscribe({signal})`,
-// an async iterable (`runIdleLoop`), each `{type, data}`; a `session.idle`
-// names its session as `data.sessionID`. The lookup is `ctx.session.get({sessionID})`
-// (the info itself, throwing on failure) and the nudge `ctx.session.prompt`.
+// an async iterable (`runIdleLoop`), each `{type, data}`; both turn-end events
+// name their session as `data.sessionID` (checked against
+// `@opencode/schema` 2.0.32 and 2.1.x). The lookup is
+// `ctx.session.get({sessionID})` (the info itself, throwing on failure) and the
+// nudge `ctx.session.prompt`.
 //
-// NOT PROVEN: that a prompt sent from a plugin on `session.idle` actually
-// EXECUTES in a live OpenCode session. The event and session shapes were read
-// from `@opencode/client` 2.0.32's types; the tests drive this with a fake
-// session API and a scripted event stream. Until a live run shows it (the gh#494
-// standard), `parity.yaml` declares this surface `partial` on OpenCode.
+// `session.execution.succeeded` is DURABLE, so a reconnecting stream can replay
+// it. The once-per-position memory below is what makes a replay free, and the
+// same memory is why accepting an event that fires more often than "the session
+// went quiet" is safe: a burst of successes at one position buys one nudge.
+//
+// PROVEN LIVE 2026-10-23 (gh#1231): OpenCode 2.1.3, isolated HOME/XDG and a
+// logging `fr` shim, an advanceable run in a disposable clone — the model
+// replied, the nudge arrived as a plugin-authored session message, and the model
+// ran `fr run advance <run>`. That is the gh#494 standard for this surface, so
+// `parity.yaml`'s `fr-run-idle-guard` OpenCode cell is `enforced`.
+//
+// The server hands one terminal event to every subscribed listener (three, in
+// that walk), so the once-per-position memory is also what keeps the nudge
+// single when the same turn end arrives several times.
 import { run } from "./spawn";
 
 export type FrAnswer = { code: number | null; stdout: string };
+
+/** The events that mean "this session's turn ended": 2.0.32's name, then
+ * 2.1.x's. See the header for why both are kept. */
+const TURN_END_EVENTS = new Set(["session.idle", "session.execution.succeeded"]);
 
 /** `globalThis` key for the plugin's process-wide once-per-position memory. */
 export const SHARED_ACTED_ON = Symbol.for("super-fr.fr-opencode-plugin.idle.actedOn");
@@ -128,7 +151,7 @@ export function createIdleHandler(options: IdleHandlerOptions) {
 
   return async (event: { type?: unknown; data?: unknown } | null | undefined): Promise<void> => {
     try {
-      if (!event || event.type !== "session.idle") return;
+      if (!event || typeof event.type !== "string" || !TURN_END_EVENTS.has(event.type)) return;
       const sessionID = (event.data as { sessionID?: unknown } | undefined)?.sessionID;
       if (typeof sessionID !== "string" || sessionID === "") return;
 

@@ -23,6 +23,8 @@
 #   {root}/scratch                                a plain dir on the allowed-prefix list
 #   {root}/elsewhere                              a plain dir NOT on the list
 #   {root}/sentinels                              FR_SENTINEL_DIR
+#   {root}/bin/bin-no-git                         this host's PATH minus git (the
+#                                                 "git is not on PATH" row)
 set -eu
 
 root=$1
@@ -53,3 +55,22 @@ mkdir -p "$root/other/docs/superpowers/plans"
 
 mkrepo "$root/plain"
 mkdir -p "$root/plain/sub"
+
+# A PATH holding this host's executables MINUS git: the guard's own helpers
+# (jq, sed, …) must still resolve, so the row proves "git unreachable" and not
+# "PATH was empty". Built from the CALLER's PATH, never a curated list — a list
+# would drift from the guard's real tool surface, and a row that denies because
+# `jq` vanished is not evidence about git. One `ln` per PATH entry (many targets
+# per call) instead of one per file: file-by-file symlinking cost seconds.
+nogit="$root/bin/bin-no-git"
+mkdir -p "$nogit"
+_oldifs=${IFS-}
+IFS=:
+for _d in ${PATH:-}; do
+  IFS=$_oldifs
+  [ -n "$_d" ] && [ -d "$_d" ] || continue
+  ln -s "$_d"/* "$nogit"/ 2>/dev/null || true
+  IFS=:
+done
+IFS=$_oldifs
+rm -f "$nogit"/git "$nogit"/git-*

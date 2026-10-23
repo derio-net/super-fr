@@ -363,3 +363,92 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     }
   });
 });
+
+// gh#1221 (found while removing the bare `git` spawn): the gate walks every
+// string in the tool input and treats an unkeyed ABSOLUTE one as a possible
+// target. `write`'s `content` is an unkeyed string, so a file beginning with
+// `//` — a licence header, a commented-out include — was read as an absolute
+// path, and the refusal named the CONTENT ("cannot inspect target symlink:
+// // …", ENAMETOOLONG on a real file). A multi-line or oversized string is
+// prose, never a path, and the verdict must come from the real target.
+describe("fr-isolation-required: content is never a target (gh#1221)", () => {
+  test("denies a write whose content starts with //, naming the FILE", async () => {
+    const hook = await makeHook(repo);
+    const target = join(repo, "notes.ts");
+    const content = "// a header comment\n// and a second line\nexport const x = 1;\n";
+    const failure = await hook({ tool: "write" } as never, { args: { filePath: target, content } } as never)
+      .then(() => null)
+      .catch((error: Error) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure!.message).toContain(target);
+    // The content never appears in the refusal, and never becomes a probe path.
+    expect(failure!.message).not.toContain("header comment");
+    expect(failure!.message).not.toContain("ENAMETOOLONG");
+  });
+
+  test("allows the same write inside a valid workspace, content untouched", async () => {
+    const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-content-wt-"));
+    rmSync(worktreeDir, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "-b", "feat/content-test", worktreeDir], repo);
+    try {
+      const resolvedTop = execFileSync("bash", ["-c", `cd "${worktreeDir}" && pwd -P`])
+        .toString()
+        .trim();
+      writeFileSync(
+        join(worktreeDir, ".fr-isolation"),
+        JSON.stringify({ toplevel: resolvedTop, mode: "worktree" })
+      );
+      const hook = await makeHook(worktreeDir);
+      await expect(
+        hook(
+          { tool: "write" } as never,
+          {
+            args: {
+              filePath: join(worktreeDir, "notes.ts"),
+              content: "// a header comment\n// and a second line\nexport const x = 1;\n",
+            },
+          } as never
+        )
+      ).resolves.toBeUndefined();
+    } finally {
+      sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
+    }
+  });
+
+  test("a huge single-line absolute string is content too, not a path probe", async () => {
+    const hook = await makeHook(repo);
+    const target = join(repo, "README.md");
+    const content = `/${"a".repeat(5000)}`;
+    const failure = await hook({ tool: "write" } as never, { args: { filePath: target, content } } as never)
+      .then(() => null)
+      .catch((error: Error) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure!.message).toContain(target);
+    expect(failure!.message).not.toContain("ENAMETOOLONG");
+  });
+});
+
+// gh#1221: the gate's posture with git unreachable is fail-OPEN (the bash
+// guard's), and setup says so once at load. Here the load happens with git
+// present; the strip is scoped to the call, so this proves the GATE's answer
+// and not setup's warning (which plugin.test.ts owns).
+describe("fr-isolation-required: fail-open when git is unreachable (gh#1221)", () => {
+  test("allows a base-repo edit rather than guessing a verdict", async () => {
+    const hook = await makeHook(repo);
+    const savedPath = process.env.PATH;
+    const savedCandidates = process.env.FR_GIT_CANDIDATES;
+    const empty = mkdtempSync(join(tmpdir(), "fr-opencode-nogit-gate-"));
+    try {
+      process.env.PATH = empty;
+      process.env.FR_GIT_CANDIDATES = join(empty, "no-such-git");
+      await expect(
+        hook({ tool: "edit" } as never, { args: { filePath: join(repo, "README.md") } } as never)
+      ).resolves.toBeUndefined();
+    } finally {
+      process.env.PATH = savedPath;
+      if (savedCandidates === undefined) delete process.env.FR_GIT_CANDIDATES;
+      else process.env.FR_GIT_CANDIDATES = savedCandidates;
+      rmSync(empty, { recursive: true, force: true });
+    }
+  });
+});

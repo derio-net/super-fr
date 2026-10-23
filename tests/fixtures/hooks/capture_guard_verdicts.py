@@ -34,6 +34,7 @@ SCRIPT = REPO / "plugins" / "super-fr" / "hooks" / "fr-isolation-guard.sh"
 WORLD = HERE / "guard-world.sh"
 TABLE = HERE / "guard-verdicts.yaml"
 SESSION = "sess-1"
+BASH = shutil.which("bash") or "/bin/bash"
 
 # Longest first, so {wt} is substituted before {home} and {root}.
 PLACEHOLDERS = {
@@ -41,6 +42,7 @@ PLACEHOLDERS = {
     "{wt_unmarked}": "base-wt-unmarked",
     "{home}": "home",
     "{base}": "base",
+    "{bin}": "bin",
     "{other}": "other",
     "{plain}": "plain",
     "{scratch}": "scratch",
@@ -98,6 +100,19 @@ ROWS: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str]]] = [
     ("multiline-later-allowance", "echo hi\nfr isolation status", "{base}", FRESH, {}),
     ("sentinel-live-workspace", "ls", "{base}", LIVE, {}),
     ("sentinel-orphaned-heals", "ls", "{base}", ORPHANED, {}),
+    # gh#1221: git unreachable must be a DECISION, not an accident. Both engines
+    # resolve one git from FR_GIT_CANDIDATES (never the inherited PATH), and both
+    # answer this the same way: no toplevel proof, so no marker is valid and the
+    # base-repo command is denied. The env strips git from PATH AND points the
+    # candidate list at nothing, because the default list carries absolutes
+    # (/usr/bin/git) that a PATH alone would not remove.
+    (
+        "git-unresolvable",
+        "ls",
+        "{base}",
+        FRESH,
+        {"PATH": "{bin}/bin-no-git", "FR_GIT_CANDIDATES": "{bin}/bin-no-git/git"},
+    ),
 ]
 
 
@@ -149,11 +164,15 @@ def judge(row: dict[str, Any], root: Path) -> dict[str, Any]:
         "tool_input": {"command": expand(row["command"], root)},
     }
     result = subprocess.run(
-        ["bash", str(SCRIPT)],
+        # Absolute: a row may narrow PATH (git-unresolvable), and Popen resolves
+        # this program through the env it is given.
+        [BASH, str(SCRIPT)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        env=env_for(root, row.get("env")),
+        # Env values carry the same placeholders as commands/cwd (the
+        # git-unresolvable row points PATH at {bin}/bin-no-git).
+        env=env_for(root, {k: expand(v, root) for k, v in (row.get("env") or {}).items()}),
         timeout=60,
     )
     if result.returncode != 0:

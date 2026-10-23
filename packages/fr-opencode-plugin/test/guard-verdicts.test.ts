@@ -35,7 +35,18 @@ const table = Bun.YAML.parse(readFileSync(join(FIXTURES, "guard-verdicts.yaml"),
 };
 
 let root = "";
-const ENV_KEYS = ["HOME", "FR_SENTINEL_DIR", "FR_CD_ALLOW_PREFIXES", "FR_BASE_OK", "KUBERNETES_SERVICE_HOST"];
+// PATH and FR_GIT_CANDIDATES are here because a row deliberately removes git
+// (the git-unresolvable row, gh#1221): the port must resolve git from these,
+// and every row after it must see the real environment again.
+const ENV_KEYS = [
+  "HOME",
+  "FR_SENTINEL_DIR",
+  "FR_CD_ALLOW_PREFIXES",
+  "FR_BASE_OK",
+  "KUBERNETES_SERVICE_HOST",
+  "PATH",
+  "FR_GIT_CANDIDATES",
+];
 const saved: Record<string, string | undefined> = {};
 
 function abs(rel: string): string {
@@ -76,7 +87,10 @@ describe("the TypeScript shell gate decides every captured row as the bash guard
 
   for (const row of table.rows) {
     test(row.id, () => {
-      for (const key of ["FR_BASE_OK", "KUBERNETES_SERVICE_HOST"]) delete process.env[key];
+      for (const key of ["FR_BASE_OK", "KUBERNETES_SERVICE_HOST", "PATH", "FR_GIT_CANDIDATES"]) {
+        if (saved[key] === undefined) delete process.env[key];
+        else process.env[key] = saved[key];
+      }
       process.env.HOME = abs("home");
       process.env.FR_SENTINEL_DIR = abs("sentinels");
       process.env.FR_CD_ALLOW_PREFIXES = `${abs("home/.cache/fr/worktrees")}:${abs("scratch")}`;

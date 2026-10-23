@@ -39,9 +39,8 @@ import {
   sentinelPath,
   sentinelUnlock,
 } from "./sentinel";
-import { runSync } from "./spawn";
+import { git } from "./git";
 
-const GIT_TIMEOUT_MS = 5_000;
 /** POSIX [[:space:]] — not JS `\s`, which also matches Unicode spaces. */
 const S = "[ \\t\\n\\v\\f\\r]";
 const NS = "[^ \\t\\n\\v\\f\\r]";
@@ -64,13 +63,6 @@ function realDir(path: string): string | undefined {
 
 function under(path: string, root: string): boolean {
   return `${path}/`.startsWith(`${root}/`);
-}
-
-function git(dir: string, ...args: string[]): string | undefined {
-  const out = runSync("git", ["-C", dir, ...args], { timeoutMs: GIT_TIMEOUT_MS });
-  if (out.code !== 0) return undefined;
-  const text = out.stdout.trim();
-  return text === "" ? undefined : text;
 }
 
 function toplevelOf(dir: string): string | undefined {
@@ -154,10 +146,10 @@ function healOrphaned(sentinel: string, rroot: string): boolean {
   try {
     const workspaces = readWorkspaces(sentinel);
     let live = true; // unknown (non-git repo, emptied while we waited): no heal
-    const listing = workspaces.length > 0 ? runSync("git", ["-C", rroot, "worktree", "list", "--porcelain"], { timeoutMs: GIT_TIMEOUT_MS }) : undefined;
-    if (listing && listing.code === 0) {
+    const listing = workspaces.length > 0 ? git(rroot, "worktree", "list", "--porcelain") : undefined;
+    if (listing !== undefined) {
       const listed = new Set<string>();
-      for (const line of listing.stdout.split("\n")) {
+      for (const line of listing.split("\n")) {
         if (!line.startsWith("worktree ")) continue;
         const real = realDir(line.slice("worktree ".length));
         if (real) listed.add(real);
