@@ -112,8 +112,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `plugins/super-fr/hooks/fr-run-idle-guard.sh` (Claude Code `Stop` — BLOCKS;
     always exits 0, deliberately no `set -e`, because exit 2 from a Stop hook
     is itself a block and `fr` exits 2 on every refusal) and
-    `packages/fr-opencode-plugin/src/idle.ts` (`session.idle` — CONTINUES; not
-    live-proven, so `partial`). Both act at most once per run `position`.
+    `packages/fr-opencode-plugin/src/idle.ts` (`session.idle` on 2.0.32,
+    `session.execution.succeeded` on 2.1.x — CONTINUES; live-proven 2026-10-23,
+    so `enforced`). Both act at most once per run `position`.
   - **`fr/tracker`** — the tracker protocol (`model.py`'s `Tracker` Protocol
     + `TrackedItem`, a structural stand-in for `WorkItem` so `fr` never
     imports `fr_dispatch`; `github.py`'s `GithubTracker` is the one

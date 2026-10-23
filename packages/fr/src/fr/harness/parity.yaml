@@ -179,14 +179,18 @@ surfaces:
     harnesses:
       claude-code: {state: enforced}
       opencode:
-        state: partial
+        state: enforced
         scope_note: >-
-          CONTINUES rather than blocks — OpenCode cannot refuse a stop, so on
-          `session.idle` from `ctx.event.subscribe()` the plugin sends the next
-          command back into the session with `ctx.session.prompt`, once per run
-          `position` (bun-tested, test/idle.test.ts). That a plugin-originated
-          prompt on idle actually EXECUTES in a live OpenCode 2 session is NOT
-          proven (the gh#494 standard) — it is the post-merge walk.
+          CONTINUES rather than blocks — OpenCode cannot refuse a stop, so when a
+          turn ends the plugin sends the next command back into the session with
+          `ctx.session.prompt`, once per run `position`. Both turn-end names are
+          accepted: 2.0.32's `session.idle` and 2.1.x's
+          `session.execution.succeeded`, which replaced it (gh#1231 — a handler
+          matching only the first is inert and silent on every 2.1 server).
+          Live-verified 2026-10-23 on OpenCode 2.1.3: an advanceable run in a
+          disposable clone received one nudge, as a plugin-authored message, and
+          the model then ran `fr run advance`; three listeners on the one event
+          still produced one nudge, which is the once-per-position guard.
       hermes:
         state: absent
         scope_note: >-
@@ -387,9 +391,11 @@ surfaces:
           session (a `subagent` dispatch is a child session). Pinned to the run
           session when fr has its id (`OPENCODE_SESSION_ID`,
           `run-session-identity`); without it ANY top-level session active
-          since the unit opened counts, as before. Live-verified 2026-09-26 on
-          OpenCode 1.x (a bash-redirect log matched, a write-tool log did not);
-          the 2.x store reader is fixture-tested (plan journal p4-*). A suite the
+          since the unit opened counts, as before. Live-verified 2026-10-23 on
+          OpenCode 2.1.3, through `_verify_tests_log` itself against the real
+          `session_message` store: a `shell`-redirect log was accepted, a
+          write-tool log refused with "no command of YOURS wrote it" (the 1.x
+          observation, 2026-09-26, is superseded by this one). A suite the
           long-command rule detached with `&` is windowed until the first later
           command of the orchestrator's that names the log prints its `exit=N`
           line, and only when N is 0 (gh#719): OpenCode records no completion

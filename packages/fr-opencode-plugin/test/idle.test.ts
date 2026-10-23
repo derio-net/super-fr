@@ -9,8 +9,12 @@
 // position; and it NEVER throws — an exception out of an `event` hook is the
 // plugin breaking the session it was meant to help.
 //
-// WHAT THIS FILE DOES NOT PROVE: that a prompt a plugin sends on `session.idle`
-// actually executes in a live OpenCode session. Everything here drives the
+// WHICH event ends a turn moved (gh#1231): 2.0.32 shipped `session.idle`,
+// 2.1.x removed it for `session.execution.succeeded`. Both are covered here,
+// because a handler that knows only one is inert and silent on the other.
+//
+// WHAT THIS FILE DOES NOT PROVE: that a prompt a plugin sends when a turn ends
+// actually EXECUTES in a live OpenCode session. Everything here drives the
 // handler with a fake client. That needs a live run (the gh#494 standard), and
 // until one exists the parity row for this surface stays `partial`.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -71,6 +75,10 @@ function answers(...queue: (FrAnswer | Error)[]) {
 const idleEvent = (sessionID: unknown = "ses_1") =>
   ({ type: "session.idle", data: { sessionID } }) as never;
 
+/** 2.1.x's turn-end event, same `data.sessionID` and `durable: true`. */
+const succeededEvent = (sessionID: unknown = "ses_1") =>
+  ({ type: "session.execution.succeeded", data: { sessionID } }) as never;
+
 const ok = (body: unknown, code: number | null = 3): FrAnswer => ({
   code,
   stdout: typeof body === "string" ? body : JSON.stringify(body),
@@ -95,13 +103,47 @@ describe("idle guard (OpenCode): continues an idle run", () => {
     expect(sent[0]!.text).toContain(IDLE.detail);
   });
 
+  test("on session.execution.succeeded (2.1.x) it does exactly what session.idle did", async () => {
+    const { client, sent } = fakeClient();
+    const { runFr, calls } = answers(ok(IDLE));
+    const handler = createIdleHandler({ session: client, directory: "/work/tree", runFr });
+
+    await handler(succeededEvent());
+
+    expect(calls).toEqual(["/work/tree"]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.sessionID).toBe("ses_1");
+    expect(sent[0]!.text).toContain("fr run advance r1");
+  });
+
+  test("a replayed session.execution.succeeded at the same position does not nudge twice", async () => {
+    const { client, sent } = fakeClient();
+    const { runFr, calls } = answers(ok(IDLE));
+    const handler = createIdleHandler({ session: client, directory: "/w", runFr });
+
+    await handler(succeededEvent());
+    await handler(succeededEvent()); // durable: a reconnect can replay it
+    await handler(idleEvent()); // and the old name on the same position
+
+    expect(calls).toHaveLength(3); // fr is asked every time — the MEMORY is the brake
+    expect(sent).toHaveLength(1);
+  });
+
   test("ignores every other event", async () => {
     const { client, sent } = fakeClient();
     const { runFr, calls } = answers(ok(IDLE));
     const handler = createIdleHandler({ session: client, directory: "/w", runFr });
 
-    await handler({ type: "session.updated", data: { sessionID: "ses_1" } } as never);
-    await handler({ type: "message.updated", data: {} } as never);
+    for (const type of [
+      "session.updated",
+      "message.updated",
+      "session.execution.started", // the same family as success — but not an end
+      "session.execution.failed", // a failure is the model's to report, not a nudge
+      "session.status", // 2.0.x's status carrier, whose idle arrives as session.idle
+      "session.text.ended",
+    ]) {
+      await handler({ type, data: { sessionID: "ses_1" } } as never);
+    }
 
     expect(calls).toEqual([]);
     expect(sent).toEqual([]);

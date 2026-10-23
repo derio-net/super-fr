@@ -1,0 +1,2 @@
+bump: patch
+summary: "OpenCode 2.x follow-ups: the idle nudge fires on session.execution.succeeded, the edit gate resolves one bounded git and announces fail-open at load, compaction tokens are counted, and the install test stops timing out under parallel load"

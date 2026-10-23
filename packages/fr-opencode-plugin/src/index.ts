@@ -64,6 +64,7 @@ import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { createBindHandler, createUnbindHandler, shellCwd } from "./bind";
 import { createClaimHandler, sharedClaimed } from "./claim";
+import { resolveGit } from "./git";
 import { decideShell } from "./guard";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
@@ -98,15 +99,27 @@ const PATH_KEYS = new Set([
 ]);
 const PATCH_KEYS = new Set(["patchText", "patch", "diff"]);
 const PATCH_PREFIXES = ["*** Add File:", "*** Update File:", "*** Delete File:", "*** Move to:"];
+const MAX_PATH_BYTES = 4096;
+// A path is one line and fits in PATH_MAX; a multi-line or huge string is a
+// content/patch blob, never a target. Without this, `write` whose `content`
+// begins with `//` is read as an absolute path and the gate refuses the call
+// with "cannot inspect target symlink" (ENAMETOOLONG) — found while fixing
+// gh#1221.
 
 interface Targets {
   paths: string[];
   unresolvablePatch: boolean;
 }
 
+function looksLikePath(value: string): boolean {
+  return !value.includes("\n") && value.length <= MAX_PATH_BYTES;
+}
+
 function collectPathValues(value: unknown, key: string | undefined, targets: Set<string>): void {
   if (typeof value === "string") {
-    if ((key !== undefined && PATH_KEYS.has(key)) || isAbsolute(value)) targets.add(value);
+    if ((key !== undefined && PATH_KEYS.has(key)) || (looksLikePath(value) && isAbsolute(value))) {
+      targets.add(value);
+    }
     return;
   }
   if (Array.isArray(value)) {
@@ -217,9 +230,31 @@ async function gate(directory: string, event: GateEvent): Promise<void> {
   }
 }
 
+/** One warning per process: a reload (`setup` runs again) must not repeat it. */
+let announcedMissingGit = false;
+
+/**
+ * gh#1221: git is this plugin's other load-bearing dependency, and with it
+ * unreachable every toplevel probe answers "no repo", so both gates degrade to
+ * allow — the bash guard's documented fail-open posture
+ * (`plugins/super-fr/hooks/lib/fr-isolation-decision.sh`). Fail-open is
+ * deliberate; staying SILENT about it is not, because the operator then reads an
+ * allow as a verified decision. So say it once, at load, where it is fixable.
+ */
+function warnIfGitUnresolved(): void {
+  if (announcedMissingGit || resolveGit() !== null) return;
+  announcedMissingGit = true;
+  console.error(
+    "super-fr: no executable git found (PATH and FR_GIT_CANDIDATES); the isolation " +
+      "gates will FAIL OPEN (allow every edit and shell command). Install git or set " +
+      "FR_GIT_CANDIDATES=/abs/path/to/git. See gh#1221."
+  );
+}
+
 const plugin: Plugin.Plugin = {
   id: "super-fr",
   async setup(ctx) {
+    warnIfGitUnresolved();
     const directory = ctx.location.directory;
     const claimChild = createClaimHandler({
       session: ctx.session,

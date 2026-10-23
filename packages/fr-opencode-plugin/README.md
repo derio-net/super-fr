@@ -22,7 +22,7 @@ rather than half-hooked.
 | Child-session claim | `execute.before`, the child's first call (gh#530) | — |
 | `fr` binary pin | `ctx.shell.hook("create.before")` exporting `FR_HARNESS_FR` | `fr-binary-pin.sh` |
 | Acceptance nag | `ctx.session.hook("context")`, first request | `fr-acceptance-nag.sh` |
-| Idle guard | `session.idle` | `fr-run-idle-guard.sh` |
+| Idle guard | `session.idle` (2.0.x), `session.execution.succeeded` (2.1.x) | `fr-run-idle-guard.sh` |
 | Status line | TUI `tui/index.tsx`, slot `prompt.footer.status` | `fr-statusline-segment.sh` |
 
 Two engines decide the shell gate now (the bash script and `src/guard.ts`), so
@@ -69,15 +69,24 @@ closed, while a pipeline is active — fail-open on every ambiguity (no
 sentinel, no push, `gh` missing, no PR, auth or network error, timeout), exactly
 as the bash hook does. It is a backstop, not a security boundary.
 
-## The idle guard (`session.idle`)
+## The idle guard (a turn ended)
 
-On `session.idle` it runs `fr run check --idle --format json` in the session's
+When a turn ends it runs `fr run check --idle --format json` in the session's
 directory and, when fr says the run is *advanceable with nobody working on it*,
 sends fr's next command back into the session with `ctx.session.prompt` (the
 2.x call; 1.x's `/session/{id}/prompt_async` transport is gone).
+
+"Turn ended" is two event names, because the server moved under us (gh#1231):
+2.0.32 emits `session.idle`, and 2.1.x emits `session.execution.succeeded`
+instead — a handler matching only the first is inert *and silent* on every 2.1
+server. Both are accepted. `session.execution.succeeded` is durable, so a
+reconnecting stream can replay it; the once-per-position memory is what makes a
+replay free.
+
 Claude Code's counterpart **blocks** the stop; OpenCode cannot refuse a stop, so
-this one **continues** the session instead — a weaker tier, declared `partial`
-in `fr harness parity`.
+this one **continues** the session instead — a weaker tier, declared `enforced`
+in `fr harness parity` since the live 2.1.3 walk (2026-10-23) showed the nudge
+reaching the session and the model acting on it.
 
 It is silent on anything but a clean, parsed "idle" (fr missing, erroring,
 refusing or hanging included), acts at most once per run position, leaves child

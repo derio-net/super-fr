@@ -31,7 +31,11 @@ writes the marker; devcontainer mode is the default.
 
 **Scope.** fr-isolation answers one question — *is this fr work happening in an
 fr-enabled repo's base clone instead of its workspace?* — and is silent on
-everything else. Not in a git repo, or not fr-enabled → allowed. It is **not** a
+everything else. Not in a git repo, or not fr-enabled → allowed. The same holds
+when `git` itself cannot be resolved: there is no toplevel to judge, so the
+edit gate allows — its one fail-open, stated once at load by the OpenCode plugin
+(gh#1221); the shell guards still deny for a live pipeline they cannot place.
+It is **not** a
 filesystem sandbox or a credential boundary: `~/.ssh`, `~/.aws` and friends are
 outside its scope (including when `$HOME` is a dotfiles git repo, which is not
 fr-enabled), and a session with no active pipeline sentinel is ungated by the

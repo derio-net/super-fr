@@ -18,13 +18,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { runSync } from "./spawn";
+import { git } from "./git";
 
 const PIPELINE_SKILLS = new Set(["fr-goal", "fr-brainstorming", "fr-execute"]);
 const GC_AGE_MS = 48 * 3600 * 1000;
 /** A lock with no readable owner is abandoned only once clearly stale. */
 const OWNERLESS_LOCK_AGE_MS = 60 * 1000;
-const GIT_TIMEOUT_MS = 5_000;
 
 export function frHome(): string {
   return process.env.HOME || homedir();
@@ -216,8 +215,7 @@ export function writePipelineSentinel(event: SkillCallEvent | null | undefined, 
     if (typeof sessionID !== "string" || sessionID === "" || !cwd) return;
 
     // Pipeline skills only matter inside a repo; a non-git cwd is a no-op.
-    const top = runSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { timeoutMs: GIT_TIMEOUT_MS });
-    const repoRoot = top.code === 0 ? top.stdout.trim() : "";
+    const repoRoot = git(cwd, "rev-parse", "--show-toplevel") ?? "";
     if (!repoRoot) return;
     // A linked worktree (.git is a file) IS the isolation workspace: only the
     // base repo gets a sentinel.

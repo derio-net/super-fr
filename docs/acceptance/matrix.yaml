@@ -3081,31 +3081,26 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels: {}
-    status: not-implemented
-    notes: 'LIVE-ONLY BY NATURE - stays not-implemented, deliberately. The handler exists
-      (packages/fr-opencode-plugin/src/idle.ts, wired as the existing plugin''s event
-      hook) and bun test covers it - 50 tests, 10 mutants killed: exactly one promptAsync
-      per run position on session.idle, silent otherwise, child sessions left alone,
-      never throws. But every one of those tests drives a FAKE client. That a plugin-originated
-      prompt on session.idle actually EXECUTES in a live OpenCode session - that the
-      event fires for a TUI session at the moment a turn ends, that promptAsync is callable
-      from inside an event hook, that the injected text is acted on, and that it does
-      not collide with the operator typing - is shown by none of them, and that is the
-      claim this row makes. By the gh#494 standard it needs a live run; until then parity.yaml
-      says opencode: partial with a scope_note saying why. The adapter cannot BLOCK
-      a stop, only continue the session - a weaker tier than the Claude Code guard,
-      declared as such rather than implied to be parity.
-
-      VERSION CORRECTION (phase 6, carried into prose and parity.yaml in phase 7): the
-      event and the endpoint were verified in @opencode-ai/sdk TYPE DEFINITIONS on the
-      authoring machine, of versions 1.17.15, 1.1.27 and 1.0.23 - all three carrying
-      EventSessionIdle {properties.sessionID}, Session.parentID, and session.promptAsync
-      -> /session/{id}/prompt_async with body.parts and query.directory. 1.18.31 is
-      the opencode BINARY''s version and is NOT an SDK copy on disk here; the earlier
-      claim "verified in the installed 1.18.31 SDK types" (spec section 4.G table, parity.yaml
-      scope_note) was wrong about WHICH artifact was read and both are now corrected.
-      The design is unaffected - every version found carries both - but a verification
-      is only worth its provenance.'
+    status: walked
+    notes: 'Live-only by nature, and now walked. The adapter (packages/fr-opencode-plugin/src/idle.ts)
+      is transport: it asks fr run check --idle and re-injects fr''s next command; bun
+      tests drive a fake client (exactly one prompt per run position, silent otherwise,
+      child sessions left alone, never throws). The live 2.1.3 walk (2026-10-23) is
+      what this row waited for: the nudge reached the session as a plugin-authored message
+      and the model ran fr run advance. It cannot BLOCK a stop, only continue the session
+      - a weaker tier than the Claude Code guard, declared as such. Event lineage (gh#1231):
+      2.0.32 emitted session.idle; 2.1.x emits session.execution.succeeded and never
+      session.idle, so both names are accepted.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-23T00:00:00Z'
+      evidence: 'OpenCode 2.1.3, isolated HOME/XDG + logging fr shim, synthetic advanceable
+        run 2026-10-23-live-idle: nudge text appeared in the session export (not the
+        operator prompt), the model ran fr run advance 2026-10-23-live-idle; one nudge
+        for three listeners on the one event'
   - id: run-idle-guard-acts-once-per-position
     capability: Harness parity
     acceptance: The idle guard acts at most once per cursor position, so a failing advance
@@ -3464,11 +3459,14 @@ rows:
       - super-fr:tests/unit/test_run_tests_log_opencode.py
     status: ci
     notes: 'gh#638. Before, OpenCode had no reader and the gate passed any fresh non-empty
-      file. Live-verified 2026-09-26: against the real opencode.db (OpenCode 1.18.32)
-      a bash-redirect log matched one window containing its mtime and a write-tool log
-      matched none (1.3 s over a 1.5 GB db); the same pair on a live Claude Code transcript
-      behaved identically. Hermes is declared unsupported (parity row deliver-tests-provenance,
-      operator decision).'
+      file. Live-verified 2026-09-26 (OpenCode 1.x): against the real opencode.db a
+      bash-redirect log matched one window containing its mtime and a write-tool log
+      matched none. RE-OBSERVED 2026-10-23 on OpenCode 2.1.3, through _verify_tests_log
+      itself against the real session_message store: a shell-redirect log was accepted
+      (witness live-redirect2.log@2e8007bff073) and a write-tool log refused with ''no
+      command of YOURS wrote it'' — so the 2.x reader answers the gate in both directions
+      (#1224; the 1.x observation is superseded). Hermes is declared unsupported (parity
+      row deliver-tests-provenance, operator decision).'
   - id: run-records-dir-holds-only-records
     capability: Run cursor
     acceptance: 'A run''s .records/ dir holds step records and fr''s pr-body render
@@ -3947,7 +3945,9 @@ rows:
     status: walked
     notes: 'Live walk on OpenCode 2.1.3 PASSED: a model-driven edit to a tracked spec
       in the base clone was refused with the fr-isolation message and git status stayed
-      clean (Test Plan step 1).'
+      clean (Test Plan step 1). Re-walked with the model''s own report: the refusal
+      came back as the model-visible tool result, and the model said so instead of retrying
+      through another tool (#1227 proof 1).'
     verify: live
     walks:
     - strategy: live
@@ -3957,6 +3957,14 @@ rows:
       at: '2026-10-22T00:00:00Z'
       evidence: 'OpenCode 2.1.3 this session: edit tool on docs/superpowers/specs/2026-10-20-opencode-2-support-design.md
         refused; no file change'
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-23T00:00:00Z'
+      evidence: 'OpenCode 2.1.3: write tool on a tracked file in an fr-enabled clone
+        -> failed tool call carrying the guard text; model reported the refusal; file
+        unchanged (#1227 proof 1)'
   - id: opencode-2-bash-gate
     capability: OpenCode adaptation
     acceptance: During an active fr pipeline in OpenCode 2.x, a shell command whose
@@ -4055,11 +4063,12 @@ rows:
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
-    status: walk-owed
-    notes: 'Live walk on OpenCode 2.1.3 FAILED: the server emits session.execution.succeeded
-      and records an idle message but never emits session.idle, so idle.ts never fires;
-      fr run check --idle returned exit 3 with next_command, yet no nudge was submitted.
-      Fix tracked in #1231; the row remains debt (not passing) until a live walk passes.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED after the #1231 fix: idle.ts accepts
+      session.execution.succeeded (2.1.x''s terminal event; session.idle kept for 2.0.x).
+      One nudge appeared as a plugin-authored session message for the advanceable run
+      and the model then ran fr run advance; exactly one nudge for three listeners on
+      the one event pins the once-per-position guard.'
     verify: live
     issues:
     - derio-net/super-fr#1231
@@ -4072,6 +4081,15 @@ rows:
       evidence: 'OpenCode 2.1.3 fresh session, synthetic advanceable run: fr run check
         --idle exit 3/next_command; no session.idle event in the plugin event stream
         (session.execution.succeeded only); no nudge in the session export'
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-23T00:00:00Z'
+      evidence: 'OpenCode 2.1.3, isolated HOME/XDG + logging fr shim, synthetic advanceable
+        run 2026-10-23-live-idle: nudge text in the session export (not the operator
+        prompt), fr run advance 2026-10-23-live-idle in the shim log, one nudge per
+        position'
   - id: opencode-2-status-line
     capability: OpenCode adaptation
     acceptance: The fr status segment renders in the OpenCode 2.x terminal status area,
@@ -4187,16 +4205,21 @@ rows:
       - super-fr:packages/fr-opencode-plugin/test/sentinel.test.ts
       - super-fr:tests/unit/test_sentinel_lifecycle.py#test_the_opencode_writer_writes_the_bash_writers_keys
       - super-fr:tests/unit/test_sentinel_lifecycle.py#test_the_python_reader_stamps_and_the_opencode_writer_carries_it
-    status: ci
-    notes: A completed pipeline skill call in a base repo writes the bash writer's sentinel
-      keys, never in a linked worktree (sentinel.test.ts, CI); test_sentinel_lifecycle.py
-      holds the TS writer to the Python reader and the bash guard. execute.after firing
-      for a live skill call is unobserved; its scenario tests/scenarios/opencode-plugin-v2.sh
-      proves the delivery contract the hook rides on (one directory, cli.json naming
-      the directory, an idempotent reinstall, an unparsable cli.json refused without
-      writing, uninstall leaving foreign entries, and one load of the delivered directory
-      in the real 2.x binary).
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED: a model-invoked pipeline skill (fr-brainstorming)
+      in a base clone produced the bash writer''s sentinel — the execute.after path,
+      not a stub — carrying repo_root and skill name, and nothing in a valid isolation
+      workspace.'
     scenario: tests/scenarios/opencode-plugin-v2.sh
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-23T00:00:00Z'
+      evidence: 'OpenCode 2.1.3, fr-enabled base clone (project2), model invoked fr-brainstorming:
+        sentinel file written by the handler with {repo_root, skill: fr-brainstorming,
+        started_at}; #1227 proof 2'
   - id: opencode-2-bind-unbind
     capability: OpenCode adaptation
     acceptance: An OpenCode 2.x session that runs fr isolation up or fr run start is
@@ -4206,16 +4229,22 @@ rows:
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/bind.test.ts
-    status: ci
-    notes: A completed shell call naming fr isolation up|exec|down or fr run start runs
-      fr isolation attach --harness opencode, and session.deleted runs fr isolation
-      detach, best-effort (bind.test.ts, CI, exact argv). session.deleted's shape is
-      from the client typings, not observed live; its scenario tests/scenarios/opencode-plugin-v2.sh
-      proves the delivery contract the hook rides on (one directory, cli.json naming
-      the directory, an idempotent reinstall, an unparsable cli.json refused without
-      writing, uninstall leaving foreign entries, and one load of the delivered directory
-      in the real 2.x binary).
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED, both halves: a completed shell call
+      running ''FR_ISOLATION_TARGET=worktree fr isolation up --branch live-bind'' made
+      the handler run fr isolation attach --session <id> --repo <clone> --branch live-bind
+      --harness opencode, and deleting that session ran fr isolation detach --session
+      <id> (the subscription''s session.deleted, #1227 proof 4).'
     scenario: tests/scenarios/opencode-plugin-v2.sh
+    walks:
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-23T00:00:00Z'
+      evidence: 'OpenCode 2.1.3: isolation up in project2 -> isolation attach --harness
+        opencode --branch live-bind (shim log 05:58:37Z); opencode session delete ->
+        isolation detach --session ses_e98af17c2ffebqTXFLmmWLiWdR (05:52:00Z)'
   - id: isolation-rebuild-keeps-worktree
     capability: Isolation lifecycle
     acceptance: 'An operator applies a changed devcontainer profile with `fr isolation

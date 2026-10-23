@@ -5,9 +5,25 @@
 // caller (e.g. a status/debug tool) share one source of truth — mirrors
 // fr-isolation-required.sh's own separation between marker lookup and the
 // PreToolUse deny decision.
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+//
+// Every probe here is BOUNDED and resolved, never a bare spawn on the edit
+// path (gh#1221): git comes from ./git (one explicit binary, SIGKILL on
+// timeout), and the directory/name checks are Node syscalls rather than `pwd`/
+// `bash` subprocesses that could stall the server for the whole session.
+//
+// FAIL-OPEN, DELIBERATELY. When git cannot be resolved or times out, this
+// resolution has no verdict — `toplevel` is null and the caller allows the
+// edit. That is exactly what the bash guard does when git is unreachable (its
+// `_fr_toplevel_of` returns non-zero and the edit decision allows), so the two
+// engines agree. It is a recorded choice, not the accident it was: an edit gate
+// that guessed "deny" on unknown filesystem state would block work in repos it
+// knows nothing about, and it is a discipline backstop, not a security
+// boundary. `setup` warns once at load when git is missing, so the fail-open
+// state is visible rather than silent.
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative } from "node:path";
+
+import { git } from "./git";
 
 export interface MarkerResolution {
   /** Absolute, symlink-resolved git toplevel of the target file's repo. */
@@ -30,7 +46,7 @@ export interface BranchDrift {
 
 function realpath(path: string): string {
   try {
-    return execFileSync("pwd", { cwd: path, shell: undefined }).toString().trim();
+    return realpathSync(path);
   } catch {
     return path;
   }
@@ -45,28 +61,18 @@ function nearestExistingAncestor(path: string): string | null {
 }
 
 function gitToplevel(dir: string): string | null {
-  try {
-    const out = execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], {
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .toString()
-      .trim();
-    return out ? realpath(out) : null;
-  } catch {
-    return null;
-  }
+  const out = git(dir, "rev-parse", "--show-toplevel");
+  return out ? realpath(out) : null;
 }
 
 function isFrEnabled(toplevel: string): boolean {
   if (existsSync(`${toplevel}/docs/superpowers/plans`)) return true;
+  // The same question the bash guard asks by globbing
+  // `.devcontainer/*/devcontainer.json`, without a subprocess on the edit path.
   try {
-    const entries = execFileSync("bash", [
-      "-c",
-      `for cfg in "${toplevel}"/.devcontainer/*/devcontainer.json; do [ -f "$cfg" ] && echo found && break; done`,
-    ])
-      .toString()
-      .trim();
-    return entries === "found";
+    return readdirSync(`${toplevel}/.devcontainer`).some((entry) =>
+      existsSync(`${toplevel}/.devcontainer/${entry}/devcontainer.json`)
+    );
   } catch {
     return false;
   }
@@ -75,23 +81,12 @@ function isFrEnabled(toplevel: string): boolean {
 function gitDirsDiffer(toplevel: string): boolean {
   // A linked worktree has a distinct --git-dir from its --git-common-dir;
   // the primary working tree's git-dir IS its common-dir.
-  try {
-    const common = execFileSync("git", ["-C", toplevel, "rev-parse", "--git-common-dir"], {
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .toString()
-      .trim();
-    const gitdir = execFileSync("git", ["-C", toplevel, "rev-parse", "--git-dir"], {
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .toString()
-      .trim();
-    const rcommon = realpath(isAbsolute(common) ? common : `${toplevel}/${common}`);
-    const rgitdir = realpath(isAbsolute(gitdir) ? gitdir : `${toplevel}/${gitdir}`);
-    return rcommon !== rgitdir;
-  } catch {
-    return false;
-  }
+  const common = git(toplevel, "rev-parse", "--git-common-dir");
+  const gitdir = git(toplevel, "rev-parse", "--git-dir");
+  if (common === undefined || gitdir === undefined) return false;
+  const rcommon = realpath(isAbsolute(common) ? common : `${toplevel}/${common}`);
+  const rgitdir = realpath(isAbsolute(gitdir) ? gitdir : `${toplevel}/${gitdir}`);
+  return rcommon !== rgitdir;
 }
 
 function hasContainerEvidence(): boolean {
@@ -115,17 +110,10 @@ function hasContainerEvidence(): boolean {
  */
 function branchDrift(toplevel: string, markerBranch: string | undefined): BranchDrift | undefined {
   if (!markerBranch) return undefined;
-  let head: string;
-  try {
-    head = execFileSync("git", ["-C", toplevel, "symbolic-ref", "--quiet", "--short", "HEAD"], {
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .toString()
-      .trim();
-  } catch {
-    return undefined;
-  }
-  return head && head !== markerBranch ? { marker: markerBranch, head } : undefined;
+  const head = git(toplevel, "symbolic-ref", "--quiet", "--short", "HEAD");
+  // A detached HEAD (mid-rebase, bisect) has no symbolic ref — not drift.
+  if (head === undefined) return undefined;
+  return head !== markerBranch ? { marker: markerBranch, head } : undefined;
 }
 
 function readMarker(toplevel: string): { toplevel?: string; mode?: string; branch?: string } | null {
