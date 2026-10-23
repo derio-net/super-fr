@@ -72,6 +72,17 @@ line in the TUI. OpenCode 1.x is not supported: the plugin is written to
 OpenCode 2's plugin API, and `fr` refuses a 1.x session by name, telling you to
 upgrade.
 
+Both gates resolve their own `git` (one binary from `FR_GIT_CANDIDATES`, every
+call bounded) instead of trusting the `PATH` the OpenCode server inherited. With
+git unreachable the **edit** gate fails open — it cannot name a toplevel, so it
+allows, exactly as the bash hook's edit decision does — while the **shell** gate
+stays closed for a live pipeline, because it cannot confirm the workspace
+marker. That asymmetry is the bash guard's own, captured in
+`tests/fixtures/hooks/guard-verdicts.yaml` (`git-unresolvable`). What is new is
+that it is announced: `setup` warns once at load when no candidate is
+executable, because an allow nobody announced reads as a verified decision
+(gh#1221).
+
 Hermes Agent: the installer copies skills and wires the hooks/rules when
 `~/.hermes` already exists. On a fresh Hermes setup, force that step with
 `HERMES_SKILLS_INSTALL=1`. See [Hermes Agent](#hermes-agent) for what lands

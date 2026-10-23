@@ -64,6 +64,16 @@ pipeline skill ran this session.
 4. Path matches a glob in `.fr-isolation-allow` (below) → allow.
 5. Otherwise → **deny** with a message naming the three ways forward.
 
+One dependency failure is fail-**open**, and it is the only one: when `git`
+itself cannot be resolved (nothing on `PATH`, nothing in
+`FR_GIT_CANDIDATES`), there is no toplevel to judge, so steps 2–5 never run and
+the edit is allowed. The bash hook's edit decision answers the same way
+(`_fr_toplevel_of` failing is an allow). The shell guards do not, and that
+asymmetry is theirs too: a live pipeline whose repo cannot be named keeps
+denying, because it cannot confirm the workspace marker. The OpenCode plugin
+states the edit-side posture once at load, because an allow that nobody
+announced reads as a verified decision (gh#1221).
+
 `fr isolation up` writes the marker (and adds it to `info/exclude`); `down`
 removes it. The marker is **never** committed — it is gitignored and a CI
 tripwire fails if it is ever tracked.

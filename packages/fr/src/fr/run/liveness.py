@@ -9,7 +9,8 @@ This module draws that one line, twice:
 
 - **idle** (`is_idle`) — the run is *advanceable and nobody is working on it*.
   `fr run check --idle` exits 3 on it; the Claude Code `Stop` hook
-  (`fr-run-idle-guard.sh`) and the OpenCode `session.idle` handler both ask
+  (`fr-run-idle-guard.sh`) and the OpenCode turn-end handler (`session.idle` on
+  2.0.32, `session.execution.succeeded` on 2.1.x) both ask
   that command and **neither re-derives the answer**. A harness adapter holds
   no opinion about cursors: it holds a session, a working directory, and the
   position it last acted on.
