@@ -3464,11 +3464,14 @@ rows:
       - super-fr:tests/unit/test_run_tests_log_opencode.py
     status: ci
     notes: 'gh#638. Before, OpenCode had no reader and the gate passed any fresh non-empty
-      file. Live-verified 2026-09-26: against the real opencode.db (OpenCode 1.18.32)
-      a bash-redirect log matched one window containing its mtime and a write-tool log
-      matched none (1.3 s over a 1.5 GB db); the same pair on a live Claude Code transcript
-      behaved identically. Hermes is declared unsupported (parity row deliver-tests-provenance,
-      operator decision).'
+      file. Live-verified 2026-09-26 (OpenCode 1.x): against the real opencode.db a
+      bash-redirect log matched one window containing its mtime and a write-tool log
+      matched none. RE-OBSERVED 2026-10-23 on OpenCode 2.1.3, through _verify_tests_log
+      itself against the real session_message store: a shell-redirect log was accepted
+      (witness live-redirect2.log@2e8007bff073) and a write-tool log refused with ''no
+      command of YOURS wrote it'' — so the 2.x reader answers the gate in both directions
+      (#1224; the 1.x observation is superseded). Hermes is declared unsupported (parity
+      row deliver-tests-provenance, operator decision).'
   - id: run-records-dir-holds-only-records
     capability: Run cursor
     acceptance: 'A run''s .records/ dir holds step records and fr''s pr-body render
