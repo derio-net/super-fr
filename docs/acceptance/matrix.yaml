@@ -4229,7 +4229,7 @@ rows:
       running ''FR_ISOLATION_TARGET=worktree fr isolation up --branch live-bind'' made
       the handler run fr isolation attach --session <id> --repo <clone> --branch live-bind
       --harness opencode, and deleting that session ran fr isolation detach --session
-      <id> (subscription''s session.deleted). #1227 proofs 4 and 5.'
+      <id> (the subscription''s session.deleted, #1227 proof 4).'
     scenario: tests/scenarios/opencode-plugin-v2.sh
     walks:
     - strategy: live
