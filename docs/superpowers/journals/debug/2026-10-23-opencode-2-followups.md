@@ -16,3 +16,10 @@ Failing behaviour, one per issue:
 - **#1221** — `src/marker.ts` runs git/pwd/bash through unbounded `execFileSync` on every edit, and spawns bare `git` from PATH rather than resolving it as the bash guard does (`FR_GIT_CANDIDATES`).
 
 Operator decisions (recorded before code): #1224 keeps `enforced` and is re-observed live on 2.x; live walks run in this session for #1227 and #1231; one batch PR on `fix/opencode-2-followups`.
+
+<!-- fr:journal kind=root-cause scope=debug id=0802292723ea created=2026-10-23T05:09:31+00:00 -->
+### 0802292723ea · root-cause · #1222: the usage reader iterated assistant rows only, so compaction rows' tokens were invisible
+
+`fr/usage/readers/opencode.py` builds `UsageRecord.messages` from `type == "assistant"` rows only. OpenCode 2 writes a compaction summary as its own `session_message` of `type: "compaction"`, carrying `data.tokens` and `data.model` (and `data.cost: 0`).
+
+Measured in the operator's live 2.1.3 store (copy read read-only, 2026-10-23): 29 compaction rows; 14 carry `tokens` + `model` + `cost: 0`, 15 (migrated older sessions) carry none. So the defect both under-counts (tokens present, unread) and would mis-report if fixed by assuming zero (the 15 with no tokens).
