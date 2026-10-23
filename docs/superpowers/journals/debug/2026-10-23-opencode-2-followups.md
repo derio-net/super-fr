@@ -96,3 +96,19 @@ Four separate 2.1.3 sessions, each in the disposable world under `$TMPDIR/fr-liv
 4. **`session.deleted` arrives on the subscription.** `opencode session delete` against that session produced `fr isolation detach --session ses_e98af17c2ffebqTXFLmmWLiWdR` in the shim log, which only the `session.deleted` branch issues.
 
 Two observations worth keeping. The server fans one terminal event out to every subscribed listener (proof 4's `detach` and the idle guard's `check --idle` both appear three times per event), so every handler must be idempotent per session/event — `setProcessWarned`, the sentinel writer and the idle dedupe all are. And an `edit`/`write` whose *content* begins with a path-looking string (`//…`) was itself refused by the edit gate as if the content were the path: recorded as its own finding below, fixed in this PR.
+
+<!-- fr:journal kind=finding scope=debug id=119c2c2dd014 created=2026-10-23T05:56:08+00:00 state=fixed -->
+### 119c2c2dd014 · finding [fixed] · #1224 re-observed live on 2.1.3: the cell keeps its operator-decided 'enforced', on 2.x evidence
+
+The operator's decision (issue option 2) stands: `deliver-tests-provenance` stays `enforced` on OpenCode in every mode. What changed is the evidence under it.
+
+Method matched the 1.x note's exactly — the real `opencode.db`, no fixture — and went one step further: it called THE gate (`_verify_tests_log` in `fr/commands/run_cmd.py`), not only the reader beneath it, with `OPENCODE_SESSION_ID` naming the 2.1.3 session that produced the store.
+
+In that session the model made both calls the row distinguishes:
+
+- `shell`, status `completed`, `metadata.exit` 0, command `printf 'suite ok\n' > …/live-redirect2.log` → **ACCEPTED**, witness `live-redirect2.log@2e8007bff073` (its mtime fell inside the call's window).
+- `write` of `…/live-write2.log` → **REFUSED, exit 2**: "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it) since this unit opened".
+
+So the 2.x `session_message` reader answers the gate correctly in both directions, live, on the store shape this release targets. The 1.x sentence is replaced by this one in the parity row's `scope_note`, and the `run-deliver-tests-log-opencode` matrix row's notes gain the same observation.
+
+What is deliberately NOT claimed: `opencode-observe-take10-rerun` (R13's full take-10 run-B re-run) is still owed post-merge, and `run-session-identity` stays `partial` because of it. This observation covers the one cell #1224 asks about — who wrote the suite log — and no more.
