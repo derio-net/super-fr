@@ -4055,11 +4055,12 @@ rows:
     levels:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
-    status: walk-owed
-    notes: 'Live walk on OpenCode 2.1.3 FAILED: the server emits session.execution.succeeded
-      and records an idle message but never emits session.idle, so idle.ts never fires;
-      fr run check --idle returned exit 3 with next_command, yet no nudge was submitted.
-      Fix tracked in #1231; the row remains debt (not passing) until a live walk passes.'
+    status: walked
+    notes: 'Live walk on OpenCode 2.1.3 PASSED after the #1231 fix: idle.ts accepts
+      session.execution.succeeded (2.1.x''s terminal event; session.idle kept for 2.0.x).
+      One nudge appeared as a plugin-authored session message for the advanceable run
+      and the model then ran fr run advance; exactly one nudge for three listeners on
+      the one event pins the once-per-position guard.'
     verify: live
     issues:
     - derio-net/super-fr#1231
@@ -4072,6 +4073,15 @@ rows:
       evidence: 'OpenCode 2.1.3 fresh session, synthetic advanceable run: fr run check
         --idle exit 3/next_command; no session.idle event in the plugin event stream
         (session.execution.succeeded only); no nudge in the session export'
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-23T00:00:00Z'
+      evidence: 'OpenCode 2.1.3, isolated HOME/XDG + logging fr shim, synthetic advanceable
+        run 2026-10-23-live-idle: nudge text in the session export (not the operator
+        prompt), fr run advance 2026-10-23-live-idle in the shim log, one nudge per
+        position'
   - id: opencode-2-status-line
     capability: OpenCode adaptation
     acceptance: The fr status segment renders in the OpenCode 2.x terminal status area,
