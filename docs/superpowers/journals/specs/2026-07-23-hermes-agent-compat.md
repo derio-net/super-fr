@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: 2026-07-23-hermes-agent-compat
 
 <!-- fr:journal kind=decision scope=spec id=d1-scope created=2026-07-23T20:40:58 -->

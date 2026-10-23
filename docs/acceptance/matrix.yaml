@@ -9925,3 +9925,203 @@ rows:
       instruction test is not live evidence.
     verify: live
     scenario: tests/scenarios/herdr-closed-recovery-live.sh
+  - id: fr-ops-model-carriers
+    capability: fr ops
+    acceptance: A plan's ops are read from ops.yaml and from legacy manual-operation
+      blocks in step text, strictly typed, a duplicate id or unknown key refused naming
+      file and line
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_model.py#test_an_op_refuses_an_unknown_key_naming_it
+      - super-fr:tests/unit/test_ops_load.py#test_the_same_id_in_both_carriers_is_an_error_naming_both
+      - super-fr:tests/unit/test_ops_load.py#test_step_text_blocks_are_dedented_and_read_through_the_legacy_model
+    status: ci
+    notes: unit tests run in CI; candidate scenario written (phase 2)
+    scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: fr-ops-status
+    capability: fr ops
+    acceptance: fr ops status reports every op DONE (checked or attested), OPEN with
+      its reason, N/A, UNVERIFIABLE or CANNOT-VERIFY, runs checks per declared identity,
+      surfaces a disabled requirement as OPEN with its consequence and escalates when
+      the guarded condition already happens
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_engine.py#test_the_check_runs_once_per_identity_and_all_must_pass
+      - super-fr:tests/unit/test_ops_engine.py#test_disables_reports_open_with_its_consequence_and_is_never_na
+      - super-fr:tests/unit/test_ops_engine.py#test_a_passing_escalate_on_a_non_done_op_escalates
+      - super-fr:tests/unit/test_ops_cli.py#test_status_reports_each_op_and_exits_1_on_an_open_op
+      - super-fr:tests/unit/test_ops_reason.py#test_a_passthrough_value_on_stderr_never_reaches_the_journal
+      - super-fr:tests/unit/test_ops_reason.py#test_a_json_stderr_body_on_a_non_identity_op_records_only_the_exit_code
+    status: ci
+    notes: 'phase 3: every printed or recorded reason goes through one sanitiser (passthrough
+      values masked, body lines dropped for every op)'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: fr-ops-apply-idempotent
+    capability: fr ops
+    acceptance: fr ops apply (one op or a phase) runs in dependency order, confirms,
+      stops on the first failure naming the op and its undo, waits for a post-merge
+      op's ready probe, and a second run writes nothing and says so
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_apply.py#test_a_second_run_over_a_done_phase_writes_nothing
+      - super-fr:tests/unit/test_ops_apply.py#test_stops_at_the_first_failure_naming_op_and_undo
+      - super-fr:tests/unit/test_ops_apply.py#test_post_merge_op_with_failing_ready_is_refused
+    status: ci
+    notes: unit tests over apply and the CLI run in CI (plan 2026-10-22-fr-ops phase
+      2); candidate scenario tests/scenarios/fr-ops-status-apply.sh runs via test_scenarios.py
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: fr-ops-profile-guard
+    capability: fr ops
+    acceptance: fr ops apply refuses outside a declared ops profile and names the exec
+      command; status only warns
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_profile.py#test_in_ops_profile_needs_the_declaration_and_container_evidence
+      - super-fr:tests/unit/test_ops_apply.py#test_cli_refuses_outside_an_ops_profile
+      - super-fr:tests/unit/test_ops_profile.py#test_scaffold_ops_mounts_the_trust_store_read_only
+    status: ci
+    notes: unit tests over in_ops_profile, scaffold --ops and the apply refusal run
+      in CI (phase 2); candidate scenario covers the out-of-profile refusal
+    scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: fr-ops-evidence-attest
+    capability: fr ops
+    acceptance: Op evidence and operator attestations are durable journal entries visible
+      to fr ops status from any checkout, attested never shown as checked
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R17
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_attest.py#test_attest_closes_an_unverifiable_op_as_attested
+      - super-fr:tests/unit/test_ops_attest.py#test_attest_is_refused_for_an_op_with_a_check
+    status: ci
+    notes: attest and recorded apply evidence tested in CI (phase 2); journal kind 3
+      lands in a later phase
+    scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: fr-ops-seal-no-plaintext
+    capability: fr ops
+    acceptance: fr ops seal never leaves plaintext in the repo or at the target when
+      encryption fails or the process is interrupted, and the helpers never print a
+      secret
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_helpers.py#test_a_failing_encrypt_leaves_the_target_byte_identical_and_no_plaintext
+      - super-fr:tests/unit/test_ops_helpers.py#test_sigterm_during_the_encrypt_command_removes_both_temps
+      - super-fr:tests/unit/test_ops_helpers.py#test_a_symlinked_target_is_refused_and_nothing_is_touched
+    status: ci
+    notes: helper unit tests and the candidate scenario run in CI (phase 2)
+    scenario: tests/scenarios/fr-ops-seal.sh
+  - id: fr-ops-probe-trust
+    capability: fr ops
+    acceptance: Repo-authored probes run only after the operator trusts the exact op
+      set by hash, with a minimal environment, closed stdin and a timeout; a changed
+      op set refuses and shows what changed
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R19
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_trust.py#test_status_refuses_after_a_probe_changes_and_names_it
+      - super-fr:tests/unit/test_ops_trust.py#test_trust_refuses_without_a_terminal
+      - super-fr:tests/unit/test_ops_runner.py#test_a_probe_gets_only_the_minimal_env
+      - super-fr:tests/unit/test_ops_runner.py#test_a_probe_that_hangs_times_out
+      - super-fr:tests/unit/test_ops_trust.py#test_exclusion_is_the_exact_file_shapes_fr_writes
+    status: ci
+    notes: scenario now exercises the trust gate with a grant written through fr.ops.trust.grant_trust;
+      exclusion narrowed to exact file shapes (phase 2)
+    scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: fr-ops-testplan-tags
+    capability: Test Plan
+    acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; any
+      other leading bracket (a checkbox, a link) stays step text
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_testplan.py#test_a_literal_devops_or_tester_tag_takes_the_gate_and_leaves_the_text
+      - super-fr:tests/unit/test_ops_testplan.py#test_any_other_leading_bracket_stays_text
+      - super-fr:tests/unit/test_ops_testplan.py#test_effective_gate_tag_wins_then_devops_then_tester_then_none
+    status: ci
+    notes: 'R12 implemented in phase 3: literal [devops]/[tester] tags and effective_step_gate,
+      unit tests in CI; any other leading bracket stays text per R12 (the acceptance
+      wording about refusing an unknown tag is finding p3-matrix-testplan-tags-wording)'
+    scenario: tests/scenarios/fr-ops-gate-stage.sh
+  - id: fr-ops-deliver-section
+    capability: deliver
+    acceptance: The delivered PR body carries a Manual operations section rendered from
+      recorded evidence, and a plan with pre-merge ops labels the PR gate:devops
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_pr_body.py#test_each_op_shows_its_phase_last_recorded_state_and_command
+      - super-fr:tests/unit/test_ops_pr_body.py#test_deliver_never_refuses_on_open_ops
+      - super-fr:tests/unit/test_ops_exit_promotion.py#test_any_op_adds_devops_beside_the_declared_gate
+    status: ci
+    notes: 'R13 implemented in phase 3: run_exit promotes devops when the plan has ops
+      (labels follow), and deliver renders Manual operations from recorded evidence
+      without refusing on open ops; unit tests in CI'
+  - id: fr-ops-devops-gate-hold
+    capability: gates
+    acceptance: An un-passed gate:devops holds the PR from the driver's merge, and fr
+      gate pass --gate devops refuses while an op or devops Test Plan step is open
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_exit_promotion.py#test_the_merge_path_holds_a_pr_labelled_gate_devops
+      - super-fr:tests/unit/test_ops_gate_pass.py#test_it_refuses_listing_every_open_op_and_unrecorded_devops_step
+      - super-fr:tests/unit/test_ops_gate_pass.py#test_it_passes_once_everything_is_recorded
+    status: ci
+    notes: 'R14 implemented in phase 3: the triage merge path holds gate:devops without
+      -passed, and fr gate pass --gate devops --run folds recorded evidence only (no
+      probe); unit tests in CI'
+    scenario: tests/scenarios/fr-ops-gate-stage.sh
+  - id: fr-ops-gate-stage
+    capability: DevOps stage
+    acceptance: fr ops gate --run runs pre-merge ops, a confirmed merge, readiness,
+      post-merge ops, devops Test Plan steps, the gate pass and the tester hand-off
+      in order, resumable from what it recorded; pickup points devops-gated runs at
+      it
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R18
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_full_run_walks_every_stage_in_order
+      - super-fr:tests/unit/test_ops_devops_brief.py#test_every_other_run_prints_todays_brief_byte_for_byte
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_stage
+    status: ci
+    notes: 'phase 4 shipped: the 8-stage sequencer, the DevOps pickup brief and the
+      gate-stage candidate scenario run in CI'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-gate-stage.sh
+  - id: fr-ops-live-first-run
+    capability: DevOps stage
+    acceptance: With a released fr, a real ops profile and a real PR, the DevOps stage
+      carries a plan's pre- and post-merge ops through merge to a passed devops gate
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R15
+    levels: {}
+    status: walk-owed
+    notes: the surface ships in this PR; only the post-merge live walk under a real
+      ops profile remains, held by the row's devops gate (spec Verification)
+    verify: live

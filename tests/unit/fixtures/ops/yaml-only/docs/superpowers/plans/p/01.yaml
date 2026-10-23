@@ -1,0 +1,12 @@
+schema_version: 2
+phase:
+  number: 1
+  title: One
+  tag: agentic
+tasks:
+- number: 1
+  title: T
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Plain step, no ops here.

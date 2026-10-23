@@ -629,8 +629,8 @@ def test_a_post_merge_that_installs_a_newer_fr_restarts_the_driver_on_it(
     assert isinstance(result.exception, _StopError), result.output
     assert len(runner.dispatched) == 1  # the pass that ran post_merge finished first
     (argv,) = execs
-    assert argv[:3] == [triage_batch_cmd.sys.executable, "-m", "fr"]
-    assert argv[3:] == triage_batch_cmd.sys.argv[1:]  # the same command, same arguments
+    assert argv[:4] == [triage_batch_cmd.sys.executable, "-P", "-m", "fr"]
+    assert argv[4:] == triage_batch_cmd.sys.argv[1:]  # the same command, same arguments
     assert held == [False]  # the lock is released for the new process to take
     assert "99.0.0" in result.output
 
@@ -674,10 +674,10 @@ def test_a_restart_that_cannot_exec_says_why_and_how_to_resume(
     checkout.released = True
     monkeypatch.setattr(triage_batch_cmd, "_installed_version", lambda: "99.0.0")
 
-    def _execv(path: str, argv: list[str]) -> None:
+    def _execve(path: str, argv: list[str], env: dict[str, str]) -> None:
         raise FileNotFoundError(2, "No such file or directory", path)
 
-    monkeypatch.setattr(triage_batch_cmd.os, "execv", _execv)
+    monkeypatch.setattr(triage_batch_cmd.os, "execve", _execve)
     result = _drive_named(tmp_path, "--yes")
     assert result.exit_code == 1, result.output
     assert "could not restart" in result.output

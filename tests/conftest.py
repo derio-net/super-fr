@@ -254,6 +254,17 @@ def _home_off_the_operators_machine(
 
 
 @pytest.fixture(autouse=True)
+def _ops_trust_store_off_the_operators_machine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """`fr ops trust` grants live in a per-operator store (spec 2026-10-22-fr-ops R19);
+    `XDG_STATE_HOME` may point past the sandboxed `HOME`, so every test gets its own."""
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path_factory.mktemp("ops-trust")))
+    # the DevOps stage's host-side state (R15) likewise
+    monkeypatch.setenv("FR_OPS_GATE_DIR", str(tmp_path_factory.mktemp("ops-gate")))
+
+
+@pytest.fixture(autouse=True)
 def _no_live_exit_label_sync(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test labels a real PR (exit-gates R7): `sync_exit_labels` reaches its forge
     through `fr.verification.labels.client_for`, here a forge that cannot label a PR (a

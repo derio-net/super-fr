@@ -181,14 +181,15 @@ def test_journal_render_shows_owed_entries_in_their_own_block(
 # --- the journal kind 1 -> 2 ----------------------------------------------
 
 
-def test_the_journal_kind_moved_to_version_two() -> None:
-    assert ARTIFACT_KINDS["journal"].current_version == 2
+def test_the_journal_kind_moved_past_version_two() -> None:
+    # 3 since the `op` entry kind (spec 2026-10-22-fr-ops §D).
+    assert ARTIFACT_KINDS["journal"].current_version == 3
 
 
 def test_the_journal_kind_is_reachable_from_version_one() -> None:
     chain = MIGRATIONS.chain("journal", 1)
-    assert [m.from_version for m in chain] == [1]
-    assert [m.to_version for m in chain] == [2]
+    assert [m.from_version for m in chain] == [1, 2]
+    assert [m.to_version for m in chain] == [2, 3]
 
 
 def test_the_journal_migration_is_stamp_only(tmp_path: Path) -> None:
@@ -202,9 +203,9 @@ def test_the_journal_migration_is_stamp_only(tmp_path: Path) -> None:
     path.write_text(body)
     report = run_migrations(tmp_path, dry_run=False)
     assert report.ok, report.failed
-    assert ARTIFACT_KINDS["journal"].read_version(path) == 2
+    assert ARTIFACT_KINDS["journal"].read_version(path) == 3
     text = path.read_text()
-    assert text == "<!-- fr:journal-schema=2 -->\n" + body
+    assert text == "<!-- fr:journal-schema=3 -->\n" + body
     # The stamp stays readable: the journal still parses to the same entries.
     assert [e.id for e in parse_journal(text)] == ["d1"]
 
@@ -224,7 +225,7 @@ def test_an_old_stamp_journal_with_an_owed_entry_is_refused(tmp_path: Path) -> N
 def test_a_new_journal_is_written_at_the_current_stamp(tmp_path: Path) -> None:
     path = journal_path(tmp_path, "spec", "2026-10-11-x")
     append_journal_entry(path, "2026-10-11-x", _owed())
-    assert ARTIFACT_KINDS["journal"].read_version(path) == 2
+    assert ARTIFACT_KINDS["journal"].read_version(path) == ARTIFACT_KINDS["journal"].current_version
     assert validate_journal(path) == []
     assert [e.id for e in parse_journal(path.read_text())] == ["test-plan-step-1"]
 
@@ -305,6 +306,6 @@ def test_appending_an_owed_entry_to_an_archived_unstamped_journal_stamps_it(
     path.parent.mkdir(parents=True)
     path.write_text("<!-- fr:journal-schema=1 -->\n# Journal: x\n")
     append_journal_entry(path, "2026-10-11-x", _owed())
-    assert ARTIFACT_KINDS["journal"].read_version(path) == 2
+    assert ARTIFACT_KINDS["journal"].read_version(path) == ARTIFACT_KINDS["journal"].current_version
     assert path.read_text().count("fr:journal-schema=") == 1
     assert validate_journal(path) == []

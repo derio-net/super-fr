@@ -3491,7 +3491,9 @@ def _exec(argv: list[str]) -> None:
     `post_merge` installed); tests replace it."""
     sys.stdout.flush()
     sys.stderr.flush()
-    os.execv(argv[0], argv)
+    from fr.safe_spawn import safe_fr_env
+
+    os.execve(argv[0], argv, safe_fr_env())
 
 
 @contextmanager
@@ -4177,6 +4179,7 @@ class _Driver:
                     failing=failing,
                     head_ref=e.pr.head_ref,
                     trusted=True,  # the queue holds `batch_pr`s only (gh#936)
+                    labels=tuple(str(n) for n in view.get("labels") or ()),
                 )
             # Every landed batch, selected or not: adopting a finished close-out is
             # bookkeeping (gh#990). Only the selection is read further.
@@ -4356,6 +4359,7 @@ class _Driver:
                     rows=read.rows,
                     run_gate=read.run_gate,
                     run_gate_inherited=read.run_gate_inherited,
+                    ops_promoted=read.ops_promoted,
                 )
         return ledgers
 
@@ -7250,7 +7254,9 @@ def batch_drive_command(
         _say(f"restart: post_merge installed fr {restart} (this driver runs {__version__}); "
              "restarting on it")  # fmt: skip
         try:
-            _exec([sys.executable, "-m", "fr", *sys.argv[1:]])
+            from fr.safe_spawn import fr_argv
+
+            _exec(fr_argv(*sys.argv[1:]))
         except OSError as exc:  # the interpreter moved under a reinstall: say so, not a trace
             _fail(
                 f"could not restart on fr {restart} ({exc}); every pass so far is saved, "

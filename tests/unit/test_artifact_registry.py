@@ -26,6 +26,7 @@ from fr.artifacts.registry import (
 EXPECTED_KINDS = {
     "plan",
     "journal",
+    "ops",
     "run",
     "matrix",
     "spec",
@@ -83,6 +84,9 @@ def _seed_repo(root: Path) -> dict[str, Path]:
 
     live["plan"] = w("docs/superpowers/plans/2026-01-01-live/_meta.yaml", "schema_version: 2\n")
     w("docs/superpowers/implemented/plans/2026-01-01-done/_meta.yaml", "schema_version: 2\n")
+
+    live["ops"] = w("docs/superpowers/plans/2026-01-01-live/ops.yaml", "ops: []\n")
+    w("docs/superpowers/implemented/plans/2026-01-01-done/ops.yaml", "ops: []\n")
 
     live["journal"] = w("docs/superpowers/journals/plans/2026-01-01-live.md", "# live\n")
     w("docs/superpowers/implemented/journals/plans/2026-01-01-done.md", "# done\n")
@@ -149,6 +153,9 @@ UNSTAMPED: dict[str, str] = {
     "usage": ("# a usage file\nrun: r\ncaptures: []   # none yet\n"),
     "record": ("# a step record\nstep: implement-phase\n\nticks: [P1.T1.S1]   # one so far\n"),
     "profiles": ("# fr-profiles\nprofiles:\n  dev: {}   # the only one\n\ndefault: dev\n"),
+    "ops": (
+        "# a plan's ops\nops:\n  - id: a   # the first\n    summary: s\n    phase: pre-merge\n"
+    ),
     "plan": (
         "# hand-edited plan meta — key order is NOT the canonical one\n"
         "\n"
@@ -235,6 +242,7 @@ STAMPED_3: dict[str, str] = {
     "profiles": UNSTAMPED["profiles"].replace(
         "default: dev\n", "schema_version: 3\ndefault: dev\n"
     ),
+    "ops": UNSTAMPED["ops"].replace("ops:\n", "schema_version: 3\nops:\n"),
     "agents": UNSTAMPED["agents"].replace(
         "name: fr-spec-reviewer\n", "name: fr-spec-reviewer\nfr_artifact_version: 3\n"
     ),
@@ -618,6 +626,7 @@ def _seed_one(root: Path, kind: str, *, version: int) -> Path | None:
         "usage": next((root / "docs" / "superpowers" / "usage").glob("*.yaml")),
         "record": next((root / "docs" / "superpowers" / "runs").glob("*.records/*.yaml")),
         "profiles": root / ".devcontainer" / "fr-profiles.yaml",
+        "ops": root / "docs" / "superpowers" / "plans" / PLAN_SLUG / "ops.yaml",
         "agents": root / ".claude" / "agents" / "fr-spec-reviewer.md",
     }[kind]
     artifact_kind(kind).write_version(target, version)

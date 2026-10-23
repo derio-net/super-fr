@@ -182,6 +182,16 @@ tracking:
 """
 )
 
+GOOD_OPS = (
+    f"schema_version: {ARTIFACT_KINDS['ops'].current_version}\n"  # built, never typed
+    + """ops:
+  - id: fill-tank
+    summary: Fill the header tank
+    phase: post-merge
+    check: test -e tank
+"""
+)
+
 
 def seed_good_repo(root: Path) -> dict[str, Path]:
     """One structurally valid live artifact per registered kind."""
@@ -193,6 +203,7 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
     return {
         "plan": meta,
         "journal": _w(root, f"docs/superpowers/journals/plans/{PLAN_SLUG}.md", GOOD_JOURNAL),
+        "ops": _w(root, f"docs/superpowers/plans/{PLAN_SLUG}/ops.yaml", GOOD_OPS),
         "run": _w(root, "docs/superpowers/runs/2019-03-04-feat-widget.yaml", GOOD_RUN),
         "matrix": _w(root, "docs/acceptance/matrix.yaml", GOOD_MATRIX),
         "spec": _w(root, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", GOOD_SPEC),
@@ -280,6 +291,11 @@ MISSING_FIELD_CASES = {
         f"docs/superpowers/journals/plans/{PLAN_SLUG}.md",
         GOOD_JOURNAL.replace("kind=discovery ", ""),
         "kind",
+    ),
+    "ops": (
+        f"docs/superpowers/plans/{PLAN_SLUG}/ops.yaml",
+        GOOD_OPS.replace("    phase: post-merge\n", ""),
+        "phase",
     ),
     "run": (
         "docs/superpowers/runs/2019-03-04-feat-widget.yaml",

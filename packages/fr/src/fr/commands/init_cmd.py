@@ -79,6 +79,13 @@ def scaffold(
         "(enabled -> the forge's own, disabled -> none); when it cannot say -> "
         "refused, pass --tracking. Jira arrives with derio-net/super-fr#795.",
     ),
+    ops: bool | None = typer.Option(
+        None,
+        "--ops/--no-ops",
+        help="Make this an ops profile: `ops: true` in fr-profiles.yaml, FR_PROFILE in the "
+        "container, and your ops-trust store mounted read-only (fr ops apply/attest/seal "
+        "run only there). Left unset, an existing ops profile stays one; --no-ops removes it.",
+    ),
 ) -> None:
     """Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus
     host secrets placeholders. The commit is what lets `fr isolation up` see the
@@ -103,6 +110,7 @@ def scaffold(
             features=list(feature),
             ci=ci,
             tracking=tracking,
+            ops=ops,
         )
     except IsolationError as err:
         typer.echo(f"error: {err}", err=True)

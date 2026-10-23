@@ -23,7 +23,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from fr.acceptance.model import Visual, Walk, check_issue_refs, check_status, check_verify
 from fr.journal.model import FindingState, JournalKind, ReviewScope
@@ -152,6 +160,15 @@ class JournalItem(_Strict):
     filed_as: StrictStr | None = None
     """On an `open` record resolving an `owed` entry: the issue `fr journal file`
     filed it as (spec 2026-10-14 R10). Still owed until discharged."""
+
+    @field_validator("kind")
+    @classmethod
+    def _never_an_op(cls, kind: str) -> str:
+        """`JournalKind` minus `op` (spec 2026-10-22-fr-ops §D, R17): an `op` entry
+        is written only by `fr ops`, so a record can never carry one."""
+        if kind == "op":
+            raise ValueError("an `op` entry is written only by `fr ops`, never by a step record")
+        return kind
 
 
 class Resolution(_Strict):

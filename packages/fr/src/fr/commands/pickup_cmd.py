@@ -13,7 +13,13 @@ from fr import parse
 from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.git import ref_exists, remote_name
 from fr.parser import PlanSchemaError
-from fr.run.closeout import CloseoutNotReadyError, branch_closeout_brief, closeout_brief
+from fr.run.closeout import (
+    CloseoutNotReadyError,
+    branch_closeout_brief,
+    closeout_brief,
+    devops_brief,
+    devops_gated,
+)
 from fr.run.model import RunStateError, load_run_state, run_path
 
 if TYPE_CHECKING:
@@ -74,7 +80,10 @@ def pickup_command(
             err_console.print(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(2) from e
         try:
-            brief = closeout_brief(repo_root, run_state)
+            if devops_gated(repo_root, run_state):  # spec 2026-10-22-fr-ops R16
+                brief = devops_brief(repo_root, run_state)
+            else:
+                brief = closeout_brief(repo_root, run_state)
         except CloseoutNotReadyError as e:
             err_console.print(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(2) from e

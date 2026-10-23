@@ -24,11 +24,11 @@ import re
 import shlex
 import stat
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from fr.safe_spawn import fr_argv, safe_fr_env
 from fr.triage.errors import TriageError
 
 
@@ -54,18 +54,26 @@ def _run(
     env: dict[str, str] | None = None,
     stdin: str | None = None,
     coded: bool = False,
+    passthrough: Literal["none", "stderr", "all"] = "none",
+    exact_env: bool = False,
 ) -> Any:
     """The one place a process starts (apart from `git_ok`): stdout as text, or raw bytes with
     `text=False`; a return code outside *ok*, or a run past *timeout* seconds, raises
     `GitError` with the command's own words. *env* is laid over the process environment;
     *stdin* is fed to the command (text mode only). *coded*: any return code is an answer,
-    `(code, stdout + stderr)`, never a raise (text mode only)."""
-    full_env = {**os.environ, **env} if env else None
+    `(code, stdout + stderr)`, never a raise (text mode only). *passthrough* leaves streams
+    with the operator instead of capturing them: `stderr` (stdout is still captured), or
+    `all` (nothing is, for a command that asks on the terminal). *exact_env*: *env* is
+    the child's WHOLE environment, not laid over this one, so a variable can be removed
+    (`fr.safe_spawn.safe_fr_env` drops a relative `PYTHONPATH`)."""
+    full_env = dict(env or {}) if exact_env else ({**os.environ, **env} if env else None)
+    pipe = subprocess.PIPE
     try:
         result = subprocess.run(
             argv,
             cwd=cwd,
-            capture_output=True,
+            stdout=None if passthrough == "all" else pipe,
+            stderr=pipe if passthrough == "none" else None,
             text=text,
             check=False,
             timeout=timeout,
@@ -906,7 +914,7 @@ class Worktree:
         PATH) with *args* in this worktree: `(exit code, its words)`. The collected
         close-out's verbs: verify-merge, closeout outcome, archive. An argument list,
         never a shell string."""
-        code, out = _run([sys.executable, "-m", "fr", *args], self.path, coded=True)
+        code, out = _run(fr_argv(*args), self.path, coded=True, env=safe_fr_env(), exact_env=True)
         return int(code), str(out)
 
     def reset_hard(self, sha: str) -> None:
@@ -927,11 +935,38 @@ class Worktree:
         git(["commit", "--no-verify", "--quiet", "-m", message], self.path)
         return self.head()
 
+    def rebase_onto(self, new_base: str, upstream: str) -> None:
+        """Replay only the commits after *upstream* onto *new_base* (`git rebase --onto`):
+        the DevOps stage's ops branch, cut from a PR head that was then squash-merged,
+        keeps only its own evidence commits (spec 2026-10-22-fr-ops R15). A conflict
+        aborts the rebase and raises, leaving the branch where it was."""
+        argv = ["rebase", f"--onto={new_base}", "--end-of-options", upstream]
+        if git_ok(argv, self.path):
+            return
+        git_ok(["rebase", "--abort"], self.path)
+        raise GitError(f"`git rebase --onto {new_base} {upstream}` failed in {self.path}")
+
     def push(self, branch: str, *, force: bool = False) -> None:
         """Push HEAD to *branch*; *force* overwrites it, for a branch fr owns (the
         driver's export branch, which a pass that died may have left behind)."""
         argv = ["push", *(["--force"] if force else []), "origin", f"HEAD:refs/heads/{branch}"]
         git(argv, self.path)
+
+
+def run_this_fr(args: list[str], cwd: Path, *, terminal: bool = False) -> tuple[int, str]:
+    """THIS `fr` (`python -m fr` of the running interpreter) in *cwd*: `(exit, stdout)`,
+    its stderr passed through to the operator. *terminal*: every stream stays the
+    operator's and nothing is captured (`(exit, "")`), for a command that asks there.
+    The DevOps stage's host commands (spec 2026-10-22-fr-ops R15)."""
+    code, out = _run(
+        fr_argv(*args),
+        cwd,
+        coded=True,
+        passthrough="all" if terminal else "stderr",
+        env=safe_fr_env(),
+        exact_env=True,
+    )
+    return code, "" if terminal else out
 
 
 def run_publish(argv: list[str], cwd: Path, timeout: float) -> str | None:

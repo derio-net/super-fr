@@ -1,0 +1,130 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Test Plan gates, the devops promotion, gate holds and the PR-body section
+    (R12, R13, R14)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - fr-ops-testplan-tags
+  - fr-ops-deliver-section
+  - fr-ops-devops-gate-hold
+  tier: hard
+  files:
+  - packages/fr/src/fr/spec.py
+  - packages/fr/src/fr/ops/testplan.py
+  - packages/fr/src/fr/verification/exit.py
+  - packages/fr/src/fr/verification/labels.py
+  - packages/fr/src/fr/gates.py
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/commands/gate_cmd.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_*spec*.py
+  - tests/unit/test_*exit*.py
+  - tests/unit/test_*gate*.py
+  - tests/unit/test_*batch_merge*.py
+  - tests/unit/test_*pr_body*.py
+  - tests/unit/test_ops_*.py
+  - docs/acceptance/*
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Test Plan step tags and the effective step gate (R12)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: `test_plan_steps` returns Step(n, text, gate) — `- [devops] x` -> gate devops,
+      text `x`; `- [tester] x` -> tester; `- [ ] x`, `- [x] x`, `- [link](u) x` stay text
+      with gate None; every existing caller still reads `.text` unchanged (run the existing
+      spec/closeout/archive tests). `effective_step_gate(step, exit_gates)`: tag wins, else
+      devops if in gates, else tester if in gates, else None.
+  - id: P3.T1.S2
+    text: |-
+      GREEN — Step gains `gate` (default None); fr/ops/testplan.py `effective_step_gate`.
+- number: 2
+  title: The devops promotion in run_exit and the pre-merge hold (R13, R14)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: `run_exit` adds `devops` to `gates` (beside, never replacing, the declared gate)
+      when the run's plan has any op of either phase, and not when it has none; labels
+      synced from it carry gate:devops; `PRE_MERGE_HOLD_GATES == {"devops"}`;
+      `batch_merge._approved_and_ready` refuses a PR labelled gate:devops without
+      gate:devops-passed and allows it with; POST_MERGE_GATES unchanged.
+  - id: P3.T2.S2
+    text: |-
+      GREEN — exit.py promotion via fr.ops.load (plan dir from the run's artifacts); gates.py constant and docstring; batch_merge hold.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR — one `plan_has_ops(repo_root, plan_dir)` used by exit and later by pickup; tests green.
+- number: 3
+  title: '`fr gate pass --gate devops --run` (R14)'
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: gate pass with `--run <id>` (or matching RunState.branch to the PR head ref when
+      omitted) refuses (exit 2, listing them) while any plan op is not DONE/N/A by recorded
+      evidence or any Test Plan step whose effective gate is devops has no recorded
+      outcome; passes otherwise; never runs a probe (fake Runner asserts zero calls); other
+      gates behave as today.
+  - id: P3.T3.S2
+    text: |-
+      GREEN — gate_cmd.py `--run`, a recorded-only fold from fr/ops/evidence.py.
+- number: 4
+  title: '`## Manual operations` in the PR body (R13)'
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: render_pr_body emits `## Manual operations` right after `## Post-merge
+      verification owed`; REQUIRED_SECTIONS lists it in that position; "None." for a plan
+      without ops; otherwise one line per op with phase, last recorded state or "never
+      checked", and its `fr ops apply`/`attest` command, plus a line that the DevOps stage
+      owns them; deliver never refuses on OPEN ops (deliver test with an OPEN op).
+  - id: P3.T4.S2
+    text: |-
+      GREEN — pr_body.py section; run ruff/mypy and the full suite LAST into a host-visible log.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-10-22T10:58:06+00:00'
+      note: null
+  completion:
+    at: '2026-10-22T10:58:06+00:00'
+    note: null
+    observed_prs: []

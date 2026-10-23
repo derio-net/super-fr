@@ -1,0 +1,172 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Apply, attest, the ops profile and the safety helpers (R4, R6, R8, R10, R11)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - fr-ops-apply-idempotent
+  - fr-ops-profile-guard
+  - fr-ops-evidence-attest
+  - fr-ops-seal-no-plaintext
+  tier: standard
+  files:
+  - packages/fr/src/fr/ops/**
+  - packages/fr/src/fr/commands/ops_cmd.py
+  - packages/fr/src/fr/commands/init_cmd.py
+  - packages/fr/src/fr/isolation/scaffold.py
+  - tests/unit/test_ops_*.py
+  - tests/unit/test_scaffold*.py
+  - tests/scenarios/fr-ops-status-apply.sh
+  - tests/scenarios/fr-ops-seal.sh
+  - tests/scenarios/fixtures/fr-ops/**
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: Ops profile guard and `fr init scaffold --ops` (R6)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests — `in_ops_profile()` true only when FR_PROFILE names a profile declared
+      `ops: true` in .devcontainer/fr-profiles.yaml AND container evidence exists
+      (/.dockerenv, /run/.containerenv or KUBERNETES_SERVICE_HOST; paths injectable for
+      tests); `fr init scaffold --ops` writes `ops: true` and containerEnv.FR_PROFILE;
+      re-scaffolding an entry keeps keys it does not own; non-ops profiles keep today's
+      containerEnv behaviour (absent unless uv).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: fr/ops/profile.py `in_ops_profile()` and `refusal_route()` (prints `fr isolation
+      up --profile <ops> --branch chore/ops-<slug> --base <ref>` then `fr isolation exec
+      --branch chore/ops-<slug> -- fr ops …`); `--ops` on init_cmd scaffold; merge, not
+      replace, in scaffold.py `_update_profiles_yaml`. `--ops` also mounts the operator's ops-trust store (fr.ops.trust's store dir) READ-ONLY into the profile's container and sets FR_OPS_TRUST_DIR to the mount target, so probes there see the operator's grants and can never write one (R19); test it in the scaffold output. Wire the status warning to it.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR — one container-evidence helper shared with the existing edit-gate notion if a Python one exists (grep first); tests green.
+- number: 2
+  title: '`fr ops apply` (R4, R11)'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_ops_apply.py (fake Runner, fake prompt) — dependency order;
+      cycle/unknown needs refused before any run; DONE/N/A skipped with "already done,
+      nothing written"; mutating prompt names side effects and undo; no terminal needs
+      --yes, mutating also --yes-mutating; stop at first failure naming op and undo;
+      re-check after apply writes one `op` entry; a second `--phase` run over a done phase
+      writes no journal bytes; post-merge op with failing `ready:` refused; refusal (exit 2)
+      outside an ops profile.
+  - id: P2.T2.S2
+    text: |-
+      GREEN — fr/ops/apply.py and the `apply` command (single id or `--phase`), prompting via /dev/tty through an injectable `Prompt`.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR — share the selection logic between status and apply; tests green.
+- number: 3
+  title: '`fr ops attest` (R8)'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED — attest closes an UNVERIFIABLE op as DONE (attested) with `attested_by: operator` and the note in the body; refused for an op with a check, without a terminal, outside an ops profile, and for a runbook op without --plan.
+  - id: P2.T3.S2
+    text: |-
+      GREEN — `attest` command through fr/ops/evidence.py's writer; status shows attested apart from checked (already tested in P1, extend with the end-to-end CLI case).
+- number: 4
+  title: Safety helpers seal / secret / clip / scratch (R10)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests/unit/test_ops_helpers.py — seal with an encrypt command that fails leaves a
+      pre-existing target byte-identical and no plaintext file anywhere under the repo
+      (walk the tree for the plaintext bytes); empty `{out}` is a failure; success replaces
+      the target with `{out}`'s bytes (binary-safe); `{in}` refused when TMPDIR resolves
+      inside the repo; SIGTERM during the encrypt command still removes both temps
+      (subprocess test); substitutions are shell-quoted; `secret` passes the value on the
+      child's stdin and never to stdout; `clip` refuses listing pbcopy/wl-copy/xclip/clip.exe
+      when none is on PATH; `scratch` runs cleanup on success, failure and SIGINT.
+      No tool-specific encryption or cluster CLI name in fr/ops/helpers.py (assert by reading the source).
+  - id: P2.T4.S2
+    text: |-
+      GREEN — fr/ops/helpers.py plus the four commands.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR — one temp-file/cleanup context manager used by seal and scratch; tests green.
+- number: 5
+  title: Candidate scenarios for status/apply and seal
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Write tests/scenarios/fr-ops-status-apply.sh and tests/scenarios/fr-ops-seal.sh in the
+      style of the existing scenarios (source _common.sh; a fresh fixture repo; credential
+      free: checks are `test -f`/`grep`, the ops profile is a fixture fr-profiles.yaml with
+      `ops: true` plus FR_PROFILE and KUBERNETES_SERVICE_HOST set as container evidence).
+      Cover: status states and exit codes, apply --phase twice (second writes nothing),
+      the out-of-profile refusal, an identity failure naming the identity; seal failure
+      leaves no plaintext and the target unchanged. Wire both into
+      tests/integration/test_scenarios.py as the existing ones are.
+  - id: P2.T5.S2
+    text: |-
+      Attach them: `uv run fr acceptance set-status --id fr-ops-status --status
+      not-implemented --scenario tests/scenarios/fr-ops-status-apply.sh --notes "candidate
+      scenario written"`, the same scenario for fr-ops-apply-idempotent; run ruff/mypy and
+      the full suite LAST into a host-visible log.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-10-22T09:39:30+00:00'
+      note: null
+  completion:
+    at: '2026-10-22T09:39:30+00:00'
+    note: null
+    observed_prs: []

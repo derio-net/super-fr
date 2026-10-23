@@ -1029,7 +1029,30 @@ report itself and records a fingerprint of it, so the one in the pull request
 can be checked against the one the tool saw. The second is the `fr run cost`
 table, so what the run spent is written down beside what it produced.
 
+Some changes cannot be finished by code alone: a deploy key to create, a token to
+rotate once the merge lands, a setting only a person with the right credentials
+can flip. When the plan declares those as **manual operations** (`fr ops`, see
+`docs/ops.md`), each with a check that says whether it is done, the description
+gains a **Manual operations** section listing each one, its phase and its last
+recorded state. `deliver` never waits on them, because the agent that delivers
+does not hold those credentials. Instead the run is held by the `devops` gate,
+before the merge as well as after it, and the operations belong to the DevOps
+stage described next.
+
 ### 9. Confirm the merge, then close out in a new session
+
+A run whose plan carries manual operations, or whose specification declares
+`gate: devops`, is closed out differently. Its `fr pickup --run <run-id>` brief
+is a **DevOps brief** with one command, `fr ops gate --run <run-id>`, which you
+run yourself at a terminal (it refuses anywhere else, so an agent cannot run it
+for you). It works through eight recorded stages: apply the pre-merge operations
+in a separate workspace on a profile that holds the credentials, merge the pull
+request once you confirm its exact head, verify the merge, apply the post-merge
+operations, record the specification's devops steps, pass the gate, hand any
+tester steps to the Tester gate, and archive. It records each stage in your own
+state outside the repository, so stopping is safe and a rerun picks up where it
+stopped. The rest of this section describes the ordinary close-out, which every
+other run gets.
 
 Resolving `deliver` prints a handoff line —
 `closeout: after the PR merges, start a NEW session in <workspace> and run

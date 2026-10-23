@@ -34,6 +34,7 @@ from fr.commands.isolation_cmd import isolation_app
 from fr.commands.journal_cmd import journal_app
 from fr.commands.migrate_cmd import migrate_app
 from fr.commands.models_cmd import models_app
+from fr.commands.ops_cmd import ops_app
 from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
 from fr.commands.release_cmd import release_app
@@ -92,6 +93,7 @@ app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
 app.add_typer(debt_app, name="debt")
 app.add_typer(gate_app, name="gate")
+app.add_typer(ops_app, name="ops")
 app.add_typer(release_app, name="release")
 app.add_typer(closeout_app, name="closeout")
 app.command(name="skills")(skills_command)

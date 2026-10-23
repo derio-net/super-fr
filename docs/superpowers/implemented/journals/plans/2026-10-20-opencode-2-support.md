@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=2 -->
+<!-- fr:journal-schema=3 -->
 # Journal: 2026-10-20-opencode-2-support
 
 <!-- fr:journal kind=decision scope=plan id=five-phases created=2026-10-20T05:45:16+00:00 -->

@@ -1,0 +1,7 @@
+- id: rb-backup
+  why_manual: backups need the vault
+  layer: storage
+- id: rb-dns
+  why_manual: DNS is in the registrar UI
+- id: shared
+  why_manual: the runbook's version
