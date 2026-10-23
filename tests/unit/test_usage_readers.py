@@ -222,6 +222,56 @@ def test_opencode_copilot_routed_cost_is_estimated_not_exact() -> None:
     assert record.cost.usd == pytest.approx(0.0184639)
 
 
+_COMPACTION_ROW = (
+    "INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) "
+    "VALUES ('msg_compact', 'ses_paid', 'compaction', 99, 1792313609000, 1792313609000, "
+    """'{"status": "completed", "reason": "auto", "summary": "redacted", "cost": 0, """
+    """"model": {"id": "claude-sonnet-5", "providerID": "example-provider"}, """
+    """"tokens": {"input": 1000, "output": 200, "reasoning": 10, """
+    """"cache": {"read": 5000, "write": 0}}}'"""
+    ")"
+)
+"""A `compaction` row as OpenCode 2.1.3 records one (measured live 2026-10-23 in
+the operator store): `data.tokens` and `data.model`, `cost: 0`."""
+
+
+def test_opencode_compaction_turn_tokens_are_counted_not_zero(tmp_path: Path) -> None:
+    # gh#1222: the summarisation call really spent tokens; assistant rows are
+    # not the only place OpenCode records them. Missing them under-counts, and
+    # a zero is indistinguishable from "no compaction turn".
+    from fr.usage.readers import opencode
+
+    record = opencode.read(_db_copy(OC_DB, tmp_path, _COMPACTION_ROW, refold=False), "ses_paid")
+    assert record.unavailable is None
+    assert len(record.messages) == 2
+    compaction = [m for m in record.messages if m.tokens.input == 1000]
+    assert len(compaction) == 1
+    assert compaction[0].model == "claude-sonnet-5"
+    assert (compaction[0].tokens.output, compaction[0].tokens.cache_read) == (210, 5000)
+    assert sum(m.tokens.input for m in record.messages) == 1200
+    # the harness dollar figure is untouched: $0 is OpenCode's own cost for it
+    assert record.cost.usd == pytest.approx(0.0123)
+    assert record.cost.source == "exact"
+
+
+def test_opencode_compaction_row_without_tokens_adds_no_zero_turn(tmp_path: Path) -> None:
+    # 15 of the 29 compaction rows in the operator's 2.1.3 store carry no
+    # `tokens` (older sessions). Those are unknown, never zero: the row must
+    # not become a message that counts a turn and spends nothing.
+    from fr.usage.readers import opencode
+
+    statement = (
+        "INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) "
+        "VALUES ('msg_compact_bare', 'ses_paid', 'compaction', 99, 1792313609000, 1792313609000, "
+        """'{"status": "completed", "reason": "auto", "summary": "redacted"}'"""
+        ")"
+    )
+    record = opencode.read(_db_copy(OC_DB, tmp_path, statement, refold=False), "ses_paid")
+    assert record.unavailable is None
+    assert len(record.messages) == 1
+    assert record.messages[0].tokens.input == 200
+
+
 def test_opencode_session_is_exact_only_if_every_priced_message_is() -> None:
     from fr.usage.readers import opencode
 

@@ -16,6 +16,12 @@ every priced message is billed, `estimated` when any is Copilot-routed
 messages all cost `$0` (a free model) has no dollar figure: `source: none`,
 rendered `—` — a free model did not cost nothing on a meter fr can read, it
 reported no meter at all.
+
+A `compaction` row is a model call too: OpenCode records its `data.tokens` and
+`data.model` (measured on 2.1.3) with `cost: 0`. Its tokens are counted into the
+session — the summary really spent them — and the row is one turn. A compaction
+row from an older session carries no `tokens`; that figure is unknown, so it
+counts nothing rather than a zero (gh#1222).
 """
 
 from __future__ import annotations
@@ -154,7 +160,15 @@ def _read(source: Path, session: str) -> UsageRecord:
     exact = True
     by_model: dict[str, float] = {}
     for message in stored:
-        if message.type != "assistant":
+        if message.type == "compaction":
+            # gh#1222: OpenCode records the summarisation call's own spend on
+            # the compaction row (`data.tokens`, `data.model`) and no `cost`.
+            # Those tokens belong to the session, so the row is one message.
+            # A row with no `tokens` (older sessions in a migrated store) is an
+            # unknown figure, never a zero one: it adds no message at all.
+            if not isinstance(message.data.get("tokens"), Mapping):
+                continue
+        elif message.type != "assistant":
             continue
         own = message.session == session
         data = message.data
