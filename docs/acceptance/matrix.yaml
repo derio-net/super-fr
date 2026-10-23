@@ -3950,7 +3950,9 @@ rows:
     status: walked
     notes: 'Live walk on OpenCode 2.1.3 PASSED: a model-driven edit to a tracked spec
       in the base clone was refused with the fr-isolation message and git status stayed
-      clean (Test Plan step 1).'
+      clean (Test Plan step 1). Re-walked with the model''s own report: the refusal
+      came back as the model-visible tool result, and the model said so instead of retrying
+      through another tool (#1227 proof 1).'
     verify: live
     walks:
     - strategy: live
@@ -3960,6 +3962,14 @@ rows:
       at: '2026-10-22T00:00:00Z'
       evidence: 'OpenCode 2.1.3 this session: edit tool on docs/superpowers/specs/2026-10-20-opencode-2-support-design.md
         refused; no file change'
+    - strategy: live
+      harness: opencode
+      model: deepseek-v4.1-flash-free
+      outcome: pass
+      at: '2026-10-23T00:00:00Z'
+      evidence: 'OpenCode 2.1.3: write tool on a tracked file in an fr-enabled clone
+        -> failed tool call carrying the guard text; model reported the refusal; file
+        unchanged (#1227 proof 1)'
   - id: opencode-2-bash-gate
     capability: OpenCode adaptation
     acceptance: During an active fr pipeline in OpenCode 2.x, a shell command whose
