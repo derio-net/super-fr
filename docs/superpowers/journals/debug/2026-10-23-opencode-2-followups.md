@@ -30,3 +30,12 @@ Measured in the operator's live 2.1.3 store (copy read read-only, 2026-10-23): 2
 Failing test first: `test_opencode_compaction_turn_tokens_are_counted_not_zero` (a `compaction` row inserted into the `ses_paid` fixture with `tokens`, `model`, `cost: 0`) saw 1 message where 2 belong. Companion: `test_opencode_compaction_row_without_tokens_adds_no_zero_turn` pins the 15-row case — unknown tokens are not a zero-token turn.
 
 Fix: `_read` accepts `compaction` rows that carry a `tokens` mapping alongside `assistant` rows (`data.model` names the model, `data.agent` is absent so the row reads as the session's own thread). `cost` stays assistant-only: OpenCode records none for a compaction, and the harness dollar total is unaffected. Module docstring records the live measurement. `tests/unit/test_usage_readers.py` + the store-agreement/rollup/report suites: 116 passed, 4 skipped.
+
+<!-- fr:journal kind=root-cause scope=debug id=f6a51a6e38d4 created=2026-10-23T05:32:05+00:00 -->
+### f6a51a6e38d4 · root-cause · #1223: eight sandbox installs each rsyncing the whole tree, concurrent with the suite, is what crosses 60s
+
+Each sandboxed install runs `scripts/install.sh` against a fake HOME; the script rsyncs the repo root into the marketplace (`rsync -a --delete --exclude .git/__pycache__/.venv/.coverage*`) and then syncs each plugin cache with `--checksum`. Measured here: 166 MB / 3300 tracked files per install. Eight of those at once, sharing the disk with the rest of `pytest -n auto`, is the load that tips the last two `TestInstallLock` tests past their hard `communicate(timeout=60)`.
+
+Measured: the file alone is 8 passed in ~28 s (17.6 s of it *system* time — rsync/forks, i.e. syscalls); `-n 8` on the file alone also passes. The full suite ran 13051 passed in 905 s on this host without reproducing the flake, so the 60 s crossing is load-dependent, not deterministic — which is exactly why the issue's "local reproduction: full suite, 12-core host" note matters.
+
+Ruled out: a busy-wait in the install path. `install.sh` waits only in `sleep 1` lock polls and the staged-`fr` retry sleeps; the ~85%-of-a-core system time the issue saw is the copy itself (reproduced here: 17.6 s system for 8 installs, no spin). The real amplifier is concurrency.
