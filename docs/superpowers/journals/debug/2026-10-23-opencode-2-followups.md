@@ -39,3 +39,10 @@ Each sandboxed install runs `scripts/install.sh` against a fake HOME; the script
 Measured: the file alone is 8 passed in ~28 s (17.6 s of it *system* time — rsync/forks, i.e. syscalls); `-n 8` on the file alone also passes. The full suite ran 13051 passed in 905 s on this host without reproducing the flake, so the 60 s crossing is load-dependent, not deterministic — which is exactly why the issue's "local reproduction: full suite, 12-core host" note matters.
 
 Ruled out: a busy-wait in the install path. `install.sh` waits only in `sleep 1` lock polls and the staged-`fr` retry sleeps; the ~85%-of-a-core system time the issue saw is the copy itself (reproduced here: 17.6 s system for 8 installs, no spin). The real amplifier is concurrency.
+
+<!-- fr:journal kind=finding scope=debug id=41905671acae created=2026-10-23T05:32:12+00:00 state=fixed -->
+### 41905671acae · finding [fixed] · #1223 fixed: one install at a time across xdist workers, and a 180s hang bound
+
+The file holds a machine-local `fcntl.flock` across every test (`_one_install_at_a_time`, autouse), so its eight sandboxed installs are the only ones on the disk at once — the issue's "bound the concurrent install load", without changing the CI invocation (`xdist_group` needs `--dist loadgroup`, which the suite does not use and which would rebalance every other file). The three hard `communicate(timeout=60)` bounds become `INSTALL_BOUND_S = 180` (the issue's "it is a sandbox, not a latency assertion"), so a genuine hang is still caught on a quieter disk. FUSE mounts that silently ignore flock fall back to the raised bound (documented in the module docstring).
+
+Verified: file serial 8 passed in ~28 s; `-n 8` 8 passed with setup waits up to 43 s, proving the gate serialises across workers and releases (no deadlock, `test_overlapping_installs_serialise` still asserts the two in-test installs never overlap).
