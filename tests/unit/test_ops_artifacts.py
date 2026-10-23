@@ -183,48 +183,105 @@ def test_journal_check_ignores_op_entries(tmp_path: Path, monkeypatch) -> None:
 # --- the self-review floor -----------------------------------------------------
 
 
-def _cut_versions() -> list[Version]:
-    """Every `v*` tag reachable here, as a PEP 440 version (unparseable tags skipped)."""
+OPS_PACKAGE = "packages/fr/src/fr/ops"
+
+
+def _cut_releases() -> dict[Version, bool]:
+    """Every `v*` tag reachable here, as a PEP 440 version mapped to whether that
+    release's tree ships `fr ops` (unparseable tags skipped)."""
     out = subprocess.run(
         ["git", "-C", str(REPO), "tag", "-l", "v*"], capture_output=True, text=True
     ).stdout
-    found = []
+    tags = {}
     for tag in out.split():
         try:
-            found.append(Version(tag[1:]))
+            tags[tag] = Version(tag[1:])
         except InvalidVersion:
             continue
-    return found
+    if not tags:
+        return {}
+    # One process for every tag: a `cat-file -e` per tag costs ~50ms each, x270.
+    checked = subprocess.run(
+        ["git", "-C", str(REPO), "cat-file", "--batch-check"],
+        input="".join(f"{tag}:{OPS_PACKAGE}\n" for tag in tags),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert len(checked) == len(tags), checked
+    return {
+        version: not line.endswith(" missing")
+        for version, line in zip(tags.values(), checked, strict=True)
+    }
 
 
-def _predicted_release() -> Version:
-    """The next release `scripts/release.py` cuts from this tree: the next RC of the
-    final packages/fr/pyproject.toml is an RC of (`X.Y.ZrcN` -> `X.Y.Zrc(N+1)`), or
-    that final plus this PR's minor bump when the tree sits on a final."""
+def _tree_version() -> Version:
     text = (REPO / "packages/fr/pyproject.toml").read_text()
     m = re.search(r'^version = "([^"]+)"', text, re.MULTILINE)
     assert m is not None
-    current = Version(m.group(1))
+    return Version(m.group(1))
+
+
+def _next_release(current: Version) -> Version:
+    """The release `scripts/release.py` cuts after `current`: its next RC
+    (`X.Y.ZrcN` -> `X.Y.Zrc(N+1)`), or the next minor when it is a final."""
     if current.pre is not None and current.pre[0] == "rc":
         return Version(f"{current.base_version}rc{current.pre[1] + 1}")
     return Version(f"{current.major}.{current.minor + 1}.0")
 
 
-def test_the_ops_floor_is_the_predicted_release() -> None:
+def _first_ops_release(tree: Version, cut: dict[Version, bool]) -> Version:
+    """The first release that ships fr ops, from wherever this tree sits: the oldest
+    cut release that ships it; else this tree, when its version is not cut yet
+    (release.py tests the staged tree before tagging it); else the next release."""
+    shipped = [version for version, ships in cut.items() if ships]
+    if shipped:
+        return min(shipped)
+    if tree not in cut:
+        return tree
+    return _next_release(tree)
+
+
+@pytest.mark.parametrize(
+    ("tree", "cut", "expected"),
+    [
+        # a PR (or main) before the release: the tree sits on the last cut RC
+        ("6.0.0rc2", {"6.0.0rc1": False, "6.0.0rc2": False}, "6.0.0rc3"),
+        # release.py's staged tree: bumped, suite run BEFORE the tag (gh run 39897787577)
+        ("6.0.0rc3", {"6.0.0rc1": False, "6.0.0rc2": False}, "6.0.0rc3"),
+        # main after the tag
+        ("6.0.0rc3", {"6.0.0rc2": False, "6.0.0rc3": True}, "6.0.0rc3"),
+        # later releases never move it
+        ("6.1.0", {"6.0.0rc2": False, "6.0.0rc3": True, "6.0.0": True}, "6.0.0rc3"),
+    ],
+)  # fmt: skip
+def test_the_first_ops_release_holds_across_the_release_lifecycle(
+    tree: str, cut: dict[str, bool], expected: str
+) -> None:
+    """The floor tests run on PRs, on main, and on the release's own staged tree;
+    a prediction from the tree's version alone fails the release it predicts."""
+    releases = {Version(v): ships for v, ships in cut.items()}
+    assert _first_ops_release(Version(tree), releases) == Version(expected)
+
+
+def test_the_ops_floor_is_the_first_release_that_ships_ops() -> None:
     """p1-r1: the RCs cut before fr ops merged (5.27.0rc1-3, 6.0.0rc1-2) ship without it,
     and `admits` lets an RC of a named final pass, so a `>=6.0.0` floor would admit them."""
-    assert Version(OPS_FR_FLOOR) == _predicted_release()
-
-
-def test_the_ops_floor_is_above_every_cut_release() -> None:
-    """A release cut before this merges ships without fr ops: the floor must move."""
-    cut = _cut_versions()
+    cut = _cut_releases()
     if not cut:
         pytest.skip("no v* tags in this checkout")
-    newest = max(cut)
-    assert Version(OPS_FR_FLOOR) > newest, (
-        f"OPS_FR_FLOOR {OPS_FR_FLOOR} does not exclude the cut release {newest}: raise it"
-    )
+    assert Version(OPS_FR_FLOOR) == _first_ops_release(_tree_version(), cut)
+
+
+def test_the_ops_floor_excludes_every_release_without_ops() -> None:
+    """A release cut before fr ops merged ships without it: the floor must exclude it,
+    and must admit every release that does ship it."""
+    cut = _cut_releases()
+    if not cut:
+        pytest.skip("no v* tags in this checkout")
+    floor = Version(OPS_FR_FLOOR)
+    wrong = [str(v) for v, ships in sorted(cut.items()) if (floor <= v) != ships]
+    assert not wrong, f"OPS_FR_FLOOR {OPS_FR_FLOOR} misclassifies cut releases {wrong}"
 
 
 @pytest.mark.parametrize(
