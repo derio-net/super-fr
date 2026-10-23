@@ -192,18 +192,27 @@ def _cut_releases() -> dict[Version, bool]:
     out = subprocess.run(
         ["git", "-C", str(REPO), "tag", "-l", "v*"], capture_output=True, text=True
     ).stdout
-    found = {}
+    tags = {}
     for tag in out.split():
         try:
-            version = Version(tag[1:])
+            tags[tag] = Version(tag[1:])
         except InvalidVersion:
             continue
-        ships = subprocess.run(
-            ["git", "-C", str(REPO), "cat-file", "-e", f"{tag}:{OPS_PACKAGE}"],
-            capture_output=True,
-        )
-        found[version] = ships.returncode == 0
-    return found
+    if not tags:
+        return {}
+    # One process for every tag: a `cat-file -e` per tag costs ~50ms each, x270.
+    checked = subprocess.run(
+        ["git", "-C", str(REPO), "cat-file", "--batch-check"],
+        input="".join(f"{tag}:{OPS_PACKAGE}\n" for tag in tags),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert len(checked) == len(tags), checked
+    return {
+        version: not line.endswith(" missing")
+        for version, line in zip(tags.values(), checked, strict=True)
+    }
 
 
 def _tree_version() -> Version:
