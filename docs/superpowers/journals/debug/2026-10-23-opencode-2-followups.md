@@ -112,3 +112,24 @@ In that session the model made both calls the row distinguishes:
 So the 2.x `session_message` reader answers the gate correctly in both directions, live, on the store shape this release targets. The 1.x sentence is replaced by this one in the parity row's `scope_note`, and the `run-deliver-tests-log-opencode` matrix row's notes gain the same observation.
 
 What is deliberately NOT claimed: `opencode-observe-take10-rerun` (R13's full take-10 run-B re-run) is still owed post-merge, and `run-session-identity` stays `partial` because of it. This observation covers the one cell #1224 asks about — who wrote the suite log — and no more.
+
+<!-- fr:journal kind=review scope=debug id=a81ad6d3c769 created=2026-10-23T06:25:19+00:00 -->
+### a81ad6d3c769 · review · Batch review: six follow-ups, one defect found on the way, every gate green
+
+What I checked, and what I deliberately did not:
+
+- **Every issue has a failing-then-passing test or a live walk, not both claimed loosely.** #1222 and #1223 have unit/integration tests (red first); #1221 has 10 cases in `test/git.test.ts`, a fail-open marker test, a setup-warning test and a captured verdict row; #1231 has 4 cases in `idle.test.ts` plus the live nudge; #1224 and #1227 are live observations, recorded in the journal and in the matrix rows' walks.
+- **The content-as-path defect is fixed, not routed around.** Found while removing the bare `git` spawn (the refusal named the *content*), pinned by three `index.test.ts` cases.
+- **The docs do not claim more than the evidence.** #1224's parity note says what was observed and by what method, and says the full take-10 re-run is still owed; `run-session-identity` stays `partial` for that reason. The fail-open sentence was corrected once already in this session: the edit gate fails open, the shell gate keeps denying for a live pipeline it cannot place, and both README and the rule now say so.
+- **No version surface touched.** `.changes/fix-opencode-2-followups.yaml` (patch) is the only release input.
+
+Gates, run on the worktree at the branch tip:
+
+- `uv run pytest -q --no-cov -n auto` — **13052 passed, 112 skipped** in 24:59 (baseline before this branch: 13051 passed, 112 skipped; the +1 is the new usage-reader case). Slower than the ~15 min baseline because #1223's fix serialises the eight sandboxed installs — that is the trade the issue asked for, and CI's four shards each carry a quarter of it.
+- `uv run ruff format packages/ tests/` (1009 files unchanged) and `uv run ruff check packages/ tests/` — clean.
+- `uv run mypy` over the six package trees — 342 files, no issues.
+- `bun test` — 238 pass / 0 fail; `bunx tsc --noEmit` — clean.
+- `uv run fr harness parity --check`, `uv run fr acceptance check` (549 rows OK), `uv run fr acceptance report --check` (three reports in sync), `uv run fr validate artifacts` (27 valid), `uv run fr journal check --scope debug` — clean.
+- `uv run --no-project python scripts/bump-version.py --check` — versions agree at 6.0.0rc2.
+
+One thing a reviewer should look at rather than trust: `INSTALL_BOUND_S = 180`. It is a hang detector, not a latency assertion, and it is the only place this PR weakens a bound instead of tightening one. The flock is what actually removes the load; the bound only stops a real hang from hiding behind it.
