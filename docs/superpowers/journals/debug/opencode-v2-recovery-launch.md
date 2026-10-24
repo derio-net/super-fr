@@ -55,3 +55,8 @@ RC10 create_session builds the correct POST /api/session model reference: {provi
 ### rc10-default-variant-response-fixed · finding [fixed] · Accept valid API-selected variants without weakening model identity
 
 Changed create_session to require the exact requested provider and model ID, require exact variant equality when a #variant was explicitly requested, and accept an omitted or valid string variant when the API resolves an unqualified model. Malformed variant types, wrong provider/model, missing session identity, malformed envelopes, and explicit variant mismatch remain refusals. OpenCode still launches attached to the returned session with --auto; no root --model fallback was added. Added a sanitized 2.1.4 response fixture and positive/negative tests. The Herdr launch acceptance row remains walk-owed: the actual RC10 failure and automatic pane closure do not prove a live managed launch.
+
+<!-- fr:journal kind=review scope=debug id=independent-review-default-variant-fix created=2026-10-24T21:18:42+00:00 -->
+### independent-review-default-variant-fix · review · Independent code review found no findings
+
+An independent read-only review examined the model-confirmation fix, negative tests, acceptance row, patch fragment, and journal. No findings. Reviewer confirmed provider/model identity and explicit variants remain strict; the user-unspecified API default is accepted without a root --model fallback, and --session --auto is unchanged. This review is not a live managed-runner pass; herdr-opencode-launch remains walk-owed.
