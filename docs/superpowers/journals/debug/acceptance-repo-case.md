@@ -10,3 +10,8 @@ gh#1237: a matrix with repo: homelab whose refs are all written HOMELAB:... — 
 ### root-cause · root-cause · Own-repo identity compared with exact string equality
 
 Own-repo identity is decided by exact string equality (repo == own) at every site: check.py check() + staleness guard + _workflow_coverage_warnings, report.py LinkBuilder._base/_actual_path/url, artifacts/matrix_anchors.py, requirements.origin_fragment. A case-only mismatch between a ref prefix and the matrix repo: key therefore falls through to the sibling branch, and nothing names the mismatch.
+
+<!-- fr:journal kind=finding scope=debug id=fix created=2026-10-24T07:48:04+00:00 state=fixed -->
+### fix · finding [fixed] · same_repo() decides own-repo identity everywhere, case-insensitively
+
+New fr.acceptance.model.same_repo (casefold) replaces == at check.py (resolution, staleness, workflow coverage), report.py (_base, _actual_path, url — own github links now use the matrix spelling and --ref), requirements.origin_fragment, artifacts/matrix_anchors. check() warns 'ref prefix X: differs from the matrix's repo: y only by case'. Failing-first: tests/unit/test_acceptance_repo_case.py (checkout dir not named like the prefix) — 6 red before the call-site change, 8 green after; 654 related tests pass.
