@@ -9869,11 +9869,13 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_closed_recovery.py#test_recovery_success_preserves_lifecycle_and_changes_owner
       - super-fr:tests/unit/test_herdr_closed_recovery.py#test_allocation_intent_and_single_input
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_observed_autonomy_and_session_required
       int:
       - super-fr:tests/integration/test_scenarios.py#test_triage_closed_recovery
     status: ci
-    notes: Installed fake-backed recovery passes; named evidence uses supported Python
-      test-name anchors.
+    notes: Closed-session recovery records the model-pinned OpenCode session ID and
+      launches the attached root TUI with --auto; the durable fresh-session identity
+      contract is unit-pinned. No live recovery walk was performed.
     verify: candidate
     scenario: tests/scenarios/triage-closed-recovery.sh
   - id: triage-closed-recovery-refusals
