@@ -39,6 +39,14 @@ def input_reason(screen: str) -> str | None:
         for i, line in enumerate(lines)
         if (match := re.fullmatch(r"(\s*)╹(▀+)(?:\s+(.*))?", line))
     ]
+    joined = "\n".join(lines).casefold()
+    if re.search(
+        r"permission required|allow once|allow this action|search provider setup|"
+        r"web search setup|plugin (?:error|failed)|failed plugin|plugin must export|"
+        r"herdr-agent-state\.js.{0,80}(?:failed|error)",
+        joined,
+    ):
+        return "unknown-dialog-or-background"
     if not borders:
         return "unknown-layout"
     end, border = borders[-1]
@@ -46,19 +54,29 @@ def input_reason(screen: str) -> str | None:
         return "dialog-or-unfocused"
     # Footer must be current: a prior transcript box is not evidence of today's input.
     below = [line for line in lines[end + 1 :] if line.strip()]
-    if (
-        not below
-        or not re.search(r"(?:^|\s)1\.18\.35\s*$", below[-1])
-        or not any("ctrl+p commands" in line for line in below)
-    ):
+    if not below:
         return "unknown-layout"
-    # Captured wide-session sidebar text can share the closing-border row. It is
-    # outside the textarea, but only the captured wide-session footer permits it.
-    if border.group(3) and not re.search(r"• OpenCode 1\.18\.35\s*$", below[-1]):
+    legacy_footer = bool(
+        re.search(r"(?:^|\s)1\.18\.35\s*$", below[-1])
+        and any("ctrl+p commands" in line for line in below)
+    )
+    # V2.1.4 changed the footer, not the focused prompt border or textarea.
+    # Require the full captured footer fingerprint; a version string alone is
+    # never sufficient evidence of an empty prompt.
+    v2_footer = bool(
+        re.search(r"shift\+tab agents", below[-1])
+        and re.search(r"ctrl\+p commands", below[-1])
+        and re.search(r"[^ ]+:main\s+main\s+·\s+no fr-isolation", below[-1])
+    )
+    if not (legacy_footer or v2_footer):
+        return "unknown-layout"
+    if border.group(3) and not (
+        re.search(r"• OpenCode 1\.18\.35\s*$", below[-1]) and legacy_footer
+    ):
         return "unknown-layout"
     x = len(border.group(1))
     width = 1 + len(border.group(2))
-    if end < 2 or not re.match(r"^\s*┃  (Build|Plan) · .+", lines[end - 1]):
+    if end < 2 or not re.match(r"^\s*┃  (Build(?: auto)?|Plan) · .+", lines[end - 1]):
         return "unknown-layout"
     begin = end - 2
     while begin >= 0 and len(lines[begin]) > x and lines[begin][x] == "┃":
@@ -77,11 +95,7 @@ def input_reason(screen: str) -> str | None:
                 return "draft"
     # Known blank prompt layout only; arbitrary overlay controls or active spinners
     # fail closed. Completed ✓ task history does NOT mean active background work.
-    if re.search(
-        r"Commands\s+esc|[\u2800-\u28ff].*Task|permission required|allow once",
-        "\n".join(lines),
-        re.I,
-    ):
+    if re.search(r"[\u2800-\u28ff].*Task", joined, re.I):
         return "unknown-dialog-or-background"
     return None
 

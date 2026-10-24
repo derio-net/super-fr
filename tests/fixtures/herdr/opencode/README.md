@@ -35,3 +35,20 @@ encoded; the loader checks its decompressed SHA-256. These are captures, not
 layouts constructed alongside the parser. Deliberate draft/palette inputs were
 refused by the real replacement CLI before being manually cleaned up as fixture
 inputs. They do not discharge the complete client-live walk.
+
+# OpenCode 2.1.4 prompt capture (2026-10-24)
+
+`v2-2.1.4-idle.json` is a lossless gzip/base64 viewport captured from the
+disposable fixture-C OpenCode 2.1.4 session. The user's home path was masked at
+capture with a same-width replacement; the SHA-256 covers the decoded,
+redacted bytes. It shows a focused blank prompt with `Build auto`, the selected
+model, and the V2 footer (`shift+tab agents`, `ctrl+p commands`, workspace and
+branch state). It has no visible dialog or overlay. RC9's previous observer
+rejected it because the V2 footer does not contain the legacy `1.18.35` marker.
+
+The fixture is a readiness-observer regression, not proof of the failed
+`herdr-agent-state.js` plugin's lifecycle hooks. That plugin warning is
+separate; the actor and action that dismissed its earlier overlay on fixture C
+are unknown. Overlay refusal tests are synthetic and explicitly exercise
+permission, search-provider setup, and plugin-error indicators. This capture
+does not discharge the operator-owned client-live/managed-runner walk.
