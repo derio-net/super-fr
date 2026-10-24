@@ -20,3 +20,8 @@ OpenCode v2.1.4 has a confirmed CLI/API contract mismatch in fr-herdr: launch_ar
 ### review-api-response-envelope · finding [open] (reviewer: in scope) · Review questioned session-create response envelope
 
 Independent reviewer asserted v2.1.4 POST /api/session returns the Session object directly and therefore the code incorrectly reads response.data. Tagged v2.1.4 protocol source defines success as Schema.Struct({ data: PublicSessionInfo }); tagged server handler returns { data: yield* session.create(...) }; CLI api writes response.text unchanged. Verify before resolution; if those tagged sources remain authoritative, the review finding is mistaken.
+
+<!-- fr:journal kind=finding scope=debug id=review-api-response-envelope-resolved created=2026-10-24T12:25:13+00:00 state=refuted resolves=review-api-response-envelope -->
+### review-api-response-envelope-resolved · finding [refuted] · resolves review-api-response-envelope: Review questioned session-create response envelope
+
+Verified against official v2.1.4 tagged source: packages/protocol/src/groups/session.ts declares success Schema.Struct({ data: PublicSessionInfo }), and packages/server/src/handlers/session.ts returns { data: yield* session.create(...) }. The api command writes that JSON response text unchanged, so reading response.data is correct. No live session or service was used.
