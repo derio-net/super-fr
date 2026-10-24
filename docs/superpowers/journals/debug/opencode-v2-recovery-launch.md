@@ -60,3 +60,8 @@ Changed create_session to require the exact requested provider and model ID, req
 ### independent-review-default-variant-fix · review · Independent code review found no findings
 
 An independent read-only review examined the model-confirmation fix, negative tests, acceptance row, patch fragment, and journal. No findings. Reviewer confirmed provider/model identity and explicit variants remain strict; the user-unspecified API default is accepted without a root --model fallback, and --session --auto is unchanged. This review is not a live managed-runner pass; herdr-opencode-launch remains walk-owed.
+
+<!-- fr:journal kind=review scope=debug id=pr-1249-independent-review created=2026-10-24T21:21:03+00:00 -->
+### pr-1249-independent-review · review · PR 1249 independent review found no findings
+
+Draft PR #1249 is open. An independent read-only final review of the exact proposed code and tests found no findings. The reviewer confirmed exact provider/model checks, strict explicit-variant matching, refusal of malformed confirmations, and unchanged --session --auto behavior. The Herdr OpenCode launch acceptance remains walk-owed; no Ready, merge, release, or live retry is authorized.
