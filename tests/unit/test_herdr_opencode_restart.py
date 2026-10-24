@@ -396,3 +396,54 @@ def test_per_pane_failure_does_not_stop_roster(monkeypatch):
     monkeypatch.setattr(opencode, "restart_pane", attempt)
     report = restart.restart_idle(yes=True)
     assert seen == ["one", "two"] and report.failed
+
+
+def v2_capture():
+    data = json.loads((FIXTURES / "v2-2.1.4-idle.json").read_text())
+    raw = gzip.decompress(base64.b64decode(data["raw_gzip_base64"]))
+    assert hashlib.sha256(raw).hexdigest() == data["sha256"]
+    return raw.decode()
+
+
+def test_real_v2_2_1_4_blank_prompt_is_ready():
+    assert opencode.input_reason(v2_capture()) is None
+
+
+def test_v2_capture_passes_full_managed_readiness_gate(operation):
+    d, fake = operation
+    fake.prompt_screen = v2_capture()
+    proc = opencode.wait_ready(d, run=fake)
+    assert proc["argv"] == ["opencode", "--session", "ses-old", "--auto"]
+    assert any(call[:2] == ["pane", "read"] for call in fake.calls)
+
+
+@pytest.mark.parametrize(
+    ("needle", "reason"),
+    [
+        ("permission required", "unknown-dialog-or-background"),
+        ("Search provider setup", "unknown-dialog-or-background"),
+        ("plugin error: herdr-agent-state.js failed", "unknown-dialog-or-background"),
+        ("esc interrupt", "background-work"),
+        ("Build auto ·", "unknown-layout"),
+    ],
+)
+def test_v2_prompt_refuses_overlay_busy_and_malformed_screens(needle, reason):
+    screen = v2_capture()
+    if needle == "Build auto ·":
+        rows = screen.splitlines()
+        rows[54] = "unknown controls"
+        screen = "\n".join(rows)
+    elif needle == "esc interrupt":
+        screen = screen.replace("New session -", "esc interrupt · New session -")
+    else:
+        screen = screen.replace("New session -", f"{needle} · New session -")
+    assert opencode.input_reason(screen) == reason
+
+
+def test_v2_permission_overlay_is_refused_even_when_herdr_reports_idle(operation):
+    d, fake = operation
+    fake.prompt_screen = v2_capture().replace(
+        "New session -", "permission required · New session -"
+    )
+    with pytest.raises(managed.ManagedError, match="unknown-dialog-or-background"):
+        opencode.eligible(d, set(), run=fake, restart=False)
