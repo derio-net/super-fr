@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from fr.cli import app
 from fr.commands import ops_cmd
-from fr.journal.model import journal_path
+from fr.journal.model import JournalParseError, archived_journal_path, journal_path
 from fr.ops.load import LoadedOp, OpsConfig, load_ops
 from fr.ops.model import Op
 from fr.ops.trust import (
@@ -201,6 +201,158 @@ def test_a_grant_is_stored_outside_the_repo_0600_and_audited(tmp_path: Path) -> 
     assert "op-trust-2" in journal_path(root, "plan", "p").read_text()
 
 
+def test_an_archived_plan_grant_keeps_identity_and_audits_archived_journal(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root = _repo(tmp_path / "r")
+    active = root / PLAN_REL
+    archived = root / "docs/superpowers/implemented/plans/p"
+    archived.parent.mkdir(parents=True)
+    active.rename(archived)
+    _commit(root, "archive plan")
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "operator-trust"))
+
+    result = _trust(
+        root,
+        monkeypatch,
+        plan_ref="docs/superpowers/implemented/plans/p",
+    )
+    assert result.exit_code == 0, result.output
+    assert "op-trust-1" in result.output
+
+    assert load_trust(root, "p") is not None
+    assert store_path(root, "p") == tmp_path / "operator-trust" / repo_key(root) / "p.json"
+    assert stat.S_IMODE(os.stat(store_path(root, "p")).st_mode) == 0o600
+    assert "op-trust-1" in archived_journal_path(root, "plan", "p").read_text()
+    assert not journal_path(root, "plan", "p").exists()
+
+    monkeypatch.chdir(root)
+    from fr.ops import profile
+
+    monkeypatch.setattr(profile, "in_ops_profile", lambda _root: True)
+    status = runner.invoke(app, ["ops", "status", "--plan", "docs/superpowers/implemented/plans/p"])
+    assert status.exit_code == 0, status.output
+    assert "create-key" in status.output and "rotate" in status.output
+    assert (root / "probe-ran").exists()
+
+
+@pytest.mark.parametrize("bad_slug", ["", "../p", "p/child", "..", "p\\child", "p with space"])
+def test_grant_refuses_invalid_or_traversal_slug_before_writing(
+    tmp_path: Path, monkeypatch, bad_slug: str
+) -> None:
+    root = _repo(tmp_path / "r")
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "trust"))
+    with pytest.raises(ValueError, match="invalid plan slug"):
+        grant_trust(root, bad_slug, {"op": "hash"})
+    assert not trust_dir().exists()
+
+
+def test_grant_refuses_missing_plan_without_grant(tmp_path: Path, monkeypatch) -> None:
+    root = _repo(tmp_path / "r")
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "trust"))
+    with pytest.raises(ValueError, match="no plan"):
+        grant_trust(root, "missing", {"op": "hash"})
+    assert not trust_dir().exists()
+
+
+def test_cli_refuses_malformed_ops_before_prompt_or_grant(tmp_path: Path, monkeypatch) -> None:
+    root = _repo(tmp_path / "r")
+    (root / PLAN_REL / "ops.yaml").write_text("ops: [not-an-op]\n")
+    _commit(root, "malformed op set")
+    result = _trust(root, monkeypatch)
+    assert result.exit_code == 2
+    assert "ops.yaml" in result.output
+    assert load_trust(root, "p") is None
+    assert not journal_path(root, "plan", "p").exists()
+
+
+def test_archived_malformed_audit_journal_refuses_before_grant(tmp_path: Path, monkeypatch) -> None:
+    root = _repo(tmp_path / "r")
+    active = root / PLAN_REL
+    archived = root / "docs/superpowers/implemented/plans/p"
+    archived.parent.mkdir(parents=True)
+    active.rename(archived)
+    _commit(root, "archive plan")
+    journal = archived_journal_path(root, "plan", "p")
+    journal.parent.mkdir(parents=True)
+    invalid = "<!-- fr:journal kind finding scope=plan id=x -->\n### x\n\nbody\n"
+    journal.write_text(invalid)
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "trust"))
+    with pytest.raises(JournalParseError):
+        grant_trust(root, "p", {"op": "hash"})
+    assert load_trust(root, "p") is None
+    assert journal.read_text() == invalid
+
+
+def test_failed_audit_append_never_persists_the_grant(tmp_path: Path, monkeypatch) -> None:
+    from fr.artifacts import atomic
+
+    root = _repo(tmp_path / "r")
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "trust"))
+
+    def fail_audit(*_args, **_kwargs):
+        raise OSError("simulated journal write failure")
+
+    monkeypatch.setattr(atomic, "write_text_atomic", fail_audit)
+    with pytest.raises(OSError, match="simulated journal write failure"):
+        grant_trust(root, "p", {"op": "hash"})
+    assert load_trust(root, "p") is None
+    assert not journal_path(root, "plan", "p").exists()
+
+
+def test_failed_archived_grant_rolls_back_the_audit_append(tmp_path: Path, monkeypatch) -> None:
+    from fr.ops import trust as trust_mod
+
+    root = _repo(tmp_path / "r")
+    active = root / PLAN_REL
+    archived = root / "docs/superpowers/implemented/plans/p"
+    archived.parent.mkdir(parents=True)
+    active.rename(archived)
+    _commit(root, "archive plan")
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "trust"))
+
+    def fail_write(*_args, **_kwargs):
+        raise OSError("simulated trust-store failure")
+
+    monkeypatch.setattr(trust_mod, "_write_private", fail_write)
+    with pytest.raises(OSError, match="simulated trust-store failure"):
+        grant_trust(root, "p", {"op": "hash"})
+    assert not archived_journal_path(root, "plan", "p").exists()
+    assert load_trust(root, "p") is None
+
+
+def test_grant_refuses_plan_symlink_escape_and_duplicate_lifecycle_matches(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root = _repo(tmp_path / "r")
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "trust"))
+    (root / "docs/superpowers/implemented/plans").mkdir(parents=True)
+    (root / "docs/superpowers/implemented/plans/p").symlink_to(
+        root / PLAN_REL, target_is_directory=True
+    )
+    with pytest.raises(ValueError, match="unsafe path"):
+        grant_trust(root, "p", {"op": "hash"})
+    (root / "docs/superpowers/implemented/plans/p").unlink()
+    (root / "docs/superpowers/implemented/plans/p").mkdir()
+    with pytest.raises(ValueError, match="multiple active or archived plans"):
+        grant_trust(root, "p", {"op": "hash"})
+    assert not trust_dir().exists()
+
+
+def test_grant_refuses_duplicate_active_and_archived_journals(tmp_path: Path, monkeypatch) -> None:
+    root = _repo(tmp_path / "r")
+    active_journal = journal_path(root, "plan", "p")
+    archived_journal = archived_journal_path(root, "plan", "p")
+    active_journal.parent.mkdir(parents=True)
+    archived_journal.parent.mkdir(parents=True)
+    active_journal.write_text("")
+    archived_journal.write_text("")
+    monkeypatch.setenv("FR_OPS_TRUST_DIR", str(tmp_path / "trust"))
+    with pytest.raises(ValueError, match="multiple active or archived plan journals"):
+        grant_trust(root, "p", {"op": "hash"})
+    assert not trust_dir().exists()
+
+
 def test_a_committed_journal_decision_grants_nothing(tmp_path: Path, monkeypatch) -> None:
     """Addendum (a): a PR author can commit a forged op-trust decision whose hash
     matches; trust is read only from the operator's store."""
@@ -218,10 +370,16 @@ def test_a_committed_journal_decision_grants_nothing(tmp_path: Path, monkeypatch
 # --- the CLI ---------------------------------------------------------------------
 
 
-def _trust(root: Path, monkeypatch, answer: str = "y\n", interactive: bool = True):
+def _trust(
+    root: Path,
+    monkeypatch,
+    answer: str = "y\n",
+    interactive: bool = True,
+    plan_ref: str = PLAN_REL,
+):
     monkeypatch.chdir(root)
     monkeypatch.setattr(ops_cmd, "_interactive", lambda: interactive)
-    return runner.invoke(app, ["ops", "trust", "--plan", PLAN_REL], input=answer)
+    return runner.invoke(app, ["ops", "trust", "--plan", plan_ref], input=answer)
 
 
 def test_trust_shows_every_probe_and_command_and_records_on_yes(
@@ -399,6 +557,7 @@ def test_frs_evidence_files_do_not_invalidate_trust(tmp_path: Path, monkeypatch)
     _trust(root, monkeypatch)
     for rel in (
         "docs/superpowers/journals/plans/other.md",
+        "docs/superpowers/implemented/journals/plans/other.md",
         "docs/superpowers/runs/r1.yaml",
         "docs/superpowers/runs/r1.records/step.yaml",
         "docs/acceptance/matrix.yaml",
@@ -430,6 +589,7 @@ def test_trust_excluded_is_exactly_frs_evidence() -> None:
 
     for path in (
         "docs/superpowers/journals/plans/p.md",
+        "docs/superpowers/implemented/journals/plans/p.md",
         "docs/superpowers/journals/specs/s.md",
         "docs/superpowers/runs/r.yaml",
         "docs/superpowers/runs/r.records/a.yaml",

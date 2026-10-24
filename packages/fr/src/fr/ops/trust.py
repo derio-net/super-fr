@@ -31,7 +31,8 @@ from pathlib import Path
 from fr.journal.model import (
     OP_TRUST_ID_RE,
     JournalEntry,
-    append_journal_entry,
+    appended_journal_text,
+    archived_journal_path,
     journal_now,
     journal_path,
     parse_journal,
@@ -47,6 +48,7 @@ invalidates trust. Deliberately NOT `fr.run.code_tree.code_tree`, which drops al
 `docs/superpowers/` and `docs/acceptance/`."""
 TRUST_EXCLUDED: tuple[str, ...] = (
     "docs/superpowers/journals/<scope>/<slug>.md",
+    "docs/superpowers/implemented/journals/<scope>/<slug>.md",
     "docs/superpowers/runs/<run-id>.yaml",
     "docs/superpowers/runs/<run-id>.records/*.yaml",
     "docs/superpowers/runs/<run-id>.records/pr-body.md",
@@ -62,7 +64,6 @@ FILE_PREFIX = "file:"
 PROBE_FIELDS = ("check", "na_if", "ready", "escalate", "apply", "undo")
 """The op fields whose text runs (or is offered to run), shown by `fr ops trust`."""
 TRUST_DIR_ENV = "FR_OPS_TRUST_DIR"
-_PLANS_REL = Path("docs/superpowers/plans")
 
 
 def _sha(data: object) -> str:
@@ -181,6 +182,14 @@ def is_trust_excluded(path: str, mode: str | None = None) -> bool:
     if path in _ACCEPTANCE:
         return True
     parts = path.split("/")
+    if (
+        parts[:3] == ["docs", "superpowers", "implemented"]
+        and len(parts) == 6
+        and parts[3] == "journals"
+        and parts[4] in _JOURNAL_SCOPES
+        and parts[5].endswith(".md")
+    ):
+        return True
     if parts[:2] == ["docs", "superpowers"] and len(parts) >= 4:
         if parts[2] == "journals":
             return len(parts) == 5 and parts[3] in _JOURNAL_SCOPES and parts[4].endswith(".md")
@@ -333,9 +342,54 @@ def grant_trust(
     *,
     tree: Mapping[str, str] | None = None,
 ) -> JournalEntry:
-    """Store the grant for this operator, then append the audit decision."""
-    if not (repo_root / _PLANS_REL / plan_slug).is_dir():
+    """Store the grant for one unambiguous active or archived plan, then audit it."""
+    if (
+        not plan_slug
+        or plan_slug in {".", ".."}
+        or Path(plan_slug).name != plan_slug
+        or "/" in plan_slug
+        or "\\" in plan_slug
+        or any(ch.isspace() for ch in plan_slug)
+    ):
+        raise ValueError(f"invalid plan slug {plan_slug!r}")
+
+    from fr.refs import resolve_plan_ref
+
+    root = repo_root.resolve()
+    resolution = resolve_plan_ref(plan_slug, root)
+    # Check every match, not just the preferred one: ambiguity and symlink
+    # aliases must never silently select a trust target.
+    for candidate in resolution.matches:
+        resolved = candidate.resolve()
+        current = root
+        has_symlink = False
+        for part in candidate.relative_to(root).parts:
+            current /= part
+            has_symlink = has_symlink or current.is_symlink()
+        if not resolved.is_relative_to(root) or has_symlink:
+            raise ValueError(f"plan {plan_slug!r} resolves through an unsafe path")
+    if len(resolution.matches) > 1:
+        raise ValueError(f"multiple active or archived plans named {plan_slug!r}")
+    if resolution.path is None:
         raise ValueError(f"no plan {plan_slug!r} to record trust against")
+
+    plan_dir = resolution.path
+    plan_root = plan_dir.parent.relative_to(root / "docs/superpowers").as_posix()
+    archived = plan_root != "plans"
+    path = (
+        archived_journal_path(root, "plan", plan_slug)
+        if archived
+        else journal_path(root, "plan", plan_slug)
+    )
+    other_path = (
+        journal_path(root, "plan", plan_slug)
+        if archived
+        else archived_journal_path(root, "plan", plan_slug)
+    )
+    if other_path.exists():
+        raise ValueError(f"multiple active or archived plan journals named {plan_slug!r}")
+    prior_text = path.read_text() if path.is_file() else None
+    prior = parse_journal(prior_text) if prior_text is not None else []
     now = journal_now()
     record = {
         "sha256": set_hash(fp),
@@ -343,9 +397,6 @@ def grant_trust(
         "granted": now,
         "tree": dict(sorted((tree or {}).items())),
     }
-    _write_private(store_path(repo_root, plan_slug), json.dumps(record, indent=2) + "\n")
-    path = journal_path(repo_root, "plan", plan_slug)
-    prior = parse_journal(path.read_text()) if path.is_file() else []
     taken = [int(m.group(1)) for e in prior if (m := OP_TRUST_ID_RE.match(e.id))]
     entry = JournalEntry(
         kind="decision",
@@ -356,7 +407,18 @@ def grant_trust(
         body=f"sha256: {set_hash(fp)}",
         decided_by="operator",
     )
-    append_journal_entry(path, plan_slug, entry)
+    from fr.artifacts.atomic import write_text_atomic
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(path, appended_journal_text(prior_text, plan_slug, entry))
+    try:
+        _write_private(store_path(root, plan_slug), json.dumps(record, indent=2) + "\n")
+    except BaseException:
+        if prior_text is None:
+            path.unlink(missing_ok=True)
+        else:
+            write_text_atomic(path, prior_text)
+        raise
     return entry
 
 
