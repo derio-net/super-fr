@@ -9187,13 +9187,15 @@ rows:
       - super-fr:tests/unit/test_herdr_stable_checkout.py#test_linked_worktree_uses_primary_checkout
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_initial_dispatch_waits_for_rendered_prompt_before_single_submission
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_managed_handback_rechecks_idle_snapshot_under_lock_before_prompt
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_persists_explicit_model_and_location
+      - super-fr:tests/unit/test_herdr_replacement.py#test_opencode_target_uses_api_pinned_session_and_interactive_auto
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: ci
-    notes: Managed OpenCode dispatch, restart and replacement pass --auto so autonomous
-      work does not stop on permission prompts; pre-change managed sessions remain observable.
-      Runner/stable-checkout/readiness tests remain CI-covered, including fail-closed
-      message eligibility under the pane lock.
+    notes: OpenCode 2.1.4 launch now creates a session through POST /api/session with
+      an explicit Model.Ref and attaches root TUI using --session and --auto; API response
+      model verification and synthetic launch identity are unit-pinned. The herdr-opencode
+      live scenario remains CI evidence only, not a real client walk.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
