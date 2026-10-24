@@ -15,3 +15,8 @@ Own-repo identity is decided by exact string equality (repo == own) at every sit
 ### fix · finding [fixed] · same_repo() decides own-repo identity everywhere, case-insensitively
 
 New fr.acceptance.model.same_repo (casefold) replaces == at check.py (resolution, staleness, workflow coverage), report.py (_base, _actual_path, url — own github links now use the matrix spelling and --ref), requirements.origin_fragment, artifacts/matrix_anchors. check() warns 'ref prefix X: differs from the matrix's repo: y only by case'. Failing-first: tests/unit/test_acceptance_repo_case.py (checkout dir not named like the prefix) — 6 red before the call-site change, 8 green after; 654 related tests pass.
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-10-24T07:49:02+00:00 -->
+### review · review · Self-review of PR #1241
+
+Reviewed the diff against every == own-repo site found by grep (check.py x3, report.py x3, requirements, matrix_anchors); no remaining exact comparison. Finding raised: add-time prefix normalisation (issue's optional 3rd suggestion) not implemented — deferred as out of scope, covered by the new check warning, noted in the PR body. No other findings.
