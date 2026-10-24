@@ -25,3 +25,8 @@ Independent reviewer asserted v2.1.4 POST /api/session returns the Session objec
 ### review-api-response-envelope-resolved · finding [refuted] · resolves review-api-response-envelope: Review questioned session-create response envelope
 
 Verified against official v2.1.4 tagged source: packages/protocol/src/groups/session.ts declares success Schema.Struct({ data: PublicSessionInfo }), and packages/server/src/handlers/session.ts returns { data: yield* session.create(...) }. The api command writes that JSON response text unchanged, so reading response.data is correct. No live session or service was used.
+
+<!-- fr:journal kind=discovery scope=debug id=verification-after-docker-recovery created=2026-10-24T17:43:40+00:00 -->
+### verification-after-docker-recovery · discovery · Bounded verification passes; full suite run exposed compatibility follow-ups
+
+After Docker recovery, the preserved branch/worktree was verified at HEAD 947b8920. Focused mypy and 254 Herdr tests passed. A conservative full-suite run with pytest -n 2 completed with 13,463 passed, 136 skipped, 10 failed; it was NOT green. Failures exposed legacy descriptors lacking session IDs, replacement not carrying the source descriptor session, and synthetic installed scenarios not stubbing the new OpenCode API. Fixed those paths/tests. The affected unit tests now pass (277 tests), and the four related installed scenarios passed in a separate focused rerun (27 combined unit/scenario tests). Mypy, Ruff, format, diff check, acceptance check (561 rows), and change-fragment gate pass on the updated tree. No full-suite rerun was performed after these fixes; full suite remains unverified, not green. No real API session, fixture session, shared-service restart, or A/B fixture was used.
