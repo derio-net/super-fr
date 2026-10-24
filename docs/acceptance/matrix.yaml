@@ -9189,13 +9189,15 @@ rows:
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_managed_handback_rechecks_idle_snapshot_under_lock_before_prompt
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_persists_explicit_model_and_location
       - super-fr:tests/unit/test_herdr_replacement.py#test_opencode_target_uses_api_pinned_session_and_interactive_auto
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_real_v2_2_1_4_blank_prompt_is_ready
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_prompt_refuses_overlay_busy_and_malformed_screens
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_permission_overlay_is_refused_even_when_herdr_reports_idle
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: ci
-    notes: OpenCode 2.1.4 launch now creates a session through POST /api/session with
-      an explicit Model.Ref and attaches root TUI using --session and --auto; API response
-      model verification and synthetic launch identity are unit-pinned. The herdr-opencode
-      live scenario remains CI evidence only, not a real client walk.
+    notes: Added a lossless sanitized OpenCode 2.1.4 live-screen fixture and CI tests
+      for its focused blank prompt and refusal overlays. The actual client-live/managed-runner
+      walk remains owed; this change does not claim a live walk passed.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
