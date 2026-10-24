@@ -662,7 +662,7 @@ strategy: candidate
 - exit-gates-pr-labels: live — only a real forge shows the labels a real run's PR carries
 - exit-gates-driver-routing: live — a gated batch and its gate pass need a real merged PR, driver and matrix on main
 - exit-gates-collected-closeout: live — one close-out over a real merged queue needs real merges and a real housekeeping PR
-- exit-gates-release-gating: live — an RC and the final after it need release.yml on the real main
+- exit-gates-release-gating: live — a real forge rehearsal of the pinned release.yml proves RC-to-final without self-gating; actual super-fr final publication is a separate follow-through observation
 
 ## Test Plan
 
@@ -681,10 +681,27 @@ exercise.
    collected close-out opens ONE housekeeping PR. The driver marks it ready and
    merges it once clean. It records the passed batch's Test Plan outcomes and
    closes that batch's `Refs` issue.
-4. **Release.** While step 2's PR is unpassed, a push to `main` cuts
-   `vX.Y.Z-rc.N` as a pre-release. After the pass, the next run cuts the final
-   `vX.Y.Z`. `bootstrap.sh --version RC` installs the RC, and with no argument it
-   installs the final.
+4. **Release (non-circular live rehearsal).** In an operator-approved disposable
+   GitHub repository, run the real release workflow and release decision code
+   pinned to the super-fr source under test, against real fixture PRs and gate
+   labels. Record the source commit and hashes, valid final baseline, fragment
+   input, workflow inputs and any fixture-only substitutions. While a fixture PR
+   waits on its post-merge gate, an authorized push/run cuts `vX.Y.Z-rc.N` as a
+   pre-release without consuming fragments. After the fixture's actual verification
+   and separately approved gate pass, the ordinary next run cuts final `vX.Y.Z`
+   and consumes the fragments. Neither run uses a version override. Verify actual
+   publication, the staged suite, `fr release status`, and RC/default-final install
+   selection against those fixture releases. A fake forge, recorded narrative,
+   reduced release suite, or changed gate predicate is not this live rehearsal.
+
+   The Tester can accept this row only after reviewing the retained live rehearsal
+   evidence and its source equivalence. This breaks the verification cycle in which
+   #1195's own unpassed gate would otherwise prevent its final-release witness.
+   It does not pass any original PR gate automatically or mark an unobserved
+   super-fr final as tested. Preserve the actual super-fr RC/final publication and
+   installer observation as the separate follow-through obligation in
+   `docs/exit-gates-release-walk.md`; #1207 remains owed until that observation is
+   complete. Follow-through failure stays a release defect, never a fabricated pass.
 
 ## Implementation Plans
 
