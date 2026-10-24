@@ -53,7 +53,7 @@ def conversions(path: Path) -> dict[str, str]:
 
     # Live parser: a pre-v5 matrix still carrying `skipped` fails it, so this
     # returns {} until the 4 -> 5 hop (`matrix_status_split`) has run.
-    from fr.acceptance.model import AcceptanceError, parse_matrix, split_ref
+    from fr.acceptance.model import AcceptanceError, parse_matrix, same_repo, split_ref
 
     root = _root(path)
     try:
@@ -76,7 +76,7 @@ def conversions(path: Path) -> dict[str, str]:
             except AcceptanceError:
                 continue
             line = line_of(frag)
-            if repo != own or line is None or not is_python(rel) or ref in out:
+            if not same_repo(repo, own) or line is None or not is_python(rel) or ref in out:
                 continue
             if rel not in sources:
                 try:

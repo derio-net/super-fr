@@ -24,7 +24,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fr.acceptance.model import AcceptanceError, Matrix, Row, archive_twin, split_ref
+from fr.acceptance.model import (
+    AcceptanceError,
+    Matrix,
+    Row,
+    archive_twin,
+    same_repo,
+    split_ref,
+)
 
 if TYPE_CHECKING:
     from fr.run.model import RunState, StepRecord
@@ -162,7 +169,7 @@ def origin_fragment(origin: str, spec_ref: str) -> str | None:
     except AcceptanceError:
         return None
     ref_repo, _, ref_path = spec_ref.partition(":")
-    if repo != ref_repo:
+    if not same_repo(repo, ref_repo):
         return None
     if path == ref_path or archive_twin(path) == ref_path or path == archive_twin(ref_path):
         return frag

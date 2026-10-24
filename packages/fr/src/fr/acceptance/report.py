@@ -29,6 +29,7 @@ from fr.acceptance.model import (
     Row,
     archive_twin,
     latest_passing_walk_at,
+    same_repo,
     split_ref,
 )
 
@@ -97,7 +98,7 @@ class LinkBuilder:
         self.probe = probe
 
     def _base(self, repo: str) -> Path:
-        return self.root if repo == self.own_repo else self.sibling / repo
+        return self.root if same_repo(repo, self.own_repo) else self.sibling / repo
 
     def _actual_path(self, repo: str, path: str) -> str:
         """Follow an archived spec to its twin when the checkout can tell
@@ -107,7 +108,7 @@ class LinkBuilder:
         if not self.probe:
             return path
         base = self._base(repo)
-        checkout = repo == self.own_repo or (base / ".git").exists()
+        checkout = same_repo(repo, self.own_repo) or (base / ".git").exists()
         if checkout and not (base / path).exists():
             twin = archive_twin(path)
             if twin and (base / twin).exists():
@@ -134,7 +135,10 @@ class LinkBuilder:
             # v1 shortcut: sibling repos are pinned to literal `main` (a
             # master-defaulted sibling gets stale links). Recorded in the
             # plan's _prose.md; a per-repo override can come with demand.
-            branch = self.ref if repo == self.own_repo else "main"
+            if same_repo(repo, self.own_repo):
+                repo, branch = self.own_repo, self.ref
+            else:
+                branch = "main"
             anchor = f"#{self._anchor(repo, path, frag)}" if frag else ""
             return f"https://github.com/{self.org}/{repo}/blob/{branch}/{path}{anchor}"
         base = self._base(repo)

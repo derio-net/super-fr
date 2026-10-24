@@ -80,6 +80,13 @@ def split_ref(ref: str) -> tuple[str, str, str]:
     return repo, path, frag
 
 
+def same_repo(a: str, b: str) -> bool:
+    """Whether two ref prefixes name one repo. Case-insensitive, as GitHub is
+    for `org/repo` (gh#1237): `HOMELAB:` under `repo: homelab` is the own repo,
+    not a sibling resolved through `<checkout>/../HOMELAB/`."""
+    return a.casefold() == b.casefold()
+
+
 # fr's own pipeline artifacts — specs, plans, runs, journals, their archive.
 # None of them is verification: a row whose level evidence is one states how
 # the pipeline must run, not what the product does (gh#775 — take 10's

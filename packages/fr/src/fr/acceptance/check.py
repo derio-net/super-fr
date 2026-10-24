@@ -19,6 +19,7 @@ from fr.acceptance.model import (
     Matrix,
     Row,
     archive_twin,
+    same_repo,
     split_ref,
 )
 
@@ -207,7 +208,7 @@ def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[st
                 repo, path, _ = split_ref(ref)
             except AcceptanceError:
                 continue
-            if repo != own:
+            if not same_repo(repo, own):
                 continue  # sister-repo refs are honestly out of PR-time reach
             if not any(_actions_glob_match(g, path) for g in globs):
                 uncovered.append(path)
@@ -222,6 +223,7 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     result = CheckResult()
     own = resolve_identity(matrix, root)[1]
     missing_repos: set[str] = set()
+    case_only: set[str] = set()
 
     for r in matrix.rows:
         for ref in r.refs():
@@ -230,7 +232,9 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
             except AcceptanceError as e:
                 result.errors.append(str(e))
                 continue
-            if repo == own:
+            if same_repo(repo, own):
+                if repo != own:
+                    case_only.add(repo)
                 base: Path | None = root
             else:
                 base = _sibling_base(root, sibling_root, repo)
@@ -240,6 +244,13 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
             _resolve_ref(r.id, ref, base, result)
     for repo in sorted(missing_repos):
         result.warnings.append(f"repo {repo} not checked out locally — its refs were not verified")
+    # gh#1237: tolerated, never silent — a case-only spelling used to make every
+    # own-repo ref a sibling, surfacing only as report drift and skipped refs.
+    for repo in sorted(case_only):
+        result.warnings.append(
+            f"ref prefix {repo}: differs from the matrix's repo: {own} only by case — "
+            f"read as the own repo; rewrite it as {own}:"
+        )
 
     # Staleness guard: every own-repo spec with a Test Plan must be cited by
     # >=1 row origin. A citation survives `fr archive` (twin-aware, trap 1).
@@ -250,7 +261,7 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
                 repo, path, _ = split_ref(ref)
             except AcceptanceError:
                 continue  # already reported above
-            if repo != own:
+            if not same_repo(repo, own):
                 continue
             referenced.add(path)
             twin = archive_twin(path)
