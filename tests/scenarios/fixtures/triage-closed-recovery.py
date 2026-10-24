@@ -17,7 +17,7 @@ from fr.commands import triage_batch_cmd as cmd
 from fr.run.model import RunState, current_run_schema_version, dump_run_state
 from fr.triage.batch import effective_handle, last_dispatch, save_batches
 from fr.triage.model import Batch, DispatchEvent, Facts, Issue, load_judgements
-from fr_herdr import managed, recovery, replacement
+from fr_herdr import managed, opencode, recovery, replacement
 from fr_herdr.runner import HerdrRunner, agent_name
 from typer.testing import CliRunner
 
@@ -26,6 +26,7 @@ ITEM = "example/alpha/run/batch-fixture"
 NAME = agent_name(ITEM)
 PANE = "w1T:pNEW"
 SESSION = "ses_fixture"
+opencode.create_session = lambda model, checkout: SESSION
 effects = []
 started = False
 fail_prompt = False
@@ -75,7 +76,7 @@ def herdr(argv):
         return {"result": {"root_pane": pane, "tab": tab}}
     if argv[:2] == ["agent", "start"]:
         assert argv[2] == NAME and "--auto" in argv
-        assert argv[argv.index("--model") + 1] == "openai/fixture"
+        assert argv[argv.index("--session") + 1] == SESSION
         effects.append("launch")
         started = True
         return {}
@@ -92,7 +93,7 @@ def herdr(argv):
                 "process_info": {
                     "foreground_processes": [
                         {
-                            "argv": ["opencode", "--model", "openai/fixture", "--auto"],
+                            "argv": ["opencode", "--session", SESSION, "--auto"],
                             "pid": 5,
                             "cwd": str(Path.cwd()),
                         }

@@ -15,7 +15,13 @@ export HERDR_FAKE_LOG="$work/log"
 export SCENARIO_PY="$(candidate_python)" SCENARIO_HELPER="$here/fixtures/herdr-opencode.py"
 mkdir -p "$work/bin"
 printf '#!/bin/sh\nexec "$SCENARIO_PY" "$SCENARIO_HELPER" "$@"\n' > "$work/bin/herdr"
+cat > "$work/bin/opencode" <<'EOF'
+#!/bin/sh
+[ "$1" = api ] || exit 2
+exec "$SCENARIO_PY" -c 'import json,sys; p=json.loads(sys.argv[1]); print(json.dumps({"data":{"id":"ses-fixture","model":p["model"]}}))' "$5"
+EOF
 chmod +x "$work/bin/herdr"
+chmod +x "$work/bin/opencode"
 export PATH="$work/bin:$PATH"
 "$SCENARIO_PY" "$SCENARIO_HELPER" scenario-prepare
 out="$(fr-herdr restart-idle)"

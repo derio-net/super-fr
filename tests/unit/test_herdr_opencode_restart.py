@@ -20,8 +20,7 @@ def test_captured_process_identity_and_exited_shell():
     assert opencode.shell_cwd(exited) == "/Users/example/projects/super-fr"
 
 
-@pytest.mark.parametrize("auto", [False, True])
-def test_managed_model_identity_accepts_sessions_from_before_and_after_auto(auto):
+def test_managed_model_identity_requires_the_pinned_session_and_auto():
     d = managed.Descriptor(
         server="server",
         pane="w1:p1",
@@ -31,11 +30,55 @@ def test_managed_model_identity_accepts_sessions_from_before_and_after_auto(auto
         branch="feat/test",
         checkout="/work/alpha",
         model="openai/test",
+        session="ses-pinned",
     )
-    argv = ["opencode", "--model", d.model]
-    if auto:
-        argv.append("--auto")
-    assert opencode.model_matches({"argv": argv}, d)
+    assert opencode.model_matches({"argv": ["opencode", "--session", "ses-pinned", "--auto"]}, d)
+    assert not opencode.model_matches({"argv": ["opencode", "--session", "ses-other", "--auto"]}, d)
+    assert not opencode.model_matches({"argv": ["opencode", "--session", "ses-pinned"]}, d)
+    assert not opencode.model_matches({"argv": ["opencode", "--model", d.model, "--auto"]}, d)
+
+
+def test_create_session_persists_explicit_model_and_location(monkeypatch):
+    import subprocess
+
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            '{"data":{"id":"ses-created","model":{"providerID":"openai","id":"gpt-test"}}}',
+            "",
+        )
+
+    monkeypatch.setattr(opencode.subprocess, "run", run)
+    assert opencode.create_session("openai/gpt-test", "/work/alpha") == "ses-created"
+    args, kwargs = calls[0]
+    assert args[:4] == ["opencode", "api", "POST", "/api/session"]
+    payload = json.loads(args[5])
+    assert payload == {
+        "model": {"providerID": "openai", "id": "gpt-test"},
+        "location": {"directory": "/work/alpha"},
+    }
+    assert kwargs["cwd"] == "/work/alpha"
+
+
+def test_create_session_refuses_unconfirmed_model(monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(
+        opencode.subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(
+            args,
+            0,
+            '{"data":{"id":"ses-created","model":{"providerID":"openai","id":"other"}}}',
+            "",
+        ),
+    )
+    with pytest.raises(opencode.HerdrError, match="did not confirm"):
+        opencode.create_session("openai/gpt-test", "/work/alpha")
 
 
 @pytest.mark.parametrize(
@@ -113,6 +156,7 @@ def operation(tmp_path, monkeypatch, native_herdr_cache):
         branch="feat/test",
         checkout=str(tmp_path),
         model="openai/test",
+        session="ses-old",
     )
     managed.save(d)
     monkeypatch.setattr(managed, "reconstruct", lambda d: "HOLD for operator review")
@@ -123,6 +167,7 @@ def operation(tmp_path, monkeypatch, native_herdr_cache):
         status = "done"
         prompt_screen = screen
         failure = ""
+        session = "ses-old"
         calls = []
 
         def __init__(self):
@@ -148,7 +193,11 @@ def operation(tmp_path, monkeypatch, native_herdr_cache):
                     }
                 }
             if verb == "pane process-info":
-                proc = {"argv": ["opencode", "--model", d.model], "pid": 2, "cwd": d.checkout}
+                proc = {
+                    "argv": ["opencode", "--session", self.session, "--auto"],
+                    "pid": 2,
+                    "cwd": d.checkout,
+                }
                 if self.phase == "shell":
                     proc = {"argv": ["-zsh"], "pid": 1, "cwd": d.checkout}
                 return {
@@ -160,9 +209,11 @@ def operation(tmp_path, monkeypatch, native_herdr_cache):
                 self.phase = "shell"
             if verb == "agent start":
                 self.phase = "target"
+                self.session = args[args.index("--session") + 1]
             return {}
 
     fake = Synthetic()
+    monkeypatch.setattr(opencode, "create_session", lambda model, checkout: "ses-fresh")
     monkeypatch.setattr(opencode, "_run_herdr", fake)
     return d, fake
 
@@ -181,8 +232,8 @@ def test_fresh_restart_preserves_pane_name_model_and_hold(operation):
         "--pane",
         d.pane,
         "--",
-        "--model",
-        d.model,
+        "--session",
+        "ses-fresh",
         "--auto",
     ]
     assert "--resume" not in str(fake.calls)

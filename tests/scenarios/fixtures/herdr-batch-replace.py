@@ -13,12 +13,14 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from fr_herdr import opencode
 from fr_herdr.runner import agent_name
 
 ITEM = "example/alpha/run/batch-scenario"
 NAME = agent_name(ITEM)
 PANE = "w1:p1"
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures/herdr"
+opencode.create_session = lambda model, checkout: "ses-" + model.replace("/", "-")
 
 
 def pane(args):
@@ -79,10 +81,18 @@ def pane(args):
         harness = args[args.index("--kind") + 1]
         harness_args = args[args.index("--") + 1 :]
         assert ("--auto" in harness_args) == (harness == "opencode")
+        if harness == "opencode":
+            model = (
+                harness_args[harness_args.index("--session") + 1]
+                .removeprefix("ses-")
+                .replace("-", "/", 1)
+            )
+        else:
+            model = harness_args[harness_args.index("--model") + 1]
         data.update(
             shell=False,
             harness=harness,
-            model=harness_args[harness_args.index("--model") + 1],
+            model=model,
             args=harness_args,
         )
     if args[:2] == ["agent", "prompt"]:

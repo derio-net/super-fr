@@ -73,7 +73,11 @@ class _Herdr:
                 "name": args[2],
                 "agent": args[args.index("--kind") + 1],
                 "pane_id": args[args.index("--pane") + 1],
-                "model": harness_args[harness_args.index("--model") + 1],
+                "session": (
+                    harness_args[harness_args.index("--session") + 1]
+                    if "--session" in harness_args
+                    else None
+                ),
                 "args": harness_args,
             }
         if args[:2] == ["pane", "process-info"] and self.launch:
@@ -109,6 +113,7 @@ def herdr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, native_herdr_cache: P
     monkeypatch.setenv("HERDR_WORKSPACE_ID", "w2")
     monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "server.sock"))
     monkeypatch.setattr(herdr_runner, "stable_checkout", lambda path: path)
+    monkeypatch.setattr(herdr_runner.opencode, "create_session", lambda model, checkout: "ses-test")
     return fake
 
 
@@ -367,7 +372,9 @@ def test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it(
         "--label", item.id, "--no-focus",
     ]  # fmt: skip
     name = agent_name(item.id)
-    harness_args = ["--model", model, "--auto"] if harness == "opencode" else ["--model", model]
+    harness_args = (
+        ["--session", "ses-test", "--auto"] if harness == "opencode" else ["--model", model]
+    )
     assert start == [
         "agent", "start", name, "--kind", harness, "--pane", "w2:p1K",
         "--", *harness_args,

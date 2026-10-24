@@ -61,6 +61,34 @@ def test_optional_protocol():
     assert isinstance(HerdrRunner(), SessionReplacer)
 
 
+def test_opencode_target_uses_api_pinned_session_and_interactive_auto(tmp_path, monkeypatch):
+    from fr_herdr import opencode
+
+    monkeypatch.setenv("HERDR_SOCKET_PATH", str(tmp_path / "server"))
+    monkeypatch.setenv("FR_HERDR_CACHE_DIR", str(tmp_path / "cache"))
+    d = managed.Descriptor(
+        server=managed.server_identity(),
+        pane="pane",
+        name="b-test",
+        item="example/repo/run/batch-test",
+        role="batch",
+        branch="fix/test",
+        checkout=str(tmp_path),
+        model="openai/gpt-test",
+        checkpoint="launch-started",
+    )
+    starts = []
+    monkeypatch.setattr(opencode, "create_session", lambda model, checkout: "ses-pinned")
+    monkeypatch.setattr(replacement, "start_agent", lambda argv, **kwargs: starts.append(argv))
+    monkeypatch.setattr(opencode, "wait_ready", lambda descriptor, **kwargs: {})
+
+    launched = replacement.launch_target(d)
+
+    assert launched.session == "ses-pinned"
+    assert managed.load(d.pane).session == "ses-pinned"
+    assert starts[0][-3:] == ["--session", "ses-pinned", "--auto"]
+
+
 @pytest.mark.parametrize(
     "old,new", [("claude", "opencode"), ("opencode", "claude"), ("opencode", "opencode")]
 )

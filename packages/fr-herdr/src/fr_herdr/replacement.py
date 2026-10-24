@@ -175,7 +175,14 @@ def exit_to_shell(d: managed.Descriptor) -> None:
         raise HerdrError("shell-cwd-timeout")
 
 
-def launch_target(d: managed.Descriptor) -> None:
+def launch_target(d: managed.Descriptor) -> managed.Descriptor:
+    if d.harness == "opencode":
+        session = opencode.create_session(d.model, d.checkout)
+        d = d.model_copy(update={"session": session})
+        managed.save(d)
+        launch = opencode.launch_args(session)
+    else:
+        launch = ["--model", d.model]
     start_agent(
         [
             "agent",
@@ -186,7 +193,7 @@ def launch_target(d: managed.Descriptor) -> None:
             "--pane",
             d.pane,
             "--",
-            *(opencode.launch_args(d.model) if d.harness == "opencode" else ["--model", d.model]),
+            *launch,
         ],
         run=_run_herdr,
         sleep=opencode._sleep,
@@ -208,6 +215,7 @@ def launch_target(d: managed.Descriptor) -> None:
 
         if opencode._poll(ready) is None:
             raise HerdrError("Claude target readiness timeout; no prompt sent")
+    return d
 
 
 def submit(d: managed.Descriptor, brief: str) -> None:
@@ -307,6 +315,10 @@ class Operation:
             and (d.harness, d.model) != (self.source.harness, self.source.model)
         ):
             raise managed.ManagedError("managed source launch mismatch")
+        if d and d.checkpoint == "active":
+            # The source's pinned v2 session belongs to the current managed
+            # descriptor, not the newly constructed replacement target.
+            self.source = self.source.model_copy(update={"session": d.session})
         self.before = source_eligible(self.source)
         return ReplacementInspection(
             self.source.pane,
@@ -378,7 +390,9 @@ class Operation:
         """Recovery strengthens identity without changing ordinary replacement."""
 
     def _target_execution(self) -> ReplacementResult:
-        launch_target(self.target)
+        launched = launch_target(self.target)
+        if launched is not None:
+            self.target = launched
         if self.request.recover:
             observe(self.target)  # Independently confirm rendered safe input before submission.
         self._target_identity()

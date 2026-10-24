@@ -26,6 +26,11 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
     monkeypatch.setattr(managed, "reconstruct", lambda d: "HOLD, never replay the goal")
     monkeypatch.setattr(opencode, "_sleep", lambda seconds: None)
     monkeypatch.setattr(opencode, "_clock", lambda counter=itertools.count(): next(counter))
+    monkeypatch.setattr(
+        opencode,
+        "create_session",
+        lambda model, checkout: "ses-" + model.replace("/", "-"),
+    )
     created = json.loads((FIXTURES / "tab-create.json").read_text())
     pane = created["result"]["root_pane"]["pane_id"]
     screen = json.loads((FIXTURES / "opencode/final-idle.json").read_text())["raw"]
@@ -75,7 +80,10 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
             if args[:2] == ["pane", "process-info"]:
                 argv = ["opencode", *self.argv]
                 if self.wrong_model:
-                    argv[argv.index("--model") + 1] = "other/model"
+                    if "--session" in argv:
+                        argv[argv.index("--session") + 1] = "ses-other"
+                    else:
+                        argv[argv.index("--model") + 1] = "other/model"
                 proc = {
                     "pid": 2,
                     "argv": argv,
@@ -102,7 +110,8 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
             if args[:2] == ["agent", "start"]:
                 self.name = args[2]
                 self.argv = args[args.index("--") + 1 :]
-                self.model = self.argv[self.argv.index("--model") + 1]
+                if "--model" in self.argv:
+                    self.model = self.argv[self.argv.index("--model") + 1]
                 self.phase = "startup"
             if args[:2] == ["agent", "prompt"] and self.reads < 3:
                 raise runner.HerdrError(
@@ -163,7 +172,11 @@ def test_replacement_target_waits_for_rendered_prompt(timeline):
     assert fake.reads >= 3
     assert sum(c[:2] == ["agent", "prompt"] for c in fake.calls) == 1
     start = next(c for c in fake.calls if c[:2] == ["agent", "start"])
-    assert start[start.index("--") + 1 :] == ["--model", request.model, "--auto"]
+    assert start[start.index("--") + 1 :] == [
+        "--session",
+        "ses-openai-new",
+        "--auto",
+    ]
 
 
 @pytest.mark.parametrize("failure", ["timeout", "draft", "dialog", "model", "name"])

@@ -6,9 +6,11 @@ overlays or foreground layouts are skipped, never treated as empty input.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
+import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -93,13 +95,68 @@ def process(info: dict[str, Any]) -> dict[str, Any] | None:
     return proc if argv and Path(str(argv[0])).name == "opencode" else None
 
 
-def launch_args(model: str) -> list[str]:
-    """Arguments for an autonomous managed OpenCode session."""
-    return ["--model", model, "--auto"]
+def create_session(model: str, checkout: str) -> str:
+    """Create a model-pinned session through the OpenCode v2 API.
+
+    OpenCode 2.1.4 accepts ``--model`` on ``run`` and ``mini``, not on the
+    interactive root command. Creating the session through the server API
+    stores the selection durably; the root TUI can then attach with ``--session``.
+    """
+    provider, model_ref = model.split("/", 1)
+    model_id, separator, variant = model_ref.partition("#")
+    model_ref_payload: dict[str, str] = {"providerID": provider, "id": model_id}
+    if separator:
+        model_ref_payload["variant"] = variant
+    payload = json.dumps(
+        {
+            "model": model_ref_payload,
+            "location": {"directory": checkout},
+        },
+        separators=(",", ":"),
+    )
+    try:
+        result = subprocess.run(
+            ["opencode", "api", "POST", "/api/session", "--data", payload],
+            cwd=checkout,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        response = json.loads(result.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise HerdrError("could not create an explicitly model-selected OpenCode session") from exc
+    data = response.get("data") if isinstance(response, dict) else None
+    selected = data.get("model") if isinstance(data, dict) else None
+    session_id = data.get("id") if isinstance(data, dict) else None
+    if (
+        not isinstance(session_id, str)
+        or not session_id
+        or not isinstance(selected, dict)
+        or selected.get("providerID") != provider
+        or selected.get("id") != model_id
+        or selected.get("variant") != (variant if separator else None)
+    ):
+        raise HerdrError("OpenCode did not confirm the requested session model")
+    return session_id
+
+
+def launch_args(session: str) -> list[str]:
+    """Attach the interactive root TUI to a session and retain auto-approval."""
+    return ["--session", session, "--auto"]
 
 
 def model_matches(proc: dict[str, Any], d: managed.Descriptor) -> bool:
-    argv = proc.get("argv", [])
+    raw_argv = proc.get("argv", [])
+    if not isinstance(raw_argv, list) or any(not isinstance(arg, str) for arg in raw_argv):
+        return False
+    argv: list[str] = raw_argv
+    if d.session:
+        return argv[1:] == ["--session", d.session, "--auto"]
+    # Pre-session descriptors and captured OpenCode 1.x processes have no
+    # durable session ID. Keep recognizing only the launch forms we supported
+    # before session pinning; every newly launched v2 session takes the strict
+    # session-ID branch above.
     return argv[1:] in (
         ["--model", d.model],
         ["-m", d.model],
@@ -229,7 +286,8 @@ def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, 
             recovery = (
                 f"Inspect {pane} and {d.name}; do not blindly resubmit. "
                 f"From a confirmed shell: cd {shlex.quote(d.checkout)} && "
-                f"opencode --model {shlex.quote(d.model)} --auto; reconstruct {d.item} "
+                "create a fresh OpenCode session with the recorded provider/model, then "
+                f"attach the interactive root with --session <id> --auto; reconstruct {d.item} "
                 "from durable fr state and explicitly reconcile the descriptor."
             )
 
@@ -276,6 +334,9 @@ def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, 
                     )
                 ):
                     raise HerdrError("shell-cwd-timeout")
+                session = create_session(d.model, d.checkout)
+                d = d.model_copy(update={"session": session})
+                managed.save(d)
                 start_agent(
                     [
                         "agent",
@@ -286,7 +347,7 @@ def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, 
                         "--pane",
                         pane,
                         "--",
-                        *launch_args(d.model),
+                        *launch_args(session),
                     ],
                     run=_run_herdr,
                     sleep=_sleep,

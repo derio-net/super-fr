@@ -9187,13 +9187,15 @@ rows:
       - super-fr:tests/unit/test_herdr_stable_checkout.py#test_linked_worktree_uses_primary_checkout
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_initial_dispatch_waits_for_rendered_prompt_before_single_submission
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_managed_handback_rechecks_idle_snapshot_under_lock_before_prompt
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_persists_explicit_model_and_location
+      - super-fr:tests/unit/test_herdr_replacement.py#test_opencode_target_uses_api_pinned_session_and_interactive_auto
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: ci
-    notes: Managed OpenCode dispatch, restart and replacement pass --auto so autonomous
-      work does not stop on permission prompts; pre-change managed sessions remain observable.
-      Runner/stable-checkout/readiness tests remain CI-covered, including fail-closed
-      message eligibility under the pane lock.
+    notes: OpenCode 2.1.4 launch now creates a session through POST /api/session with
+      an explicit Model.Ref and attaches root TUI using --session and --auto; API response
+      model verification and synthetic launch identity are unit-pinned. The herdr-opencode
+      live scenario remains CI evidence only, not a real client walk.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
@@ -9251,14 +9253,14 @@ rows:
       - super-fr:tests/unit/test_herdr_managed.py#test_pane_lock_excludes_an_independent_process
       - super-fr:tests/unit/test_herdr_managed.py#test_unenforced_os_lock_is_refused_before_entering
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_managed_restart_waits_for_new_rendered_prompt
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_persists_explicit_model_and_location
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_restart
     status: ci
-    notes: Managed fresh recovery retains HOLD and identity, now sharing bounded rendered-target
-      readiness with initial dispatch/replacement before a single prompt. Native pane
-      locking and pending checkpoint exclusion remain unchanged; named regression and
-      installed restart scenario pass. Full suite is CI-owned; real six-item client-live
-      evidence is independent.
+    notes: Managed restart creates and verifies a fresh model-pinned session through
+      OpenCode v2 API, then launches the interactive root with --session and --auto.
+      Synthetic tests pin the API body, response model, and fresh session identity;
+      actual client-live evidence remains a separate owed walk.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode-restart.sh
   - id: herdr-opencode-live
@@ -9873,11 +9875,13 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_closed_recovery.py#test_recovery_success_preserves_lifecycle_and_changes_owner
       - super-fr:tests/unit/test_herdr_closed_recovery.py#test_allocation_intent_and_single_input
+      - super-fr:tests/unit/test_herdr_closed_recovery.py#test_observed_autonomy_and_session_required
       int:
       - super-fr:tests/integration/test_scenarios.py#test_triage_closed_recovery
     status: ci
-    notes: Installed fake-backed recovery passes; named evidence uses supported Python
-      test-name anchors.
+    notes: Closed-session recovery records the model-pinned OpenCode session ID and
+      launches the attached root TUI with --auto; the durable fresh-session identity
+      contract is unit-pinned. No live recovery walk was performed.
     verify: candidate
     scenario: tests/scenarios/triage-closed-recovery.sh
   - id: triage-closed-recovery-refusals
