@@ -9195,11 +9195,11 @@ rows:
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_capture_passes_full_managed_readiness_gate
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
-    status: ci
-    notes: Added a lossless sanitized OpenCode 2.1.4 live-screen fixture and CI tests
-      for its focused blank prompt, full managed readiness identity gate, and refusal
-      overlays. The actual client-live/managed-runner walk remains owed; this change
-      does not claim a live walk passed.
+    status: walk-owed
+    notes: The new V2.1.4 capture and managed readiness gate are CI-pinned, but the
+      registered RC9 runner was stopped before dispatch because the pre-fix observer
+      would fail and its cleanup closes the newly opened tab. A real published-build
+      managed-runner walk remains owed; no live pass is claimed.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
