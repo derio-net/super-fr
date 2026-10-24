@@ -13,12 +13,16 @@ import sys
 from pathlib import Path
 
 from fr_dispatch.testing import run_item
-from fr_herdr import managed, runner
+from fr_herdr import managed, opencode, runner
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures/herdr"
 PANE = "w1:p1"
 NAME = "b-scenario"
 MODEL = "openai/gpt-6.1-sol"
+
+
+def create_session(model: str, checkout: str) -> str:
+    return "ses-fixture"
 
 
 def git(*args: str) -> None:
@@ -59,6 +63,7 @@ def prepare() -> managed.Descriptor:
 
 def launch() -> None:
     prepare()
+    opencode.create_session = create_session
     linked = Path(os.environ["FR_HERDR_CACHE_DIR"]).parent / "linked"
     git("worktree", "add", "-b", "feat/linked", str(linked))
     calls = []
@@ -108,7 +113,7 @@ def launch() -> None:
     assert handle == "w2:p1K"
     assert calls[0][calls[0].index("--cwd") + 1] == str(Path.cwd())
     assert ["--kind", "opencode"] == calls[1][3:5]
-    assert calls[1][-3:] == ["--model", MODEL, "--auto"]
+    assert calls[1][-3:] == ["--session", "ses-fixture", "--auto"]
     assert "--wait" in next(c for c in calls if c[:2] == ["agent", "prompt"])
     assert managed.load(handle).item == item.id
     assert managed.load(handle).checkpoint == "active"
@@ -189,8 +194,8 @@ def herdr(args: list[str]) -> dict:
             "--pane",
             PANE,
             "--",
-            "--model",
-            MODEL,
+            "--session",
+            "ses-fixture",
             "--auto",
         ]
         args_state.write_text(json.dumps(args[args.index("--") + 1 :]))

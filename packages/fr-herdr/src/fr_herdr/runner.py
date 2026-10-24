@@ -399,6 +399,14 @@ class HerdrRunner:
                 )
                 descriptor = managed.handback(descriptor, descriptor.brief)
                 managed.save(descriptor)
+                session = opencode.create_session(str(payload["model"]), checkout)
+                descriptor = descriptor.model_copy(update={"session": session})
+                managed.save(descriptor)
+            if harness.kind == "opencode":
+                assert descriptor is not None and descriptor.session
+                launch = opencode.launch_args(descriptor.session)
+            else:
+                launch = harness.model_args(str(payload["model"]))
             _start_agent(
                 [
                     "agent",
@@ -409,11 +417,7 @@ class HerdrRunner:
                     "--pane",
                     pane,
                     "--",
-                    *(
-                        opencode.launch_args(str(payload["model"]))
-                        if harness.kind == "opencode"
-                        else harness.model_args(str(payload["model"]))
-                    ),
+                    *launch,
                 ]
             )
             if descriptor:

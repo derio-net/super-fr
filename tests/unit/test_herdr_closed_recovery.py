@@ -322,7 +322,11 @@ def test_observed_autonomy_and_session_required(recovery_env, monkeypatch):
         "agent_status": "done",
         "interactive_ready": True,
     }
-    proc = {"pid": 5, "cwd": op.target.checkout, "argv": ["opencode", "--model", "openai/new"]}
+    proc = {
+        "pid": 5,
+        "cwd": op.target.checkout,
+        "argv": ["opencode"],
+    }
 
     def run(argv):
         if argv[:2] == ["agent", "list"]:
@@ -338,10 +342,12 @@ def test_observed_autonomy_and_session_required(recovery_env, monkeypatch):
         opencode.eligible(
             op.target.model_copy(update={"checkpoint": "active"}), set(), run=run, restart=False
         )
-    proc["argv"].append("--auto")
-    with pytest.raises(managed.ManagedError, match="session"):
+    op.target = op.target.model_copy(update={"session": "ses_new"})
+    proc["argv"] = ["opencode", "--session", "ses-wrong", "--auto"]
+    with pytest.raises(managed.ManagedError, match="process/model/cwd"):
         op._target_identity()
     agent["agent_session"] = {"agent": "opencode", "kind": "id", "value": "ses_new"}
+    proc["argv"] = ["opencode", "--session", "ses_new", "--auto"]
     op._target_identity()
     assert op.target.session == "ses_new"
 
@@ -535,7 +541,7 @@ def test_activation_failure_blocks_restart_input(execution, monkeypatch, intent_
         lambda info: {
             "pid": 5,
             "cwd": d.checkout,
-            "argv": ["opencode", "--model", d.model, "--auto"],
+            "argv": ["opencode", "--session", d.session, "--auto"],
         },
     )
     monkeypatch.setattr(opencode, "input_reason", lambda screen: None)
