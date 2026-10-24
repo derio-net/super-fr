@@ -1,0 +1,6 @@
+{
+  "data": {
+    "id": "ses-fixture-v214",
+    "model": {"providerID": "openai", "id": "gpt-6.1-sol", "variant": "default"}
+  }
+}

@@ -149,7 +149,14 @@ def create_session(model: str, checkout: str) -> str:
         or not isinstance(selected, dict)
         or selected.get("providerID") != provider
         or selected.get("id") != model_id
-        or selected.get("variant") != (variant if separator else None)
+        # OpenCode 2.1.4 resolves an omitted variant to its default in the response.
+        # The provider and model id must always match; a variant is strict only when
+        # the request explicitly selected one. Validate any returned optional variant.
+        or (
+            selected.get("variant") != variant
+            if separator
+            else ("variant" in selected and not isinstance(selected.get("variant"), str))
+        )
     ):
         raise HerdrError("OpenCode did not confirm the requested session model")
     return session_id

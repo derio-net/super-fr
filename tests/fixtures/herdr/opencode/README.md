@@ -52,3 +52,14 @@ separate; the actor and action that dismissed its earlier overlay on fixture C
 are unknown. Overlay refusal tests are synthetic and explicitly exercise
 permission, search-provider setup, and plugin-error indicators. This capture
 does not discharge the operator-owned client-live/managed-runner walk.
+
+# OpenCode 2.1.4 session-create response shape
+
+`session-create-v2.1.4.json` is a sanitized, realistic response projection based on
+the read-only record of a session created by the RC10 fixture dispatch. Its session
+ID is synthetic. OpenCode normalized the requested `openai/gpt-6.1-sol` reference
+(with no requested variant) to a response model reference whose variant is
+`default`. The POST response body itself was not captured; this shape was confirmed
+by reading the persisted session record through `GET /api/session/{sessionID}`.
+Negative tests for wrong provider/model, a mismatched explicit variant, malformed
+variant types, and malformed response envelopes are synthetic.
