@@ -9192,12 +9192,14 @@ rows:
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_real_v2_2_1_4_blank_prompt_is_ready
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_prompt_refuses_overlay_busy_and_malformed_screens
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_permission_overlay_is_refused_even_when_herdr_reports_idle
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_capture_passes_full_managed_readiness_gate
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: ci
     notes: Added a lossless sanitized OpenCode 2.1.4 live-screen fixture and CI tests
-      for its focused blank prompt and refusal overlays. The actual client-live/managed-runner
-      walk remains owed; this change does not claim a live walk passed.
+      for its focused blank prompt, full managed readiness identity gate, and refusal
+      overlays. The actual client-live/managed-runner walk remains owed; this change
+      does not claim a live walk passed.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
