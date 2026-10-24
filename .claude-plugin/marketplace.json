@@ -8,13 +8,13 @@
         {
             "name": "super-fr",
             "description": "super-fr base: superpowers-wrapped planning, isolation, goal-to-PR",
-            "version": "6.0.0-rc.6",
+            "version": "6.0.0-rc.7",
             "source": "./plugins/super-fr"
         },
         {
             "name": "super-fr-dispatch",
             "description": "super-fr dispatch: queue phases to autonomous runners",
-            "version": "6.0.0-rc.6",
+            "version": "6.0.0-rc.7",
             "source": "./plugins/super-fr-dispatch"
         }
     ]
