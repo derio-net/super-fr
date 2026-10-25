@@ -40,3 +40,28 @@ Reviewer session ses_e90fefc9cffeDA9HQnDaUuksz9 reviewed the final code/test dif
 ### final-independent-review · review · Independent final compatibility review found no findings
 
 Reviewer session ses_e90fefc9cffeDA9HQnDaUuksz9 rechecked the post-full-suite-failure compatibility fixes: strict selected-session identity, legacy descriptor matching, replacement source-session propagation, and synthetic API scenarios against tagged OpenCode 2.1.4. No findings were returned. This records independent code review, not operator approval or a live recovery pass. Final focused verification: 277 unit tests and four related installed scenarios passed; full suite had 13463 passed,136 skipped,10 failures before those fixes and was not rerun locally on the corrected tree. Draft PR1245 CI is the current whole-tree check. Detailed result summary is retained in the durable coordination artifact bundle at release-control-2026-10-24/1217/result-summary.md, not a new top-level repository folder. No gate, merge or release is authorized by this record.
+
+<!-- fr:journal kind=repro scope=debug id=rc10-default-variant-create-session-false-negative created=2026-10-24T21:16:14+00:00 -->
+### rc10-default-variant-create-session-false-negative · repro · RC10 rejected a correctly selected OpenCode session default variant
+
+The published RC10 fixture dispatch failed in create_session with “OpenCode did not confirm the requested session model.” Its request selected provider openai and model gpt-6.1-sol explicitly and supplied the fixture location. A read-only GET of the newly persisted session, whose creation timestamp matches the failure, showed the same provider and model with variant default. The POST response body was not captured. No prompt was submitted; no batch dispatch event or run cursor was written. Herdr automatically closed the runner-created w24:p2 tab on this failure path. That closure was an unauthorized runner side effect, not a manual cleanup or a successful launch. The prepared descriptor remains untouched in the coordinator bundle.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc10-default-variant-response-normalization created=2026-10-24T21:16:28+00:00 -->
+### rc10-default-variant-response-normalization · root-cause · Variant equality compared a server default to an unrequested absence
+
+RC10 create_session builds the correct POST /api/session model reference: {providerID: openai, id: gpt-6.1-sol}, with no variant because the requested model has no #variant suffix. OpenCode v2.1.4 accepts Model.Ref.variant as optional and returns a valid persisted session model with variant default. The helper then compared selected.variant to None and falsely refused an otherwise exact provider/model match. The official v2.1.4 protocol tag confirms the POST payload and data-wrapped PublicSessionInfo response; the live persisted record confirms the server selection. This is not provider/model rejection, a response-envelope mismatch, or fallback to root --model. The manual C fixture used the same provider/model selection with no explicit variant. The session POST response bytes themselves were not retained, so the GET record is the live evidence.
+
+<!-- fr:journal kind=finding scope=debug id=rc10-default-variant-response-fixed created=2026-10-24T21:16:39+00:00 state=fixed -->
+### rc10-default-variant-response-fixed · finding [fixed] · Accept valid API-selected variants without weakening model identity
+
+Changed create_session to require the exact requested provider and model ID, require exact variant equality when a #variant was explicitly requested, and accept an omitted or valid string variant when the API resolves an unqualified model. Malformed variant types, wrong provider/model, missing session identity, malformed envelopes, and explicit variant mismatch remain refusals. OpenCode still launches attached to the returned session with --auto; no root --model fallback was added. Added a sanitized 2.1.4 response fixture and positive/negative tests. The Herdr launch acceptance row remains walk-owed: the actual RC10 failure and automatic pane closure do not prove a live managed launch.
+
+<!-- fr:journal kind=review scope=debug id=independent-review-default-variant-fix created=2026-10-24T21:18:42+00:00 -->
+### independent-review-default-variant-fix · review · Independent code review found no findings
+
+An independent read-only review examined the model-confirmation fix, negative tests, acceptance row, patch fragment, and journal. No findings. Reviewer confirmed provider/model identity and explicit variants remain strict; the user-unspecified API default is accepted without a root --model fallback, and --session --auto is unchanged. This review is not a live managed-runner pass; herdr-opencode-launch remains walk-owed.
+
+<!-- fr:journal kind=review scope=debug id=pr-1249-independent-review created=2026-10-24T21:21:03+00:00 -->
+### pr-1249-independent-review · review · PR 1249 independent review found no findings
+
+Draft PR #1249 is open. An independent read-only final review of the exact proposed code and tests found no findings. The reviewer confirmed exact provider/model checks, strict explicit-variant matching, refusal of malformed confirmations, and unchanged --session --auto behavior. The Herdr OpenCode launch acceptance remains walk-owed; no Ready, merge, release, or live retry is authorized.

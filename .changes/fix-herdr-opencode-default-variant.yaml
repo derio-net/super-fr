@@ -1,0 +1,2 @@
+bump: patch
+summary: Accept OpenCode default-variant session confirmations without weakening model identity checks

@@ -9193,13 +9193,15 @@ rows:
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_prompt_refuses_overlay_busy_and_malformed_screens
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_permission_overlay_is_refused_even_when_herdr_reports_idle
       - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_capture_passes_full_managed_readiness_gate
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_accepts_v214_default_variant_response
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_refuses_wrong_or_malformed_confirmation
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: walk-owed
-    notes: The new V2.1.4 capture and managed readiness gate are CI-pinned, but the
-      registered RC9 runner was stopped before dispatch because the pre-fix observer
-      would fail and its cleanup closes the newly opened tab. A real published-build
-      managed-runner walk remains owed; no live pass is claimed.
+    notes: RC10 unit coverage now checks OpenCode 2.1.4 default-variant normalization
+      and fail-closed model mismatches. The actual RC10 fixture launch still failed
+      during session confirmation and Herdr automatically closed its newly created tab;
+      no managed launch pass is claimed, so a live walk remains owed.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace

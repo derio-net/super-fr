@@ -64,6 +64,69 @@ def test_create_session_persists_explicit_model_and_location(monkeypatch):
     assert kwargs["cwd"] == "/work/alpha"
 
 
+@pytest.mark.parametrize("requested", ["openai/gpt-6.1-sol", "openai/gpt-6.1-sol#default"])
+def test_create_session_accepts_v214_default_variant_response(monkeypatch, requested):
+    import subprocess
+
+    response = (FIXTURES / "session-create-v2.1.4.json").read_text()
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, response, "")
+
+    monkeypatch.setattr(opencode.subprocess, "run", run)
+    assert opencode.create_session(requested, "/work/alpha") == "ses-fixture-v214"
+    args, _kwargs = calls[0]
+    assert args[:4] == ["opencode", "api", "POST", "/api/session"]
+    expected_model = {"providerID": "openai", "id": "gpt-6.1-sol"}
+    if "#" in requested:
+        expected_model["variant"] = "default"
+    assert json.loads(args[5]) == {
+        "model": expected_model,
+        "location": {"directory": "/work/alpha"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("requested", "response"),
+    [
+        (
+            "openai/gpt-6.1-sol",
+            '{"data":{"id":"ses-fixture","model":{"providerID":"other","id":"gpt-6.1-sol","variant":"default"}}}',
+        ),
+        (
+            "openai/gpt-6.1-sol",
+            '{"data":{"id":"ses-fixture","model":{"providerID":"openai","id":"different-model","variant":"default"}}}',
+        ),
+        (
+            "openai/gpt-6.1-sol#default",
+            '{"data":{"id":"ses-fixture","model":{"providerID":"openai","id":"gpt-6.1-sol","variant":"high"}}}',
+        ),
+        (
+            "openai/gpt-6.1-sol",
+            '{"data":{"id":"ses-fixture","model":{"providerID":"openai","id":"gpt-6.1-sol","variant":17}}}',
+        ),
+        (
+            "openai/gpt-6.1-sol",
+            '{"data":{"model":{"providerID":"openai","id":"gpt-6.1-sol","variant":"default"}}}',
+        ),
+        ("openai/gpt-6.1-sol", '{"data":{"id":"ses-fixture","model":"openai/gpt-6.1-sol"}}'),
+        ("openai/gpt-6.1-sol", '{"unexpected":true}'),
+    ],
+)
+def test_create_session_refuses_wrong_or_malformed_confirmation(monkeypatch, requested, response):
+    import subprocess
+
+    monkeypatch.setattr(
+        opencode.subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(args, 0, response, ""),
+    )
+    with pytest.raises(opencode.HerdrError, match="did not confirm"):
+        opencode.create_session(requested, "/work/alpha")
+
+
 def test_create_session_refuses_unconfirmed_model(monkeypatch):
     import subprocess
 
