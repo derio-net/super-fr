@@ -10139,7 +10139,23 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-22-fr-ops-design.md#R15
     levels: {}
-    status: walk-owed
-    notes: the surface ships in this PR; only the post-merge live walk under a real
-      ops profile remains, held by the row's devops gate (spec Verification)
+    status: walked
+    notes: 'Walked on disposable fixture only: real fixture PRs #1 and #4 merged, no-op
+      rerun preserved completed stages, and published RC11 fresh-main status returned
+      DONE (checked) for both fixture ops with marker hashes unchanged. Live checks
+      are separate from archived journal evidence. The fixture literal identity is not
+      production credential/service proof; early adoption-inferred stages are not review
+      evidence; archived USD is unavailable. Original PR #1228 remains gate:devops pending
+      its separately authorized gate pass.'
     verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: gpt-6-luna-fast
+      outcome: pass
+      at: '2026-10-25T00:00:00Z'
+      evidence: 'docs/acceptance/evidence/2026-10-25-fr-ops-live-first-run-1228.md;
+        fixture PR #1 merged 134287446e2301501269ac74a6d1b5dd84157094 and housekeeping
+        PR #4 merged 8a15e2daaa9a536bc4f5899acd72eeeddaa31cf7; clean fresh-main tree
+        matched the PR #4 source tree; published RC11 source cc133a53b3ed6dcaa8f6e6d64e2bb8b04c6c53b8
+        status returned DONE (checked) for both ops, with unchanged marker hashes.'
