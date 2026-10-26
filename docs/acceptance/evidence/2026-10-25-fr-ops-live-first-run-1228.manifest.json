@@ -1,0 +1,194 @@
+{
+  "fixture": {
+    "fresh_main": {
+      "clean": true,
+      "head": "8a15e2daaa9a536bc4f5899acd72eeeddaa31cf7",
+      "tree": "a770ac57fca1aa79656ef09cafae59d1be94e386"
+    },
+    "pr1": {
+      "gate_label": "gate:devops-passed",
+      "merge_commit": "134287446e2301501269ac74a6d1b5dd84157094",
+      "url": "https://github.com/derio-net/super-fr-release-fixtures-20261024/pull/1"
+    },
+    "pr4": {
+      "head": "250e8f57f0b89da53dcb8d9384120b62bb04975c",
+      "merge_commit": "8a15e2daaa9a536bc4f5899acd72eeeddaa31cf7",
+      "tree": "a770ac57fca1aa79656ef09cafae59d1be94e386",
+      "url": "https://github.com/derio-net/super-fr-release-fixtures-20261024/pull/4"
+    },
+    "repository": "derio-net/super-fr-release-fixtures-20261024"
+  },
+  "packet_integrity": {
+    "eight_stage_capture": "pass",
+    "eight_stage_capture_members": 3,
+    "postwalk_packet": "pass",
+    "postwalk_packet_files": 79,
+    "prior_final_manifest_sha256": "9d42571d52184cdea93375d101bd584a725adfd9c0dbab8bd110d312abb18166"
+  },
+  "privacy": "No grant, private source cache, raw forge response, private host path, secret, or runtime cache is included. Private packet artifacts are identified only by bundle-relative path, size, and SHA-256.",
+  "private_packet_hash_anchors": [
+    {
+      "artifact": "completed-eight-stages/capture.json",
+      "bytes": 594,
+      "role": "8-stage capture index; its three members independently verified",
+      "sha256": "0b639e107e0efe5839a49aac226f62280cc09a88d27e5aa57cdad856984d144c"
+    },
+    {
+      "artifact": "completed-eight-stages/terminal.txt",
+      "bytes": 11813,
+      "role": "captured 8-stage terminal transcript; per-invocation identity qualification is explicit",
+      "sha256": "5fbac616989173539e5833e2c5dfa3d5c60b51fc77a1fd89b2a2743448ee9b9d"
+    },
+    {
+      "artifact": "postwalk-pr4-250e8f57/manifest.json",
+      "bytes": 16568,
+      "role": "79-file private audit packet manifest; all entries independently verified",
+      "sha256": "1b614d091a22c9854ca2dbd13565144ecad310dbb3209415dd6a8336c2e11de0"
+    },
+    {
+      "artifact": "postwalk-pr4-250e8f57/terminal/full-w10-p5.txt",
+      "bytes": 11813,
+      "role": "fixture stage transcript including PR #1, stage 5 outcome, gate pass, and PR #4 creation",
+      "sha256": "5fbac616989173539e5833e2c5dfa3d5c60b51fc77a1fd89b2a2743448ee9b9d"
+    },
+    {
+      "artifact": "postwalk-pr4-250e8f57/terminal/full-w10-p5-after-rerun.txt",
+      "bytes": 11920,
+      "role": "no-op rerun transcript",
+      "sha256": "a5cd1ea8ffab713b432077497326d4c9a4d8baf8c7e362774ce948630dcf1504"
+    },
+    {
+      "artifact": "postwalk-pr4-250e8f57/state/rerun-before.json",
+      "bytes": 1007,
+      "role": "rerun pre-state",
+      "sha256": "1bf2451bc185bb02fe9701d5400123eb5c602bbf8c40784e6d1b6fcb695f4941"
+    },
+    {
+      "artifact": "postwalk-pr4-250e8f57/state/rerun-after.json",
+      "bytes": 1027,
+      "role": "rerun post-state",
+      "sha256": "1bb7944e988576800f7d09c69bdd61526e6c48d8d186958a614b4bde04cf8eb1"
+    },
+    {
+      "artifact": "postwalk-pr4-250e8f57/state/rerun-comparison.json",
+      "bytes": 194,
+      "role": "recorded no-change comparisons",
+      "sha256": "0903e532d109c19d96fdd831112c75b06fad97fd9608182d09d3b9b5f17d63e6"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/forge-pr1-current.json",
+      "bytes": 26045,
+      "role": "read-only current forge GET for fixture PR #1",
+      "sha256": "3a339f2080d8c3b13de3a915b532df7be67bb02e1042c936756133eef96996f3"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/forge-pr4-current.json",
+      "bytes": 19718,
+      "role": "read-only current forge GET for fixture PR #4",
+      "sha256": "1ad38b2cec99938be56321e03e8763ca4848c37ee5382ede2df0f17981d924bb"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/forge-original-pr1228-current.json",
+      "bytes": 37376,
+      "role": "read-only current forge GET for original PR #1228",
+      "sha256": "ab4e393da280b356d82e09defdd6d51e309ebd48882dfe93c458102fa30dcccb"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/forge-pr4-head-commit-current.json",
+      "bytes": 5069,
+      "role": "read-only source commit/tree GET for PR #4",
+      "sha256": "d36f8cd6322401ad964fdb41a1a7b96355d70523fd3c49e0d8cefcef92c27566"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/pr4-fresh-main-tree-comparison.json",
+      "bytes": 866,
+      "role": "derived PR #4 source tree vs fresh-main comparison",
+      "sha256": "42f1696b7e09356e2735ee48b3a7c3c5f5d94fd289cdd248798193e9fef35bdc"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/status-readonly-run.txt",
+      "bytes": 4542,
+      "role": "published RC11 fresh-main ops status log",
+      "sha256": "d121a5409a81bedf5d3ab54f4f9258bfa2652a3010977c0e2ff917c7526259c1"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/venv-identity-verification.txt",
+      "bytes": 700,
+      "role": "explicit supported RC11 venv identity/version evidence",
+      "sha256": "f59eab27c3a72c3437c5545e671759cf81e88267879fb17b6a7d8f8358791b63"
+    },
+    {
+      "artifact": "trust-attempt-rc11-20261025-b7c31e4d/original-gate-preview-rc11-no-yes.txt",
+      "bytes": 1315,
+      "role": "no-yes original gate preview held by recorded owed step",
+      "sha256": "f10eb03e5b21537e9a919ea6a737046bc7b7df6a6a5506250b708188ad9523f4"
+    },
+    {
+      "artifact": "final-unified-evidence-manifest.json",
+      "bytes": 10275,
+      "role": "prior private final bundle manifest; hash only, private absolute paths not copied",
+      "sha256": "9d42571d52184cdea93375d101bd584a725adfd9c0dbab8bd110d312abb18166"
+    }
+  ],
+  "repository_files": [
+    {
+      "artifact": "docs/acceptance/evidence/2026-10-25-fr-ops-live-first-run-1228.md",
+      "bytes": 4064,
+      "role": "portable walk evidence",
+      "sha256": "409d8ef1c968e1b2abd0b21a78cb798ed4c913142e4f5e965a73d0786fbb39df"
+    },
+    {
+      "artifact": "docs/superpowers/implemented/journals/specs/2026-10-22-fr-ops.md",
+      "bytes": 47063,
+      "role": "append-only original spec journal including retained owed and #1233 finding",
+      "sha256": "3384b38cc2e5ccc06feaca31813698073c3e830887911d7c907ee3aa3f0fcb4b"
+    },
+    {
+      "artifact": "docs/acceptance/matrix.yaml",
+      "bytes": 591694,
+      "role": "acceptance registry after fr acceptance set-status",
+      "sha256": "1d26755e99beff8774b7ddfa605925c247f1c1ea2c94689e2f9696a81bc08e7f"
+    },
+    {
+      "artifact": "docs/acceptance/report_local.html",
+      "bytes": 775961,
+      "role": "generated local report",
+      "sha256": "597c06ef685d87aaf06283d2b7586153c43c8186bb81c495f0493f56398bef3d"
+    },
+    {
+      "artifact": "docs/acceptance/report_linked.html",
+      "bytes": 963939,
+      "role": "generated linked HTML report",
+      "sha256": "6110dfe22e397c4fb29ec275fd2fdfb434c9e3b35436959599f9fdbde154f65f"
+    },
+    {
+      "artifact": "docs/acceptance/report_linked.md",
+      "bytes": 752240,
+      "role": "generated linked Markdown report",
+      "sha256": "18271ac576a368aab5e300658bf4efa7541569b93e0827f2db2ad3216dc3fa34"
+    }
+  ],
+  "result_limits": {
+    "adoption": "adoption-inferred early states are not review evidence",
+    "cost": "usd null / usd_source none; cost unavailable",
+    "credential_scope": "fixture identity is literal local test data; no production credential or service authorization evidence",
+    "issue_1233": "historical owed/finding reference retained; issue not closed",
+    "journal_vs_status": "live marker checks and archived op-trust-2 journal evidence are distinct; no claim that status reads/folds the journal",
+    "live_status": "both disposable fixture ops returned DONE (checked); marker hashes unchanged",
+    "original_pr1228": "gate:devops remains; no gate pass or merge claimed/performed by this closeout"
+  },
+  "runtime_attribution": {
+    "fixture_ops_profile_install_pin": "v6.0.0-rc.7 (published tag; profile configuration)",
+    "fresh_main_live_status": {
+      "identity_verified_by": "explicit VIRTUAL_ENV matching sys.prefix; FR_SKIP_IDENTITY unset",
+      "source_commit": "cc133a53b3ed6dcaa8f6e6d64e2bb8b04c6c53b8",
+      "version": "6.0.0-rc.11"
+    },
+    "initial_eight_stage_host_cli_identity": "not independently captured per invocation; no stronger identity claim made",
+    "walk_harness": "opencode",
+    "walk_model": "gpt-6-luna-fast (exact recorded model key in archived usage; no provider prefix inferred)"
+  },
+  "schema_version": 1,
+  "scope": "public evidence index for the disposable fr-ops live walk and original PR #1228 closeout proposal",
+  "walk_date_utc": "2026-10-25"
+}
