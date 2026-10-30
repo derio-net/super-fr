@@ -194,3 +194,85 @@ def test_existing_final_symlink_is_not_followed_or_replaced(tmp_path):
     assert final.is_symlink()
     assert victim.read_text() == "operator work"
     assert list(directory.iterdir()) == [final]
+
+
+@pytest.mark.parametrize("row,column", [(63, 141), (63, 142), (64, 0), (0, 161)])
+def test_trigger_span_identifies_exact_crop_boundary(row, column):
+    text = "permission required"
+    screen = "\n" * row + "x" * column + text
+    reason = opencode.input_reason(screen)
+    assert reason == "unknown-dialog-or-background"
+    evidence = opencode.refusal_evidence(screen, reason)
+    assert evidence["predicate_span"] == {
+        "start": [row, column],
+        "end": [row, column + len(text)],
+    }
+    assert evidence["predicate_outside_capture"] == (row >= 64 or column + len(text) > 160)
+    assert evidence["predicate"] == "permission-required"
+
+
+@pytest.mark.parametrize("prefix", ["ß", "İ", "ßİ", "ß\nİ", "ß\r\nİ", "\x1b[31mßİ\x1b[0m"])
+def test_casefold_expansion_maps_back_to_original_character_coordinates(prefix):
+    screen = prefix + "plugin failed permission required"
+    reason = opencode.input_reason(screen)
+    evidence = opencode.refusal_evidence(screen, reason)
+    clean = opencode._ANSI.sub("", prefix)
+    row = clean.count("\n")
+    col = len(clean.rsplit("\n", 1)[-1])
+    assert reason == "unknown-dialog-or-background"
+    assert evidence["predicate"] == "plugin-error-or-failed"
+    assert evidence["predicate_span"] == {"start": [row, col], "end": [row, col + 13]}
+    assert evidence["predicate_outside_capture"] is False
+
+
+def test_span_reports_actual_text_before_spinner_branch_and_no_secret_payload():
+    screen = (
+        "⠋ Task secret\n" + metadata_capture("ready") + "\nherdr-agent-state.js sk-secret failed"
+    )
+    reason = opencode.input_reason(screen)
+    assert reason == "unknown-dialog-or-background"
+    evidence = opencode.refusal_evidence(screen, reason)
+    assert evidence["predicate"] == "agent-state-plugin"
+    assert evidence["predicate_span"]["start"][1] == 0
+    assert "sk-secret" not in json.dumps(evidence)
+    assert len(json.dumps(evidence, ensure_ascii=True).encode()) <= refusal.MAX_BYTES
+
+
+def test_spinner_span_uses_original_casefold_coordinates_and_not_later_category():
+    screen = "ßİ ⠋ Task private\n" + metadata_capture("ready")
+    reason = opencode.input_reason(screen)
+    assert reason == "unknown-dialog-or-background"
+    evidence = opencode.refusal_evidence(screen, reason)
+    assert evidence["predicate"] == "braille-task"
+    assert evidence["predicate_span"] == {"start": [0, 3], "end": [0, 9]}
+
+
+def test_expansion_inside_variable_plugin_pattern_emits_only_covering_span():
+    text = "herdr-agent-state.js ßİ secret failed"
+    reason = opencode.input_reason(text)
+    evidence = opencode.refusal_evidence(text, reason)
+    assert reason == "unknown-dialog-or-background"
+    assert evidence["predicate_span"] == {"start": [0, 0], "end": [0, len(text)]}
+    assert "secret" not in json.dumps(evidence)
+
+
+def test_maximum_multibyte_projection_with_outside_span_still_fits_json_bound():
+    screen = ("密" * 160 + "\n") * 64 + "ßİ permission required"
+    reason = opencode.input_reason(screen)
+    evidence = opencode.refusal_evidence(screen, reason)
+    assert evidence["predicate_span"] == {"start": [64, 3], "end": [64, 22]}
+    assert evidence["predicate_outside_capture"] is True
+    encoded = json.dumps(evidence, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    assert len(encoded) <= refusal.MAX_BYTES
+    assert "permission required" not in encoded.decode()
+
+
+@pytest.mark.parametrize("row,column", [(63, 154), (63, 155), (64, 0), (0, 161)])
+def test_task_trigger_span_at_crop_boundaries(row, column):
+    screen = "\n" * row + "x" * column + "⠋ Task\n" + metadata_capture("ready")
+    reason = opencode.input_reason(screen)
+    assert reason == "unknown-dialog-or-background"
+    evidence = opencode.refusal_evidence(screen, reason)
+    assert evidence["predicate"] == "braille-task"
+    assert evidence["predicate_span"] == {"start": [row, column], "end": [row, column + 6]}
+    assert evidence["predicate_outside_capture"] == (row >= 64 or column + 6 > 160)

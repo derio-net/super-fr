@@ -33,6 +33,27 @@ _DIALOG = re.compile(
     r"(?P<failed_plugin>failed plugin)|(?P<plugin_export>plugin must export)|"
     r"(?P<agent_state_plugin>herdr-agent-state\.js.{0,80}(?:failed|error))"
 )
+_TASK = re.compile(r"[\u2800-\u28ff].*Task", re.I)
+
+
+def _predicate_span(text: str, match: re.Match[str]) -> dict[str, list[int]]:
+    """Map casefolded match offsets to covering original character coordinates."""
+    folded_offset = 0
+    start = None
+    end = 0
+    for index, char in enumerate(text):
+        folded_offset += len(char.casefold())
+        if start is None and folded_offset > match.start():
+            start = index
+        if folded_offset >= match.end():
+            end = index + 1
+            break
+    assert start is not None
+
+    def coordinate(offset: int) -> list[int]:
+        return [text.count("\n", 0, offset), offset - text.rfind("\n", 0, offset) - 1]
+
+    return {"start": coordinate(start), "end": coordinate(end)}
 
 
 def refusal_evidence(screen: str, reason: str) -> dict[str, Any]:
@@ -44,11 +65,22 @@ def refusal_evidence(screen: str, reason: str) -> dict[str, Any]:
     """
     lines = [_ANSI.sub("", line).rstrip() for line in screen.splitlines()]
     predicate = "other"
+    span = None
     if reason == "unknown-dialog-or-background":
-        match = _DIALOG.search("\n".join(lines).casefold())
-        predicate = (
-            match.lastgroup.replace("_", "-") if match and match.lastgroup else "braille-task"
-        )
+        text = "\n".join(lines)
+        joined = text.casefold()
+        # Exactly the guard's branch order: any text predicate wins before Task,
+        # even when a spinner occurs earlier on the frame. Never use re.I in
+        # place of the guard's casefolding for text predicates.
+        match = _DIALOG.search(joined)
+        if match and match.lastgroup:
+            predicate = match.lastgroup.replace("_", "-")
+        else:
+            match = _TASK.search(joined)
+            if match:
+                predicate = "braille-task"
+        if match:
+            span = _predicate_span(text, match)
     known_reasons = {
         "unknown-dialog-or-background",
         "unknown-layout",
@@ -59,6 +91,11 @@ def refusal_evidence(screen: str, reason: str) -> dict[str, Any]:
     return {
         "classification": reason if reason in known_reasons else "other",
         "predicate": predicate,
+        "predicate_span": span,
+        # Both current regexes match within one normalized line (dot is not DOTALL).
+        "predicate_outside_capture": (
+            span["start"][0] >= 64 or span["end"][1] > 160 if span else None
+        ),
         "frame": [
             "".join(char if char in " ┃╹▀" else "·" for char in line[:160]) for line in lines[:64]
         ],
@@ -160,7 +197,7 @@ def input_reason(screen: str) -> str | None:
                 return "draft"
     # Known blank prompt layout only; arbitrary overlay controls or active spinners
     # fail closed. Completed ✓ task history does NOT mean active background work.
-    if re.search(r"[\u2800-\u28ff].*Task", joined, re.I):
+    if _TASK.search(joined):
         return "unknown-dialog-or-background"
     return None
 
