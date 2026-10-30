@@ -236,7 +236,7 @@ def operation(tmp_path, monkeypatch, native_herdr_cache):
         def __init__(self):
             self.calls = []
 
-        def __call__(self, args):
+        def __call__(self, args, **kwargs):
             self.calls.append(args)
             verb = " ".join(args[:2])
             if self.failure == verb:
@@ -390,8 +390,8 @@ def test_synthetic_foreground_shell_timeout_is_bounded(operation, monkeypatch):
     d, fake = operation
     original = fake.__call__
 
-    def stuck(args):
-        result = original(args)
+    def stuck(args, **kwargs):
+        result = original(args, **kwargs)
         if args[:2] == ["pane", "send-keys"]:
             fake.phase = "source"
         return result
@@ -409,8 +409,8 @@ def test_synthetic_exit_dialog_is_left_untouched(operation, monkeypatch):
     d, fake = operation
     original = fake.__call__
 
-    def dialog(args):
-        answer = original(args)
+    def dialog(args, **kwargs):
+        answer = original(args, **kwargs)
         if args[:2] == ["pane", "send-keys"]:
             fake.phase = "source"
             fake.prompt_screen = json.loads((FIXTURES / "dialog.json").read_text())["raw"]

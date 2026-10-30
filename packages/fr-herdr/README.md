@@ -18,7 +18,20 @@ Descriptors live in `~/.cache/fr/herdr` (`FR_HERDR_CACHE_DIR` overrides), keyed 
 the inherited server socket and pane. Missing, corrupt or non-active descriptors,
 busy/self/excluded panes, drafts, overlays, unknown processes/models and unsupported
 input layouts are skipped without input. Observation supports the captured OpenCode
-1.18.35 default-theme full TUI, not arbitrary versions/themes/mini mode.
+1.18.35 and 2.1.4 default-theme full TUI captures, not arbitrary versions/themes/mini mode.
+
+Before the first brief, OpenCode readiness waits within the existing 30-second
+budget for unknown startup layout or the narrowly captured empty V2 metadata frame
+(grey border, no agent/model row, default new-session title and known footer).
+Each native observation receives only the remaining budget. Readiness arriving at
+or after the deadline is rejected, and expiry prevents further observations.
+That frame is **never accepted as ready**. Every observation rechecks the live
+identity, selected session/model, `--auto`, cwd and status; a changed foreground PID
+refuses. Only the unchanged strict input parser can admit submission. Drafts,
+visible overlays and complete-but-grey prompts still refuse; timeout sends no
+brief. Launch keeps `--no-focus`; no input or focus action settles the UI.
+This handles a known premature startup refusal, not proof of a historical failure's
+cause or a completed client-live walk.
 
 An OS-backed nonblocking pane lock excludes concurrent mutations.
 Before input, an independent process verifies that the filesystem actually

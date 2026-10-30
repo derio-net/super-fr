@@ -40,7 +40,7 @@ class _Herdr:
         self.launch: dict[str, Any] = {}
         self.cwd = "/work/alpha"
 
-    def __call__(self, args: list[str]) -> dict[str, Any]:
+    def __call__(self, args: list[str], **kwargs: Any) -> dict[str, Any]:
         self.calls.append(list(args))
         if args[:2] in (["tab", "create"], ["workspace", "create"]) and "--cwd" in args:
             self.cwd = args[args.index("--cwd") + 1]
@@ -408,12 +408,12 @@ def _refusing(herdr: _Herdr, refusals: dict[str, list[herdr_runner.HerdrError]])
     """`herdr` with the first calls of each verb (`"agent start"`) raising its errors."""
     left = {verb: list(errors) for verb, errors in refusals.items()}
 
-    def fake(args: list[str]) -> dict[str, Any]:
+    def fake(args: list[str], **kwargs: Any) -> dict[str, Any]:
         errors = left.get(" ".join(args[:2]))
         if errors:
             herdr.calls.append(list(args))
             raise errors.pop(0)
-        return herdr(args)
+        return herdr(args, **kwargs)
 
     return fake
 

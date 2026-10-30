@@ -4,7 +4,9 @@ Real diagnostic: title readiness at +4.406s, eligible rendered textarea at +9.74
 All three entry points must wait before a single prompt; no uncertain replay.
 """
 
-import itertools
+import base64
+import gzip
+import hashlib
 import json
 from pathlib import Path
 
@@ -24,8 +26,13 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
     monkeypatch.setattr(runner, "stable_checkout", lambda p: p)
     monkeypatch.setattr(replacement, "stable_checkout", lambda p: p)
     monkeypatch.setattr(managed, "reconstruct", lambda d: "HOLD, never replay the goal")
-    monkeypatch.setattr(opencode, "_sleep", lambda seconds: None)
-    monkeypatch.setattr(opencode, "_clock", lambda counter=itertools.count(): next(counter))
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(opencode, "_sleep", sleep)
+    monkeypatch.setattr(opencode, "_clock", lambda: now[0])
     monkeypatch.setattr(
         opencode,
         "create_session",
@@ -53,13 +60,15 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
         model = d.model
         calls = []
         refusal_screen = None
+        startup_screen = ""
+        ready_screen = screen
         wrong_model = False
 
         def __init__(self):
             self.calls = []
             self.argv = ["--model", self.model]
 
-        def __call__(self, args):
+        def __call__(self, args, **kwargs):
             self.calls.append(args)
             if args[:2] == ["tab", "create"]:
                 return created
@@ -100,9 +109,9 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
                     return {
                         "raw": self.refusal_screen
                         if self.refusal_screen is not None
-                        else ""
+                        else self.startup_screen
                         if self.reads < 3
-                        else screen
+                        else self.ready_screen
                     }
                 return {"raw": screen}
             if args[:2] == ["pane", "send-keys"]:
@@ -197,3 +206,138 @@ def test_startup_readiness_refuses_unsafe_or_unrendered_target_without_prompt(ti
         opencode.wait_ready(pending)
     assert managed.load(d.pane) == pending
     assert not any(c[:2] in (["agent", "prompt"], ["pane", "send-keys"]) for c in fake.calls)
+
+
+def metadata_capture(kind):
+    name = "startup-metadata" if kind == "startup" else "metadata-ready"
+    data = json.loads((FIXTURES / f"opencode/v2-2.1.4-{name}.json").read_text())
+    raw = gzip.decompress(base64.b64decode(data["raw_gzip_base64"]))
+    assert hashlib.sha256(raw).hexdigest() == data["sha256"]
+    return raw.decode()
+
+
+def test_captured_metadata_sequence_never_admits_the_incomplete_screen():
+    assert opencode.input_reason(metadata_capture("startup")) == "dialog-or-unfocused"
+    assert opencode.input_reason(metadata_capture("ready")) is None
+
+
+def test_dispatch_waits_for_captured_startup_metadata_before_single_submission(timeline):
+    d, fake = timeline
+    fake.startup_screen = metadata_capture("startup")
+    fake.ready_screen = metadata_capture("ready")
+    item = run_item(
+        "example/alpha",
+        "batch-test",
+        harness="opencode",
+        model=d.model,
+        checkout=d.checkout,
+        branch=d.branch,
+        brief="HOLD",
+    )
+    assert runner.HerdrRunner("w2").dispatch(item) == d.pane
+    assert fake.reads == 3
+    assert sum(c[:2] == ["agent", "prompt"] for c in fake.calls) == 1
+    create = next(c for c in fake.calls if c[:2] == ["tab", "create"])
+    assert "--no-focus" in create
+    start = next(c for c in fake.calls if c[:2] == ["agent", "start"])
+    assert start[start.index("--") + 1 :] == ["--session", "ses-openai-old", "--auto"]
+    assert not any(c[:2] in (["pane", "send-keys"], ["agent", "focus"]) for c in fake.calls)
+
+
+def test_permanent_captured_startup_metadata_times_out_without_submission(timeline):
+    d, fake = timeline
+    fake.phase = "startup"
+    fake.refusal_screen = metadata_capture("startup")
+    pending = d.model_copy(update={"checkpoint": "prepared"})
+    managed.save(pending)
+    with pytest.raises(runner.HerdrError, match="rendered-input-timeout; no prompt sent"):
+        opencode.wait_ready(pending, run=fake)
+    assert 1 < fake.reads <= 31
+    assert managed.load(d.pane) == pending
+    assert not any(c[:2] == ["agent", "prompt"] for c in fake.calls)
+
+
+@pytest.mark.parametrize("when", ["initial", "after-pending"])
+@pytest.mark.parametrize("unsafe", ["draft", "permission", "palette", "unknown", "resolved-grey"])
+def test_grey_startup_with_draft_or_overlay_is_a_refusal(timeline, unsafe, when):
+    d, fake = timeline
+    fake.phase = "startup"
+    startup = metadata_capture("startup")
+    if unsafe == "draft":
+        # Synthetic negative: insert a draft in the real grey prompt's blank input row.
+        screen = startup.replace("┃", "┃  unsent draft", 1)
+    elif unsafe == "permission":
+        screen = startup.replace("New session -", "permission required · New session -")
+    elif unsafe == "palette":
+        # The real captured Commands overlay replaces the upper blank viewport;
+        # preserve the incomplete grey prompt below it. This composition is synthetic.
+        dialog = json.loads((FIXTURES / "opencode/dialog.json").read_text())["raw"]
+        rows = startup.splitlines()
+        rows[10] = dialog.splitlines()[0]
+        screen = "\n".join(rows)
+    elif unsafe == "unknown":
+        screen = startup.replace("New session -", "Unrecognized overlay · New session -")
+    else:
+        screen = metadata_capture("ready").replace("38;2;92;156;245m", "38;2;72;72;72m")
+    original = fake.__call__
+
+    def observe(args, **kwargs):
+        answer = original(args, **kwargs)
+        if args[:2] == ["pane", "read"]:
+            return {"raw": startup if when == "after-pending" and fake.reads == 1 else screen}
+        return answer
+
+    with pytest.raises(managed.ManagedError):
+        opencode.wait_ready(d.model_copy(update={"checkpoint": "prepared"}), run=observe)
+    assert fake.reads == (2 if when == "after-pending" else 1)
+    assert not any(c[:2] == ["agent", "prompt"] for c in fake.calls)
+
+
+@pytest.mark.parametrize(
+    "change", ["name", "status", "readiness", "model", "cwd", "session", "auto", "pid"]
+)
+def test_metadata_wait_revalidates_guards_after_each_pending_observation(timeline, change):
+    d, fake = timeline
+    d = d.model_copy(update={"session": "ses-pinned"})
+    fake.argv = ["--session", d.session, "--auto"]
+    fake.phase = "startup"
+    fake.startup_screen = metadata_capture("startup")
+    original = fake.__call__
+
+    def observe(args, **kwargs):
+        answer = original(args, **kwargs)
+        if fake.reads >= 1:
+            if args[:2] == ["agent", "list"]:
+                agent = answer["result"]["agents"][0]
+                if change == "name":
+                    agent["name"] = "different-name"
+                elif change == "status":
+                    agent["agent_status"] = "working"
+                elif change == "readiness":
+                    agent["interactive_ready"] = False
+            if args[:2] == ["pane", "process-info"]:
+                proc = answer["result"]["process_info"]["foreground_processes"][0]
+                if change == "model":
+                    proc["argv"] = ["opencode", "--model", "other/model"]
+                elif change == "cwd":
+                    proc["cwd"] = "/other"
+                elif change == "session":
+                    proc["argv"] = ["opencode", "--session", "ses-other", "--auto"]
+                elif change == "auto":
+                    proc["argv"] = ["opencode", "--session", "ses-pinned"]
+                elif change == "pid":
+                    proc["pid"] = 3
+        return answer
+
+    with pytest.raises(managed.ManagedError, match="mismatch|unknown or changed|process changed"):
+        opencode.wait_ready(d.model_copy(update={"checkpoint": "prepared"}), run=observe)
+    assert fake.reads == 1  # The second observation refuses before reading another screen.
+    assert not any(c[:2] == ["agent", "prompt"] for c in fake.calls)
+
+
+def test_incomplete_metadata_is_not_active_restart_admission(timeline):
+    d, fake = timeline
+    fake.phase = "startup"
+    fake.refusal_screen = metadata_capture("startup")
+    with pytest.raises(managed.ManagedError, match="dialog-or-unfocused"):
+        opencode.eligible(d, set(), run=fake, restart=False)

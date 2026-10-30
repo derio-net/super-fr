@@ -1,0 +1,58 @@
+<!-- fr:journal-schema=3 -->
+# Journal: 2026-10-30-opencode-startup-metadata-ready
+
+<!-- fr:journal kind=hypothesis scope=debug id=6e13d45851f3 created=2026-10-30T13:23:21+00:00 -->
+### 6e13d45851f3 · hypothesis · Current main aborts unresolved startup metadata before bounded readiness can wait
+
+Fresh origin/main bf59f77a946c retains RC11 behavior: wait_ready retries unknown-layout only and propagates dialog-or-unfocused immediately. Private paired captures of one unchanged no-focus, --auto diagnostic client show blank metadata/grey border then complete Build/model metadata and strict-parser acceptance. This establishes the premature classification mechanism, not the original service failure cause. Investigate a full-shape startup-only predicate, never accepting grey as ready; reject any draft, overlay or identity/status change. Existing 30-second budget remains finite; 360 seconds was the observation interval, not measured latency. No live allocation or dispatch is authorized. Independent review is pending.
+
+<!-- fr:journal kind=repro scope=debug id=a23b8b67a8d9 created=2026-10-30T13:37:45+00:00 -->
+### a23b8b67a8d9 · repro · RED: captured startup is refused before transition or second-observation guards
+
+Focused test_opencode_rendered_readiness.py run before production edits: 12 failed, 15 passed. The captured incomplete-metadata to ready sequence fails at the first dialog-or-unfocused refusal; permanent pending cannot reach its timeout and later unsafe states are never reobserved. Both sanitized lossless viewport fixture hashes verified; the unmodified input parser rejects the initial viewport and accepts the later viewport. Negative tests compose explicit drafts/known captured overlay/unknown overlay with the real startup screen; compositions are labeled synthetic. No live API, terminal control or model call in reproduction.
+
+<!-- fr:journal kind=root-cause scope=debug id=5a8209ef0930 created=2026-10-30T14:12:49+00:00 -->
+### 5a8209ef0930 · root-cause · Confirmed classification gap: known incomplete metadata frame aborted startup wait
+
+Current main propagated dialog-or-unfocused immediately after generic title readiness; only unknown-layout entered its bounded wait. The paired diagnostic captures and RED replay establish that a narrow empty grey metadata frame can later become strict-parser-ready without controller input or focus. This identifies a premature startup classification, not the historical service/root-cause or a measured initialization duration. The fix recognizes only the full captured empty-layout fingerprint as pending, preserves the strict parser, keeps the existing 30-second deadline and revalidates identity/session/auto/cwd/status and foreground PID each observation.
+
+<!-- fr:journal kind=finding scope=debug id=5da3a0439361 created=2026-10-30T14:12:56+00:00 state=fixed -->
+### 5da3a0439361 · finding [fixed] · Bounded metadata wait passes focused regressions; live walk and independent review remain owed
+
+RED before production edits: 12 failed/15 passed. Added PID continuity RED: 1 failed/7 passed, then GREEN. Latest same-source verification: readiness 30, restart 57, runner 90, replacement 35, replacement observer 15 and directly relevant recovery autonomy/eligible cases 3 all pass (230 total). Ruff and scoped mypy pass. Full six-module run timed out; later full recovery module also hit its 90-second cap during unrelated cursor cases, without printed failure. Earlier replacement attempt timed out in unchanged conftest CLI import; separating that import from pytest allowed its full current-code module to pass with all fixtures/guards enabled. No historical timeout is relabeled PASS. Full suite and installed/live verification were not run. Public fixtures retain sanitized lossless viewports; synthetic draft/overlay negatives are labeled. Independent code review has NOT occurred; no review PASS, runtime install, model turn, live launch, batch recovery or issue closeout is claimed.
+
+<!-- fr:journal kind=review scope=debug id=9e32a9a9e5a2 created=2026-10-30T16:09:10+00:00 -->
+### 9e32a9a9e5a2 · review · Independent review REQUEST CHANGES at PR 1254 head 2a3af0105c834f2f15baa647a5d003f0d59d6c76
+
+Independent report dated 2026-10-30T16:04:43Z requests changes for blocking R1 P2. Shared poll checks expiry after unsuccessful checks and accepts late success; native observations individually retain a 60-second timeout. Reviewer reproduced pending completion at 29.5s and late readiness at 31.5s being admitted under a 30-second startup budget. Other reviewed guard/parser/privacy/matrix invariants were supported; this is not review approval. Re-review remains required after resolution.
+
+<!-- fr:journal kind=finding scope=debug id=r1-startup-deadline created=2026-10-30T16:09:13+00:00 state=open review_scope=in -->
+### r1-startup-deadline · finding [open] (reviewer: in scope) · R1: enforce the total startup admission deadline before and after each observation
+
+RED against reviewed head: 11 failed / 1 passed in deterministic startup-deadline tests. Covers overslept pending frame, zero/expired budget, identity/process/screen responses completing at or after 30.0s, native remaining-time propagation, and a blocking native timeout. A response at 29.999s is the positive control. Use a startup-local monotonic deadline and remaining-time subprocess bounds; do not alter shared poll semantics or strict input/identity guards. No live command or model request in the reproduction.
+
+<!-- fr:journal kind=finding scope=debug id=r1-startup-deadline-resolved created=2026-10-30T16:14:45+00:00 state=fixed resolves=r1-startup-deadline -->
+### r1-startup-deadline-resolved · finding [fixed] · resolves r1-startup-deadline: R1: enforce the total startup admission deadline before and after each observation
+
+Author resolution of independent blocking R1 (not review approval): startup now owns a monotonic deadline, checks remaining time before and after every identity/status/process/screen call and before accepting a strict-ready result, rejects equality at the deadline, and sleeps at most the remaining budget. Native herdr calls receive remaining seconds through an optional timeout keyword; existing default remains 60 seconds outside this startup path and shared poll AST is unchanged. RED 11 failed/1 passed; GREEN deadline plus full readiness 42 passed. Fresh neighbor runs: restart 57, runner 90 (including default native timeout semantics), replacement 35, observer 15, relevant recovery 3: 242 scoped passes total. Ruff and mypy pass. Injected transports now accept the timeout keyword; test transports updated without disabling guards; clocks advance explicitly with elapsed work/sleep, not reads. Prior timeouts and full-suite/live limits remain disclosed. Independent re-review of the new head is REQUIRED; no install/live operation/merge is claimed.
+
+<!-- fr:journal kind=finding scope=debug id=ad17f0cbfa60 created=2026-10-30T17:03:28+00:00 state=fixed -->
+### ad17f0cbfa60 · finding [fixed] · CI follow-up: adapt only the two scenario transports to the bounded timeout contract
+
+CI at e3cb6e9c9 failed the herdr-opencode and triage-closed-recovery integration scenarios because their injected transports rejected timeout=. Production deadline code is unchanged: all 18 fr-herdr Python file hashes match the frozen reviewed head. Local RED reproduced both exact TypeErrors in the actual two pytest nodes. GREEN after fixture-only changes: 2 integration scenarios passed in 10.97s, plus 42 deadline/readiness tests in 1.88s; Ruff and diff check pass. Scenario transports now explicitly accept timeout, assert positive budgets no greater than 30 seconds, whitelist only observation commands, assert ordered/non-increasing observation budgets, single prompt per launch and no observations during repair. Existing identity/HOLD/persistence/uptake assertions remain intact. Offline harness detail: unmodified candidate-install --refresh conflicts with UV_OFFLINE; a private functional copy omitting only --refresh was selected by the test module INSTALL constant. Repository installer/test harness source was not edited; all installed candidate Python files match frozen production source, and original operator-link guards ran. The original forced-offline setup error is retained as an error, not counted as RED. Prior 242 passes remain evidence for the earlier head; independent production R1 review is still pending. No runtime/global install, native UI/model operation, issue closeout or live retry occurred.
+
+<!-- fr:journal kind=finding scope=debug id=a5f14f643100 created=2026-10-30T17:04:47+00:00 state=fixed -->
+### a5f14f643100 · finding [fixed] · Correct candidate file-count wording without changing verification outcomes
+
+The preceding scenario follow-up record counted candidate-prefix0 and candidate-prefixcurrent aliases separately: 18 successful installed-file comparisons cover 9 DISTINCT fr-herdr Python files, not 18 distinct files. All 9 production source hashes remain identical to frozen head e3cb6e9c9, and both prefix aliases matched them. The 2 actual integration-node passes and 42 unit passes are unchanged. This is an append-only correction of receipt wording, not new product code, a new test run or independent review approval.
+
+<!-- fr:journal kind=review scope=debug id=4db6d838bd64 created=2026-10-30T17:09:52+00:00 -->
+### 4db6d838bd64 · review · Genuine independent R1 and final scenario-delta reviews PASS; CI and live obligations remain separate
+
+Independent review by reviewer session ses_e890f0cf0ffemnoL14M1Y8y817, identified by the coordinator; the retained actual reports and receipt hashes were read and verified. This records the reviewer dispositions, not an author-generated approval or a new backend attestation.
+
+R1 production re-review PASS at e3cb6e9c9ab7ec9a6ae056b7bfa0b8b247813015: the total startup deadline and native remaining-time bounds passed 15 independent in-memory boundary cases. Exact expiry refuses. Strict parser/shared poll/identity guards remain unchanged; OS process teardown is not a hard-real-time guarantee. [R1 report](ROOT/1205/product-startup-fix-review-20261030/r1-rereview-e3cb6e9/report.md) and [receipt](ROOT/1205/product-startup-fix-review-20261030/r1-rereview-e3cb6e9/proof-receipt.json), SHA-256 74561d60e2a82c12bdfb50ce3e78faab054acc946629fc3020b1553e16a3bac6.
+
+Final scenario-adapter delta PASS at exact head 753601b78cfbe82b2a6004ec99027f4271da4719, timestamp 2026-10-30T17:07:38.193773Z: two fixture files plus append-only journal, no production changes. Nine distinct production modules and 33 evidence entries verified; candidate prefix aliases were not distinct installs. [Final report](ROOT/1205/product-startup-fix-review-20261030/scenario-delta-753601b/report.md) and [receipt](ROOT/1205/product-startup-fix-review-20261030/scenario-delta-753601b/proof-receipt.json), SHA-256 6efc0e1450a27efd2ec5553c46c0e44026014dbb128f444adb9f7bc4506ebb8a. ROOT denotes the retained private coordination-artifact root; these are private receipt links, not repository-hosted evidence.
+
+The earlier REQUEST CHANGES at 2a3af0105c834f2f15baa647a5d003f0d59d6c76 and author R1 resolution remain append-only history. Review PASS is scoped to the R1 code and final adapter delta only. CI is a separate pending obligation, not inferred from review. No installed/live trial, full unmodified candidate-installer proof, reviewer full-suite run, overall #1205/#1195 pass, merge/install/allocation/gate/release authority or diagnostic cleanup is claimed. Offline scenario evidence retains the private installer omission of --refresh and its limits. All 561 matrix statuses/walk metadata stay unchanged. This journal-only record grants no new effects.
