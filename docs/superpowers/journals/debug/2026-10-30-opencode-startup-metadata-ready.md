@@ -25,3 +25,8 @@ RED before production edits: 12 failed/15 passed. Added PID continuity RED: 1 fa
 ### 9e32a9a9e5a2 · review · Independent review REQUEST CHANGES at PR 1254 head 2a3af0105c834f2f15baa647a5d003f0d59d6c76
 
 Independent report dated 2026-10-30T16:04:43Z requests changes for blocking R1 P2. Shared poll checks expiry after unsuccessful checks and accepts late success; native observations individually retain a 60-second timeout. Reviewer reproduced pending completion at 29.5s and late readiness at 31.5s being admitted under a 30-second startup budget. Other reviewed guard/parser/privacy/matrix invariants were supported; this is not review approval. Re-review remains required after resolution.
+
+<!-- fr:journal kind=finding scope=debug id=r1-startup-deadline created=2026-10-30T16:09:13+00:00 state=open review_scope=in -->
+### r1-startup-deadline · finding [open] (reviewer: in scope) · R1: enforce the total startup admission deadline before and after each observation
+
+RED against reviewed head: 11 failed / 1 passed in deterministic startup-deadline tests. Covers overslept pending frame, zero/expired budget, identity/process/screen responses completing at or after 30.0s, native remaining-time propagation, and a blocking native timeout. A response at 29.999s is the positive control. Use a startup-local monotonic deadline and remaining-time subprocess bounds; do not alter shared poll semantics or strict input/identity guards. No live command or model request in the reproduction.
