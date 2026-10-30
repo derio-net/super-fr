@@ -3929,10 +3929,11 @@ rows:
       synthetic registration-control regression for repository super-fr.development
       plus global super-fr: explicit -super-fr selects source setup once in either discovery
       order and repo-only use, including distinct module paths; real source edit gate
-      denies a base edit. This is not a real 2.1.4 server-loader walk. Full isolated
-      Bun run: 241 pass, 1 existing marker test fails because it assumes no container
-      evidence inside a devcontainer. Global/repo registration on a real server remains
-      unwalked for the new bytes; external RC14 failure evidence is in the debug journal.'
+      denies a base edit. This is not a real 2.1.4 server-loader walk. Final isolated
+      Bun run independently confirmed: 243 pass, 1 existing marker test fails because
+      it assumes no container evidence inside a devcontainer. Global/repo registration
+      on a real server remains unwalked for the new bytes; external RC14 failure evidence
+      is in the debug journal.'
     verify: candidate
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-edit-gate
