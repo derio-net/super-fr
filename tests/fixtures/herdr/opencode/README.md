@@ -63,3 +63,29 @@ ID is synthetic. OpenCode normalized the requested `openai/gpt-6.1-sol` referenc
 by reading the persisted session record through `GET /api/session/{sessionID}`.
 Negative tests for wrong provider/model, a mismatched explicit variant, malformed
 variant types, and malformed response envelopes are synthetic.
+
+# OpenCode 2.1.4 incomplete metadata and later ready viewport (2026-10-30)
+
+`v2-2.1.4-startup-metadata.json` and `v2-2.1.4-metadata-ready.json` retain full
+gzip/base64 viewports from two authorized reads of the same diagnostic client.
+The client remained attached to the same existing session, with `--auto`, in a
+no-focus Herdr tab. No prompt, key or focus command was issued by the controller
+between the reads. These are not the original failed-launch screen.
+
+Before publication, private paths, the default title's timestamp and the editor
+label were replaced with same-width fictional values. All ANSI sequences and row
+geometry are retained; each SHA-256 covers the decoded, redacted bytes. The first
+viewport has a grey border and blank agent/model metadata; the later viewport
+shows `Build auto` and the selected model with the expected blue border. The
+roughly 360-second interval between samples is **not** initialization latency.
+
+At OpenCode v2.1.4 commit `68bc26b7da1990ce10ffecfbc1e09eb13aa5d824`,
+`packages/tui/src/component/prompt/index.tsx` blends the border colour from agent
+metadata and its fade-in, not directly from OS or input-widget focus. Catalog or
+display resolution is consistent with this pair but is not a proven historical
+root cause. The production input parser still rejects the first viewport.
+Only startup waiting recognizes its complete empty-layout fingerprint; arbitrary
+missing metadata is insufficient. Draft/overlay compositions in the tests are
+explicitly synthetic negatives, including the Commands header from a captured
+overlay. Neither these replays nor a later diagnostic parser PASS discharge the
+managed-runner/client-live walk.

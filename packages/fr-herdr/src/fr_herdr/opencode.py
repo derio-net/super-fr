@@ -100,6 +100,51 @@ def input_reason(screen: str) -> str | None:
     return None
 
 
+def _startup_metadata_pending(screen: str) -> bool:
+    """Recognize only the captured V2 empty, not-yet-resolved metadata frame.
+
+    This is a reason to WAIT before the first prompt, never input admission.
+    Whitelist the whole visible layout: an unknown overlay, transcript, draft,
+    complete-but-muted prompt or different theme must not become a startup retry.
+    V2's border blends agent metadata colour; it is not a direct focus flag.
+    """
+    raw = screen.splitlines()
+    lines = [_ANSI.sub("", line).rstrip() for line in raw]
+    if any("\x1b" in line for line in lines):
+        return False
+    borders = [i for i, line in enumerate(lines) if re.fullmatch(r"  ╹▀{20,}", line)]
+    if len(borders) != 1:
+        return False
+    end = borders[0]
+    begin = end - 4
+    if begin < 3 or lines[begin:end] != ["  ┃"] * 4:
+        return False
+    grey = r"\x1b\[38;2;72;72;72m(?:\x1b\[[0-9;]*m)*"
+    if any(
+        not re.search(grey + glyph, raw[i])
+        for i, glyph in [*((i, "┃") for i in range(begin, end)), (end, "╹")]
+    ):
+        return False
+    # Only the default timestamp title is visible above the empty composer.
+    # It may wrap in the right sidebar; no arbitrary history/dialog text is allowed.
+    sidebar = len(lines[end]) + 4
+    heading = [(i, line) for i, line in enumerate(lines[:begin]) if line.strip()]
+    if not heading or [i for i, _ in heading] != list(range(1, 1 + len(heading))):
+        return False
+    if any(line[:sidebar].strip() for _, line in heading):
+        return False
+    title = "".join(line[sidebar:] for _, line in heading)
+    if not re.fullmatch(r"New session - \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", title):
+        return False
+    below = [line for line in lines[end + 1 :] if line.strip()]
+    return len(below) == 1 and bool(
+        re.fullmatch(
+            r"  \S+  main · no fr-isolation  shift\+tab agents  ctrl\+p commands    \S+",
+            below[0],
+        )
+    )
+
+
 def process(info: dict[str, Any]) -> dict[str, Any] | None:
     procs = info.get("result", {}).get("process_info", {}).get("foreground_processes", [])
     if len(procs) != 1:
@@ -213,7 +258,7 @@ def _fresh(
     return agent
 
 
-def eligible(
+def _eligible_process(
     d: managed.Descriptor,
     exclude: set[str],
     *,
@@ -245,6 +290,18 @@ def eligible(
         or proc.get("cwd") != d.checkout
     ):
         raise managed.ManagedError("foreground process/model is unknown or changed")
+    return proc
+
+
+def eligible(
+    d: managed.Descriptor,
+    exclude: set[str],
+    *,
+    run: Callable[[list[str]], dict[str, Any]] | None = None,
+    restart: bool = True,
+) -> dict[str, Any]:
+    observe = run or _run_herdr
+    proc = _eligible_process(d, exclude, run=observe, restart=restart)
     screen = str(observe(["pane", "read", d.pane, "--source", "visible", "--ansi"]).get("raw", ""))
     reason = input_reason(screen)
     if reason:
@@ -264,20 +321,34 @@ def wait_ready(
 ) -> dict[str, Any]:
     """Title readiness precedes rendered input. Wait boundedly, before ONE prompt.
 
-    Only unknown startup layout is retried. Drafts/dialogs, status or exact live
-    identity/model/cwd mismatches refuse. The active projection is read-only: pending
-    durable checkpoints are never promoted before submission/uptake confirmation.
+    Unknown layout and the captured incomplete-metadata startup frame are retried
+    within the existing deadline. Drafts/dialogs, status or exact live identity/model/cwd
+    mismatches refuse. The active projection is read-only: pending durable checkpoints
+    are never promoted before submission/uptake confirmation.
     """
     observation = d.model_copy(update={"checkpoint": "active"})
+    observe = run or _run_herdr
+    initial_pid: object = None
 
     def ready() -> dict[str, Any] | None:
-        try:
-            # Startup readiness is inside the owned pending transaction, not restart admission.
-            return eligible(observation, set(), run=run, restart=False)
-        except managed.ManagedError as exc:
-            if str(exc) == "unknown-layout":
-                return None
-            raise
+        nonlocal initial_pid
+        # Startup readiness is inside the owned pending transaction, not restart admission.
+        proc = _eligible_process(observation, set(), run=observe, restart=False)
+        if initial_pid is None:
+            initial_pid = proc["pid"]
+        elif proc["pid"] != initial_pid:
+            raise managed.ManagedError("startup foreground process changed")
+        screen = str(
+            observe(["pane", "read", d.pane, "--source", "visible", "--ansi"]).get("raw", "")
+        )
+        reason = input_reason(screen)
+        if reason == "unknown-layout" or (
+            reason == "dialog-or-unfocused" and _startup_metadata_pending(screen)
+        ):
+            return None
+        if reason:
+            raise managed.ManagedError(reason)
+        return proc
 
     proc = _poll(ready)
     if proc is None:
