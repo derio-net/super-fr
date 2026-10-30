@@ -7,7 +7,6 @@ All three entry points must wait before a single prompt; no uncertain replay.
 import base64
 import gzip
 import hashlib
-import itertools
 import json
 from pathlib import Path
 
@@ -27,8 +26,13 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
     monkeypatch.setattr(runner, "stable_checkout", lambda p: p)
     monkeypatch.setattr(replacement, "stable_checkout", lambda p: p)
     monkeypatch.setattr(managed, "reconstruct", lambda d: "HOLD, never replay the goal")
-    monkeypatch.setattr(opencode, "_sleep", lambda seconds: None)
-    monkeypatch.setattr(opencode, "_clock", lambda counter=itertools.count(): next(counter))
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(opencode, "_sleep", sleep)
+    monkeypatch.setattr(opencode, "_clock", lambda: now[0])
     monkeypatch.setattr(
         opencode,
         "create_session",
@@ -64,7 +68,7 @@ def timeline(tmp_path, monkeypatch, native_herdr_cache):
             self.calls = []
             self.argv = ["--model", self.model]
 
-        def __call__(self, args):
+        def __call__(self, args, **kwargs):
             self.calls.append(args)
             if args[:2] == ["tab", "create"]:
                 return created
@@ -277,8 +281,8 @@ def test_grey_startup_with_draft_or_overlay_is_a_refusal(timeline, unsafe, when)
         screen = metadata_capture("ready").replace("38;2;92;156;245m", "38;2;72;72;72m")
     original = fake.__call__
 
-    def observe(args):
-        answer = original(args)
+    def observe(args, **kwargs):
+        answer = original(args, **kwargs)
         if args[:2] == ["pane", "read"]:
             return {"raw": startup if when == "after-pending" and fake.reads == 1 else screen}
         return answer
@@ -300,8 +304,8 @@ def test_metadata_wait_revalidates_guards_after_each_pending_observation(timelin
     fake.startup_screen = metadata_capture("startup")
     original = fake.__call__
 
-    def observe(args):
-        answer = original(args)
+    def observe(args, **kwargs):
+        answer = original(args, **kwargs)
         if fake.reads >= 1:
             if args[:2] == ["agent", "list"]:
                 agent = answer["result"]["agents"][0]

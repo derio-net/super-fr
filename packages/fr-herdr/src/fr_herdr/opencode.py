@@ -317,7 +317,7 @@ def _poll(check: Callable[[], _T | None]) -> _T | None:
 
 
 def wait_ready(
-    d: managed.Descriptor, *, run: Callable[[list[str]], dict[str, Any]] | None = None
+    d: managed.Descriptor, *, run: Callable[..., dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     """Title readiness precedes rendered input. Wait boundedly, before ONE prompt.
 
@@ -326,12 +326,31 @@ def wait_ready(
     mismatches refuse. The active projection is read-only: pending durable checkpoints
     are never promoted before submission/uptake confirmation.
     """
+    deadline = _clock() + TIMEOUT
     observation = d.model_copy(update={"checkpoint": "active"})
-    observe = run or _run_herdr
+    transport = run or _run_herdr
     initial_pid: object = None
 
-    def ready() -> dict[str, Any] | None:
-        nonlocal initial_pid
+    def remaining() -> float:
+        budget = deadline - _clock()
+        if budget <= 0:
+            raise HerdrError("rendered-input-timeout; no prompt sent; inspect the target")
+        return budget
+
+    def observe(args: list[str]) -> dict[str, Any]:
+        # All native identity/status/process/screen subprocesses share ONE budget.
+        # The injected transport seam likewise accepts timeout=remaining seconds.
+        budget = remaining()
+        try:
+            answer = transport(args, timeout=budget)
+        except HerdrError:
+            remaining()  # Normalize a budget-exhausting subprocess timeout.
+            raise
+        remaining()  # A late response is not usable, even if it looks ready.
+        return answer
+
+    while True:
+        remaining()  # Never start another observation at or after expiry.
         # Startup readiness is inside the owned pending transaction, not restart admission.
         proc = _eligible_process(observation, set(), run=observe, restart=False)
         if initial_pid is None:
@@ -342,18 +361,16 @@ def wait_ready(
             observe(["pane", "read", d.pane, "--source", "visible", "--ansi"]).get("raw", "")
         )
         reason = input_reason(screen)
+        remaining()  # Parsing/classification must also finish before the deadline.
         if reason == "unknown-layout" or (
             reason == "dialog-or-unfocused" and _startup_metadata_pending(screen)
         ):
-            return None
+            _sleep(min(1.0, remaining()))
+            continue
         if reason:
             raise managed.ManagedError(reason)
+        remaining()  # Exact deadline is expired; do not authorize submission.
         return proc
-
-    proc = _poll(ready)
-    if proc is None:
-        raise HerdrError("rendered-input-timeout; no prompt sent; inspect the target")
-    return proc
 
 
 def restart_pane(pane: str, *, yes: bool, exclude: set[str]) -> tuple[str, str, str | None]:

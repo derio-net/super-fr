@@ -23,6 +23,8 @@ input layouts are skipped without input. Observation supports the captured OpenC
 Before the first brief, OpenCode readiness waits within the existing 30-second
 budget for unknown startup layout or the narrowly captured empty V2 metadata frame
 (grey border, no agent/model row, default new-session title and known footer).
+Each native observation receives only the remaining budget. Readiness arriving at
+or after the deadline is rejected, and expiry prevents further observations.
 That frame is **never accepted as ready**. Every observation rechecks the live
 identity, selected session/model, `--auto`, cwd and status; a changed foreground PID
 refuses. Only the unchanged strict input parser can admit submission. Drafts,

@@ -1,2 +1,2 @@
 bump: patch
-summary: Wait boundedly for the captured incomplete OpenCode startup metadata layout before strict input admission.
+summary: Enforce a total startup deadline while waiting for captured incomplete OpenCode metadata before strict input admission.

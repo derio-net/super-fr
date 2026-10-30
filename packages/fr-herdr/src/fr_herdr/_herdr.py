@@ -51,11 +51,11 @@ class HerdrError(Exception):
         self.code = code
 
 
-def _run_herdr(args: list[str]) -> dict[str, Any]:
+def _run_herdr(args: list[str], *, timeout: float = 60) -> dict[str, Any]:
     """Run `herdr <args>` and return its parsed JSON (`{}` for empty output)."""
     try:
         done = subprocess.run(
-            ["herdr", *args], capture_output=True, text=True, check=True, timeout=60
+            ["herdr", *args], capture_output=True, text=True, check=True, timeout=timeout
         )
     except FileNotFoundError as exc:
         raise HerdrError("herdr is not on PATH") from exc
