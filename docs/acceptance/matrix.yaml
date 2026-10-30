@@ -9200,6 +9200,12 @@ rows:
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_grey_startup_with_draft_or_overlay_is_a_refusal
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_metadata_wait_revalidates_guards_after_each_pending_observation
       - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_incomplete_metadata_is_not_active_restart_admission
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_pending_then_overslept_deadline_never_starts_another_observation
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_observation_at_or_after_deadline_never_admits_ready
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_expired_deadline_before_first_observation_sends_nothing
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_ready_just_before_deadline_is_admitted
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_native_observations_each_receive_only_remaining_budget
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_native_observation_timeout_never_proceeds_to_next_call
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: walk-owed
@@ -9210,7 +9216,10 @@ rows:
       unit replay now covers a narrowly fingerprinted incomplete frame to ready, finite
       timeout without submission, and draft/overlay/process/session/status refusals
       on repeated observations. Strict input admission is unchanged; the later diagnostic
-      PASS is not a native launch or live-walk PASS. Status remains walk-owed.
+      PASS is not a native launch or live-walk PASS. Status remains walk-owed. R1 deadline
+      regressions additionally enforce rejection at/after expiry, no calls after expiry
+      and remaining-time limits for each native startup observation; no live walk or
+      status change.
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
   - id: herdr-batch-replace
