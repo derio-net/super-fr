@@ -67,9 +67,14 @@ def launch() -> None:
     linked = Path(os.environ["FR_HERDR_CACHE_DIR"]).parent / "linked"
     git("worktree", "add", "-b", "feat/linked", str(linked))
     calls = []
+    timed_observations = []
     process = {"args": ["--model", MODEL]}
 
-    def fake(args):
+    def fake(args, *, timeout=None):
+        if timeout is not None:
+            assert 0 < timeout <= 30
+            assert args[:2] in (["agent", "list"], ["pane", "process-info"], ["pane", "read"])
+            timed_observations.append((args[:2], timeout))
         calls.append(args)
         if args[:2] == ["tab", "create"]:
             return json.loads((FIXTURES / "tab-create.json").read_text())
@@ -115,6 +120,14 @@ def launch() -> None:
     assert ["--kind", "opencode"] == calls[1][3:5]
     assert calls[1][-3:] == ["--session", "ses-fixture", "--auto"]
     assert "--wait" in next(c for c in calls if c[:2] == ["agent", "prompt"])
+    assert sum(c[:2] == ["agent", "prompt"] for c in calls) == 1
+    assert [args for args, _ in timed_observations] == [
+        ["agent", "list"],
+        ["pane", "process-info"],
+        ["pane", "read"],
+    ]
+    budgets = [timeout for _, timeout in timed_observations]
+    assert budgets == sorted(budgets, reverse=True)
     assert managed.load(handle).item == item.id
     assert managed.load(handle).checkpoint == "active"
     d = managed.load(handle)
@@ -133,10 +146,10 @@ def launch() -> None:
     managed.conflict_current = lambda d: False
     assert "HOLD" in managed.reconstruct(current)
 
-    def failed(args):
+    def failed(args, *, timeout=None):
         if args[:2] == ["agent", "start"]:
             raise runner.HerdrError("synthetic startup failure")
-        return fake(args)
+        return fake(args, timeout=timeout)
 
     runner._run_herdr = failed
     try:
@@ -147,7 +160,10 @@ def launch() -> None:
         raise AssertionError("failed startup was reported successful")
 
 
-def herdr(args: list[str]) -> dict:
+def herdr(args: list[str], *, timeout: float | None = None) -> dict:
+    if timeout is not None:
+        assert 0 < timeout <= 30
+        assert args[:2] in (["agent", "list"], ["pane", "process-info"], ["pane", "read"])
     state = Path(os.environ["HERDR_FAKE_STATE"])
     args_state = state.with_suffix(".args")
     phase = state.read_text() if state.exists() else "source"

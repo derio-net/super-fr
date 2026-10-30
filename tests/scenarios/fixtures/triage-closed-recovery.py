@@ -28,6 +28,7 @@ PANE = "w1T:pNEW"
 SESSION = "ses_fixture"
 opencode.create_session = lambda model, checkout: SESSION
 effects = []
+timed_observations = []
 started = False
 fail_prompt = False
 panes = json.loads((ROOT / "recovery-capture/pane-list.json").read_text())
@@ -35,8 +36,12 @@ tabs = json.loads((ROOT / "recovery-capture/tab-list.json").read_text())
 screen = json.loads((ROOT / "opencode/final-idle.json").read_text())
 
 
-def herdr(argv):
+def herdr(argv, *, timeout=None):
     global started
+    if timeout is not None:
+        assert 0 < timeout <= 30
+        assert argv[:2] in (["agent", "list"], ["pane", "process-info"], ["pane", "read"])
+        timed_observations.append((argv[:2], timeout))
     if argv[:2] == ["pane", "list"]:
         return copy.deepcopy(panes)
     if argv[:2] == ["tab", "list"]:
@@ -248,8 +253,15 @@ assert managed.load(PANE).checkpoint == "uptake-confirmed", (
 )
 cmd.save_batches = save
 before_effects = list(effects)
+before_observations = list(timed_observations)
 invoke(["--repair", "--yes"])
 assert effects == before_effects == ["allocate", "launch", "prompt"]
+assert timed_observations == before_observations
+assert [args for args, _ in timed_observations] == [
+    ["agent", "list"],
+    ["pane", "process-info"],
+    ["pane", "read"],
+]
 final = load_judgements(path).batches[0]
 assert last_dispatch(final) == original and effective_handle(final) == PANE
 assert managed.load(PANE).recovery_hold and managed.load(PANE).checkpoint == "active"
@@ -287,6 +299,14 @@ invoke(["--repair", "--yes"])
 assert effects == before_effects == ["allocate", "launch", "prompt"] * 2
 assert recovery.load_intent(ITEM, old_pane).checkpoint == "active"
 assert last_dispatch(load_judgements(path).batches[0]) == original
+assert [args for args, _ in timed_observations] == [
+    ["agent", "list"],
+    ["pane", "process-info"],
+    ["pane", "read"],
+] * 2
+for offset in (0, 3):
+    budgets = [timeout for _, timeout in timed_observations[offset : offset + 3]]
+    assert budgets == sorted(budgets, reverse=True)
 print(
     "installed recovery: preview, refusal, same-model, cross-store repair, "
     "immutable lifecycle and HOLD passed"
