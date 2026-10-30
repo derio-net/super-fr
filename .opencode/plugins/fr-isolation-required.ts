@@ -1,7 +1,8 @@
-// Thin re-export so this repo's own OpenCode sessions load the super-fr plugin
-// automatically from .opencode/plugins/ (OpenCode's project-local plugin
-// directory). The implementation lives in packages/fr-opencode-plugin/ — an
-// OpenCode 2 plugin definition (`{ id, setup }`) — so it can also be published
-// to npm and consumed by other repos via the config's "plugin" array; see that
-// package's README.md.
-export { default } from "../../packages/fr-opencode-plugin/src/index";
+// Development definition: run the source guards even with an installed copy.
+// opencode.json disables the global "super-fr" ID in this repo only. Distinct
+// IDs are essential: OpenCode rejects duplicates BEFORE either setup can elect
+// an owner. Do not replace setup with a no-op or check the filesystem for an
+// installed copy: its presence does not prove active enforcement.
+import plugin from "../../packages/fr-opencode-plugin/src/index";
+
+export default { ...plugin, id: "super-fr.development" };

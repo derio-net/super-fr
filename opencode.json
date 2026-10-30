@@ -1,4 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugins": ["-super-fr"],
   "instructions": [".opencode/instructions/*.md"]
 }
