@@ -484,3 +484,8 @@ Filed at archive as derio-net/super-fr#1206; still owed until discharged.
 ### test-plan-step-4-resolved · finding [filed → derio-net/super-fr#1207] · resolves test-plan-step-4: Test Plan step 4 owed
 
 Filed at archive as derio-net/super-fr#1207; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved-2 created=2026-10-30T05:00:35+00:00 state=fixed resolves=test-plan-step-1 -->
+### test-plan-step-1-resolved-2 · finding [fixed] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Operator accepted #1204 Test Plan step 1 observations on 2026-10-30. Operator accepted live #1204 evidence on 2026-10-30: rehearsal PR https://github.com/derio-net/super-fr-release-rehearsal-20261026/pull/2 at c1bdf0b01a65422f7a83ffb0d0ac4bcb65cd920e. Shipped RC11 sync_exit_labels (direct API, not completed CLI delivery) added verification:candidate, verification:live and gate:tester from no labels. One post-review gate-none attempt exited 2 with unchanged tracked bytes/index/HEAD/PR labels. Evidence: docs/acceptance/evidence/2026-10-30-exit-gates-labels-1204.md. No overall #1195 gate pass; other walks remain owed. The separate evidence PR is not merged; #1204 must remain open pending durable recording on main. Steps 2-4 and #1205/#1206/#1207/#1217 remain owed; no release, merge or gate-pass claim.
