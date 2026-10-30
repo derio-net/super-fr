@@ -162,11 +162,21 @@ versions the spec names.
 
 ## Using it in this repo
 
-This repo loads it automatically via `.opencode/plugins/fr-isolation-required.ts`,
-a thin re-export of `src/index.ts`. On a machine that also ran `install.sh`,
-OpenCode then loads two copies. That is safe: both refuse the same edits, the
-idle adapter's once-per-position memory and the nag's once-per-session memory
-are shared process-wide, so each still nudges once, not twice.
+This repo loads the source implementation automatically via
+`.opencode/plugins/fr-isolation-required.ts`, under the distinct ID
+`super-fr.development`. Its `opencode.json` explicitly disables the installed
+`super-fr` ID **in this repo only**. OpenCode applies explicit controls after
+auto-discovery, before duplicate detection and setup. Consequently only the
+source definition registers hooks and subscribes to events, whether or not a
+global copy is installed. Other repos continue using the installed plugin.
+
+The distinct ID and the config control belong together. Two definitions with
+the same ID are rejected before setup; shared idle/nag memory cannot make that
+safe. Merely finding installed files is not evidence that their guards loaded.
+Repo-only development still runs every source guard, with no global install
+required. Registration controls and effective edit enforcement are covered by
+`test/registration.test.ts` (a synthetic loader-order regression, not a live
+server test).
 
 ## Development
 
