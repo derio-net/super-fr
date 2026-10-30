@@ -1,0 +1,2 @@
+bump: patch
+summary: Add explicit local-only redacted OpenCode readiness-refusal evidence capture.

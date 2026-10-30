@@ -145,8 +145,11 @@ class HerdrRunner:
     capabilities: frozenset[str] = frozenset({"git", "tests", "scm", "devcontainer"})
     units: frozenset[str] = frozenset({"run"})
 
-    def __init__(self, workspace_id: str | None = None) -> None:
+    def __init__(
+        self, workspace_id: str | None = None, *, readiness_evidence_dir: Path | None = None
+    ) -> None:
         self.workspace_id = workspace_id
+        self.readiness_evidence_dir = readiness_evidence_dir
 
     @classmethod
     def from_env(cls) -> HerdrRunner:
@@ -421,7 +424,12 @@ class HerdrRunner:
                 ]
             )
             if descriptor:
-                opencode.wait_ready(descriptor, run=_run_herdr)
+                if self.readiness_evidence_dir is None:
+                    opencode.wait_ready(descriptor, run=_run_herdr)
+                else:
+                    opencode.wait_ready(
+                        descriptor, run=_run_herdr, evidence_dir=self.readiness_evidence_dir
+                    )
                 descriptor = descriptor.model_copy(update={"checkpoint": "submission-started"})
                 managed.save(descriptor)
             _submit(name, str(payload["brief"]), harness=harness.kind)

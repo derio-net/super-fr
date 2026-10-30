@@ -6,6 +6,7 @@ overlays or foreground layouts are skipped, never treated as empty input.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -13,6 +14,7 @@ import shlex
 import subprocess
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -24,6 +26,74 @@ _FOCUSED = re.compile(r"\x1b\[38;2;92;156;245m(?:\x1b\[[0-9;]*m)*╹")
 _clock = time.monotonic
 _sleep = time.sleep
 TIMEOUT = 30.0
+_DIALOG = re.compile(
+    r"(?P<permission_required>permission required)|(?P<allow_once>allow once)|"
+    r"(?P<allow_action>allow this action)|(?P<search_provider_setup>search provider setup)|"
+    r"(?P<web_search_setup>web search setup)|(?P<plugin_error_or_failed>plugin (?:error|failed))|"
+    r"(?P<failed_plugin>failed plugin)|(?P<plugin_export>plugin must export)|"
+    r"(?P<agent_state_plugin>herdr-agent-state\.js.{0,80}(?:failed|error))"
+)
+
+
+def refusal_evidence(screen: str, reason: str) -> dict[str, Any]:
+    """Pure, lossy projection of an ALREADY observed guard frame; never raw text.
+
+    Coordinates are character offsets, not terminal display-cell coordinates.
+    All non-allowlisted content, including unknown control sequences, is masked.
+    Shape and fixed category indicators are diagnostic, not readiness evidence.
+    """
+    lines = [_ANSI.sub("", line).rstrip() for line in screen.splitlines()]
+    predicate = "other"
+    if reason == "unknown-dialog-or-background":
+        match = _DIALOG.search("\n".join(lines).casefold())
+        predicate = (
+            match.lastgroup.replace("_", "-") if match and match.lastgroup else "braille-task"
+        )
+    known_reasons = {
+        "unknown-dialog-or-background",
+        "unknown-layout",
+        "background-work",
+        "dialog-or-unfocused",
+        "draft",
+    }
+    return {
+        "classification": reason if reason in known_reasons else "other",
+        "predicate": predicate,
+        "frame": [
+            "".join(char if char in " ┃╹▀" else "·" for char in line[:160]) for line in lines[:64]
+        ],
+        "truncated": len(lines) > 64 or any(len(line) > 160 for line in lines[:64]),
+        "focused_border": bool(_FOCUSED.search(screen)),
+        "metadata_present": any(
+            re.match(r"^\s*┃  (Build(?: auto)?|Plan) · .+", line) for line in lines
+        ),
+    }
+
+
+def capture_refusal(
+    directory: Path | None, d: managed.Descriptor | None, screen: str, reason: str
+) -> str | None:
+    """Opt-in only; a failed diagnostic must never replace the guard refusal."""
+    if directory is None:
+        return None
+    try:
+        from fr_herdr.refusal import publish
+
+        assert d is not None
+        evidence = refusal_evidence(screen, reason)
+        identity = json.dumps([d.server, d.pane, d.session, d.item], separators=(",", ":"))
+        evidence.update(
+            {
+                "schema": 1,
+                "identity_sha256": hashlib.sha256(identity.encode()).hexdigest(),
+                "recorded_at": datetime.now(UTC).isoformat(),
+                "association": "diagnostic-only-not-admission",
+            }
+        )
+        publish(directory, evidence)
+    except Exception:
+        return "readiness evidence: unavailable"
+    return None
 
 
 def input_reason(screen: str) -> str | None:
@@ -40,12 +110,7 @@ def input_reason(screen: str) -> str | None:
         if (match := re.fullmatch(r"(\s*)╹(▀+)(?:\s+(.*))?", line))
     ]
     joined = "\n".join(lines).casefold()
-    if re.search(
-        r"permission required|allow once|allow this action|search provider setup|"
-        r"web search setup|plugin (?:error|failed)|failed plugin|plugin must export|"
-        r"herdr-agent-state\.js.{0,80}(?:failed|error)",
-        joined,
-    ):
+    if _DIALOG.search(joined):
         return "unknown-dialog-or-background"
     if not borders:
         return "unknown-layout"
@@ -317,7 +382,10 @@ def _poll(check: Callable[[], _T | None]) -> _T | None:
 
 
 def wait_ready(
-    d: managed.Descriptor, *, run: Callable[..., dict[str, Any]] | None = None
+    d: managed.Descriptor,
+    *,
+    run: Callable[..., dict[str, Any]] | None = None,
+    evidence_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Title readiness precedes rendered input. Wait boundedly, before ONE prompt.
 
@@ -368,7 +436,11 @@ def wait_ready(
             _sleep(min(1.0, remaining()))
             continue
         if reason:
-            raise managed.ManagedError(reason)
+            refusal = managed.ManagedError(reason)
+            annotation = capture_refusal(evidence_dir, d, screen, reason)
+            if annotation:
+                refusal.add_note(annotation)
+            raise refusal
         remaining()  # Exact deadline is expired; do not authorize submission.
         return proc
 
