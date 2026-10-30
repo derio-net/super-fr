@@ -3919,15 +3919,20 @@ rows:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/plugin.test.ts
       - super-fr:packages/fr-opencode-plugin/test/wiring.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/registration.test.ts
       int:
       - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_registers_the_delivered_plugin_exactly_once
       - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
     status: ci
-    notes: 'The delivered plugin directory loads exactly once in the real opencode 2.x
-      binary as a V2 definition (id super-fr) and its edit gate refuses a base-clone
-      edit: tests/integration/test_opencode_plugin_live.py, run by CI''s opencode-plugin-test
-      job against 2.0.32 and 2.1.0 with FR_REQUIRE_OPENCODE=1; setup''s registrations
-      are bun-tested in plugin.test.ts and wiring.test.ts.'
+    notes: 'Retained existing CI coverage: delivered V2 super-fr loads and refuses base
+      edits in test_opencode_plugin_live.py on CI-pinned versions. Added 2026-10-30
+      synthetic registration-control regression for repository super-fr.development
+      plus global super-fr: explicit -super-fr selects source setup once in either discovery
+      order and repo-only use, including distinct module paths; real source edit gate
+      denies a base edit. This is not a real 2.1.4 server-loader walk. Full isolated
+      Bun run: 241 pass, 1 existing marker test fails because it assumes no container
+      evidence inside a devcontainer. Global/repo registration on a real server remains
+      unwalked for the new bytes; external RC14 failure evidence is in the debug journal.'
     verify: candidate
     scenario: tests/scenarios/opencode-plugin-v2.sh
   - id: opencode-2-edit-gate
