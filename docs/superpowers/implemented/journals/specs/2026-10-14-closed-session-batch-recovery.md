@@ -80,3 +80,8 @@ what: Post-merge — operator-driven: run the shipped disposable closed-session 
 why: Deferred at the v6.0.0 release (operator decision, 2026-10-31; see #1258). Tracked by derio-net/super-fr#1257; matrix row triage-closed-recovery-live stays walk-owed.
 how: fr journal resolve --scope spec --slug 2026-10-14-closed-session-batch-recovery --id test-plan-step-1 --state fixed --note "<evidence>"
 owed_key: spec:2026-10-14-closed-session-batch-recovery#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-10-31T17:42:06+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1257 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1257] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1257; still owed until discharged.

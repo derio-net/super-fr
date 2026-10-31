@@ -229,3 +229,8 @@ what: **Post-merge — operator-driven:** sweep all six issue-backed sessions on
 why: The six sessions were adopted into batches, but those batches have been paused since 2026-10-14 (closed-session recovery work); the 'driver later merges and closes them' half was never observed. Owed until the paused batches are resumed and driven to merge.
 how: fr journal resolve --scope spec --slug 2026-10-06-triage-batch-adopt --id test-plan-step-5 --state fixed --note "<evidence>"
 owed_key: spec:2026-10-06-triage-batch-adopt#step5
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-5-resolved created=2026-10-31T17:41:45+00:00 state=open resolves=test-plan-step-5 filed_as=derio-net/super-fr#1263 -->
+### test-plan-step-5-resolved · finding [filed → derio-net/super-fr#1263] · resolves test-plan-step-5: Test Plan step 5 owed
+
+Filed at archive as derio-net/super-fr#1263; still owed until discharged.

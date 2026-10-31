@@ -2,41 +2,42 @@ schema_version: 2
 run: 2026-10-14-feat-closed-session-batch-recovery
 captures:
 - host: h-42b4c3f9
-  harness: opencode
+  harness: claude-code
   mode: devcontainer
-  captured_at: '2026-10-14T21:04:29+00:00'
+  captured_at: '2026-10-31T17:41:52+00:00'
   at:
   - resolve:brainstorm
   - deliver
+  - closeout
   sessions:
   - session: ses_ec52e48a3ffeYuGgSUiT9iZD10
     role: main
     models:
       gpt-6.1-sol:
-        input: 1575107
+        input: 29449457
         cache_write: 0
-        cache_read: 75843456
-        output: 169026
+        cache_read: 1544503808
+        output: 3729337
         usd: null
         usd_source: none
     activity:
       implementation:
         usd: null
-        turns: 147
+        turns: 1343
       other:
         usd: null
-        turns: 253
+        turns: 5766
       paperwork:
         usd: null
-        turns: 45
+        turns: 397
     steps:
       (outside run):
         usd: null
-        turns: 68
-        input: 144254
+        turns: 6892
+        input: 28016943
         cache_write: 0
-        cache_read: 5014656
-        output: 7988
+        cache_read: 1473340288
+        output: 3568149
       brainstorm:
         usd: null
         turns: 30
@@ -68,19 +69,19 @@ captures:
       deliver:
         usd: null
         turns: 31
-        input: 344686
+        input: 346347
         cache_write: 0
-        cache_read: 9274112
-        output: 8843
+        cache_read: 9608832
+        output: 8993
     steps_by_role:
       main:
         (outside run):
           usd: null
-          turns: 68
-          input: 144254
+          turns: 3088
+          input: 13048444
           cache_write: 0
-          cache_read: 5014656
-          output: 7988
+          cache_read: 742912640
+          output: 1063682
         brainstorm:
           usd: null
           turns: 30
@@ -112,10 +113,10 @@ captures:
         deliver:
           usd: null
           turns: 31
-          input: 344686
+          input: 346347
           cache_write: 0
-          cache_read: 9274112
-          output: 8843
+          cache_read: 9608832
+          output: 8993
       subagent:
         spec-review:
           usd: null
@@ -131,6 +132,13 @@ captures:
           cache_write: 0
           cache_read: 42637056
           output: 113959
+        (outside run):
+          usd: null
+          turns: 3804
+          input: 14968499
+          cache_write: 0
+          cache_read: 730427648
+          output: 2504467
     units:
       step/spec-review:
         orchestrator:
@@ -189,11 +197,49 @@ captures:
         orchestrator:
           usd: null
           turns: 31
-          input: 344686
+          input: 346347
           cache_write: 0
-          cache_read: 9274112
-          output: 8843
+          cache_read: 9608832
+          output: 8993
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 3804
+          input: 14968499
+          cache_write: 0
+          cache_read: 730427648
+          output: 2504467
     briefs:
       step/spec-review: 1331
       phase/1/implement-phase: 786
       phase/1/review-phase: 430
+      ses_e8b039c91ffeD3lfRg3lwQPACS: 1956
+      ses_e896fe256ffenBhmXVbnXBl73J: 1406
+      ses_e89598a51ffehGXDZPfUTnMYYf: 2119
+      ses_e890f0cf0ffemnoL14M1Y8y817: 2140
+      ses_e83adbd0affe8puCAruckhU0em: 1028
+      ses_e83aadeb9ffeJ9Bb72fyy86MSF: 1619
+      ses_e80d73e61ffeHtfSRuV3cStOUg: 2734
+      ses_e80d2849cffeEno3x7iDUsdJh6: 1239
+      ses_e80c8900effeV9SbxsX3GUBkDp: 1097
+      ses_e802e7c13ffexYgfQ5P2uIHlQa: 1812
+      ses_e7ea640b4ffeG2EHP1YMf07jbe: 2323
+      ses_e74f1bf6dffeWoz6D6rmhxf00c: 1451
+      ses_e72258ce9ffeBJmJMqqcRQHlkN: 5024
+      ses_e722066b0ffeacgIb91hwC564J: 1835
+      ses_e720decd1ffejRpdsJ3vm48Eiz: 3281
+      ses_e71eb7118ffebAkQ1tgohKCmJl: 2857
+      ses_e71dff324ffeJL6I0iPV6HtT62: 2539
+      ses_e71a58975ffe3kBVPhJIZuSz1D: 8761
+      ses_e71826c63ffe2Airka9Q1hoMvs: 2217
+      ses_e7167413bffeQ47jnQJLQHbh0b: 4015
+      ses_e715e6263ffewTK6w96qQWvvlC: 2493
+      ses_e7131dbafffevqdpI4OCtAWIRg: 4305
+      ses_e712e236affePEKsVtzK6yf7Hx: 1912
+      ses_e7129b6beffeuIeI8FMz8lqn5E: 1939
+      ses_e6fa16643ffewnUs94wY6erI1F: 3417
+      ses_e6f99ab5dffencsyFuSDMtFTBP: 3625
+      ses_e6f9205b7ffeNh4oIe6pK8SghR: 3414
+      ses_e6f28e0f5ffePiMHDDFhi1jV8w: 4084
+      ses_e6f05877bffeD34cUkAGmNVaJQ: 1718
+      ses_e6eb0803affe1X6VSCgKkj4B0U: 2324
