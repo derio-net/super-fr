@@ -15,3 +15,8 @@ HostCheckout.changed_paths (commands/ops_gate_cmd.py) runs a two-dot 'git diff -
 ### fix-1 · finding [fixed] · diff from the merge base
 
 ops_gate_cmd.HostCheckout.changed_paths now runs 'git diff --name-only --merge-base --end-of-options <base> <head> -- <paths>'; GateHost docstring updated. Failing-first test: tests/unit/test_ops_gate_cmd.py::test_changed_paths_are_what_the_pr_changed_not_what_main_gained (red before: main-side profile file listed; green after). Covers both stage-1 checks (archived journals, ops profile). A merged PR's head is an ancestor of main, so its diff is empty. Not addressed here: stage 1 still fetches feat/<slug> by name after the forge deletes it (a non-fatal warning).
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-10-31T20:13:49+00:00 -->
+### review-1 · review · self-review, PR #1267
+
+Inline self-review of the diff. Both changed_paths callers (archived journals, ops profile) want PR-diff semantics, so --merge-base is correct for each. Raised: (1) unrelated histories now fail loudly instead of answering, accepted for a security gate; (2) the post-merge fetch of feat/<slug> warns after branch deletion, out of scope, non-fatal. No in-scope findings open.
