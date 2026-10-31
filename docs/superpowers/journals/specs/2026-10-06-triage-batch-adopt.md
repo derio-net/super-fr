@@ -214,3 +214,10 @@ Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_
 Step: Unit: a failure at each step of §A.7, then a re-run that finishes it (R10).
 
 Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_a_failure_at_each_step_exits_1_and_the_same_command_finishes_it)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-10-31T17:40:32+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: Unit: `drive_pass` over an adopted batch counts it in flight, matches its new PR, and plans close actions for its tab when finished.
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one)
