@@ -9991,10 +9991,14 @@ rows:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_closed_recovery_live_instructions
     status: walk-owed
-    notes: Disposable actual-client walk remains owed post-merge at Tester; the named
-      instruction test is not live evidence.
+    notes: 'Disposable actual-client walk remains owed post-merge at Tester; the named
+      instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified.'
     verify: live
     scenario: tests/scenarios/herdr-closed-recovery-live.sh
+    issues:
+    - derio-net/super-fr#1257
   - id: fr-ops-model-carriers
     capability: fr ops
     acceptance: A plan's ops are read from ops.yaml and from legacy manual-operation
