@@ -1,0 +1,52 @@
+{
+  "format": "Selected normalized projection of accepted historical packet receipts, not raw native output",
+  "source_packets": {
+    "first": "first-routing-acting-pass-20261031T050853Z",
+    "second": "second-routing-acting-pass-COMPLETED-20261031T063332Z",
+    "recheck": "second-routing-pass-recheck-20261031T063229Z"
+  },
+  "first": {
+    "sources": ["result.json", "after-native-ledger.json", "after-needs-you.json", "actual-effects.json"],
+    "start": "2026-10-31T05:10:00.208701Z",
+    "end": "2026-10-31T05:10:17.873595Z",
+    "exit": 0,
+    "row_walked": false,
+    "run_gate": "tester",
+    "run_gate_inherited": true,
+    "needs_you": "needs-tester",
+    "issue3_state": "OPEN",
+    "added_labels": ["fr:awaiting-live"],
+    "claim_heartbeat_after": "2026-10-31T05:10:11Z",
+    "merged": 1,
+    "gated": 1,
+    "closing": 0,
+    "closeout_records": 0
+  },
+  "second_prepass_ledger": {
+    "source": "recheck/fresh-native-ledger.json",
+    "row": "routing-1205-held-then-walked",
+    "row_walked": true,
+    "run_gate": "tester",
+    "run_gate_inherited": true,
+    "pr_labels": ["gate:tester", "verification:live"]
+  },
+  "second": {
+    "sources": ["result.json", "actual-forge-effects.json", "post-closeout-records.json"],
+    "start": "2026-10-31T06:34:24.751529Z",
+    "end": "2026-10-31T06:34:40.990073Z",
+    "exit": 0,
+    "added_labels": ["gate:tester-passed"],
+    "removed_labels": ["gate:tester"],
+    "automatic_comment_id": 6540141711,
+    "automatic_comment_at": "2026-10-31T06:34:38Z",
+    "automatic_comment_url": "https://github.com/derio-net/super-fr-release-rehearsal-20261026/pull/6#issuecomment-6540141711",
+    "issue3_state": "OPEN",
+    "issue3_labels": ["fr:claimed", "fr:in-progress", "fr:awaiting-live"],
+    "dispatch_event_count": 1,
+    "actual_closeout_records": 0,
+    "total_actual_acting_passes": 2,
+    "post_dryrun_closing": 1,
+    "post_dryrun_not_executed": true,
+    "third_passes": 0
+  }
+}

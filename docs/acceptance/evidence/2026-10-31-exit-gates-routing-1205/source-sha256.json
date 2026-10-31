@@ -1,0 +1,24 @@
+{
+  "description": "Original packet source hashes. Renamed verbatim stdout receipts must match these hashes; projection.json is a labeled derivative, not a hash-identical original.",
+  "verbatim": {
+    "first-acting-native.stdout": "7694aff1c96eafe6de734b38b9234c44f590caf22e45d8ab841d81c72f081468",
+    "second-acting-native.stdout": "87b53272b52ae9c6a87880765b0b2fcd44803a44a08fab109490d8ec852daccf",
+    "post-second-dryrun.stdout": "b1630579812368ecb6823551e6ced0b8c107bc335952b85496287fe8a1cbfedf"
+  },
+  "first_sources": {
+    "result.json": "0b875215a8096a2a41494676fa70c905cdcfa11f12581a9e0231d8b69cfd6b1c",
+    "after-native-ledger.json": "6ff37049b8b763fa00ecaed2aca5e683999ca658d1f3dbd4a810534359fde4e5",
+    "after-needs-you.json": "a6f9b172a68d21e663ee4eef2ef86393a23eeeecf399bd2c7c0ce15f93c9665c",
+    "actual-effects.json": "08c2c7ec67a7f5a6f43e87372efcdb74c6ddf1f3272a95b7da84d07041d15788"
+  },
+  "second_sources": {
+    "result.json": "14e74ad5ba1f56d110839550e4acfd2f9c04d9ff1540b7cefd8e5636e2b98ebe",
+    "actual-forge-effects.json": "c15dcd8ed4b775d31eb2bb4c10bf942e2643647df65e5fd4fb977a2f89ccf992",
+    "post-closeout-records.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "recheck_sources": {
+    "fresh-native-ledger.json": "b12400993ba401da927cf7435bc87b769d82f37cc2583a96750f21a9bd4ebbc0",
+    "fresh-native-plan.json": "1e4a56c98fe0714524e0262f369f6520f723e857780a24d307825c2b9f300eec"
+  },
+  "second_packet_manifest_sha256": "4c406143e578e4aca9fd4874416c8749bd66e64d7a4fa209e52b7f2b0b949fc8"
+}

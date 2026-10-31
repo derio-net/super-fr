@@ -9851,12 +9851,24 @@ rows:
       - super-fr:tests/unit/test_triage_exit_gates_drive.py
       - super-fr:tests/unit/test_triage_exit_gates_facts.py
       - super-fr:tests/unit/test_gate_cmd.py
-    status: walk-owed
-    notes: 'The gate ledger is unit-tested against a fake forge: merged-PR labels and
-      the cursor position in facts, step 2 holding a gated batch, awaiting-live and
-      gate-pass actions and their writes, the rows read on the default branch, fr gate
-      pass. A real merged PR, driver and matrix on main are still owed, so the live
-      walk stays owed; the Needs-you lane is phase 5'
+    status: walked
+    notes: 'Independently accepted live routing #1205 on 2026-10-31: first native RC15
+      pass 05:10:00–05:10:17Z retained Needs you Tester, OPEN/fr:awaiting-live issue
+      #3 and no closeout; fixture evidence PR #7 merged a1631551d7605503a2c010db88499eecce6ad9dd
+      with the first-hold row walked. Second actual pass 06:34:24–06:34:40Z automatically
+      changed fixture PR #6 from gate:tester to gate:tester-passed and posted comment
+      6540141711 at 06:34:38Z. Reviewer ses_e6fa16643ffewnUs94wY6erI1F accepted the
+      two-pass chain. Issue #3 remained OPEN; zero closeouts executed; subsequent closing=1
+      was a dry-run proposal only. Evidence: docs/acceptance/evidence/2026-10-31-exit-gates-routing-1205.md.
+      Discharges only original Test Plan step 2, not #1206 closeout, completed target
+      delivery, or overall #1195/#1217 gates.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: openai/gpt-6.1-sol
+      outcome: pass
+      at: '2026-10-31T06:34:40Z'
+      evidence: docs/acceptance/evidence/2026-10-31-exit-gates-routing-1205.md
   - id: exit-gates-collected-closeout
     capability: exit-gates
     acceptance: Every landed, not-held batch of a repo closes out in one session with
