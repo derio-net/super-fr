@@ -193,3 +193,44 @@ Fixed: files list uses tests/unit/fakes.py, test_real_ghclient.py, test_forge_ad
 ### spr-f12-resolved · finding [fixed] · resolves spr-f12: `refs` on the runner-neutral AdoptTarget
 
 Fixed: AdoptTarget carries raw labels only (§E); the ref parser is a pure helper in fr.triage.batch (P1.T5.S2).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-10-31T17:40:23+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Unit: every R9 refusal, each with nothing written (judgements, forge, git, herdr fakes untouched); `--list` writes nothing.
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (refusal tests: test_an_unknown_batch_is_refused … test_a_working_agent_is_refused; --list: test_list_prints_every_session_with_its_issue_refs_and_writes_nothing)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-10-31T17:40:26+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: Unit: a full adopt on fakes — tab and agent renamed; branch renamed in git, in the isolation record, marker, session indexes and cursor; old PR superseded by a new one carrying its title, body and draft state; one event stamped before the new PR; label and marker comment on every member; one message.
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_adopt_with_an_open_pr_moves_everything_in_order)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-10-31T17:40:29+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: Unit: a failure at each step of §A.7, then a re-run that finishes it (R10).
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_a_failure_at_each_step_exits_1_and_the_same_command_finishes_it)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-10-31T17:40:32+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: Unit: `drive_pass` over an adopted batch counts it in flight, matches its new PR, and plans close actions for its tab when finished.
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one)
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-5 created=2026-10-31T17:40:35+00:00 -->
+### test-plan-step-5 · owed · Test Plan step 5 owed
+
+what: **Post-merge — operator-driven:** sweep all six issue-backed sessions on the operator's host (frank#551, frank#813, super-fr#314, willikins#422, cnc-fr#97, the brain-candidates run): `--list`, `batch create` each, `batch adopt --yes` each, then `batch drive --once`; confirm each batch is in flight, each open PR was superseded by a new one on the batch branch, each session kept working on the new branch, and the driver later merges and closes them.
+why: The six sessions were adopted into batches, but those batches have been paused since 2026-10-14 (closed-session recovery work); the 'driver later merges and closes them' half was never observed. Owed until the paused batches are resumed and driven to merge.
+how: fr journal resolve --scope spec --slug 2026-10-06-triage-batch-adopt --id test-plan-step-5 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-06-triage-batch-adopt#step5
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-5-resolved created=2026-10-31T17:41:45+00:00 state=open resolves=test-plan-step-5 filed_as=derio-net/super-fr#1263 -->
+### test-plan-step-5-resolved · finding [filed → derio-net/super-fr#1263] · resolves test-plan-step-5: Test Plan step 5 owed
+
+Filed at archive as derio-net/super-fr#1263; still owed until discharged.
