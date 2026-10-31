@@ -1,2 +1,0 @@
-bump: patch
-summary: Fix managed OpenCode 2.1.4 launches to pin the selected model on an interactive session

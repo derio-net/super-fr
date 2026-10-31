@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr acceptance treats a ref prefix that differs from the matrix repo: key only by case as the own repo (verified, linked to --ref, checkout-name independent) and warns naming both spellings (gh#1237)"

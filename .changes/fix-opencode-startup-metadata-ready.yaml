@@ -1,2 +1,0 @@
-bump: patch
-summary: Enforce a total startup deadline while waiting for captured incomplete OpenCode metadata before strict input admission.

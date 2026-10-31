@@ -1,2 +1,0 @@
-bump: patch
-summary: Select repository source guards without duplicate OpenCode plugin registration when a global copy is installed.

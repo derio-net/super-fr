@@ -1,2 +1,0 @@
-bump: patch
-summary: Recognize focused blank prompts in OpenCode 2.1.4 while preserving fail-closed readiness checks
