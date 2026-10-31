@@ -9912,16 +9912,19 @@ rows:
       - super-fr:tests/unit/test_version_rc.py
       - super-fr:tests/unit/test_release_workflow.py
     status: walk-owed
-    notes: >-
-      fr release status, release.py's RC/final decision (RC tag, pre-release, no
-      fragment consumed; final once nothing waits), both RC spellings and RC-admitting
-      floors are unit-tested against fake forges and temp git repos. Live evidence
-      remains owed: a real disposable GitHub repository must run the pinned ordinary
-      release workflow through held-gate RC then verified-gate final, with full staged
-      suite, unchanged gate predicate, fragment and installer checks, and retained
-      source-bound raw proof. See docs/exit-gates-release-walk.md. The later actual
-      super-fr final publication/installer observation is separately tracked by #1207;
-      this amendment records neither a walk nor a gate pass.
+    notes: 'fr release status, release.py''s RC/final decision (RC tag, pre-release,
+      no fragment consumed; final once nothing waits), both RC spellings and RC-admitting
+      floors are unit-tested against fake forges and temp git repos. Observed on super-fr
+      itself: RC13-RC16 were cut as pre-releases consuming no fragment while #1195/#1217
+      waited (e.g. run 41007180324). Still owed: the held-gate RC then verified-gate
+      final transition through the ordinary workflow, with installer channel checks
+      (see docs/exit-gates-release-walk.md). v6.0.0 was cut on 2026-10-31 via the release
+      workflow version override (operator decision) with #1195 and #1217 gate:tester
+      left held; this walk was deferred, not certified. The final itself was the ungated
+      --version path (run 41214190564, 13 fragments consumed), so it is not the gated
+      transition.'
+    issues:
+    - derio-net/super-fr#1207
   - id: triage-closed-recovery
     capability: Triage batch recovery
     acceptance: A closed batch session can recover into a fresh held OpenCode session
