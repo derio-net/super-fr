@@ -193,3 +193,10 @@ Fixed: files list uses tests/unit/fakes.py, test_real_ghclient.py, test_forge_ad
 ### spr-f12-resolved · finding [fixed] · resolves spr-f12: `refs` on the runner-neutral AdoptTarget
 
 Fixed: AdoptTarget carries raw labels only (§E); the ref parser is a pure helper in fr.triage.batch (P1.T5.S2).
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-10-31T17:40:23+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Unit: every R9 refusal, each with nothing written (judgements, forge, git, herdr fakes untouched); `--list` writes nothing.
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (refusal tests: test_an_unknown_batch_is_refused … test_a_working_agent_is_refused; --list: test_list_prints_every_session_with_its_issue_refs_and_writes_nothing)
