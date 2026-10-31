@@ -72,3 +72,11 @@ run_kind: candidate
 ### tier-2026-10-14-closed-session-batch-recovery-p1 · decision · hard: allocation ownership and uncertain-submission concurrency
 
 One coherent recovery ask; hard tier because durable pre-allocation intent, source/target locks and cross-store reconciliation must preserve no-replay gates.
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-10-31T17:40:38+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: Post-merge — operator-driven: run the shipped disposable closed-session recovery walk against the merged release candidate in herdr. Create a fixture batch/run, close its source pane, preview recovery (zero effects), then explicitly recover into `opencode --auto --model openai/gpt-6.1-sol`; verify unchanged branch/worktree, cursor, history, observed fresh session ownership and acknowledge/report-only HOLD. Exercise the documented partial-failure/repair path and verify no second launch or uncertain prompt replay. Record the passing walk for `triage-closed-recovery-live` and pass the Tester gate. Use only disposable fixtures; never the six real paused batches or org driver.
+why: Deferred at the v6.0.0 release (operator decision, 2026-10-31; see #1258). Tracked by derio-net/super-fr#1257; matrix row triage-closed-recovery-live stays walk-owed.
+how: fr journal resolve --scope spec --slug 2026-10-14-closed-session-batch-recovery --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-14-closed-session-batch-recovery#step1
