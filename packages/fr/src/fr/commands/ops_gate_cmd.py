@@ -109,8 +109,11 @@ class HostCheckout:
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
         from fr.triage.gitseam import git
 
-        out = git(["diff", "--name-only", "--end-of-options", base, head, "--", *paths],
-                  self.primary)  # fmt: skip
+        # --merge-base: what *head* changed since it forked from *base* (gh#1266), not
+        # what *base* gained since; the two revisions stay separate argv entries, so
+        # --end-of-options still guards each one.
+        out = git(["diff", "--name-only", "--merge-base", "--end-of-options", base, head,
+                   "--", *paths], self.primary)  # fmt: skip
         return [line for line in out.splitlines() if line]
 
     def origin_head(self) -> str | None:

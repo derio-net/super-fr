@@ -77,8 +77,10 @@ class GateHost(Protocol):
     def fetch(self, ref: str) -> None: ...
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
-        """The *paths* (pathspecs) that differ between *base* and *head*, in the base
-        checkout (`git diff --name-only --end-of-options <base> <head> -- <paths>`)."""
+        """The *paths* (pathspecs) *head* changed since it forked from *base*, in the base
+        checkout (`git diff --name-only --merge-base --end-of-options <base> <head> --
+        <paths>`). The merge base, never *base*'s tip: what the default branch gained
+        after the PR forked is not the PR's change (gh#1266)."""
         ...
 
     def origin_head(self) -> str | None:

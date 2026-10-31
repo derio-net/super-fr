@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr ops gate` stage 1 judges a PR by its own diff (from the merge base), so an ops-profile change merged to the default branch after the PR forked no longer refuses it (gh#1266)."
