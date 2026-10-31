@@ -207,3 +207,10 @@ Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_
 Step: Unit: a full adopt on fakes — tab and agent renamed; branch renamed in git, in the isolation record, marker, session indexes and cursor; old PR superseded by a new one carrying its title, body and draft state; one event stamped before the new PR; label and marker comment on every member; one message.
 
 Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_adopt_with_an_open_pr_moves_everything_in_order)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-10-31T17:40:29+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: Unit: a failure at each step of §A.7, then a re-run that finishes it (R10).
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_a_failure_at_each_step_exits_1_and_the_same_command_finishes_it)
