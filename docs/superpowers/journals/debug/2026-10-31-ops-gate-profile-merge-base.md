@@ -30,3 +30,8 @@ Security review of efce11a0a: isolation/local.py reads .devcontainer/<profile>/d
 ### sec-1-resolved · finding [fixed] · resolves sec-1: merge-base diff lets a stale ops profile run
 
 1ffe62768, operator chose split check + main cut. Stage 1: the PR's own diff (merge base) must not touch the profile; the cut's profile must equal the default tip's (GateHost.differing_paths, two-dot), else rebase (open) or re-cut (merged); a merged PR is cut from origin/<default>'s tip (GateHost.rev_parse); stage 3 rebases from the recorded cut. Tests: test_ops_gate_review.py gh#1266 block (5 tests), real-git adapter test extended. 769 ops tests green.
+
+<!-- fr:journal kind=review scope=debug id=review-2 created=2026-10-31T20:27:27+00:00 -->
+### review-2 · review · re-review after the security fix
+
+Self-review of 1ffe62768. Checked: open-PR path unchanged when main has not moved (cut==head, both diffs empty); stage 3 upstream equals the PR head for open PRs, so existing behaviour is preserved; pinned_head() now returns the tip in the merged case, so journal entries present at the cut (including the PR's merged ones) still close nothing, the conservative side of p4-r2; squash merges are covered, since the merged path does not assume the head is an ancestor of main. Raised and accepted: pre-merge ops for an already-merged PR run against main's tip, which contains the PR. No in-scope findings open.
