@@ -122,3 +122,62 @@ walk/resolution is unchanged; #1206 collected-closeout and other outstanding
 walks remain owed. Overall #1195 and #1217 Tester gates remain held. No full
 suite, completed target delivery, closeout, original gate pass, release, cleanup,
 extra fixture merge, allocation or further acting pass is claimed or authorized.
+
+## Product recording and authorized native discharge
+
+The product row was recorded once using the supported `uv run fr acceptance
+set-status` inside the original `dev` isolation container: start
+**2026-10-31T07:17:53.489781Z**, end **07:18:03.161902Z**, exit 0. It moved only
+`exit-gates-driver-routing` to `walked`, appended the passing `live` /
+`opencode` / `openai/gpt-6.1-sol` walk at **2026-10-31T06:34:40Z**, regenerated
+all three reports, and committed the generated artifacts. No row was hand-edited.
+
+The forge-writing operation used the logged-in **host** `gh` naturally through
+the installed `/Users/derio/.local/bin/fr` from the same valid isolated worktree,
+not host `uv run`. Its identity was RC15 and all 362 installed source files
+matched the worktree/release closure before invocation. No credentials were
+copied, token values printed, global credential settings changed, pin altered,
+or identity/migration bypass used. Earlier container credential-route failures
+are retained privately; they did not execute either mutation.
+
+Exactly one native `fr journal resolve --scope spec --slug
+2026-10-14-exit-gates --id test-plan-step-2 --state fixed --note <accepted public
+fixture chain and proposed product evidence>` ran **07:18:41Z–07:18:51Z** on
+2026-10-31, exit 0. It appended only
+`test-plan-step-2-resolved-2` to the existing archived spec journal (record time
+**07:18:43Z**), with the original journal byte-prefix and all prior entries
+preserved. No active replacement journal was created.
+
+The native command posted [discharge comment 6540531941](https://github.com/derio-net/super-fr/issues/1205#issuecomment-6540531941)
+at **07:18:48Z** and closed **#1205 at 07:18:50Z**, as expressly authorized
+before product evidence merge. Fresh before/after reads corroborate the exact
+owed marker, original OPEN state, one new native discharge comment and CLOSED
+state. This is an actual native effect, not a printed close suggestion or a
+standalone manual `gh issue close`. The comment explicitly identifies the
+product evidence as proposed and not yet merged.
+
+Full command argv, stdout/stderr, exit and timing captures, matrix/journal
+snapshots and pre/post hashes for both mutations are retained in the private
+preparation archive named above. This new product recording does not inherit
+the older fixture CLI-capture gap.
+
+Local verification:
+
+- `fr acceptance check`: **561 rows OK**; 19 walk-owed, 35 walked. Parsed
+  comparison with base verifies exactly one changed row and **560 unchanged**.
+  #1204's row is unchanged; #1206's row is still `walk-owed`.
+- `fr acceptance report --check`: all three reports synchronized.
+- `fr journal check --scope spec --slug 2026-10-14-exit-gates`: exit 0;
+  step 3 / #1206 and step 4 / #1207 remain owed; the existing #1197 deferral
+  remains. The scoped fold confirms only step 2 was newly discharged.
+- `fr validate artifacts`: **34 artifacts valid**.
+- `pytest tests/unit/test_journal_owed.py -q --no-cov`: **23 passed**; this is
+  focused bookkeeping validation, not a full suite or another live walk.
+- The three selected native stdout SHA-256 values match their source packets;
+  the normalized projection preserves held/walked/automatic-pass/no-closeout
+  distinctions. `git diff --check` passes. No product source/version/run changed.
+
+Fresh product forge reads still show #1195 and #1217 with `gate:tester`, no
+passed label; #1206 remains OPEN / `fr:owed`. No original gate was passed and
+no additional forge write was performed beyond the one native #1205 discharge.
+Independent product-branch review and draft publication are **not yet done**.
