@@ -31,7 +31,7 @@ writes one).
 
 | Stage | What it does |
 |---|---|
-| 1 | Brings up the ops workspace `chore/ops-<slug>` from the PR head on the ops profile, asks you to trust the op set when it changed (`fr ops trust`, on the host), then runs pre-merge status and applies each open op after its own confirmation |
+| 1 | Brings up the ops workspace `chore/ops-<slug>` from the PR head (from the default branch once the PR merged) on the ops profile, asks you to trust the op set when it changed (`fr ops trust`, on the host), then runs pre-merge status and applies each open op after its own confirmation |
 | 2 | Merges the PR, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state |
 | 3 | `fr isolation verify-merge`, rebases the ops branch onto the default branch, runs every `ready:` |
 | 4 | Post-merge status and apply |
@@ -48,8 +48,9 @@ trail. The default branch is the forge's, checked against `origin/HEAD`; a PR ba
 elsewhere, or touching the archived journals, is refused. The PR controls
 the ops workspace, so inside the stage an op closes only by its live check, and an
 attestation or Test Plan outcome only when added on the ops branch, never one the PR
-already carries. A PR that changes the ops profile itself is refused before anything
-comes up: that change merges in its own PR first. So stopping is always safe: re-run
+already carries. A PR whose own diff changes the ops profile is refused before anything
+comes up (it merges in its own PR first), and so is a cut whose profile is not the
+default branch's (rebase an open PR onto it). So stopping is always safe: re-run
 the same command. Pre-merge evidence never lands on the PR head, so
 the reviewed head and its checks stay valid. A PR merged by hand in the forge counts as
 stage 2 done.

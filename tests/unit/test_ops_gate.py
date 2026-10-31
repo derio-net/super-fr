@@ -33,6 +33,7 @@ SPEC = "docs/superpowers/specs/2026-10-22-s-design.md"
 SPEC_SLUG = "2026-10-22-s"
 PLAN = "docs/superpowers/plans/p"
 HEAD = "a" * 40
+TIP = "c" * 40  # the default branch's tip, where a merged PR's ops workspace is cut
 OPS = """schema_version: 1
 ops:
   - {id: pre, summary: create the thing, phase: pre-merge, check: 'false', apply: 'true'}
@@ -98,7 +99,7 @@ class FakeTree:
             self.head_files[path.relative_to(self.path).as_posix()] = path.read_text()
 
     def show(self, ref: str, path: str) -> str | None:
-        assert ref == HEAD
+        assert ref in (HEAD, TIP)  # the cut: the PR head, or main's tip after the merge
         return self.head_files.get(path)
 
     def head(self) -> str:
@@ -169,12 +170,23 @@ class FakeHost:
         self.fail_apply: set[str] = set()
         self.ready_code = 0
         self.changed: list[str] = []  # ops-profile files the PR head changes (p4-r1)
+        # files whose content differs from the default branch's tip, per compared rev
+        self.stale: dict[str, list[str]] = {}
+        self.tip: str | None = TIP
         self.origin_default: str | None = "main"
         self.how: dict[str, str] = {}
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
         self.calls.append((["diff", base, head, *paths], False))
         return [c for c in self.changed if any(c.startswith(p) for p in paths)]
+
+    def differing_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
+        self.calls.append((["diff-tip", base, head, *paths], False))
+        return [c for c in self.stale.get(head, []) if any(c.startswith(p) for p in paths)]
+
+    def rev_parse(self, ref: str) -> str | None:
+        self.calls.append((["rev-parse", ref], False))
+        return self.tip
 
     def origin_head(self) -> str | None:
         return self.origin_default

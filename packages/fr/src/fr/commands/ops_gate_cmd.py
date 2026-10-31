@@ -116,6 +116,23 @@ class HostCheckout:
                    "--", *paths], self.primary)  # fmt: skip
         return [line for line in out.splitlines() if line]
 
+    def differing_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
+        from fr.triage.gitseam import git
+
+        out = git(["diff", "--name-only", "--end-of-options", base, head, "--", *paths],
+                  self.primary)  # fmt: skip
+        return [line for line in out.splitlines() if line]
+
+    def rev_parse(self, ref: str) -> str | None:
+        from fr.triage.gitseam import GitError, git
+
+        try:
+            out = git(["rev-parse", "--verify", "--quiet", "--end-of-options",
+                       f"{ref}^{{commit}}"], self.primary)  # fmt: skip
+        except GitError:
+            return None
+        return out.strip() or None
+
     def origin_head(self) -> str | None:
         from fr.triage.gitseam import GitError, git
 

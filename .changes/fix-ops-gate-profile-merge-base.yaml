@@ -1,2 +1,2 @@
 bump: patch
-summary: "`fr ops gate` stage 1 judges a PR by its own diff (from the merge base), so an ops-profile change merged to the default branch after the PR forked no longer refuses it (gh#1266)."
+summary: "`fr ops gate` stage 1 judges a PR by its own diff (from the merge base), refuses a cut whose ops profile is not the default branch's, and cuts an already-merged PR's ops workspace from the default branch, so a profile that merged in its own PR no longer deadlocks the stage (gh#1266)."

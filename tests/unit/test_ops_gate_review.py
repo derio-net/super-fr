@@ -15,6 +15,8 @@ from tests.unit.test_ops_gate import (
     PLAN,
     SPEC,
     SPEC_SLUG,
+    TIP,
+    FakeForge,
     FakePrompt,
     _exec,
     _gate,
@@ -51,6 +53,66 @@ def test_a_reused_workspace_is_checked_too(ops_root: Path) -> None:
     result = run(gate)
     assert result.failed == 1 and result.code == 2
     assert not any(a[:2] == ["isolation", "exec"] for a, _ in host.calls)
+
+
+# ------------------ gh#1266: the PR's own diff, and only the default branch's profile
+
+
+PROFILE = ".devcontainer/ops/devcontainer.json"
+
+
+def test_a_profile_change_main_gained_is_not_blamed_on_an_open_pr(ops_root: Path) -> None:
+    """The PR's own diff leaves the profile alone, but main moved it after the fork: the
+    PR head's copy is older, so it is refused, as a rebase, never as the PR's change."""
+    gate, host, *_ = _gate(ops_root)
+    host.stale = {HEAD: [PROFILE]}
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2
+    assert "changes the ops profile" not in result.why
+    assert PROFILE in result.why and "rebase PR #5 onto main" in result.why
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_a_merged_pr_is_cut_from_the_default_branch_tip(ops_root: Path) -> None:
+    """A merged PR's head can never be rebased, and running its stale profile is unsafe:
+    stage 1 cuts from the default branch, which holds the PR, and stage 3 replays only
+    the ops branch's own commits from that cut."""
+    gate, host, tree, *_ = _gate(ops_root, forge=FakeForge(state="MERGED"))
+    host.stale = {HEAD: [PROFILE]}  # the PR head's profile predates main's
+    run(gate)
+    up = next(a for a, _ in host.calls if a[:2] == ["isolation", "up"])
+    assert up[up.index("--base") + 1] == TIP
+    assert _host(ops_root).cut() == TIP and _host(ops_root).head() == HEAD
+    assert ["diff-tip", "origin/main", TIP, ".devcontainer/ops",
+            ".devcontainer/fr-profiles.yaml"] in [a for a, _ in host.calls]  # fmt: skip
+    assert ("rebase", ("origin/main", TIP)) in tree.calls
+
+
+def test_a_merged_pr_still_refuses_a_profile_it_changed_itself(ops_root: Path) -> None:
+    gate, host, *_ = _gate(ops_root, forge=FakeForge(state="MERGED"))
+    host.changed = [PROFILE]
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2 and "changes the ops profile" in result.why
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_a_merged_pr_reusing_a_stale_cut_is_refused(ops_root: Path) -> None:
+    """A workspace cut from the head before the PR merged runs that head's profile; once
+    main moved it, the workspace is re-cut, never reused."""
+    gate, host, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    host.stale = {HEAD: [PROFILE]}
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2
+    assert PROFILE in result.why and "fr isolation down" in result.why
+    assert not any(a[:2] == ["isolation", "exec"] for a, _ in host.calls)
+
+
+def test_a_merged_pr_with_an_unresolvable_default_tip_is_refused(ops_root: Path) -> None:
+    gate, host, *_ = _gate(ops_root, forge=FakeForge(state="MERGED"))
+    host.tip = None
+    result = run(gate)
+    assert result.failed == 1 and result.code == 2
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
 
 
 # --------------------------------- p4-r2: nothing the PR pre-commits closes anything

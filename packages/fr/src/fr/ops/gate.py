@@ -83,6 +83,16 @@ class GateHost(Protocol):
         after the PR forked is not the PR's change (gh#1266)."""
         ...
 
+    def differing_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
+        """The *paths* whose content differs between *base*'s tip and *head* (`git diff
+        --name-only --end-of-options <base> <head> -- <paths>`): whether the profile a
+        workspace cut from *head* would run is the default branch's own (gh#1266)."""
+        ...
+
+    def rev_parse(self, ref: str) -> str | None:
+        """The commit *ref* names in the base checkout, or None."""
+        ...
+
     def origin_head(self) -> str | None:
         """The default branch the base checkout's `origin/HEAD` names, or None."""
         ...
@@ -559,13 +569,17 @@ def apply_phase(gate: Gate, phase: str) -> None:
 
 
 def stage_1(gate: Gate) -> None:
-    """Bring up (or reuse) the ops workspace, cut from the PR head; pre-merge ops."""
+    """Bring up (or reuse) the ops workspace, cut from the PR head (from the default
+    branch once the PR merged); pre-merge ops."""
     t = gate.target
-    head = valid_sha(str(gate.view(fresh=True).get("head_oid") or ""), f"PR #{t.pr}'s head")
+    view = gate.view(fresh=True)
+    head = valid_sha(str(view.get("head_oid") or ""), f"PR #{t.pr}'s head")
+    merged = str(view.get("state") or "") == "MERGED"
     gate.require_default_base()
     gate.host.fetch(t.feature)
     gate.host.fetch(gate.default)
-    archived = gate.host.changed_paths(f"origin/{gate.default}", head, [ARCHIVED_JOURNALS])
+    default_ref = f"origin/{gate.default}"
+    archived = gate.host.changed_paths(default_ref, head, [ARCHIVED_JOURNALS])
     if archived:  # p4-r2 addendum: a feature PR has no business in the archive
         raise StageFailed(
             f"PR #{t.pr} adds or changes archived journals ({', '.join(archived)}); "
@@ -573,7 +587,7 @@ def stage_1(gate: Gate) -> None:
             code=2,
         )
     pinned = [f".devcontainer/{t.profile}", PROFILES_FILE]
-    changed = gate.host.changed_paths(f"origin/{gate.default}", head, pinned)
+    changed = gate.host.changed_paths(default_ref, head, pinned)  # the PR's own diff
     if changed:  # p4-r1: never bring up a privileged profile the PR itself rewrote
         raise StageFailed(
             f"PR #{t.pr} changes the ops profile ({', '.join(changed)}); its devcontainer "
@@ -581,19 +595,48 @@ def stage_1(gate: Gate) -> None:
             "first. Nothing was brought up",
             code=2,
         )
+    # The workspace runs the profile it was cut with. An open PR is cut from its head
+    # (p4-r5); a merged one cannot be rebased, so it is cut from the default branch,
+    # which already holds it (gh#1266).
+    if merged:
+        tip = gate.host.rev_parse(default_ref)
+        base = valid_sha(tip or "", f"{default_ref}'s tip")
+    else:
+        base = head
     reused = gate.host.workspace(t.ops_branch)
-    if reused is not None and gate.state.cut() != head:  # p4-r5: exactly the PR head
+    cut = gate.state.cut()
+    if reused is not None and not merged and cut != head:  # p4-r5: exactly the PR head
         raise StageFailed(
-            f"the ops workspace {t.ops_branch} was cut from {gate.state.cut() or 'unknown'}, "
+            f"the ops workspace {t.ops_branch} was cut from {cut or 'unknown'}, "
             f"not PR #{t.pr}'s head {head}; " + gate.redo_stage_1()
+        )
+    if reused is not None and merged and not cut:
+        raise StageFailed(
+            f"the ops workspace {t.ops_branch} was cut from unknown; " + gate.redo_stage_1()
+        )
+    run_from = valid_sha(cut or "", "the recorded cut") if reused is not None else base
+    stale = gate.host.differing_paths(default_ref, run_from, pinned)
+    if stale:  # never run a profile other than the default branch's own (gh#1266)
+        fix = (
+            gate.redo_stage_1()
+            if merged
+            else f"rebase PR #{t.pr} onto {gate.default} (or merge {gate.default} into it), "
+            "then re-run `fr ops gate`"
+        )
+        raise StageFailed(
+            f"the ops profile on {gate.default} changed since {run_from[:12]} "
+            f"({', '.join(stale)}); an ops workspace from there would run an older profile "
+            f"with the ops credentials. Nothing was brought up: {fix}",
+            code=2,
         )
     if reused is None:
         code, _ = gate.host.fr(["isolation", "up", "--repo", str(t.primary), "--profile",
-                                t.profile, "--branch", t.ops_branch, "--base", head])  # fmt: skip
+                                t.profile, "--branch", t.ops_branch, "--base", base])  # fmt: skip
         if code != 0 or gate.host.workspace(t.ops_branch) is None:
             raise StageFailed(f"`fr isolation up --branch {t.ops_branch}` exited {code}")
-        gate.state.set_cut(head)
-        gate.say(f"ops workspace {t.ops_branch} up on profile {t.profile}, from {head[:12]}")
+        gate.state.set_cut(base)
+        origin = f"{gate.default} at {base[:12]} (PR #{t.pr} merged)" if merged else base[:12]
+        gate.say(f"ops workspace {t.ops_branch} up on profile {t.profile}, from {origin}")
     apply_phase(gate, "pre-merge")
     gate.finish(gate.tree(), 1, f"head: {head}\npre-merge ops closed on {t.ops_branch}", head=head)
 
@@ -677,8 +720,11 @@ def stage_3(gate: Gate) -> None:
             f"verified ({head}); nothing rebased",
             code=2,
         )
+    # Replay only the ops branch's own commits: they sit on the cut, which is the PR
+    # head, or the default branch's tip when stage 1 ran after the merge (gh#1266).
+    upstream = gate.pinned_head()
     try:
-        tree.rebase_onto(f"origin/{gate.default}", head)
+        tree.rebase_onto(f"origin/{gate.default}", upstream)
     except Exception as exc:  # noqa: BLE001 — git's own words
         raise StageFailed(f"cannot rebase {t.ops_branch} onto {gate.default}: {exc}") from exc
     gate.trust(tree)  # the tree moved: the grant must cover the merged revision

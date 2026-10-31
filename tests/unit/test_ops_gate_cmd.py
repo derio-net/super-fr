@@ -262,7 +262,14 @@ def test_changed_paths_are_what_the_pr_changed_not_what_main_gained(tmp_path: Pa
     git("commit", "-qm", "the ops profile, in its own PR")
     pinned = [".devcontainer/ops"]
 
-    assert HostCheckout(tmp_path).changed_paths("main", head, pinned) == []
+    host = HostCheckout(tmp_path)
+    assert host.changed_paths("main", head, pinned) == []
+    # ...yet the PR head's copy is not main's: a workspace cut there would run it.
+    assert host.differing_paths("main", head, pinned) == [".devcontainer/ops/devcontainer.json"]
+    tip = git("rev-parse", "main")
+    assert host.rev_parse("main") == tip
+    assert host.differing_paths("main", tip, pinned) == []
+    assert host.rev_parse("no-such-branch") is None
 
     git("checkout", "-q", "feat")
     (tmp_path / ".devcontainer" / "ops").mkdir(parents=True)
