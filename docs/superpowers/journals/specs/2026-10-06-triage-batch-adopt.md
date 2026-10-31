@@ -221,3 +221,11 @@ Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_
 Step: Unit: `drive_pass` over an adopted batch counts it in flight, matches its new PR, and plans close actions for its tab when finished.
 
 Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one)
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-5 created=2026-10-31T17:40:35+00:00 -->
+### test-plan-step-5 · owed · Test Plan step 5 owed
+
+what: **Post-merge — operator-driven:** sweep all six issue-backed sessions on the operator's host (frank#551, frank#813, super-fr#314, willikins#422, cnc-fr#97, the brain-candidates run): `--list`, `batch create` each, `batch adopt --yes` each, then `batch drive --once`; confirm each batch is in flight, each open PR was superseded by a new one on the batch branch, each session kept working on the new branch, and the driver later merges and closes them.
+why: The six sessions were adopted into batches, but those batches have been paused since 2026-10-14 (closed-session recovery work); the 'driver later merges and closes them' half was never observed. Owed until the paused batches are resumed and driven to merge.
+how: fr journal resolve --scope spec --slug 2026-10-06-triage-batch-adopt --id test-plan-step-5 --state fixed --note "<evidence>"
+owed_key: spec:2026-10-06-triage-batch-adopt#step5
