@@ -200,3 +200,10 @@ Fixed: AdoptTarget carries raw labels only (§E); the ref parser is a pure helpe
 Step: Unit: every R9 refusal, each with nothing written (judgements, forge, git, herdr fakes untouched); `--list` writes nothing.
 
 Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (refusal tests: test_an_unknown_batch_is_refused … test_a_working_agent_is_refused; --list: test_list_prints_every_session_with_its_issue_refs_and_writes_nothing)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-10-31T17:40:26+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: Unit: a full adopt on fakes — tab and agent renamed; branch renamed in git, in the isolation record, marker, session indexes and cursor; old PR superseded by a new one carrying its title, body and draft state; one event stamped before the new PR; label and marker comment on every member; one message.
+
+Evidence: 2026-10-31: tests/unit/test_triage_batch_adopt.py + test_triage_batch_drive.py::test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one — 56 passed locally on main 188823182, and in CI (test_adopt_with_an_open_pr_moves_everything_in_order)
