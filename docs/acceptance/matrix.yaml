@@ -9889,7 +9889,12 @@ rows:
       the verb (test_triage_batch_closeout_cmd), and the driver''s one-per-repo plan,
       shared-head attribution, ready-and-merge and single hand-back (test_triage_collected_closeout_drive).
       Live walk owed: one close-out over a real merged queue with a real housekeeping
-      PR (Test Plan step 3).'
+      PR (Test Plan step 3). v6.0.0 was cut on 2026-10-31 via the release workflow version
+      override (operator decision) with #1195 and #1217 gate:tester left held; this
+      walk was deferred, not certified. A disposable two-batch rehearsal was started
+      and paused unfinished; it is not evidence.'
+    issues:
+    - derio-net/super-fr#1206
   - id: exit-gates-release-gating
     capability: exit-gates
     acceptance: A push to main cuts a vX.Y.Z-rc.N pre-release while any change merged
