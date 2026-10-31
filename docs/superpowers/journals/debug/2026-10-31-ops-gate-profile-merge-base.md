@@ -20,3 +20,8 @@ ops_gate_cmd.HostCheckout.changed_paths now runs 'git diff --name-only --merge-b
 ### review-1 · review · self-review, PR #1267
 
 Inline self-review of the diff. Both changed_paths callers (archived journals, ops profile) want PR-diff semantics, so --merge-base is correct for each. Raised: (1) unrelated histories now fail loudly instead of answering, accepted for a security gate; (2) the post-merge fetch of feat/<slug> warns after branch deletion, out of scope, non-fatal. No in-scope findings open.
+
+<!-- fr:journal kind=finding scope=debug id=sec-1 created=2026-10-31T20:15:44+00:00 state=open -->
+### sec-1 · finding [open] · merge-base diff lets a stale ops profile run
+
+Security review of efce11a0a: isolation/local.py reads .devcontainer/<profile>/devcontainer.json from the worktree, which stage 1 cuts from the PR head. The two-dot diff, though it blamed the wrong PR, enforced profile == default-branch tip. With --merge-base alone, a profile main TIGHTENED after the fork is brought up from the PR head's stale, looser copy with the ops credentials. Fix #1 is a regression; PR #1267 must not merge as-is. Correct shape needs two checks (PR changed it; main moved it since the fork), and for a merged PR, where rebase is impossible, the ops workspace must come from the default branch, which breaks stage 1's cut==PR-head invariant (p4-r5). Design decision escalated to the operator.
