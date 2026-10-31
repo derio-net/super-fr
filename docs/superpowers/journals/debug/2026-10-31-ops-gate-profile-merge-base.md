@@ -25,3 +25,8 @@ Inline self-review of the diff. Both changed_paths callers (archived journals, o
 ### sec-1 · finding [open] · merge-base diff lets a stale ops profile run
 
 Security review of efce11a0a: isolation/local.py reads .devcontainer/<profile>/devcontainer.json from the worktree, which stage 1 cuts from the PR head. The two-dot diff, though it blamed the wrong PR, enforced profile == default-branch tip. With --merge-base alone, a profile main TIGHTENED after the fork is brought up from the PR head's stale, looser copy with the ops credentials. Fix #1 is a regression; PR #1267 must not merge as-is. Correct shape needs two checks (PR changed it; main moved it since the fork), and for a merged PR, where rebase is impossible, the ops workspace must come from the default branch, which breaks stage 1's cut==PR-head invariant (p4-r5). Design decision escalated to the operator.
+
+<!-- fr:journal kind=finding scope=debug id=sec-1-resolved created=2026-10-31T20:27:25+00:00 state=fixed resolves=sec-1 -->
+### sec-1-resolved · finding [fixed] · resolves sec-1: merge-base diff lets a stale ops profile run
+
+1ffe62768, operator chose split check + main cut. Stage 1: the PR's own diff (merge base) must not touch the profile; the cut's profile must equal the default tip's (GateHost.differing_paths, two-dot), else rebase (open) or re-cut (merged); a merged PR is cut from origin/<default>'s tip (GateHost.rev_parse); stage 3 rebases from the recorded cut. Tests: test_ops_gate_review.py gh#1266 block (5 tests), real-git adapter test extended. 769 ops tests green.
