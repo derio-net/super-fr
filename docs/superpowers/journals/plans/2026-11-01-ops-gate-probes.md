@@ -205,3 +205,8 @@ Automated security review of 738a7d0bb: evidence_lines judged body shape per lin
 ### p2-sec-2 · finding [open] (reviewer: in scope) · the block-aware evidence filter was still a denylist: mid-line bodies, single quotes, key: value and env lines got through (phase 2)
 
 Automated security review of 1cb930211.
+
+<!-- fr:journal kind=finding scope=plan id=p2-sec-2-resolved created=2026-11-01T20:28:07+00:00 state=fixed resolves=p2-sec-2 -->
+### p2-sec-2-resolved · finding [fixed] · resolves p2-sec-2: the block-aware evidence filter was still a denylist: mid-line bodies, single quotes, key: value and env lines got through
+
+5463bf9cc (swept into the phase-3 stub commit): an allowlist plus quote-aware bracket blocks; test_evidence_fails_closed_on_data_shaped_lines
