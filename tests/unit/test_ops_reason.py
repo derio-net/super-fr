@@ -137,3 +137,27 @@ def test_output_and_evidence_mask_secret_values() -> None:
     assert secret not in clip_output(f"token={secret}\nok", [secret])
     assert secret not in evidence_lines(f"token={secret}\nok", [secret])
     assert "***" in evidence_lines(f"token={secret}", [secret])
+
+
+def test_evidence_drops_an_indented_multi_line_json_body_as_a_block() -> None:
+    """security review: a pretty-printed body's members are not status lines."""
+    out = (
+        "checking the stack\n"
+        "{\n"
+        '  "user": "someone@example.invalid",\n'
+        '  "nested": {"token": "issued-by-the-server", "list": [1, 2]},\n'
+        '  "brace_in_string": "}",\n'
+        '  "tail": [\n    "x"\n  ]\n'
+        "}\n"
+        "converged 3 of 3\n"
+    )
+    got = evidence_lines(out, ())
+    assert got == "checking the stack; converged 3 of 3"
+    for leaked in ("someone@example.invalid", "issued-by-the-server", '"x"'):
+        assert leaked not in got
+
+
+def test_evidence_drops_stray_member_lines_and_closers() -> None:
+    """security review: a member line or a lone closer outside a tracked block."""
+    out = '  "token": "issued-by-the-server",\n}\n]\nok\n'
+    assert evidence_lines(out, ()) == "ok"

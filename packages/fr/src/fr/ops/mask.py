@@ -116,6 +116,44 @@ def evidence_lines(out: str, secrets: Iterable[str]) -> str:
     output ever committed, so a JSON body or a token a server printed never is; `""`
     when no status line is left (the caller then records "no output")."""
     secrets = list(secrets)
-    kept = [" ".join(mask(line, secrets).split()) for line in out.splitlines()]
+    kept = [" ".join(mask(line, secrets).split()) for line in _status_lines(out)]
     kept = [line for line in kept if line and not looks_like_a_body(line, OUTPUT_LINE_MAX)]
     return "; ".join(kept[-EVIDENCE_LINES:])[:EVIDENCE_MAX]
+
+
+_MEMBER = re.compile(r"""^\s*(?:"[^"]*"|'[^']*')\s*:""")
+"""A JSON/YAML member line (`"token": …`), the inside of a pretty-printed body."""
+
+
+def _status_lines(out: str) -> list[str]:
+    """*out*'s lines with every body removed as a BLOCK, not line by line (security
+    review): a line opening `{`/`[` starts a body that runs until its brackets balance,
+    so the members of an indented, multi-line JSON document never survive as lines of
+    their own; a stray member line or a lone closer is dropped too."""
+    kept: list[str] = []
+    depth = 0
+    for line in out.splitlines():
+        stripped = line.strip()
+        if depth == 0 and not stripped.startswith(("{", "[")):
+            if not _MEMBER.match(stripped) and stripped not in ("}", "]", "},", "],"):
+                kept.append(line)
+            continue
+        depth = max(0, depth + _bracket_delta(stripped))
+    return kept
+
+
+def _bracket_delta(line: str) -> int:
+    """Net `{`/`[` minus `}`/`]` on *line*, ignoring brackets inside double-quoted strings."""
+    delta, quoted, escaped = 0, False, False
+    for ch in line:
+        if escaped:
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif ch == '"':
+            quoted = not quoted
+        elif not quoted and ch in "{[":
+            delta += 1
+        elif not quoted and ch in "}]":
+            delta -= 1
+    return delta
