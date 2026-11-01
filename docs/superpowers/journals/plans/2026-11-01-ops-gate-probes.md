@@ -145,3 +145,48 @@ _ask_outcome is the one small loop; nothing to clean
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 scenario-only task; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-01T20:12:04+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · evidence_lines committed probe stdout without sanitise_reason's body filter: JSON/body-shaped lines (third-party data, server-issued tokens) could reach the pushed spec journal (phase 2)
+
+evidence: mask.py:111-117 → engine.py:156 → gate.py `--ran --evidence` → committed spec journal. Also raised by the automated security review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-01T20:12:04+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · evidence_lines read the raw output, so one evidence line could exceed the 200-char output-line bound (phase 2)
+
+evidence: mask.py:115 vs R9's 'last ≤3 non-blank of those lines'.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-01T20:12:04+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · test gaps: UNVERIFIABLE/CANNOT-VERIFY and proof/legacy DONE untested at the gate, trust order not asserted, grammar missing from the three-miss echo assertion, scenario never checked committed evidence (phase 2)
+
+evidence: test_ops_gate.py:853,889; fr-ops-gate-probes.sh:301.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-01T20:12:04+00:00 phase=2 state=open review_scope=out -->
+### p2-r4 · finding [open] (reviewer: out of scope) · an op already DONE at stage 4 is skipped by apply_phase, so `fr gate pass` reports it 'never checked' (phase 2)
+
+evidence: gate.py:549 (_closed skip) → evidence.py:110 recorded_state. Pre-existing (#1220's apply_phase), untouched by this diff.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-11-01T20:12:04+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 code review: 3 in-scope findings fixed, 1 out of scope (phase 2)
+
+Independent read-only reviewer over 25664d798..488038053 (152 targeted tests run). R8 per-state logic, the R10 grammar (all listed cases checked in memory), R9 bounds, the runner change preserving every reason, and no forbidden file: all confirmed. Raised p2-r1 (body leak into committed evidence), p2-r2 (line bound), p2-r3 (test gaps), all fixed with tests; p2-r4 pre-existing, out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-01T20:12:04+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: evidence_lines committed probe stdout without sanitise_reason's body filter: JSON/body-shaped lines (third-party data, server-issued tokens) could reach the pushed spec journal (phase 2)
+
+evidence_lines now applies the reason sanitiser's rules per line (mask, collapse, drop looks_like_a_body at OUTPUT_LINE_MAX) before taking the last 3; empty → 'no output'. Tests: test_evidence_never_records_a_body_shaped_line; scenario asserts the committed ran evidence omits a JSON body the probe printed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-01T20:12:04+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: evidence_lines read the raw output, so one evidence line could exceed the 200-char output-line bound (phase 2)
+
+A line over OUTPUT_LINE_MAX is dropped as a body, so every evidence line is within the output bound. Test: test_evidence_lines_respect_the_output_line_bound.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-01T20:12:04+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: test gaps: UNVERIFIABLE/CANNOT-VERIFY and proof/legacy DONE untested at the gate, trust order not asserted, grammar missing from the three-miss echo assertion, scenario never checked committed evidence (phase 2)
+
+Added test_a_failing_state_offers_only_retry_na_owed (UNVERIFIABLE, CANNOT-VERIFY, ESCALATE), test_a_done_that_ran_no_check_asks_the_usual_question (proof, legacy, attested), test_trust_is_granted_before_the_first_probe_runs, the grammar assertion in the three-miss test, and the scenario's committed-evidence checks.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-01T20:12:04+00:00 phase=2 state=open resolves=p2-r4 out_of_scope=true -->
+### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: an op already DONE at stage 4 is skipped by apply_phase, so `fr gate pass` reports it 'never checked' (phase 2)
+
+Not caused by this change: apply_phase and recorded_state are unchanged here, and stage 5 writes only spec-journal outcomes. Recorded by the executor as discovery p2-gate-pass-needs-applied-evidence; filed as a follow-up at deliver.
