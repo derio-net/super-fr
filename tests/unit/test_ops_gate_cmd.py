@@ -234,6 +234,54 @@ def test_git_revisions_follow_end_of_options(monkeypatch, tmp_path: Path) -> Non
     assert any(a[0] == "rebase" for a in seen) and any(a[0] == "diff" for a in seen)
 
 
+def test_changed_paths_are_what_the_pr_changed_not_what_main_gained(tmp_path: Path) -> None:
+    """gh#1266: stage 1 asks which pinned paths the PR changes. A profile change that
+    merged to the default branch AFTER the PR forked is not the PR's, so the diff is
+    from the merge base (`main...head`), never from main's tip (`main head`)."""
+    from fr.commands.ops_gate_cmd import HostCheckout
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(tmp_path), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()  # fmt: skip
+
+    git("init", "-q", "-b", "main")
+    (tmp_path / "README").write_text("seed\n")
+    git("add", "-A")
+    git("commit", "-qm", "seed")
+    git("checkout", "-qb", "feat")
+    (tmp_path / "app.py").write_text("x = 1\n")
+    git("add", "-A")
+    git("commit", "-qm", "the PR's own change")
+    head = git("rev-parse", "HEAD")
+    git("checkout", "-q", "main")
+    (tmp_path / ".devcontainer" / "ops").mkdir(parents=True)
+    (tmp_path / ".devcontainer" / "ops" / "devcontainer.json").write_text("{}\n")
+    git("add", "-A")
+    git("commit", "-qm", "the ops profile, in its own PR")
+    pinned = [".devcontainer/ops"]
+
+    host = HostCheckout(tmp_path)
+    assert host.changed_paths("main", head, pinned) == []
+    # ...yet the PR head's copy is not main's: a workspace cut there would run it.
+    assert host.differing_paths("main", head, pinned) == [".devcontainer/ops/devcontainer.json"]
+    tip = git("rev-parse", "main")
+    assert host.rev_parse("main") == tip
+    assert host.differing_paths("main", tip, pinned) == []
+    assert host.rev_parse("no-such-branch") is None
+
+    git("checkout", "-q", "feat")
+    (tmp_path / ".devcontainer" / "ops").mkdir(parents=True)
+    (tmp_path / ".devcontainer" / "ops" / "devcontainer.json").write_text('{"x": 1}\n')
+    git("add", "-A")
+    git("commit", "-qm", "the PR rewrites the profile")
+    head = git("rev-parse", "HEAD")
+    assert HostCheckout(tmp_path).changed_paths("main", head, pinned) == [
+        ".devcontainer/ops/devcontainer.json"
+    ]
+
+
 def test_the_ops_branch_push_is_leased(monkeypatch, tmp_path: Path) -> None:
     """p4-r11 correction: the first push creates the branch (refusing one that exists);
     every later one is leased on the sha fr last pushed, never a bare --force."""
