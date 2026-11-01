@@ -74,9 +74,20 @@ state:
         this instance creates projects with issues DISABLED; create_issue then fails
         with GitLab''s own clear message.'
     P9.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-11-01T10:22:49+00:00'
+      note: 'Walked 2026-11-01 against a self-hosted Gitea (operator''s cluster, reached
+        via kubectl port-forward because its external host is SSO-gated, derio-net/frank#909;
+        host and LAN address redacted), tea 0.16.0, a private scratch repo deleted
+        afterwards, by driving RealTeaClient directly. First run: 21/30 pass; list_linked_prs''
+        timeline heuristic fully correct (PR surfaced, plain referencing issue excluded,
+        open/merged state right, deduped). Seven bugs, one cause (adapter parsed tea''s
+        --fields renderings as Gitea''s API; tea api exits 0 on HTTP errors): ensure_labels
+        duplicated labels (Gitea allows duplicate names), file_exists True on 404,
+        pr_for_branch/default_branch always None (invalid tea fields), pr_status_by_url
+        https-only and blind to merged, list_open_issues_with_body str numbers + space-joined
+        labels. Fixed forward tests-first in fix/gitea-adapter-live-shapes (fr.tea.api_json;
+        fixtures captured live, redacted). Re-walk on the fix: 33/33 pass.'
     P9.T3.S1:
       state: ' '
       ticked_at: null
