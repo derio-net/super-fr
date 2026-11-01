@@ -59,7 +59,7 @@ steps:
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-01T12:02:39+00:00'
           agent: ab7b87a37eb6038fe
@@ -69,6 +69,11 @@ steps:
           tier: hard
           bound: opus
           session: 5bbde709-3ae1-4fec-9aef-381cbe81fddc
+          returned: '2026-11-01T18:58:03+00:00'
+          outcome: done
+        evidence:
+          tests: ci:7bae310f5e7879c3adcc71ddd10255a99504b466+a07feae3e138da7ff5fba10af721911c36da2e5c;tree=bb27bd2909fedfda5ae3ca39b06db87ef68b6281eddc7543caa55b7b99cd8ed4
+          visual: none
   journal-check:
     state: pending
   deliver:
