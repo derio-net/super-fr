@@ -9614,9 +9614,16 @@ rows:
       test set once each
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_split_check.py
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_covers_every_test_leg
+      int:
+      - super-fr:tests/integration/test_split_durations_xdist.py#test_each_groups_file_is_the_controllers_and_the_groups_partition
+    status: ci
+    notes: 'split-check job runs on every CI run (both legs: 13770 tests, 6 shards,
+      complete on PR run 41340117422); shape and pure check/merge pinned by unit tests;
+      xdist writer pinned by integration test.'
     verify: none
   - id: ci-coverage-newest-leg
     capability: ci
