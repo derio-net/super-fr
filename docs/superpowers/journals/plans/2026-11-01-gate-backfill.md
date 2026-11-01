@@ -442,3 +442,33 @@ Fixed in 89daa45fa: moved into __init__.
 ### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: non-forge exceptions escape close_gate_trackers and could crash the driver after the pass (phase 3)
 
 The same exposure already exists for the driver's pass_gate call (non-forge exceptions are not caught there either); this change adds no new exception class to that path. Hardening the driver's exception boundary is the driver's concern.
+
+<!-- fr:journal kind=decision scope=plan id=p4-devops-no-run-evidence created=2026-11-01T21:22:25+00:00 phase=4 -->
+### p4-devops-no-run-evidence · decision · the board's gate-labelled PR reason uses --no-run-evidence for devops (phase 4)
+
+The board reads no repo checkout, so it cannot resolve the run whose cursor names the PR's head; gated_pr_lane calls trackers.pass_command(gate, pr) with no run id, which prints --no-run-evidence for devops. The operator swaps in --run when a run exists.
+
+<!-- fr:journal kind=decision scope=plan id=p4-gated-card-not-batch-card created=2026-11-01T21:22:25+00:00 phase=4 -->
+### p4-gated-card-not-batch-card · decision · a gate-labelled PR outside a lane is a GatedCard in its column, not a Card (phase 4)
+
+Card is built around a Batch (events, members, session status), which a bare PR has none of, so kanban.ColumnView gains `gated` (GatedCard repo/number/title/url/reason) beside `cards`, counted in the column header, and Board.gated_count keeps the page from reading "No batches" when only gated PRs exist. lanes.unlisted_gated_prs is the one filter (batch PR in a lane, or ledger unread) that needs_you and build_board both call.
+
+<!-- fr:journal kind=decision scope=plan id=p4-lane-reason-shared created=2026-11-01T21:22:25+00:00 phase=4 -->
+### p4-lane-reason-shared · decision · lane_of's landed branch now speaks gated_pr_lane's reason (phase 4)
+
+The one held-gate rule is gated_pr_lane(pr); lane_of calls it on the batch PR (the ledger is that PR's labels). Its reason changed from "landed, held by a post-merge gate (...)" to "merged, held by gate:<g> ..." and now carries pass_command (with --notes), as R13 asks; the existing lane tests (walk, `fr gate pass --pr N --gate g`) stay green.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-facts-schema-pins created=2026-11-01T21:22:25+00:00 phase=4 -->
+### p4-facts-schema-pins · discovery · several test modules pin FACTS_SCHEMA literally (phase 4)
+
+Moving FACTS_SCHEMA 12 to 13 turned red literal pins in test_triage_* (collect, cli, facts_schema3, exit_gates_facts, labels_filter, model, state_integrity); updated them. Committed scenario fixtures stamped schema 12 still load (13 reads 3..13) and were left alone.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-01T21:22:25+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+one read added across the existing adapters, following list_open_prs; nothing duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-01T21:22:25+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+collect gained one helper beside _closed_in_progress; no shared code to extract
