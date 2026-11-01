@@ -6181,6 +6181,30 @@ def _spec_review_ids(repo_root: Path, state: RunState) -> tuple[str, ...]:
     return spec_review_steps(repo_root, state)
 
 
+def _warn_ops_gap(repo_root: Path, state: RunState) -> None:
+    """Spec 2026-11-01-ops-gate-probes R3: the spec review resolved, so warn when the run
+    has an ops gap — against its plan when it has one, else as steps that will need ops.
+    Advisory: it never refuses, and an unreadable section, matrix, ops carrier or spec
+    (an undecodable one is a `ValueError`, as `SectionError` is) is silent."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.ops.gap import gap_message, ops_gap
+    from fr.ops.load import OpsLoadError
+    from fr.requirements import run_spec
+    from fr.verification.exit import run_exit, run_plan_dir
+
+    spec_rel = run_spec(state)
+    if spec_rel is None:
+        return
+    plan_dir = run_plan_dir(repo_root, state)
+    try:
+        gap = ops_gap(repo_root, spec_rel, plan_dir, run_exit(repo_root, state).gates)
+    except (ValueError, OSError, AcceptanceError, OpsLoadError):
+        return
+    if gap:
+        message = gap_message(gap, has_plan=plan_dir is not None)
+        err_console.print(f"warning: {message}", markup=False, soft_wrap=True)
+
+
 def _warn_label_sync(repo_root: Path, state: RunState) -> None:
     """Exit-gates R7: a spec-bearing step resolved, so bring the run's PR labels to its
     exit (the PR is found by the run's branch). Advisory: a run with no PR yet is
@@ -6799,6 +6823,8 @@ def _resolve_body(
     console.print(f"{step_id}: {state_value}")
     if state_value == "done" and step_id in ("brainstorm", *_spec_review_ids(repo_root, new_state)):
         _warn_label_sync(repo_root, new_state)
+    if state_value == "done" and step_id in _spec_review_ids(repo_root, new_state):
+        _warn_ops_gap(repo_root, new_state)
     if step_id == "deliver" and state_value == "done":
         # spec 2026-09-25 §5.B.3: the usage capture rides this commit
         _capture_usage(repo_root, new_state, "deliver")

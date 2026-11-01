@@ -18,24 +18,24 @@ def test_a_probe_gets_only_the_minimal_env(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FR_TEST_LEAK", "leaked")
     monkeypatch.setenv("HOME", "/home/someone")
     run = ShellRunner(tmp_path)
-    assert run('echo "${FR_TEST_LEAK:-unset}"', {}) == (0, "unset")
-    assert run('echo "$HOME"', {}) == (0, "/home/someone")
-    assert run("command -v bash >/dev/null && echo found", {}) == (0, "found")
+    assert run('echo "${FR_TEST_LEAK:-unset}"', {}) == (0, "unset\n")
+    assert run('echo "$HOME"', {}) == (0, "/home/someone\n")
+    assert run("command -v bash >/dev/null && echo found", {}) == (0, "found\n")
 
 
 def test_env_passthrough_names_extra_variables(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FR_TEST_PASS", "through")
     run = ShellRunner(tmp_path, passthrough=("FR_TEST_PASS",))
-    assert run('echo "$FR_TEST_PASS"', {}) == (0, "through")
+    assert run('echo "$FR_TEST_PASS"', {}) == (0, "through\n")
 
 
 def test_the_identity_env_is_added(tmp_path: Path) -> None:
-    assert ShellRunner(tmp_path)('echo "$TOKEN"', {"TOKEN": "t"}) == (0, "t")
+    assert ShellRunner(tmp_path)('echo "$TOKEN"', {"TOKEN": "t"}) == (0, "t\n")
 
 
 def test_stdin_is_closed(tmp_path: Path) -> None:
     start = time.monotonic()
-    assert ShellRunner(tmp_path, timeout=5)("cat; echo eof", {}) == (0, "eof")
+    assert ShellRunner(tmp_path, timeout=5)("cat; echo eof", {}) == (0, "eof\n")
     assert time.monotonic() - start < 4
 
 
@@ -61,3 +61,7 @@ def test_ops_config_reads_passthrough_and_timeout() -> None:
     assert OpsConfig().timeout_seconds == 60
     with pytest.raises(ValueError):
         OpsConfig.model_validate({"timeout_seconds": 0})
+
+
+def test_the_runner_returns_the_probes_full_stdout(tmp_path: Path) -> None:
+    assert ShellRunner(tmp_path)("echo one; echo two; echo three", {}) == (0, "one\ntwo\nthree\n")

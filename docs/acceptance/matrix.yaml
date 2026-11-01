@@ -10151,6 +10151,22 @@ rows:
       audit placement, and status use of the unchanged per-plan grant; status remains
       ci.
     scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: ops-none-acknowledgement
+    capability: fr ops
+    acceptance: 'A plan''s ops.yaml can declare `none: <reason>` (no ops on purpose);
+      it is refused beside a non-empty op list, never promotes the devops gate, and
+      older ops.yaml files migrate to the new version'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_load.py#test_ops_none_beside_step_blocks_is_refused_by_name
+      - super-fr:tests/unit/test_ops_load.py#test_a_none_file_loads_no_ops_and_never_counts_as_ops
+      - super-fr:tests/unit/test_migration_ops_none.py#test_the_ops_chain_is_one_hop_to_two
+    status: ci
+    notes: 'R4 unit-pinned: loader/model refusals, plan_has_ops false, ops kind 1->2
+      stamp-only migration chain'
+    verify: none
   - id: fr-ops-testplan-tags
     capability: Test Plan
     acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; any
@@ -10246,6 +10262,105 @@ rows:
         PR #4 merged 8a15e2daaa9a536bc4f5899acd72eeeddaa31cf7; clean fresh-main tree
         matched the PR #4 source tree; published RC11 source cc133a53b3ed6dcaa8f6e6d64e2bb8b04c6c53b8
         status returned DONE (checked) for both ops, with unchanged marker hashes.'
+  - id: ops-gap-advisory
+    capability: fr ops gap
+    acceptance: A devops-gated run with no ops and Test Plan steps containing commands
+      is warned about by fr plan self-review and at spec-review (naming the steps and
+      commands), and a step pointer naming an undeclared op is a self-review error
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gap.py#test_an_inline_span_starting_with_a_shipped_tool_is_a_command
+      - super-fr:tests/unit/test_plan_ops.py#test_self_review_warns_of_an_ops_gap
+      - super-fr:tests/unit/test_plan_ops.py#test_a_pointer_to_an_undeclared_op_is_an_error
+    status: ci
+    notes: 'R1-R3, R7 unit-pinned: the gap function, self-review warn/errors, spec-review
+      stderr warning; CI test job'
+    verify: none
+  - id: ops-gate-gap-refusal
+    capability: fr ops gate
+    acceptance: fr ops gate stage 1 refuses, bringing nothing up, a devops-gated run
+      whose plan has no ops and whose Test Plan has command steps, naming them and both
+      fixes; a `none:` acknowledgement lets it proceed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_1_refuses_an_ops_gap_before_anything_is_brought_up
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_1_reads_a_merged_prs_gap_from_the_default_branch_tip
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R5: unit (open and merged PR) plus the fr-ops-gate-probes scenario, which
+      CI runs via test_scenarios'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-gate-probes.sh
+  - id: ops-gate-step-probe
+    capability: fr ops gate
+    acceptance: 'A Test Plan step pointing at an op is probed at stage 5: DONE records
+      `ran` with the probe''s output without asking, a failing probe shows its reason
+      and asks retry/na/owed only'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_passing_probe_records_ran_with_its_evidence_and_asks_nothing
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R6, R8, R9: unit plus the scenario asserting the committed ran evidence
+      omits data lines'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-gate-probes.sh
+  - id: ops-gate-answer-grammar
+    capability: fr ops gate
+    acceptance: 'Stage 5 accepts `ran: x` and `na - y`, and re-prompts a malformed answer
+      echoing it and the grammar instead of failing the stage'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_non_matching_answer_is_reprompted_with_an_echo
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R10: unit (accepted/re-prompted cases, three-miss failure) plus the scenario''s
+      re-prompted bare ran'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-gate-probes.sh
+  - id: ops-gate-probes-first-real-use
+    capability: fr ops gate
+    acceptance: On a real devops-gated run, pointed steps are probed and recorded with
+      real output and natural `ran:` answers are accepted
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
+    levels: {}
+    status: walk-owed
+    notes: 'walked on first real use: the next real devops-gated run (tracked derio-net/super-fr#1294)'
+    verify: live
+    issues:
+    - derio-net/super-fr#1294
+  - id: ops-stub-cli
+    capability: fr ops stub
+    acceptance: fr ops stub previews, and with --yes writes, ops.yaml stubs and step
+      pointers for a spec's command steps, refusing a duplicate id or an acknowledged
+      `none:`
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_stub.py#test_one_op_per_devops_command_step_without_a_pointer
+      - super-fr:tests/unit/test_ops_stub.py#test_the_pointer_goes_after_the_tag
+    status: ci
+    notes: 'R11: pure proposer and CLI tests incl. refusals, append-only ops.yaml, CRLF,
+      rollback'
   - id: auto-migrate-workspace-commits-alone
     capability: artifact migration gate
     acceptance: 'In a non-interactive fr-isolation workspace on a work branch, stale

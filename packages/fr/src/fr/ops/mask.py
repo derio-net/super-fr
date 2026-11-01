@@ -87,3 +87,82 @@ def sanitise_reason(line: str, secrets: Iterable[str], *, typed: bool = False) -
     if typed:
         return "" if len(line) > REASON_MAX else line
     return "" if looks_like_a_body(line, REASON_MAX) else line
+
+
+OUTPUT_LINES = 40
+OUTPUT_LINE_MAX = 200
+EVIDENCE_LINES = 3
+EVIDENCE_MAX = 300
+
+
+def last_line(out: str) -> str:
+    """The last non-blank line of a probe's stdout, stripped: the line a reason used."""
+    lines = [line for line in out.splitlines() if line.strip()]
+    return lines[-1].strip() if lines else ""
+
+
+def clip_output(out: str, secrets: Iterable[str]) -> str:
+    """A checked probe's output for the screen: the last `OUTPUT_LINES` lines, secrets
+    masked, each line clipped to `OUTPUT_LINE_MAX` characters."""
+    lines = mask(out.rstrip(), secrets).splitlines()[-OUTPUT_LINES:]
+    return "\n".join(line.rstrip()[:OUTPUT_LINE_MAX] for line in lines).strip("\n")
+
+
+def evidence_lines(out: str, secrets: Iterable[str]) -> str:
+    """The recordable evidence: the last `EVIDENCE_LINES` status lines of `out`, each
+    through the reason sanitiser's own rules (secrets masked, whitespace collapsed, a
+    body-shaped or over-`OUTPUT_LINE_MAX` line dropped — review p2-r1, p2-r2), joined
+    with `; ` and clipped to `EVIDENCE_MAX` characters. The only part of a probe's
+    output ever committed, so a JSON body or a token a server printed never is; `""`
+    when no status line is left (the caller then records "no output")."""
+    secrets = list(secrets)
+    kept = [" ".join(mask(line, secrets).split()) for line in _status_lines(mask(out, secrets))]
+    kept = [line for line in kept if line and not looks_like_a_body(line, OUTPUT_LINE_MAX)]
+    return "; ".join(kept[-EVIDENCE_LINES:])[:EVIDENCE_MAX]
+
+
+_STATUS_LINE = re.compile(r"^[A-Za-z0-9 ,.;()/%+#_*-]*$")
+"""A recordable status line, by a narrow POSITIVE grammar (security review, third pass):
+letters, digits, spaces and `, . ; ( ) / % + # _ * -`, nothing else. No colon, quote,
+bracket, `=`, backtick or angle bracket, so no JSON, YAML, env assignment, URL or XML
+fragment qualifies, and no quoting can hide anything because nothing is parsed. `***`
+(a masked secret) is allowed. Three more rules (review p3-r8) drop what the grammar
+lets through: a list item (`- ` or `* ` first), a word of `LONG_WORD` characters or
+more, and a token-shaped word (`TOKEN_WORD` or more, letters AND digits)."""
+
+LONG_WORD = 20
+TOKEN_WORD = 12
+_LIST_ITEM = re.compile(r"^[-*]\s")
+
+
+def _token_shaped(word: str) -> bool:
+    if len(word) >= LONG_WORD:
+        return True
+    return (
+        len(word) >= TOKEN_WORD
+        and any(c.isalpha() for c in word)
+        and any(c.isdigit() for c in word)
+    )
+
+
+def _is_status(line: str) -> bool:
+    stripped = line.strip()
+    return (
+        _STATUS_LINE.match(stripped) is not None
+        and _LIST_ITEM.match(stripped) is None
+        and not any(_token_shaped(w) for w in stripped.split())
+    )
+
+
+_STRUCTURE = re.compile(r"[{}\[\]]")
+"""Any bracket anywhere in a probe's output: the output carries structured data."""
+
+
+def _status_lines(out: str) -> list[str]:
+    """*out*'s recordable lines, failing closed. Output with a bracket ANYWHERE records
+    none of its lines: a body's lines cannot be told apart from status by shape, so none
+    is trusted. Otherwise only lines passing `_is_status` are kept. "converged 3 of 3" passes;
+    anything shaped like data does not, and evidence comes back "no output", never a body."""
+    if _STRUCTURE.search(out):
+        return []
+    return [line for line in out.splitlines() if _is_status(line)]

@@ -22,7 +22,7 @@ from fr.ops.engine import OrderError as OrderError  # re-export for callers
 from fr.ops.evidence import recorded_close
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
-from fr.ops.mask import sanitise_reason
+from fr.ops.mask import last_line, sanitise_reason
 from fr.ops.model import UndoNone
 from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_interactive, run_probe_full
 
@@ -266,7 +266,8 @@ def apply_ops(
             step(op.id, "failed", f"{op.id}: cannot verify ({row.reason}); not applied")
             break
         if op.phase == "post-merge" and op.ready:
-            rc, line = runner(op.ready, {})
+            rc, out = runner(op.ready, {})
+            line = last_line(out)
             if rc != 0:
                 why = sanitise_reason(line, runner_secrets(runner)) or f"exit {rc}"
                 step(

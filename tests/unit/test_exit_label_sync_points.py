@@ -185,3 +185,21 @@ def test_deliver_syncs_nothing_it_was_told_to_skip(tmp_path: Path, sync: _Sync, 
     _rec, out = _deliver(root)
     assert out.exit_code == 0, out.output
     assert "not synced" not in out.output
+
+
+def test_resolving_spec_review_warns_of_an_ops_gap_without_a_plan(
+    tmp_path: Path, sync: _Sync
+) -> None:
+    """spec 2026-11-01-ops-gate-probes R3: advisory, and the exit code is unchanged."""
+    import subprocess
+
+    root = _at_spec_review(tmp_path)
+    (root / "docs" / "spec.md").write_text(
+        "# spec\n\n## Verification\n\nstrategy: none\ngate: devops\n\n"
+        "## Test Plan\n\n- run `pulumi up` on the stack\n"
+    )
+    subprocess.run(["git", "-C", str(root), "commit", "-qam", "gated spec"], check=True)
+    out = _resolve(root, write_record(root, _spec_review_record()), step="spec-review", item=None)
+    assert out.exit_code == 0, out.output
+    assert "ops gap" in out.output and "will need ops" in out.output
+    assert "pulumi up" in out.output

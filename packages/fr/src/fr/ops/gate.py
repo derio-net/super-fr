@@ -69,6 +69,11 @@ class StageFailed(Exception):  # noqa: N818 — a stage's stop, not a fault
 
 
 class GateHost(Protocol):
+    def materialise(self, ref: str, paths: Sequence[str]) -> Path:
+        """A fresh temporary directory holding *paths* as *ref* carries them (`git archive
+        <ref> -- <paths>`), paths absent at *ref* skipped. The caller removes it."""
+        ...
+
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         """This `fr` in the base checkout: (exit, stdout). *terminal*: the operator's
         terminal attached and nothing captured (an `interactive: true` op)."""
@@ -568,6 +573,58 @@ def apply_phase(gate: Gate, phase: str) -> None:
 # ------------------------------------------------------------------------ stages
 
 
+def _head_paths(t: GateTarget, spec_rel: str) -> list[str]:
+    """What the ops-gap check reads at the PR head (spec 2026-11-01-ops-gate-probes §A),
+    plus the run's own spec when it lives elsewhere."""
+    paths = ["docs/superpowers/specs", t.plan_rel, "docs/acceptance/matrix.yaml", ".fr"]
+    return paths if spec_rel.startswith("docs/superpowers/specs/") else [*paths, spec_rel]
+
+
+def _refuse_an_ops_gap(gate: Gate, ref: str, *, merged: bool) -> None:
+    """R5: refuse, before any workspace exists, a run with an ops gap. It is decided on a
+    scratch tree materialised from *ref*, removed afterwards: the PR head while the PR is
+    open, the default branch's tip once it merged (review p1-r1, the gh#1266 family): a
+    merged PR gains no commits, so only a fix landed on the default branch can clear it. A head
+    whose Verification section, matrix or ops carriers cannot be read is not decided here:
+    the stages that read them report it."""
+    import shutil
+
+    from fr.acceptance.model import AcceptanceError
+    from fr.ops.gap import gap_message, ops_gap
+    from fr.ops.load import OpsLoadError
+    from fr.requirements import run_spec
+    from fr.triage.gitseam import GitError
+    from fr.verification.exit import exit_for_spec
+
+    t = gate.target
+    spec_rel = run_spec(t.run)
+    if spec_rel is None:
+        return
+    where = f"{gate.default} at {ref[:12]} (PR #{t.pr} merged)" if merged else f"PR #{t.pr}'s head"
+    scratch: Path | None = None
+    try:
+        scratch = gate.host.materialise(ref, _head_paths(t, spec_rel))
+        gates = exit_for_spec(scratch, spec_rel, repo=t.repo.rsplit("/", 1)[-1]).gates
+        gap = ops_gap(scratch, spec_rel, scratch / t.plan_rel, gates)
+    except (ValueError, OSError, AcceptanceError, OpsLoadError, GitError) as e:
+        gate.say(f"the ops-gap check could not read {where} ({e}); not checked")
+        gap = []
+    finally:
+        if scratch is not None:
+            shutil.rmtree(scratch, ignore_errors=True)
+    if gap:
+        fix = (
+            f"The PR has merged, so land the fix on {gate.default} (a follow-up PR)"
+            if merged
+            else "Fix it on the PR branch"
+        )
+        raise StageFailed(
+            f"{where} has an ops gap. {gap_message(gap, has_plan=True)} "
+            f"{fix}, then re-run `fr ops gate`. Nothing was brought up",
+            code=2,
+        )
+
+
 def stage_1(gate: Gate) -> None:
     """Bring up (or reuse) the ops workspace, cut from the PR head (from the default
     branch once the PR merged); pre-merge ops."""
@@ -629,6 +686,7 @@ def stage_1(gate: Gate) -> None:
             f"with the ops credentials. Nothing was brought up: {fix}",
             code=2,
         )
+    _refuse_an_ops_gap(gate, base, merged=merged)
     if reused is None:
         code, _ = gate.host.fr(["isolation", "up", "--repo", str(t.primary), "--profile",
                                 t.profile, "--branch", t.ops_branch, "--base", base])  # fmt: skip
@@ -749,12 +807,114 @@ def stage_4(gate: Gate) -> None:
     gate.finish(gate.tree(), 4, "post-merge ops closed")
 
 
-_ANSWER = re.compile(r"^\s*(ran|na|n/a|owed)\s+(\S.*)$", re.I)
+_KEYWORD = re.compile(
+    r"^\s*(ran|n/a|na|owed|retry)(?=$|\s|:|-\s)\s*(?:(?::|-(?=\s))\s*)?(.*?)\s*$", re.I | re.S
+)
+_GRAMMAR = {
+    "ran": "`ran <evidence>`",
+    "na": "`na <reason>`",
+    "owed": "`owed <why>`",
+    "retry": "`retry`",
+}
+MAX_ANSWERS = 3
+
+
+def _ask_outcome(gate: Gate, text: str, allowed: Sequence[str]) -> tuple[str, str]:
+    """Ask until the answer is `<keyword>[:|-] <argument>` for an allowed keyword (R10):
+    `retry` takes no argument and the others need one. A miss is echoed with the grammar
+    and re-asked; the third in a row fails the stage with that same echo."""
+    expected = ", ".join(_GRAMMAR[k] for k in allowed)
+    shown = text
+    for attempt in range(MAX_ANSWERS):
+        answer = gate.prompt.ask(shown) or ""
+        m = _KEYWORD.match(answer)
+        if m is not None:
+            how = "na" if m.group(1).lower() == "n/a" else m.group(1).lower()
+            arg = m.group(2).strip()
+            if how in allowed and bool(arg) == (how != "retry"):
+                return how, arg
+        echo = f"Not understood: {answer!r}. Expected {expected}."
+        if attempt == MAX_ANSWERS - 1:
+            raise StageFailed(f"{echo} Three answers in a row did not match.")
+        shown = f"{echo}\n{text}"
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
+def _record_outcome(
+    gate: Gate, tree: OpsTree, step: Any, kind: str | None, how: str, text: str
+) -> None:
+    flag = {"ran": ("--ran", "--evidence"), "owed": ("--owed", "--why")}.get(
+        how, ("--na", "--reason")
+    )
+    argv = ["closeout", "outcome", "--run", gate.target.run.run, "--step", str(step.n),
+            flag[0], flag[1], text]  # fmt: skip
+    if kind is not None:  # an outcome the PR carries, or an owed one: record over it
+        argv.append("--supersede")
+    code, out = tree.fr(argv)
+    if code != 0:
+        raise StageFailed(f"`fr closeout outcome --step {step.n}` exited {code}: {out}")
+
+
+def _ask_step(gate: Gate, tree: OpsTree, step: Any, kind: str | None) -> None:
+    """A step with no pointer: walk it, then answer."""
+    how, text = _ask_outcome(
+        gate,
+        f"Test Plan step {step.n} (devops): {step.text}\n"
+        "Walk it, then answer `ran <evidence>`, `na <reason>` or `owed <why>`:",
+        ("ran", "na", "owed"),
+    )
+    _record_outcome(gate, tree, step, kind, how, text)
+
+
+def _step_row(gate: Gate, op_id: str) -> Mapping[str, Any]:
+    plan = gate.target.plan_rel
+    code, out = gate.host.fr(gate.exec_args("ops", "status", op_id, "--plan", plan, "--json"))
+    if code not in STATUS_OK_CODES:
+        raise StageFailed(f"`fr ops status {op_id}` in the ops workspace exited {code}: {out}")
+    try:
+        rows = json.loads(out or "[]")
+    except json.JSONDecodeError as exc:
+        raise StageFailed(f"`fr ops status {op_id}` printed no readable report: {out}") from exc
+    for r in rows:
+        if str(r.get("op")) == op_id:
+            return r  # type: ignore[no-any-return]
+    raise StageFailed(f"`fr ops status {op_id}` did not report the op the step points at")
+
+
+def _probe_step(gate: Gate, tree: OpsTree, step: Any, kind: str | None) -> None:
+    """A step that points at an op (R8): run its probe; a pass is recorded as `ran` with
+    no question, anything else asks what to do about it."""
+    op_id = step.op
+    while True:
+        row = _step_row(gate, op_id)
+        state, how = str(row.get("state")), row.get("how")
+        gate.say(
+            f"  step {step.n}: {row.get('label') or state}  {op_id}  {row.get('reason') or ''}"
+        )
+        if row.get("output"):
+            gate.say(str(row["output"]))
+        if state == "DONE" and how == "checked":
+            evidence = row.get("evidence") or "no output"
+            _record_outcome(gate, tree, step, kind, "ran", f"{op_id}: check passed — {evidence}")
+            return
+        head = f"Test Plan step {step.n} (devops): {step.text}\n"
+        if state in ("OPEN", "UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"):
+            what, allowed = "`retry`, `na <reason>` or `owed <why>`", ("retry", "na", "owed")
+        else:  # N/A, or a DONE that ran no check: no probe ran, so fr records no `ran`
+            what, allowed = "`ran <evidence>`, `na <reason>` or `owed <why>`", ("ran", "na", "owed")
+        answer, text = _ask_outcome(
+            gate, f"{head}{op_id} is {row.get('label') or state}. Answer {what}:", allowed
+        )
+        if answer == "retry":
+            continue
+        _record_outcome(gate, tree, step, kind, answer, text)
+        return
 
 
 def stage_5(gate: Gate) -> None:
-    """Each Test Plan step whose effective gate is devops, recorded with `fr closeout
-    outcome` (ran, n/a, or owed — which stage 6 then refuses)."""
+    """Each Test Plan step whose effective gate is devops: a pointed step is probed (R8),
+    any other asked (R10); recorded with `fr closeout outcome` (ran, n/a, or owed — which
+    stage 6 then refuses)."""
     from fr.ops.holds import gated_steps
 
     t = gate.target
@@ -763,27 +923,17 @@ def stage_5(gate: Gate) -> None:
     at_head = head_entry_ids(tree, gate.pinned_head(), "spec", spec_slug) if spec_slug else set()
     every = gated_steps(tree.path, t.run, "devops")
     trusted = gated_steps(tree.path, t.run, "devops", exclude=at_head)
+    probed = False
     for (step, kind), (_, mine) in zip(every, trusted, strict=True):
         if mine is not None:
             continue
-        answer = gate.prompt.ask(
-            f"Test Plan step {step.n} (devops): {step.text}\n"
-            "Walk it, then answer `ran <evidence>`, `na <reason>` or `owed <why>`:"
-        )
-        m = _ANSWER.match(answer or "")
-        if m is None:
-            raise StageFailed(f"Test Plan step {step.n} has no outcome; walk it and re-run")
-        how, text = m.group(1).lower(), m.group(2).strip()
-        flag = {"ran": ("--ran", "--evidence"), "owed": ("--owed", "--why")}.get(
-            how, ("--na", "--reason")
-        )
-        argv = ["closeout", "outcome", "--run", t.run.run, "--step", str(step.n),
-                flag[0], flag[1], text]  # fmt: skip
-        if kind is not None:  # an outcome the PR carries, or an owed one: record over it
-            argv.append("--supersede")
-        code, out = tree.fr(argv)
-        if code != 0:
-            raise StageFailed(f"`fr closeout outcome --step {step.n}` exited {code}: {out}")
+        if step.op is None:
+            _ask_step(gate, tree, step, kind)
+            continue
+        if not probed:
+            gate.trust(tree)
+            probed = True
+        _probe_step(gate, tree, step, kind)
     gate.finish(tree, 5, "devops Test Plan steps recorded")
 
 

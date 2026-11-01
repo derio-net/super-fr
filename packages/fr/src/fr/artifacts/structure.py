@@ -219,14 +219,23 @@ def validate_journal(path: Path) -> list[str]:
 # --- ops -----------------------------------------------------------------
 
 
+OPS_NONE_VERSION = 2
+"""The `ops` kind version that introduced `none:` (spec 2026-11-01-ops-gate-probes R4)."""
+
+
 def validate_ops(path: Path) -> list[str]:
     """A plan's `ops.yaml` (spec `2026-10-22-fr-ops-design` R1, R17) against
-    `OpsFile`: every op parses as an `Op`, and no op id appears twice."""
+    `OpsFile`: every op parses as an `Op`, and no op id appears twice. A `none:`
+    acknowledgement needs a version-2 stamp (spec 2026-11-01-ops-gate-probes R4): no fr
+    that wrote version 1 knew the key."""
     from fr.ops.model import OpsFile
 
     data, problems = _load_mapping(path)
     if problems or data is None:
         return problems
+    stamp = data.get("schema_version", 1)
+    if "none" in data and not (isinstance(stamp, int) and stamp >= OPS_NONE_VERSION):
+        return [f"`none:` needs `schema_version: {OPS_NONE_VERSION}` or later (stamped {stamp})"]
     problems = _model_problems(OpsFile, data)
     if problems:
         return problems
