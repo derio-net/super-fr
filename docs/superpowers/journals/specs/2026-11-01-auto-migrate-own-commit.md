@@ -260,3 +260,8 @@ run_kind: candidate
 ### tier-2026-11-01-auto-migrate-own-commit-p1 · decision · tier hard: the change rewires the CLI-entry migration gate every fr command passes through
 
 The phase reorders ensure_artifacts_current's refusals and adds a committing context in non-interactive sessions; a mistake either commits where it must not (CI, bridge, default branch) or strands every command behind a refusal.
+
+<!-- fr:journal kind=finding scope=spec id=f9-resolved-2 created=2026-11-01T17:29:49+00:00 state=open resolves=f9 tracked_by=https://github.com/derio-net/super-fr/issues/1279 -->
+### f9-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1279] · resolves f9: fr-acceptance-nag.sh claims `fr acceptance status` is gate-exempt; it is not
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1279.
