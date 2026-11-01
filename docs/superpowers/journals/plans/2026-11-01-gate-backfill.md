@@ -180,3 +180,53 @@ The key source is the pre-existing debt fold, as the reviewer says; this change 
 ### p1-load-flakes-resolved · finding [out-of-scope] · resolves p1-load-flakes: Six wall-clock-sensitive tests failed in a 2h loaded full-suite run, pass alone (phase 1)
 
 Six timing-bound tests (idle guard, records commit, visual evidence) failed only in a 2-hour run on an oversubscribed host; the same 133 tests pass alone (re-run by the orchestrator). No file of this change is involved.
+
+<!-- fr:journal kind=decision scope=plan id=p2-manifest-key-held-by-own-tracker created=2026-11-01T19:11:33+00:00 phase=2 -->
+### p2-manifest-key-held-by-own-tracker · decision · a manifest key held only by fr's own tracker is the manifest's again (phase 2)
+
+After a first `--yes`, the tracker fr filed makes `fr debt` hold the manifest entry's key,
+and `collect_candidates` refused the manifest ("fr debt already holds this key"), so a
+second `--yes --from` exited 2 instead of being a no-op (R7). A key in the fold only
+because of an `owned_trackers` issue now yields to the manifest entry (candidates.py).
+
+<!-- fr:journal kind=decision scope=plan id=p2-plan-entry-issue created=2026-11-01T19:11:33+00:00 phase=2 -->
+### p2-plan-entry-issue · decision · PlanEntry gained an optional `issue` (the closed issue whose ask this is) (phase 2)
+
+Apply needs the closed issue to link, and a manifest `closed-issue` item names it under a
+non-`issue:` key, so `to_entry` now records `Candidate.issue_number`. Optional and
+defaulted; the plan file lives outside the repo and is not a registered artifact kind.
+
+<!-- fr:journal kind=decision scope=plan id=p2-open-issue-key-is-its-own-tracker created=2026-11-01T19:11:33+00:00 phase=2 -->
+### p2-open-issue-key-is-its-own-tracker · decision · an open `issue:` entry gets its PR label but no tracker (phase 2)
+
+An `issue:` candidate whose issue is still open is its own tracker; filing a second one
+would duplicate it. `--yes` labels the PR and reports "adopt it to label it". The spec
+is silent; this is the conservative reading of R8.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-apply-signature created=2026-11-01T19:11:33+00:00 phase=2 -->
+### p2-apply-signature · discovery · apply_plan takes the re-resolved plan entries as `candidates`, plus repo= and tracking= (phase 2)
+
+The command re-resolves each candidate's delivering PR (delivery.py) into PlanEntry
+objects exactly as the dry run does and passes those, so R15's comparison is entry to
+entry; `repo=` carries `owed_identity` for the plan-repo refusal.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fake-pr-view-labels created=2026-11-01T19:11:33+00:00 phase=2 -->
+### p2-fake-pr-view-labels · discovery · FakeGhClient.pr_view now reports labels written by edit_pr_labels (phase 2)
+
+It returned only the record's labels, so the fake could not show a second apply that
+reads the PR's labels; it now unions `pr_labels`. Existing tests unaffected.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-01T19:11:33+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+new helpers appended to the phase-1 trackers.py; nothing duplicated, no existing code to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-01T19:11:33+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+apply.py is a new module built on _Writer (one write path per verb) from the start; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-01T19:11:33+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+a scenario, a stub and docs only; no production code touched
