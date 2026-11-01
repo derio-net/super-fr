@@ -262,3 +262,4 @@ gate: tester
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-11-01-auto-migrate-own-commit | `derio-net/super-fr` | `2026-11-01-auto-migrate-own-commit` | — |
