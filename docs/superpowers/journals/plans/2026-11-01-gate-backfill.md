@@ -472,3 +472,8 @@ one read added across the existing adapters, following list_open_prs; nothing du
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 collect gained one helper beside _closed_in_progress; no shared code to extract
+
+<!-- fr:journal kind=discovery scope=plan id=p4-facts-schema-pins-2 created=2026-11-01T21:39:33+00:00 phase=4 -->
+### p4-facts-schema-pins-2 · discovery · Correction to p4-facts-schema-pins: six scenario fixtures WERE regenerated (phase 4)
+
+p4-facts-schema-pins says the scenario fixtures were left alone. That is wrong: commit 0f99f1461 regenerated six of them (cancelled-terminal, claims-expired, claims-held, config-skew, retire-sync, settle facts JSON) for the schema 13 facts. The older entry stays as written; this one corrects it.
