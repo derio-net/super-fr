@@ -5,7 +5,9 @@ gitea.com/swagger.v1.json) — closer to GitHub's than GitLab's in several
 respects (labels are full objects, not plain strings; contents API is
 base64-encoded the same way), but with real differences of its own (label
 color needs a leading `#` on write; no dedicated "related PRs" endpoint).
-We monkeypatch `fr.tea._run_tea` to return canned JSON.
+Writes and `view_issue` monkeypatch `fr.tea._run_tea`; every API read goes
+through `_api`, which answers `tea api -i` the way tea really does (exit 0,
+status on stderr). The shapes captured live are in `test_tea_live_shapes.py`.
 """
 
 from __future__ import annotations
@@ -25,6 +27,23 @@ def _fake_run_tea_factory(returns: dict[tuple[str, ...], str]):
         raise AssertionError(f"unexpected tea call: {args}")
 
     return _run
+
+
+def _api(monkeypatch, body: str, status: int = 200) -> list[list[str]]:
+    """Answer every `tea api -i` with *body* under an HTTP *status* line, as
+    tea really does (exit 0 whatever the status — see `fr.tea.api_result`).
+    Returns the argv list, so a test can pin the endpoint it asked for."""
+    import subprocess
+
+    calls: list[list[str]] = []
+
+    def run(argv, *, cwd, env=None):
+        calls.append(list(argv))
+        err = f"HTTP/1.1 {status} X\r\nContent-Type: application/json\r\n"
+        return subprocess.CompletedProcess(argv, 0, stdout=body, stderr=err)
+
+    monkeypatch.setattr(_tea, "run_cli", run)
+    return calls
 
 
 class TestViewIssue:
@@ -85,7 +104,7 @@ class TestListLinkedPrs:
                 },
             ]
         )
-        monkeypatch.setattr(_tea, "_run_tea", _fake_run_tea_factory({("api",): timeline}))
+        _api(monkeypatch, timeline)
         prs = RealTeaClient().list_linked_prs("owner/repo", 3)
         assert len(prs) == 1
         assert prs[0]["url"] == "https://gitea.example.com/o/r/pulls/7"
@@ -107,7 +126,7 @@ class TestListLinkedPrs:
                 }
             ]
         )
-        monkeypatch.setattr(_tea, "_run_tea", _fake_run_tea_factory({("api",): timeline}))
+        _api(monkeypatch, timeline)
         prs = RealTeaClient().list_linked_prs("owner/repo", 3)
         assert prs[0]["state"] == "CLOSED"
         assert prs[0]["merged"] is True
@@ -123,15 +142,12 @@ class TestListLinkedPrs:
         timeline = json.dumps(
             [{"type": "pull_ref", "ref_issue": pr}, {"type": "pull_ref", "ref_issue": pr}]
         )
-        monkeypatch.setattr(_tea, "_run_tea", _fake_run_tea_factory({("api",): timeline}))
+        _api(monkeypatch, timeline)
         prs = RealTeaClient().list_linked_prs("owner/repo", 3)
         assert len(prs) == 1
 
     def test_returns_empty_on_tea_error(self, monkeypatch):
-        def _raise(args):
-            raise _tea.TeaError("transient failure")
-
-        monkeypatch.setattr(_tea, "_run_tea", _raise)
+        _api(monkeypatch, json.dumps({"message": "Not Found"}), status=404)
         assert RealTeaClient().list_linked_prs("owner/repo", 3) == []
 
 
@@ -203,27 +219,18 @@ class TestThinPassThroughs:
 
 class TestContentsApi:
     def test_file_exists_true_on_success(self, monkeypatch):
-        monkeypatch.setattr(
-            _tea, "_run_tea", lambda args: json.dumps({"content": "eA==", "type": "file"})
-        )
+        _api(monkeypatch, json.dumps({"content": "eA==", "type": "file"}))
         assert RealTeaClient().file_exists("owner/repo", "docs/x.md") is True
 
     def test_file_exists_false_on_error(self, monkeypatch):
-        def _raise(args):
-            raise _tea.TeaError("404")
-
-        monkeypatch.setattr(_tea, "_run_tea", _raise)
+        _api(monkeypatch, json.dumps({"message": "Not Found"}), status=404)
         assert RealTeaClient().file_exists("owner/repo", "docs/missing.md") is False
 
     def test_read_file_decodes_base64_content(self, monkeypatch):
         import base64
 
         encoded = base64.b64encode(b"hello world").decode("ascii")
-        monkeypatch.setattr(
-            _tea,
-            "_run_tea",
-            lambda args: json.dumps({"content": encoded, "encoding": "base64", "type": "file"}),
-        )
+        _api(monkeypatch, json.dumps({"content": encoded, "encoding": "base64", "type": "file"}))
         assert RealTeaClient().read_file("owner/repo", "docs/x.md") == "hello world"
 
     def test_list_dir_returns_names(self, monkeypatch):
@@ -233,14 +240,11 @@ class TestContentsApi:
                 {"name": "02.yaml", "type": "file"},
             ]
         )
-        monkeypatch.setattr(_tea, "_run_tea", lambda args: response)
+        _api(monkeypatch, response)
         assert RealTeaClient().list_dir("owner/repo", "docs/plan") == ["01.yaml", "02.yaml"]
 
     def test_list_dir_empty_on_error(self, monkeypatch):
-        def _raise(args):
-            raise _tea.TeaError("404")
-
-        monkeypatch.setattr(_tea, "_run_tea", _raise)
+        _api(monkeypatch, json.dumps({"message": "Not Found"}), status=404)
         assert RealTeaClient().list_dir("owner/repo", "docs/missing") == []
 
 
@@ -249,41 +253,24 @@ class TestPrStatusByUrl:
     reasoning as GitLab's `mr view`) — parse (repo, index) from the URL,
     then query by index."""
 
-    def test_parses_url_and_calls_pulls_by_index(self, monkeypatch):
-        captured: list[list[str]] = []
-
-        def fake(args: list[str]) -> str:
-            captured.append(args)
-            return json.dumps({"state": "open", "merged": False, "draft": False})
-
-        monkeypatch.setattr(_tea, "_run_tea", fake)
+    def test_parses_url_and_reads_the_pr_from_the_api(self, monkeypatch):
+        calls = _api(monkeypatch, json.dumps({"state": "open", "merged": False, "draft": True}))
         result = RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/7")
-        assert result == {"state": "OPEN", "draft": False}
-        assert captured == [["pulls", "7", "--repo", "owner/repo", "--output", "json"]]
+        assert result == {"state": "OPEN", "draft": True}
+        assert calls == [["tea", "api", "-i", "/repos/owner/repo/pulls/7"]]
 
     def test_merged_state(self, monkeypatch):
-        monkeypatch.setattr(
-            _tea,
-            "_run_tea",
-            lambda args: json.dumps({"state": "closed", "merged": True, "draft": False}),
-        )
+        _api(monkeypatch, json.dumps({"state": "closed", "merged": True, "draft": False}))
         result = RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/7")
         assert result == {"state": "MERGED", "draft": False}
 
     def test_closed_unmerged_state(self, monkeypatch):
-        monkeypatch.setattr(
-            _tea,
-            "_run_tea",
-            lambda args: json.dumps({"state": "closed", "merged": False, "draft": False}),
-        )
+        _api(monkeypatch, json.dumps({"state": "closed", "merged": False, "draft": False}))
         result = RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/7")
         assert result == {"state": "CLOSED", "draft": False}
 
     def test_returns_none_on_error(self, monkeypatch):
-        def _raise(args):
-            raise _tea.TeaError("not found")
-
-        monkeypatch.setattr(_tea, "_run_tea", _raise)
+        _api(monkeypatch, json.dumps({"message": "Not Found"}), status=404)
         assert (
             RealTeaClient().pr_status_by_url("https://gitea.example.com/owner/repo/pulls/999")
             is None

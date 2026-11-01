@@ -510,12 +510,14 @@ rows:
       - super-fr:tests/unit/test_tea.py
       - super-fr:tests/unit/test_real_teaclient.py
       - super-fr:tests/unit/test_hostclient.py
+      - super-fr:tests/unit/test_tea_live_shapes.py
     status: ci
-    notes: RealTeaClient satisfies the GhClient Protocol (mypy-verified) and is reachable
-      from every fr apply CLI command via hostclient.client_for, gated on fr._hosts.detect_backend.
-      Unit-verified against Gitea's own live swagger-spec-confirmed shapes (Phase 3/4,
-      2026-07-09). Not yet proven against a live Gitea instance -- owed to the plan's
-      back-loaded manual verification phase (Phase 9).
+    notes: 'RealTeaClient satisfies the GhClient Protocol (mypy-verified) and is reachable
+      via client_for; every read now goes through fr.tea.api_json (tea api -i, HTTP
+      status checked). 2026-11-01: walked live against a self-hosted Gitea (tea 0.16.0;
+      host redacted) — the walk found seven read/label bugs the swagger-modelled doubles
+      could not, fixed in fix/gitea-adapter-live-shapes; test_tea_live_shapes.py pins
+      each against shapes captured from that instance (tests/fixtures/gitea/).'
   - id: multibackend-isolation-lifecycle
     capability: Multi-backend git hosting
     acceptance: fr isolation up/status/down/gc resolves the default branch and checks

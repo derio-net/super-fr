@@ -173,6 +173,7 @@ class TestEnsureLabels:
             )
 
         monkeypatch.setattr(tea, "ensure_label", fake_ensure)
+        monkeypatch.setattr(tea, "api_pages", lambda path, **kw: [])  # no labels yet
         defs = [LabelDef("fr:ready", "0E8AE6", "queued")]
         tea.ensure_labels(repo="o/r", labels=defs)
         assert captured == [

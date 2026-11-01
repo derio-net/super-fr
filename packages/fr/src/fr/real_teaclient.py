@@ -22,6 +22,10 @@ see docs/superpowers/specs/
 - Contents lookups mirror GitHub's shape closely (base64-encoded content
   + `encoding` field, same as GitHub's Contents API, NOT GitLab's
   differently-shaped endpoint).
+- Every read goes through `fr.tea.api_json` (Gitea's documented API shape,
+  HTTP status checked) — never tea's `--fields` renderings, which are tea's
+  own shape and broke six reads here in the Phase 9 live walk (see
+  `fr.tea`'s module docstring and `tests/fixtures/gitea/`).
 """
 
 from __future__ import annotations
@@ -33,15 +37,17 @@ from pathlib import Path
 from typing import Any, cast
 
 from fr import tea as _tea
-from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body, run_cli
+from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body
 from fr.labels import LabelDef
 
-# Gitea-specific PR URL shape (https://{host}/{owner}/{repo}/pulls/{n}).
+# Gitea-specific PR URL shape (http(s)://{host}/{owner}/{repo}/pulls/{n}).
 # Gitea has no GitLab-style arbitrary subgroup nesting, so a plain
 # two-segment repo capture is sufficient — deliberately not shared with
 # fr._urls (issue-URL-only) or fr.real_glabclient's MR-URL pattern (which
-# needs the lazy-quantifier trick GitLab's nesting requires).
-_PR_URL_RE = re.compile(r"^https://[^/]+/([^/]+/[^/]+)/pulls/(\d+)/?$")
+# needs the lazy-quantifier trick GitLab's nesting requires). Plain http is
+# real: a LAN-hosted Gitea's ROOT_URL, and so every html_url it emits, can be
+# http:// (the Phase 9 walk's instance is one).
+_PR_URL_RE = re.compile(r"^https?://[^/]+/([^/]+/[^/]+)/pulls/(\d+)/?$")
 
 
 def _login(author: Any) -> str:
@@ -74,15 +80,17 @@ class RealTeaClient(UnsupportedBatchOps):
     def list_linked_prs(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
         """PRs referencing this Issue, derived from its timeline (no
         dedicated endpoint exists — see module docstring). Fails soft."""
-        owner_name = repo
         try:
-            out = _tea._run_tea(["api", f"/repos/{owner_name}/issues/{issue_number}/timeline"])
+            events = _tea.api_json(f"/repos/{repo}/issues/{issue_number}/timeline")
         except _tea.TeaError:
             return []
-        events = json.loads(out) if out else []
+        if not isinstance(events, list):
+            return []
         seen_urls: set[str] = set()
         result: list[dict[str, Any]] = []
         for event in events:
+            if not isinstance(event, dict):
+                continue
             ref_issue = event.get("ref_issue")
             if not isinstance(ref_issue, dict):
                 continue
@@ -108,19 +116,20 @@ class RealTeaClient(UnsupportedBatchOps):
         return result
 
     def pr_status_by_url(self, url: str) -> dict[str, Any] | None:
-        """tea's `pulls` command doesn't accept a bare URL either (same
-        reasoning as GitLab's `mr view`) — parse (repo, index) from the
-        URL, then query by index. Fails soft: None on any error or
-        unparseable URL."""
+        """No lookup takes a bare URL (same reasoning as GitLab's `mr view`)
+        — parse (repo, index) from the URL, then read the PR from the API
+        (`tea pulls <n>` renders merge state as `hasMerged` and drops
+        `draft`). Fails soft: None on any error or unparseable URL."""
         m = _PR_URL_RE.match(url)
         if not m:
             return None
         repo, index = m.group(1), m.group(2)
         try:
-            out = _tea._run_tea(["pulls", index, "--repo", repo, "--output", "json"])
+            raw = _tea.api_json(f"/repos/{repo}/pulls/{index}")
         except _tea.TeaError:
             return None
-        raw = json.loads(out)
+        if not isinstance(raw, dict):
+            return None
         merged = bool(raw.get("merged", False))
         state = "MERGED" if merged else ("CLOSED" if raw.get("state") == "closed" else "OPEN")
         return {"state": state, "draft": bool(raw.get("draft", False))}
@@ -192,11 +201,11 @@ class RealTeaClient(UnsupportedBatchOps):
         _tea.edit_issue_body(repo=repo, number=number, body=body)
 
     def authenticated_login(self) -> str:
-        out = _tea._run_tea(["api", "user"])
+        raw = _tea.api_json("/user")
         try:
-            return str(json.loads(out)["login"])
-        except (json.JSONDecodeError, KeyError, TypeError) as exc:
-            raise _tea.TeaError(f"unreadable `tea api user` output: {exc}") from exc
+            return str(raw["login"])
+        except (KeyError, TypeError) as exc:
+            raise _tea.TeaError(f"unreadable `tea api /user` output: {exc}") from exc
 
     def edit_issue(self, repo: str, number: int, *, title: str, body: str) -> None:
         _tea.edit_issue(repo=repo, number=number, title=title, body=body)
@@ -207,41 +216,22 @@ class RealTeaClient(UnsupportedBatchOps):
     def list_open_issues_with_body(
         self, repo: str, *, search: tuple[str, ...], limit: int
     ) -> list[dict[str, Any]]:
-        # Gitea clamps a page to its own maximum (50 by default), whatever --limit
-        # says, so page until an empty page: a single page would be a silent cap.
-        got: list[Any] = []
-        page = 1
-        while len(got) < limit:
-            out = _tea._run_tea(
-                ["issues", "list", "--repo", repo, "--state", "open"]
-                + ["--limit", str(min(limit, 50)), "--page", str(page)]
-                + ["--fields", "index,title,body,labels,author", "--output", "json"]
-            )
-            try:
-                chunk = json.loads(out) if out.strip() else []
-            except json.JSONDecodeError as exc:
-                raise _tea.TeaError(f"unreadable `tea issues list` output: {exc}") from exc
-            if not isinstance(chunk, list):
-                raise _tea.TeaError("unreadable `tea issues list` output: not a JSON list")
-            if not chunk:
-                break
-            got.extend(chunk)
-            page += 1
-        got = got[:limit] if len(got) > limit else got
+        # The API, not `tea issues list`: tea renders `index` as a string and
+        # `labels` space-separated, and a Gitea label name may contain a space.
+        # `type=issues` keeps PRs out (Gitea lists them as issues otherwise).
+        got = _tea.api_pages(f"/repos/{repo}/issues?state=open&type=issues", max_items=limit)
         raw: list[dict[str, Any]] = []
         for i in got:
             if not isinstance(i, dict):
                 continue
-            labels = i.get("labels") or []
-            if isinstance(labels, str):
-                labels = [x.strip() for x in labels.split(",") if x.strip()]
+            labels = [str(lbl["name"]) for lbl in i.get("labels") or [] if isinstance(lbl, dict)]
             raw.append(
                 {
-                    "number": i.get("index"),
+                    "number": i.get("number"),
                     "title": i.get("title") or "",
                     "body": i.get("body") or "",
-                    "labels": [str(x) for x in labels],
-                    "author": {"login": _login(i.get("author"))},
+                    "labels": labels,
+                    "author": {"login": _login(i.get("user"))},
                 }
             )
         return filter_issues_by_body(raw, search, limit)
@@ -281,19 +271,11 @@ class RealTeaClient(UnsupportedBatchOps):
         _tea._run_tea(["comments", "add", str(number), body, "--repo", repo])
 
     def default_branch(self, *, cwd: Path, run: CommandRunner | None = None) -> str | None:
-        result = (run or run_cli)(
-            ["tea", "repos", "--fields", "default_branch", "--output", "json"], cwd=cwd
-        )
-        out = (result.stdout or "").strip()
-        if result.returncode != 0 or not out:
-            return None
-        # tea's `--output json` on a single-repo view returns a JSON object
-        # (unlike glab's --jq, which already extracts the bare string) — parse
-        # it here. Field name confirmed against Gitea's live swagger spec
-        # (Repository.default_branch).
+        # `tea repos` LISTS repos and has no default_branch field; the API's
+        # Repository does, and `{owner}/{repo}` resolves from the checkout at cwd.
         try:
-            parsed = json.loads(out)
-        except json.JSONDecodeError:
+            parsed = _tea.api_json("/repos/{owner}/{repo}", cwd=cwd, run=run)
+        except _tea.TeaError:
             return None
         branch = parsed.get("default_branch") if isinstance(parsed, dict) else None
         return branch if isinstance(branch, str) and branch else None
@@ -301,47 +283,36 @@ class RealTeaClient(UnsupportedBatchOps):
     def pr_for_branch(
         self, branch: str, *, cwd: Path, run: CommandRunner | None = None
     ) -> dict[str, Any] | None:
-        """No single-shot branch→PR query exists (`tea pulls` only takes a
-        numeric index), so list ALL PRs (`--state all`, so a merged/closed PR
-        for a torn-down branch is still found) and match `head.label`
-        client-side — a real, bounded degradation vs. gh/glab, not a bug."""
-        result = (run or run_cli)(
-            [
-                "tea",
-                "pulls",
-                "list",
-                "--state",
-                "all",
-                "--fields",
-                "state,merged,url,head,updated",
-                "--output",
-                "json",
-            ],
-            cwd=cwd,
-        )
-        if result.returncode != 0 or not (result.stdout or "").strip():
-            return None
+        """No single-shot branch→PR query exists, so list the 50 most recently
+        updated PRs of every state (a merged/closed PR for a torn-down branch is
+        still found) and match `head.label` client-side — a real, bounded
+        degradation vs. gh/glab, not a bug. The API, not `tea pulls list`:
+        tea's listing has no `merged` field and no merge time. `label`, not
+        `ref`: a same-repo PR's label is the bare branch, a fork's is
+        `owner:branch`, so a fork's same-named branch is not this one."""
         try:
-            entries = json.loads(result.stdout)
-        except json.JSONDecodeError:
+            entries = _tea.api_json(
+                "/repos/{owner}/{repo}/pulls?state=all&sort=recentupdate&limit=50",
+                cwd=cwd,
+                run=run,
+            )
+        except _tea.TeaError:
             return None
         if not isinstance(entries, list):
             return None
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            head = entry.get("head") or {}
+            head = entry.get("head")
             if not isinstance(head, dict) or head.get("label") != branch:
                 continue
-            merged = entry.get("merged", False)
+            merged = bool(entry.get("merged", False))
             state = "MERGED" if merged else ("CLOSED" if entry.get("state") == "closed" else "OPEN")
-            # tea renders `merged` as the merge time when there is one.
-            merged_at = merged if isinstance(merged, str) else None
             return {
                 "state": state,
-                "url": entry.get("url", ""),
-                "mergedAt": merged_at,
-                "updatedAt": entry.get("updated"),
+                "url": entry.get("html_url", ""),
+                "mergedAt": entry.get("merged_at") if merged else None,
+                "updatedAt": entry.get("updated_at"),
             }
         return None
 
@@ -351,9 +322,10 @@ class RealTeaClient(UnsupportedBatchOps):
 
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe. Any error reads as "not found"
-        — the safe direction (same posture as the GitHub/GitLab adapters)."""
+        — the safe direction (same posture as the GitHub/GitLab adapters).
+        `api_json` is what makes a 404 an error: tea itself exits 0."""
         try:
-            _tea._run_tea(["api", f"/repos/{repo}/contents/{path}"])
+            _tea.api_json(f"/repos/{repo}/contents/{path}")
             return True
         except _tea.TeaError:
             return False
@@ -361,18 +333,18 @@ class RealTeaClient(UnsupportedBatchOps):
     def list_dir(self, repo: str, path: str) -> list[str]:
         """Entry names under `path`. `[]` on any TeaError."""
         try:
-            out = _tea._run_tea(["api", f"/repos/{repo}/contents/{path}"])
+            entries = _tea.api_json(f"/repos/{repo}/contents/{path}")
         except _tea.TeaError:
             return []
-        entries = json.loads(out) if out else []
         if not isinstance(entries, list):
             return []
         return [e["name"] for e in entries if isinstance(e, dict) and "name" in e]
 
     def read_file(self, repo: str, path: str) -> str:
         """Raw file text. Gitea's Contents API mirrors GitHub's shape
-        closely (base64-encoded `content` + `encoding` field)."""
-        out = _tea._run_tea(["api", f"/repos/{repo}/contents/{path}"])
-        data = json.loads(out)
-        content = data.get("content", "")
-        return base64.b64decode(content).decode("utf-8")
+        closely (base64-encoded `content` + `encoding` field). Raises
+        TeaError on a missing path rather than returning ""."""
+        data = _tea.api_json(f"/repos/{repo}/contents/{path}")
+        if not isinstance(data, dict) or "content" not in data:
+            raise _tea.TeaError(f"{path}: not a file in {repo}")
+        return base64.b64decode(data.get("content") or "").decode("utf-8")

@@ -255,7 +255,10 @@ class FakeRunner:
         elif argv[0:3] == ["gh", "pr", "view"] and self.pr_by_branch is not None:
             body = self.pr_by_branch.get(argv[3], "")
             return subprocess.CompletedProcess(argv, 0 if body else 1, stdout=body, stderr="")
-        return subprocess.CompletedProcess(argv, rc, stdout=out, stderr="")
+        # `tea api -i` reports the HTTP status on stderr and exits 0 whatever it
+        # is (fr.tea.api_result); answer the way the real binary does.
+        err = "HTTP/1.1 200 OK\r\n" if argv[:3] == ["tea", "api", "-i"] and rc == 0 else ""
+        return subprocess.CompletedProcess(argv, rc, stdout=out, stderr=err)
 
     def _ps_out(self) -> str:
         """Per-state `docker ps` line, minus any container id already `rm`'d."""
@@ -861,11 +864,10 @@ def test_resolve_default_branch_gitlab_backend(tmp_path: Path) -> None:
 
 
 def test_resolve_default_branch_gitea_backend(tmp_path: Path) -> None:
-    """A Gitea-backed repo resolves via `tea repos ... --output json`
-    (field name `default_branch` — confirmed against Gitea's live
-    swagger spec, Repository.default_branch — but the CLI's own JSON
-    shape is reconfirmed against a live tea in Phase 9's manual
-    verification)."""
+    """A Gitea-backed repo resolves via `tea api -i /repos/{owner}/{repo}`
+    (Repository.default_branch). Phase 9's live walk (2026-11-01, tea 0.16.0)
+    found the earlier `tea repos --fields default_branch` invalid: `tea repos`
+    lists repos and has no such field (tests/fixtures/gitea/repo.json)."""
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
     (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
@@ -875,7 +877,7 @@ def test_resolve_default_branch_gitea_backend(tmp_path: Path) -> None:
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     assert target._resolve_default_branch() == "develop"
     tea_calls = runner.argv_for("tea")
-    assert tea_calls and tea_calls[0][:1] == ["tea"]
+    assert tea_calls and tea_calls[0] == ["tea", "api", "-i", "/repos/{owner}/{repo}"]
 
 
 def test_resolve_default_branch_gitlab_backend_falls_back_on_failure(tmp_path: Path) -> None:
@@ -923,22 +925,21 @@ def test_pr_from_gitlab_backend_no_mr_returns_none(tmp_path: Path) -> None:
 
 
 def test_pr_from_gitea_backend_list_and_filter_fallback(tmp_path: Path) -> None:
-    """Gitea's CLI has no single-shot branch→PR query (unlike gh/glab) —
-    verified during the multi-backend design's research (`tea pulls`
-    only takes an index, not a branch). The adapter falls back to
-    listing ALL PRs and matching `head.label` client-side. This is a
-    real, bounded degradation vs. gh/glab's single-shot query, not a
-    bug — documented in the design doc §8."""
+    """Gitea has no single-shot branch→PR query (unlike gh/glab). The adapter
+    lists the most recently updated PRs of every state through the API and
+    matches `head.label` client-side — a real, bounded degradation vs.
+    gh/glab's single-shot query, not a bug (design doc §8). The API's
+    PullRequest shape, not tea's listing: see tests/fixtures/gitea/pulls_all.json."""
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
     (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
         "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
     )
     listing = (
-        '[{"state": "open", "merged": false, "url": "https://gitea.example.com/o/r/pulls/1", '
-        '"head": {"label": "other-branch"}}, '
-        '{"state": "open", "merged": false, "url": "https://gitea.example.com/o/r/pulls/2", '
-        '"head": {"label": "feat/x"}}]'
+        '[{"state": "open", "merged": false, "html_url": "https://gitea.example.com/o/r/pulls/1", '
+        '"head": {"ref": "other-branch", "label": "other-branch"}}, '
+        '{"state": "open", "merged": false, "html_url": "https://gitea.example.com/o/r/pulls/2", '
+        '"head": {"ref": "feat/x", "label": "feat/x"}}]'
     )
     runner = FakeRunner(stdout={"tea": listing})
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
@@ -959,8 +960,9 @@ def test_pr_from_gitea_backend_merged_state(tmp_path: Path) -> None:
         "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
     )
     listing = (
-        '[{"state": "closed", "merged": true, "url": "https://gitea.example.com/o/r/pulls/2", '
-        '"head": {"label": "feat/x"}}]'
+        '[{"state": "closed", "merged": true, "merged_at": "2026-11-01T08:26:40Z", '
+        '"html_url": "https://gitea.example.com/o/r/pulls/2", '
+        '"head": {"ref": "feat/x", "label": "feat/x"}}]'
     )
     runner = FakeRunner(stdout={"tea": listing})
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
@@ -975,7 +977,10 @@ def test_pr_from_gitea_backend_no_matching_branch_returns_none(tmp_path: Path) -
     (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
         "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
     )
-    listing = '[{"state": "open", "merged": false, "url": "u", "head": {"label": "other-branch"}}]'
+    listing = (
+        '[{"state": "open", "merged": false, "html_url": "u", '
+        '"head": {"ref": "other-branch", "label": "other-branch"}}]'
+    )
     runner = FakeRunner(stdout={"tea": listing})
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     assert target._pr_from(repo, "feat/x") is None

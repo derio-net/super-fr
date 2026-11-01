@@ -92,7 +92,7 @@ def _cp(rc: int = 0, out: str = "") -> subprocess.CompletedProcess[str]:
     [
         ("github", ("gh", "repo", "view")),
         ("gitlab", ("glab", "repo", "view")),
-        ("gitea", ("tea", "repos")),
+        ("gitea", ("tea", "api", "-i")),
     ],
 )
 def test_default_branch_lookup_is_bounded_and_falls_back_on_timeout(

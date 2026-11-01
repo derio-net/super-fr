@@ -1,0 +1,29 @@
+[
+  {
+    "color": "d73a4a",
+    "description": "phase 9 walk",
+    "exclusive": false,
+    "id": 1,
+    "is_archived": false,
+    "name": "fr:walk",
+    "url": "http://gitea.example.com:3000/api/v1/repos/walker/fr-walk-scratch/labels/1"
+  },
+  {
+    "color": "d73a4a",
+    "description": "phase 9 walk",
+    "exclusive": false,
+    "id": 2,
+    "is_archived": false,
+    "name": "fr:walk",
+    "url": "http://gitea.example.com:3000/api/v1/repos/walker/fr-walk-scratch/labels/2"
+  },
+  {
+    "color": "ededed",
+    "description": "",
+    "exclusive": false,
+    "id": 3,
+    "is_archived": false,
+    "name": "fr:walk-extra",
+    "url": "http://gitea.example.com:3000/api/v1/repos/walker/fr-walk-scratch/labels/3"
+  }
+]
