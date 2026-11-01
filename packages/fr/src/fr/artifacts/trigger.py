@@ -49,7 +49,7 @@ import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 import typer
 
@@ -330,6 +330,40 @@ def is_interactive(
     )
 
 
+MigrationContext = Literal["ci", "opt-out", "interactive", "workspace", "refuse"]
+"""The five contexts of spec 2026-11-01-auto-migrate-own-commit §A, in precedence.
+
+- **ci** — a truthy `CI_ENV_VARS` marker: migrate the working tree in place,
+  never commit.
+- **opt-out** — `FR_NON_INTERACTIVE` truthy: refuse, write nothing.
+- **interactive** — a TTY on stdin and stdout: migrate and commit alone.
+- **workspace** — a valid fr-isolation workspace: migrate and commit alone.
+- **refuse** — anything else (a bridge/daemon checkout, an agent in a base
+  clone): refuse, write nothing.
+"""
+
+
+def classify(
+    env: Mapping[str, str] | None = None, stdin: Any = None, stdout: Any = None
+) -> MigrationContext | None:
+    """The context, from the environment and the streams alone.
+
+    `None` means "workspace or refuse": that needs git, and is decided by the
+    gate after `git_context`. CI comes first because a CI runner may allocate a
+    pty and a CI checkout must never be committed to; `FR_NON_INTERACTIVE` comes
+    before interactive because it is a TTY-bearing wrapper's explicit opt-out.
+    `is_interactive` stays the one answer to "is this an operator's terminal?".
+    """
+    environ = os.environ if env is None else env
+    if any(_truthy(environ, name) for name in CI_ENV_VARS):
+        return "ci"
+    if _truthy(environ, NON_INTERACTIVE_ENV_VAR):
+        return "opt-out"
+    if is_interactive(env=environ, stdin=stdin, stdout=stdout):
+        return "interactive"
+    return None
+
+
 # --- the gate ------------------------------------------------------------
 
 
@@ -353,7 +387,7 @@ def ensure_artifacts_current(
     env: Mapping[str, str] | None = None,
     repo_root: Path | None = None,
     registry: MigrationRegistry | None = None,
-    interactive: bool | None = None,
+    context: MigrationContext | None = None,
     commit: Callable[[Path, MigrationReport], Any] | None = None,
     err: Callable[[str], None] | None = None,
 ) -> None:
@@ -372,7 +406,7 @@ def ensure_artifacts_current(
        an operator told only "N could not be migrated" re-runs and is surprised
        by a commit that already exists.
 
-    `registry`, `interactive`, `commit` and `err` are injection points for
+    `registry`, `context`, `commit` and `err` are injection points for
     tests, mirroring the runner's own `registry=`; production passes none of
     them.
     """
@@ -408,8 +442,8 @@ def ensure_artifacts_current(
     if not stale:
         return
 
-    live = interactive if interactive is not None else is_interactive(env=environ)
-    if not live:
+    where = context if context is not None else classify(environ)
+    if where != "interactive":
         raise _refuse(
             emit,
             _will_not_act_here(

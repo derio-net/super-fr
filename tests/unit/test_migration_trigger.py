@@ -216,7 +216,7 @@ def test_a_read_only_command_never_migrates_or_commits(
             invoked_subcommand=command,
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
         )
     assert ran == [], "an exempt command must not even look at the tree"
 
@@ -312,7 +312,7 @@ def test_a_current_tree_neither_migrates_nor_commits(
     monkeypatch.setattr(trigger, "run_migrations", lambda *a, **k: ran.append(1))
     monkeypatch.setattr(trigger, "commit_migration", lambda *a, **k: committed.append(1))
     trigger.ensure_artifacts_current(
-        argv=["apply"], invoked_subcommand="apply", env={}, repo_root=tmp_path, interactive=True
+        argv=["apply"], invoked_subcommand="apply", env={}, repo_root=tmp_path, context="interactive"
     )
     assert ran == [] and committed == []
 
@@ -326,7 +326,7 @@ def test_interactive_migrates_commits_and_returns(tmp_path: Path) -> None:
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: committed.append(report),
     )
     assert f"<{CEILING_VERSION}" in p.read_text()
@@ -346,7 +346,7 @@ def test_non_interactive_refuses_without_migrating_or_committing(
             invoked_subcommand="apply",
             env={"CI": "true"},
             repo_root=tmp_path,
-            interactive=False,
+            context="refuse",
             commit=lambda root, report: committed.append(report),
         )
     assert e.value.exit_code != 0
@@ -368,7 +368,7 @@ def test_a_chain_gap_refuses_instead_of_escaping_as_a_traceback(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             registry=_gap_registry(),
         )
     assert e.value.exit_code == 2
@@ -393,7 +393,7 @@ def test_a_half_migrated_tree_is_exit_two_not_a_silent_pass(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
     assert e.value.exit_code == 2
@@ -511,7 +511,7 @@ def test_the_gate_reports_in_flight_plans_with_no_run(
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -534,7 +534,7 @@ def test_the_gate_creates_no_run_of_its_own(tmp_path: Path) -> None:
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -554,7 +554,7 @@ def test_a_complete_plan_is_not_offered_by_the_gate(
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -575,7 +575,7 @@ def test_the_non_interactive_refusal_does_not_reach_the_offer(
             invoked_subcommand="apply",
             env={"CI": "true"},
             repo_root=tmp_path,
-            interactive=False,
+            context="refuse",
         )
 
     assert "fr run adopt" not in capsys.readouterr().err
@@ -606,7 +606,7 @@ def test_an_artifact_the_gate_cannot_inspect_is_refused_not_waved_through(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: committed.append(report),
         )
 
@@ -631,7 +631,7 @@ def test_an_unreadable_stamp_is_refused_not_waved_through(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -671,7 +671,7 @@ def test_the_gate_refuses_on_the_repositorys_default_branch(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: committed.append(report),
         )
 
@@ -706,7 +706,7 @@ def test_a_feature_branch_is_migrated_as_before(
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -730,7 +730,7 @@ def test_the_gate_holds_back_an_artifact_with_uncommitted_changes(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -840,7 +840,7 @@ def test_the_gate_refuses_while_another_fr_holds_the_migration_lock(
                 invoked_subcommand="apply",
                 env={},
                 repo_root=tmp_path,
-                interactive=True,
+                context="interactive",
                 commit=lambda root, report: None,
             )
 
@@ -870,7 +870,7 @@ def test_the_loser_proceeds_when_the_winner_already_migrated(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -887,7 +887,7 @@ def test_a_lock_free_repo_still_migrates(tmp_path: Path, monkeypatch: pytest.Mon
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -911,7 +911,7 @@ def test_a_partial_migration_says_how_many_landed(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -957,7 +957,7 @@ def test_a_non_interactive_refusal_names_an_unreadable_file_not_a_migration(
             invoked_subcommand="plan",
             env={},
             repo_root=tmp_path,
-            interactive=False,
+            context="refuse",
             commit=lambda root, report: None,
         )
 
@@ -968,3 +968,40 @@ def test_a_non_interactive_refusal_names_an_unreadable_file_not_a_migration(
     assert "docs/superpowers/runs/r1.records/" + name in err
     assert why in err
     assert "outside the repository" in err
+
+
+# =========================================================================
+# spec 2026-11-01-auto-migrate-own-commit — which contexts migrate (§A)
+# =========================================================================
+
+
+def test_a_ci_marker_wins_over_a_tty() -> None:
+    assert trigger.classify({"CI": "true"}, _tty(), _tty()) == "ci"
+
+
+def test_github_actions_alone_is_ci() -> None:
+    assert trigger.classify({"GITHUB_ACTIONS": "true"}, _pipe(), _pipe()) == "ci"
+
+
+def test_ci_false_is_not_ci() -> None:
+    assert trigger.classify({"CI": "false"}, _tty(), _tty()) == "interactive"
+    assert trigger.classify({"CI": "false"}, _pipe(), _pipe()) is None
+
+
+def test_fr_non_interactive_wins_over_a_tty() -> None:
+    env = {trigger.NON_INTERACTIVE_ENV_VAR: "1"}
+    assert trigger.classify(env, _tty(), _tty()) == "opt-out"
+
+
+def test_a_ci_marker_wins_over_fr_non_interactive() -> None:
+    env = {"CI": "1", trigger.NON_INTERACTIVE_ENV_VAR: "1"}
+    assert trigger.classify(env, _pipe(), _pipe()) == "ci"
+
+
+def test_a_tty_on_both_streams_is_interactive() -> None:
+    assert trigger.classify({}, _tty(), _tty()) == "interactive"
+
+
+def test_pipes_leave_the_workspace_or_refuse_decision_to_git() -> None:
+    assert trigger.classify({}, _pipe(), _pipe()) is None
+    assert trigger.classify({}, _tty(), _pipe()) is None
