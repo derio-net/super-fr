@@ -377,3 +377,8 @@ Spec Requirements group; see plan _prose.md.
 ### phase-split-2026-11-01-gate-backfill-p4 · decision · ask: the board listing gate-labelled merged PRs (R13) is its own ask, independent of apply
 
 Spec Requirements group; see plan _prose.md.
+
+<!-- fr:journal kind=finding scope=spec id=archive-no-dry-run created=2026-11-01T21:52:50+00:00 state=open review_scope=out -->
+### archive-no-dry-run · finding [open] (reviewer: out of scope) · fr archive files forge issues but has no dry run
+
+Corpus update 1 (decision d14): two triage owners refused to run fr archive during their reconciliation because it files fr:owed and follow-up issues with no preview. fr gate backfill now gives the per-repo sweep its own preview; fr archive itself still has none. Out of scope here (d14).
