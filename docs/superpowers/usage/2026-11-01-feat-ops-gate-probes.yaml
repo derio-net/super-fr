@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-01-feat-ops-gate-probes
+captures:
+- host: h-fdc56784
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-01T11:48:31+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 5bbde709-3ae1-4fec-9aef-381cbe81fddc
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 56
+        cache_write: 152977
+        cache_read: 3778614
+        output: 25764
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 9
+      other:
+        usd: null
+        turns: 8
+      paperwork:
+        usd: null
+        turns: 10
+    steps:
+      (outside run):
+        usd: null
+        turns: 5
+        input: 10
+        cache_write: 95694
+        cache_read: 518415
+        output: 1005
+      brainstorm:
+        usd: null
+        turns: 21
+        input: 46
+        cache_write: 57283
+        cache_read: 3260199
+        output: 24759
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 5
+          input: 10
+          cache_write: 95694
+          cache_read: 518415
+          output: 1005
+        brainstorm:
+          usd: null
+          turns: 21
+          input: 46
+          cache_write: 57283
+          cache_read: 3260199
+          output: 24759
