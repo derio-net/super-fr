@@ -360,3 +360,8 @@ Fixed in 0d593cae6 (110 lines; mirrors synced), with tests; targeted run 1179 pa
 ### p1-suite-red-outside-the-phase-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1292] · resolves p1-suite-red-outside-the-phase: the full suite is red under -n auto on this host, in tests the phase did not touch (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1292.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-11-01T21:27:47+00:00 phase=2 state=open resolves=p2-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1293 -->
+### p2-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1293] · resolves p2-r4: an op already DONE at stage 4 is skipped by apply_phase, so `fr gate pass` reports it 'never checked' (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1293.
