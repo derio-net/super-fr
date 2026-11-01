@@ -676,3 +676,84 @@ def test_an_alias_into_the_replaced_block_falls_back_instead_of_raising(tmp_path
     out = rewrite_phase_text(original, raw, "state")
 
     assert yaml.safe_load(out) == raw
+
+
+# --- the ops gap and op pointers (spec 2026-11-01-ops-gate-probes R3, R7) ---------------
+
+_GATED = "\n## Verification\n\nstrategy: none\ngate: devops\n\n## Test Plan\n\n"
+
+
+def _gated_plan(tmp_path, monkeypatch, *steps: str, ops_yaml: str | None = None):
+    from fr.parser import parse as parse_plan
+
+    from tests.unit.test_ops_artifacts import _plan
+
+    from fr.artifacts.registry import ARTIFACT_KINDS
+
+    plan_dir = _plan(tmp_path, monkeypatch)
+    spec = tmp_path / "docs/superpowers/specs/2026-10-22-toy.md"
+    spec.write_text(spec.read_text() + _GATED + "\n".join(steps) + "\n")
+    matrix = tmp_path / "docs/acceptance/matrix.yaml"  # names the repo: no origin here
+    matrix.parent.mkdir(parents=True)
+    version = ARTIFACT_KINDS["matrix"].current_version
+    matrix.write_text(f"schema_version: {version}\norg: derio-net\nrepo: own\nrows: []\n")
+    if ops_yaml is not None:
+        (plan_dir / "ops.yaml").write_text(ops_yaml)
+    return parse_plan(plan_dir)
+
+
+def _ops_issues(plan):
+    from fr.plan_ops import self_review
+
+    return [
+        i
+        for i in self_review(plan)
+        if "ops gap" in i.message or "(op:" in i.message or "TODO" in i.message
+    ]
+
+
+_OP = "schema_version: 2\nops:\n  - {id: a, summary: s, phase: post-merge, check: CHECK}\n"
+
+
+def test_self_review_warns_of_an_ops_gap(tmp_path, monkeypatch):
+    plan = _gated_plan(tmp_path, monkeypatch, "- run `pulumi up` on the stack", "- walk it")
+    (issue,) = _ops_issues(plan)
+    assert issue.severity == "warn"
+    assert "step 1" in issue.message and "pulumi up" in issue.message
+    assert "fr ops stub" in issue.message and "none:" in issue.message
+
+
+def test_self_review_is_quiet_with_a_none_acknowledgement(tmp_path, monkeypatch):
+    plan = _gated_plan(
+        tmp_path, monkeypatch, "- run `pulumi up`", ops_yaml="schema_version: 2\nnone: by hand\n"
+    )
+    assert _ops_issues(plan) == []
+
+
+def test_a_pointer_to_an_undeclared_op_is_an_error(tmp_path, monkeypatch):
+    plan = _gated_plan(
+        tmp_path,
+        monkeypatch,
+        "- (op: missing) run it",
+        ops_yaml=_OP.replace("CHECK", "'true'"),
+    )
+    (issue,) = _ops_issues(plan)
+    assert issue.severity == "error" and "missing" in issue.message
+
+
+def test_an_op_whose_check_is_still_todo_is_an_error(tmp_path, monkeypatch):
+    plan = _gated_plan(tmp_path, monkeypatch, "- (op: a) run it", ops_yaml=_OP.replace("CHECK", "TODO"))
+    (issue,) = _ops_issues(plan)
+    assert issue.severity == "error" and "`a`" in issue.message and "TODO" in issue.message
+
+
+def test_an_unreadable_verification_section_skips_the_gap_warning(tmp_path, monkeypatch):
+    plan = _gated_plan(tmp_path, monkeypatch, "- run `pulumi up`")
+    spec = tmp_path / "docs/superpowers/specs/2026-10-22-toy.md"
+    spec.write_text(spec.read_text().replace("gate: devops", "gate: devops\ngate: nonsense!"))
+    from fr.verification.exit import exit_for_spec
+    from fr.verification.spec_section import SectionError
+
+    with pytest.raises(SectionError):
+        exit_for_spec(tmp_path, "docs/superpowers/specs/2026-10-22-toy.md")
+    assert [i for i in _ops_issues(plan) if "ops gap" in i.message] == []
