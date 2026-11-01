@@ -684,11 +684,10 @@ _GATED = "\n## Verification\n\nstrategy: none\ngate: devops\n\n## Test Plan\n\n"
 
 
 def _gated_plan(tmp_path, monkeypatch, *steps: str, ops_yaml: str | None = None):
+    from fr.artifacts.registry import ARTIFACT_KINDS
     from fr.parser import parse as parse_plan
 
     from tests.unit.test_ops_artifacts import _plan
-
-    from fr.artifacts.registry import ARTIFACT_KINDS
 
     plan_dir = _plan(tmp_path, monkeypatch)
     spec = tmp_path / "docs/superpowers/specs/2026-10-22-toy.md"
