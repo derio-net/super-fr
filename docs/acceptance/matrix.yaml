@@ -10349,8 +10349,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: 'post-merge live walk owed: walked on first real use (the first per-repo
+      sweep), gate tester holds the close-out'
     verify: live
   - id: auto-migrate-workspace-commits-alone
     capability: artifact migration gate
