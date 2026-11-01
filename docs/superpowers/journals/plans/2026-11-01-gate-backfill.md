@@ -325,3 +325,30 @@ Fixed in 564500cfa: trackers.runs_by_head indexes cursors once per apply.
 ### p2-r9-resolved · finding [out-of-scope] · resolves p2-r9: 02.yaml's `-k gate-backfill` selects no test; the ids are test_gate_backfill_* (phase 2)
 
 Plan step text, not code: the scenarios run and pass with -k gate_backfill (orchestrator and executors used that); the plan's literal command is cosmetic and the plan is not behaviour this change ships.
+
+<!-- fr:journal kind=decision scope=plan id=p3-close-lives-in-gatebackfill created=2026-11-01T20:07:00+00:00 phase=3 -->
+### p3-close-lives-in-gatebackfill · decision · close_gate_trackers lives in fr/gatebackfill/close.py and fr.verification.labels re-exports it (phase 3)
+
+Keeps the fr.gatebackfill -> fr.verification direction free of a cycle (close.py imports
+only ghclient/labels/archive_followups; trackers are imported lazily). Both routes import
+it via fr.verification.labels. It returns a CloseReport (closed, adopt commands,
+discharge commands, errors) and takes optional root (discharge commands) and dry_run.
+
+<!-- fr:journal kind=decision scope=plan id=p3-driver-prints-no-discharge created=2026-11-01T20:07:00+00:00 phase=3 -->
+### p3-driver-prints-no-discharge · decision · the driver route passes no repo root, so it prints no discharge commands (phase 3)
+
+The driver has no checkout of the repo the PR is in at that point; its one-line output
+names the closed trackers and any error. The discharge commands print from `fr gate pass`.
+
+<!-- fr:journal kind=decision scope=plan id=p3-retry-exit-code created=2026-11-01T20:07:00+00:00 phase=3 -->
+### p3-retry-exit-code · decision · the retry path exits 1 when the close failed; the normal path exits 0 (phase 3)
+
+After a normal pass the pass itself succeeded, so a tracker failure is reported and the
+retry command printed with exit 0; on the retry path the close is the whole job, so a
+failure exits 1. The old test that a gate:<g>-passed PR refuses was dropped: it is now the
+retry (a PR with neither label still refuses, tested).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-01T20:07:00+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+one new helper module; both routes call it, nothing duplicated or existing to clean
