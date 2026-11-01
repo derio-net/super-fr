@@ -10297,9 +10297,14 @@ rows:
       echoing it and the grammar instead of failing the stage'
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_non_matching_answer_is_reprompted_with_an_echo
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R10: unit (accepted/re-prompted cases, three-miss failure) plus the scenario''s
+      re-prompted bare ran'
     verify: candidate
     scenario: tests/scenarios/fr-ops-gate-probes.sh
   - id: ops-gate-probes-first-real-use
