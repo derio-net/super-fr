@@ -200,3 +200,8 @@ Automated security review of 738a7d0bb: evidence_lines judged body shape per lin
 ### p2-sec-1-resolved · finding [fixed] · resolves p2-sec-1: committed probe evidence let a pretty-printed JSON body's member lines through (per-line body check)
 
 1cb930211: mask._status_lines removes a body as a block (bracket depth, quoted brackets ignored) plus stray member lines and lone closers; tests test_evidence_drops_an_indented_multi_line_json_body_as_a_block, test_evidence_drops_stray_member_lines_and_closers.
+
+<!-- fr:journal kind=finding scope=plan id=p2-sec-2 created=2026-11-01T20:27:39+00:00 phase=2 state=open review_scope=in -->
+### p2-sec-2 · finding [open] (reviewer: in scope) · the block-aware evidence filter was still a denylist: mid-line bodies, single quotes, key: value and env lines got through (phase 2)
+
+Automated security review of 1cb930211.
