@@ -352,3 +352,8 @@ retry (a PR with neither label still refuses, tested).
 ### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
 
 one new helper module; both routes call it, nothing duplicated or existing to clean
+
+<!-- fr:journal kind=decision scope=plan id=p3-driver-prints-discharge created=2026-11-01T20:25:34+00:00 phase=3 -->
+### p3-driver-prints-discharge · decision · the driver route prints the adopt close and discharge lines (supersedes p3-driver-prints-no-discharge) (phase 3)
+
+The earlier rationale was wrong: the driver does know the repo's checkout (_Driver.path_of). _pass_gate now passes root=path_of(repo) and emits the adopt gh issue close lines and the discharge lines after the gate-pass line, as R12 requires on both routes. With no checkout path the discharge lines are omitted.
