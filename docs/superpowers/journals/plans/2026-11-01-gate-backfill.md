@@ -562,3 +562,28 @@ Fixed in 8f592de1f: correcting plan-journal discovery p4-facts-schema-pins-2 (ap
 ### p4-r8-resolved · finding [out-of-scope] · resolves p4-r8: facts schema pinned in three model.py places and seven test modules (phase 4)
 
 Pre-existing pattern from earlier schema bumps; this change moved the pin 12→13 everywhere it already lived and added no new pin site.
+
+<!-- fr:journal kind=finding scope=plan id=p1-load-flakes-resolved-2 created=2026-11-01T21:53:37+00:00 phase=1 state=open resolves=p1-load-flakes tracked_by=https://github.com/derio-net/super-fr/issues/1296 -->
+### p1-load-flakes-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1296] · resolves p1-load-flakes: Six wall-clock-sensitive tests failed in a 2h loaded full-suite run, pass alone (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1296.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r13-resolved-2 created=2026-11-01T21:53:37+00:00 phase=1 state=open resolves=p1-r13 tracked_by=https://github.com/derio-net/super-fr/issues/1297 -->
+### p1-r13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1297] · resolves p1-r13: owed keys from issue markers reached filesystem paths unvalidated (path traversal) (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1297.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved-2 created=2026-11-01T21:53:37+00:00 phase=2 state=open resolves=p2-r9 tracked_by=https://github.com/derio-net/super-fr/issues/1298 -->
+### p2-r9-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1298] · resolves p2-r9: 02.yaml's `-k gate-backfill` selects no test; the ids are test_gate_backfill_* (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1298.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved-2 created=2026-11-01T21:53:37+00:00 phase=3 state=open resolves=p3-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1299 -->
+### p3-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1299] · resolves p3-r8: non-forge exceptions escape close_gate_trackers and could crash the driver after the pass (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1299.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved-2 created=2026-11-01T21:53:37+00:00 phase=4 state=open resolves=p4-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1300 -->
+### p4-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1300] · resolves p4-r8: facts schema pinned in three model.py places and seven test modules (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1300.
