@@ -55,4 +55,22 @@ journal:
       a container whose mount path may differ from the host path the marker records, in which case
       the gate refuses there (the old behaviour, with the new `carry it:` line) rather than
       committing. Host-worktree and external modes are unaffected. Not verified live here.
-evidence: {}
+  - kind: finding
+    id: p1-full-suite-red-preexisting
+    phase: 1
+    review_scope: out
+    title: The local full suite is red on 13 tests that also fail against origin/main's fr source
+    body: |
+      Full suite under a host load average of 100-300 (another session's suite in the other slot):
+      13 failed, 13601 passed, 126 skipped in 3h03m. The failures are
+      tests/integration/test_install_atomic.py (5: install lock / atomic replacement timing),
+      tests/unit/test_run_evidence_visual.py (7) and
+      tests/unit/test_records_commit.py::test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly.
+      None of those files or the code they exercise is touched by this phase. Re-run with
+      `PYTHONPATH=<git archive origin/main packages/fr/src>`, test_a_named_script_that_was_run_passes
+      and the stuck-index-lock test still fail, so they are not caused by this branch (time- or
+      load-sensitive). The PR's CI run is the clean evidence.
+      The log's final `exit=1` line was appended from testslot.sh's own `end rc=1` record, because the
+      suite was detached from its `timeout` wrapper (which would have killed it) before it finished.
+evidence:
+  tests: /Users/derio/.claude-tmp/claude-501/-Users-derio-Docs-projects-DERIO-NET-super-fr/1c93bd61-6acb-461a-b9ba-095bb092d0ac/scratchpad/p1-full-suite.log
