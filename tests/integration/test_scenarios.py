@@ -235,6 +235,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "fr-ops-status-apply",
         "fr-ops-seal",
         "fr-ops-gate-stage",
+        "fr-ops-gate-probes",
     }
     assert on_disk == here
 
@@ -397,6 +398,10 @@ def test_fr_ops_seal(installed: Path, tmp_path: Path) -> None:
 
 def test_fr_ops_gate_stage(installed: Path, tmp_path: Path) -> None:
     _scenario("fr-ops-gate-stage", installed, tmp_path)
+
+
+def test_fr_ops_gate_probes(installed: Path, tmp_path: Path) -> None:
+    _scenario("fr-ops-gate-probes", installed, tmp_path)
 
 
 def test_opencode_store_v2(installed: Path, tmp_path: Path) -> None:
