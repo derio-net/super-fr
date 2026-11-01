@@ -10226,10 +10226,10 @@ rows:
       alone as chore(fr): migrate ..., on top of any existing work, and the command
       then runs'
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_migration_trigger.py#test_a_workspace_migrates_and_commits_the_migration_alone
@@ -10247,8 +10247,8 @@ rows:
       with a warning (and a GitHub annotation), and the command runs; an unmigratable
       tree still fails
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_migration_trigger.py#test_ci_migrates_in_place_on_main_and_never_commits
@@ -10267,9 +10267,9 @@ rows:
       FR_NON_INTERACTIVE set) refuses, writes nothing, and names fr isolation up as
       the way to carry the migration
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_migration_trigger.py#test_a_base_clone_on_a_branch_with_no_marker_refuses_and_names_isolation
@@ -10286,7 +10286,7 @@ rows:
     acceptance: No committing context ever auto-commits on the default branch, a detached
       HEAD, the wrong root, or over a file with uncommitted edits
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_migration_trigger.py#test_a_workspace_on_the_default_branch_gets_the_default_branch_refusal
@@ -10303,9 +10303,9 @@ rows:
       commit in the sweep's PRs, and a consumer main red only from stale artifacts goes
       green
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R9
     levels: {}
     status: walk-owed
     notes: 'walked on first real use: the per-repo sweep'
@@ -10316,7 +10316,7 @@ rows:
       migrates and commits, the session is told which commit was made; a refused context's
       nag names fr isolation up
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_hooks_acceptance_nag.py#test_the_gates_commit_notice_is_relayed_first
