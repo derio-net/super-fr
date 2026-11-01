@@ -240,3 +240,118 @@ stub.py and the command are new and small; nothing existing to clean
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 prose only; fr-plan took one added line (119 of 120), no compression needed
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · stub inserted (op:) before a [devops] tag alone on the item's first line, dropping the step's gate tag (phase 3)
+
+evidence: stub.py:23 _LEAD_RE
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · stub apply joined each fence line with &&, so a comment line no-oped the apply and backslash continuations broke; summary took in fence markup (phase 3)
+
+evidence: stub.py:65-67
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · stub --yes re-serialised the existing ops.yaml, dropping comments and layout and escaping non-ASCII (phase 3)
+
+evidence: ops_cmd.py:641-645
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · apply_edits matched line content not step position, so an identical line inside an earlier fence got the pointer (phase 3)
+
+evidence: stub.py:89
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · the spec was read with read_text(), converting CRLF to LF (phase 3)
+
+evidence: ops_cmd.py:632
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · ops.yaml and spec writes were not atomic as a pair (phase 3)
+
+evidence: ops_cmd.py:654-655
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · missing tests for the stub edge cases and for status/self-review on a stubbed plan (phase 3)
+
+evidence: test_ops_stub.py, test_ops_cli.py
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · evidence filter still recorded unmasked JWTs, API keys and YAML block sequences (phase 3)
+
+evidence: mask.py:124,135
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · docs/ops.md overstated the filter (phase 3)
+
+evidence: docs/ops.md:308
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r10 · finding [open] (reviewer: in scope) · docs/ops.md said fix the gap on the PR branch even once merged (phase 3)
+
+evidence: docs/ops.md:284
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-11-01T21:23:29+00:00 phase=3 state=open review_scope=in -->
+### p3-r11 · finding [open] (reviewer: in scope) · fr-devops-gate skill omitted the status-line grammar that decides whether evidence is recorded (phase 3)
+
+evidence: fr-devops-gate/SKILL.md:98
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-11-01T21:23:29+00:00 phase=3 -->
+### p3-review-1 · review · phase 3 code review: 11 in-scope findings, all fixed (phase 3)
+
+Independent read-only reviewer over 06873340f..7fecf0c81 including the swept-in mask.py evidence filter. Raised p3-r1..r7 (fr ops stub correctness/robustness/tests), p3-r8 (evidence filter token leaks), p3-r9..r11 (prose accuracy). Confirmed fine: skills/docs match code on the stage-1 refusal ref, stage-5 probing and grammar; skills <= 120 lines, mirrors in sync, neutrality passes; no third-party names. Fixes dispatched to a separate fixer and spot-checked by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: stub inserted (op:) before a [devops] tag alone on the item's first line, dropping the step's gate tag (phase 3)
+
+Fixed in 7b8652ea3, with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: stub apply joined each fence line with &&, so a comment line no-oped the apply and backslash continuations broke; summary took in fence markup (phase 3)
+
+Fixed in 7b8652ea3, with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: stub --yes re-serialised the existing ops.yaml, dropping comments and layout and escaping non-ASCII (phase 3)
+
+Fixed in 7b8652ea3 (append-only; refuses a flow-style ops list it cannot append to), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: apply_edits matched line content not step position, so an identical line inside an earlier fence got the pointer (phase 3)
+
+Fixed in 7b8652ea3 (Step.line, the item's line index), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: the spec was read with read_text(), converting CRLF to LF (phase 3)
+
+Fixed in 7b8652ea3 (byte-exact read and write), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: ops.yaml and spec writes were not atomic as a pair (phase 3)
+
+Fixed in 7b8652ea3 (spec first, restored if ops.yaml fails), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: missing tests for the stub edge cases and for status/self-review on a stubbed plan (phase 3)
+
+Fixed in 7b8652ea3 (tag-only line, lazy continuation, fenced comments/continuations, comment-preserving append, CRLF, duplicate line, rollback, engine 'a stub', self-review TODO), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: evidence filter still recorded unmasked JWTs, API keys and YAML block sequences (phase 3)
+
+Fixed in 148ad860e (drops list items, words >= 20 chars and >= 12-char letter+digit words; verified: JWT, AKIA pair, '- a' record nothing; status lines and masked secrets still pass), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: docs/ops.md overstated the filter (phase 3)
+
+Fixed in 0d593cae6, with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r10 -->
+### p3-r10-resolved · finding [fixed] · resolves p3-r10: docs/ops.md said fix the gap on the PR branch even once merged (phase 3)
+
+Fixed in 0d593cae6, with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-11-01T21:23:29+00:00 phase=3 state=fixed resolves=p3-r11 -->
+### p3-r11-resolved · finding [fixed] · resolves p3-r11: fr-devops-gate skill omitted the status-line grammar that decides whether evidence is recorded (phase 3)
+
+Fixed in 0d593cae6 (110 lines; mirrors synced), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
