@@ -10131,9 +10131,14 @@ rows:
       older ops.yaml files migrate to the new version'
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_load.py#test_ops_none_beside_step_blocks_is_refused_by_name
+      - super-fr:tests/unit/test_ops_load.py#test_a_none_file_loads_no_ops_and_never_counts_as_ops
+      - super-fr:tests/unit/test_migration_ops_none.py#test_the_ops_chain_is_one_hop_to_two
+    status: ci
+    notes: 'R4 unit-pinned: loader/model refusals, plan_has_ops false, ops kind 1->2
+      stamp-only migration chain'
     verify: none
   - id: fr-ops-testplan-tags
     capability: Test Plan
