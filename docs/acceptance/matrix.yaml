@@ -9693,9 +9693,16 @@ rows:
       every existing release outcome still happens
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_materialise_refuses_a_bundle_whose_head_is_not_the_planned_commit
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_probes_the_version_before_pytest_and_refuses_a_wrong_number
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_runs_its_split_credential_free_with_the_durations_options
+    status: walk-owed
+    notes: Job graph and its gate pinned by unit tests (materialise refuses a foreign
+      bundle and pins origin/main; each shard probes the version first and runs credential-free;
+      check_materialised self-proof). Live walk owed on the first real Release run after
+      merge (Test Plan 1; walked on first real use).
     verify: live
   - id: release-superseded-not-retried
     capability: release
