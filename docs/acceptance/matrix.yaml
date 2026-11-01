@@ -10249,8 +10249,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R14
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario named up front; written in plan phase 2
     verify: candidate
+    scenario: tests/scenarios/gate-backfill-apply.sh
   - id: gate-backfill-delivering-pr
     capability: gate-backfill
     acceptance: An old owed item's delivering PR is found from a manifest override,
