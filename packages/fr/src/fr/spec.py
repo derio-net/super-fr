@@ -505,25 +505,23 @@ class Step:
     gate: StepGate | None = None
     raw: tuple[str, ...] = field(default=(), compare=False)
     op: str | None = None
+    line: int | None = field(default=None, compare=False)
+    """The 0-based index, in the spec's `splitlines()`, of the item's first line; `None`
+    for the one step of a section with no list item. Not compared."""
 
 
-def _step(n: int, text: str, raw: tuple[str, ...] = ()) -> Step:
+def _step(n: int, text: str, raw: tuple[str, ...] = (), line: int | None = None) -> Step:
     gate: StepGate | None = None
     if (tag := _TAG_RE.match(text)) is not None:
         gate, text = tag.group(1), tag.group(2)  # type: ignore[assignment]
     op: str | None = None
     if (pointer := _POINTER_RE.match(text)) is not None:
         op, text = pointer.group("id"), pointer.group("rest")
-    return Step(n, text, gate, raw, op)
+    return Step(n, text, gate, raw, op, line)
 
 
-def test_plan_section(text: str) -> str | None:
-    """The body of a spec's `## Test Plan` section, or `None` when it has none.
-
-    Scanned line by line with code fences tracked (review p3-r2): a `## Test
-    Plan` inside a fence never starts the section, and a `# comment` inside a
-    fence never ends it — only a real `#`/`##` heading does."""
-    lines = text.splitlines(keepends=True)
+def _test_plan_span(lines: list[str]) -> tuple[int, int] | None:
+    """`(start, end)` line indexes of the Test Plan body in `lines`, fences tracked."""
     fenced = False
     start: int | None = None
     for i, line in enumerate(lines):
@@ -536,8 +534,19 @@ def test_plan_section(text: str) -> str | None:
             if _SECTION_RE.match(line.rstrip("\r\n")):
                 start = i + 1
         elif _NEXT_SECTION_RE.match(line):
-            return "".join(lines[start:i])
-    return None if start is None else "".join(lines[start:])
+            return start, i
+    return None if start is None else (start, len(lines))
+
+
+def test_plan_section(text: str) -> str | None:
+    """The body of a spec's `## Test Plan` section, or `None` when it has none.
+
+    Scanned line by line with code fences tracked (review p3-r2): a `## Test
+    Plan` inside a fence never starts the section, and a `# comment` inside a
+    fence never ends it — only a real `#`/`##` heading does."""
+    lines = text.splitlines(keepends=True)
+    span = _test_plan_span(lines)
+    return None if span is None else "".join(lines[span[0] : span[1]])
 
 
 def test_plan_steps(text: str) -> list[Step]:
@@ -549,16 +558,19 @@ def test_plan_steps(text: str) -> list[Step]:
     the item (a lazy continuation); an unindented line after a blank line is
     section prose and ends the item. Nothing inside a code fence starts one.
     """
-    section = test_plan_section(text)
-    if section is None:
+    all_lines = text.splitlines(keepends=True)
+    span = _test_plan_span(all_lines)
+    if span is None:
         return []
+    section = "".join(all_lines[span[0] : span[1]])
     items: list[list[str]] = []
     raws: list[list[str]] = []
+    starts: list[int] = []
     prose: list[str] = []
     current: list[str] | None = None
     blank = False
     fenced = False
-    for line in section.splitlines():
+    for offset, line in enumerate(section.splitlines()):
         if FENCE_RE.match(line):
             fenced = not fenced
         stripped = line.strip()
@@ -571,6 +583,7 @@ def test_plan_steps(text: str) -> list[Step]:
             current = [m.group(1)]
             items.append(current)
             raws.append([line])
+            starts.append(span[0] + offset)
         elif current is not None and (indented or not blank):
             current.append(stripped)
             raws[-1].append(line)
@@ -581,8 +594,8 @@ def test_plan_steps(text: str) -> list[Step]:
     if not items:
         return [Step(1, " ".join(" ".join(prose).split()) or EMPTY_TEST_PLAN)]
     return [
-        _step(i, " ".join(" ".join(parts).split()), tuple(raw))
-        for i, (parts, raw) in enumerate(zip(items, raws, strict=True), 1)
+        _step(i, " ".join(" ".join(parts).split()), tuple(raw), at)
+        for i, (parts, raw, at) in enumerate(zip(items, raws, starts, strict=True), 1)
     ]
 
 

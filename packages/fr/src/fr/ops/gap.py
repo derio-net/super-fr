@@ -102,6 +102,39 @@ def step_commands(step: Step) -> tuple[str, ...]:
     return tuple(out + [s for s in spans if _span_is_command(s)])
 
 
+def _fenced_commands(lines: Sequence[str]) -> list[str]:
+    """Fenced lines as runnable commands (review p3-r2): blank and `#`-comment lines
+    dropped, a backslash-continued line joined to the next."""
+    out: list[str] = []
+    pending = ""
+    for line in lines:
+        text = line.strip()
+        if not pending and (not text or text.startswith("#")):
+            continue
+        if text.endswith("\\"):
+            pending += text[:-1].rstrip() + " "
+            continue
+        out.append((pending + text).strip())
+        pending = ""
+    if pending.strip():
+        out.append(pending.strip())
+    return out
+
+
+def step_apply_parts(step: Step) -> tuple[list[str], str]:
+    """`(runnable commands, prose)` of a step, for `fr ops stub`: the fenced commands
+    cleaned by `_fenced_commands`, then the inline command spans; the prose is the step
+    text with the fence markup and the fenced lines removed."""
+    fenced_lines: list[str] = []
+    prose: list[str] = []
+    for fenced, line in _scan(step.raw):
+        (fenced_lines if fenced else prose).append(line)
+    joined = " ".join(prose)
+    spans = (" ".join(m.group(1).split()) for m in _SPAN_RE.finditer(joined))
+    commands = _fenced_commands(fenced_lines) + [s for s in spans if _span_is_command(s)]
+    return commands, joined
+
+
 def command_steps(steps: Sequence[Step], exit_gates: Set[str]) -> list[CommandStep]:
     """The steps the devops gate owns under `exit_gates` that carry a command."""
     found = ((s, step_commands(s)) for s in steps_gated(steps, exit_gates, "devops"))

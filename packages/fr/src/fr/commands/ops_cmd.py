@@ -602,6 +602,23 @@ def scratch(
     raise typer.Exit(code=helpers.scratch(cleanup, command))
 
 
+def _write_bytes_atomic(path: Path, data: bytes) -> None:
+    """Replace `path` with `data` byte for byte (no newline translation), atomically."""
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        if path.exists():
+            os.chmod(tmp, path.stat().st_mode & 0o7777)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
 @ops_app.command("stub")
 def stub(
     plan: Annotated[Path | None, PLAN_OPTION] = None,
@@ -614,9 +631,8 @@ def stub(
     replace it with a real probe."""
     import yaml
 
-    from fr.artifacts.atomic import write_text_atomic
     from fr.ops.load import OPS_FILE, OpsLoadError, load_ops, ops_none
-    from fr.ops.stub import StubError, apply_edits, propose
+    from fr.ops.stub import StubError, append_ops, apply_edits, propose
     from fr.parser import parse
     from fr.verification.exit import exit_for_spec
 
@@ -629,7 +645,8 @@ def stub(
         if ops_none(plan_dir) is not None:
             _refuse("the plan's ops.yaml says `none:`; remove it first", "stub")
         existing = {lo.op.id for lo in load_ops(plan_dir, root).ops}
-        spec_text = spec.read_text()
+        spec_bytes = spec.read_bytes()
+        spec_text = spec_bytes.decode()
         new_ops, edits = propose(spec_text, existing, exit_for_spec(root, parsed.spec_path).gates)
         new_spec = apply_edits(spec_text, edits)
     except (StubError, OpsLoadError, ValueError, OSError) as e:
@@ -638,11 +655,11 @@ def stub(
         typer.echo("fr ops stub: no devops command step without an op pointer")
         return
     ops_path = plan_dir / OPS_FILE
-    data = yaml.safe_load(ops_path.read_text()) if ops_path.is_file() else None
-    data = dict(data or {})
-    data["schema_version"] = 2
-    data["ops"] = [*(data.get("ops") or []), *new_ops]
-    ops_text = yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    try:
+        ops_bytes = ops_path.read_bytes() if ops_path.is_file() else None
+        ops_text = append_ops(ops_bytes.decode() if ops_bytes is not None else None, new_ops)
+    except (StubError, ValueError, OSError) as e:
+        _refuse(str(e), "stub")
     typer.echo(yaml.safe_dump({"ops": new_ops}, sort_keys=False).rstrip())
     for edit in edits:
         typer.echo(
@@ -651,8 +668,14 @@ def stub(
     if not yes:
         typer.echo("fr ops stub: nothing written; pass --yes to write")
         return
-    write_text_atomic(ops_path, ops_text)
-    write_text_atomic(spec, new_spec)
+    # the spec first: if ops.yaml then fails, the spec is restored, and a re-run sees
+    # no pointers and no stubs (review p3-r6)
+    _write_bytes_atomic(spec, new_spec.encode())
+    try:
+        _write_bytes_atomic(ops_path, ops_text.encode())
+    except BaseException:
+        _write_bytes_atomic(spec, spec_bytes)
+        raise
     typer.echo(f"fr ops stub: wrote {len(new_ops)} op(s) to {ops_path} and the spec")
 
 

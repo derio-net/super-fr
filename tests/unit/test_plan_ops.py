@@ -758,3 +758,15 @@ def test_an_unreadable_verification_section_skips_the_gap_warning(tmp_path, monk
     with pytest.raises(SectionError):
         exit_for_spec(tmp_path, "docs/superpowers/specs/2026-10-22-toy.md")
     assert [i for i in _ops_issues(plan) if "ops gap" in i.message] == []
+
+
+def test_self_review_reports_the_todo_check_of_a_stubbed_plan(tmp_path, monkeypatch):
+    from fr.ops.stub import append_ops, propose
+
+    spec = "## Test Plan\n\n1. [devops] converge `pulumi up --yes`\n"
+    ops, _ = propose(spec, set(), {"devops"})
+    plan = _gated_plan(
+        tmp_path, monkeypatch, "- (op: step-1) run it", ops_yaml=append_ops(None, ops)
+    )
+    (issue,) = _ops_issues(plan)
+    assert issue.severity == "error" and "`step-1`" in issue.message and "TODO" in issue.message

@@ -291,3 +291,39 @@ def test_stub_refuses_a_plan_with_no_spec(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"])
     assert result.exit_code == 2, result.output
     assert not (root / PLAN_REL / "ops.yaml").exists()
+
+
+def test_stub_yes_appends_to_ops_yaml_and_keeps_comments_and_crlf_spec(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import yaml
+
+    ops = "# my notes, café\n" + OPS
+    root = _stub_repo(tmp_path, monkeypatch, ops=ops)
+    spec_bytes = STUB_SPEC.replace("\n", "\r\n").encode()
+    (root / STUB_SPEC_REL).write_bytes(spec_bytes)
+    assert runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"]).exit_code == 0
+    text = (root / PLAN_REL / "ops.yaml").read_text()
+    assert text.startswith("# my notes, café\n") and "naïve" not in text
+    assert [o["id"] for o in yaml.safe_load(text)["ops"]][-1] == "step-1"
+    assert (root / STUB_SPEC_REL).read_bytes() == spec_bytes.replace(
+        b"[devops] converge", b"[devops] (op: step-1) converge"
+    )
+
+
+def test_stub_restores_the_spec_when_the_ops_yaml_write_fails(tmp_path: Path, monkeypatch) -> None:
+    import fr.commands.ops_cmd as cmd
+
+    root = _stub_repo(tmp_path, monkeypatch)
+    real = cmd._write_bytes_atomic
+
+    def flaky(path: Path, data: bytes) -> None:
+        if path.name == "ops.yaml":
+            raise OSError("disk full")
+        real(path, data)
+
+    monkeypatch.setattr(cmd, "_write_bytes_atomic", flaky)
+    result = runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"])
+    assert result.exit_code != 0
+    assert (root / STUB_SPEC_REL).read_text() == STUB_SPEC
+    assert not (root / PLAN_REL / "ops.yaml").exists()
