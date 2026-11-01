@@ -415,7 +415,7 @@ def test_p4_r4_two_repos_pr_5_do_not_share_a_ref() -> None:
 
 def _unsupported(repo: str, backend: str = "glab") -> dict[str, str]:
     return {"repo": repo, "why": f"`list_merged_prs_by_label` is not supported on the {backend} "
-            "backend yet (tracked in #611)"}  # fmt: skip
+            "backend yet (tracked in #611)", "unsupported_backend": backend}  # fmt: skip
 
 
 def test_p4_r5_unsupported_reads_fold_into_one_need_a_backend() -> None:

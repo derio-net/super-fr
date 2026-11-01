@@ -846,7 +846,9 @@ def _gated_prs(
                 if held_gates(pr.labels or []):
                     found.setdefault(pr.number, pr)
     except ForgeError as exc:
-        return [], [GatedUnread(repo=repo, why=str(exc))]
+        cause = exc.__cause__
+        backend = cause.backend if isinstance(cause, UnsupportedForgeOperation) else None
+        return [], [GatedUnread(repo=repo, why=str(exc), unsupported_backend=backend)]
     return sorted(found.values(), key=lambda p: p.number), []
 
 

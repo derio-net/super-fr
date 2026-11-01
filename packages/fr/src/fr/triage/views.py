@@ -258,7 +258,7 @@ def gated_unread_needs(facts: Facts) -> list[Need]:
     out: list[Need] = []
     unsupported: dict[str, list[str]] = {}
     for u in facts.gated_unread:
-        if (backend := u.unsupported_backend()) is not None:
+        if (backend := u.unsupported_backend) is not None:
             unsupported.setdefault(backend, []).append(u.repo)  # permanent: one Need a backend
         else:
             out.append(Need("gated-unread", u.repo, u.describe(), None))

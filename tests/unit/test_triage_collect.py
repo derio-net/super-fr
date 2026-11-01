@@ -1013,11 +1013,28 @@ def test_an_unsupported_gated_read_is_recorded_not_fatal() -> None:
     forge = _gated_forge()
 
     def unsupported(**kw: Any) -> list[dict[str, Any]]:
-        raise ForgeError("`list_merged_prs_by_label` is not supported on the gitlab backend")
+        from fr.ghclient import UnsupportedForgeOperation
+
+        cause = UnsupportedForgeOperation("list_merged_prs_by_label", "gitlab")
+        raise ForgeError(str(cause)) from cause
 
     forge.list_merged_prs_by_label = unsupported  # type: ignore[method-assign]
     facts = collect_facts(forge, GATED_SCOPE, now=NOW)
     assert [u.repo for u in facts.gated_unread] == [GATED_REPO]
+    assert facts.gated_unread[0].unsupported_backend == "gitlab"
+
+
+def test_an_unsupported_backend_is_read_from_the_cause_never_from_the_message() -> None:
+    """p4-r5 hardening: a real read failure whose TEXT looks like an unsupported one is
+    still a real failure; the backend comes from the exception type, never from `why`."""
+    forge = _gated_forge()
+
+    def failing(**kw: Any) -> list[dict[str, Any]]:
+        raise ForgeError("HTTP 502: `x` is not supported on the gitlab backend")
+
+    forge.list_merged_prs_by_label = failing  # type: ignore[method-assign]
+    facts = collect_facts(forge, GATED_SCOPE, now=NOW)
+    assert facts.gated_unread[0].unsupported_backend is None
 
 
 def test_facts_written_before_schema_13_read_with_no_gated_fields(tmp_path: Path) -> None:
