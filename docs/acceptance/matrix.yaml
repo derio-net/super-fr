@@ -10249,9 +10249,11 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R7
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R10
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R14
-    levels: {}
-    status: not-implemented
-    notes: scenario named up front; written in plan phase 2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_apply.py#test_a_second_apply_makes_no_write
+    status: ci
+    notes: apply unit-tested and walked by the gate-backfill-apply scenario
     verify: candidate
     scenario: tests/scenarios/gate-backfill-apply.sh
   - id: gate-backfill-delivering-pr
