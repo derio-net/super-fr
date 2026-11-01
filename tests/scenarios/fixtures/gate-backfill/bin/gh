@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# A recording forge double for tests/scenarios/gate-backfill-dry-run.sh. It records every
+# call, one argv per line, to $FAKE_GH_LOG and answers only the READS a dry run makes:
+#   gh api user --jq .login              -> the viewer's login
+#   gh issue list ... --json ...         -> no open issues
+#   gh pr view 12 --json ...             -> the delivering PR, merged
+#   gh api repos/.../commits/<sha>/pulls -> the same PR (fixture JSON)
+# Anything else fails loudly, so a forge WRITE (or a new read) cannot slip through unseen.
+log="${FAKE_GH_LOG:?FAKE_GH_LOG is required}"
+printf '%s\n' "$*" >> "$log"
+case "$1 ${2:-}" in
+  "api user") echo scenario-bot ;;
+  "issue list") echo '[]' ;;
+  "pr view")
+    echo '{"state":"MERGED","isDraft":false,"headRefOid":"","headRefName":"feat/widget","baseRefName":"main","mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","mergeCommit":{"oid":""},"title":"feat: widget","body":"","labels":[]}' ;;
+  "api repos/example-org/widgets/commits/"*)
+    echo '[{"number":12,"state":"closed","merged_at":"2026-10-11T00:00:00Z","html_url":"https://github.com/example-org/widgets/pull/12"}]' ;;
+  *) echo "fake gh: unexpected call: gh $*" >&2; exit 1 ;;
+esac
