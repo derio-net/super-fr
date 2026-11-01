@@ -100,3 +100,17 @@ def test_a_close_failure_is_reported_and_the_rest_still_close() -> None:
     fake.close_issue = flaky  # type: ignore[method-assign]
     rep = close_gate_trackers(fake, REPO, 41, "tester", "ok")
     assert rep.closed == [2] and "#1" in rep.errors[0]
+
+
+def test_an_empty_viewer_login_closes_and_adopts_nothing() -> None:
+    """p3-r4: a ghost (author-less) issue or comment must not match an unknown viewer."""
+    fake = FakeGhClient()
+    fake.comment_author = ""  # viewer_login() is empty
+    _tracker(fake, 1)
+    fake.add_issue(REPO, 2, labels={"fr:owed"}, body="a human's issue")
+    fake.comment_issue(REPO, 2, t.adopt_comment(KEY, "tester", 41))
+
+    rep = close_gate_trackers(fake, REPO, 41, "tester", "ok", root=Path("/nonexistent"))
+
+    assert _closes(fake) == [] and rep.closed == [] and rep.adopt_commands == []
+    assert len(rep.errors) == 1 and "viewer" in rep.errors[0]

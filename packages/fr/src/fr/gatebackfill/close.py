@@ -87,6 +87,9 @@ def close_gate_trackers(
     except _FAILURES as exc:
         report.errors.append(f"cannot list the open {FR_OWED.name} issues of {repo}: {exc}")
         return report
+    if not me:  # p3-r4: no identity to match, and a ghost's empty author would match it
+        report.errors.append(f"the viewer's login on {repo} is empty: closing nothing")
+        return report
     comment = f"Gate {gate} passed on #{pr}: {notes}"
     for issue in issues:
         try:

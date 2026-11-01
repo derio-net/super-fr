@@ -212,6 +212,16 @@ class FakeGhClient:
     def comment_pr(self, repo: str, pr: int, body: str) -> None:
         self._gate()
         self.calls.append(("comment_pr", {"repo": repo, "pr": pr, "body": body}))
+        self.next_comment_id += 1  # like GitHub, a PR comment is an issue comment
+        self.issue_comments.setdefault((repo, pr), []).append(
+            {
+                "association": self.comment_association,
+                "author": self.comment_author,
+                "body": body,
+                "created_at": self.comment_created_at,
+                "id": self.next_comment_id,
+            }
+        )
 
     def edit_issue_state(
         self,

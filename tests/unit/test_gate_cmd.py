@@ -15,6 +15,7 @@ import pytest
 from fr.artifacts import trigger
 from fr.cli import app
 from fr.commands import gate_cmd
+from fr.verification.labels import gate_pass_comment
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
@@ -407,6 +408,8 @@ def test_the_dry_run_lists_the_trackers_it_would_close(forge: Any) -> None:
 def test_a_passed_gate_retries_only_the_close(forge: Any) -> None:
     fake = forge(["gate:tester-passed"])
     _with_tracker(fake)
+    fake.comment_pr(REPO, 5, gate_pass_comment("tester", "walked live"))
+    fake.calls.clear()
 
     dry = _pass("--gate", "tester")
     assert dry.exit_code == 0, dry.output
@@ -466,3 +469,39 @@ def test_the_retry_hint_is_a_valid_invocation(forge: Any) -> None:
     del fake.list_issues  # the forge recovers
     again = CliRunner().invoke(app, argv[1:])
     assert "Missing option" not in again.output and again.exit_code != 2, again.output
+
+
+def test_a_hand_labelled_passed_gate_is_not_retried(forge: Any) -> None:
+    """p3-r3: `gate:<g>-passed` with no fr:gate-pass comment by us was not set by fr."""
+    fake = forge(["gate:tester-passed"])
+    _with_tracker(fake)
+
+    result = _pass("--gate", "tester", "--yes")
+
+    assert result.exit_code == 2, result.output
+    assert "was not set by fr gate pass" in result.output
+    assert "no fr:gate-pass comment by fr-bot" in result.output
+    assert not [c for c in fake.calls if c[0] == "close_issue"]
+
+
+def test_a_foreign_authors_gate_pass_comment_does_not_count(forge: Any) -> None:
+    fake = forge(["gate:tester-passed"])
+    _with_tracker(fake)
+    fake.comment_author = "someone-else"
+    fake.comment_pr(REPO, 5, gate_pass_comment("tester", "x"))
+    fake.comment_author = "fr-bot"
+
+    assert _pass("--gate", "tester", "--yes").exit_code == 2
+
+
+def test_a_forge_without_pr_comment_reads_refuses_the_retry(forge: Any) -> None:
+    from fr.ghclient import UnsupportedForgeOperation
+
+    fake = forge(["gate:tester-passed"])
+
+    def nope(*a: Any, **k: Any) -> Any:
+        raise UnsupportedForgeOperation("glab", "list_issue_comments")
+
+    fake.list_issue_comments = nope  # type: ignore[method-assign]
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 2 and "cannot read the comments" in result.output

@@ -20,7 +20,7 @@ from __future__ import annotations
 import shlex
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
 import typer
 
@@ -29,7 +29,13 @@ from fr.ghclient import UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.labels import gate_label, held_gates
 from fr.run.cursors import all_cursors
-from fr.verification.labels import CloseReport, close_gate_trackers, gate_pass_comment, pass_gate
+from fr.verification.labels import (
+    GATE_PASS_MARKER,
+    CloseReport,
+    close_gate_trackers,
+    gate_pass_comment,
+    pass_gate,
+)
 
 if TYPE_CHECKING:
     from fr.run.model import RunState
@@ -156,6 +162,29 @@ def _repo_root() -> Path | None:
         return None
 
 
+def _require_fr_pass(client: Any, repo: str, pr: int, gate: str, passed: str) -> None:
+    """Refuse (exit 2) a retry unless we commented `fr:gate-pass <gate>` on the PR."""
+    marker = f"{GATE_PASS_MARKER}{gate} -->"
+    try:
+        me = client.viewer_login()
+        comments = client.list_issue_comments(repo, pr)  # a PR is an issue on GitHub
+    except UnsupportedForgeOperation as exc:
+        _refuse(f"cannot read the comments of PR #{pr} to confirm fr passed {gate}: {exc}")
+        return
+    except _FORGE_FAILURES as exc:
+        _refuse(f"cannot read the comments of PR #{pr} of {repo}: {exc}")
+        return
+    if me and any(
+        c.get("author") == me and str(c.get("body") or "").lstrip().startswith(marker)
+        for c in comments
+    ):
+        return
+    _refuse(
+        f"{passed} on #{pr} was not set by fr gate pass (no fr:gate-pass comment by "
+        f"{me or 'the viewer'}): nothing to retry"
+    )
+
+
 def _echo_close(report: CloseReport) -> None:
     """Print what a pass closed (or would), the discharge commands, and any tracker error."""
     for line in report.lines():
@@ -237,7 +266,9 @@ def pass_command(
         _refuse(f"PR #{pr} of {repo} is {state}, not merged: a post-merge gate passes on a merge")
     labels = {str(n) for n in view.get("labels") or []}
     if held not in labels and passed in labels:
-        # R12's retry: the gate already passed, so only the tracker close is owed.
+        # R12's retry: the gate already passed, so only the tracker close is owed. But only
+        # when fr passed it (p3-r3): a label set by hand proves nothing was recorded.
+        _require_fr_pass(client, repo, pr, gate, passed)
         typer.echo(f"gate {gate} already passed on #{pr}; closing its trackers")
         report = close_gate_trackers(
             client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes
