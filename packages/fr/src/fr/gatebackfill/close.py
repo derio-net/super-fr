@@ -42,7 +42,9 @@ class CloseReport:
         if not self.found and not self.errors:
             return ""
         verb = "would close" if self.dry_run else "closed"
-        parts = [f"{verb} trackers {', '.join(f'#{n}' for n in self.closed)}"] if self.closed else []
+        parts = (
+            [f"{verb} trackers {', '.join(f'#{n}' for n in self.closed)}"] if self.closed else []
+        )
         if self.adopt_commands:
             parts.append(f"{len(self.adopt_commands)} adopted issue(s) to close by hand")
         if self.errors:

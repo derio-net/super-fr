@@ -93,7 +93,6 @@ def test_with_yes_it_swaps_the_label_and_comments(forge: Any) -> None:
         ("qa", ["gate:tester"], "unknown gate"),
         ("owner", ["gate:owner"], "not a post-merge gate"),
         ("devops", ["gate:tester"], "does not carry gate:devops"),
-        ("tester", ["gate:tester-passed"], "does not carry gate:tester"),
     ],
 )
 def test_it_refuses_what_is_not_a_held_post_merge_gate(
@@ -367,3 +366,80 @@ def test_a_bare_owed_on_an_open_issue_key_is_refused_at_the_dry_run(
     assert f"issue:{BACKFILL_REPO}#8" in result.output
     assert result.exit_code == 2, result.output
     assert "adopt it" in result.output and "give the manifest entry an issue:" in result.output
+
+
+# --- P3.T2: a pass closes the PR's backfill trackers (spec gate-backfill §H, R12) ------------
+
+
+def _with_tracker(fake: FakeGhClient, n: int = 12, *, pr: int = 5, gate: str = "tester") -> None:
+    from fr.gatebackfill import trackers
+
+    fake.comment_author = "fr-bot"
+    fake.add_issue(
+        REPO, n, labels={"fr:owed"}, body=trackers.tracker_body("row:r-live", "t", gate, pr)
+    )
+
+
+def test_yes_closes_the_prs_trackers_after_the_pass_and_prints_the_discharge(forge: Any) -> None:
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+
+    result = _pass("--gate", "tester", "--yes")
+
+    assert result.exit_code == 0, result.output
+    names = [c[0] for c in fake.calls]
+    assert names.index("edit_pr_labels") < names.index("close_issue")
+    (close,) = [c[1] for c in fake.calls if c[0] == "close_issue"]
+    assert close["number"] == 12 and close["comment"] == "Gate tester passed on #5: walked live"
+    assert "closed tracker #12" in result.output
+
+
+def test_the_dry_run_lists_the_trackers_it_would_close(forge: Any) -> None:
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+
+    result = _pass("--gate", "tester")
+
+    assert "would close tracker #12" in result.output
+    assert not [c for c in fake.calls if c[0] == "close_issue"]
+
+
+def test_a_passed_gate_retries_only_the_close(forge: Any) -> None:
+    fake = forge(["gate:tester-passed"])
+    _with_tracker(fake)
+
+    dry = _pass("--gate", "tester")
+    assert dry.exit_code == 0, dry.output
+    assert "gate tester already passed on #5; closing its trackers" in dry.output
+    assert "would close tracker #12" in dry.output
+    assert not [c for c in fake.calls if c[0] == "close_issue"]
+
+    result = _pass("--gate", "tester", "--yes")
+
+    assert result.exit_code == 0, result.output
+    assert _writes(fake) == []  # no comment, no label swap
+    assert [c[1]["number"] for c in fake.calls if c[0] == "close_issue"] == [12]
+
+
+def test_a_pr_with_neither_label_still_refuses(forge: Any) -> None:
+    forge(["verification:live"])
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 2
+    assert "does not carry gate:tester" in result.output
+
+
+def test_a_tracker_failure_never_reverses_the_pass(forge: Any) -> None:
+    from tests.unit.fakes import FakeGhError
+
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+
+    def boom(*a: Any, **k: Any) -> Any:
+        raise FakeGhError("rate limited")
+
+    fake.list_issues = boom  # type: ignore[method-assign]
+    result = _pass("--gate", "tester", "--yes")
+
+    assert result.exit_code == 0, result.output
+    assert "passed: PR #5 now carries gate:tester-passed" in result.output
+    assert "rate limited" in result.output

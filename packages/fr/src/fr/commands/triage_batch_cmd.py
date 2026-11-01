@@ -294,7 +294,7 @@ from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
-from fr.verification.labels import GATE_PASS_MARKER, pass_gate
+from fr.verification.labels import GATE_PASS_MARKER, close_gate_trackers, pass_gate
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
@@ -5474,7 +5474,13 @@ class _Driver:
         except _GATE_WRITE_FAILURES as exc:
             self.failed_write = True
             return f"gate pass failed, retried next pass: {exc}", False
-        return f"PR #{action.pr}: gate:{action.gate} -> gate:{action.gate}-passed", True
+        line = f"PR #{action.pr}: gate:{action.gate} -> gate:{action.gate}-passed"
+        # R12: the pass also closes the PR's backfill trackers; a failure there is reported
+        # in the line and never reverses the pass.
+        closed = close_gate_trackers(
+            self.client(facts, repo), repo, action.pr, action.gate, why
+        ).summary()
+        return (f"{line}; {closed}" if closed else line), True
 
     def _claim_write(self, action: Action) -> tuple[str, bool]:
         """Execute one claim, refresh or release through `claim_sync.execute` (R3, R8,

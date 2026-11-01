@@ -189,6 +189,19 @@ class GatedWorld(World):
     def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
         self.calls.append(f"issue labels {number} +{sorted(kw.get('add', ()))}")
 
+    trackers: dict[int, str] = {}
+
+    def viewer_login(self) -> str:
+        return "fr-bot"
+
+    def list_issues(self, repo: str, state: str, limit: int, fields: Any = None,
+                    labels: Any = None) -> list[dict[str, Any]]:  # fmt: skip
+        return [{"number": n, "body": b, "labels": [{"name": "fr:owed"}],
+                 "author": {"login": "fr-bot"}} for n, b in self.trackers.items()]  # fmt: skip
+
+    def close_issue(self, repo: str, number: int, comment: str) -> None:
+        self.calls.append(f"issue close {number}: {comment}")
+
 
 @pytest.fixture(name="gworld")
 def gworld_fixture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> GatedWorld:
@@ -261,6 +274,26 @@ def test_with_yes_the_driver_labels_the_issue_and_swaps_the_gate(
     assert "tester" in comment and "row-a" in comment
     assert gworld.prs[101]["labels"] == ["gate:tester-passed"]
     assert gworld.runner.dispatched == []  # type: ignore[attr-defined]  # no close-out yet
+
+
+def test_with_yes_the_rows_walked_pass_also_closes_the_prs_trackers(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gatebackfill.trackers import tracker_body
+
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", True, (ISSUE,)),))
+    gworld.trackers = {
+        31: tracker_body("row:row-a", "t", "tester", 101),
+        32: tracker_body("row:row-b", "t", "tester", 102),  # another PR: left open
+    }
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    closes = [c for c in gworld.calls if c.startswith("issue close")]
+    assert [c.split(":")[0] for c in closes] == ["issue close 31"]
+    assert "Gate tester passed on #101" in closes[0]
+    assert "closed trackers #31" in "\n".join(_lines(out, "gate-pass"))
 
 
 # ------------------------------------------- the default branch's rows (gitseam)

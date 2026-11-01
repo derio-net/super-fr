@@ -19,7 +19,9 @@ def _fake() -> FakeGhClient:
     return fake
 
 
-def _tracker(fake: FakeGhClient, n: int, key: str = KEY, gate: str = "tester", pr: int = 41) -> None:
+def _tracker(
+    fake: FakeGhClient, n: int, key: str = KEY, gate: str = "tester", pr: int = 41
+) -> None:
     fake.add_issue(REPO, n, labels={"fr:owed"}, body=t.tracker_body(key, "t", gate, pr))
 
 

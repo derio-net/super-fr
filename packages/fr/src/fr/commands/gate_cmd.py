@@ -27,7 +27,7 @@ from fr.ghclient import UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.labels import gate_label, held_gates
 from fr.run.cursors import all_cursors
-from fr.verification.labels import gate_pass_comment, pass_gate
+from fr.verification.labels import CloseReport, close_gate_trackers, gate_pass_comment, pass_gate
 
 if TYPE_CHECKING:
     from fr.run.model import RunState
@@ -154,6 +154,12 @@ def _repo_root() -> Path | None:
         return None
 
 
+def _echo_close(report: CloseReport) -> None:
+    """Print what a pass closed (or would), the discharge commands, and any tracker error."""
+    for line in report.lines():
+        typer.echo(line, err=line.startswith("tracker error"))
+
+
 def release_command(repo: str) -> str:
     """The dispatch that cuts the final once the last gate passed (R20)."""
     return f"gh workflow run {RELEASE_WORKFLOW} --repo {repo}"
@@ -228,6 +234,18 @@ def pass_command(
     if state != "MERGED":
         _refuse(f"PR #{pr} of {repo} is {state}, not merged: a post-merge gate passes on a merge")
     labels = {str(n) for n in view.get("labels") or []}
+    if held not in labels and passed in labels:
+        # R12's retry: the gate already passed, so only the tracker close is owed.
+        typer.echo(f"gate {gate} already passed on #{pr}; closing its trackers")
+        report = close_gate_trackers(
+            client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes
+        )
+        _echo_close(report)
+        if not yes:
+            typer.echo("nothing done; re-run with --yes to act")
+        elif report.errors:
+            raise typer.Exit(code=1)
+        return
     if held not in labels:
         have = ", ".join(sorted(n for n in labels if n.startswith("gate:"))) or "no gate label"
         _refuse(f"PR #{pr} of {repo} does not carry {held} ({have}): nothing to pass")
@@ -245,6 +263,10 @@ def pass_command(
             typer.echo(f"fr gate pass: the forge refused: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         typer.echo(f"passed: PR #{pr} now carries {passed}")
+    report = close_gate_trackers(client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes)
+    _echo_close(report)
+    if yes and report.errors:
+        typer.echo(f"re-run `fr gate pass --pr {pr} --gate {gate} --yes` to retry the close")
     if left:  # p4-r9: no final while a post-merge gate still holds this PR
         typer.echo(f"{', '.join(f'gate:{g}' for g in left)} still holds PR #{pr}: no release yet")
     else:

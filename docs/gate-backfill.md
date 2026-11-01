@@ -20,6 +20,16 @@ where the gate ledger and the triage board look: a `gate:<g>` label on the merge
 5. **Pass** — when the work is done, run the `fr gate pass --pr <n> --gate <g> --notes "..."` the
    tracker body prints.
 
+**Clearing.** `fr gate pass --yes` (and the triage driver's rows-walked pass) swaps the label and
+then closes every open `fr:owed` tracker fr filed whose gate marker names that PR and gate, with the
+comment "Gate <g> passed on #<pr>: <notes>". It never closes an issue fr did not file: an adopted
+issue is listed with a `gh issue close` line for you to run. For each tracker it also prints the
+command that discharges the owed key itself (the same one the backfill printed). Without `--yes` it
+lists what it would close. A failure to list or close is reported and never reverses the pass; if a
+PR already carries `gate:<g>-passed` and no `gate:<g>`, re-running `fr gate pass` prints "gate <g>
+already passed on #<pr>; closing its trackers" and runs only the close. A PR carrying neither label
+still refuses.
+
 The repo-file commands the dry run prints (`fr plan edit --tick`, `fr closeout outcome`,
 `fr acceptance set-status`) are for your own chore PR; backfill never writes a repo file.
 
