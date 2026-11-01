@@ -20,3 +20,8 @@ Live: `tea api /repos/o/r/contents/nope.txt` prints the 404 error JSON and exits
 ### h3 · hypothesis · H3: Gitea permits duplicate label names, so create-and-tolerate-ALREADY-EXISTS never converges
 
 Live: two ensure_labels calls left two labels named fr:walk with the same colour; the create succeeded both times (no ALREADY-EXISTS refusal for the GitLab-parity tolerance to catch). Issues created with --labels fr:walk then carry both.
+
+<!-- fr:journal kind=root-cause scope=debug id=root-cause created=2026-11-01T09:08:51+00:00 -->
+### root-cause · root-cause · RealTeaClient parses tea's presentation layer as if it were Gitea's API, and trusts tea api's exit code
+
+One cause, seven symptoms: tea's --fields/--output json renderings are tea's own undocumented shape (renamed, flattened, stringly-typed fields), and `tea api` signals HTTP errors only in its -i status line. Fix: one helper, fr.tea.api_json, that runs `tea api -i`, refuses on a status >= 400 or a missing status line, and returns Gitea's documented swagger shape; every RealTeaClient read moves onto it ({owner}/{repo} placeholders resolve from the cwd checkout for default_branch/pr_for_branch). ensure_labels lists existing names via the API and creates only the missing ones (drift tolerated, GitLab parity). pr_status_by_url accepts http:// ROOT_URLs.
