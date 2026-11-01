@@ -10292,9 +10292,12 @@ rows:
       it.
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gate_cmd.py#test_a_passed_gate_retries_only_the_close
+      - super-fr:tests/unit/test_triage_exit_gates_drive.py#test_with_yes_the_rows_walked_pass_also_closes_the_prs_trackers
+    status: ci
+    notes: both routes and the retry unit-tested
     verify: none
   - id: board-lanes-gated-prs
     capability: gate-backfill
