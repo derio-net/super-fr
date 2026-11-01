@@ -1,0 +1,10 @@
+schema_version: 10
+run: 2026-11-01-feat-gate-backfill
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1295
+evidence:
+  tests: ci
+  walk: /Users/derio/.cache/fr/walks/2026-11-01-feat-gate-backfill/20261101T220039Z.log
