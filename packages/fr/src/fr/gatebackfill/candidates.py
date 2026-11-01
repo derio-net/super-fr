@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict
 
 from fr.archive_followups import owned_owed_key
-from fr.gatebackfill.forge import BackfillForge, Git
+from fr.gatebackfill.forge import OPEN_ISSUE_LIMIT, BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
 from fr.gatebackfill.trackers import fr_gate_marker, is_ours
 
@@ -283,6 +283,11 @@ def collect_candidates(
     if forge is not None:
         try:
             issues = forge.open_issues()
+            if len(issues) >= OPEN_ISSUE_LIMIT:
+                notes.append(
+                    f"{len(issues)} open issues read, the cap: trackers and look-alikes past it "
+                    "are not seen"
+                )
         except Exception as exc:  # noqa: BLE001 — a failed read degrades look-alikes only
             notes.append(f"open issues not read: {type(exc).__name__}: {exc}")
     me = ""

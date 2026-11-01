@@ -229,3 +229,23 @@ def test_only_our_own_labelled_issues_are_trackers_or_hide_a_candidate(tmp_path:
     assert cands["row:r3"].tracker_ref == f"{REPO}#72"
     assert f"issue:{REPO}#73" in cands  # a stranger's marker hides nothing
     assert not any("73" in n for n in notes)
+
+
+def test_p1_r5_a_full_open_issue_page_is_reported_as_possibly_capped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gatebackfill import candidates
+
+    monkeypatch.setattr(candidates, "OPEN_ISSUE_LIMIT", 2)
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [issue(80, "a", "x"), issue(81, "b", "y")]
+
+    _, notes = _collect(repo, forge)
+    assert any("2 open issues" in n and "cap" in n for n in notes)
+
+    forge.issues = forge.issues[:1]
+    _, quiet = _collect(repo, forge)
+    assert not any("cap" in n for n in quiet)
