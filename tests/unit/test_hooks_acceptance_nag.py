@@ -148,3 +148,74 @@ def test_a_stale_artifact_refusal_is_reported_not_swallowed(tmp_path, monkeypatc
 
     assert done.returncode == 0, done.stderr
     assert "acceptance nag skipped: artifacts stale" in done.stdout
+
+
+def _run_with_fake_fr(tmp_path: Path, script: str) -> subprocess.CompletedProcess[str]:
+    repo = tmp_path / "repo"
+    (repo / "docs" / "acceptance").mkdir(parents=True)
+    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: []\n")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_fr = bin_dir / "fr"
+    fake_fr.write_text("#!/bin/sh\n" + script)
+    fake_fr.chmod(0o755)
+    return subprocess.run(
+        ["bash", str(SCRIPT)],
+        input=json.dumps({"cwd": str(repo)}),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"},
+    )
+
+
+NOTICE = (
+    "fr: migrated and committed 2 artifact(s): chore(fr): migrate 2 plans to fr 9.9.9 (abc1234)"
+)
+
+
+def test_the_gates_commit_notice_is_relayed_first(tmp_path: Path) -> None:
+    """Spec 2026-11-01-auto-migrate-own-commit R11: a session's first gated
+    command is often this nag, so a migration it committed is said here."""
+    done = _run_with_fake_fr(
+        tmp_path,
+        "echo 'fr: artifacts in . are out of date — migrating before running the command.' >&2\n"
+        f"echo '{NOTICE}' >&2\n"
+        "echo '1 row owes a walk: debt-0'\n"
+        "exit 0\n",
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.startswith(NOTICE + "\n"), done.stdout
+    assert "debt-0" in done.stdout
+
+
+def test_the_commit_notice_is_relayed_even_with_no_debt(tmp_path: Path) -> None:
+    done = _run_with_fake_fr(tmp_path, f"echo '{NOTICE}' >&2\necho 'no acceptance debt'\nexit 0\n")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == NOTICE
+
+
+def test_a_partial_migration_still_relays_its_commit(tmp_path: Path) -> None:
+    """Review p1-r4: a partial migration commits what it could and then exits
+    2. The commit has landed, so the session is told about it."""
+    done = _run_with_fake_fr(
+        tmp_path,
+        f"echo '{NOTICE}' >&2\n"
+        "echo 'fr: 2 artifact(s) migrated and committed; 1 left unmodified.' >&2\n"
+        "exit 2\n",
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.startswith(NOTICE + "\n") or done.stdout.strip() == NOTICE, done.stdout
+
+
+def test_a_stale_refusal_names_the_workspace_way_to_carry_it(tmp_path: Path) -> None:
+    done = _run_with_fake_fr(
+        tmp_path,
+        "echo 'fr: artifacts in . were written for a different fr and must be migrated' >&2\n"
+        "exit 2\n",
+    )
+    assert done.returncode == 0, done.stderr
+    assert "acceptance nag skipped: artifacts stale" in done.stdout
+    assert "fr-isolation workspace" in done.stdout
+    assert "fr isolation up --branch" in done.stdout
+    assert "fr migrate artifacts --yes" in done.stdout

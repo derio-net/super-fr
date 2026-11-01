@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -136,6 +137,11 @@ def logged_env(env: dict[str, str]) -> list[str]:
     return log.read_text().splitlines()
 
 
+def agent_dir(env: dict[str, str], name: str, key: str = "repo") -> Path:
+    """Where the hook puts an `agent-*` worktree (gh#1270)."""
+    return Path(env["HOME"]) / ".cache" / "fr" / "agent-worktrees" / key / name
+
+
 def last_line(text: str) -> str:
     lines = [ln for ln in text.splitlines() if ln.strip()]
     return lines[-1] if lines else ""
@@ -172,21 +178,78 @@ class TestWorktreeCreate:
         )
         assert "--branch feat/x " in logged(stub_fr)[0]
 
-    # (c) agent-* -> Claude default shape, real git worktree, idempotent
-    def test_agent_worktree_mimics_claude_default(
+    # (c) agent-* -> OUTSIDE the repo, under the fr agent cache (gh#1270): a real
+    # linked worktree of the repo, idempotent, never routed through fr.
+    def test_agent_worktree_lands_outside_the_repo(
         self, repo: Path, stub_fr: dict[str, str]
     ) -> None:
         result = run_hook(CREATE, create_payload("agent-abc123", repo), stub_fr)
         assert result.returncode == 0, result.stderr
-        expected = repo / ".claude" / "worktrees" / "agent-abc123"
+        expected = agent_dir(stub_fr, "agent-abc123")
         assert last_line(result.stdout) == str(expected)
         assert expected.is_dir()
         assert str(expected) in worktrees(repo)
-        assert logged(stub_fr) == []
+        assert not (repo / ".claude" / "worktrees").exists()
         again = run_hook(CREATE, create_payload("agent-abc123", repo), stub_fr)
         assert again.returncode == 0, again.stderr
         assert last_line(again.stdout) == str(expected)
-        assert logged(stub_fr) == []
+
+    def test_agent_worktree_is_locked_with_the_session_pid(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        """Claude's native path locks a running subagent's worktree; a hook-made
+        one has no lock unless the hook takes it. The reason names the hook's
+        parent (the Claude process, measured live) so gc can tell running from
+        finished (gh#1270)."""
+        result = run_hook(CREATE, create_payload("agent-lck1", repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        porcelain = _git(repo, "worktree", "list", "--porcelain")
+        block = porcelain.split(f"worktree {agent_dir(stub_fr, 'agent-lck1')}\n", 1)[1]
+        block = block.split("\n\n", 1)[0]
+        assert f"locked fr-agent pid={os.getpid()} session=sess-1" in block
+
+    def test_nested_agent_worktree_is_a_sibling_not_a_child(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        """A subagent inside its worktree dispatching another isolated subagent
+        nested `agent-Y` inside `agent-X` (frank: 4 of 31). Out of the repo, both
+        are siblings under the MAIN checkout's key."""
+        outer = run_hook(CREATE, create_payload("agent-outer", repo), stub_fr)
+        assert outer.returncode == 0, outer.stderr
+        inner = run_hook(CREATE, create_payload("agent-inner", last_line(outer.stdout)), stub_fr)
+        assert inner.returncode == 0, inner.stderr
+        assert last_line(inner.stdout) == str(agent_dir(stub_fr, "agent-inner"))
+        assert str(agent_dir(stub_fr, "agent-inner")) in worktrees(repo)
+
+    def test_agent_worktree_creation_fires_a_detached_agent_sweep(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        """Claude never fires WorktreeRemove for a subagent, and non-fr repos never
+        run `fr isolation up/down`, so every agent dispatch starts the reaper."""
+        result = run_hook(CREATE, create_payload("agent-sw1", repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        for _ in range(50):
+            if logged(stub_fr):
+                break
+            time.sleep(0.1)
+        assert logged(stub_fr) == [f"isolation gc --agent-worktrees --repo {repo}"]
+
+    def test_agent_dir_owned_by_another_repo_fails_closed(
+        self, tmp_path: Path, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        """Two repos with one basename share a cache key. A name collision must
+        not hand a subagent the OTHER repo's checkout."""
+        other = tmp_path / "elsewhere" / "repo"
+        other.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", str(other)], check=True)
+        (other / "y").write_text("y")
+        _git(other, "add", "-A")
+        _git(other, "commit", "-qm", "init")
+        first = run_hook(CREATE, create_payload("agent-same", other), stub_fr)
+        assert first.returncode == 0, first.stderr
+        result = run_hook(CREATE, create_payload("agent-same", repo), stub_fr)
+        assert result.returncode == 1
+        assert "belongs to another repository" in result.stderr
 
     # (c2) super-fr#455: agent-* also copies `.worktreeinclude` matches — the
     # files that are BOTH git-ignored and named by an include pattern, as
@@ -207,7 +270,7 @@ class TestWorktreeCreate:
 
         result = run_hook(CREATE, create_payload("agent-inc1", repo), stub_fr)
         assert result.returncode == 0, result.stderr
-        wt = repo / ".claude" / "worktrees" / "agent-inc1"
+        wt = agent_dir(stub_fr, "agent-inc1")
         assert last_line(result.stdout) == str(wt)
         assert (wt / ".env").read_text() == "TOKEN=x\n"
         assert (wt / "secrets" / "k.pem").read_text() == "k\n"
@@ -235,7 +298,7 @@ class TestWorktreeCreate:
 
         result = run_hook(CREATE, create_payload("agent-inc3", repo), stub_fr)
         assert result.returncode == 0, result.stderr
-        wt = repo / ".claude" / "worktrees" / "agent-inc3"
+        wt = agent_dir(stub_fr, "agent-inc3")
         assert not (outside / ".env").exists(), "copied through the committed symlink"
         assert (wt / ".env").is_symlink()  # copied as a link, not its target's bytes
 
@@ -248,7 +311,7 @@ class TestWorktreeCreate:
         (repo / ".env").write_text("TOKEN=x\n")
         result = run_hook(CREATE, create_payload("agent-inc2", repo), stub_fr)
         assert result.returncode == 0, result.stderr
-        assert not (repo / ".claude" / "worktrees" / "agent-inc2" / ".env").exists()
+        assert not (agent_dir(stub_fr, "agent-inc2") / ".env").exists()
 
     # (d) non-fr repo -> default shape even for a session worktree name
     def test_non_fr_repo_mimics_default(self, plain_repo: Path, stub_fr: dict[str, str]) -> None:
@@ -294,8 +357,11 @@ class TestWorktreeCreate:
 
 
 class TestWorktreeRemove:
-    # (g) agent-* path -> plain git worktree removal, fr never called
-    def test_agent_worktree_removed_with_git(self, repo: Path, stub_fr: dict[str, str]) -> None:
+    # (g) agent-* path -> plain git worktree removal, fr never called. Both the
+    # legacy in-repo shape and the gh#1270 cache shape, the latter locked.
+    def test_legacy_in_repo_agent_worktree_removed_with_git(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
         wt = repo / ".claude" / "worktrees" / "agent-abc123"
         wt.parent.mkdir(parents=True)
         _git(repo, "worktree", "add", "--detach", str(wt), "HEAD")
@@ -305,6 +371,20 @@ class TestWorktreeRemove:
         assert not wt.exists()
         assert str(wt) not in worktrees(repo)
         assert logged(stub_fr) == []
+
+    def test_locked_cache_agent_worktree_removed_with_git(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        made = run_hook(CREATE, create_payload("agent-rm1", repo), stub_fr)
+        assert made.returncode == 0, made.stderr
+        wt = agent_dir(stub_fr, "agent-rm1")
+        result = run_hook(REMOVE, remove_payload(repo, worktree_path=str(wt)), stub_fr)
+        assert result.returncode == 0, result.stderr
+        assert not wt.exists()
+        assert str(wt) not in worktrees(repo)
+        assert [
+            ln for ln in logged(stub_fr) if "--agent-worktrees" not in ln
+        ] == []  # create's sweep only
 
     # (h) any other path -> fr isolation down --worktree <path>
     def test_other_path_delegates_to_fr_down(
@@ -457,6 +537,38 @@ def test_two_concurrent_agent_worktree_creations_both_succeed(
             )
     outs = [p.communicate(timeout=60) for p in procs]
     assert all(p.returncode == 0 for p in procs), [o[1] for o in outs]
-    expected = str(repo / ".claude" / "worktrees" / "agent-twice")
+    expected = str(agent_dir(stub_fr, "agent-twice"))
     assert {last_line(o[0]) for o in outs} == {expected}
     assert worktrees(repo).count(expected) == 1
+
+
+def test_agent_worktree_of_a_bare_repo_is_removed_and_unlocked(
+    tmp_path: Path, stub_fr: dict[str, str]
+) -> None:
+    """A bare repo's common dir has no parent checkout; the remove hook must
+    still unlock and remove, or its `rm -rf` fallback leaves a locked entry."""
+    bare = tmp_path / "b.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", "-q", str(bare), str(seed)], check=True, capture_output=True)
+    (seed / "x").write_text("x")
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-qm", "init")
+    _git(seed, "push", "-q", "origin", "main")
+    wt = agent_dir(stub_fr, "agent-bare1", key="b")
+    wt.parent.mkdir(parents=True)
+    subprocess.run(
+        ["git", "--git-dir", str(bare), "worktree", "add", "--detach", str(wt), "main"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "--git-dir", str(bare), "worktree", "lock", str(wt)], check=True)
+    result = run_hook(REMOVE, remove_payload(tmp_path, worktree_path=str(wt)), stub_fr)
+    assert result.returncode == 0, result.stderr
+    listed = subprocess.run(
+        ["git", "--git-dir", str(bare), "worktree", "list"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert str(wt) not in listed

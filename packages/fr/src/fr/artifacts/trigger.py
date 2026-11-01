@@ -1,28 +1,34 @@
-"""The obligatory trigger at CLI entry, context-aware (spec §3.C).
+"""The obligatory trigger at CLI entry, context-aware (spec §3.C; contexts
+re-decided by spec 2026-11-01-auto-migrate-own-commit §A, super-fr#1242).
 
 `fr.cli`'s root callback calls `ensure_artifacts_current` before every command:
 
     fr <any command>
       └─ artifacts stale?
-           ├─ interactive  → migrate, commit, continue
-           └─ daemon / CI  → refuse loudly, exit non-zero
+           ├─ ci           (a truthy CI marker)       → migrate in place, NEVER commit, continue
+           ├─ opt-out      (FR_NON_INTERACTIVE)       → refuse, write nothing
+           ├─ interactive  (a TTY on stdin + stdout)  → migrate, commit alone, continue
+           ├─ workspace    (a valid fr-isolation one) → migrate, commit alone, continue
+           └─ refuse       (a daemon, a base clone)   → refuse, write nothing
 
-**Interactive** means a TTY with `CI` unset. Then the operator gets the "pause,
-migrate, resume" they asked for, and the pause is invisible because the command
-they typed still runs afterwards.
+**The two committing contexts** (interactive, workspace) keep every git-state
+guard: never on **the repository's default branch** (a commit made
+automatically on `main`, before a command typed for another reason, is work
+someone has to notice and undo), never on a detached HEAD, never from a
+subdirectory, never while another fr holds the lock, and never over an
+artifact with **uncommitted changes** (`git add -- <path>` stages the whole
+file, so migrating it would commit a half-typed edit under a `chore(fr):
+migrate ...` message). The migration is always its own commit. A workspace is
+committed to because its branch survives and reaches a PR.
 
-**Non-interactive** means refuse, exit non-zero, name the command to run — and
-*never* migrate, never commit. So does **HEAD being the repository's default
-branch**: a commit made automatically on `main`, before a command the operator
-typed for some other reason, is work they have to notice and undo. So does an
-artifact the operator has **uncommitted changes in**: `git add -- <path>`
-stages the whole file, so migrating it would commit their half-typed edit under
-a `chore(fr): migrate ...` message. The bridge works from a checkout it `reset
+**CI** migrates the working tree so the command can run, and never commits: a
+CI checkout is discarded. It warns on stderr that the files must not be
+committed with other work.
+
+**Refuse** is the bridge's row. The bridge works from a checkout it `reset
 --hard`s to `origin/main` every tick (#286), so a commit there is discarded on
 the next pass: auto-committing would be pointless *and* actively misleading.
-That asymmetry is the whole reason this module has a context predicate at all,
-and Phase 5's daemon refusal reuses `is_interactive` rather than growing a
-second one.
+Its refusal names the way to get the migration carried: `fr isolation up`.
 
 Three properties this module is built around:
 
@@ -49,7 +55,7 @@ import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 import typer
 
@@ -62,6 +68,7 @@ from fr.artifacts.atomic import migration_lock
 from fr.artifacts.commit import (
     GitContext,
     GitRefusal,
+    NoRepo,
     commit_migration,
     git_context,
     lock_path,
@@ -73,6 +80,7 @@ from fr.artifacts.runner import (
     MigrationReport,
     inspection_failures,
 )
+from fr.isolation.marker import valid_workspace
 
 # --- what is exempt ------------------------------------------------------
 
@@ -330,6 +338,40 @@ def is_interactive(
     )
 
 
+MigrationContext = Literal["ci", "opt-out", "interactive", "workspace", "refuse"]
+"""The five contexts of spec 2026-11-01-auto-migrate-own-commit §A, in precedence.
+
+- **ci** — a truthy `CI_ENV_VARS` marker: migrate the working tree in place,
+  never commit.
+- **opt-out** — `FR_NON_INTERACTIVE` truthy: refuse, write nothing.
+- **interactive** — a TTY on stdin and stdout: migrate and commit alone.
+- **workspace** — a valid fr-isolation workspace: migrate and commit alone.
+- **refuse** — anything else (a bridge/daemon checkout, an agent in a base
+  clone): refuse, write nothing.
+"""
+
+
+def classify(
+    env: Mapping[str, str] | None = None, stdin: Any = None, stdout: Any = None
+) -> MigrationContext | None:
+    """The context, from the environment and the streams alone.
+
+    `None` means "workspace or refuse": that needs git, and is decided by the
+    gate after `git_context`. CI comes first because a CI runner may allocate a
+    pty and a CI checkout must never be committed to; `FR_NON_INTERACTIVE` comes
+    before interactive because it is a TTY-bearing wrapper's explicit opt-out.
+    `is_interactive` stays the one answer to "is this an operator's terminal?".
+    """
+    environ = os.environ if env is None else env
+    if any(_truthy(environ, name) for name in CI_ENV_VARS):
+        return "ci"
+    if _truthy(environ, NON_INTERACTIVE_ENV_VAR):
+        return "opt-out"
+    if is_interactive(env=environ, stdin=stdin, stdout=stdout):
+        return "interactive"
+    return None
+
+
 # --- the gate ------------------------------------------------------------
 
 
@@ -353,7 +395,7 @@ def ensure_artifacts_current(
     env: Mapping[str, str] | None = None,
     repo_root: Path | None = None,
     registry: MigrationRegistry | None = None,
-    interactive: bool | None = None,
+    context: MigrationContext | None = None,
     commit: Callable[[Path, MigrationReport], Any] | None = None,
     err: Callable[[str], None] | None = None,
 ) -> None:
@@ -372,7 +414,7 @@ def ensure_artifacts_current(
        an operator told only "N could not be migrated" re-runs and is surprised
        by a commit that already exists.
 
-    `registry`, `interactive`, `commit` and `err` are injection points for
+    `registry`, `context`, `commit` and `err` are injection points for
     tests, mirroring the runner's own `registry=`; production passes none of
     them.
     """
@@ -408,25 +450,37 @@ def ensure_artifacts_current(
     if not stale:
         return
 
-    live = interactive if interactive is not None else is_interactive(env=environ)
-    if not live:
+    # Step 2 (spec 2026-11-01 §B): classify from the environment and the
+    # streams alone. `None` is the workspace candidate, decided with git below.
+    where = context if context is not None else classify(environ)
+    if where == "opt-out":
         raise _refuse(
             emit,
             _will_not_act_here(
                 root,
                 registry,
-                "This context is non-interactive (CI is set, or there is no TTY), so fr "
-                "will not migrate or commit here:",
-                "a daemon checkout is hard-reset every tick, so a commit made in it "
-                "would be silently discarded.",
+                f'{NON_INTERACTIVE_ENV_VAR} is set — an explicit "do not write to git" — so '
+                "fr will not migrate or commit here:",
+                "the opt-out wins over a TTY and over an fr-isolation workspace alike.",
+                # No `carry it:` line (review p1-r3): entering isolation does not
+                # help while the opt-out stays set.
+                carry=False,
             ),
         )
+    if where == "ci":
+        # §C: nothing is committed, so no git-state refusal applies. The lock
+        # and the uncommitted-file veto still do.
+        _migrate_in_place(root, registry, emit, environ)
+        return
+    if where == "refuse":
+        raise _refuse(emit, _not_a_workspace(root, registry, "no TTY"))
 
-    # ONE place asks git anything (review r5-c1/c2/c3). Every branch below
-    # reads the same snapshot, so the default-branch guard, the detached-HEAD
-    # refusal and the uncommitted-file veto cannot disagree about the tree —
-    # and a git that could not answer refuses ONCE, loudly, instead of each
-    # predicate independently degrading to a permissive default.
+    # Step 3. ONE place asks git anything (review r5-c1/c2/c3). Every branch
+    # below reads the same snapshot, so the default-branch guard, the
+    # detached-HEAD refusal, the workspace check and the uncommitted-file veto
+    # cannot disagree about the tree — and a git that could not answer refuses
+    # ONCE, loudly, instead of each predicate independently degrading to a
+    # permissive default.
     state = git_context(root)
     if isinstance(state, GitRefusal):
         raise _refuse(
@@ -439,7 +493,12 @@ def ensure_artifacts_current(
                 f"{state.reason} Unknown git state is not a clean one.",
             ),
         )
+    if isinstance(state, NoRepo) and where != "interactive":
+        raise _refuse(emit, _not_a_workspace(root, registry, "not a git repository"))
     if isinstance(state, GitContext):
+        # Step 4: the committing contexts' own git-state refusals, in today's
+        # order — so a workspace mid-rebase hears "finish or abort it", never
+        # "enter isolation".
         if _fell_back_to_cwd(root, state):
             raise _refuse(
                 emit,
@@ -464,6 +523,14 @@ def ensure_artifacts_current(
                     "orphaned by the next checkout. Finish or abort it first.",
                 ),
             )
+        # Step 5: the workspace candidate must BE one (R2).
+        if where != "interactive":
+            verdict = valid_workspace(state.toplevel, state.branch)
+            if not verdict.ok:
+                raise _refuse(
+                    emit, _not_a_workspace(root, registry, verdict.reason or "invalid marker")
+                )
+        # Step 6: never an automatic commit on the default branch (R6).
         if state.branch == state.default_branch:
             raise _refuse(
                 emit,
@@ -477,6 +544,7 @@ def ensure_artifacts_current(
                 ),
             )
 
+    # Step 7: lock, migrate, commit alone.
     emit(f"fr: artifacts in {root} are out of date — migrating before running the command.")
     # One migration at a time, per repository (review r5-e7). Two agents — or
     # an agent and the operator — running `fr` in the same second would both
@@ -510,6 +578,87 @@ def _still_stale(root: Path, registry: MigrationRegistry | None) -> bool:
         return is_stale(root, registry=registry)
     except Exception:
         return True
+
+
+def _migrate_in_place(
+    root: Path,
+    registry: MigrationRegistry | None,
+    emit: Callable[[str], None],
+    environ: Mapping[str, str],
+) -> None:
+    """The ci row (spec 2026-11-01 §C, R5): migrate the working tree, never commit.
+
+    A CI checkout is discarded, so a commit there is pointless; migrating lets
+    the command run over a tree it can read. Everything is said on STDERR — the
+    `::warning::` annotation included — so a `--json` command's stdout, or a
+    `>> $GITHUB_STEP_SUMMARY` redirect, is never contaminated. No adoption
+    offer: it offers to write run files, which makes no sense here.
+    """
+    with migration_lock(lock_path(root)) as acquired:
+        if not acquired:
+            if not _still_stale(root, registry):
+                emit("  another fr process migrated this tree; continuing.")
+                return
+            raise _refuse(
+                emit,
+                _will_not_act_here(
+                    root,
+                    registry,
+                    "another fr process is migrating this repository right now, so fr "
+                    "will not migrate here:",
+                    "two migrations of one tree race each other. Re-run this command "
+                    "once it finishes.",
+                ),
+            )
+        try:
+            # `uncommitted_veto` itself, inside the try (review p1-r1): with no
+            # repo it holds nothing back (`uncommitted_paths` returns an empty
+            # set), and a git state it cannot read raises, which refuses below.
+            # Unknown is never treated as clean.
+            report = run_migrations(
+                root, dry_run=False, registry=registry, veto=uncommitted_veto(root)
+            )
+        except Exception as e:
+            raise _refuse(
+                emit,
+                [
+                    f"fr: artifact migration failed: {type(e).__name__}: {e}",
+                    f"  Nothing was committed. Run `fr migrate artifacts` to inspect, or set "
+                    f"{SKIP_ENV_VAR}=1 to bypass this check.",
+                ],
+            ) from e
+
+    for action in report.applied:
+        emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
+    if report.failed:
+        for failure in report.failed:
+            emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
+            for companion in failure.also_wrote:
+                emit(f"    it had already written {_rel(companion, root)} (uncommitted)")
+        raise _refuse(
+            emit,
+            [
+                f"fr: {len(report.applied)} artifact(s) migrated in place (not committed); "
+                f"{len(report.failed)} left unmodified.",
+                "  Refusing to run over a half-migrated tree. Fix them by hand, or set "
+                f"{SKIP_ENV_VAR}=1 to bypass this check.",
+            ],
+        )
+
+    n = len(report.changed_paths)
+    emit(
+        f"fr: {n} artifact(s) in {root} were written for an older fr; migrated in place "
+        "for this run (NOT committed)."
+    )
+    emit(
+        "  Do not commit these files with other work. Carry the migration on a branch: "
+        "the next fr command in an fr-isolation workspace commits it alone."
+    )
+    if _truthy(environ, "GITHUB_ACTIONS"):
+        emit(
+            f"::warning title=fr artifacts stale::{n} artifact(s) migrated in place for "
+            "this run; carry the migration on a branch."
+        )
 
 
 def _migrate_and_commit(
@@ -549,6 +698,9 @@ def _migrate_and_commit(
             reason = getattr(outcome, "reason", None)
             if reason:
                 emit(f"  {reason}")
+            notice = _commit_notice(outcome)
+            if notice:
+                emit(notice)
 
     # Spec §3.E: the migration REPORTS in-flight plans that have no run cursor.
     # It stops at reporting here on purpose. This runs before an unrelated
@@ -599,8 +751,48 @@ def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
     return root.resolve() != state.toplevel
 
 
+COMMIT_NOTICE_PREFIX: Final = "fr: migrated and committed"
+"""The one line the session hooks relay (spec §D, R11) — keep it a prefix match."""
+
+CARRY_LINE: Final = (
+    "  carry it:  fr isolation up --branch <branch>   "
+    "(the next fr command there migrates and commits it alone)"
+)
+
+
+def _commit_notice(outcome: Any) -> str | None:
+    """`fr: migrated and committed <n> artifact(s): <subject> (<sha>)`, or None."""
+    if not getattr(outcome, "committed", False):
+        return None
+    message = getattr(outcome, "message", None) or ""
+    subject = message.splitlines()[0] if message else "chore(fr): migrate"
+    n = len(getattr(outcome, "paths", ()) or ())
+    sha = getattr(outcome, "sha", None)
+    return f"{COMMIT_NOTICE_PREFIX} {n} artifact(s): {subject}" + (f" ({sha})" if sha else "")
+
+
+def _not_a_workspace(
+    root: Path, registry: MigrationRegistry | None, reason: str
+) -> tuple[str, ...]:
+    """The refuse row (R3): non-interactive, not CI, not a valid workspace."""
+    return _will_not_act_here(
+        root,
+        registry,
+        f"this context is non-interactive and not an fr-isolation workspace ({reason}), "
+        "so fr will not migrate or commit here:",
+        "a daemon checkout is hard-reset every tick, so a commit made in it "
+        "would be silently discarded.",
+        carry=True,
+    )
+
+
 def _will_not_act_here(
-    root: Path, registry: MigrationRegistry | None, because: str, detail: str
+    root: Path,
+    registry: MigrationRegistry | None,
+    because: str,
+    detail: str,
+    *,
+    carry: bool = False,
 ) -> tuple[str, ...]:
     """The refusal shape shared by every "stale, but fr will not touch it here".
 
@@ -620,6 +812,7 @@ def _will_not_act_here(
         "migrated before this command can run.",
         f"  {because}",
         f"  {detail}",
+        *((CARRY_LINE,) if carry else ()),
         "  preview:  fr migrate artifacts",
         "  apply:    fr migrate artifacts --yes",
         f"  bypass (recovery only):  {SKIP_ENV_VAR}=1 fr <command>",

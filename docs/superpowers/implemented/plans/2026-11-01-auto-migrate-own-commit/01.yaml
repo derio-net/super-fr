@@ -1,0 +1,286 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Stale artifacts migrate in workspaces and CI, in their own commit (R1-R11)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - auto-migrate-workspace-commits-alone
+  - auto-migrate-ci-in-place
+  - auto-migrate-refuses-outside-workspace
+  - auto-migrate-git-guards-hold
+  - auto-migrate-nag-surfaces-commit
+  - auto-migrate-live-sweep
+  tier: hard
+  files:
+  - packages/fr/src/fr/isolation/marker.py
+  - packages/fr/src/fr/run/workspace.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - packages/fr/src/fr/artifacts/commit.py
+  - packages/fr/src/fr/cli.py
+  - plugins/super-fr/hooks/fr-acceptance-nag.sh
+  - packages/fr-opencode-plugin/src/nag.ts
+  - packages/fr-opencode-plugin/**/nag*.ts
+  - tests/conftest.py
+  - tests/unit/test_isolation_marker.py
+  - tests/unit/test_run_workspace*.py
+  - tests/unit/test_migration_*.py
+  - tests/unit/test_hooks_acceptance_nag.py
+  - tests/scenarios/auto-migrate-*.sh
+  - tests/scenarios/fixtures/auto-migrate*/**
+  - tests/integration/test_scenarios.py
+  - .claude/rules/artifact-versioning.md
+  - .opencode/instructions/artifact-versioning.md
+  - .hermes/SOUL.d/super-fr-rules.md
+  - .changes/feat-auto-migrate-own-commit.yaml
+  - docs/acceptance/*
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: One marker validator, shared by `fr run start` and the gate (spec §B, R2)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_isolation_marker.py for `fr.isolation.marker.valid_workspace(root, branch)`,
+      building real git fixtures (tmp `git init`, `git worktree add`). It is ok for a linked worktree whose
+      marker has a matching toplevel and branch and `mode: worktree`. It is also ok with `mode` absent (read
+      as worktree), with no `branch` key, and with `branch` None (detached). It is NOT ok, each case with a
+      non-empty `reason`, for: no marker, unparseable JSON, a non-dict, a toplevel mismatch, the marker copied
+      into the PRIMARY working tree (not a linked worktree), a branch other than the marker's (drift),
+      `mode: external` without container evidence (monkeypatch the evidence function to False), and an
+      unknown mode. `mode: external` with evidence True and a matching toplevel is ok. Run
+      `uv run pytest tests/unit/test_isolation_marker.py -q --no-cov` and see it fail (module missing).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/isolation/marker.py. MOVE `_is_linked_worktree`, `_container_evidence`,
+      `_marker_mode_holds` and `_marker_at` out of packages/fr/src/fr/run/workspace.py (:37-134) into it, as
+      public names (`is_linked_worktree`, `container_evidence`, `marker_mode_holds`, `marker_at`), and have
+      fr/run/workspace.py import them. Grep tests/ for monkeypatches of the old private names first, and
+      retarget them to the new module. Add `WorkspaceVerdict` (a frozen dataclass: ok: bool, reason: str | None)
+      and `valid_workspace(root, branch)`, applying the missing-mode-is-worktree reading and the drift rule (a
+      present marker branch that differs from a non-None current branch). The docstring cites
+      plugins/super-fr/hooks/lib/fr-isolation-decision.sh:214-251 as the authority it mirrors. Run the new
+      tests plus `uv run pytest tests/unit -q --no-cov -k "run_workspace or run_start or isolation_marker"`
+      and see them green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: if `marker_mode_holds`'s missing-mode handling differs from the new reading, make `fr run start`
+      take the SAME reading (one implementation) and confirm its tests still pass. Otherwise record a
+      `refactor:` reason in the step record.
+- number: 2
+  title: The context classification and the test seam (spec §A, R4)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: add to tests/conftest.py an autouse fixture that deletes every name in
+      `fr.artifacts.trigger.CI_ENV_VARS` plus `FR_NON_INTERACTIVE` (monkeypatch.delenv(raising=False)). Add
+      tests in tests/unit/test_migration_trigger.py for a pure `classify(env, stdin, stdout)` returning
+      "ci" | "opt-out" | "interactive" | None (None means workspace-or-refuse, decided later with git): a CI
+      marker wins over a TTY; GITHUB_ACTIONS alone is ci; CI=false is not ci; FR_NON_INTERACTIVE wins over a
+      TTY; a TTY on both streams is interactive; pipes give None. Run them and see them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/artifacts/trigger.py add `MigrationContext = Literal["ci", "opt-out",
+      "interactive", "workspace", "refuse"]` and `classify`. Replace `ensure_artifacts_current`'s
+      `interactive: bool | None` keyword with `context: MigrationContext | None`. Migrate every gate caller or
+      test that passes `interactive=` or monkeypatches `trigger.is_interactive` (grep `interactive=` and
+      `is_interactive` in tests/unit/test_migration_*.py and packages/fr/src/fr/cli.py): True becomes
+      "interactive" and False becomes "refuse", keeping each test's meaning. `is_interactive` itself is
+      unchanged, and so are its other callers. Run `uv run pytest tests/unit/test_migration_trigger.py
+      tests/unit/test_migration_profiles_services.py tests/unit/test_migration_commit.py -q --no-cov` and see
+      them green.
+- number: 3
+  title: Workspace commits alone, in the spec's order (spec §B steps 1-7, R1, R3,
+    R6, R7, R8)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: add tests in test_migration_trigger.py on a real git fixture: a bare origin, `main` as default, a
+      stale plan whose fr_version ceiling excludes the installed major, and a linked worktree on feat/x with
+      a valid marker and one work commit. Drive them with context=None and pipes, so classification is real.
+      (a) The gate migrates and commits alone: HEAD's subject starts `chore(fr): migrate`, its parent is the
+      work commit, and `git show --name-only` lists only the plan's _meta.yaml. The ceiling is widened, and
+      the gate emits `fr: migrated and committed <n> artifact(s): <subject> (<sha>)`. (b) With the same
+      fixture's worktree DETACHED, today's detached-HEAD refusal text appears, never the isolation line.
+      (c) The primary checkout on a branch with no marker exits 2, its output contains
+      `carry it:  fr isolation up --branch` and the reason, and the tree stays byte-identical with no commit.
+      (d) A marker on the default branch gets the default-branch refusal. (e) FR_NON_INTERACTIVE=1 in a valid
+      workspace refuses, with no commit. (f) A drifted marker refuses, naming drift. (g) An uncommitted edit
+      to the stale plan in a valid workspace is held back, as today. See them fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: restructure `ensure_artifacts_current` into spec §B's numbered order:
+      1. exempt, then stale, then classify;
+      2. ci goes to §C; opt-out refuses;
+      3. git_context once: a GitRefusal gets today's message, and a NoRepo with a workspace candidate refuses
+         with "not a git repository";
+      4. the wrong-root and detached refusals for committing contexts;
+      5. `valid_workspace` for the workspace candidate, refusing with its reason on failure;
+      6. the default-branch refusal;
+      7. lock, then `_migrate_and_commit`, unchanged.
+      Extend `_will_not_act_here` with the `carry it:` line (spec §D) on the non-interactive refusal, whose
+      `because` now names "not an fr-isolation workspace (<reason>)". After a successful commit, emit the
+      `fr: migrated and committed …` line, reading the commit outcome's message and sha (add them to
+      `CommitOutcome` if absent). Run the trigger, commit and profiles tests and see them green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: keep `_will_not_act_here` the single refusal shape, and update the module docstring's tree
+      diagram to the five contexts (spec §E). Run `uv run ruff check packages/ tests/` and
+      `uv run mypy packages/fr/src`.
+- number: 4
+  title: CI migrates in place, never commits (spec §C, R5, R10)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: add tests with env {"CI": "true"} (and separately {"GITHUB_ACTIONS": "true"}) on a stale fixture ON
+      `main`. The gate returns (the command runs), the plan is migrated in the working tree, `git rev-parse
+      HEAD` is unchanged, and stderr (the `err=` callback) carries the two-line warning. With GITHUB_ACTIONS
+      set, the `::warning title=fr artifacts stale::` line goes through the same stderr callback, never
+      stdout (capsys stdout is empty). An uncommitted edit to a stale file is held back (the veto is kept). A
+      failing migration (inject a registry whose migration raises) exits 2 with today's message.
+      `_adoption_offer` is not called. Split the two existing CI tests
+      (test_non_interactive_refuses_without_migrating_or_committing and
+      test_the_non_interactive_refusal_does_not_reach_the_offer) into a `context="refuse"` refusal test and
+      these CI tests. See them fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `_migrate_in_place(root, registry, emit, environ)` per spec §C: take the lock, run
+      run_migrations with uncommitted_veto (a veto that cannot read git counts as "no edits"), give today's
+      partial refusal on report.failed, make no commit and no adoption offer, and write the warning and the
+      annotation on stderr. Wire the ci context to it. Run the trigger tests and see them green.
+- number: 5
+  title: The nag relays the commit (spec §D, R11)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: in tests/unit/test_hooks_acceptance_nag.py add two cases. First, a fake `fr` that writes
+      `fr: migrated and committed 2 artifact(s): chore(fr): migrate 2 plans to fr 9.9.9 (abc1234)` to stderr
+      and debt to stdout, then exits 0: the hook's message starts with that line. Second, a fake that refuses
+      with "must be migrated": the skipped line names `fr-isolation workspace` and `fr migrate artifacts
+      --yes`. Add the same two cases to packages/fr-opencode-plugin's nag test. Run
+      `uv run pytest tests/unit/test_hooks_acceptance_nag.py -q --no-cov` and, inside
+      packages/fr-opencode-plugin, `bun test`, and see the new cases fail.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: edit plugins/super-fr/hooks/fr-acceptance-nag.sh: on success, prepend the captured
+      `fr: migrated and committed` stderr line; on refusal, use the new skipped wording. Make the same change
+      to packages/fr-opencode-plugin/src/nag.ts, keeping its `// super-fr-parity:` marker. Both test commands
+      and `uv run fr harness parity --check` pass.
+- number: 6
+  title: Candidate scenarios and matrix evidence (spec §F)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Write tests/scenarios/auto-migrate-workspace.sh and tests/scenarios/auto-migrate-ci-in-place.sh per spec
+      §F, modelled on tests/scenarios/closeout-owed.sh: source _common.sh, then `unset` every CI_ENV_VARS name,
+      FR_NON_INTERACTIVE and FR_SKIP_MIGRATION, and set CI/GITHUB_ACTIONS only in the CI scenario.
+      Workspace scenario: in the worktree, `fr plan self-review <plan-dir>` with stdin from /dev/null exits 0;
+      assert the subject, the parent, the touched paths and the widened ceiling; then run the negative leg in
+      the primary checkout.
+      CI scenario: build a minimal current-schema matrix and generate its reports with `fr acceptance report
+      --deterministic` before the plan is made stale. `fr acceptance check` exits 0, no new commit appears,
+      the warning and `::warning` are on stderr, and stdout carries neither.
+      Check how tests/integration/test_scenarios.py discovers scenarios and make sure it picks these up. Run
+      `uv run pytest tests/integration/test_scenarios.py -q --no-cov -k auto_migrate` and see it green.
+  - id: P1.T6.S2
+    text: |-
+      Move the six rows with `uv run fr acceptance set-status --id <row> --status <ci|walk-owed> --notes
+      "<why>" --level unit=super-fr:tests/unit/<file>#<test>`:
+      - auto-migrate-live-sweep → walk-owed, notes "walked on first real use: the per-repo sweep";
+      - the `none` rows → ci, with their unit refs;
+      - the candidate rows → ci, with their scenario and unit refs.
+      Run `uv run fr acceptance check`.
+- number: 7
+  title: Rule, mirrors, fragment (spec §E, R9)
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      Rewrite .claude/rules/artifact-versioning.md §1 as "1. Which contexts migrate". It carries the §A table,
+      the 2026-10-31 decision linking derio-net/super-fr#1242, the two remaining invariants, the CI ride-along
+      caveat, the bridge rationale on the refuse row, and the replacement for "Do not 'fix' it later". Update
+      "What the CLI-entry gate will and will not do" item 1, and keep the "Exempt commands" prose intact. Run
+      `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`, then
+      `uv run pytest "tests/unit/test_migration_trigger.py::test_the_rule_prose_names_every_read_only_command"
+      tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_tripwire_hermes_skills_sync.py
+      -q --no-cov`.
+  - id: P1.T7.S2
+    text: |-
+      Add .changes/feat-auto-migrate-own-commit.yaml with `bump: minor` and `summary: Stale artifacts now
+      migrate automatically in fr-isolation workspaces (committed alone) and in place in CI (never committed)`.
+      Run `uv run --no-project python scripts/check-change-fragment.py origin/main`, `uv run ruff format
+      packages/ tests/`, `uv run ruff check packages/ tests/` and the mypy command from AGENTS.md. After the
+      final code commit, run the full suite LAST via
+      `bash ~/.cache/fr/coord/testslot.sh -- uv run pytest -q --no-cov -n auto`, logging to a file outside the
+      repo.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T7.S1:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+    P1.T7.S2:
+      state: x
+      ticked_at: '2026-11-01T16:19:06+00:00'
+      note: null
+  completion:
+    at: '2026-11-01T16:19:06+00:00'
+    note: null
+    observed_prs: []

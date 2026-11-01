@@ -89,10 +89,31 @@ state:
         labels. Fixed forward tests-first in fix/gitea-adapter-live-shapes (fr.tea.api_json;
         fixtures captured live, redacted). Re-walk on the fix: 33/33 pass.'
     P9.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-11-01T11:23:46+00:00'
+      note: 'Walked 2026-11-01 on both backends with fr at the merged gitea-adapter-live-shapes
+        fix (#1272): a private scratch project on gitlab.com (glab 1.101.0 on the
+        host) and one on a self-hosted Gitea (host redacted; reached by kubectl port-forward,
+        derio-net/frank#909; tea 0.16.0 on the host), both deleted afterwards (GitLab
+        permanently, past its delayed deletion). fr init scaffold --backend gitlab
+        / --backend gitea --tracking gitea wrote the right forge/tracking services
+        and the pinned glab 1.107.0 / tea 0.14.2 install; building the devcontainer
+        (fr isolation up) left a WORKING binary at /usr/local/bin in each container
+        (--version run inside). Isolation lifecycle on each: status pr=none -> OPEN
+        -> MERGED; verify-merge refused the open PR/MR and passed the merged one;
+        down removed container and worktree. Gitea''s list-and-filter _pr_from fallback
+        answered correctly through the API. Default-branch resolution proven to reach
+        the forge: with the forge default moved to trunk and the local origin/HEAD
+        deleted, _resolve_default_branch returned trunk via glab and via tea (symbolic-ref
+        missed first), then both restored. The pinned tea 0.14.2 also passed the full
+        Task 2 adapter walk (33/33). Noted, not a bug: scaffold needs --tracking on
+        Gitea because issues_enabled is unknown there (spec 3.C), though the API''s
+        repository.has_issues could now answer it.'
   completion:
-    at: null
-    note: null
+    at: '2026-11-01T11:25:02+00:00'
+    note: 'Real-CLI verification walked 2026-11-01 on gitlab.com and a self-hosted
+      Gitea: GitLab adapter (Task 1, 2026-09-24), Gitea adapter (Task 2; seven bugs
+      found and fixed forward in #1272, re-walk 33/33, also on the pinned tea 0.14.2),
+      scaffold + isolation lifecycle + forge default-branch resolution on both (Task
+      3).'
     observed_prs: []

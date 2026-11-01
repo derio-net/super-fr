@@ -134,8 +134,10 @@ def test_a_run_file_that_is_not_run_state_is_reported_never_stamped(tmp_path: Pa
 def test_this_repos_own_run_cursors_are_current(repo_root: Path) -> None:
     """Dogfooding, per the rule: the moment `current_version` moved, this
     repo's own live cursors went stale — including the cursor of the very run
-    that is doing the moving — and CI (`CI=true`, non-interactive) refuses
-    rather than migrating. `fr migrate artifacts --yes` was run here and its
+    that is doing the moving. CI (`CI=true`) now migrates such a tree in place
+    without committing (spec 2026-11-01-auto-migrate-own-commit R5), but
+    `fr validate artifacts` (exempt from the gate) still fails it, so the
+    migration is committed: `fr migrate artifacts --yes` was run here and its
     result committed.
 
     ZERO LIVE CURSORS IS A PASS, and the `assert live, "this test would prove

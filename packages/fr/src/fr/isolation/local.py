@@ -207,6 +207,7 @@ class GcAction:
     # merged | merged-by-content | open | no-pr | orphan | no-state | dangling-image
     # | empty-repo-dir | stale-session (cache/index hygiene, spec 2026-09-04 §5)
     # | unverifiable (a refused forge lookup, spec 2026-10-06-forge-remainder)
+    # | agent-worktree (a subagent's `agent-*` worktree, gh#1270)
     verdict: str
     # reaped | skipped | warned | reap-failed | would-reap | would-skip | removed
     # | would-remove
@@ -2090,6 +2091,7 @@ class LocalWorktreeDevcontainerTarget:
             actions.extend(self._sweep_dangling_images(dry_run))
             actions.extend(self._sweep_empty_repo_dirs(dry_run))
             actions.extend(self._sweep_stale_sessions(dry_run))
+            actions.extend(self._sweep_agent_worktrees(dry_run))
             return actions
         finally:
             lock.close()
@@ -2544,6 +2546,18 @@ class LocalWorktreeDevcontainerTarget:
             p.unlink(missing_ok=True)
             out.append(GcAction(wt, br, "stale-session", "removed", str(p)))
         return out
+
+    def _sweep_agent_worktrees(self, dry_run: bool) -> list[GcAction]:
+        """Reap finished, clean `agent-*` subagent worktrees, which Claude Code
+        never removes once fr's WorktreeCreate hook made them (gh#1270). The
+        rules live in `agent_worktrees`; a failure there costs this step only,
+        never the rest of the host-wide sweep."""
+        from .agent_worktrees import sweep_agent_worktrees
+
+        try:
+            return sweep_agent_worktrees(self.repo_root, dry_run=dry_run)
+        except Exception as e:  # noqa: BLE001 — one step of a best-effort sweep
+            return [GcAction(str(self.repo_root), None, "agent-worktree", "reap-failed", str(e))]
 
     # ---------- helpers ----------
 
