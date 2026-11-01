@@ -66,6 +66,7 @@ jobs:
           uv run pytest -o addopts="--strict-markers --cov" --cov-report=
           -n auto --splits 4 --group ${{ matrix.shard }}
           --splitting-algorithm least_duration
+          --durations=40
           --junitxml=junit-shard.xml
         env:
           COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
@@ -77,6 +78,12 @@ jobs:
       - if: failure()
         run: >-
           uv run --no-project python scripts/junit_annotations.py junit-shard.xml
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-py${{ matrix.python }}-shard-${{ matrix.shard }}
+          path: junit-shard.xml
+          retention-days: 7
       # Coverage is measured on the floor leg only: both legs would upload the
       # same artifact name, and the gate needs one run of the suite, not two.
       - if: matrix.python == '3.11'
