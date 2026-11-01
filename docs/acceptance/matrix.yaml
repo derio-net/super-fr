@@ -10315,9 +10315,11 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: 'walked on first real use: the next real devops-gated run (tracked derio-net/super-fr#1294)'
     verify: live
+    issues:
+    - derio-net/super-fr#1294
   - id: ops-stub-cli
     capability: fr ops stub
     acceptance: fr ops stub previews, and with --yes writes, ops.yaml stubs and step
