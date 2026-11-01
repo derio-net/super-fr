@@ -17,7 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fr.gatebackfill.forge import BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
-from fr.gatebackfill.trackers import fr_gate_marker, owed_marker_key
+from fr.archive_followups import owned_owed_key
+from fr.gatebackfill.trackers import fr_gate_marker, is_ours
 
 PLANS_REL = Path("docs/superpowers/plans")
 IMPLEMENTED_PLANS_REL = Path("docs/superpowers/implemented/plans")
@@ -212,13 +213,17 @@ def _age_days(git: Git, ref: str | None, root: Path, name: str, now: datetime) -
         return None
 
 
+def _as_issue(i: dict[str, Any]) -> dict[str, object]:
+    return {k: i.get(k) for k in ("number", "body", "author", "labels")}
+
+
 def _lookalikes(c: Candidate, issues: list[dict[str, Any]], manifest: ManifestItem | None) -> list[str]:
     """Open issues that read like this item's tracker but that fr did not write: suggestions."""
     kind, name, n = split_key(c.key)
     found = []
     for i in issues:
         ref = str(i.get("ref"))
-        if ref == c.ref or owed_marker_key(str(i.get("body") or "")) == c.key:
+        if ref == c.ref or ref == c.tracker_ref:
             continue
         text = f"{i.get('title', '')}\n{i.get('body', '')}"
         hit = False
@@ -270,9 +275,16 @@ def collect_candidates(
             issues = forge.open_issues()
         except Exception as exc:  # noqa: BLE001 — a failed read degrades look-alikes only
             notes.append(f"open issues not read: {type(exc).__name__}: {exc}")
+    me = ""
+    if forge is not None:
+        try:
+            me = forge.viewer_login()
+        except Exception as exc:  # noqa: BLE001 — no identity: no issue is trusted as ours
+            notes.append(f"viewer login not read: {type(exc).__name__}: {exc}")
     owned_trackers = {
-        k: str(i.get("ref")) for i in issues if (k := owed_marker_key(str(i.get("body") or "")))
+        k: str(i.get("ref")) for i in issues if (k := owned_owed_key(_as_issue(i), me))
     }
+    ours = {str(i.get("ref")) for i in issues if is_ours(i, me)}
     adopted = {e.adopt_ref for e in (previous.entries if previous else []) if e.adopt_ref}
     by_ref = {str(i.get("ref")): i for i in issues}
     man = {m.key: m for m in (manifest.items if manifest else [])}
@@ -345,7 +357,7 @@ def collect_candidates(
         )
         out.append(cand)
 
-    out = _settle_trackers(out, issues, by_ref, man, adopted, notes)
+    out = _settle_trackers(out, issues, by_ref, man, adopted, ours, notes)
     return sorted(out, key=lambda c: c.key), notes
 
 
@@ -355,6 +367,7 @@ def _settle_trackers(
     by_ref: dict[str, dict[str, Any]],
     man: dict[str, ManifestItem],
     adopted: set[str | None],
+    ours: set[str],
     notes: list[str],
 ) -> list[Candidate]:
     """Attach look-alike trackers, then settle the `issue:` candidates that are trackers."""
@@ -371,7 +384,7 @@ def _settle_trackers(
         if split_key(c.key)[0] == "issue" and c.key not in man:
             ref = c.key.removeprefix("issue:")
             body = str(by_ref.get(ref, {}).get("body") or "")
-            if ref in adopted or fr_gate_marker(body) is not None:
+            if ref in adopted or (ref in ours and fr_gate_marker(body) is not None):
                 notes.append(f"{c.key}: a tracker, not a candidate")
                 continue
             if ref in suggested:

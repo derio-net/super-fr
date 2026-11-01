@@ -12,6 +12,7 @@ from tests.unit.gatebackfill_fixtures import (
     NOW,
     REPO,
     SP,
+    STRANGER,
     FakeForge,
     commit_at,
     issue,
@@ -204,3 +205,27 @@ def test_gate_for_is_the_spec_table() -> None:
     assert split_key("plan:2026-01-01-x#p2") == ("plan", "2026-01-01-x", 2)
     assert split_key("spec:s#step4") == ("spec", "s", 4)
     assert split_key("row:a-b") == ("row", "a-b", None)
+
+
+def test_only_our_own_labelled_issues_are_trackers_or_hide_a_candidate(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed"), row("r2", "walk-owed"), row("r3", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [
+        issue(70, "foreign", "x\n\n<!-- fr-owed:row:r1 -->", author=STRANGER),
+        issue(71, "unlabelled", "x\n\n<!-- fr-owed:row:r2 -->", labels=()),
+        issue(72, "ours", "x\n\n<!-- fr-owed:row:r3 -->"),
+        issue(
+            73, "foreign gate marker", "y\n<!-- fr-gate:devops pr:41 -->\n<!-- fr-owed:no key -->",
+            author=STRANGER,
+        ),
+    ]
+
+    cands, notes = _collect(repo, forge)
+
+    assert cands["row:r1"].tracker_ref is None
+    assert cands["row:r2"].tracker_ref is None
+    assert cands["row:r3"].tracker_ref == f"{REPO}#72"
+    assert f"issue:{REPO}#73" in cands  # a stranger's marker hides nothing
+    assert not any("73" in n for n in notes)

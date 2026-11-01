@@ -15,7 +15,7 @@ from typing import Any, Protocol
 from fr.debt.forge import ClientDebtForge
 from fr.ghclient import GhClient
 
-OPEN_ISSUE_FIELDS = "number,title,body,labels,author"
+OPEN_ISSUE_FIELDS = "number,title,body,labels,author"  # archive_followups.OWED_ISSUE_FIELDS + title
 OPEN_ISSUE_LIMIT = 500
 _PULL_URL = re.compile(r"/(?:pull|pulls|merge_requests|-/merge_requests)/(\d+)")
 
@@ -29,6 +29,10 @@ class BackfillForge(Protocol):
 
     def open_issues(self) -> list[dict[str, Any]]:
         """Every open issue as `{ref, number, title, body, labels}` (capped, never silently)."""
+        ...
+
+    def viewer_login(self) -> str:
+        """The login fr acts as: only issues it wrote can be its trackers (R8)."""
         ...
 
     def pr_view(self, number: int) -> dict[str, Any]: ...
@@ -68,9 +72,13 @@ class ClientBackfillForge(ClientDebtForge):
                     "title": str(i.get("title") or ""),
                     "body": str(i.get("body") or ""),
                     "labels": labels,
+                    "author": i.get("author"),
                 }
             )
         return out
+
+    def viewer_login(self) -> str:
+        return self._client.viewer_login()
 
     def pr_view(self, number: int) -> dict[str, Any]:
         return self._client.pr_view(self._repo, number)

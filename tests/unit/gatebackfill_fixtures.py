@@ -15,6 +15,8 @@ NOW = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
 REPO = "example-org/widgets"
 SP = "docs/superpowers"
 OWED_LABEL = {"name": "fr:owed"}
+ME = "fr-bot"
+STRANGER = "someone-else"
 
 
 def git(repo: Path, *args: str, env: dict[str, str] | None = None) -> str:
@@ -68,11 +70,15 @@ def row(i: str, status: str, **kw: Any) -> dict[str, Any]:
 
 
 def issue(
-    number: int, title: str = "", body: str = "", labels: tuple[str, ...] = ("fr:owed",)
+    number: int,
+    title: str = "",
+    body: str = "",
+    labels: tuple[str, ...] = ("fr:owed",),
+    author: str = ME,
 ) -> dict[str, Any]:
     return {
         "ref": f"{REPO}#{number}", "number": number, "title": title, "body": body,
-        "labels": list(labels),
+        "labels": list(labels), "author": {"login": author},
     }  # fmt: skip
 
 
@@ -100,6 +106,9 @@ class FakeForge:
     def open_issues(self) -> list[dict[str, Any]]:
         self.calls.append(("open_issues", None))
         return list(self.issues)
+
+    def viewer_login(self) -> str:
+        return ME
 
     def pr_view(self, number: int) -> dict[str, Any]:
         self.calls.append(("pr_view", number))

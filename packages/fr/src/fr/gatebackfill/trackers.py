@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 
 _GATE_MARKER = re.compile(r"^<!-- fr-gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
-_OWED_MARKER = re.compile(r"^<!-- fr-owed:(?P<key>\S+) -->$")
 
 
 def fr_gate_marker(body: str) -> tuple[str, int] | None:
@@ -24,10 +23,15 @@ def fr_gate_marker(body: str) -> tuple[str, int] | None:
     return (m.group("gate"), int(m.group("pr"))) if m else None
 
 
-def owed_marker_key(body: str) -> str | None:
-    """The owed key on the LAST line of *body*, when that line is exactly an owed marker."""
-    lines = body.rstrip().splitlines()
-    if not lines:
-        return None
-    m = _OWED_MARKER.match(lines[-1].strip())
-    return m.group("key") if m else None
+def is_ours(issue: dict[str, object], me: str) -> bool:
+    """Whether fr wrote this open issue: this account's, labelled `fr:owed`. A marker on any
+    other issue is only text (R8)."""
+    from fr.labels import FR_OWED
+
+    author = issue.get("author")
+    login = author.get("login") if isinstance(author, dict) else author
+    labels = {
+        str(lab.get("name", "")) if isinstance(lab, dict) else str(lab)
+        for lab in (issue.get("labels") or [])  # type: ignore[attr-defined]
+    }
+    return bool(me) and login == me and FR_OWED.name in labels
