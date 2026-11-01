@@ -118,6 +118,15 @@ def api_result(result: subprocess.CompletedProcess[str]) -> Any:
     try:
         return json.loads(out) if out else None
     except json.JSONDecodeError as exc:
+        # tea follows redirects, so a forward-auth proxy's login page can arrive
+        # as a 200: an HTML body is the only sign of it left.
+        if out.startswith("<") or "text/html" in stderr.lower():
+            raise TeaError(
+                f"HTTP {status} with an HTML body, not Gitea's JSON — an SSO or "
+                "forward-auth login page, most likely; exempt the instance's /api/ "
+                "paths or use an internal URL",
+                stderr=stderr,
+            ) from exc
         raise TeaError(f"HTTP {status} with a body that is not JSON: {exc}", stderr=stderr) from exc
 
 

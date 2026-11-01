@@ -99,6 +99,20 @@ class TestApiJson:
         with pytest.raises(_tea.TeaError, match=r"302.*auth\.example\.com"):
             _tea.api_json("/user")
 
+    def test_a_followed_redirect_onto_an_html_login_page_is_named(self, monkeypatch) -> None:
+        """tea's HTTP client follows redirects, so behind a forward-auth proxy the
+        status line can be the login page's 200 — the HTML body is the tell."""
+
+        def run(argv, *, cwd, env=None):
+            err = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="<!DOCTYPE html><html>Sign in</html>", stderr=err
+            )
+
+        monkeypatch.setattr(_tea, "run_cli", run)
+        with pytest.raises(_tea.TeaError, match=r"HTML.*SSO"):
+            _tea.api_json("/user")
+
     def test_a_nonzero_exit_raises(self, monkeypatch) -> None:
         def run(argv, *, cwd, env=None):
             return subprocess.CompletedProcess(argv, 1, stdout="", stderr="Error: no login")
@@ -179,6 +193,21 @@ class TestBranchLookups:
     def test_pr_for_branch_is_none_for_an_unknown_branch(self, api, tmp_path: Path) -> None:
         runner = api({PULLS: "pulls_all"})
         assert RealTeaClient().pr_for_branch("no/such", cwd=tmp_path, run=runner) is None
+
+    def test_pr_for_branch_ignores_a_forks_pr_from_a_same_named_branch(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        """A fork's PR has head.ref == the branch name too; only its head.label
+        (`owner:branch`) tells it apart from this repo's own branch."""
+        pulls = json.loads((FIX / "pulls_all.json").read_text())
+        fork = dict(pulls[0], head=dict(pulls[0]["head"], label="someone:fr-walk/pr"))
+
+        def run(argv, *, cwd, env=None):
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps([fork]), stderr="HTTP/1.1 200 OK\r\n"
+            )
+
+        assert RealTeaClient().pr_for_branch("fr-walk/pr", cwd=tmp_path, run=run) is None
 
 
 class TestPrStatusByUrl:

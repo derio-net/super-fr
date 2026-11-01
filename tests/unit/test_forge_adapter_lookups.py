@@ -91,13 +91,18 @@ def _pr_out(backend: str, native_state: str) -> str:
     state = "closed" if native_state in ("closed", "merged") else "open"
     return json.dumps(
         [
-            {"state": "open", "merged": False, "html_url": "other", "head": {"ref": "feat/y"}},
+            {
+                "state": "open",
+                "merged": False,
+                "html_url": "other",
+                "head": {"ref": "feat/y", "label": "feat/y"},
+            },
             {
                 "state": state,
                 "merged": merged,
                 "merged_at": merged_at,
                 "html_url": "u",
-                "head": {"ref": "feat/x"},
+                "head": {"ref": "feat/x", "label": "feat/x"},
                 "updated_at": None,
             },
         ]
@@ -254,8 +259,8 @@ def test_gitlab_carries_updated_at(tmp_path: Path) -> None:
 
 def test_gitea_carries_updated(tmp_path: Path) -> None:
     out = json.dumps(
-        [{"state": "open", "merged": False, "html_url": "u", "head": {"ref": "feat/x"},
-          "updated_at": "2026-10-03T00:00:00Z"}]
+        [{"state": "open", "merged": False, "html_url": "u",
+          "head": {"ref": "feat/x", "label": "feat/x"}, "updated_at": "2026-10-03T00:00:00Z"}]
     )  # fmt: skip
     pr = RealTeaClient().pr_for_branch("feat/x", cwd=tmp_path, run=_Scripted(out=out))
     assert pr is not None and pr["updatedAt"] == "2026-10-03T00:00:00Z"

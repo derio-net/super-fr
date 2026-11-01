@@ -285,9 +285,11 @@ class RealTeaClient(UnsupportedBatchOps):
     ) -> dict[str, Any] | None:
         """No single-shot branch→PR query exists, so list the 50 most recently
         updated PRs of every state (a merged/closed PR for a torn-down branch is
-        still found) and match `head.ref` client-side — a real, bounded
+        still found) and match `head.label` client-side — a real, bounded
         degradation vs. gh/glab, not a bug. The API, not `tea pulls list`:
-        tea's listing has no `merged` field and no merge time."""
+        tea's listing has no `merged` field and no merge time. `label`, not
+        `ref`: a same-repo PR's label is the bare branch, a fork's is
+        `owner:branch`, so a fork's same-named branch is not this one."""
         try:
             entries = _tea.api_json(
                 "/repos/{owner}/{repo}/pulls?state=all&sort=recentupdate&limit=50",
@@ -302,7 +304,7 @@ class RealTeaClient(UnsupportedBatchOps):
             if not isinstance(entry, dict):
                 continue
             head = entry.get("head")
-            if not isinstance(head, dict) or head.get("ref") != branch:
+            if not isinstance(head, dict) or head.get("label") != branch:
                 continue
             merged = bool(entry.get("merged", False))
             state = "MERGED" if merged else ("CLOSED" if entry.get("state") == "closed" else "OPEN")
