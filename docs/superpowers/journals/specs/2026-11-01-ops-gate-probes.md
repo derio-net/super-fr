@@ -227,3 +227,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-01-ops-gate-probes-p2 created=2026-11-01T12:01:50+00:00 -->
 ### phase-split-2026-11-01-ops-gate-probes-p2 · decision · ask: stage-5 probes, probe output and the answer grammar are their own ask (#1273 part 2 + the _ANSWER bug)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-01-ops-gate-probes-p3 created=2026-11-01T12:01:56+00:00 -->
+### phase-split-2026-11-01-ops-gate-probes-p3 · decision · ask: fr ops stub and the fr-plan/devops-gate guidance are their own ask (#1273 part 3)
