@@ -3795,6 +3795,7 @@ class _Driver:
         self._unfinished: frozenset[str] | None = None
         self._observed_last = False  # the one extra pass `observation_owed` grants
         self._export_refusals = 0  # per pass: owed exports refused before any write
+        self._after_lines: list[str] = []  # output lines owed after the current action's
         self._export_failures = 0  # per pass: export writes that failed, retried (gh#1025)
         # per pass: repo -> why collect skipped it, and the unfinished batches of those
         # repos, left out of the pass because their PRs and config were not read (gh#921)
@@ -5203,6 +5204,9 @@ class _Driver:
                     # a close reported already stays quiet, as does a claim write that wrote
                     # nothing, and a red PR the recovery has nothing new to say about
                     _say(action_line(action, outcome))
+                for extra in self._after_lines:
+                    _say(extra)
+                self._after_lines = []
             if self.yes:
                 self._record_released(facts)
                 self._drift(facts, snap)
@@ -5477,9 +5481,17 @@ class _Driver:
         line = f"PR #{action.pr}: gate:{action.gate} -> gate:{action.gate}-passed"
         # R12: the pass also closes the PR's backfill trackers; a failure there is reported
         # in the line and never reverses the pass.
-        closed = close_gate_trackers(
-            self.client(facts, repo), repo, action.pr, action.gate, why
-        ).summary()
+        report = close_gate_trackers(
+            self.client(facts, repo),
+            repo,
+            action.pr,
+            action.gate,
+            why,
+            root=self.path_of(repo),
+        )
+        # the adopt close commands and the discharge lines (R12) follow the gate-pass line
+        self._after_lines = [x for x in report.lines() if not x.startswith(("closed", "tracker"))]
+        closed = report.summary()
         return (f"{line}; {closed}" if closed else line), True
 
     def _claim_write(self, action: Action) -> tuple[str, bool]:

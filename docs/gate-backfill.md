@@ -27,8 +27,11 @@ issue is listed with a `gh issue close` line for you to run. For each tracker it
 command that discharges the owed key itself (the same one the backfill printed). Without `--yes` it
 lists what it would close. A failure to list or close is reported and never reverses the pass; if a
 PR already carries `gate:<g>-passed` and no `gate:<g>`, re-running `fr gate pass` prints "gate <g>
-already passed on #<pr>; closing its trackers" and runs only the close. A PR carrying neither label
-still refuses.
+already passed on #<pr>; closing its trackers" and runs only the close, but only when fr passed it:
+the PR must carry an `fr:gate-pass <g>` comment by the same account, else the retry refuses (exit 2).
+The retry hint fr prints is a complete command (`--notes`, `--repo`, `--host`). The driver route
+prints the same adopt `gh issue close` and discharge lines after its `gate-pass` line, when it has a
+checkout of the repo. A PR carrying neither label still refuses.
 
 The repo-file commands the dry run prints (`fr plan edit --tick`, `fr closeout outcome`,
 `fr acceptance set-status`) are for your own chore PR; backfill never writes a repo file.

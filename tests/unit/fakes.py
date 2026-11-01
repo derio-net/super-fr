@@ -392,7 +392,9 @@ class FakeGhClient:
         fields: str | None = None,
         labels: Any = None,
     ) -> list[dict[str, Any]]:
-        self.calls.append(("list_issues", {"repo": repo, "state": state}))
+        self.calls.append(
+            ("list_issues", {"repo": repo, "state": state, "labels": list(labels or ())})
+        )
         want = {state.upper()} if state != "all" else {"OPEN", "CLOSED"}
         return [
             {

@@ -114,3 +114,14 @@ def test_an_empty_viewer_login_closes_and_adopts_nothing() -> None:
 
     assert _closes(fake) == [] and rep.closed == [] and rep.adopt_commands == []
     assert len(rep.errors) == 1 and "viewer" in rep.errors[0]
+
+
+def test_it_lists_only_the_owed_labelled_issues() -> None:
+    """p3-r5: the open-issue read is narrowed on the forge by `fr:owed`."""
+    fake = _fake()
+    _tracker(fake, 1)
+
+    close_gate_trackers(fake, REPO, 41, "tester", "ok")
+
+    (listing,) = [c[1] for c in fake.calls if c[0] == "list_issues"]
+    assert listing["labels"] == ["fr:owed"] and listing["state"] == "open"

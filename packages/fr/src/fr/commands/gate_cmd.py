@@ -18,7 +18,6 @@ what this checkout recorded. It never runs a probe.
 from __future__ import annotations
 
 import shlex
-
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 

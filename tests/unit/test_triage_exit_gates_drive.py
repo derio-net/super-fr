@@ -189,18 +189,34 @@ class GatedWorld(World):
     def edit_issue_labels(self, repo: str, number: int, **kw: Any) -> None:
         self.calls.append(f"issue labels {number} +{sorted(kw.get('add', ()))}")
 
-    trackers: dict[int, str] = {}
+    def __init__(self, *a: Any, **k: Any) -> None:
+        super().__init__(*a, **k)
+        self.trackers: dict[int, str] = {}
+        self.adopted: dict[int, tuple[str, str]] = {}  # foreign issue -> (body, fr's comment)
+        self.list_labels: list[Any] = []  # p3-r5: the `labels` each list_issues call carried
+        self.list_error: Exception | None = None  # p3-r6
 
     def viewer_login(self) -> str:
         return "fr-bot"
 
     def list_issues(self, repo: str, state: str, limit: int, fields: Any = None,
                     labels: Any = None) -> list[dict[str, Any]]:  # fmt: skip
+        self.list_labels.append(labels)
+        if self.list_error is not None:
+            raise self.list_error
         return [{"number": n, "body": b, "labels": [{"name": "fr:owed"}],
-                 "author": {"login": "fr-bot"}} for n, b in self.trackers.items()]  # fmt: skip
+                 "author": {"login": "fr-bot"}} for n, b in self.trackers.items()] + [
+                {"number": n, "body": b, "labels": [{"name": "fr:owed"}],
+                 "author": {"login": "someone-else"}} for n, (b, _c) in self.adopted.items()
+        ]  # fmt: skip
 
     def close_issue(self, repo: str, number: int, comment: str) -> None:
         self.calls.append(f"issue close {number}: {comment}")
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        if number in self.adopted:
+            return [{"author": "fr-bot", "body": self.adopted[number][1]}]
+        return super().list_issue_comments(repo, number)
 
 
 @pytest.fixture(name="gworld")
@@ -294,6 +310,49 @@ def test_with_yes_the_rows_walked_pass_also_closes_the_prs_trackers(
     assert [c.split(":")[0] for c in closes] == ["issue close 31"]
     assert "Gate tester passed on #101" in closes[0]
     assert "closed trackers #31" in "\n".join(_lines(out, "gate-pass"))
+    assert gworld.list_labels == [["fr:owed"]]  # p3-r5: narrowed on the forge
+
+
+def test_the_driver_route_prints_the_adopt_close_and_discharge_lines(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p3-r2: R12 asks both routes for the adopt `gh issue close` and the discharge lines."""
+    from fr.gatebackfill.trackers import adopt_comment, tracker_body
+
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", True, (ISSUE,)),))
+    monkeypatch.setattr(triage_batch_cmd._Driver, "path_of", lambda self, repo: tmp_path)
+    gworld.trackers = {31: tracker_body("row:row-a", "t", "tester", 101)}
+    gworld.adopted = {  # type: ignore[attr-defined]
+        40: ("a human's issue", adopt_comment("row:row-b", "tester", 101))
+    }
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    lines = out.splitlines()
+    at = next(i for i, x in enumerate(lines) if x.startswith("gate-pass "))
+    after = "\n".join(lines[at + 1 :])
+    assert "gh issue close 40 --repo" in after
+    assert "fr acceptance set-status --id row-a" in after
+    assert "fr acceptance set-status --id row-b" in after
+
+
+def test_a_tracker_close_failure_leaves_the_gate_pass_a_success(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p3-r6: the pass already happened; a tracker error is reported, never a failed write."""
+    from tests.unit.fakes import FakeGhError
+
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", True, (ISSUE,)),))
+    gworld.list_error = FakeGhError("rate limited")
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert gworld.prs[101]["labels"] == ["gate:tester-passed"]
+    (line,) = _lines(out, "gate-pass")
+    assert "gate:tester -> gate:tester-passed" in line and "rate limited" in line
+    assert "failed" not in line.split(";")[0]
 
 
 # ------------------------------------------- the default branch's rows (gitseam)
