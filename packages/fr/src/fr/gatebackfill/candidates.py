@@ -88,6 +88,8 @@ class Candidate(BaseModel):
             walk_only=self.walk_only,
             why="; ".join(r for r in reasons if r),
             decision=decision,
+            default_decision=decision,
+            computed_gate=self.gate,
         )
 
 

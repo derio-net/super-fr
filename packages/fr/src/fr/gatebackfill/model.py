@@ -79,14 +79,19 @@ class PlanEntry(_Strict):
     note: str = ""
     """The operator's own note; `na` requires it as the reason (kept across dry runs)."""
     decision: str = "owed"
+    default_decision: str = "owed"
+    """The decision this tool computed (refreshed on every dry run): `decision` differing from
+    it is the operator's, and the only kind carried over."""
+    computed_gate: str | None = None
+    """The gate this tool computed: `gate` differing from it is the operator's."""
 
-    @field_validator("decision")
+    @field_validator("decision", "default_decision")
     @classmethod
     def _decision_parses(cls, v: str) -> str:
         split_decision(v)
         return v
 
-    @field_validator("gate")
+    @field_validator("gate", "computed_gate")
     @classmethod
     def _gate_ok(cls, v: str | None) -> str | None:
         return _post_merge(v)
@@ -177,9 +182,9 @@ def parse_manifest(text: str) -> Manifest:
 
 def merge_plan(old: PlanFile | None, fresh: list[PlanEntry]) -> list[PlanEntry]:
     """*fresh* with the operator's decisions carried over (R5): for a key still owed, an existing
-    entry's `decision` (so its adopt target), `note`, and any `gate:` the operator wrote (one
-    that differs from the computed gate); every other field is refreshed. A key no longer owed
-    is dropped."""
+    entry's `note`, its `decision` (so its adopt target) and `gate:` when they differ from what
+    that entry recorded as computed (`default_decision`, `computed_gate`), i.e. the operator
+    wrote them; a computed default is refreshed. A key no longer owed is dropped."""
     if old is None:
         return list(fresh)
     before = {e.key: e for e in old.entries}
@@ -189,9 +194,10 @@ def merge_plan(old: PlanFile | None, fresh: list[PlanEntry]) -> list[PlanEntry]:
         if prev is None:
             merged.append(entry)
             continue
-        gate = prev.gate if prev.gate is not None and prev.gate != entry.gate else entry.gate
+        decision = prev.decision if prev.decision != prev.default_decision else entry.decision
+        gate = prev.gate if prev.gate != prev.computed_gate else entry.gate
         merged.append(
-            entry.model_copy(update={"decision": prev.decision, "note": prev.note, "gate": gate})
+            entry.model_copy(update={"decision": decision, "note": prev.note, "gate": gate})
         )
     return merged
 

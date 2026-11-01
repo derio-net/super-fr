@@ -70,9 +70,63 @@ def test_merge_keeps_the_decision_adopt_target_note_and_an_operator_gate() -> No
 
 
 def test_merge_fills_a_gate_the_operator_wrote_over_a_none() -> None:
-    old = PlanFile(repo=REPO, entries=[PlanEntry(key="row:a", gate="tester", decision="owed")])
+    old = PlanFile(
+        repo=REPO,
+        entries=[PlanEntry(key="row:a", gate="tester", decision="owed", default_decision="review")],
+    )
     [kept] = merge_plan(old, [PlanEntry(key="row:a", gate=None, decision="review")])
     assert kept.gate == "tester" and kept.decision == "owed"
+
+
+def test_p1_r4_a_computed_default_is_refreshed_not_carried_as_a_decision() -> None:
+    old = PlanFile(
+        repo=REPO,
+        entries=[
+            PlanEntry(
+                key="row:a",
+                gate="devops",
+                computed_gate="devops",
+                decision="owed",
+                default_decision="owed",
+            )  # fmt: skip
+        ],
+    )
+    fresh = PlanEntry(
+        key="row:a", gate="tester", computed_gate="tester",
+        decision="review", default_decision="review", why="several merged PRs",
+    )  # fmt: skip
+
+    [kept] = merge_plan(old, [fresh])
+
+    assert kept.decision == "review" and kept.default_decision == "review"
+    assert kept.gate == "tester" and kept.computed_gate == "tester"
+
+
+def test_p1_r4_an_operator_edit_of_a_default_survives_and_the_fields_are_in_the_file(
+    tmp_path: Path,
+) -> None:
+    old = PlanFile(
+        repo=REPO,
+        entries=[
+            PlanEntry(
+                key="row:a",
+                gate="tester",
+                computed_gate="devops",
+                decision="park",
+                default_decision="review",
+            )  # fmt: skip
+        ],
+    )
+    fresh = PlanEntry(
+        key="row:a", gate="devops", computed_gate="devops",
+        decision="review", default_decision="review",
+    )  # fmt: skip
+
+    [kept] = merge_plan(old, [fresh])
+
+    assert kept.decision == "park" and kept.gate == "tester"
+    write_plan(tmp_path / "p.yaml", PlanFile(repo=REPO, entries=[kept]))
+    assert load_plan(tmp_path / "p.yaml") == PlanFile(repo=REPO, entries=[kept])
 
 
 def test_the_plan_round_trips_under_home_and_plan_overrides_it(
