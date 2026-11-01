@@ -10287,9 +10287,15 @@ rows:
       HEAD, the wrong root, or over a file with uncommitted edits
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_workspace_on_the_default_branch_gets_the_default_branch_refusal
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_detached_workspace_gets_the_detached_refusal_not_enter_isolation
+      - super-fr:tests/unit/test_migration_trigger.py#test_an_uncommitted_edit_in_a_workspace_is_held_back
+      - super-fr:tests/unit/test_migration_trigger.py#test_ci_holds_back_an_uncommitted_edit
+    status: ci
+    notes: the default-branch, detached-HEAD and uncommitted-file guards re-pinned per
+      committing context by unit tests in CI
     verify: none
   - id: auto-migrate-live-sweep
     capability: artifact migration gate
