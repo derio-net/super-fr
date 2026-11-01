@@ -99,8 +99,11 @@ six lines: what is stale, why fr will not act *here*, then `fr migrate
 artifacts` (preview), `fr migrate artifacts --yes` (apply) and
 `FR_SKIP_MIGRATION=1` (bypass).
 
-1. **Non-interactive** — CI, a pod, an agent's Bash tool, `fr isolation exec`.
-   See the section below; this is the load-bearing one.
+1. **A context that may not write** — the opt-out (`FR_NON_INTERACTIVE`) and the
+   refuse row: no TTY, no CI marker, and not a valid fr-isolation workspace (a
+   bridge/daemon checkout, an agent in a base clone). Its refusal adds a
+   `carry it:  fr isolation up --branch <branch>` line. CI and a valid workspace
+   are NOT in this list: they migrate. See "Which contexts migrate" below.
 2. **HEAD is the repository's default branch.** No automatic migration and no
    automatic commit on `main` (or whatever `origin/HEAD` says the default is).
    An `fr` command typed in the base clone used to leave a real commit on a
@@ -145,33 +148,66 @@ failure mode of an over-broad list is silence.
 
 ## Two operational facts, learned by running the thing
 
-### 1. Agent sessions, pods and CI always land non-interactive — by design
+### 1. Which contexts migrate
 
-`fr.artifacts.trigger.is_interactive` needs a TTY on **both** stdin and stdout
-and treats `CI` being set as decisive. `fr isolation exec`, an agent's Bash
-tool, a hermes pod and every CI runner fail that predicate. So while any live
-artifact is stale, the **first `fr` command in those contexts refuses** and
-writes nothing:
+**Decision, 2026-10-31** ([derio-net/super-fr#1242](https://github.com/derio-net/super-fr/issues/1242),
+spec `2026-11-01-auto-migrate-own-commit-design.md`): the gate used to migrate
+only at an operator's terminal and refuse everywhere else. Almost all real fr
+work is non-interactive — an agent's Bash tool, a pod, `fr isolation exec`, CI —
+so in practice it never migrated: it refused in the middle of unrelated work, and
+a consumer's `main` went red on every fr release with nothing in the repo
+changed. It now classifies the context once (`fr.artifacts.trigger.classify`),
+in this precedence:
 
-    fr: artifacts in <repo> were written for a different fr and must be
-    migrated before this command can run.
+| Context | Test | Migrates | Commits |
+|---|---|---|---|
+| ci | any truthy `CI_ENV_VARS` marker | working tree, in place (veto kept) | **never** |
+| opt-out | `FR_NON_INTERACTIVE` truthy | no | no |
+| interactive | TTY on stdin and stdout | yes | yes (git-state guards apply) |
+| workspace | valid fr-isolation workspace (`fr.isolation.marker.valid_workspace`) | yes | yes (git-state guards apply) |
+| refuse | anything else | no | no |
 
-That is not a deadlock and not a bug to route around. `fr migrate artifacts` is
-itself exempt from the gate and needs no TTY, so **the agent runs
-`fr migrate artifacts --yes` itself** and continues. This is the operator's
-deliberate choice — safe by default, one explicit step — chosen over
-auto-migrating in contexts where a surprise commit is worst (the bridge
-`reset --hard`s its checkout every tick, so a commit there is discarded *and*
-misleading). **Do not "fix" it later by loosening the predicate**, adding an
-agent-detecting exemption, or making non-interactive contexts migrate silently.
-What an agent must never be able to do is proceed over stale artifacts.
+A **valid workspace** passes the edit gate's own checks: the marker parses, its
+`toplevel` is this checkout, `mode: worktree` (or none) is a real linked
+worktree, `mode: external` has container evidence, and HEAD has not drifted to a
+branch other than the marker's. Its branch survives and reaches a PR, which is
+why a commit there is safe.
+
+The **refuse** row is the bridge's: it works from a checkout it `reset --hard`s
+every tick (#286), so a commit there is discarded *and* misleading. Its refusal
+names `fr isolation up --branch <branch>`, where the next fr command migrates and
+commits it; `fr migrate artifacts --yes` (exempt, no TTY needed) still works
+anywhere you type it.
+
+Two invariants still hold in every context:
+
+1. **No automatic commit on the default branch** — and the detached-HEAD,
+   wrong-root, lock-held and uncommitted-file refusals keep their behaviour in
+   both committing contexts.
+2. **A migration is always its own visible commit** — `chore(fr): migrate <n>
+   ... to fr <version>`, holding only the migrated paths, on top of any work
+   already on the branch. History is never rewritten.
+
+**The CI ride-along caveat.** CI migrates the working tree and commits nothing;
+it says so on stderr (and as a `::warning::` annotation under GitHub Actions).
+A real CI checkout is discarded, but a local shell or agent that exports `CI=1`
+and later runs `git add -A` would fold the in-place migration into its work
+commit — the warning's "Do not commit these files with other work" is the
+mitigation.
+
+**What must not change:** never commit in CI, and never commit outside a valid
+workspace or an operator's terminal. Do not widen the committing contexts with an
+agent-detecting exemption or a looser workspace test; what an agent must never be
+able to do is proceed over stale artifacts in a context where its commit would be
+lost or land on a protected branch.
 
 ### 2. Moving `current_version` makes this repo's own CI red until you migrate
 
 The moment a kind's `current_version` moves, every live artifact of that kind
 in *this* repo is stale — and `.github/workflows/acceptance-report.yml`
-installs `fr` from this checkout and runs `fr acceptance check` with `CI=true`,
-which the gate then refuses. So:
+installs `fr` from this checkout and runs `fr acceptance check` with `CI=true`.
+That now migrates in place and passes, but `fr validate artifacts` is exempt from
+the gate, so the `validate-artifacts` job still fails a stale tree. So:
 
 **Any PR that moves a kind's `current_version` runs `fr migrate artifacts --yes`
 and commits the result in the same PR.**

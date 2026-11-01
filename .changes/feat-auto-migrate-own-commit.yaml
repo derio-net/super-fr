@@ -1,0 +1,2 @@
+bump: minor
+summary: Stale artifacts now migrate automatically in fr-isolation workspaces (committed alone) and in place in CI (never committed)
