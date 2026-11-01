@@ -10230,9 +10230,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R7
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_workspace_migrates_and_commits_the_migration_alone
+      - super-fr:tests/unit/test_isolation_marker.py#test_a_linked_worktree_with_a_matching_marker_is_a_workspace
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_auto_migrate_workspace
+    status: ci
+    notes: pinned by the trigger's real-git workspace tests and the installed-CLI workspace
+      scenario, both in CI
     verify: candidate
     scenario: tests/scenarios/auto-migrate-workspace.sh
   - id: auto-migrate-ci-in-place
