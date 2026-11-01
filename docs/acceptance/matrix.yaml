@@ -10263,9 +10263,11 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R3
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_delivery.py#test_a_squash_subject_names_the_pr_that_added_the_plan
+    status: ci
+    notes: evidence chain unit-tested over fixture histories
     verify: none
   - id: gate-backfill-tracker-trust
     capability: gate-backfill
