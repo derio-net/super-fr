@@ -59,7 +59,9 @@ acts as, labelled `fr:owed`, last line an owed marker. Any other issue is touche
 explicit `adopt`, by one comment and labels (`fr:owed`, plus `fr:awaiting-live` when only a walk
 remains); its body is never edited and it is never closed. Adopting while an fr-owned tracker holds
 the key closes that one as a duplicate. A PR already carrying `gate:<g>-passed` gets no write and
-no tracker; the run prints the command that discharges the stale debt.
+no tracker; the run prints the command that discharges the owed key itself (`set-status --walk` for a row,
+`closeout outcome --ran` for a spec step, the `--tick` lines for a plan phase, `journal resolve` for
+a journal entry, "close it by hand" for an issue), never `fr gate pass`.
 
 Labels (`gate:<g>`, `fr:owed`, `fr:awaiting-live`) are created only right before the first write
 that uses them. Forge errors, including a forge that cannot do an operation, are recorded on their

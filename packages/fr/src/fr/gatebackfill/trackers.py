@@ -10,6 +10,7 @@ A backfill tracker's body ends with two marker lines, the PR marker before the o
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 
 _GATE_MARKER = re.compile(r"^<!-- fr-gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
@@ -84,6 +85,69 @@ def pass_command(gate: str, pr: int, *, run_id: str | None = None) -> str:
     if gate == "devops":
         cmd += f" --run {run_id}" if run_id else " --no-run-evidence"
     return cmd
+
+
+def _journal_resolve(root: Path, key: str) -> str | None:
+    """The `fr journal resolve` that discharges the open `owed` journal entry holding *key*."""
+    from fr.journal.model import (
+        IMPLEMENTED_JOURNALS_REL,
+        JOURNALS_REL,
+        SCOPE_DIRS,
+        JournalParseError,
+        open_owed_ids,
+        owed_key,
+        parse_journal,
+    )
+
+    for base in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
+        for scope, sub in SCOPE_DIRS.items():
+            d = root / base / sub
+            if not d.is_dir():
+                continue
+            for path in sorted(d.glob("*.md")):
+                try:
+                    entries = parse_journal(path.read_text())
+                except (JournalParseError, OSError, UnicodeDecodeError):
+                    continue
+                still = set(open_owed_ids(entries))
+                for e in entries:
+                    if e.kind == "owed" and e.id in still and owed_key(e) == key:
+                        return (
+                            f"fr journal resolve --scope {scope} --slug {shlex.quote(path.stem)} "
+                            f'--id {shlex.quote(e.id)} --state fixed --body "<why it is done>"'
+                        )
+    return None
+
+
+def discharge_command(key: str, *, repo_root: Path) -> str:
+    """The command(s) that discharge the owed *key* itself (spec §H step 4), one per line. Pure
+    over the checkout; never raises: a key it has no command for says how to close it by hand."""
+    from fr.gatebackfill.candidates import PLANS_REL, find_spec, split_key
+    from fr.gatebackfill.render import _unticked
+
+    journal = _journal_resolve(repo_root, key)
+    if journal is not None:
+        return journal
+    kind, name, n = split_key(key)
+    if kind == "row":
+        return (
+            f"fr acceptance set-status --id {shlex.quote(name)} --status walked "
+            '--walk "<walk log>" --notes "<what passed>"'
+        )
+    if kind == "spec" and n is not None:
+        spec = find_spec(repo_root, name) or "<spec>"
+        return (
+            f"fr closeout outcome --spec {shlex.quote(spec)} --step {n} --ran "
+            '--evidence "<what>" --supersede'
+        )
+    if kind == "plan" and n is not None:
+        steps, why = _unticked(repo_root, name, n)
+        if steps:
+            plan_dir = shlex.quote((PLANS_REL / name).as_posix())
+            return "\n".join(f"fr plan edit {plan_dir} --tick {sid}" for sid in steps)
+        return f"{key}: nothing to tick ({why or 'every step is ticked'}); close it by hand"
+    ref = key.partition(":")[2]
+    return f"close {ref or key} by hand"
 
 
 def tracker_body(key: str, title: str, gate: str, pr: int, *, run_id: str | None = None) -> str:

@@ -223,10 +223,9 @@ class _Apply:
             return
         labels = {str(n) for n in view.get("labels") or []}
         if gate_label(gate, passed=True).name in labels:
-            run_id = trackers.run_for_head(self.root, str(view.get("head_ref") or ""))
             res.discharge = (
-                f"PR #{pr} already passed {gate}; discharge: "
-                f"{trackers.pass_command(gate, pr, run_id=run_id)}"
+                f"PR #{pr} already passed {gate}; discharge the key itself:\n    "
+                + trackers.discharge_command(e.key, repo_root=self.root).replace("\n", "\n    ")
             )
             return
         if gate_label(gate).name not in labels:

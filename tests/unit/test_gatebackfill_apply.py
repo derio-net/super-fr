@@ -83,7 +83,9 @@ def test_a_passed_gate_writes_nothing_and_reports_the_discharge_command() -> Non
     c = client()
     c.prs[(REPO, 41)]["labels"] = ["gate:devops-passed"]
     rep = run(c, entry())
-    assert names(c) == [] and "fr gate pass --pr 41 --gate devops" in rep.lines()[0]
+    line = rep.lines()[0]
+    assert names(c) == [] and "fr gate pass" not in line
+    assert "nothing to tick" in line or "fr plan edit" in line
 
 
 def test_a_walk_only_tracker_is_filed_with_awaiting_live() -> None:

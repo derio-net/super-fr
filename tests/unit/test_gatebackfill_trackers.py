@@ -55,3 +55,36 @@ def test_run_for_head_is_none_without_a_cursor(tmp_path: Path) -> None:
 @pytest.mark.parametrize("gate", ["tester", "devops"])
 def test_body_names_the_delivering_pr(gate: str) -> None:
     assert f"Delivered by #12 (merged). Held by gate:{gate}" in t.tracker_body(KEY, "x", gate, 12)
+
+
+# --- p2-r1: the key's own discharge command ---------------------------------------------------
+
+
+def test_discharge_command_per_key_kind(tmp_path: Path) -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path, owed_body
+
+    from tests.unit.test_merge_evidence import _write_plan
+
+    assert t.discharge_command("row:ops-walk", repo_root=tmp_path).startswith(
+        "fr acceptance set-status --id ops-walk --status walked --walk "
+    )
+    spec = tmp_path / "docs/superpowers/specs" / "2026-10-20-widget-design.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# Widget\n")
+    out = t.discharge_command("spec:2026-10-20-widget#step4", repo_root=tmp_path)
+    assert "fr closeout outcome --spec" in out and "--step 4 --ran" in out
+    assert out.endswith("--supersede") and "--evidence" in out
+    _write_plan(tmp_path, "2026-10-20-ops", [("manual", False)])
+    plan = t.discharge_command("plan:2026-10-20-ops#p1", repo_root=tmp_path)
+    assert plan.startswith("fr plan edit docs/superpowers/plans/2026-10-20-ops --tick P1.")
+    assert t.discharge_command("issue:example-org/widgets#9", repo_root=tmp_path) == (
+        "close example-org/widgets#9 by hand"
+    )
+    key = "row:ops-journal"
+    entry = JournalEntry(
+        kind="owed", scope="spec", id="owed-1", created="2026-10-11T10:00:00+00:00",
+        title="owed", body=owed_body(what="w", why="y", how="h", key=key),
+    )  # fmt: skip
+    append_journal_entry(journal_path(tmp_path, "spec", "some-slug"), "some-slug", entry)
+    got = t.discharge_command(key, repo_root=tmp_path)
+    assert got.startswith("fr journal resolve --scope spec --slug some-slug --id owed-1 --state fixed")
