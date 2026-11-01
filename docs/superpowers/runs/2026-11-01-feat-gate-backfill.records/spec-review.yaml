@@ -1,0 +1,227 @@
+schema_version: 10
+run: 2026-11-01-feat-gate-backfill
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: sr-1
+  title: gate_for has no rule for spec:<slug>#step<n> or issue:<ref> keys, which the fold yields
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-2
+  title: Adopting an issue (or a labelled hand-made tracker) feeds a second issue:<ref> candidate back
+    into the fold
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-3
+  title: 'The §I dedup hides closed-out batch PRs: lane_of never places a batch that has a close-out event'
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-4
+  title: 'A PR holding both gates: collect''s two label lists return it twice, and the lane rule puts
+    it in Tester only'
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-5
+  title: §I does not define the unsupported-forge warning, the partial-collect carry of gated_prs, or
+    the new GhClient method
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-6
+  title: The `commit` step names the planning PR, not the delivering one, for plans merged before their
+    code
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-7
+  title: _run_branches reads live cursors only, but §C.2 relies on it for live and archived cursors
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-8
+  title: plan:<name>#p<n> covers every open phase of a merged plan, not only manual ones, yet always gets
+    devops
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-9
+  title: R11's `fr closeout outcome --na` applies to Test Plan steps, not plan phases; the per-key command
+    mapping is undefined
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-10
+  title: R11's 'not-implemented row that names a live walk' has no detection rule, and the brief's skipped
+    rows go unaddressed
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-11
+  title: Closing a tracker at gate pass leaves the debt open, and the next backfill or archive re-files
+    it
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-12
+  title: 'No retry path when R12''s tracker close fails: a re-run of `fr gate pass` refuses on the swapped
+    label'
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-13
+  title: The adopt marker names no PR or gate, so §H cannot find 'the adopted tracker for that PR' without
+    guessing
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-14
+  title: 'The `fr gate pass` lines the spec prints refuse: --notes is missing, and devops on an old PR
+    needs --no-run-evidence or --run'
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-15
+  title: '`--yes` refusals and plan-file drift are not stated (no plan file, other repo, adopt target,
+    re-resolved PR or gate)'
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-16
+  title: The lazy-label rule is stated for gate:<g> only, while the fr:owed / fr:awaiting-live path through
+    file_owed_ends creates labels up front
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-17
+  title: '`park` prints only a count, which contradicts R1/R10''s ''summary of every candidate'''
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-18
+  title: Gate pass through the driver route bypasses R12's tracker close
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: finding
+  id: sr-19
+  title: Agent decisions d10–d14 are stamped decided_by=operator in the spec journal
+  body: Raised by the dispatched fr-spec-reviewer (spec-review-1).
+  review_scope: in
+- kind: decision
+  id: d10-unmarked-trackers-agent
+  title: Unmarked trackers adopted only by an explicit decision; adoption closes fr's duplicate
+  body: 'Supersedes d10-unmarked-trackers, stamped operator in error: the agent''s decision, from corpus
+    update 2. Spec R9, §B, §E, §F.'
+  answered_by: agent
+- kind: decision
+  id: d11-foreign-issues-agent
+  title: Issues written by others are never reused, edited or closed
+  body: 'Supersedes d11-foreign-issues (stamped operator in error): the agent''s decision, from corpus
+    update 3. Spec R8.'
+  answered_by: agent
+- kind: decision
+  id: d12-review-step-agent
+  title: The plan file is the review step; stale manual phases default to review
+  body: 'Supersedes d12-review-step (stamped operator in error): the agent''s decision, from corpus update
+    5. Spec R5, §E.'
+  answered_by: agent
+- kind: decision
+  id: d13-park-agent
+  title: Parked scope is a persistent park decision, listed under its own heading
+  body: 'Supersedes d13-park (stamped operator in error): the agent''s decision, from corpus update 7.
+    Spec §E.'
+  answered_by: agent
+- kind: decision
+  id: d14-archive-dry-run-agent
+  title: fr archive --dry-run is a follow-up, not built here
+  body: 'Supersedes d14-archive-dry-run (stamped operator in error): the agent''s decision, from corpus
+    update 1.'
+  answered_by: agent
+- kind: review
+  id: spec-review-1
+  title: spec review of 2026-11-01-gate-backfill-design
+  body: '19 findings raised: sr-1 to sr-19, all in scope, all fixed in the spec (see resolutions).'
+resolves:
+- id: sr-1
+  state: fixed
+  body: 'Fixed: §D table gives spec: keys devops when the spec''s run gate is devops else tester; issue:
+    keys take the manifest gate else None → review, refused by --yes until set (R4).'
+- id: sr-2
+  state: fixed
+  body: 'Fixed: §B drops an issue: candidate that is an adopt target or a backfill tracker, and defaults
+    a look-alike to review naming the key it may track (R2).'
+- id: sr-3
+  state: fixed
+  body: 'Fixed: §I drops a gated_prs entry only when lane_of placed its batch in a lane or its ledger
+    is unknown; closed-out batch PRs appear via gated_prs; the row''s verification line names the case.'
+- id: sr-4
+  state: fixed
+  body: 'Fixed: collect dedupes by (repo, number); R13 states one lane, tester first, else devops.'
+- id: sr-5
+  state: fixed
+  body: 'Fixed: §I names GhClient.list_merged_prs_by_label, the keyword-only Forge method, TruncatedList
+    gated-prs, Facts.gated_unread/GatedUnread with describe(), the --only carry, and a gated-unread Need.'
+- id: sr-6
+  state: fixed
+  body: 'Fixed: §C reads the merge''s diff locally; a docs/-only PR is planning: true and defaults to
+    review (R3).'
+- id: sr-7
+  state: fixed
+  body: 'Fixed: §C.2 reads live and archived cursors through one shared helper (gate_cmd._cursors moved
+    onto it), maps row:/spec: candidates via the origin spec and its plans, and reports several merged
+    PRs as an ambiguity defaulting to review.'
+- id: sr-8
+  state: fixed
+  body: 'Fixed: §B reads the phase header; §D gives an agentic open phase no gate (review); Background
+    corrects the merged_manual_open description.'
+- id: sr-9
+  state: fixed
+  body: 'Fixed: §E gives a key-kind × decision table with exact commands and required flags, refusing
+    undefined cells; na requires a note.'
+- id: sr-10
+  state: fixed
+  body: 'Fixed: §E row reconcile uses effective_strategy being post-merge; rows are listed, not plan entries;
+    Non-goals give skipped rows to fr migrate artifacts, which the chore runs first.'
+- id: sr-11
+  state: fixed
+  body: 'Fixed: §G.1 skips all writes on a passed PR and prints the key''s discharge command; §H prints
+    each closed tracker''s discharge command (R6, R12).'
+- id: sr-12
+  state: fixed
+  body: 'Fixed: §H — fr gate pass on a PR with gate:<g>-passed and no gate:<g> runs only the close helper
+    (R12).'
+- id: sr-13
+  state: fixed
+  body: 'Fixed: distinct markers fr-gate-adopt:<key> gate:<g> pr:<n> and fr-gate-link:<key> tracker:<ref>;
+    adopt adds fr:owed so §H reads only fr:owed issues and their comments.'
+- id: sr-14
+  state: fixed
+  body: 'Fixed: §F defines the printed pass command with --notes and, for devops, --run <id> or --no-run-evidence,
+    and states how a pre-fr-ops run''s evidence folds.'
+- id: sr-15
+  state: fixed
+  body: 'Fixed: new R15 and §A — what is applied is what was reviewed; a missing or other-repo plan refuses;
+    a drifted PR/gate, a bad adopt target or a mismatched tracker marker skips the entry with a line.'
+- id: sr-16
+  state: fixed
+  body: 'Fixed: §F backfill files its own trackers; §G ensures fr:owed and fr:awaiting-live just before
+    first use; R6 says every label.'
+- id: sr-17
+  state: fixed
+  body: 'Fixed: parked entries are listed one per line under a Parked heading (R1, §E, d13).'
+- id: sr-18
+  state: fixed
+  body: 'Fixed: §H''s close_gate_trackers sits beside pass_gate and both routes (fr gate pass, the driver''s
+    rows-walked pass) call it (R12).'
+- id: sr-19
+  state: fixed
+  body: 'Fixed: the brainstorm record omitted answered_by: agent on d10–d14; this record supersedes each
+    with an agent-attributed decision (…-agent), so the PR body attributes them correctly.'
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a683c2f2abe74af9c
