@@ -155,5 +155,13 @@ steps:
     stdout: |
       4 out-of-scope finding(s): p2-r7, p2-r8, p3-r10, p3-r11
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-01T20:36:41+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-01T20:36:41+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d27210e4-7ab4-408c-96b0-9945ccbe8d8c
 fr_version: 6.0.1rc3
