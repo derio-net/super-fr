@@ -116,7 +116,7 @@ def evidence_lines(out: str, secrets: Iterable[str]) -> str:
     output ever committed, so a JSON body or a token a server printed never is; `""`
     when no status line is left (the caller then records "no output")."""
     secrets = list(secrets)
-    kept = [" ".join(mask(line, secrets).split()) for line in _status_lines(out)]
+    kept = [" ".join(mask(line, secrets).split()) for line in _status_lines(mask(out, secrets))]
     kept = [line for line in kept if line and not looks_like_a_body(line, OUTPUT_LINE_MAX)]
     return "; ".join(kept[-EVIDENCE_LINES:])[:EVIDENCE_MAX]
 
@@ -126,7 +126,33 @@ _STATUS_LINE = re.compile(r"^[A-Za-z0-9 ,.;()/%+#_*-]*$")
 letters, digits, spaces and `, . ; ( ) / % + # _ * -`, nothing else. No colon, quote,
 bracket, `=`, backtick or angle bracket, so no JSON, YAML, env assignment, URL or XML
 fragment qualifies, and no quoting can hide anything because nothing is parsed. `***`
-(a masked secret) is allowed."""
+(a masked secret) is allowed. Three more rules (review p3-r8) drop what the grammar
+lets through: a list item (`- ` or `* ` first), a word of `LONG_WORD` characters or
+more, and a token-shaped word (`TOKEN_WORD` or more, letters AND digits)."""
+
+LONG_WORD = 20
+TOKEN_WORD = 12
+_LIST_ITEM = re.compile(r"^[-*]\s")
+
+
+def _token_shaped(word: str) -> bool:
+    if len(word) >= LONG_WORD:
+        return True
+    return (
+        len(word) >= TOKEN_WORD
+        and any(c.isalpha() for c in word)
+        and any(c.isdigit() for c in word)
+    )
+
+
+def _is_status(line: str) -> bool:
+    stripped = line.strip()
+    return (
+        _STATUS_LINE.match(stripped) is not None
+        and _LIST_ITEM.match(stripped) is None
+        and not any(_token_shaped(w) for w in stripped.split())
+    )
+
 
 _STRUCTURE = re.compile(r"[{}\[\]]")
 """Any bracket anywhere in a probe's output: the output carries structured data."""
@@ -135,8 +161,8 @@ _STRUCTURE = re.compile(r"[{}\[\]]")
 def _status_lines(out: str) -> list[str]:
     """*out*'s recordable lines, failing closed. Output with a bracket ANYWHERE records
     none of its lines: a body's lines cannot be told apart from status by shape, so none
-    is trusted. Otherwise only `_STATUS_LINE` lines are kept. "converged 3 of 3" passes;
+    is trusted. Otherwise only lines passing `_is_status` are kept. "converged 3 of 3" passes;
     anything shaped like data does not, and evidence comes back "no output", never a body."""
     if _STRUCTURE.search(out):
         return []
-    return [line for line in out.splitlines() if _STATUS_LINE.match(line.strip())]
+    return [line for line in out.splitlines() if _is_status(line)]

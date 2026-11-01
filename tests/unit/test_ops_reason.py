@@ -113,8 +113,9 @@ def test_clip_output_keeps_the_last_40_lines_each_at_most_200_chars() -> None:
 
 def test_evidence_is_the_last_three_non_blank_lines_within_300_chars() -> None:
     assert evidence_lines("a\n\nb\nc\n\nd\n", ()) == "b; c; d"
-    assert len(evidence_lines("\n".join(["y" * 150] * 3), ())) == 300
-    assert evidence_lines("z" * 1000, ()) == ""  # one over-long line is a body: dropped
+    row = " ".join(["yy"] * 50)  # 149 chars, no long word
+    assert len(evidence_lines("\n".join([row] * 3), ())) == 300
+    assert evidence_lines("z " * 500, ()) == ""  # one over-long line is a body: dropped
 
 
 def test_evidence_never_records_a_body_shaped_line() -> None:
@@ -127,8 +128,34 @@ def test_evidence_never_records_a_body_shaped_line() -> None:
 
 def test_evidence_lines_respect_the_output_line_bound() -> None:
     """review p2-r2: evidence is drawn from the bounded output lines, never a longer one."""
-    assert evidence_lines("x" * 201 + "\nshort", ()) == "short"
-    assert evidence_lines("x" * 200, ()) == "x" * 200
+    assert evidence_lines("x " * 101 + "\nshort", ()) == "short"
+    assert evidence_lines("x " * 99 + "x", ()) == "x " * 99 + "x"
+
+
+@pytest.mark.parametrize(
+    "leak",
+    [
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r",
+        "AKIAIOSFODNN7EXAMPLE wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
+        "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+        "- alpha beta",
+        "* alpha beta",
+        "deployed a1b2c3d4e5f6a7",
+    ],
+)
+def test_evidence_drops_token_shaped_and_list_lines(leak: str) -> None:
+    """review p3-r8: a JWT, keys, a sha and a YAML/Markdown list item never record."""
+    assert evidence_lines(f"{leak}\nconverged 3 of 3\n", ()) == "converged 3 of 3"
+    assert evidence_lines(f"{leak}\n", ()) == ""
+
+
+def test_evidence_still_passes_plain_summaries() -> None:
+    out = "converged 3 of 3\nchecking the stack\ndeployed ref 1a2b3c4\n"
+    assert evidence_lines(out, ()) == "converged 3 of 3; checking the stack; deployed ref 1a2b3c4"
+
+
+def test_a_yaml_block_sequence_records_nothing() -> None:
+    assert evidence_lines("items\n- one\n- two\n", ()) == "items"
 
 
 def test_output_and_evidence_mask_secret_values() -> None:
