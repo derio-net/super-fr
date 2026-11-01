@@ -472,6 +472,11 @@ class GhClient(Protocol):
 
     def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]: ...
 
+    def list_merged_prs_by_label(self, repo: str, label: str, limit: int) -> list[dict[str, Any]]:
+        """The MERGED PRs of *repo* carrying *label*: `fr.gh.PR_LIST_FIELDS` plus `labels`
+        (spec 2026-11-01-gate-backfill §I). glab and tea raise `UnsupportedForgeOperation`."""
+        ...
+
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
         """Raw text of *path* at *ref*; raises the backend's error when absent."""
         ...
@@ -665,6 +670,9 @@ class UnsupportedBatchOps:
 
     def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
         raise self._unsupported("list_open_prs")
+
+    def list_merged_prs_by_label(self, repo: str, label: str, limit: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_merged_prs_by_label")
 
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
         raise self._unsupported("read_file_at_ref")

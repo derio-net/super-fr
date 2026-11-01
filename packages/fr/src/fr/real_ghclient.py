@@ -674,6 +674,13 @@ class RealGhClient:
         return cast("list[dict[str, Any]]", _gh.list_open_prs(repo=repo, limit=limit))
 
     @_hosted
+    def list_merged_prs_by_label(self, repo: str, label: str, limit: int) -> list[dict[str, Any]]:
+        return cast(
+            "list[dict[str, Any]]",
+            _gh.list_merged_prs_by_label(repo=repo, label=label, limit=limit),
+        )
+
+    @_hosted
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
         return _gh.read_file_at_ref(repo=repo, path=path, ref=ref)
 

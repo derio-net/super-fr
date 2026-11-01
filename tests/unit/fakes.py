@@ -49,6 +49,8 @@ class FakeGhClient:
         self.label_checks: list[tuple[str, str]] = []
         # (repo, pr) -> labels `edit_pr_labels` leaves on the PR (exit-gates R7).
         self.pr_labels: dict[tuple[str, int], set[str]] = {}
+        # repo -> the merged PR records `list_merged_prs_by_label` filters by label.
+        self.merged_prs: dict[str, list[dict[str, Any]]] = {}
         self.labels_missing: set[str] = set()
         self.attempted_mutations: int = 0
         self._next_issue_number: dict[str, int] = {}
@@ -320,6 +322,16 @@ class FakeGhClient:
                     c["body"] = body
                     return
         raise FakeGhError(f"no comment {comment_id} on {repo}")
+
+    def list_merged_prs_by_label(self, repo: str, label: str, limit: int) -> list[dict[str, Any]]:
+        self.calls.append(
+            ("list_merged_prs_by_label", {"repo": repo, "label": label, "limit": limit})
+        )
+        return [
+            dict(p)
+            for p in self.merged_prs.get(repo, [])
+            if label in {lb["name"] for lb in p.get("labels", [])}
+        ][:limit]
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         """`gh pr list --head` records (`number, title, state, isDraft, createdAt, url,

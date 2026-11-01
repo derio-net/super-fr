@@ -103,7 +103,13 @@ class FakeForge:
         closed_in_progress: dict[str, list[dict[str, Any]]] | None = None,
         closed_listing_failing: dict[str, str] | None = None,
         pr_labels: dict[tuple[str, int], list[str]] | None = None,
+        gated: dict[str, list[dict[str, Any]]] | None = None,
+        gated_failing: dict[str, str] | None = None,
     ) -> None:
+        # repo -> merged PR records (with `labels`) `list_merged_prs_by_label` filters;
+        # a repo in `gated_failing` raises its message (gate-backfill §I).
+        self.gated = gated or {}
+        self.gated_failing = gated_failing or {}
         # (repo, number) -> the labels a merged batch PR carries (exit-gates §D Facts)
         self.merged_labels = pr_labels or {}
         self.closed_in_progress = closed_in_progress or {}
@@ -196,6 +202,20 @@ class FakeForge:
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
         self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))
         return self.head_prs.get((repo, branch), [])
+
+    def list_merged_prs_by_label(
+        self, *, repo: str, label: str, limit: int
+    ) -> list[dict[str, Any]]:
+        self.calls.append(
+            ("list_merged_prs_by_label", {"repo": repo, "label": label, "limit": limit})
+        )
+        if repo in self.gated_failing:
+            raise ForgeError(self.gated_failing[repo])
+        return [
+            dict(p)
+            for p in self.gated.get(repo, [])
+            if label in {lb["name"] for lb in p.get("labels", [])}
+        ][:limit]
 
     def pr_labels(self, *, repo: str, number: int) -> list[str]:
         self.calls.append(("pr_labels", {"repo": repo, "number": number}))

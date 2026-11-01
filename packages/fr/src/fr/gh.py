@@ -584,6 +584,22 @@ def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
     return json.loads(out) if out else []
 
 
+def list_merged_prs_by_label(*, repo: str, label: str, limit: int) -> list[dict[str, object]]:
+    """The MERGED PRs of *repo* carrying *label*: `PR_LIST_FIELDS` plus `labels`."""
+    import json
+
+    if (rest := _rest()) is not None:
+        return _records(rest.list_merged_prs_by_label(repo, label, limit))
+    out = _run_gh(
+        [
+            *("pr", "list", "--repo", repo, "--state", "merged"),
+            *("--label", label, "--limit", str(limit)),
+            *("--json", PR_LIST_FIELDS + ",labels"),
+        ]
+    )
+    return json.loads(out) if out else []
+
+
 def prs_for_commit(*, repo: str, sha: str) -> list[dict[str, object]]:
     """The PRs containing commit *sha* (`GET repos/{repo}/commits/{sha}/pulls`) as
     `{number, state, url, merged}` records; a merged one has a non-null `merged_at`."""

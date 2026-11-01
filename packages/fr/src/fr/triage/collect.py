@@ -88,6 +88,9 @@ class Forge(Protocol):
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]: ...
+    def list_merged_prs_by_label(
+        self, *, repo: str, label: str, limit: int
+    ) -> list[dict[str, Any]]: ...
 
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]: ...
 
@@ -169,6 +172,12 @@ class ClientForge:
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
         with _forge_errors():
             return self._client.list_open_prs(repo, limit)
+
+    def list_merged_prs_by_label(
+        self, *, repo: str, label: str, limit: int
+    ) -> list[dict[str, Any]]:
+        with _forge_errors():
+            return self._client.list_merged_prs_by_label(repo, label, limit)
 
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         with _forge_errors():

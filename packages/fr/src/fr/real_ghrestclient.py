@@ -709,6 +709,33 @@ class RealGhRestClient:
             out.append(record)
         return out
 
+    def list_merged_prs_by_label(self, repo: str, label: str, limit: int) -> list[dict[str, Any]]:
+        """The `issues` route filtered to merged pulls, in `fr.gh.PR_LIST_FIELDS` plus
+        `labels`. The route carries no head ref or closing references, so those read empty."""
+        route = f"repos/{repo}/issues?state=closed&labels={urllib.parse.quote(label, safe='')}"
+        raw = self._paged(
+            route,
+            limit=limit,
+            keep=lambda i: bool((i.get("pull_request") or {}).get("merged_at")),
+        )
+        return [
+            {
+                "number": i["number"],
+                "title": i.get("title") or "",
+                "state": "MERGED",
+                "isDraft": False,
+                "createdAt": i.get("created_at"),
+                "mergedAt": (i.get("pull_request") or {}).get("merged_at"),
+                "url": i.get("html_url") or "",
+                "headRefName": "",
+                "closingIssuesReferences": [],
+                "author": _author(i.get("user")),
+                "isCrossRepository": False,
+                "labels": [{"name": lb.get("name") or ""} for lb in i.get("labels") or []],
+            }
+            for i in raw
+        ]
+
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         out = []
         for p in self._pulls_by_head(repo, branch):
