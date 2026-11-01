@@ -6415,6 +6415,22 @@ rows:
     notes: 'Review p1-r5: anchor R3 (--deterministic writes ignored reports) and the
       record-apply commit path the issue is about.'
     verify: none
+  - id: matrix-parse-libyaml
+    capability: acceptance-matrix
+    acceptance: fr parses an acceptance matrix with libyaml when PyYAML has it (pure-Python
+      otherwise) to the same Matrix, and reuses one parse of identical text within a
+      process
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_yamlio.py#test_loader_falls_back_without_the_c_loader
+      - super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_matrix_equals_plain_pyyaml_build
+    status: ci
+    notes: Unit tests in CI pin loader choice + pure fallback parse (test_yamlio), memoized
+      parse with per-caller deep copy, uncached errors and real-matrix equality (test_acceptance_parse_cache).
+      Phase 1 of plan 2026-11-01-ci-speed.
+    verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -9618,6 +9634,50 @@ rows:
     notes: 'Phase 3: both workflows trigger on merge_group; change-fragment stays pull-request-only
       and ci-ok treats its skip as a pass.'
     verify: none
+  - id: ci-shards-complete
+    capability: ci
+    acceptance: CI splits every leg's tests across 6 shards by one CI-derived durations
+      file per run, and fails when the shards together did not run exactly the collected
+      test set once each
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_split_check.py
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_covers_every_test_leg
+      int:
+      - super-fr:tests/integration/test_split_durations_xdist.py#test_each_groups_file_is_the_controllers_and_the_groups_partition
+    status: ci
+    notes: 'split-check job runs on every CI run (both legs: 13770 tests, 6 shards,
+      complete on PR run 41340117422); shape and pure check/merge pinned by unit tests;
+      xdist writer pinned by integration test.'
+    verify: none
+  - id: ci-coverage-newest-leg
+    capability: ci
+    acceptance: The combined coverage gate (fail-under 75) is measured on the 3.14 leg;
+      the 3.11 floor leg runs the same tests without coverage
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
+    status: ci
+    notes: Coverage measured and uploaded on the 3.14 leg only, 3.11 runs --no-cov;
+      coverage job (fail-under 75) unchanged and green on PR run 41340117422.
+    verify: none
+  - id: ci-budget-watcher-files-breach
+    capability: ci
+    acceptance: The CI budget watcher reads the run's workflow file at its commit and
+      files or updates a ci-budget issue when the run is over budget
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_budget.py#test_fetch_workflow_text_sends_the_ref_as_a_get_query_parameter
+    status: walk-owed
+    notes: GET fix unit-pinned (argv test); the live proof is the watcher's first workflow_run
+      after merge (Test Plan 3).
+    verify: live
   - id: release-pushes-as-app
     capability: release
     acceptance: With the app configured, super-fr's release commit and tag are pushed
@@ -9653,6 +9713,41 @@ rows:
     status: ci
     notes: 'configure-main-protection.sh tested with a stub gh: merge-not-overwrite
       body, both refusals, --force, --dry-run, idempotence'
+  - id: release-staged-suite-sharded
+    capability: release
+    acceptance: A release proves its exact staged commit with the full suite in 6 token-free
+      shards, each checking the new fr version, and pushes only when all are green;
+      every existing release outcome still happens
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_materialise_refuses_a_bundle_whose_head_is_not_the_planned_commit
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_probes_the_version_before_pytest_and_refuses_a_wrong_number
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_runs_its_split_credential_free_with_the_durations_options
+    status: walk-owed
+    notes: Job graph and its gate pinned by unit tests (materialise refuses a foreign
+      bundle and pins origin/main; each shard probes the version first and runs credential-free;
+      check_materialised self-proof). Live walk owed on the first real Release run after
+      merge (Test Plan 1; walked on first real use).
+    verify: live
+  - id: release-superseded-not-retried
+    capability: release
+    acceptance: When main moved past the commit a release was staged on, the release
+      exits green as superseded without pushing, and the run that push triggered releases
+      instead
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_a_race_at_the_push_itself_is_superseded
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_redispatch
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_tests_once_and_never_retests
+    status: walk-owed
+    notes: Superseded outcomes pinned by unit tests against a real bare remote (moved
+      base, real non-fast-forward race, override exits non-zero with re-dispatch, never
+      retests). Live walk owed on the first real merge race (Test Plan 2).
+    verify: live
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue

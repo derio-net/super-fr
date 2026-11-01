@@ -1,13 +1,14 @@
 """Pins the CI `test` job's shard layout and partition (spec 2026-09-26
 ci-time-budget §3.A, Test Plan §7.1/§7.8).
 
-(a) `.github/workflows/ci.yml` shape: the `test` job is a 4-way matrix with
+(a) `.github/workflows/ci.yml` shape: the `test` job is a 6-way matrix with
 `fail-fast: false`, its pytest step clears `addopts` and re-adds
-`--strict-markers --cov`, and a `coverage` job (`needs: test`) combines the
+`--strict-markers`, coverage options come per leg (`matrix.cov_args`, measured
+on 3.14 only — spec 2026-11-01-ci-speed R7), and a `coverage` job (`needs: test`) combines the
 shards and gates at 75.
 
 (b) Partition: pytest-split's `least_duration` grouping must place every
-test in exactly one of the 4 groups. This calls pytest-split's own algorithm
+test in exactly one of the 6 groups. This calls pytest-split's own algorithm
 in process over the real node ids in `.test_durations`, plus ids absent from
 it (a new test gets the average duration), so the check exercises the real
 algorithm and costs milliseconds. Earlier versions of this test ran five
@@ -47,7 +48,7 @@ def test_test_job_matrix_shape() -> None:
     test_job = workflow["jobs"]["test"]
 
     strategy = test_job["strategy"]
-    assert strategy["matrix"]["shard"] == [1, 2, 3, 4]
+    assert strategy["matrix"]["shard"] == [1, 2, 3, 4, 5, 6]
     assert strategy["fail-fast"] is False
 
 
@@ -59,10 +60,10 @@ def test_test_job_pytest_step_pins_addopts_and_splitting() -> None:
     assert len(pytest_steps) == 1, f"expected exactly one pytest step, got {pytest_steps}"
     run = pytest_steps[0]["run"]
 
-    assert '-o addopts="--strict-markers --cov"' in run
-    assert "--cov-report=" in run
-    assert "--splits 4" in run
-    assert "--group ${{ matrix.shard }}" in run
+    assert '-o addopts="--strict-markers"' in run
+    assert "--splits 6" in run
+    assert "--group $SHARD" in run
+    assert pytest_steps[0]["env"]["SHARD"] == "${{ matrix.shard }}"
     assert "--splitting-algorithm least_duration" in run
 
 
@@ -93,7 +94,7 @@ def test_coverage_job_combines_and_gates() -> None:
     assert "coverage report --fail-under=75" in run_steps
 
 
-# ── (b) partition: every collected test exactly once across 4 groups ──
+# ── (b) partition: every collected test exactly once across 6 groups ──
 
 
 class _Item:
@@ -109,10 +110,10 @@ def test_shard_partition_is_disjoint_and_complete() -> None:
     node_ids = [*durations, *(f"tests/unit/test_new_{i}.py::test_x" for i in range(7))]
     items = [_Item(n) for n in node_ids]
 
-    groups_raw = LeastDurationAlgorithm()(4, items, durations)
+    groups_raw = LeastDurationAlgorithm()(6, items, durations)
     groups = [{it.nodeid for it in g.selected} for g in groups_raw]
 
-    assert len(groups) == 4
+    assert len(groups) == 6
     assert all(groups), "an empty shard means the matrix is wider than the suite"
     for i in range(len(groups)):
         for j in range(i + 1, len(groups)):
