@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -487,21 +487,34 @@ _TAG_RE = re.compile(r"^\[(devops|tester)\]\s+(\S.*)$")
 leading the item, then whitespace. A checkbox or a Markdown link is not one."""
 
 
+_POINTER_RE = re.compile(r"^\(op:\s*(?P<id>[A-Za-z0-9][\w.-]*)\)\s+(?P<rest>\S.*)$")
+"""A step's op pointer (spec 2026-11-01-ops-gate-probes R6): `(op: <id>)` leading the
+text, after the optional gate tag, then whitespace. Anywhere else it stays text."""
+
+
 @dataclass(frozen=True)
 class Step:
-    """One Test Plan step: its position (1-based), its text (one line, the gate tag
-    removed) and the gate its literal tag names, if any (R12)."""
+    """One Test Plan step: its position (1-based), its text (one line, the gate tag and
+    the op pointer removed), the gate its literal tag names, if any (R12), the op its
+    pointer names, if any (R6), and the item's lines as written, fences included (R2).
+
+    `raw` is not compared: two steps reading the same are the same step."""
 
     n: int
     text: str
     gate: StepGate | None = None
+    raw: tuple[str, ...] = field(default=(), compare=False)
+    op: str | None = None
 
 
-def _step(n: int, text: str) -> Step:
-    m = _TAG_RE.match(text)
-    if m is None:
-        return Step(n, text)
-    return Step(n, m.group(2), m.group(1))  # type: ignore[arg-type]
+def _step(n: int, text: str, raw: tuple[str, ...] = ()) -> Step:
+    gate: StepGate | None = None
+    if (tag := _TAG_RE.match(text)) is not None:
+        gate, text = tag.group(1), tag.group(2)  # type: ignore[assignment]
+    op: str | None = None
+    if (pointer := _POINTER_RE.match(text)) is not None:
+        op, text = pointer.group("id"), pointer.group("rest")
+    return Step(n, text, gate, raw, op)
 
 
 def test_plan_section(text: str) -> str | None:
@@ -540,6 +553,7 @@ def test_plan_steps(text: str) -> list[Step]:
     if section is None:
         return []
     items: list[list[str]] = []
+    raws: list[list[str]] = []
     prose: list[str] = []
     current: list[str] | None = None
     blank = False
@@ -556,15 +570,20 @@ def test_plan_steps(text: str) -> list[Step]:
         if m is not None:
             current = [m.group(1)]
             items.append(current)
+            raws.append([line])
         elif current is not None and (indented or not blank):
             current.append(stripped)
+            raws[-1].append(line)
         else:
             current = None
             prose.append(stripped)
         blank = False
     if not items:
         return [Step(1, " ".join(" ".join(prose).split()) or EMPTY_TEST_PLAN)]
-    return [_step(i, " ".join(" ".join(parts).split())) for i, parts in enumerate(items, 1)]
+    return [
+        _step(i, " ".join(" ".join(parts).split()), tuple(raw))
+        for i, (parts, raw) in enumerate(zip(items, raws, strict=True), 1)
+    ]
 
 
 test_plan_steps.__test__ = False  # type: ignore[attr-defined]  # not a pytest test

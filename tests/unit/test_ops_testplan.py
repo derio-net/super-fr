@@ -48,3 +48,34 @@ def test_effective_gate_tag_wins_then_devops_then_tester_then_none() -> None:
     assert effective_step_gate(plain, both) == "devops"
     assert effective_step_gate(plain, frozenset({"tester", "developer"})) == "tester"
     assert effective_step_gate(plain, frozenset({"developer"})) is None
+
+
+# --- the op pointer and the raw lines (spec 2026-11-01-ops-gate-probes R6, R2) ---------
+
+
+def test_a_pointer_after_the_tag_names_the_op_and_leaves_the_text() -> None:
+    (step,) = _steps("- [devops] (op: guest-verify) Run it")
+    assert step == Step(1, gate="devops", op="guest-verify", text="Run it")
+
+
+def test_a_pointer_without_a_tag_still_names_the_op() -> None:
+    (step,) = _steps("- (op: x) do")
+    assert (step.gate, step.op, step.text) == (None, "x", "do")
+
+
+def test_a_pointer_needs_whitespace_after_it() -> None:
+    (step,) = _steps("- (op:x)do it")
+    assert (step.op, step.text) == (None, "(op:x)do it")
+
+
+def test_a_pointer_mid_text_is_not_one() -> None:
+    (step,) = _steps("- run (op: x) later")
+    assert (step.op, step.text) == (None, "run (op: x) later")
+
+
+def test_raw_keeps_the_items_lines_as_written_fences_included() -> None:
+    lines = ["- [devops] converge", "    ```bash", "    pulumi up --yes", "    ```"]
+    first, second = _steps(*lines, "- next")
+    assert first.raw == tuple(lines)
+    assert second.raw == ("- next",)
+    assert first.op is None
