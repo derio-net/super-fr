@@ -220,3 +220,23 @@ Automated security review of the second-pass filter.
 ### p2-sec-3-resolved · finding [fixed] · resolves p2-sec-3: quote-aware bracket tracking could be fooled by an unmatched apostrophe; '- key: value' list items passed
 
 656830495 (swept into the phase-3 docs commit): no parsing at all — any bracket in the output records nothing, else a narrow positive status-line grammar (no colon, quote, =); tests test_evidence_third_pass_shapes_are_never_recorded, test_any_bracket_in_the_output_records_no_evidence; scenario probe prints a key: value line that must not be committed
+
+<!-- fr:journal kind=discovery scope=plan id=p3-no-explainer created=2026-11-01T20:46:29+00:00 phase=3 -->
+### p3-no-explainer · discovery · No explainer describes stage 1 or 5 detail (phase 3)
+
+docs/explainers/01-fr-goal.md describes the DevOps stage only as eight recorded stages incl. 'record the specification's devops steps'; that remains accurate, so no .md edit or .html regeneration applies.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-fragment-preexisting created=2026-11-01T20:46:29+00:00 phase=3 -->
+### p3-fragment-preexisting · discovery · Change fragment already present (phase 3)
+
+.changes/feat-ops-gate-probes.yaml existed before this phase and was left as is (the fragment part of P3.T2.S2 was already done).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-01T20:46:29+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+stub.py and the command are new and small; nothing existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-01T20:46:29+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+prose only; fr-plan took one added line (119 of 120), no compression needed
