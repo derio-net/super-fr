@@ -817,7 +817,7 @@ def test_the_gate_refuses_on_a_detached_head(tmp_path: Path) -> None:
             invoked_subcommand="apply",
             env={},
             repo_root=root,
-            interactive=True,
+            context="interactive",
             commit=lambda r, report: None,
         )
 

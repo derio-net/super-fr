@@ -216,7 +216,7 @@ def test_a_read_only_command_never_migrates_or_commits(
             invoked_subcommand=command,
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
         )
     assert ran == [], "an exempt command must not even look at the tree"
 
@@ -312,7 +312,11 @@ def test_a_current_tree_neither_migrates_nor_commits(
     monkeypatch.setattr(trigger, "run_migrations", lambda *a, **k: ran.append(1))
     monkeypatch.setattr(trigger, "commit_migration", lambda *a, **k: committed.append(1))
     trigger.ensure_artifacts_current(
-        argv=["apply"], invoked_subcommand="apply", env={}, repo_root=tmp_path, interactive=True
+        argv=["apply"],
+        invoked_subcommand="apply",
+        env={},
+        repo_root=tmp_path,
+        context="interactive",
     )
     assert ran == [] and committed == []
 
@@ -326,14 +330,14 @@ def test_interactive_migrates_commits_and_returns(tmp_path: Path) -> None:
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: committed.append(report),
     )
     assert f"<{CEILING_VERSION}" in p.read_text()
     assert len(committed) == 1
 
 
-def test_non_interactive_refuses_without_migrating_or_committing(
+def test_the_refuse_context_refuses_without_migrating_or_committing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The single highest-value behaviour in the spec: a loud refusal."""
@@ -344,9 +348,9 @@ def test_non_interactive_refuses_without_migrating_or_committing(
         trigger.ensure_artifacts_current(
             argv=["apply"],
             invoked_subcommand="apply",
-            env={"CI": "true"},
+            env={},
             repo_root=tmp_path,
-            interactive=False,
+            context="refuse",
             commit=lambda root, report: committed.append(report),
         )
     assert e.value.exit_code != 0
@@ -368,7 +372,7 @@ def test_a_chain_gap_refuses_instead_of_escaping_as_a_traceback(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             registry=_gap_registry(),
         )
     assert e.value.exit_code == 2
@@ -393,7 +397,7 @@ def test_a_half_migrated_tree_is_exit_two_not_a_silent_pass(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
     assert e.value.exit_code == 2
@@ -511,7 +515,7 @@ def test_the_gate_reports_in_flight_plans_with_no_run(
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -534,7 +538,7 @@ def test_the_gate_creates_no_run_of_its_own(tmp_path: Path) -> None:
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -554,14 +558,14 @@ def test_a_complete_plan_is_not_offered_by_the_gate(
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
     assert "fr run adopt" not in capsys.readouterr().err
 
 
-def test_the_non_interactive_refusal_does_not_reach_the_offer(
+def test_the_refuse_context_does_not_reach_the_offer(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A refusal is a refusal: nothing migrated, so there is no "your fr
@@ -573,9 +577,9 @@ def test_the_non_interactive_refusal_does_not_reach_the_offer(
         trigger.ensure_artifacts_current(
             argv=["apply"],
             invoked_subcommand="apply",
-            env={"CI": "true"},
+            env={},
             repo_root=tmp_path,
-            interactive=False,
+            context="refuse",
         )
 
     assert "fr run adopt" not in capsys.readouterr().err
@@ -606,7 +610,7 @@ def test_an_artifact_the_gate_cannot_inspect_is_refused_not_waved_through(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: committed.append(report),
         )
 
@@ -631,7 +635,7 @@ def test_an_unreadable_stamp_is_refused_not_waved_through(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -671,7 +675,7 @@ def test_the_gate_refuses_on_the_repositorys_default_branch(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: committed.append(report),
         )
 
@@ -706,7 +710,7 @@ def test_a_feature_branch_is_migrated_as_before(
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -730,7 +734,7 @@ def test_the_gate_holds_back_an_artifact_with_uncommitted_changes(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -840,7 +844,7 @@ def test_the_gate_refuses_while_another_fr_holds_the_migration_lock(
                 invoked_subcommand="apply",
                 env={},
                 repo_root=tmp_path,
-                interactive=True,
+                context="interactive",
                 commit=lambda root, report: None,
             )
 
@@ -870,7 +874,7 @@ def test_the_loser_proceeds_when_the_winner_already_migrated(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -887,7 +891,7 @@ def test_a_lock_free_repo_still_migrates(tmp_path: Path, monkeypatch: pytest.Mon
         invoked_subcommand="apply",
         env={},
         repo_root=tmp_path,
-        interactive=True,
+        context="interactive",
         commit=lambda root, report: None,
     )
 
@@ -911,7 +915,7 @@ def test_a_partial_migration_says_how_many_landed(
             invoked_subcommand="apply",
             env={},
             repo_root=tmp_path,
-            interactive=True,
+            context="interactive",
             commit=lambda root, report: None,
         )
 
@@ -957,7 +961,7 @@ def test_a_non_interactive_refusal_names_an_unreadable_file_not_a_migration(
             invoked_subcommand="plan",
             env={},
             repo_root=tmp_path,
-            interactive=False,
+            context="refuse",
             commit=lambda root, report: None,
         )
 
@@ -968,3 +972,309 @@ def test_a_non_interactive_refusal_names_an_unreadable_file_not_a_migration(
     assert "docs/superpowers/runs/r1.records/" + name in err
     assert why in err
     assert "outside the repository" in err
+
+
+# =========================================================================
+# spec 2026-11-01-auto-migrate-own-commit — which contexts migrate (§A)
+# =========================================================================
+
+
+def test_a_ci_marker_wins_over_a_tty() -> None:
+    assert trigger.classify({"CI": "true"}, _tty(), _tty()) == "ci"
+
+
+def test_github_actions_alone_is_ci() -> None:
+    assert trigger.classify({"GITHUB_ACTIONS": "true"}, _pipe(), _pipe()) == "ci"
+
+
+def test_ci_false_is_not_ci() -> None:
+    assert trigger.classify({"CI": "false"}, _tty(), _tty()) == "interactive"
+    assert trigger.classify({"CI": "false"}, _pipe(), _pipe()) is None
+
+
+def test_fr_non_interactive_wins_over_a_tty() -> None:
+    env = {trigger.NON_INTERACTIVE_ENV_VAR: "1"}
+    assert trigger.classify(env, _tty(), _tty()) == "opt-out"
+
+
+def test_a_ci_marker_wins_over_fr_non_interactive() -> None:
+    env = {"CI": "1", trigger.NON_INTERACTIVE_ENV_VAR: "1"}
+    assert trigger.classify(env, _pipe(), _pipe()) == "ci"
+
+
+def test_a_tty_on_both_streams_is_interactive() -> None:
+    assert trigger.classify({}, _tty(), _tty()) == "interactive"
+
+
+def test_pipes_leave_the_workspace_or_refuse_decision_to_git() -> None:
+    assert trigger.classify({}, _pipe(), _pipe()) is None
+    assert trigger.classify({}, _tty(), _pipe()) is None
+
+
+# --- the workspace context, on real git (§B, R1 R3 R4 R6 R7 R8) ----------
+
+
+def _g(cwd: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _workspace_marker(wt: Path, branch: str = "feat/x", **over: object) -> None:
+    import json
+
+    data: dict[str, object] = {"toplevel": str(wt.resolve()), "branch": branch, "mode": "worktree"}
+    data.update(over)
+    (wt / ".fr-isolation").write_text(json.dumps(data))
+
+
+class _Fixture:
+    """A bare origin, `main` as its default, a stale plan, and a linked worktree
+    on `feat/x` with a valid marker and one work commit on top."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.origin = tmp_path / "origin.git"
+        _g(tmp_path, "init", "-q", "--bare", "-b", "main", str(self.origin))
+        self.primary = tmp_path / "primary"
+        self.primary.mkdir()
+        p = self.primary
+        _g(p, "init", "-q", "-b", "main")
+        _g(p, "config", "user.email", "t@example.com")
+        _g(p, "config", "user.name", "T")
+        _g(p, "config", "commit.gpgsign", "false")
+        (p / ".git" / "info" / "exclude").write_text(".fr-isolation\n")
+        _plan(p)
+        _g(p, "add", "-A")
+        _g(p, "commit", "-qm", "seed")
+        _g(p, "remote", "add", "origin", str(self.origin))
+        _g(p, "push", "-q", "origin", "main")
+        _g(p, "remote", "set-head", "origin", "main")
+        self.wt = tmp_path / "wt"
+        _g(p, "worktree", "add", "-q", "-b", "feat/x", str(self.wt))
+        _workspace_marker(self.wt)
+        (self.wt / "work.md").write_text("work\n")
+        _g(self.wt, "add", "work.md")
+        _g(self.wt, "commit", "-qm", "work commit")
+        self.work_sha = _g(self.wt, "rev-parse", "HEAD")
+
+    def meta(self, root: Path) -> Path:
+        return root / "docs" / "superpowers" / "plans" / "p" / "_meta.yaml"
+
+
+def _gate(root: Path, env: dict[str, str] | None = None, **kw: object) -> tuple[int, list[str]]:
+    lines: list[str] = []
+    try:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env=env or {},
+            repo_root=root,
+            err=lines.append,
+            **kw,  # type: ignore[arg-type]
+        )
+    except typer.Exit as e:
+        return e.exit_code, lines
+    return 0, lines
+
+
+def _flat(lines: list[str]) -> str:
+    return " ".join(" ".join(lines).split())
+
+
+def test_a_workspace_migrates_and_commits_the_migration_alone(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    code, lines = _gate(fx.wt)
+    assert code == 0, lines
+    subject = _g(fx.wt, "log", "-1", "--format=%s")
+    assert subject.startswith("chore(fr): migrate")
+    assert _g(fx.wt, "rev-parse", "HEAD~1") == fx.work_sha, "on top of the work (R7)"
+    touched = _g(fx.wt, "show", "--name-only", "--format=", "HEAD").splitlines()
+    assert touched == ["docs/superpowers/plans/p/_meta.yaml"], "the commit is alone (R1)"
+    assert f"<{CEILING_VERSION}" in fx.meta(fx.wt).read_text(), "the ceiling is widened (R8)"
+    short = _g(fx.wt, "rev-parse", "--short", "HEAD")
+    assert any(
+        line.startswith("fr: migrated and committed 1 artifact(s): ")
+        and subject in line
+        and f"({short})" in line
+        for line in lines
+    ), lines
+
+
+def test_a_detached_workspace_gets_the_detached_refusal_not_enter_isolation(
+    tmp_path: Path,
+) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.wt, "checkout", "-q", "--detach")
+    before = fx.meta(fx.wt).read_text()
+    code, lines = _gate(fx.wt)
+    assert code == 2
+    text = _flat(lines)
+    assert "HEAD is detached" in text
+    assert "carry it:" not in text
+    assert fx.meta(fx.wt).read_text() == before
+
+
+def test_a_base_clone_on_a_branch_with_no_marker_refuses_and_names_isolation(
+    tmp_path: Path,
+) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.primary, "checkout", "-q", "-b", "feat/y")
+    head = _g(fx.primary, "rev-parse", "HEAD")
+    before = fx.meta(fx.primary).read_bytes()
+    status = _g(fx.primary, "status", "--porcelain")
+    code, lines = _gate(fx.primary)
+    assert code == 2
+    text = _flat(lines)
+    assert "carry it: fr isolation up --branch" in text
+    assert "not an fr-isolation workspace" in text
+    assert "no .fr-isolation marker" in text
+    assert fx.meta(fx.primary).read_bytes() == before
+    assert _g(fx.primary, "rev-parse", "HEAD") == head
+    assert _g(fx.primary, "status", "--porcelain") == status
+
+
+def test_a_workspace_on_the_default_branch_gets_the_default_branch_refusal(
+    tmp_path: Path,
+) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.primary, "checkout", "-q", "-b", "elsewhere")
+    wt2 = tmp_path / "wt-main"
+    _g(fx.primary, "worktree", "add", "-q", str(wt2), "main")
+    _workspace_marker(wt2, branch="main")
+    head = _g(wt2, "rev-parse", "HEAD")
+    code, lines = _gate(wt2)
+    assert code == 2
+    assert "this repository's default branch" in _flat(lines)
+    assert _g(wt2, "rev-parse", "HEAD") == head
+
+
+def test_fr_non_interactive_in_a_valid_workspace_refuses(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    code, lines = _gate(fx.wt, env={trigger.NON_INTERACTIVE_ENV_VAR: "1"})
+    assert code == 2
+    assert _g(fx.wt, "rev-parse", "HEAD") == fx.work_sha
+    assert "FR_NON_INTERACTIVE" in _flat(lines)
+    # Review p1-r3: "enter isolation and the next command migrates" is false
+    # while the opt-out stays set, so the opt-out refusal does not offer it.
+    assert "carry it:" not in _flat(lines)
+
+
+def test_a_drifted_workspace_refuses_naming_drift(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.wt, "checkout", "-q", "-b", "feat/z")
+    head = _g(fx.wt, "rev-parse", "HEAD")
+    code, lines = _gate(fx.wt)
+    assert code == 2
+    assert "drift" in _flat(lines)
+    assert _g(fx.wt, "rev-parse", "HEAD") == head
+
+
+def test_an_uncommitted_edit_in_a_workspace_is_held_back(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    meta = fx.meta(fx.wt)
+    meta.write_text(meta.read_text() + "workflow: fr-goal@1\n")
+    before = meta.read_text()
+    code, _ = _gate(fx.wt)
+    assert code == 2, "a held-back artifact is a refusal, not a silent skip"
+    assert meta.read_text() == before
+    assert _g(fx.wt, "rev-parse", "HEAD") == fx.work_sha
+
+
+# --- the ci context: in place, never committed (§C, R5 R10) --------------
+
+
+@pytest.mark.parametrize("marker", ["CI", "GITHUB_ACTIONS"])
+def test_ci_migrates_in_place_on_main_and_never_commits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    marker: str,
+) -> None:
+    fx = _Fixture(tmp_path)
+    offered: list[Path] = []
+    monkeypatch.setattr(trigger, "_adoption_offer", lambda root: offered.append(root) or ())
+    head = _g(fx.primary, "rev-parse", "HEAD")
+    assert _g(fx.primary, "branch", "--show-current") == "main"
+
+    code, lines = _gate(fx.primary, env={marker: "true"})
+
+    assert code == 0, lines
+    assert f"<{CEILING_VERSION}" in fx.meta(fx.primary).read_text(), "migrated in the tree"
+    assert _g(fx.primary, "rev-parse", "HEAD") == head, "CI never commits"
+    text = _flat(lines)
+    assert "migrated in place for this run (NOT committed)" in text
+    assert "Do not commit these files with other work." in text
+    assert offered == [], "CI makes no adoption offer"
+    annotation = [line for line in lines if line.startswith("::warning title=fr artifacts stale::")]
+    assert len(annotation) == (1 if marker == "GITHUB_ACTIONS" else 0)
+    assert capsys.readouterr().out == "", "the gate never writes stdout"
+
+
+def test_ci_writes_its_warning_on_stderr_never_stdout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The default emitter, not the test's `err=`: stdout stays clean for a
+    `--json` command or a `>> $GITHUB_STEP_SUMMARY` redirect."""
+    fx = _Fixture(tmp_path)
+    trigger.ensure_artifacts_current(
+        argv=["apply"],
+        invoked_subcommand="apply",
+        env={"GITHUB_ACTIONS": "true"},
+        repo_root=fx.primary,
+    )
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert "::warning title=fr artifacts stale::" in out.err
+    assert "NOT committed" in out.err
+
+
+def test_ci_holds_back_an_uncommitted_edit(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    meta = fx.meta(fx.primary)
+    meta.write_text(meta.read_text() + "workflow: fr-goal@1\n")
+    before = meta.read_text()
+    code, _ = _gate(fx.primary, env={"CI": "true"})
+    assert code == 2
+    assert meta.read_text() == before, "the veto holds in CI too"
+
+
+def test_ci_refuses_when_git_cannot_say_what_is_uncommitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p1-r1: an unreadable git state is not a clean one. The CI veto
+    used to swallow every error and hold nothing back, so a local shell with
+    `CI=1` and a broken git context had edited artifacts rewritten in place."""
+    from fr.artifacts import commit as commit_mod
+
+    fx = _Fixture(tmp_path)
+    meta = fx.meta(fx.primary)
+    before = meta.read_text()
+    monkeypatch.setattr(
+        commit_mod, "git_context", lambda root: commit_mod.GitRefusal(reason="git exploded")
+    )
+
+    code, lines = _gate(fx.primary, env={"CI": "true"})
+
+    assert code == 2, lines
+    assert "git exploded" in _flat(lines)
+    assert meta.read_text() == before, "nothing is migrated over an unknown tree"
+
+
+def test_a_failing_migration_in_ci_refuses(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+
+    def boom(path: Path) -> None:
+        raise RuntimeError("migration exploded")
+
+    kind: ArtifactKind = replace(ARTIFACT_KINDS["plan"], current_version=3)
+    reg = MigrationRegistry(kinds={kind.name: kind})
+    reg.register(SchemaMigration(kind="plan", from_version=2, to_version=3, fn=boom))
+    head = _g(fx.primary, "rev-parse", "HEAD")
+
+    code, lines = _gate(fx.primary, env={"CI": "true"}, registry=reg)
+
+    assert code == 2, lines
+    assert "migration exploded" in _flat(lines)
+    assert _g(fx.primary, "rev-parse", "HEAD") == head

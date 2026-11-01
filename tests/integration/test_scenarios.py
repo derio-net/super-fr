@@ -236,6 +236,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "fr-ops-seal",
         "fr-ops-gate-stage",
         "fr-ops-gate-probes",
+        "auto-migrate-workspace",
+        "auto-migrate-ci-in-place",
     }
     assert on_disk == here
 
@@ -282,6 +284,14 @@ def test_debt_report(installed: Path, tmp_path: Path) -> None:
 
 def test_closeout_owed(installed: Path, tmp_path: Path) -> None:
     _scenario("closeout-owed", installed, tmp_path)
+
+
+def test_auto_migrate_workspace(installed: Path, tmp_path: Path) -> None:
+    _scenario("auto-migrate-workspace", installed, tmp_path)
+
+
+def test_auto_migrate_ci_in_place(installed: Path, tmp_path: Path) -> None:
+    _scenario("auto-migrate-ci-in-place", installed, tmp_path)
 
 
 def test_triage_closed_in_progress(installed: Path, tmp_path: Path) -> None:

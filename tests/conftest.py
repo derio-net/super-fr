@@ -92,6 +92,23 @@ def _skip_artifact_migration_gate(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_inherited_ci_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No CI marker and no `FR_NON_INTERACTIVE` reaches a test unless it sets one.
+
+    The migration gate classifies its context from the environment (spec
+    2026-11-01-auto-migrate-own-commit §A): any truthy `CI_ENV_VARS` marker is
+    the ci row, which migrates in place. The CI shards and release.py's staged
+    suite run with `GITHUB_ACTIONS=true`, so without this a test that classifies
+    from the environment would be green locally and red in CI. A test that
+    wants CI sets the marker itself.
+    """
+    from fr.artifacts.trigger import CI_ENV_VARS, NON_INTERACTIVE_ENV_VAR
+
+    for name in (*CI_ENV_VARS, NON_INTERACTIVE_ENV_VAR):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_git_credential_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test may open a credential dialog, or block on the operator's desktop.
 

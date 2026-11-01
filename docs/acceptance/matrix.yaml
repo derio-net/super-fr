@@ -481,7 +481,7 @@ rows:
       rendered/observed/diffed/applied as GitLab Issues with correctly-shaped GitLab
       labels (color, length)
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_glab.py
@@ -504,7 +504,7 @@ rows:
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
       rendered/observed/diffed/applied as Gitea Issues with correctly-shaped labels
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tea.py
@@ -524,7 +524,7 @@ rows:
       PR/MR-merge state correctly against a GitLab- or Gitea-backed repo, with zero
       gh-specific calls
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -541,7 +541,7 @@ rows:
     acceptance: The VK dispatch bridge polls PR/MR status and auto-closes tracking Issues
       correctly for a GitLab- or Gitea-backed phase
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_pr_observe.py
@@ -564,7 +564,7 @@ rows:
       CLI into the devcontainer (not github-cli), and fr acceptance init generates a
       working CI workflow in the right location and schema for that backend
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_init_scaffold.py
@@ -10302,4 +10302,109 @@ rows:
     levels: {}
     status: not-implemented
     notes: ''
+  - id: auto-migrate-workspace-commits-alone
+    capability: artifact migration gate
+    acceptance: 'In a non-interactive fr-isolation workspace on a work branch, stale
+      artifacts (including an excluded fr_version ceiling) are migrated and committed
+      alone as chore(fr): migrate ..., on top of any existing work, and the command
+      then runs'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_workspace_migrates_and_commits_the_migration_alone
+      - super-fr:tests/unit/test_isolation_marker.py#test_a_linked_worktree_with_a_matching_marker_is_a_workspace
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_auto_migrate_workspace
+    status: ci
+    notes: pinned by the trigger's real-git workspace tests and the installed-CLI workspace
+      scenario, both in CI
+    verify: candidate
+    scenario: tests/scenarios/auto-migrate-workspace.sh
+  - id: auto-migrate-ci-in-place
+    capability: artifact migration gate
+    acceptance: In CI a stale but migratable checkout is migrated in place, never committed,
+      with a warning (and a GitHub annotation), and the command runs; an unmigratable
+      tree still fails
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_ci_migrates_in_place_on_main_and_never_commits
+      - super-fr:tests/unit/test_migration_trigger.py#test_ci_writes_its_warning_on_stderr_never_stdout
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_failing_migration_in_ci_refuses
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_auto_migrate_ci_in_place
+    status: ci
+    notes: pinned by the trigger's CI in-place tests and the installed-CLI CI scenario,
+      both in CI
+    verify: candidate
+    scenario: tests/scenarios/auto-migrate-ci-in-place.sh
+  - id: auto-migrate-refuses-outside-workspace
+    capability: artifact migration gate
+    acceptance: A non-interactive non-CI context outside a valid workspace (or with
+      FR_NON_INTERACTIVE set) refuses, writes nothing, and names fr isolation up as
+      the way to carry the migration
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_base_clone_on_a_branch_with_no_marker_refuses_and_names_isolation
+      - super-fr:tests/unit/test_migration_trigger.py#test_fr_non_interactive_in_a_valid_workspace_refuses
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_drifted_workspace_refuses_naming_drift
+      - super-fr:tests/unit/test_migration_trigger.py#test_fr_non_interactive_wins_over_a_tty
+      - super-fr:tests/unit/test_isolation_marker.py#test_no_marker_is_not_a_workspace
+    status: ci
+    notes: unit tests over classify and the gate pin the refusal and its carry-it line;
+      the workspace scenario's negative leg checks it installed
+    verify: none
+  - id: auto-migrate-git-guards-hold
+    capability: artifact migration gate
+    acceptance: No committing context ever auto-commits on the default branch, a detached
+      HEAD, the wrong root, or over a file with uncommitted edits
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_workspace_on_the_default_branch_gets_the_default_branch_refusal
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_detached_workspace_gets_the_detached_refusal_not_enter_isolation
+      - super-fr:tests/unit/test_migration_trigger.py#test_an_uncommitted_edit_in_a_workspace_is_held_back
+      - super-fr:tests/unit/test_migration_trigger.py#test_ci_holds_back_an_uncommitted_edit
+    status: ci
+    notes: the default-branch, detached-HEAD and uncommitted-file guards re-pinned per
+      committing context by unit tests in CI
+    verify: none
+  - id: auto-migrate-live-sweep
+    capability: artifact migration gate
+    acceptance: With the released fr, real stale repos get their migration as its own
+      commit in the sweep's PRs, and a consumer main red only from stale artifacts goes
+      green
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R9
+    levels: {}
+    status: walk-owed
+    notes: 'walked on first real use: the per-repo sweep'
+    verify: live
+  - id: auto-migrate-nag-surfaces-commit
+    capability: artifact migration gate
+    acceptance: When a session's first fr command (the SessionStart acceptance nag)
+      migrates and commits, the session is told which commit was made; a refused context's
+      nag names fr isolation up
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_acceptance_nag.py#test_the_gates_commit_notice_is_relayed_first
+      - super-fr:tests/unit/test_hooks_acceptance_nag.py#test_a_stale_refusal_names_the_workspace_way_to_carry_it
+      - super-fr:packages/fr-opencode-plugin/test/nag.test.ts
+    status: ci
+    notes: the hook and nag.ts are pinned by their shell and bun tests in CI
     verify: none
