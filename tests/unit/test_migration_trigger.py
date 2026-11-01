@@ -312,7 +312,11 @@ def test_a_current_tree_neither_migrates_nor_commits(
     monkeypatch.setattr(trigger, "run_migrations", lambda *a, **k: ran.append(1))
     monkeypatch.setattr(trigger, "commit_migration", lambda *a, **k: committed.append(1))
     trigger.ensure_artifacts_current(
-        argv=["apply"], invoked_subcommand="apply", env={}, repo_root=tmp_path, context="interactive"
+        argv=["apply"],
+        invoked_subcommand="apply",
+        env={},
+        repo_root=tmp_path,
+        context="interactive",
     )
     assert ran == [] and committed == []
 
@@ -1005,3 +1009,171 @@ def test_a_tty_on_both_streams_is_interactive() -> None:
 def test_pipes_leave_the_workspace_or_refuse_decision_to_git() -> None:
     assert trigger.classify({}, _pipe(), _pipe()) is None
     assert trigger.classify({}, _tty(), _pipe()) is None
+
+
+# --- the workspace context, on real git (§B, R1 R3 R4 R6 R7 R8) ----------
+
+
+def _g(cwd: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _workspace_marker(wt: Path, branch: str = "feat/x", **over: object) -> None:
+    import json
+
+    data: dict[str, object] = {"toplevel": str(wt.resolve()), "branch": branch, "mode": "worktree"}
+    data.update(over)
+    (wt / ".fr-isolation").write_text(json.dumps(data))
+
+
+class _Fixture:
+    """A bare origin, `main` as its default, a stale plan, and a linked worktree
+    on `feat/x` with a valid marker and one work commit on top."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.origin = tmp_path / "origin.git"
+        _g(tmp_path, "init", "-q", "--bare", "-b", "main", str(self.origin))
+        self.primary = tmp_path / "primary"
+        self.primary.mkdir()
+        p = self.primary
+        _g(p, "init", "-q", "-b", "main")
+        _g(p, "config", "user.email", "t@example.com")
+        _g(p, "config", "user.name", "T")
+        _g(p, "config", "commit.gpgsign", "false")
+        (p / ".git" / "info" / "exclude").write_text(".fr-isolation\n")
+        _plan(p)
+        _g(p, "add", "-A")
+        _g(p, "commit", "-qm", "seed")
+        _g(p, "remote", "add", "origin", str(self.origin))
+        _g(p, "push", "-q", "origin", "main")
+        _g(p, "remote", "set-head", "origin", "main")
+        self.wt = tmp_path / "wt"
+        _g(p, "worktree", "add", "-q", "-b", "feat/x", str(self.wt))
+        _workspace_marker(self.wt)
+        (self.wt / "work.md").write_text("work\n")
+        _g(self.wt, "add", "work.md")
+        _g(self.wt, "commit", "-qm", "work commit")
+        self.work_sha = _g(self.wt, "rev-parse", "HEAD")
+
+    def meta(self, root: Path) -> Path:
+        return root / "docs" / "superpowers" / "plans" / "p" / "_meta.yaml"
+
+
+def _gate(root: Path, env: dict[str, str] | None = None, **kw: object) -> tuple[int, list[str]]:
+    lines: list[str] = []
+    try:
+        trigger.ensure_artifacts_current(
+            argv=["apply"],
+            invoked_subcommand="apply",
+            env=env or {},
+            repo_root=root,
+            err=lines.append,
+            **kw,  # type: ignore[arg-type]
+        )
+    except typer.Exit as e:
+        return e.exit_code, lines
+    return 0, lines
+
+
+def _flat(lines: list[str]) -> str:
+    return " ".join(" ".join(lines).split())
+
+
+def test_a_workspace_migrates_and_commits_the_migration_alone(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    code, lines = _gate(fx.wt)
+    assert code == 0, lines
+    subject = _g(fx.wt, "log", "-1", "--format=%s")
+    assert subject.startswith("chore(fr): migrate")
+    assert _g(fx.wt, "rev-parse", "HEAD~1") == fx.work_sha, "on top of the work (R7)"
+    touched = _g(fx.wt, "show", "--name-only", "--format=", "HEAD").splitlines()
+    assert touched == ["docs/superpowers/plans/p/_meta.yaml"], "the commit is alone (R1)"
+    assert f"<{CEILING_VERSION}" in fx.meta(fx.wt).read_text(), "the ceiling is widened (R8)"
+    short = _g(fx.wt, "rev-parse", "--short", "HEAD")
+    assert any(
+        line.startswith("fr: migrated and committed 1 artifact(s): ")
+        and subject in line
+        and f"({short})" in line
+        for line in lines
+    ), lines
+
+
+def test_a_detached_workspace_gets_the_detached_refusal_not_enter_isolation(
+    tmp_path: Path,
+) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.wt, "checkout", "-q", "--detach")
+    before = fx.meta(fx.wt).read_text()
+    code, lines = _gate(fx.wt)
+    assert code == 2
+    text = _flat(lines)
+    assert "HEAD is detached" in text
+    assert "carry it:" not in text
+    assert fx.meta(fx.wt).read_text() == before
+
+
+def test_a_base_clone_on_a_branch_with_no_marker_refuses_and_names_isolation(
+    tmp_path: Path,
+) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.primary, "checkout", "-q", "-b", "feat/y")
+    head = _g(fx.primary, "rev-parse", "HEAD")
+    before = fx.meta(fx.primary).read_bytes()
+    status = _g(fx.primary, "status", "--porcelain")
+    code, lines = _gate(fx.primary)
+    assert code == 2
+    text = _flat(lines)
+    assert "carry it: fr isolation up --branch" in text
+    assert "not an fr-isolation workspace" in text
+    assert "no .fr-isolation marker" in text
+    assert fx.meta(fx.primary).read_bytes() == before
+    assert _g(fx.primary, "rev-parse", "HEAD") == head
+    assert _g(fx.primary, "status", "--porcelain") == status
+
+
+def test_a_workspace_on_the_default_branch_gets_the_default_branch_refusal(
+    tmp_path: Path,
+) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.primary, "checkout", "-q", "-b", "elsewhere")
+    wt2 = tmp_path / "wt-main"
+    _g(fx.primary, "worktree", "add", "-q", str(wt2), "main")
+    _workspace_marker(wt2, branch="main")
+    head = _g(wt2, "rev-parse", "HEAD")
+    code, lines = _gate(wt2)
+    assert code == 2
+    assert "this repository's default branch" in _flat(lines)
+    assert _g(wt2, "rev-parse", "HEAD") == head
+
+
+def test_fr_non_interactive_in_a_valid_workspace_refuses(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    code, lines = _gate(fx.wt, env={trigger.NON_INTERACTIVE_ENV_VAR: "1"})
+    assert code == 2
+    assert _g(fx.wt, "rev-parse", "HEAD") == fx.work_sha
+    assert "FR_NON_INTERACTIVE" in _flat(lines)
+
+
+def test_a_drifted_workspace_refuses_naming_drift(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    _g(fx.wt, "checkout", "-q", "-b", "feat/z")
+    head = _g(fx.wt, "rev-parse", "HEAD")
+    code, lines = _gate(fx.wt)
+    assert code == 2
+    assert "drift" in _flat(lines)
+    assert _g(fx.wt, "rev-parse", "HEAD") == head
+
+
+def test_an_uncommitted_edit_in_a_workspace_is_held_back(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    meta = fx.meta(fx.wt)
+    meta.write_text(meta.read_text() + "workflow: fr-goal@1\n")
+    before = meta.read_text()
+    code, _ = _gate(fx.wt)
+    assert code == 2, "a held-back artifact is a refusal, not a silent skip"
+    assert meta.read_text() == before
+    assert _g(fx.wt, "rev-parse", "HEAD") == fx.work_sha
