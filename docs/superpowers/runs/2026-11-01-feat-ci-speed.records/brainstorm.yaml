@@ -1,0 +1,105 @@
+schema_version: 10
+run: 2026-11-01-feat-ci-speed
+step: brainstorm
+outcome: done
+questions:
+  rounds: 2
+  trigger: operator-request
+  reason: "Round 1 Q6's answer asked to research GitHub merge queues and ask again ('Search and ask me'); round 2 asked the queue scope and the PR-vs-queue CI split."
+journal:
+  - kind: discovery
+    input: true
+    id: brief
+    title: Operator brief (via the wave-coordinator's goal file ~/.cache/fr/coord/goals/ci-speed/brief.md)
+    body: |
+      Goal: make super-fr's CI and release (much) faster.
+      The problem (operator, 2026-11-01): the super-fr Release workflow and several CI flows take more than 13 minutes on GitHub Actions. Find where the time goes and ship changes that make them much faster, without weakening any gate.
+      Start with measurement, not guesses: real timings with gh (last ~30 runs per workflow, per-job and per-step durations; rank by wall clock and critical path; separate queue from run time). Read the CI time-budget watcher (ci-budget.yml, scripts/ci_budget.py, .github/ci-budget.yaml, 240s default) and its open issues; the sharded test job (pytest-split x4, .test_durations — stale?); release.yml + scripts/release.py's whole-suite staged run (spec 2026-09-26-version-bump-churn, gh#854); acceptance-report.yml, the 3.11/3.14 matrices, coverage/ci-ok. Related issues #1238, #1225, #1260. Usual suspects to prove with numbers: dependency install/cache misses, duplicated work across jobs, slow tests and subprocess/git-heavy tests, serial steps that could be parallel, needs: that aren't needed, the staged release suite re-running what the merge commit's CI proved for an identical tree.
+      Constraints: no local full suites (Mac oversubscribed); only targeted tests via ~/.cache/fr/coord/testslot.sh. Never weaken a gate; a faster equivalent proof (e.g. reuse for an identical tree hash) is fine if the spec argues the equivalence and a test pins it. New/renamed workflow files registered with the CI budget watcher. fr-goal's normal pipeline, one question round asked in this pane; PR stays draft; change fragment for scripts/ or packages/ changes; never edit versions. Test Plan steps carry a cost line (#1260); the live proof is the next real CI/release runs ("walked on first real use") with before/after timings. Parallel goal runs active (#1242 migration gate, gate backfill, #1273 ops gate): stay out of their files. Report to the coordinator's status.log.
+  - kind: decision
+    id: q1-long-tail-fix
+    title: "Long-tail test: libyaml helper in fr (operator: option 1)"
+    body: |
+      Q (round 1, 1/7): the 418s corpus test spends 98% re-parsing matrix.yaml with pure-Python PyYAML. Options: libyaml helper routed through every fr artifact read + parse once (recommended); matrix-only libyaml; test-only cache.
+      A: "1 but what is the expected saving? Maybe splitting the matrix into areas would improve the parsing speed further?"
+      Answered inline: measured pure 4.6s vs C 0.254s on the real matrix (18x); expected test 418s -> <30s on CI. Matrix split not recommended (whole parse ~0.25s with libyaml; split is an artifact shape change in every consumer). decided_by: operator.
+  - kind: decision
+    id: q1-scope-narrowed
+    title: "Helper ships with the matrix path; the other 104 safe_load sites go to a follow-up issue"
+    body: |
+      Option 1 named routing every fr artifact read. The brief requires staying out of three parallel goal runs' files, and the 104 sites span 71 files including theirs. The operator's own note (answer to Q4) asks to "open an issue to standardize that handling" once the optimization is done. So: fr.yamlio + parse_matrix (+ memo) ship here; the standardization and its tripwire are the follow-up issue (spec §3.F.1). Rule: brief constraint 'stay out of their files'.
+  - kind: decision
+    id: q2-durations
+    title: "Shard weights: CI-derived, self-healing (operator: recommended)"
+    body: "Q (round 1, 2/7). A: CI-derived, self-healing — one plan artifact per run, cache saved from main's CI, split-check guard, committed file as fallback. decided_by: operator."
+  - kind: decision
+    id: q3-shards
+    title: "6 shards per Python leg (operator: recommended)"
+    body: "Q (round 1, 3/7). A: 6 per leg. decided_by: operator."
+  - kind: decision
+    id: q4-coverage-leg
+    title: "Coverage gate moves to the 3.14 leg (operator: option 1, plus all-clients note)"
+    body: |
+      Q (round 1, 4/7). A: "1 but also this should be an optimization for all clients that use super-fr's matrix.yaml, not only super-fr. Once it's done, open an issue to standardize that handling."
+      Read as: coverage moves to 3.14; the matrix-parse speed-up is a product change in fr (all consumer repos get it), and a follow-up issue standardizes YAML handling (spec §3.F.1). decided_by: operator.
+  - kind: decision
+    id: q5-release
+    title: "Release: shard the staged suite (operator: recommended)"
+    body: "Q (round 1, 5/7). A: prepare -> 6-shard test on the exact staged commit -> publish. decided_by: operator."
+  - kind: decision
+    id: q6-race
+    title: "Race: stop as superseded; explore merge queues (operator: option 1 + research request)"
+    body: |
+      Q (round 1, 6/7). A: "1. but also, GitHub supports Merge Queues, I want to explore how we can best use them, maybe there is a better method hidden there. Search and ask mee". Triggered round 2 after reading docs/merge-protection.md, the live ruleset (deletion + non_fast_forward only, no bypass, no FR_AUTOMATION_APP_ID) and GitHub's merge-queue docs. decided_by: operator.
+  - kind: decision
+    id: q7-verification
+    title: "Verification: candidate + gate tester (operator: recommended)"
+    body: "Q (round 1, 7/7). A: run strategy candidate; release rows live, walked on first real use (an RC cut counts); gate tester. decided_by: operator."
+  - kind: decision
+    id: r2-q1-queue-scope
+    title: "Merge queue: design issue extending #1238, not in this goal (operator: recommended)"
+    body: "Q (round 2, 1/2). A: design issue — release rides the queue (#1238 A), app-token release PR, staging, wave-driver queue path. decided_by: operator."
+  - kind: decision
+    id: r2-q2-pr-vs-queue
+    title: "Light-PR / full-queue CI split: decided in the queue issue (operator: recommended)"
+    body: "Q (round 2, 2/2). A: PR CI keeps the full matrix now; the split goes in the design issue. decided_by: operator."
+acceptance:
+  - id: matrix-parse-libyaml
+    capability: acceptance-matrix
+    acceptance: "fr parses an acceptance matrix with libyaml when PyYAML has it (pure-Python otherwise) to the same Matrix, and reuses one parse of identical text within a process"
+    origin: [super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R1]
+    status: not-implemented
+    verify: none
+  - id: ci-shards-complete
+    capability: ci
+    acceptance: "CI splits every leg's tests across 6 shards by one CI-derived durations file per run, and fails when the shards together did not run exactly the collected test set once each"
+    origin: [super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R4]
+    status: not-implemented
+    verify: none
+  - id: ci-coverage-newest-leg
+    capability: ci
+    acceptance: "The combined coverage gate (fail-under 75) is measured on the 3.14 leg; the 3.11 floor leg runs the same tests without coverage"
+    origin: [super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R7]
+    status: not-implemented
+    verify: none
+  - id: release-staged-suite-sharded
+    capability: release
+    acceptance: "A release proves its exact staged commit with the full suite in 6 token-free shards, each checking the new fr version, and pushes only when all are green; every existing release outcome still happens"
+    origin: [super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R8]
+    status: not-implemented
+    verify: live
+  - id: release-superseded-not-retried
+    capability: release
+    acceptance: "When main moved past the commit a release was staged on, the release exits green as superseded without pushing, and the run that push triggered releases instead"
+    origin: [super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R10]
+    status: not-implemented
+    verify: live
+  - id: ci-budget-watcher-files-breach
+    capability: ci
+    acceptance: "The CI budget watcher reads the run's workflow file at its commit and files or updates a ci-budget issue when the run is over budget"
+    origin: [super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R13]
+    status: not-implemented
+    verify: live
+emitted:
+  spec: docs/superpowers/specs/2026-11-01-ci-speed-design.md
+evidence: {}
