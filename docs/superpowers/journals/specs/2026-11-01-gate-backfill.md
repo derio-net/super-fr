@@ -387,3 +387,8 @@ Corpus update 1 (decision d14): two triage owners refused to run fr archive duri
 ### archive-no-dry-run-resolved · finding [out-of-scope] · resolves archive-no-dry-run: fr archive files forge issues but has no dry run
 
 fr archive is not changed by this run (decision d14); backfill gives the sweep its own preview.
+
+<!-- fr:journal kind=finding scope=spec id=archive-no-dry-run-resolved-2 created=2026-11-01T21:54:56+00:00 state=open resolves=archive-no-dry-run tracked_by=https://github.com/derio-net/super-fr/issues/1301 -->
+### archive-no-dry-run-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1301] · resolves archive-no-dry-run: fr archive files forge issues but has no dry run
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1301.
