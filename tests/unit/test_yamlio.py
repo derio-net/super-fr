@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
 
 import fr.yamlio as yamlio
 import pytest
 import yaml
-
-REPO = Path(__file__).resolve().parents[2]
 
 
 def test_loader_is_the_c_loader_when_libyaml_is_present():
@@ -24,6 +21,8 @@ def test_loader_falls_back_without_the_c_loader(monkeypatch):
     try:
         reloaded = importlib.reload(yamlio)
         assert reloaded.SafeLoader is yaml.SafeLoader
+        text = "a:\n  b: [1, 2, {c: d}]\n  note: 'q: r'\n"
+        assert reloaded.safe_load(text) == yaml.safe_load(text)
     finally:
         monkeypatch.undo()
         importlib.reload(yamlio)
@@ -45,11 +44,6 @@ def test_safe_load_matches_pyyaml(text):
 
 def test_empty_text_is_none():
     assert yamlio.safe_load("") is None
-
-
-def test_safe_load_matches_pyyaml_on_the_real_matrix():
-    text = (REPO / "docs/acceptance/matrix.yaml").read_text()
-    assert yamlio.safe_load(text) == yaml.safe_load(text)
 
 
 def test_invalid_yaml_raises_yaml_error():

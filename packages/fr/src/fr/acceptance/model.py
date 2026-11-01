@@ -334,7 +334,7 @@ def parse_matrix(text: str) -> Matrix:
     """`load_matrix` over text already in memory — what the step-record engine
     validates a matrix edit against before it writes anything.
 
-    Identical text is parsed once (spec 2026-11-01-ci-speed R1); every call
+    Identical text is parsed once (spec 2026-11-01-ci-speed R2); every call
     returns its own deep copy, so no caller can change another's result (R2).
     Errors are raised by the cached function and never cached."""
     return _parse_matrix_cached(text).model_copy(deep=True)

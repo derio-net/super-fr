@@ -9,13 +9,11 @@ this change.
 
 from __future__ import annotations
 
-from typing import Any
-
 import yaml
 
 SafeLoader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
-def safe_load(text: str) -> Any:
+def safe_load(text: str) -> object:
     """`yaml.safe_load`, through libyaml's loader when available."""
     return yaml.load(text, Loader=SafeLoader)  # noqa: S506 - a safe loader

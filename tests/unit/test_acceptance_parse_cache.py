@@ -62,7 +62,7 @@ def test_results_are_equal_but_independent():
 
 def test_invalid_yaml_raises_every_time():
     for _ in range(2):
-        with pytest.raises(AcceptanceError):
+        with pytest.raises(AcceptanceError, match="matrix is not valid YAML"):
             parse_matrix("rows: [unclosed\n")
 
 

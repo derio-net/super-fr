@@ -1,2 +1,2 @@
 bump: patch
-summary: fr parses acceptance matrices with libyaml and reuses identical parses (CI and release run ~2-3x faster)
+summary: fr reads acceptance matrices with libyaml when available and reuses identical parses, so matrix-reading commands (acceptance, plan self-review, deliver, debt) run much faster on large matrices
