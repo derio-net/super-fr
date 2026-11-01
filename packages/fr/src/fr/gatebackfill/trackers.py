@@ -87,11 +87,15 @@ def run_for_head(
     return found[0] if len(found) == 1 else None
 
 
-def pass_command(gate: str, pr: int, *, run_id: str | None = None) -> str:
+def pass_command(
+    gate: str, pr: int, *, run_id: str | None = None, resolve_run: bool = False
+) -> str:
     """The `fr gate pass` that clears *gate* on PR *pr*; always carries `--notes`, and for
-    devops `--run <id>` when a cursor names the PR's head ref, else `--no-run-evidence`."""
+    devops `--run <id>` when a cursor names the PR's head ref, else `--no-run-evidence`.
+    *resolve_run* omits both: a batch PR's run cursor exists, `--no-run-evidence` would be
+    refused, and `fr gate pass` finds the run from the checkout by head ref itself."""
     cmd = f'fr gate pass --pr {pr} --gate {gate} --notes "{_PLACEHOLDER}"'
-    if gate == "devops":
+    if gate == "devops" and not resolve_run:
         cmd += f" --run {run_id}" if run_id else " --no-run-evidence"
     return cmd
 

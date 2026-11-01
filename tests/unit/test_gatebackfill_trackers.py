@@ -90,3 +90,9 @@ def test_discharge_command_per_key_kind(tmp_path: Path) -> None:
     assert got.startswith(
         "fr journal resolve --scope spec --slug some-slug --id owed-1 --state fixed"
     )
+
+
+def test_p4_r2_resolve_run_omits_both_run_flags_for_devops_only() -> None:
+    cmd = t.pass_command("devops", 3, resolve_run=True)
+    assert "--run" not in cmd and "--no-run-evidence" not in cmd and '--notes "' in cmd
+    assert t.pass_command("tester", 3, resolve_run=True) == t.pass_command("tester", 3)

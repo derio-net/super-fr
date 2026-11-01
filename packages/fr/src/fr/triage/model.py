@@ -620,6 +620,13 @@ class GatedUnread(_Strict):
     def describe(self) -> str:
         return f"gate-labelled PRs of {self.repo} not read: {self.why}"
 
+    def unsupported_backend(self) -> str | None:
+        """The backend named when the read is UNSUPPORTED there (glab, tea: a permanent
+        absence, not a transient failure); None for a real read failure. Reads the
+        `UnsupportedForgeOperation` message, which `collect` stores verbatim in `why`."""
+        m = re.search(r"is not supported on the (\S+) backend", self.why)
+        return m.group(1) if m else None
+
 
 class Facts(_Strict):
     """What `collect` read from the forge for one scope.

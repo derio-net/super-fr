@@ -187,7 +187,7 @@ class Need:
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     # | archive-conflict
     kind: str
-    ref: str  # the batch id, `PR #n`, or issue key the row names
+    ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
     href: str | None  # an https URL, or `#batch-<id>` on the page itself
 
@@ -247,6 +247,28 @@ def queue_needs(snap: Snapshot) -> list[Need]:
                     Need("enqueue-refused", entry.batch.id,
                          f"PR #{live.number} cannot be put in the merge queue{why}", entry.pr.url)
                 )  # fmt: skip
+    return out
+
+
+def gated_unread_needs(facts: Facts) -> list[Need]:
+    """One `gated-unread` Need per repo whose gate-labelled merged PRs could not be read
+    (gate-backfill R13); a backend that cannot list PRs by label at all (glab, tea) is a
+    permanent absence, so it folds into ONE Need per backend naming the repos it covers.
+    The board's notes print these same texts, so an unread repo never looks like an empty lane."""
+    out: list[Need] = []
+    unsupported: dict[str, list[str]] = {}
+    for u in facts.gated_unread:
+        if (backend := u.unsupported_backend()) is not None:
+            unsupported.setdefault(backend, []).append(u.repo)  # permanent: one Need a backend
+        else:
+            out.append(Need("gated-unread", u.repo, u.describe(), None))
+    for backend, repos in unsupported.items():
+        n = len(repos)
+        out.append(
+            Need("gated-unread", backend,
+                 f"gate-labelled PRs not read: this forge ({backend}) cannot list PRs by label "
+                 f"({n} repo{'s' if n != 1 else ''}: {', '.join(sorted(repos))})", None)
+        )  # fmt: skip
     return out
 
 
@@ -414,9 +436,11 @@ def needs_you(
     for g in unlisted_gated_prs(judgements.batches, facts, held_stops):
         placed = gated_pr_lane(g)
         if placed is not None:
-            out.append(Need(placed.lane, f"PR #{g.number}", f"{g.repo}: {placed.reason}", g.url))
-    for u in facts.gated_unread:
-        out.append(Need("gated-unread", u.repo, u.describe(), None))
+            out.append(
+                Need(placed.lane, f"{g.repo}#{g.number}", f"{g.repo} PR #{g.number}: "
+                     f"{placed.reason}", g.url)
+            )  # fmt: skip
+    out.extend(gated_unread_needs(facts))
 
     for s in stale_dispatches(facts):
         out.append(

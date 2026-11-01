@@ -60,25 +60,27 @@ def lane_of(batch: Batch, facts: Facts, stop: MergeStop | None = None) -> LaneVe
     if stage in LANDED and closeout_event(batch) is None:
         ledger = fact_ledgers([batch], facts, {batch.id: stage}).get(batch.id)
         if ledger is not None and pr is not None:
-            return gated_pr_lane(pr)  # the ledger is this very PR's labels
+            return gated_pr_lane(pr, in_batch=True)  # the ledger is this very PR's labels
     return None
 
 
-def gated_pr_lane(pr: PullRequest) -> LaneVerdict | None:
+def gated_pr_lane(pr: PullRequest, *, in_batch: bool = False) -> LaneVerdict | None:
     """The lane a MERGED PR's held post-merge gate puts it in: Tester first, else DevOps;
     None when no gate is held (none labelled, or each passed) or its labels were never
     read. The ONE held-gate rule: `lane_of`'s landed batches and the board's gate-labelled
     PRs outside batches (gate-backfill R13) both ask it.
 
     The reason carries `trackers.pass_command`, which names `--notes`; for devops it
-    names `--no-run-evidence`, as the board has no checkout to find the run in."""
+    names `--no-run-evidence`, as the board has no checkout to find the run in. A BATCH PR
+    (*in_batch*) has a run cursor naming its branch, which refuses that escape, so its
+    devops command names neither flag and `fr gate pass` resolves the run itself."""
     held = held_gates(pr.labels or [])
     gates = [g for g in ("tester", "devops") if g in held]
     if not gates:
         return None
     owed = "; ".join(
-        f"gate:{g} {'walk its gated rows, or ' if g == 'tester' else ''}"
-        f"`{pass_command(g, pr.number)}`"
+        f"gate:{g} ({'walk its gated rows, or ' if g == 'tester' else ''}"
+        f"`{pass_command(g, pr.number, resolve_run=in_batch)}`)"
         for g in gates
     )
     lane: Lane = "needs-tester" if gates[0] == "tester" else "needs-devops"

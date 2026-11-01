@@ -311,9 +311,9 @@ def test_gated_pr_lane_is_tester_first_then_devops_then_none() -> None:
 def test_a_gate_labelled_pr_outside_every_batch_is_one_need_with_the_pass_command() -> None:
     f, jd = _only_gated(_gated(30, ["gate:devops"]))
     (need,) = needs_you(f, jd)
-    assert (need.kind, need.ref) == ("needs-devops", "PR #30")
+    assert (need.kind, need.ref) == ("needs-devops", "example-org/widgets#30")
     assert need.href == "https://github.com/example-org/widgets/pull/30"
-    assert "merged, held by gate:devops" in need.text
+    assert "merged, held by gate:devops (`fr gate pass" in need.text
     assert 'fr gate pass --pr 30 --gate devops --notes "' in need.text
     assert "--no-run-evidence" in need.text
 
@@ -341,7 +341,7 @@ def test_a_closed_out_batchs_pr_is_listed_through_gated_prs() -> None:
     assert not [n for n in needs_you(f, jd) if n.ref == "a" and n.kind in LANES]
     f = _with_gated(f, _gated(10, ["gate:tester"]))
     (need,) = [n for n in needs_you(f, jd) if n.kind in LANES]
-    assert (need.kind, need.ref) == ("needs-tester", "PR #10")
+    assert (need.kind, need.ref) == ("needs-tester", "example-org/widgets#10")
     assert [g.number for g in build_board(f, jd, {}).column("needs-tester").gated] == [10]
 
 
@@ -377,4 +377,82 @@ def test_the_rendered_board_shows_a_gated_pr_card() -> None:
         refresh=30,
         notes=[],
     )
-    assert "PR #30" in page and "merged, held by gate:tester" in page
+    assert "PR #30" in page and "merged, held by gate:tester (walk its gated rows" in page
+
+
+# ------------------------------------------------ review fixes p4-r1..p4-r5
+
+
+def test_p4_r2_a_batch_card_devops_command_names_neither_run_flag() -> None:
+    f, jd = _merged(["gate:devops"])
+    verdict = lane_of(jd.batches[0], f)
+    assert verdict is not None and verdict.lane == "needs-devops"
+    assert "fr gate pass --pr 10 --gate devops" in verdict.reason
+    assert "--no-run-evidence" not in verdict.reason and "--run" not in verdict.reason
+    # outside a batch the board has no run to name, so the escape stays
+    f2, jd2 = _only_gated(_gated(30, ["gate:devops"]))
+    (need,) = needs_you(f2, jd2)
+    assert "--no-run-evidence" in need.text
+
+
+def test_p4_r3_the_reason_groups_each_gate_with_its_command() -> None:
+    from fr.triage.lanes import gated_pr_lane
+
+    both = gated_pr_lane(_gated_pr_of(1, ["gate:tester", "gate:devops"]))
+    assert both is not None
+    assert both.reason.startswith("merged, held by gate:tester (walk its gated rows, or `fr gate")
+    assert "); gate:devops (`fr gate pass --pr 1 --gate devops" in both.reason
+    assert both.reason.endswith("`)")
+
+
+def test_p4_r4_two_repos_pr_5_do_not_share_a_ref() -> None:
+    a = _gated(5, ["gate:tester"])
+    b = {**_gated(5, ["gate:tester"]), "repo": "example-org/gadgets"}
+    f, jd = _only_gated(a, b)
+    refs = sorted(n.ref for n in needs_you(f, jd) if n.kind == "needs-tester")
+    assert refs == ["example-org/gadgets#5", "example-org/widgets#5"]
+
+
+def _unsupported(repo: str, backend: str = "glab") -> dict[str, str]:
+    return {"repo": repo, "why": f"`list_merged_prs_by_label` is not supported on the {backend} "
+            "backend yet (tracked in #611)"}  # fmt: skip
+
+
+def test_p4_r5_unsupported_reads_fold_into_one_need_a_backend() -> None:
+    f, jd = _only_gated(
+        unread=[
+            _unsupported("o/a"),
+            _unsupported("o/b"),
+            _unsupported("o/c"),
+            {"repo": "o/d", "why": "HTTP 502"},
+        ]  # fmt: skip
+    )
+    needs = [n for n in needs_you(f, jd) if n.kind == "gated-unread"]
+    assert [n.ref for n in needs] == ["o/d", "glab"]
+    assert needs[0].text == "gate-labelled PRs of o/d not read: HTTP 502"
+    assert needs[1].text == (
+        "gate-labelled PRs not read: this forge (glab) cannot list PRs by label "
+        "(3 repos: o/a, o/b, o/c)"
+    )
+
+
+def test_p4_r1_the_board_page_shows_unread_repos_and_gated_truncations() -> None:
+    from datetime import UTC, datetime
+
+    from fr.commands.triage_kanban_cmd import gated_notes
+    from fr.triage.kanban_render import render_board
+    from fr.triage.model import Truncation
+
+    f, jd = _only_gated(unread=[{"repo": "example-org/widgets", "why": "HTTP 502"}])
+    doc = f.model_dump(by_alias=True)
+    doc["warnings"] = [Truncation(source="gated-prs", target="example-org/widgets", limit=30)]
+    f = type(f).model_validate(doc)
+    page = render_board(
+        build_board(f, jd, {}),
+        scope_args=["--repo", "example-org/widgets"],
+        rendered_at=datetime(2026, 10, 5, tzinfo=UTC),
+        refresh=30,
+        notes=gated_notes(f),
+    )
+    assert "gate-labelled PRs of example-org/widgets not read: HTTP 502" in page
+    assert "gate-labelled merged PR list for example-org/widgets returned exactly its limit" in page
