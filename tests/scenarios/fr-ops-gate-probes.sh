@@ -257,7 +257,7 @@ ops:
     summary: converge
     phase: post-merge
     ready: 'true'
-    check: 'test -f "$MARKS/good" && { echo checking the stack; echo converged 3 of 3; }'
+    check: 'test -f "$MARKS/good" && { echo checking the stack; echo "{\"token\": \"from-the-server\"}"; echo converged 3 of 3; }'
     apply: 'touch "$MARKS/good"'
   - id: bad
     summary: no drift
@@ -299,6 +299,12 @@ expect_grep 'stage 4 \(post-merge ops\): done' "$OUT" "stage 4 closes the post-m
 expect_grep 'stage 5 \(devops steps\): done' "$OUT" "stage 5 completes"
 refuse_grep 'ASK Test Plan step 1' "$OUT" "the passing pointed step was asked about"
 expect_grep 'converged 3 of 3' "$OUT" "the probe's output is shown"
+# R8/R9 end to end: the committed `ran` evidence is the probe's status lines, never its
+# body line (review p2-r1, p2-r3), on whatever the ops workspace pushed.
+COMMITTED="$(git --git-dir "$ORIGIN" log --all -p 2>/dev/null)"
+expect_grep 'good: check passed — checking the stack; converged 3 of 3' "$COMMITTED" "the probe's evidence is committed as ran"
+EVIDENCE="$(printf '%s\n' "$COMMITTED" | grep -E '^\+.*check passed — ' || true)"
+refuse_grep 'from-the-server' "$EVIDENCE" "a body line the probe printed was committed as evidence"
 expect_grep "Not understood: 'ran'" "$OUT" "a bare keyword is re-prompted"
 expect_grep 'ASK Test Plan step 2' "$OUT" "the unpointed step is asked"
 expect_grep 'drift found' "$OUT" "the failing probe's reason is shown"

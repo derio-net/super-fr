@@ -109,9 +109,13 @@ def clip_output(out: str, secrets: Iterable[str]) -> str:
 
 
 def evidence_lines(out: str, secrets: Iterable[str]) -> str:
-    """The recordable evidence: the last `EVIDENCE_LINES` non-blank lines of `out`,
-    masked, whitespace-collapsed per line, joined with `; ` and clipped to
-    `EVIDENCE_MAX` characters. The only part of a probe's output ever committed."""
-    kept = [line for line in mask(out, secrets).splitlines() if line.strip()]
-    text = "; ".join(" ".join(line.split()) for line in kept[-EVIDENCE_LINES:])
-    return text[:EVIDENCE_MAX]
+    """The recordable evidence: the last `EVIDENCE_LINES` status lines of `out`, each
+    through the reason sanitiser's own rules (secrets masked, whitespace collapsed, a
+    body-shaped or over-`OUTPUT_LINE_MAX` line dropped — review p2-r1, p2-r2), joined
+    with `; ` and clipped to `EVIDENCE_MAX` characters. The only part of a probe's
+    output ever committed, so a JSON body or a token a server printed never is; `""`
+    when no status line is left (the caller then records "no output")."""
+    secrets = list(secrets)
+    kept = [" ".join(mask(line, secrets).split()) for line in out.splitlines()]
+    kept = [line for line in kept if line and not looks_like_a_body(line, OUTPUT_LINE_MAX)]
+    return "; ".join(kept[-EVIDENCE_LINES:])[:EVIDENCE_MAX]

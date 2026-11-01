@@ -112,7 +112,24 @@ def test_clip_output_keeps_the_last_40_lines_each_at_most_200_chars() -> None:
 
 def test_evidence_is_the_last_three_non_blank_lines_within_300_chars() -> None:
     assert evidence_lines("a\n\nb\nc\n\nd\n", ()) == "b; c; d"
-    assert len(evidence_lines("z" * 1000, ())) == 300
+    assert len(evidence_lines("\n".join(["y" * 150] * 3), ())) == 300
+    assert evidence_lines("z" * 1000, ()) == ""  # one over-long line is a body: dropped
+
+
+def test_evidence_never_records_a_body_shaped_line() -> None:
+    """review p2-r1: committed evidence takes the reason sanitiser's body rule."""
+    body = '{"user": "someone@example.invalid", "token": "issued-by-the-server"}'
+    assert evidence_lines(f"checking\n{body}\nconverged 3 of 3\n", ()) == (
+        "checking; converged 3 of 3"
+    )
+    assert evidence_lines(f"{body}\n[1, 2, 3]\n", ()) == ""
+    assert "issued-by-the-server" not in evidence_lines(f"ok\n{body}", ())
+
+
+def test_evidence_lines_respect_the_output_line_bound() -> None:
+    """review p2-r2: evidence is drawn from the bounded output lines, never a longer one."""
+    assert evidence_lines("x" * 201 + "\nshort", ()) == "short"
+    assert evidence_lines("x" * 200, ()) == "x" * 200
 
 
 def test_output_and_evidence_mask_secret_values() -> None:

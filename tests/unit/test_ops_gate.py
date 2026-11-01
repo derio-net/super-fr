@@ -853,6 +853,7 @@ def test_a_non_matching_answer_is_reprompted_with_an_echo(ops_root: Path, bad: s
 def test_three_non_matches_in_a_row_fail_the_stage_with_the_echo(ops_root: Path) -> None:
     result, prompt, tree = _run5(ops_root, ["rancid", "ran", "na-ive"])
     assert result.failed == 5 and "'na-ive'" in result.why and len(prompt.asked) == 3
+    assert "`ran <evidence>`" in result.why  # review p2-r3: the grammar is echoed too
     assert _outcome_args(tree) == []
 
 
@@ -888,6 +889,52 @@ def test_a_passing_probe_records_ran_with_its_evidence_and_asks_nothing(ops_root
     assert args[args.index("--ran") :][:3] == ["--ran", "--evidence", "post: check passed — a; b"]
     trusts = [c for c in tree.calls if c[0] == "fr" and c[1][0][:2] == ["ops", "trust"]]
     assert len(trusts) == 1 and any("a\nb" in line for line in said)
+
+
+def test_trust_is_granted_before_the_first_probe_runs(ops_root: Path) -> None:
+    """review p2-r3: R8's `gate.trust(tree)` precedes the first `fr ops status <id>`."""
+    order: list[str] = []
+    done = [_row("post", "DONE", "checked", evidence="ok")]
+    _point(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, said = _gate(ops_root, up=True)
+    host.by_id["post"] = [(0, done)]
+    real_trust, real_fr = gate.trust, host.fr
+
+    def trust(t: Any) -> None:
+        order.append("trust")
+        real_trust(t)
+
+    def fr(args: Any, *, terminal: bool = False) -> tuple[int, str]:
+        if "status" in list(args):
+            order.append("status")
+        return real_fr(args, terminal=terminal)
+
+    gate.trust = trust  # type: ignore[method-assign]
+    host.fr = fr  # type: ignore[method-assign]
+    run(gate)
+    assert "status" in order and order.index("trust") < order.index("status")
+
+
+@pytest.mark.parametrize("state", ["UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"])
+def test_a_failing_state_offers_only_retry_na_owed(ops_root: Path, state: str) -> None:
+    """review p2-r3: every not-done state is treated as OPEN is (R8)."""
+    script = [(1, [_row("post", state, reason="why")])]
+    result, host, tree, prompt, _ = _probe(ops_root, script, ["ran x", "owed chase it"])
+    assert "`retry`" in prompt.asked[0] and "`ran <evidence>`" not in prompt.asked[0]
+    assert "Not understood: 'ran x'" in prompt.asked[1]
+    (args,) = _outcome_args(tree)
+    assert "--owed" in args
+
+
+@pytest.mark.parametrize("how", ["proof", "legacy", "attested"])
+def test_a_done_that_ran_no_check_asks_the_usual_question(ops_root: Path, how: str) -> None:
+    """review p2-r3: no probe ran, so fr records no `ran` on its own (R8)."""
+    script = [(0, [_row("post", "DONE", how)])]
+    result, host, tree, prompt, _ = _probe(ops_root, script, ["ran: walked it"])
+    assert len(prompt.asked) == 1 and "`ran <evidence>`" in prompt.asked[0]
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--evidence") + 1] == "walked it"
 
 
 def test_an_open_probe_offers_retry_na_owed_and_retry_reruns_it(ops_root: Path) -> None:
