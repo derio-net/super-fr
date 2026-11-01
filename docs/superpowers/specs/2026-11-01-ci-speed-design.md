@@ -319,5 +319,6 @@ Post-merge, operator-driven. Each step carries its cost.
 
 ## Implementation Plans
 
-| Plan | Status |
-|---|---|
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-11-01-ci-speed | `derio-net/super-fr` | `2026-11-01-ci-speed` | — |

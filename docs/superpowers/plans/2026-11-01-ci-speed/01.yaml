@@ -1,0 +1,125 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Fast acceptance-matrix parsing (fr.yamlio + memoized parse_matrix)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - matrix-parse-libyaml
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/yamlio.py
+  - packages/fr/src/fr/acceptance/model.py
+  - tests/unit/test_yamlio.py
+  - tests/unit/test_acceptance_parse_cache.py
+  - .changes/feat-ci-speed.yaml
+  - .github/workflows/ci.yml
+  estimate_lines: 180
+tasks:
+- number: 1
+  title: Smoke — the branch's CI is green on a trivial test
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      SMOKE: create tests/unit/test_yamlio.py with one trivial test
+      (`def test_smoke(): assert True`), commit it, push, and confirm the
+      draft PR's CI (https://github.com/derio-net/super-fr/pull/1276)
+      runs. Revert the measurement step in .github/workflows/ci.yml from
+      commit "ci: report --durations and keep each shard's junit" (the
+      junit upload added before the coverage upload broke
+      tests/unit/test_ci_python_floor.py::test_only_the_floor_leg_feeds_coverage);
+      keep `--durations=40`. Phase 2 rewrites this step properly.
+- number: 2
+  title: RED — fr.yamlio and parse_matrix behaviour
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_yamlio.py replace the smoke test with:
+      (a) `fr.yamlio.SafeLoader is yaml.CSafeLoader` when
+      `yaml.__with_libyaml__`, else `yaml.SafeLoader` (monkeypatch
+      `yaml.CSafeLoader` away and importlib.reload the module to cover
+      the fallback); (b) `fr.yamlio.safe_load(text)` equals
+      `yaml.safe_load(text)` for scalars, nested maps/lists, quoted
+      strings with ": ", empty text (None) and the repo's real
+      docs/acceptance/matrix.yaml; (c) `safe_load` raises
+      `yaml.YAMLError` on invalid YAML.
+  - id: P1.T2.S2
+    text: |-
+      RED: tests/unit/test_acceptance_parse_cache.py:
+      (a) parse_matrix(text) twice parses once — monkeypatch
+      `fr.yamlio.safe_load` with a counting wrapper and clear the cache
+      first (expose `fr.acceptance.model._parse_matrix_cached.cache_clear`);
+      (b) the two results are equal but not the same object, and
+      mutating `result1.rows[0].levels` (a dict item) does not change
+      `result2` or a third parse (R2: no caller can change another's
+      result); (c) invalid YAML raises AcceptanceError on BOTH calls
+      (errors are not cached); (d) a duplicate-row-id matrix raises on
+      both calls; (e) parse_matrix of the real matrix.yaml equals the
+      Matrix built from `yaml.safe_load` + `Matrix.model_validate`.
+      Run: `bash ~/.cache/fr/coord/testslot.sh -- uv run pytest -q --no-cov tests/unit/test_yamlio.py tests/unit/test_acceptance_parse_cache.py` → fails (module missing).
+- number: 3
+  title: GREEN — implement
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/yamlio.py:
+      `SafeLoader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)` and
+      `def safe_load(text: str) -> Any: return yaml.load(text, Loader=SafeLoader)`,
+      with a module docstring naming spec 2026-11-01-ci-speed §3.A and the
+      follow-up standardization issue.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/acceptance/model.py move parse_matrix's
+      body into `@functools.lru_cache(maxsize=8) def _parse_matrix_cached(text: str) -> Matrix`
+      using `fr.yamlio.safe_load` (keep the `yaml.YAMLError` →
+      AcceptanceError mapping and the duplicate-id check); `parse_matrix`
+      returns `_parse_matrix_cached(text).model_copy(deep=True)`. Run the
+      two new test files plus tests/unit/test_acceptance*.py and
+      tests/unit/test_dispatch_lint_corpus.py through testslot; all
+      green. Record the corpus test's local duration
+      (`--durations=5`) in the step note.
+- number: 4
+  title: REFACTOR + change fragment
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      REFACTOR: dedupe the O(n²) `ids.count(i)` duplicate scan in
+      _parse_matrix_cached with a collections.Counter (same message,
+      sorted ids). Add `.changes/feat-ci-speed.yaml`:
+      `bump: patch`, `summary: fr parses acceptance matrices with libyaml
+      and reuses identical parses (CI and release run ~2-3x faster)`.
+      `uv run ruff format packages/ tests/ && uv run ruff check packages/ tests/`
+      and `uv run mypy packages/fr/src`. Commit, push; evidence is
+      `tests: ci` on the pushed head.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

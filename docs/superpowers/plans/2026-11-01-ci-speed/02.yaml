@@ -1,0 +1,187 @@
+schema_version: 2
+phase:
+  number: 2
+  title: CI — CI-derived shard weights, split-check, 6 shards, coverage on 3.14, watcher
+    fix
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - ci-shards-complete
+  - ci-coverage-newest-leg
+  - ci-budget-watcher-files-breach
+  tier: standard
+  files:
+  - .github/workflows/ci.yml
+  - .github/ci-budget.yaml
+  - scripts/split_check.py
+  - scripts/ci_budget.py
+  - tests/unit/test_split_check.py
+  - tests/unit/test_ci_split_workflow.py
+  - tests/unit/test_ci_python_floor.py
+  - tests/unit/test_ci_budget.py
+  - tests/unit/test_release_workflow.py
+  - tests/integration/test_split_durations_xdist.py
+  - .test_durations
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: RED/GREEN — scripts/split_check.py (pure check + merge)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_split_check.py for scripts/split_check.py
+      (import it the way tests/unit/test_ci_budget.py imports
+      scripts/ci_budget.py): `parse_collected(stdout) -> list[str]` keeps
+      only lines containing "::" (drops "N tests collected in Xs" and
+      blank lines); `check(collected, shard_files: dict[str, dict[str,float]])
+      -> list[str]` returns problems naming each missing id, extra id and
+      id present in two shards (with both shard names), and [] when the
+      multiset equals the collected set; `merge(shard_files) -> dict`
+      unions them (sorted keys). CLI: `split_check.py check --collected
+      <txt> <shard.json>...` exits 1 printing problems, 0 printing
+      "split-check: N tests, K shards, complete"; `split_check.py merge
+      -o <out> <shard.json>...`.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement scripts/split_check.py (stdlib only, runnable as
+      `uv run --no-project python scripts/split_check.py`). Run the test
+      file via testslot.
+- number: 2
+  title: Verify pytest-split's writer under xdist (controller file)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Check that with `-n 2 --splits 2 --group 1 --durations-path x.json
+      --store-durations --clean-durations`, the file at x.json after the
+      run holds exactly the tests the controller reported for that group
+      (workers also register PytestSplitCachePlugin, pytest_split/plugin.py:110-113).
+      Pin it as an integration test (tests/integration/test_split_durations_xdist.py)
+      that runs pytest in a subprocess on a tiny generated test package
+      in tmp_path (6 tests, 2 groups) and asserts the union of both
+      groups' files equals the 6 ids and their intersection is empty.
+      If a worker overwrite is observed, use a per-process path for
+      workers (`-p` hook in a tiny conftest plugin is NOT allowed — the
+      base tests/conftest.py belongs to a parallel run) and record the
+      finding.
+- number: 3
+  title: RED — workflow-shape tests for the new CI layout
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_ci_split_workflow.py loading
+      .github/workflows/ci.yml with yaml: `plan` job exists with
+      actions/cache/restore keyed `test-durations-`, the
+      .test_durations fallback, an upload named `durations-plan`, and
+      timeout-minutes; `test` needs `plan`, matrix shard == [1..6] and
+      python == ["3.11","3.14"], timeout-minutes 20, its pytest step
+      contains `--splits 6`, `--splitting-algorithm least_duration`,
+      `--store-durations`, `--clean-durations`, `--durations-path
+      shard-durations.json`, and is preceded by a step copying
+      durations-plan.json to shard-durations.json; a `collect` job per
+      python using `--collect-only -q` with `-o addopts="--strict-markers"`
+      and no `--splits`; `split-check` needs [test, collect] and saves
+      the cache only under `github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'` from the 3.14 leg's files;
+      `ci-ok.needs` contains plan, collect, split-check.
+  - id: P2.T3.S2
+    text: |-
+      RED: rewrite tests/unit/test_ci_python_floor.py::test_only_the_floor_leg_feeds_coverage
+      as `test_only_the_newest_leg_feeds_coverage`: select the upload step
+      whose `with.name` starts `coverage-shard-`, assert its `if` names
+      the newest matrix python (the max of the matrix list), and assert
+      the pytest step runs `--no-cov` for the 3.11 leg and `--cov` for
+      3.14 (expressed through a matrix-conditional the test can read,
+      e.g. an `include:` entry carrying `cov_args`). Keep every other
+      test in that file passing.
+- number: 4
+  title: GREEN — rewrite ci.yml
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      GREEN: rewrite the `test` job and add `plan`, `collect`,
+      `split-check` per spec §3.B/§3.C exactly (shard command in §3.B;
+      3.14 leg `--cov --cov-report=` with COVERAGE_FILE and the
+      coverage-shard-N upload, 3.11 leg `--no-cov`); keep the failure()
+      junit_annotations step and `--junitxml`; drop the measurement
+      junit upload; keep `--durations=25`; each shard uploads
+      `durations-py<v>-shard-<n>` from shard-durations.json with
+      `if: always()`. `split-check` downloads both, runs
+      `split_check.py check` per leg, and on main pushes merges 3.14's
+      and runs actions/cache/save with key `test-durations-${{ github.run_id }}`.
+      Add plan/collect/split-check to ci-ok.needs. Every new job gets
+      timeout-minutes (plan 5, collect 10, split-check 5, test 20).
+      Run the workflow-shape tests via testslot; green.
+- number: 5
+  title: Watcher fix and budgets
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: tests/unit/test_ci_budget.py — a case that drives
+      `GhAdapter.fetch_workflow_text` through its `_run` seam
+      (scripts/ci_budget.py:485) and asserts the argv contains "-X" "GET"
+      before the `-f ref=<sha>` field; a case that `.github/ci-budget.yaml`
+      gives ci.yml 360 and release.yml 600.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: add `-X GET` to fetch_workflow_text's `gh api` argv; set
+      the two budgets in .github/ci-budget.yaml with a comment pointing
+      at spec 2026-11-01-ci-speed §3.E, and move
+      tests/unit/test_release_workflow.py's budget pin (`>= 900` at :138)
+      to `>= 600` with the rationale comment (phase 3 leaves it).
+- number: 6
+  title: Push, measure, refresh the committed fallback
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Commit, push, wait for the PR's CI. Download the run's
+      `durations-py3.14-shard-*` artifacts (`gh run download <id> -p
+      'durations-py3.14-*'`), merge them with `split_check.py merge -o
+      .test_durations`, and commit the refreshed fallback. Record in the
+      step note: per-job wall clock of the run (gh api
+      repos/derio-net/super-fr/actions/runs/<id>/jobs), the split-check
+      line for each leg, and the corpus test's CI duration from
+      --durations. Push again; evidence `tests: ci`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
