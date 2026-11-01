@@ -236,28 +236,56 @@ def test_glab_create_draft_mr_and_find_by_source_branch(monkeypatch: pytest.Monk
 # ------------------------------------------------------------------ tea
 
 
-# Shape mirror of `tea issues list --fields index,title,body,labels,author --output json`
-# (not captured live: no Gitea host here). Values are fictional; the shape is the
-# documented one: `index` for the number, `labels` a comma string, `author` a login.
+# Gitea's API Issue (`/repos/{o}/{r}/issues?type=issues`) — the shape captured
+# live in tests/fixtures/gitea/issues_all.json: an int `number`, label OBJECTS,
+# `user.login`. Not `tea issues list`'s rendering, which stringifies the index
+# and space-joins labels. Values are fictional; the `--web` number is a hostile
+# value the adapter must skip, never `int()`.
 TEA_LIST_PAGE_1 = [
-    {"index": 3, "title": "old", "body": "fr-technical-debt", "labels": "a, b", "author": "bot"},
-    {"index": "--web", "title": "x", "body": "fr-technical-debt", "labels": "", "author": "m"},
+    {
+        "number": 3,
+        "title": "old",
+        "body": "fr-technical-debt",
+        "labels": [{"name": "a"}, {"name": "b"}],
+        "user": {"login": "bot"},
+    },
+    {"number": "--web", "title": "x", "body": "fr-technical-debt", "labels": [], "user": {}},
 ]
+
+
+def _tea_api(monkeypatch: pytest.MonkeyPatch, answer: Any) -> list[str]:
+    """Answer `tea api -i <path>` with *answer(path)* under a 200 status line,
+    as tea does (exit 0 whatever the status). Returns the paths asked."""
+    import subprocess
+
+    paths: list[str] = []
+
+    def run(argv: list[str], **_kw: Any) -> subprocess.CompletedProcess[str]:
+        assert argv[:3] == ["tea", "api", "-i"], argv
+        paths.append(argv[3])
+        return subprocess.CompletedProcess(
+            argv, 0, stdout=json.dumps(answer(argv[3])), stderr="HTTP/1.1 200 OK\r\n"
+        )
+
+    monkeypatch.setattr(_tea, "run_cli", run)
+    return paths
 
 
 def test_tea_edit_close_and_list_pages_until_an_empty_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pages = {"1": TEA_LIST_PAGE_1, "2": [{"index": 9, "title": "t", "body": "z", "author": "m"}]}
+    pages = {
+        "1": TEA_LIST_PAGE_1,
+        "2": [{"number": 9, "title": "t", "body": "z", "user": {"login": "m"}}],
+    }
     calls: list[list[str]] = []
 
     def run(args: list[str], **_kw: Any) -> str:
         calls.append(list(args))
-        if args[:2] == ["issues", "list"]:
-            return json.dumps(pages.get(args[args.index("--page") + 1], []))
         return ""
 
     monkeypatch.setattr(_tea, "_run_tea", run)
+    paths = _tea_api(monkeypatch, lambda p: pages.get(p.rsplit("page=", 1)[1], []))
     c = RealTeaClient()
     c.edit_issue(REPO, 7, title="T", body="B")
     c.close_issue(REPO, 7, "done")
@@ -265,8 +293,9 @@ def test_tea_edit_close_and_list_pages_until_an_empty_page(
     assert calls[0] == ["issues", "edit", "7", "--repo", REPO, "--title", "T", "--description", "B"]
     assert calls[1] == ["comments", "add", "7", "done", "--repo", REPO]
     assert calls[2] == ["issues", "close", "7", "--repo", REPO]
-    pages_asked = [c_[c_.index("--page") + 1] for c_ in calls if c_[:2] == ["issues", "list"]]
-    assert pages_asked == ["1", "2", "3"]
+    assert paths == [
+        f"/repos/{REPO}/issues?state=open&type=issues&limit=50&page={n}" for n in (1, 2, 3)
+    ]
     assert got == [
         {
             "number": 3,
@@ -279,11 +308,7 @@ def test_tea_edit_close_and_list_pages_until_an_empty_page(
 
 
 def test_tea_listing_that_reaches_the_cap_is_partial(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        _tea,
-        "_run_tea",
-        lambda args, **_kw: json.dumps([{"index": 1, "title": "t", "body": "z", "author": "m"}]),
-    )
+    _tea_api(monkeypatch, lambda p: [{"number": 1, "title": "t", "body": "z", "user": {}}])
     with pytest.raises(ListingCapped):
         RealTeaClient().list_open_issues_with_body(REPO, search=MARKERS, limit=3)
 
@@ -338,8 +363,9 @@ def test_glab_and_tea_name_the_account_their_credentials_act_as(
 ) -> None:
     monkeypatch.setattr(_glab, "_run_glab", Recorder({("api",): json.dumps({"username": "bot"})}))
     assert RealGlabClient().authenticated_login() == "bot"
-    monkeypatch.setattr(_tea, "_run_tea", Recorder({("api",): json.dumps({"login": "bot"})}))
+    paths = _tea_api(monkeypatch, lambda p: {"login": "bot"})
     assert RealTeaClient().authenticated_login() == "bot"
+    assert paths == ["/user"]
 
 
 # ---------------------------------------- through the real glab argv gate

@@ -2,10 +2,10 @@
 
 Thin wrappers around ``tea`` commands, mirroring `fr.gh`'s shape (same
 function names/signatures where the operation maps 1:1). Functions raise
-TeaError on failure. No direct Gitea API usage — we leverage tea's
-existing auth (`tea login add`), same architecture as `fr.gh`/`fr.glab`
-(see docs/superpowers/specs/
-2026-07-09-multi-backend-git-host-adapters-design.md).
+TeaError on failure. Everything goes through `tea` — writes through its
+subcommands, reads through `tea api` — so tea's existing auth (`tea login
+add`) is the only credential, same architecture as `fr.gh`/`fr.glab` (see
+docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md).
 
 Concrete differences from `gh`/`glab`, verified directly against the
 installed `tea` binary's `--help` output and Gitea's live swagger spec
@@ -21,16 +21,29 @@ installed `tea` binary's `--help` output and Gitea's live swagger spec
   (`CreateLabelOption.color` example `"#00aabb"`) — the same as GitLab,
   NOT bare hex like GitHub as originally assumed; corrected after
   checking the live swagger spec instead of guessing by analogy.
+
+Reads go through `api_json` (`tea api -i`), never tea's `--fields` /
+`--output json` renderings. Found live against tea 0.16.0 (Phase 9 walk of
+the multi-backend plan; fixtures in `tests/fixtures/gitea/`): those
+renderings are tea's own shape, not Gitea's — `pulls list` has no `merged`
+field and renders `head` as a bare string and state as open|closed|merged,
+`pulls <n>` says `hasMerged` and drops `draft`, `repos` lists repos (no
+`default_branch`), and `issues list` renders `index` as a string and
+`labels` space-separated. And `tea api` exits 0 whatever the HTTP status,
+so the `-i` status line on stderr is the only error signal.
 """
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
+from fr.ghclient import CommandRunner, run_cli
 from fr.labels import LabelDef
 
 T = TypeVar("T")
@@ -62,6 +75,79 @@ def _run_tea(args: list[str], *, cwd: Path | None = None) -> str:
         msg = exc.stderr.strip() if exc.stderr else f"tea exited with code {exc.returncode}"
         raise TeaError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
     return result.stdout.strip()
+
+
+_STATUS_LINE = re.compile(r"^HTTP/\S+\s+(\d{3})\b")
+_LOCATION = re.compile(r"^location:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+
+
+def api_result(result: subprocess.CompletedProcess[str]) -> Any:
+    """Gitea's JSON body from one `tea api -i` run, or TeaError.
+
+    Refuses a non-zero exit, a missing status line (`-i` was not passed, or
+    tea printed something else), any status outside 2xx, and a body that is
+    not JSON. A 3xx is almost always an SSO / forward-auth proxy in front of
+    the instance answering with its login page, so it is named as one."""
+    stderr = result.stderr or ""
+    if result.returncode != 0:
+        msg = stderr.strip() or f"tea exited with code {result.returncode}"
+        raise TeaError(msg, stderr=stderr, returncode=result.returncode)
+    first = stderr.lstrip().splitlines()[0] if stderr.strip() else ""
+    m = _STATUS_LINE.match(first)
+    if not m:
+        raise TeaError("`tea api -i` printed no HTTP status line", stderr=stderr)
+    status = int(m.group(1))
+    if 300 <= status < 400:
+        loc = _LOCATION.search(stderr)
+        where = f" to {loc.group(1)}" if loc else ""
+        raise TeaError(
+            f"HTTP {status}: the Gitea API redirected{where} — an SSO or forward-auth "
+            "proxy is likely in front of it; exempt its /api/ paths or use an internal URL",
+            stderr=stderr,
+        )
+    if not 200 <= status < 300:
+        detail = ""
+        try:
+            body = json.loads(result.stdout or "null")
+            if isinstance(body, dict) and body.get("message"):
+                detail = f": {body['message']}"
+        except json.JSONDecodeError:
+            pass
+        raise TeaError(f"HTTP {status}{detail}", stderr=stderr)
+    out = (result.stdout or "").strip()
+    try:
+        return json.loads(out) if out else None
+    except json.JSONDecodeError as exc:
+        raise TeaError(f"HTTP {status} with a body that is not JSON: {exc}", stderr=stderr) from exc
+
+
+def api_json(path: str, *, cwd: Path | None = None, run: CommandRunner | None = None) -> Any:
+    """GET one Gitea API endpoint through `tea api -i` — tea's auth, and its
+    `{owner}`/`{repo}` placeholders resolved from the checkout at *cwd*.
+
+    *run* is the caller's `CommandRunner` (the isolation lifecycle passes its
+    own, for its network env and timeout); `None` is `run_cli`."""
+    runner = run or run_cli
+    return api_result(runner(["tea", "api", "-i", path], cwd=cwd or Path.cwd()))
+
+
+def api_pages(path: str, *, max_items: int | None = None) -> list[Any]:
+    """Every item of a paginated list endpoint (*path* may carry a query).
+
+    Gitea clamps a page to its own maximum (50 by default) whatever `limit`
+    asks, so page until an empty page — a single page is a silent cap."""
+    items: list[Any] = []
+    sep = "&" if "?" in path else "?"
+    page = 1
+    while max_items is None or len(items) < max_items:
+        chunk = api_json(f"{path}{sep}limit=50&page={page}")
+        if not isinstance(chunk, list):
+            raise TeaError(f"{path}: expected a JSON list, got {type(chunk).__name__}")
+        if not chunk:
+            break
+        items.extend(chunk)
+        page += 1
+    return items if max_items is None else items[:max_items]
 
 
 def create_issue(
@@ -158,12 +244,11 @@ def ensure_label(
     color: str = "ededed",
     description: str = "",
 ) -> None:
-    """Create a label on the target repo.
+    """Create one label on the target repo, unconditionally.
 
-    Like glab, `tea labels create` has no documented idempotent-update
-    flag equivalent to `gh label create --force` — a pre-existing label
-    name is tolerated the same way as fr.glab.ensure_label (see that
-    module's docstring for the rationale).
+    Gitea ALLOWS two labels with the same name — a create never refuses
+    with "already exists" the way GitLab's does — so this alone does not
+    converge. `ensure_labels` is the idempotent entry point.
     """
     args = [
         "labels",
@@ -181,10 +266,21 @@ def ensure_label(
 
 
 def ensure_labels(*, repo: str, labels: list[LabelDef]) -> None:
-    """Ensure every label exists on the repo with the right color and
-    description. First failure propagates (mirrors `fr.gh.ensure_labels`)."""
+    """Ensure every label NAME exists on the repo, creating only the missing.
+
+    The existing names are read first, because Gitea accepts a duplicate
+    name and two `ensure_labels` calls would otherwise leave two labels
+    (and issues created after carrying both). Colour/description drift on
+    an existing label is tolerated, as `fr.glab.ensure_labels` tolerates it.
+    First failure propagates (mirrors `fr.gh.ensure_labels`)."""
+    existing = {
+        str(lbl.get("name")) for lbl in api_pages(f"/repos/{repo}/labels") if isinstance(lbl, dict)
+    }
     for ld in labels:
+        if ld.name in existing:
+            continue
         ensure_label(repo=repo, name=ld.name, color=ld.color, description=ld.description)
+        existing.add(ld.name)
 
 
 _TRANSIENT_PATTERNS = (

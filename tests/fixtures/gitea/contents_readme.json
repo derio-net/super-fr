@@ -1,0 +1,23 @@
+{
+  "_links": {
+    "git": "http://gitea.example.com:3000/api/v1/repos/walker/fr-walk-scratch/git/blobs/2a5eabf2efe05101d228cde3e4a1e50f7fec6497",
+    "html": "http://gitea.example.com:3000/walker/fr-walk-scratch/src/branch/main/README.md",
+    "self": "http://gitea.example.com:3000/api/v1/repos/walker/fr-walk-scratch/contents/README.md?ref=main"
+  },
+  "content": "IyBmci13YWxrLXNjcmF0Y2gKCg==",
+  "download_url": "http://gitea.example.com:3000/walker/fr-walk-scratch/raw/branch/main/README.md",
+  "encoding": "base64",
+  "git_url": "http://gitea.example.com:3000/api/v1/repos/walker/fr-walk-scratch/git/blobs/2a5eabf2efe05101d228cde3e4a1e50f7fec6497",
+  "html_url": "http://gitea.example.com:3000/walker/fr-walk-scratch/src/branch/main/README.md",
+  "last_author_date": "2026-11-01T08:24:47Z",
+  "last_commit_sha": "51d3946626c88e4e1dd7b4f38ba37b7f31947a21",
+  "last_committer_date": "2026-11-01T08:24:47Z",
+  "name": "README.md",
+  "path": "README.md",
+  "sha": "2a5eabf2efe05101d228cde3e4a1e50f7fec6497",
+  "size": 19,
+  "submodule_git_url": null,
+  "target": null,
+  "type": "file",
+  "url": "http://gitea.example.com:3000/api/v1/repos/walker/fr-walk-scratch/contents/README.md?ref=main"
+}

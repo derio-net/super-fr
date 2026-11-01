@@ -1,0 +1,7 @@
+{
+  "errors": [
+    "object does not exist [id: , rel_path: nope]"
+  ],
+  "message": "GetContentsOrList",
+  "url": "http://gitea.example.com:3000/api/swagger"
+}

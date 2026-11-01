@@ -34,7 +34,10 @@ class _Scripted:
         self, argv: list[str], *, cwd: Path, env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append((list(argv), cwd))
-        return subprocess.CompletedProcess(argv, self.rc, stdout=self.out, stderr="")
+        # `tea api -i` reports the HTTP status on stderr and exits 0 whatever it
+        # is (fr.tea.api_result); answer the way the real binary does.
+        err = "HTTP/1.1 200 OK\r\n" if argv[:3] == ["tea", "api", "-i"] and self.rc == 0 else ""
+        return subprocess.CompletedProcess(argv, self.rc, stdout=self.out, stderr=err)
 
 
 _CLIENTS: dict[str, Any] = {
@@ -54,7 +57,7 @@ _DEFAULT_BRANCH_ARGV = {
         ".defaultBranchRef.name",
     ],
     "gitlab": ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"],
-    "gitea": ["tea", "repos", "--fields", "default_branch", "--output", "json"],
+    "gitea": ["tea", "api", "-i", "/repos/{owner}/{repo}"],
 }
 
 _DEFAULT_BRANCH_OUT = {
@@ -67,8 +70,7 @@ _PR_ARGV = {
     "github": ["gh", "pr", "view", "feat/x", "--json", "state,url,mergedAt,updatedAt"],
     "gitlab": ["glab", "mr", "view", "feat/x", "--output", "json"],
     "gitea": [
-        "tea", "pulls", "list", "--state", "all",
-        "--fields", "state,merged,url,head,updated", "--output", "json",
+        "tea", "api", "-i", "/repos/{owner}/{repo}/pulls?state=all&sort=recentupdate&limit=50",
     ],
 }  # fmt: skip
 
@@ -83,12 +85,21 @@ def _pr_out(backend: str, native_state: str) -> str:
     if backend == "gitlab":
         merged_at = "2026-10-01T00:00:00Z" if native_state == "merged" else None
         return json.dumps({"state": native_state, "web_url": "u", "merged_at": merged_at})
-    merged: Any = "2026-10-01T00:00:00Z" if native_state == "merged" else False
+    # Gitea's API PullRequest (tests/fixtures/gitea/pulls_all.json), not tea's listing.
+    merged = native_state == "merged"
+    merged_at = "2026-10-01T00:00:00Z" if merged else None
     state = "closed" if native_state in ("closed", "merged") else "open"
     return json.dumps(
         [
-            {"state": "open", "merged": False, "url": "other", "head": {"label": "feat/y"}},
-            {"state": state, "merged": merged, "url": "u", "head": {"label": "feat/x"}},
+            {"state": "open", "merged": False, "html_url": "other", "head": {"ref": "feat/y"}},
+            {
+                "state": state,
+                "merged": merged,
+                "merged_at": merged_at,
+                "html_url": "u",
+                "head": {"ref": "feat/x"},
+                "updated_at": None,
+            },
         ]
     )
 
@@ -243,8 +254,8 @@ def test_gitlab_carries_updated_at(tmp_path: Path) -> None:
 
 def test_gitea_carries_updated(tmp_path: Path) -> None:
     out = json.dumps(
-        [{"state": "open", "merged": False, "url": "u", "head": {"label": "feat/x"},
-          "updated": "2026-10-03T00:00:00Z"}]
+        [{"state": "open", "merged": False, "html_url": "u", "head": {"ref": "feat/x"},
+          "updated_at": "2026-10-03T00:00:00Z"}]
     )  # fmt: skip
     pr = RealTeaClient().pr_for_branch("feat/x", cwd=tmp_path, run=_Scripted(out=out))
     assert pr is not None and pr["updatedAt"] == "2026-10-03T00:00:00Z"

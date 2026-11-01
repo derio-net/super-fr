@@ -1,0 +1,2 @@
+bump: patch
+summary: "Gitea adapter: reads go through `tea api` with HTTP-status checks, so default-branch and branch-to-PR lookups, merged-PR state, missing-file probes and issue listings work against a real Gitea; `ensure_labels` no longer duplicates labels."
