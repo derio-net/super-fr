@@ -15,3 +15,8 @@ Evidence: tests/unit/test_real_teaclient.py and test_forge_adapter_lookups.py fe
 ### h2 · hypothesis · H2: tea api exits 0 on an HTTP error, so check=True never fires
 
 Live: `tea api /repos/o/r/contents/nope.txt` prints the 404 error JSON and exits 0; with -i the status line (HTTP/1.1 404 Not Found) goes to stderr. Unit doubles modelled a 404 as a raised TeaError, so file_exists' safe direction was only ever tested against behaviour tea does not have.
+
+<!-- fr:journal kind=hypothesis scope=debug id=h3 created=2026-11-01T09:08:45+00:00 -->
+### h3 · hypothesis · H3: Gitea permits duplicate label names, so create-and-tolerate-ALREADY-EXISTS never converges
+
+Live: two ensure_labels calls left two labels named fr:walk with the same colour; the create succeeded both times (no ALREADY-EXISTS refusal for the GitLab-parity tolerance to catch). Issues created with --labels fr:walk then carry both.
