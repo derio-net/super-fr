@@ -443,3 +443,26 @@ def test_a_tracker_failure_never_reverses_the_pass(forge: Any) -> None:
     assert result.exit_code == 0, result.output
     assert "passed: PR #5 now carries gate:tester-passed" in result.output
     assert "rate limited" in result.output
+
+
+def test_the_retry_hint_is_a_valid_invocation(forge: Any) -> None:
+    """p3-r1: the printed `re-run ...` line carries --notes/--repo and parses as a real call."""
+    import shlex
+
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+
+    def boom(*a: Any, **k: Any) -> Any:
+        from tests.unit.fakes import FakeGhError
+
+        raise FakeGhError("rate limited")
+
+    fake.list_issues = boom  # type: ignore[method-assign]
+    first = _pass("--gate", "tester", "--yes")
+    (hint,) = [ln for ln in first.output.splitlines() if "to retry the close" in ln]
+    cmd = hint.split("`")[1]
+    argv = shlex.split(cmd)
+    assert argv[:2] == ["fr", "gate"] and "--notes" in argv and "--repo" in argv
+    del fake.list_issues  # the forge recovers
+    again = CliRunner().invoke(app, argv[1:])
+    assert "Missing option" not in again.output and again.exit_code != 2, again.output

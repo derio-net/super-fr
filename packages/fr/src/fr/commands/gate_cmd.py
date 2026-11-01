@@ -17,6 +17,8 @@ what this checkout recorded. It never runs a probe.
 
 from __future__ import annotations
 
+import shlex
+
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
@@ -266,7 +268,11 @@ def pass_command(
     report = close_gate_trackers(client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes)
     _echo_close(report)
     if yes and report.errors:
-        typer.echo(f"re-run `fr gate pass --pr {pr} --gate {gate} --yes` to retry the close")
+        again = f"fr gate pass --pr {pr} --gate {gate} --notes {shlex.quote(notes)}"
+        again += f" --repo {shlex.quote(repo)}"
+        if forge_host != "github.com":
+            again += f" --host {shlex.quote(forge_host)}"
+        typer.echo(f"re-run `{again} --yes` to retry the close")
     if left:  # p4-r9: no final while a post-merge gate still holds this PR
         typer.echo(f"{', '.join(f'gate:{g}' for g in left)} still holds PR #{pr}: no release yet")
     else:
