@@ -86,6 +86,9 @@ class FakeGhClient:
         self.required_names: dict[tuple[str, str], list[str]] = {}
         # OWNER/REPO -> visibility; a repo missing here cannot be read (GhError).
         self.visibility: dict[str, str] = {}
+        # (repo, sha) -> PRs `prs_for_commit` maps the commit to (gate-backfill R3).
+        self.commit_prs: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        self.commit_prs_error: Exception | None = None
 
     # ---- preload helpers (test setup) ----
 
@@ -357,6 +360,40 @@ class FakeGhClient:
             "body": p["body"],
             "labels": list(p.get("labels", [])),
         }
+
+    def prs_for_commit(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """`GET repos/{repo}/commits/{sha}/pulls`: what a test loaded into `commit_prs`;
+        a sha it never loaded maps to no PR. A test sets `commit_prs_error` to raise."""
+        self.calls.append(("prs_for_commit", {"repo": repo, "sha": sha}))
+        if self.commit_prs_error is not None:
+            raise self.commit_prs_error
+        return [dict(p) for p in self.commit_prs.get((repo, sha), [])]
+
+    def viewer_login(self) -> str:
+        return self.comment_author
+
+    def list_issues(
+        self,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Any = None,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(("list_issues", {"repo": repo, "state": state}))
+        want = {s.upper()} if state != "all" else {"OPEN", "CLOSED"}
+        return [
+            {
+                "number": n,
+                "title": self.issue_titles.get((r, n), ""),
+                "body": i.body,
+                "labels": [{"name": x} for x in sorted(i.labels)],
+                "author": {"login": self.issue_authors.get((r, n), self.comment_author)},
+                "state": i.state,
+            }
+            for (r, n), i in sorted(self.issues.items())
+            if r == repo and i.state in want and set(labels or ()) <= i.labels
+        ][:limit]
 
     def pr_ready(self, repo: str, number: int) -> None:
         self.calls.append(("pr_ready", {"repo": repo, "number": number}))

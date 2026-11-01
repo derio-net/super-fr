@@ -584,6 +584,28 @@ def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
     return json.loads(out) if out else []
 
 
+def prs_for_commit(*, repo: str, sha: str) -> list[dict[str, object]]:
+    """The PRs containing commit *sha* (`GET repos/{repo}/commits/{sha}/pulls`) as
+    `{number, state, url, merged}` records; a merged one has a non-null `merged_at`."""
+    import json
+
+    if (rest := _rest()) is not None:
+        return _records(rest.prs_for_commit(repo, sha))
+    out = _run_gh(["api", f"repos/{repo}/commits/{sha}/pulls"])
+    raw = json.loads(out) if out else []
+    return [commit_pr_record(p) for p in raw if isinstance(p, dict)]
+
+
+def commit_pr_record(p: dict[str, object]) -> dict[str, object]:
+    """One `commits/{sha}/pulls` element in `prs_for_commit`'s shape."""
+    return {
+        "number": p.get("number"),
+        "state": "MERGED" if p.get("merged_at") else str(p.get("state") or "").upper(),
+        "url": p.get("html_url") or "",
+        "merged": bool(p.get("merged_at")),
+    }
+
+
 def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[str, object]]:
     """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`
     and `files` (the wave driver attributes a merged archive PR by them)."""

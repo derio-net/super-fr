@@ -26,6 +26,7 @@ from fr.gates import GATES, POST_MERGE_GATES
 from fr.ghclient import UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.labels import gate_label, held_gates
+from fr.run.cursors import all_cursors
 from fr.verification.labels import gate_pass_comment, pass_gate
 
 if TYPE_CHECKING:
@@ -44,15 +45,6 @@ _FORGE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeO
 NO_RUN_EVIDENCE = "--no-run-evidence"
 
 
-def _cursors(root: Path) -> list[Path]:
-    """Every run cursor this checkout holds, live then archived (R14: archived runs count)."""
-    from fr.record.model import RUNS_REL
-    from fr.run.model import IMPLEMENTED_RUNS_REL
-
-    dirs = (root / RUNS_REL, root / IMPLEMENTED_RUNS_REL)
-    return [p for d in dirs if d.is_dir() for p in sorted(d.glob("*.yaml"))]
-
-
 class RunLookupError(Exception):
     """A named run this checkout does not hold, or cannot read."""
 
@@ -62,7 +54,7 @@ def find_run(root: Path, run: str) -> RunState:
     naming why when it is absent or unreadable. `fr ops gate` reads it too."""
     from fr.run.model import RunStateError, parse_run_state
 
-    for path in _cursors(root):
+    for path in all_cursors(root):
         if path.stem == run:
             try:
                 return parse_run_state(path.read_text())
@@ -85,7 +77,7 @@ def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
         except RunLookupError as exc:
             _refuse(str(exc))
     found = []
-    for path in _cursors(root):
+    for path in all_cursors(root):
         try:
             state = parse_run_state(path.read_text())
         except (RunStateError, OSError) as exc:

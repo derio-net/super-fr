@@ -8,6 +8,7 @@ release dispatch, so a final follows the last pass (R20). The forge is faked.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -166,3 +167,58 @@ def test_p4_r4_pass_gate_comments_first_and_never_twice() -> None:
     with pytest.raises(Exception, match="configured failure"):
         pass_gate(failing, REPO, 5, "tester", why="walked")
     assert [c[0] for c in failing.calls if c[0] == "edit_pr_labels"] == []
+
+
+# --- `fr gate backfill` (spec 2026-11-01-gate-backfill) -----------------------------------
+
+BACKFILL_REPO = "example-org/widgets"
+FORGE_WRITES = (
+    "ensure_labels", "edit_pr_labels", "edit_issue_labels", "edit_issue_body", "edit_issue",
+    "comment_pr", "comment_issue", "close_issue", "close_pr", "create_issue", "create_pr",
+    "edit_pr", "edit_issue_state", "edit_issue_comment",
+)  # fmt: skip
+
+
+def _backfill_repo(tmp_path: Path) -> Path:
+    import subprocess
+
+    import yaml
+
+    root = tmp_path / "widgets"
+    root.mkdir()
+    for args in (
+        ["init", "-q", "-b", "main"],
+        ["remote", "add", "origin", f"https://github.com/{BACKFILL_REPO}.git"],
+    ):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix.parent.mkdir(parents=True)
+    org, name = BACKFILL_REPO.split("/")
+    matrix.write_text(
+        yaml.safe_dump({"schema_version": 5, "org": org, "repo": name, "rows": []})
+    )
+    return root
+
+
+@pytest.fixture
+def backfill_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    root = _backfill_repo(tmp_path)
+    fake = FakeGhClient()
+    monkeypatch.setattr(gate_cmd, "client_for_url", lambda url: fake)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(root)
+    return root, fake
+
+
+def test_backfill_is_a_gate_verb_and_dry_run_writes_nothing(backfill_env: Any) -> None:
+    _root, fake = backfill_env
+
+    helped = CliRunner().invoke(app, ["gate", "backfill", "--help"])
+    assert helped.exit_code == 0, helped.output
+    for flag in ("--yes", "--plan", "--from"):
+        assert flag in helped.output
+
+    result = CliRunner().invoke(app, ["gate", "backfill"])
+
+    assert result.exit_code == 0, result.output
+    assert [c[0] for c in fake.calls if c[0] in FORGE_WRITES] == []

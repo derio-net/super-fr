@@ -302,6 +302,12 @@ class GhClient(Protocol):
         records with `fr.gh.PR_LIST_FIELDS` plus `headRefOid` and `files`."""
         ...
 
+    def prs_for_commit(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """The PRs that contain commit *sha* (`GET repos/{repo}/commits/{sha}/pulls`), as
+        `{number, state, url, merged}` records; glab and tea raise `UnsupportedForgeOperation`
+        (`fr gate backfill` maps a squash commit to its PR with it)."""
+        ...
+
     def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
         """Whether *repo*'s `#number` is an issue or a PR (`adopt --list` classifies the
         refs in a session label); None when the forge says neither."""
@@ -561,6 +567,9 @@ class UnsupportedBatchOps:
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         raise self._unsupported("list_prs_by_head")
+
+    def prs_for_commit(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        raise self._unsupported("prs_for_commit")
 
     def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
         raise self._unsupported("ref_kind")

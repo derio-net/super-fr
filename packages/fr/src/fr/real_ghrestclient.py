@@ -717,6 +717,12 @@ class RealGhRestClient:
             out.append(record)
         return out
 
+    def prs_for_commit(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        from fr.gh import commit_pr_record
+
+        raw = self._api(f"repos/{repo}/commits/{sha}/pulls") or []
+        return [commit_pr_record(p) for p in raw if isinstance(p, dict)]
+
     def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
         payload = self._api(f"repos/{repo}/issues/{number}")
         if not isinstance(payload, dict):
