@@ -96,7 +96,7 @@ from fr.triage import gitseam
 
 work = Path(os.environ["WORK"])
 run_id, answers = sys.argv[1], list(sys.argv[2:])
-MINE = {"run-g": 7}[run_id]
+MINE = {"run-g": 7, "run-h": 8}[run_id]
 state_file = work / "forge.json"
 prs = json.loads(state_file.read_text())
 
@@ -169,6 +169,8 @@ class Prompt:
 
     def ask(self, text):
         print(f"ASK {text.splitlines()[0]}")
+        if os.environ.get("DRIFT_ON_ASK"):  # the world moves while the operator walks a step
+            (Path(os.environ["MARKS"]) / "drift").touch()
         return answers.pop(0) if answers else ""
 
 
@@ -231,5 +233,75 @@ forge_at "$(git rev-parse HEAD)"
 gate run-g
 refuse_grep 'ops gap' "$OUT" "a none: acknowledgement is still refused"
 expect_grep 'ops workspace chore/ops-g up' "$OUT" "stage 1 brings the workspace up past the gap check"
+
+# --- a pointed step is probed; the grammar re-prompts an unpointed one (R8, R10) ---------
+mkdir -p docs/superpowers/plans/h
+cat > docs/superpowers/specs/2026-11-01-h-design.md <<'MD'
+# Fixture
+
+## Verification
+
+strategy: none
+gate: developer
+
+## Test Plan
+
+- [devops] (op: good) converge the stack
+- [devops] look at the dashboard
+- [devops] (op: bad) confirm nothing drifted
+MD
+cat > docs/superpowers/plans/h/ops.yaml <<'YAML'
+schema_version: 2
+ops:
+  - id: good
+    summary: converge
+    phase: post-merge
+    ready: 'true'
+    check: 'test -f "$MARKS/good" && { echo checking the stack; echo converged 3 of 3; }'
+    apply: 'touch "$MARKS/good"'
+  - id: bad
+    summary: no drift
+    phase: post-merge
+    check: 'test -f "$MARKS/applied" && ! test -f "$MARKS/drift" || { echo drift found; false; }'
+    apply: 'touch "$MARKS/applied"'
+YAML
+"$py" - <<'PY' || fail "could not write the run cursor"
+from pathlib import Path
+from fr.run.model import RunState, StepRecord, save_run_state
+save_run_state(Path.cwd(), RunState(
+    run="run-h", workflow="fr-goal@1", branch="feat/x",
+    started="2026-11-01T00:00:00+00:00", cursor="deliver",
+    steps={
+        "brainstorm": StepRecord(state="done", emitted={"spec": "docs/superpowers/specs/2026-11-01-h-design.md"}),
+        "plan": StepRecord(state="done", emitted={"plan": "docs/superpowers/plans/h"}),
+        "deliver": StepRecord(state="done", emitted={"pr": "https://github.com/derio-net/fixture/pull/8"}),
+    }))
+PY
+git add -A && git commit -qm "feature h" && git push -q origin feat/x || fail "push feature h"
+HEAD_H="$(git rev-parse HEAD)"
+"$py" - <<'PY' || fail "could not write the trust grant"
+from pathlib import Path
+from fr.ops.load import load_ops, load_ops_config
+from fr.ops.trust import fingerprint, grant_trust, head_tree, tree_digest
+root = Path.cwd()
+tree = head_tree(root)
+ops = load_ops(root / "docs/superpowers/plans/h", root).ops
+fp = fingerprint(ops, load_ops_config(root), root, code_tree=tree_digest(tree))
+grant_trust(root, "h", fp, tree=tree)
+PY
+git reset -q --hard "$HEAD_H" && git clean -fdq
+printf '{"8": {"state": "OPEN", "head_oid": "%s", "head_ref": "feat/x", "base_ref": "main", "labels": ["gate:devops"]}}\n' "$HEAD_H" > "$work/forge.json"
+# stages 1-4 run unprompted but for the merge; stage 5: the pointed `good` step is probed
+# (no question), the dashboard step is answered `ran` (re-prompted) then `ran: walked`, the
+# world drifts while it is walked, and the pointed `bad` step is answered `owed`.
+DRIFT_ON_ASK=1 gate run-h y y y "ran" "ran: walked" "owed drift to chase"
+expect_grep 'stage 4 \(post-merge ops\): done' "$OUT" "stage 4 closes the post-merge ops"
+expect_grep 'stage 5 \(devops steps\): done' "$OUT" "stage 5 completes"
+refuse_grep 'ASK Test Plan step 1' "$OUT" "the passing pointed step was asked about"
+expect_grep 'converged 3 of 3' "$OUT" "the probe's output is shown"
+expect_grep "Not understood: 'ran'" "$OUT" "a bare keyword is re-prompted"
+expect_grep 'ASK Test Plan step 2' "$OUT" "the unpointed step is asked"
+expect_grep 'drift found' "$OUT" "the failing probe's reason is shown"
+expect_grep 'stage 6 \(gate pass\) failed' "$OUT" "the owed pointed step stops stage 6"
 
 echo "ok: fr-ops-gate-probes"

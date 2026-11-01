@@ -860,8 +860,9 @@ def test_three_non_matches_in_a_row_fail_the_stage_with_the_echo(ops_root: Path)
 
 
 def _row(op: str, state: str, how: str | None = None, **kw: Any) -> dict[str, Any]:
-    return {"op": op, "state": state, "label": state, "how": how, "reason": kw.pop("reason", ""),
-            "output": kw.pop("output", None), "evidence": kw.pop("evidence", None), **kw}  # fmt: skip
+    row = {"op": op, "state": state, "label": state, "how": how, "reason": "", "output": None,
+           "evidence": None}  # fmt: skip
+    return {**row, **kw}
 
 
 def _point(ops_root: Path, op: str = "post") -> None:

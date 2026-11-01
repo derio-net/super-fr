@@ -23,7 +23,6 @@ from typing import Any, Literal, Protocol
 from fr.ops.evidence import OpEvidence
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
-from fr.ops.model import TODO_CHECK
 from fr.ops.mask import (
     clip_output,
     evidence_lines,
@@ -31,6 +30,7 @@ from fr.ops.mask import (
     passthrough_values,
     sanitise_reason,
 )
+from fr.ops.model import TODO_CHECK
 from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_probe
 
 State = Literal["DONE", "OPEN", "N/A", "UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"]
