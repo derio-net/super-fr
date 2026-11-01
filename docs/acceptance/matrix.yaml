@@ -10307,9 +10307,11 @@ rows:
       lane.
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_board_lanes.py#test_a_closed_out_batchs_pr_is_listed_through_gated_prs
+    status: ci
+    notes: collect and lanes unit-tested over fixture facts
     verify: none
   - id: gate-backfill-first-real-sweep
     capability: gate-backfill
