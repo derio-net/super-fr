@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-01-ci-speed-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-01T18:17:29+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-01T18:17:29+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: d27210e4-7ab4-408c-96b0-9945ccbe8d8c
   plan:
     state: pending
   plan-review:
