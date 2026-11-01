@@ -580,9 +580,11 @@ def _head_paths(t: GateTarget, spec_rel: str) -> list[str]:
     return paths if spec_rel.startswith("docs/superpowers/specs/") else [*paths, spec_rel]
 
 
-def _refuse_an_ops_gap(gate: Gate, head: str) -> None:
-    """R5: refuse, before any workspace exists, a PR head whose run has an ops gap. It is
-    decided on a scratch tree materialised from the head, removed afterwards. A head
+def _refuse_an_ops_gap(gate: Gate, ref: str, *, merged: bool) -> None:
+    """R5: refuse, before any workspace exists, a run with an ops gap. It is decided on a
+    scratch tree materialised from *ref*, removed afterwards: the PR head while the PR is
+    open, the default branch's tip once it merged (review p1-r1, the gh#1266 family): a
+    merged PR gains no commits, so only a fix landed on the default branch can clear it. A head
     whose Verification section, matrix or ops carriers cannot be read is not decided here:
     the stages that read them report it."""
     import shutil
@@ -591,25 +593,34 @@ def _refuse_an_ops_gap(gate: Gate, head: str) -> None:
     from fr.ops.gap import gap_message, ops_gap
     from fr.ops.load import OpsLoadError
     from fr.requirements import run_spec
+    from fr.triage.gitseam import GitError
     from fr.verification.exit import exit_for_spec
 
     t = gate.target
     spec_rel = run_spec(t.run)
     if spec_rel is None:
         return
-    scratch = gate.host.materialise(head, _head_paths(t, spec_rel))
+    where = f"{gate.default} at {ref[:12]} (PR #{t.pr} merged)" if merged else f"PR #{t.pr}'s head"
+    scratch: Path | None = None
     try:
+        scratch = gate.host.materialise(ref, _head_paths(t, spec_rel))
         gates = exit_for_spec(scratch, spec_rel, repo=t.repo.rsplit("/", 1)[-1]).gates
         gap = ops_gap(scratch, spec_rel, scratch / t.plan_rel, gates)
-    except (ValueError, OSError, AcceptanceError, OpsLoadError) as e:
-        gate.say(f"the ops-gap check could not read PR #{t.pr}'s head ({e}); not checked")
+    except (ValueError, OSError, AcceptanceError, OpsLoadError, GitError) as e:
+        gate.say(f"the ops-gap check could not read {where} ({e}); not checked")
         gap = []
     finally:
-        shutil.rmtree(scratch, ignore_errors=True)
+        if scratch is not None:
+            shutil.rmtree(scratch, ignore_errors=True)
     if gap:
+        fix = (
+            f"The PR has merged, so land the fix on {gate.default} (a follow-up PR)"
+            if merged
+            else "Fix it on the PR branch"
+        )
         raise StageFailed(
-            f"PR #{t.pr}'s head has an ops gap. {gap_message(gap, has_plan=True)} "
-            "Fix it on the PR branch, then re-run `fr ops gate`. Nothing was brought up",
+            f"{where} has an ops gap. {gap_message(gap, has_plan=True)} "
+            f"{fix}, then re-run `fr ops gate`. Nothing was brought up",
             code=2,
         )
 
@@ -675,7 +686,7 @@ def stage_1(gate: Gate) -> None:
             f"with the ops credentials. Nothing was brought up: {fix}",
             code=2,
         )
-    _refuse_an_ops_gap(gate, head)
+    _refuse_an_ops_gap(gate, base, merged=merged)
     if reused is None:
         code, _ = gate.host.fr(["isolation", "up", "--repo", str(t.primary), "--profile",
                                 t.profile, "--branch", t.ops_branch, "--base", base])  # fmt: skip

@@ -338,3 +338,87 @@ def test_the_host_materialises_the_head_paths_skipping_absent_ones(tmp_path: Pat
         assert not (out / "other.txt").exists() and not (out / ".fr").exists()
     finally:
         shutil.rmtree(out)
+
+
+def _committed_repo(tmp_path: Path, files: dict[str, str]) -> tuple[Path, str]:
+    import subprocess
+
+    repo = tmp_path / "repo"
+    for rel, text in files.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+         "commit", "-qm", "x"],
+        check=True,
+    )  # fmt: skip
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    return repo, head
+
+
+def test_the_host_materialises_a_non_ascii_path(tmp_path: Path) -> None:
+    """review p1-r2: tar keeps names raw, so a C-quoted ls-tree name never reaches git show."""
+    import shutil
+
+    from fr.commands.ops_gate_cmd import HostCheckout
+
+    repo, head = _committed_repo(tmp_path, {"docs/superpowers/specs/café-é.md": "# É\n"})
+    out = HostCheckout(repo).materialise(head, ["docs/superpowers/specs"])
+    try:
+        assert (out / "docs/superpowers/specs/café-é.md").read_text() == "# É\n"
+    finally:
+        shutil.rmtree(out)
+
+
+def test_the_host_removes_its_scratch_tree_when_git_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """review p1-r3: a git failure mid-materialise leaves no temporary directory behind."""
+    import tempfile
+
+    from fr.commands.ops_gate_cmd import HostCheckout
+    from fr.triage import gitseam
+
+    repo, head = _committed_repo(tmp_path, {"docs/superpowers/specs/s.md": "# S\n"})
+    made: list[str] = []
+    real = tempfile.mkdtemp
+
+    def mkdtemp(**kw: str) -> str:
+        made.append(real(**kw))
+        return made[-1]
+
+    def boom(*_a: object, **_k: object) -> bytes:
+        raise gitseam.GitError("archive failed")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+    monkeypatch.setattr(gitseam, "git_bytes", boom)
+    with pytest.raises(gitseam.GitError):
+        HostCheckout(repo).materialise(head, ["docs/superpowers/specs"])
+    assert made and not Path(made[0]).exists()
+
+
+def test_the_host_refuses_an_archive_member_outside_its_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """review p1-r4: a crafted `..` entry never writes outside the scratch tree."""
+    import io
+    import tarfile
+
+    from fr.commands.ops_gate_cmd import HostCheckout
+    from fr.triage import gitseam
+
+    repo, head = _committed_repo(tmp_path, {"docs/superpowers/specs/s.md": "# S\n"})
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        data = b"escaped\n"
+        info = tarfile.TarInfo("../../escaped.txt")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+    monkeypatch.setattr(gitseam, "git_bytes", lambda *_a, **_k: buf.getvalue())
+    with pytest.raises(gitseam.GitError, match="outside the tree"):
+        HostCheckout(repo).materialise(head, ["docs/superpowers/specs"])
+    assert not (tmp_path / "escaped.txt").exists()

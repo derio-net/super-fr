@@ -752,6 +752,48 @@ def test_stage_1_refuses_an_ops_gap_before_anything_is_brought_up(ops_root: Path
     assert _host(ops_root).head() is None  # nothing recorded
 
 
+def test_stage_1_reads_a_merged_prs_gap_from_the_default_branch_tip(ops_root: Path) -> None:
+    """review p1-r1 (gh#1266 family): a merged PR gains no commits, so the gap is read
+    from the default branch's tip, where a follow-up fix lands, and the refusal says so."""
+    _gapped(ops_root)
+    gate, host, *_ = _gate(ops_root, forge=FakeForge(state="MERGED"))
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_1(gate)
+    assert exc.value.code == 2
+    assert any(a[:2] == ["materialise", TIP] for a, _ in host.calls)
+    assert not any(a[:2] == ["materialise", HEAD] for a, _ in host.calls)
+    assert "follow-up PR" in exc.value.why and "on the PR branch" not in exc.value.why
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_stage_1_passes_a_merged_pr_once_the_tip_carries_the_fix(ops_root: Path) -> None:
+    """review p1-r1: the way out — `none:` (or ops) landed on the default branch."""
+    _gapped(ops_root, "schema_version: 2\nnone: converged by hand\n")
+    gate, host, *_ = _gate(ops_root, forge=FakeForge(state="MERGED"))
+    gate_mod.stage_1(gate)
+    assert any(a[:2] == ["materialise", TIP] for a, _ in host.calls)
+    assert any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_stage_1_reports_a_git_failure_in_the_gap_read_as_not_checked(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """review p1-r3: the advisory read never escapes the stage as a raw GitError."""
+    from fr.triage.gitseam import GitError
+
+    _gapped(ops_root)
+    gate, host, *_ = _gate(ops_root)
+    said: list[str] = []
+    monkeypatch.setattr(gate, "say", said.append)
+
+    def boom(ref: str, paths: object) -> Path:
+        raise GitError("archive failed")
+
+    monkeypatch.setattr(host, "materialise", boom)
+    gate_mod.stage_1(gate)
+    assert any("not checked" in line for line in said)
+
+
 def test_stage_1_passes_the_gap_check_with_a_none_acknowledgement(ops_root: Path) -> None:
     _gapped(ops_root, "schema_version: 2\nnone: converged by hand\n")
     gate, host, *_ = _gate(ops_root)

@@ -107,30 +107,42 @@ class HostCheckout:
             typer.echo(f"fr ops gate: warning: {exc}", err=True)
 
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:
-        """*paths* as *ref* carries them, in a fresh temporary directory: each blob
-        `git ls-tree -r <ref> -- <paths>` lists, written from `git show` (what `git
-        archive <ref> -- <paths>` would extract, without a tar step). A path absent at
-        *ref* is skipped."""
+        """*paths* as *ref* carries them, in a fresh temporary directory: one `git archive
+        <ref> -- <paths>` read in process. A path absent at *ref* is skipped; only regular
+        files are written, each checked to land inside the directory (review p1-r4), so a
+        crafted tree entry cannot escape it. Tar keeps names raw, so a non-ASCII path
+        needs no unquoting (p1-r2). Any failure removes the directory and re-raises (p1-r3)."""
+        import io
+        import shutil
+        import tarfile
         import tempfile
 
-        from fr.triage.gitseam import GitError, git, git_ok, show_bytes
+        from fr.triage.gitseam import GitError, git_bytes, git_ok
 
         present = [p for p in paths if git_ok(["cat-file", "-e", f"{ref}:{p}"], self.primary)]
         out = Path(tempfile.mkdtemp(prefix="fr-ops-gate-head-"))
-        listed = (
-            git(
-                ["ls-tree", "-r", "--name-only", "--end-of-options", ref, "--", *present],
-                self.primary,
-            )  # fmt: skip
-            if present
-            else ""
-        )
-        for rel in filter(None, listed.splitlines()):
-            data = show_bytes(self.primary, ref, rel)
-            if data is None:
-                raise GitError(f"{ref}:{rel} could not be read")
-            (out / rel).parent.mkdir(parents=True, exist_ok=True)
-            (out / rel).write_bytes(data)
+        try:
+            if present:
+                # `git archive` takes no `--`: every word after the tree-ish is a pathspec,
+                # and --end-of-options keeps a ref from reading as an option.
+                blob = git_bytes(["archive", "--format=tar", "--end-of-options", ref,
+                                  *present], self.primary)  # fmt: skip
+                root = out.resolve()
+                with tarfile.open(fileobj=io.BytesIO(blob), mode="r:") as tar:
+                    for member in tar.getmembers():
+                        if not member.isfile():
+                            continue
+                        dest = (root / member.name).resolve()
+                        if not dest.is_relative_to(root):
+                            raise GitError(f"{ref}: {member.name!r} would land outside the tree")
+                        data = tar.extractfile(member)
+                        if data is None:
+                            raise GitError(f"{ref}:{member.name} could not be read")
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_bytes(data.read())
+        except BaseException:
+            shutil.rmtree(out, ignore_errors=True)
+            raise
         return out
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
