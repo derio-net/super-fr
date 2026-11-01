@@ -10,3 +10,8 @@ Observed 2026-11-01 in super-fr's own base clone (Claude Code 2.1.316): 19 `.cla
 ### h1-remove-not-fired · hypothesis · H1: Claude Code never fires WorktreeRemove for hook-created subagent worktrees
 
 Tested 2026-11-01 (Claude Code 2.1.316) in a throwaway repo with project-only settings (--setting-sources project) and logging WorktreeCreate/WorktreeRemove probe hooks. One isolated general-purpose subagent, read-only commands, clean worktree. CREATE logged (input: session_id, transcript_path, cwd, prompt_id, hook_event_name, name=agent-<id>; no agent_id). REMOVE never logged, through subagent completion and session exit; worktree left behind. CONFIRMED.
+
+<!-- fr:journal kind=ruled-out scope=debug id=h2-outside-path-rejected created=2026-11-01T19:52:57+00:00 -->
+### h2-outside-path-rejected · ruled-out · Ruled out: Claude Code rejects a WorktreeCreate path outside the repo for a subagent
+
+Same probe: the hook printed <scratch>/outside/agent-<id> (not under the repo). The subagent ran there: pwd = that path, --show-toplevel = that path, --git-common-dir = <repo>/.git. Claude's checkout verification is git-identity based, not location based. Moving agent-* out of the repo is safe.
