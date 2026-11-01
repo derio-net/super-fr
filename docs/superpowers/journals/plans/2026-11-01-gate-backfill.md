@@ -230,3 +230,98 @@ apply.py is a new module built on _Writer (one write path per verb) from the sta
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 a scenario, a stub and docs only; no production code touched
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · already-passed PR printed `fr gate pass` as its discharge instead of the key's §H discharge command (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · open issue: path counted its note as a write, was untested, and left no marker for §H (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · manifest takeover overrode row/plan/journal keys that also had a tracker (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · _target reported any read failure as 'does not exist' and skipped (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · R9 closed only the lowest-numbered fr-owned duplicate per run (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · tracker gate-marker mismatch skipped with no stated remedy (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · no test for a foreign adopt-marker comment, nor for the open-issue path (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · run_for_head re-parsed every cursor per entry (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-11-01T19:51:53+00:00 phase=2 state=open review_scope=out -->
+### p2-r9 · finding [open] (reviewer: out of scope) · 02.yaml's `-k gate-backfill` selects no test; the ids are test_gate_backfill_* (phase 2)
+
+Raised by the dispatched phase-2 code reviewer.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-11-01T19:51:53+00:00 phase=2 -->
+### p2-review · review · phase 2 code review (phase 2)
+
+9 findings raised (p2-r1..p2-r9): p2-r1..p2-r8 fixed; p2-r9 (out, plan text) resolved out-of-scope. 141 targeted tests and the 1178 FakeGhClient-using tests pass after the fixes.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: already-passed PR printed `fr gate pass` as its discharge instead of the key's §H discharge command (phase 2)
+
+Fixed in 00822b176: one pure trackers.discharge_command(key, repo_root=) per key kind, used by apply; test and docs corrected. Phase 3 reuses it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: open issue: path counted its note as a write, was untested, and left no marker for §H (phase 2)
+
+Fixed in 564500cfa: a bare owed on an open issue: key is refused at the dry run (adopt it, or give the manifest an issue:) and skipped at apply; notes are no longer counted as writes; tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: manifest takeover overrode row/plan/journal keys that also had a tracker (phase 2)
+
+Fixed in 564500cfa: a manifest takes a key back only when the fold's source for it is issue; refusal test for a row key with a tracker.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: _target reported any read failure as 'does not exist' and skipped (phase 2)
+
+Fixed in 564500cfa: only a forge not-found reads as missing; other errors are recorded (exit 1); FakeGhClient.view_issue now raises a 404 like the real client (1178 FakeGhClient-using tests green).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: R9 closed only the lowest-numbered fr-owned duplicate per run (phase 2)
+
+Fixed in 564500cfa: every fr-owned duplicate for the key is closed; two-duplicate test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: tracker gate-marker mismatch skipped with no stated remedy (phase 2)
+
+Fixed in 564500cfa: the skip line names the remedy; documented in docs/gate-backfill.md.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: no test for a foreign adopt-marker comment, nor for the open-issue path (phase 2)
+
+Fixed in 564500cfa: tests added (the code already ignored foreign comments).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: run_for_head re-parsed every cursor per entry (phase 2)
+
+Fixed in 564500cfa: trackers.runs_by_head indexes cursors once per apply.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-11-01T19:51:53+00:00 phase=2 state=open resolves=p2-r9 out_of_scope=true -->
+### p2-r9-resolved · finding [out-of-scope] · resolves p2-r9: 02.yaml's `-k gate-backfill` selects no test; the ids are test_gate_backfill_* (phase 2)
+
+Plan step text, not code: the scenarios run and pass with -k gate_backfill (orchestrator and executors used that); the plan's literal command is cosmetic and the plan is not behaviour this change ships.
