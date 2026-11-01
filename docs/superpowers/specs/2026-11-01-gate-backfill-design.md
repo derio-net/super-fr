@@ -279,7 +279,7 @@ entries:
 |---|---|---|---|---|---|
 | `plan:` (live plan) | §G | one `fr plan edit <plan> --tick P<n>.T<t>.S<s>` per unticked step | `fr plan edit <plan> --tick …` per step, with `--note "n/a: <reason>"` | listed under *Parked* | skipped by `--yes` |
 | `plan:` (archived plan) | §G | refused: an archived plan is frozen | refused | listed | skipped |
-| `spec:` step | §G | refused (record it ran: `fr closeout outcome --ran`) | `fr closeout outcome --spec <spec> --step <n> --na --reason "<reason>"` | listed | skipped |
+| `spec:` step | §G | refused (record it ran: `fr closeout outcome --spec <spec> --step <n> --ran --evidence "<what>" --supersede`) | `fr closeout outcome --spec <spec> --step <n> --na --reason "<reason>" --supersede` (the step is already recorded owed) | listed | skipped |
 | `row:` | §G | refused | `fr acceptance set-status --id <row> --status manual --notes "<reason>"` | listed | skipped |
 | `issue:` / manifest | §G | refused | refused (close it by hand: printed) | listed | skipped |
 
@@ -377,7 +377,7 @@ rows-walked pass (`triage_batch_cmd.py:5468-5473`). Its steps:
 4. For every closed or listed tracker, print its key's discharge command:
    `fr acceptance set-status --id <row> --walk … --status walked` for `row:`,
    `fr journal resolve --scope … --id … --state fixed` for a journal entry,
-   `fr closeout outcome … --ran` for `spec:`, `fr plan edit --tick …` for
+   `fr closeout outcome --spec <spec> --step <n> --ran --evidence "<what>" --supersede` for `spec:`, `fr plan edit --tick …` for
    `plan:`. Without that, the next backfill or `fr archive` would re-file the
    key.
 
