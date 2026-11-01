@@ -1,0 +1,24 @@
+schema_version: 10
+run: 2026-11-01-feat-ci-speed
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T5.S1, P2.T5.S2]
+refactor:
+  P2.T1: "scripts/split_check.py was written minimal (three pure functions, thin CLI) alongside its tests; nothing to clean."
+  P2.T3: "RED-only task (adds workflow-shape tests); no production code to clean."
+  P2.T5: "One-argv change plus two config values; nothing to clean."
+journal:
+  - kind: discovery
+    id: p2-xdist-writer
+    phase: 2
+    title: pytest-split --store-durations under -n 2 leaves the controller's file
+    body: |
+      Pinned by tests/integration/test_split_durations_xdist.py (6 tests, 2 groups, -n 2, --clean-durations): each group's file holds exactly that group's tests, the groups are disjoint and their union is the 6 ids. No worker overwrite was observed, so no per-process path was needed.
+  - kind: discovery
+    id: p2-cov-matrix-include
+    phase: 2
+    title: Per-leg cov options ride matrix include entries and reach pytest through env
+    body: |
+      The 3.11 leg gets cov_args --no-cov and the 3.14 leg "--cov --cov-report=" via matrix.include; the run step reads them as $COV_ARGS (env, not ${{ }} in run). test_ci_shards.py also needed updating (6 shards, addopts, partition over 6 groups), which spec E2 did not list.
+evidence: {tests: ci}

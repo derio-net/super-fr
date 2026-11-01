@@ -7,5 +7,8 @@
 default_seconds: 240
 workflows:
   fr-spec-status.yml: { exclude: true } # reusable (workflow_call); timed inside its caller
-  release.yml: { budget_seconds: 900 } # runs the whole suite on the staged tree (gh#854)
+  # Budgets follow spec 2026-11-01-ci-speed §3.E: the wall clock is first job
+  # start to last job end, so it includes queue time between stages.
+  ci.yml: { budget_seconds: 360 }
+  release.yml: { budget_seconds: 600 } # runs the whole suite on the staged tree (gh#854)
   # a numeric override looks like:  some.yml: {budget_seconds: 360}

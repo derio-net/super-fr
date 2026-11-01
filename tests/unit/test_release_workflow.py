@@ -137,7 +137,9 @@ def test_header_no_longer_claims_the_staged_diff_check_is_enough() -> None:
 
 def test_the_release_job_has_a_budget_for_the_full_suite() -> None:
     budget = yaml.safe_load((REPO / ".github" / "ci-budget.yaml").read_text())
-    assert budget["workflows"]["release.yml"]["budget_seconds"] >= 900
+    assert (
+        budget["workflows"]["release.yml"]["budget_seconds"] >= 600
+    )  # spec 2026-11-01-ci-speed §3.E
 
 
 def test_auto_tag_workflow_is_gone() -> None:
