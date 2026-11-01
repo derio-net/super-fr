@@ -9711,9 +9711,15 @@ rows:
       instead
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_a_race_at_the_push_itself_is_superseded
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_redispatch
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_tests_once_and_never_retests
+    status: walk-owed
+    notes: Superseded outcomes pinned by unit tests against a real bare remote (moved
+      base, real non-fast-forward race, override exits non-zero with re-dispatch, never
+      retests). Live walk owed on the first real merge race (Test Plan 2).
     verify: live
   - id: tracker-done-closes-issue
     capability: tracker protocol
