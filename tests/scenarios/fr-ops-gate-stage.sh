@@ -169,6 +169,12 @@ class Forge:
         print(f"FAKE-FORGE pr_create head={head} base={base}")
         return 9
 
+    def viewer_login(self):  # `fr gate pass` closes the PR's fr-owned trackers (gate-backfill R12)
+        return "fr-bot"
+
+    def list_issues(self, repo, state, limit, fields=None, labels=None):
+        return []  # this repo has no backfill trackers, so the pass closes nothing
+
     def pr_for_branch(self, branch, cwd=None, run=None):  # verify-merge's lookup
         p = self._pr(MINE)
         return {"state": p["state"], "url": "u", "mergedAt": "2026-10-22T12:00:00Z"}
