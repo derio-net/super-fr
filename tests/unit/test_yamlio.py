@@ -5,10 +5,9 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import fr.yamlio as yamlio
 import pytest
 import yaml
-
-import fr.yamlio as yamlio
 
 REPO = Path(__file__).resolve().parents[2]
 

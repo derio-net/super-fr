@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import fr.yamlio
 import pytest
 import yaml
-
-import fr.yamlio
 from fr.acceptance import model
 from fr.acceptance.model import AcceptanceError, Matrix, parse_matrix
 
