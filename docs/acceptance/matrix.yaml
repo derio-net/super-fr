@@ -9644,9 +9644,12 @@ rows:
       files or updates a ci-budget issue when the run is over budget
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_budget.py#test_no_open_issue_under_budget_is_noop
+    status: walk-owed
+    notes: GET fix unit-pinned; the live proof is the watcher's first workflow_run after
+      merge (Test Plan 3).
     verify: live
   - id: release-pushes-as-app
     capability: release
