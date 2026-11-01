@@ -367,3 +367,8 @@ run_kind: candidate
 ### phase-split-2026-11-01-gate-backfill-p2 · decision · ask: --yes apply (labels, trackers, adopt, idempotency, refusals; R6–R10, R15) is its own reviewable ask
 
 Spec Requirements group; see plan _prose.md.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-01-gate-backfill-p3 created=2026-11-01T15:19:57+00:00 -->
+### phase-split-2026-11-01-gate-backfill-p3 · decision · ask: fr gate pass closing backfill trackers on both routes with a retry (R12) is its own ask
+
+Spec Requirements group; see plan _prose.md.
