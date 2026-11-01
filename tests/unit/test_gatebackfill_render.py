@@ -69,7 +69,7 @@ def test_na_prints_the_command_of_its_kind_and_needs_a_note(tmp_path: Path) -> N
     spec_cmd, _ = decision_commands(_e("spec:2026-05-01-thing#step1", "na", note="moot"), repo)
     assert spec_cmd == [
         "fr closeout outcome --spec docs/superpowers/specs/2026-05-01-thing-design.md "
-        "--step 1 --na --reason moot"
+        "--step 1 --na --reason moot --supersede"
     ]
     row_cmd, _ = decision_commands(_e("row:a", "na", note="manual by nature"), repo)
     assert row_cmd == ["fr acceptance set-status --id a --status manual --notes 'manual by nature'"]
@@ -108,3 +108,24 @@ def test_a_not_implemented_row_with_a_post_merge_strategy_is_moved_to_walk_owed(
 
     assert len(cmds) == 1 and cmds[0].startswith("fr acceptance set-status --id live-one")
     assert "--status walk-owed" in cmds[0]
+
+
+def test_p1_r2_a_spec_tick_is_refused_with_the_command_that_records_it_ran(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    spec = repo / SP / "specs" / "2026-05-01-thing-design.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# t\n\n## Test Plan\n\n1. walk\n")
+
+    cmds, refusal = decision_commands(_e("spec:2026-05-01-thing#step1", "tick"), repo)
+
+    assert cmds == []
+    assert (
+        refusal is not None
+        and (
+            "record it ran: fr closeout outcome --spec docs/superpowers/specs/"
+            '2026-05-01-thing-design.md --step 1 --ran --evidence "<what>" --supersede'
+        )
+        in refusal
+    )

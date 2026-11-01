@@ -69,14 +69,21 @@ def decision_commands(entry: PlanEntry, root: Path) -> tuple[list[str], str | No
             return [], f"{entry.key}: spec not found in this checkout{accepted}"
         return [
             f"fr closeout outcome --spec {shlex.quote(spec)} --step {n} --na "
-            f"--reason {shlex.quote(reason)}"
+            f"--reason {shlex.quote(reason)} --supersede"
         ], None
     if kind == "na" and k == "row":
         return [
             f"fr acceptance set-status --id {shlex.quote(name)} --status manual "
             f"--notes {shlex.quote(reason)}"
         ], None
-    return [], f"{entry.key}: {kind} refused: no command for this kind{accepted}"
+    hint = ""
+    if k == "spec" and n is not None:
+        spec = find_spec(root, name) or "<spec>"
+        hint = (
+            f"; record it ran: fr closeout outcome --spec {shlex.quote(spec)} --step {n} "
+            '--ran --evidence "<what>" --supersede'
+        )
+    return [], f"{entry.key}: {kind} refused: no command for this kind{hint}{accepted}"
 
 
 def row_reconcile(root: Path) -> list[str]:
