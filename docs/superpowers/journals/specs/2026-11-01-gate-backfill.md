@@ -372,3 +372,8 @@ Spec Requirements group; see plan _prose.md.
 ### phase-split-2026-11-01-gate-backfill-p3 · decision · ask: fr gate pass closing backfill trackers on both routes with a retry (R12) is its own ask
 
 Spec Requirements group; see plan _prose.md.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-01-gate-backfill-p4 created=2026-11-01T15:20:03+00:00 -->
+### phase-split-2026-11-01-gate-backfill-p4 · decision · ask: the board listing gate-labelled merged PRs (R13) is its own ask, independent of apply
+
+Spec Requirements group; see plan _prose.md.
