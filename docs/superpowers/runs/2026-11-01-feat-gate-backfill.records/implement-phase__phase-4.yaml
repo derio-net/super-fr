@@ -1,0 +1,39 @@
+schema_version: 10
+run: 2026-11-01-feat-gate-backfill
+step: implement-phase
+item: phase/4
+outcome: done
+ticks:
+  - P4.T1.S1
+  - P4.T1.S2
+  - P4.T2.S1
+  - P4.T2.S2
+  - P4.T3.S1
+  - P4.T3.S2
+  - P4.T3.S3
+refactor:
+  P4.T1: "one read added across the existing adapters, following list_open_prs; nothing duplicated to clean"
+  P4.T2: "collect gained one helper beside _closed_in_progress; no shared code to extract"
+journal:
+  - kind: decision
+    id: p4-devops-no-run-evidence
+    title: the board's gate-labelled PR reason uses --no-run-evidence for devops
+    body: The board reads no repo checkout, so it cannot resolve the run whose cursor names the PR's head; gated_pr_lane calls trackers.pass_command(gate, pr) with no run id, which prints --no-run-evidence for devops. The operator swaps in --run when a run exists.
+    phase: 4
+  - kind: decision
+    id: p4-gated-card-not-batch-card
+    title: a gate-labelled PR outside a lane is a GatedCard in its column, not a Card
+    body: Card is built around a Batch (events, members, session status), which a bare PR has none of, so kanban.ColumnView gains `gated` (GatedCard repo/number/title/url/reason) beside `cards`, counted in the column header, and Board.gated_count keeps the page from reading "No batches" when only gated PRs exist. lanes.unlisted_gated_prs is the one filter (batch PR in a lane, or ledger unread) that needs_you and build_board both call.
+    phase: 4
+  - kind: decision
+    id: p4-lane-reason-shared
+    title: lane_of's landed branch now speaks gated_pr_lane's reason
+    body: The one held-gate rule is gated_pr_lane(pr); lane_of calls it on the batch PR (the ledger is that PR's labels). Its reason changed from "landed, held by a post-merge gate (...)" to "merged, held by gate:<g> ..." and now carries pass_command (with --notes), as R13 asks; the existing lane tests (walk, `fr gate pass --pr N --gate g`) stay green.
+    phase: 4
+  - kind: discovery
+    id: p4-facts-schema-pins
+    title: several test modules pin FACTS_SCHEMA literally
+    body: Moving FACTS_SCHEMA 12 to 13 turned red literal pins in test_triage_* (collect, cli, facts_schema3, exit_gates_facts, labels_filter, model, state_integrity); updated them. Committed scenario fixtures stamped schema 12 still load (13 reads 3..13) and were left alone.
+    phase: 4
+resolves: []
+evidence: {}

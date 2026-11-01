@@ -50,7 +50,7 @@ from fr.triage.batch_drive import (
 )
 from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
-from fr.triage.lanes import lane_of, live_stops
+from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop, archive_stop_key, live_stop
 from fr.triage.mergeability import CONFLICT_HINT, conflicting
 from fr.triage.model import (
@@ -341,10 +341,23 @@ class Card:
 
 
 @dataclass(frozen=True)
+class GatedCard:
+    """A merged PR still holding a post-merge gate that no batch card speaks for
+    (gate-backfill R13): it sits in the Tester or DevOps lane beside the batch cards."""
+
+    repo: str
+    number: int
+    title: str
+    url: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class ColumnView:
     key: Column
     title: str
     cards: tuple[Card, ...]
+    gated: tuple[GatedCard, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -363,6 +376,10 @@ class Board:
     @property
     def batch_count(self) -> int:
         return sum(len(c.cards) for c in self.columns)
+
+    @property
+    def gated_count(self) -> int:
+        return sum(len(c.gated) for c in self.columns)
 
 
 # ------------------------------------------------------------------ columns
@@ -764,8 +781,19 @@ def build_board(
         for b in batches
     ]
     cards.sort(key=lambda c: (c.batch.wave is None, c.batch.wave or 0, c.batch.id))
+    gated: dict[str, list[GatedCard]] = {}
+    for g in unlisted_gated_prs(batches, facts, live):
+        if (placed := gated_pr_lane(g)) is not None:
+            gated.setdefault(placed.lane, []).append(
+                GatedCard(g.repo, g.number, g.title, g.url, placed.reason)
+            )
     columns = tuple(
-        ColumnView(key, COLUMN_TITLES[key], tuple(c for c in cards if c.column == key))
+        ColumnView(
+            key,
+            COLUMN_TITLES[key],
+            tuple(c for c in cards if c.column == key),
+            tuple(gated.get(key, ())),
+        )
         for key in COLUMNS
     )
     held = _held_issues(facts, me, now) if me and now else ()

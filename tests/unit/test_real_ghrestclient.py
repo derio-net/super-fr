@@ -30,7 +30,8 @@ from tests.unit.github_rest_support import (
 SHA_1080 = "095092b8f4ec27dffd445d5c8f1f717f9cd216e0"
 
 READS = (
-    "view_issue view_issue_record list_issues list_prs list_open_prs list_merged_prs_by_label list_prs_by_head pr_view "
+    "view_issue view_issue_record list_issues list_prs list_open_prs list_prs_by_head pr_view "
+    "list_merged_prs_by_label "
     "pr_checks pr_required_checks pr_status_by_url pr_body list_issue_comments list_linked_prs "
     "file_exists list_dir read_file read_file_at_ref list_repos viewer_login repo_merge_methods "
     "closing_ref default_branch pr_for_branch issues_enabled rate_limit"

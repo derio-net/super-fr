@@ -33,6 +33,7 @@ from fr.triage.model import (
     FACTS_SCHEMA,
     CursorReader,
     Facts,
+    GatedUnread,
     InProgressState,
     Issue,
     IssueClaim,
@@ -640,6 +641,8 @@ def collect_facts_counted(
     markers: dict[tuple[str, int], str] = {}
     claims: dict[tuple[str, int], list[IssueClaim]] = {}
     closed_hits: list[StaleInProgress] = []
+    gated: list[PullRequest] = []
+    gated_unread: list[GatedUnread] = []
     for repo in repos:
         if repo in keep:
             continue
@@ -664,6 +667,9 @@ def collect_facts_counted(
             continue
         collected.append(repo)
         closed_hits.extend(_closed_in_progress(forge, repo, scope, trusted, issue_limit, warnings))
+        gated_found, gated_miss = _gated_prs(forge, repo, pr_limit, warnings)
+        gated.extend(gated_found)
+        gated_unread.extend(gated_miss)
         if repo_config is not None:
             config[repo] = repo_config
         if dropped:
@@ -778,6 +784,9 @@ def collect_facts_counted(
     )
     if prior is not None:
         batch_prs += [p for p in prior.batch_prs if p.repo in keep]
+    if prior is not None:
+        gated += [p for p in prior.gated_prs if p.repo in keep]
+        gated_unread += [u for u in prior.gated_unread if u.repo in keep]
     in_facts = {(p.repo, p.number) for p in [*linked_prs_all(out), *unlinked, *batch_prs]}
     judged_prs = [p for p in judged_prs if (p.repo, p.number) not in in_facts]
     every = [*linked_prs_all(out), *unlinked, *batch_prs, *judged_prs]
@@ -809,10 +818,36 @@ def collect_facts_counted(
         visibility=_visibility(forge, collected, listed_visibility),
         stale_in_progress=closed_hits,
         config_ignored={r: list(keys) for r, keys in ignored.items()},
+        gated_prs=gated,
+        gated_unread=gated_unread,
     )
     return facts, CollectStats(
         viewed=viewed, carried=carried_n, ignored=ignored, carried_repos=keep
     )
+
+
+GATE_LABELS = ("gate:tester", "gate:devops")
+
+
+def _gated_prs(
+    forge: Forge, repo: str, limit: int, warnings: list[Truncation]
+) -> tuple[list[PullRequest], list[GatedUnread]]:
+    """The merged PRs of *repo* still holding a gate (gate-backfill §I): one read per gate
+    label, a PR holding both kept once, only those `held_gates` says are held. A list that
+    returns its limit is a truncation; a failed read (or a backend without it) is recorded
+    as unread, never fatal and never an empty answer."""
+    found: dict[int, PullRequest] = {}
+    try:
+        for label in GATE_LABELS:
+            raw = forge.list_merged_prs_by_label(repo=repo, label=label, limit=limit)
+            if len(raw) == limit:
+                warnings.append(Truncation(source="gated-prs", target=repo, limit=limit))
+            for pr, _ in parse_prs(repo, raw):
+                if held_gates(pr.labels or []):
+                    found.setdefault(pr.number, pr)
+    except ForgeError as exc:
+        return [], [GatedUnread(repo=repo, why=str(exc))]
+    return sorted(found.values(), key=lambda p: p.number), []
 
 
 def _ledger_reads(

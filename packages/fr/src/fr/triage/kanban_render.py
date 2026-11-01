@@ -26,7 +26,16 @@ from fr.triage.components import (
     stamp_text,
     when,
 )
-from fr.triage.kanban import Board, BoardStatus, Card, ColumnView, HeldIssue, Member, PrView
+from fr.triage.kanban import (
+    Board,
+    BoardStatus,
+    Card,
+    ColumnView,
+    GatedCard,
+    HeldIssue,
+    Member,
+    PrView,
+)
 from fr.triage.render import FONTS, _safe_url, esc, noun
 
 if TYPE_CHECKING:
@@ -361,12 +370,23 @@ def _held(held: Sequence[HeldIssue]) -> str:
     )
 
 
+def _gated_card(g: GatedCard) -> str:
+    return (
+        f'<div class="card needs-you" data-gated-pr="{esc(g.repo)}#{g.number}">'
+        f'<span class="mono">{_link(f"PR #{g.number}", g.url)}</span> '
+        f'<span class="meta">{esc(g.repo)}</span>'
+        f'<span class="title">{esc(g.title)}</span>'
+        f'<span class="hint">{esc(g.reason)}</span></div>'
+    )
+
+
 def _column(column: ColumnView, scope_args: Sequence[str]) -> str:
     cards = "".join(_card(c, scope_args) for c in column.cards)
+    cards += "".join(_gated_card(g) for g in column.gated)
     return (
         f'<section class="col" data-column="{esc(column.key)}">'
-        f'<h2>{esc(column.title)} <span class="count">{len(column.cards)}</span></h2>'
-        f"{cards}</section>"
+        f'<h2>{esc(column.title)} <span class="count">{len(column.cards) + len(column.gated)}'
+        f"</span></h2>{cards}</section>"
     )
 
 
@@ -386,7 +406,7 @@ def render_board(
     board that stopped moving is told apart from a quiet one. None: no quota clause.
     *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
     commands carry; *refresh* is the reload interval in seconds, 0 for none."""
-    if board.batch_count:
+    if board.batch_count or board.gated_count:
         body = (
             '<div class="board">'
             + "".join(_column(c, scope_args) for c in board.columns)

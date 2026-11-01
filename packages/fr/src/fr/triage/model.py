@@ -65,8 +65,12 @@ from fr.triage.stage import Stage, derive_stage
 # per-config `TriageConfig.exit` (R4): `to_json` dumps `cursor` and `exit`, `null`
 # included, which a closed-world schema-11 reader rejects; a file below 12 reads both as
 # None, so no batch reads as gated and no cursor position is known.
-FACTS_SCHEMA: Literal[12] = 12
-FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+# 13 adds (2026-11-01-gate-backfill §I, R13) `gated_prs` (the merged PRs still holding a
+# `gate:*` label, batch or not) and `gated_unread` (repos whose gate-labelled PRs could not
+# be read): `to_json` dumps both, `[]` included, which a closed-world schema-12 reader
+# rejects; a file below 13 reads both as `[]`, so no gate-labelled PR outside a batch shows.
+FACTS_SCHEMA: Literal[13] = 13
+FACTS_READS: tuple[int, ...] = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
 # The version this fr WRITES: every engine write stamps 12 (recovery ownership/session
 # metadata; 11 added the `archive_conflict` event,
 # 2026-10-14-merge-truth §E; 10 was the `closeout_handback` and `closeout_hold` events and
@@ -87,7 +91,7 @@ SCOPE_NAME_LIMIT = 80
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
 PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
-TruncatedList = Literal["repos", "issues", "prs", "closed-in-progress"]
+TruncatedList = Literal["repos", "issues", "prs", "closed-in-progress", "gated-prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 Kind = Literal["defect", "feature", "parked"]
@@ -431,7 +435,11 @@ class Truncation(_Strict):
                 f"({self.limit}), so the closed-but-in-progress set may be incomplete; "
                 "no flag raises this limit"
             )
-        remedy = "raise it with --pr-limit" if self.source == "prs" else "no flag raises this limit"
+        remedy = (
+            "raise it with --pr-limit"
+            if self.source in ("prs", "gated-prs")
+            else "no flag raises this limit"
+        )
         return (
             f"the {_LIST_WORDS[self.source]} for {target} returned exactly its limit "
             f"({self.limit}), so it may be cut short; {remedy}"
@@ -443,6 +451,7 @@ _LIST_WORDS: dict[str, str] = {
     "issues": "issue list",
     "repos": "repo list",
     "closed-in-progress": "closed fr:in-progress / fr:claimed list",
+    "gated-prs": "gate-labelled merged PR list",
 }
 
 
@@ -600,6 +609,18 @@ class StaleInProgress(_Strict):
     state: InProgressState
 
 
+class GatedUnread(_Strict):
+    """A repo whose gate-labelled merged PRs `collect` could not read (gate-backfill R13):
+    the forge failed, or the backend has no such read. The board lists it, so an empty
+    gate lane never passes for "nothing is held"."""
+
+    repo: str
+    why: str
+
+    def describe(self) -> str:
+        return f"gate-labelled PRs of {self.repo} not read: {self.why}"
+
+
 class Facts(_Strict):
     """What `collect` read from the forge for one scope.
 
@@ -608,7 +629,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11, 12] = Field(12, alias="schema")
+    schema_: Literal[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] = Field(13, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -638,6 +659,11 @@ class Facts(_Strict):
     # OWNER/REPO -> the top-level `.fr/triage.yaml` keys a lenient read dropped (R4,
     # schema 9; the skew banner reads it).
     config_ignored: dict[str, list[str]] = {}
+    # Merged PRs of a collected repo still holding `gate:tester` or `gate:devops` (read by
+    # label, so a PR outside every batch is found), and the repos that read failed for
+    # (gate-backfill §I, schema 13).
+    gated_prs: list[PullRequest] = []
+    gated_unread: list[GatedUnread] = []
 
     @model_validator(mode="after")
     def _group_needs_schema_4(self) -> Facts:

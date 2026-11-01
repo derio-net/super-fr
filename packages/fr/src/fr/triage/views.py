@@ -60,7 +60,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
-from fr.triage.lanes import lane_of, live_stops
+from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
@@ -179,6 +179,7 @@ class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
     # | needs-developer | needs-reviewer | needs-tester | needs-devops (the board's lanes)
     # | ledger-unread (a landed batch whose gate labels could not be read)
+    # | gated-unread (a repo whose gate-labelled merged PRs could not be listed)
     # | closeout-held (a landed batch the close-out verb held, exit-gates R15)
     # | closeout-pr-closed | closeout-needs-review | closeout-unrecorded | closeout-reopened
     #   (a collected close-out PR the driver will not merge unasked, R15)
@@ -206,6 +207,7 @@ NEED_LABELS = {
     "archive-conflict": "Archive PR conflict",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
+    "gated-unread": "Gate labels unread",
     "closeout-held": "Close-out held: Test Plan outcome owed",
     "closeout-stuck": "Close-out PR stuck",
     "closeout-pr-closed": "Close-out PR closed unmerged",
@@ -408,6 +410,13 @@ def needs_you(
         if lane_pr is not None and conflicting(lane_pr.mergeable, lane_pr.merge_state):
             text += f" (PR #{lane_pr.number} is also conflicting)"
         out.append(Need(placed.lane, b.id, text, f"#batch-{b.id}"))
+
+    for g in unlisted_gated_prs(judgements.batches, facts, held_stops):
+        placed = gated_pr_lane(g)
+        if placed is not None:
+            out.append(Need(placed.lane, f"PR #{g.number}", f"{g.repo}: {placed.reason}", g.url))
+    for u in facts.gated_unread:
+        out.append(Need("gated-unread", u.repo, u.describe(), None))
 
     for s in stale_dispatches(facts):
         out.append(

@@ -385,7 +385,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 12
+    assert facts.to_json()["schema"] == 13
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -714,7 +714,7 @@ def test_collect_ignores_an_untrusted_authors_marker() -> None:
 
 def test_collected_facts_are_schema_9() -> None:
     facts = collect_facts(_claim_forge({}), SUPER_FR, now=NOW)
-    assert facts.to_json()["schema"] == 12
+    assert facts.to_json()["schema"] == 13
 
 
 def test_collect_counts_a_peer_hosts_marker_by_a_repo_member() -> None:
@@ -939,3 +939,96 @@ def test_a_closed_list_at_its_limit_names_itself_and_leaves_the_carry_active() -
     assert isinstance(w, Truncation) and w.source == "closed-in-progress"
     assert "closed fr:in-progress / fr:claimed list" in w.describe(REPO)
     assert stats.carried == 1 and stats.viewed == 0
+
+
+# ---- gate-labelled merged PRs (spec 2026-11-01-gate-backfill §I, R13) ----------------
+
+
+def _gated_pr(number: int, labels: list[str]) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": f"merged {number}",
+        "state": "MERGED",
+        "isDraft": False,
+        "createdAt": "2026-10-01T00:00:00Z",
+        "mergedAt": "2026-10-02T00:00:00Z",
+        "url": f"https://github.com/example-org/alpha/pull/{number}",
+        "headRefName": f"feat/x{number}",
+        "closingIssuesReferences": [],
+        "author": {"login": "operator"},
+        "isCrossRepository": False,
+        "labels": [{"name": n} for n in labels],
+    }
+
+
+GATED_REPO = "example-org/alpha"
+GATED_SCOPE = Scope(kind="repo", target=GATED_REPO)
+
+
+def _gated_forge(**kw: Any) -> FakeForge:
+    return FakeForge(issues={GATED_REPO: []}, prs={GATED_REPO: []}, **kw)
+
+
+def test_collect_keeps_gate_labelled_merged_prs_once_each() -> None:
+    both = _gated_pr(1, ["gate:tester", "gate:devops"])
+    forge = _gated_forge(
+        gated={
+            GATED_REPO: [
+                both,
+                _gated_pr(2, ["gate:devops"]),
+                _gated_pr(3, ["gate:tester", "gate:tester-passed"]),  # settled
+            ]
+        }
+    )
+    facts = collect_facts(forge, GATED_SCOPE, now=NOW)
+    assert [(p.repo, p.number) for p in facts.gated_prs] == [(GATED_REPO, 1), (GATED_REPO, 2)]
+    assert facts.gated_prs[0].state == "MERGED"
+    assert facts.gated_prs[0].labels == ["gate:tester", "gate:devops"]
+    assert facts.gated_unread == []
+    labels = sorted(kw["label"] for kw in forge.called("list_merged_prs_by_label"))
+    assert labels == ["gate:devops", "gate:tester"]
+
+
+def test_a_gated_list_returning_its_limit_is_a_truncation() -> None:
+    forge = _gated_forge(gated={GATED_REPO: [_gated_pr(1, ["gate:tester"])]})
+    facts = collect_facts(forge, GATED_SCOPE, now=NOW, pr_limit=1)
+    assert [(w.source, w.target, w.limit) for w in facts.warnings if w.source == "gated-prs"] == [
+        ("gated-prs", GATED_REPO, 1)
+    ]
+    assert "gate-labelled" in next(w for w in facts.warnings if w.source == "gated-prs").describe(
+        GATED_REPO
+    )
+
+
+def test_a_failed_gated_read_is_recorded_not_fatal() -> None:
+    forge = _gated_forge(gated_failing={GATED_REPO: "HTTP 502"})
+    facts = collect_facts(forge, GATED_SCOPE, now=NOW)
+    assert facts.gated_prs == []
+    (unread,) = facts.gated_unread
+    assert unread.repo == GATED_REPO
+    assert unread.describe() == f"gate-labelled PRs of {GATED_REPO} not read: HTTP 502"
+
+
+def test_an_unsupported_gated_read_is_recorded_not_fatal() -> None:
+    forge = _gated_forge()
+
+    def unsupported(**kw: Any) -> list[dict[str, Any]]:
+        raise ForgeError("`list_merged_prs_by_label` is not supported on the gitlab backend")
+
+    forge.list_merged_prs_by_label = unsupported  # type: ignore[method-assign]
+    facts = collect_facts(forge, GATED_SCOPE, now=NOW)
+    assert [u.repo for u in facts.gated_unread] == [GATED_REPO]
+
+
+def test_facts_written_before_schema_13_read_with_no_gated_fields(tmp_path: Path) -> None:
+    from fr.triage.model import load_facts
+
+    facts = collect_facts(_gated_forge(), GATED_SCOPE, now=NOW)
+    doc = facts.to_json()
+    doc.pop("gated_prs")
+    doc.pop("gated_unread")
+    doc["schema"] = 12
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    loaded = load_facts(path)
+    assert loaded.gated_prs == [] and loaded.gated_unread == []

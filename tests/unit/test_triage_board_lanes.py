@@ -271,3 +271,110 @@ def test_p3_r9_a_passed_devops_gate_merges_as_before() -> None:
 
     f, jd = _open(_cursor("none"), labels=["approved-fr", "gate:devops", "gate:devops-passed"])
     assert _col(f, jd) == "pr-open" and first_actions(f, jd)["a"].kind == "merge"
+
+
+# ------------------------------- gate-labelled merged PRs outside batches (gate-backfill R13)
+
+
+def _gated(number: int, labels: list[str] | None) -> dict[str, Any]:
+    return pr(number, f"feat/x{number}", state="MERGED", merged_at="2026-10-01T09:00:00Z",
+              labels=labels)  # fmt: skip
+
+
+def _with_gated(f: Any, *prs: dict[str, Any], unread: list[dict[str, str]] | None = None) -> Any:
+    doc = f.model_dump(by_alias=True)
+    doc.update(schema=13, gated_prs=list(prs), gated_unread=unread or [])
+    return type(f).model_validate(doc)
+
+
+def _only_gated(*prs: dict[str, Any], unread: list[dict[str, str]] | None = None) -> Any:
+    return _with_gated(facts([]), *prs, unread=unread), judgements({})
+
+
+def _gated_pr_of(number: int, labels: list[str] | None) -> Any:
+    return _with_gated(facts([]), _gated(number, labels)).gated_prs[0]
+
+
+def test_gated_pr_lane_is_tester_first_then_devops_then_none() -> None:
+    from fr.triage.lanes import gated_pr_lane
+
+    both = gated_pr_lane(_gated_pr_of(1, ["gate:tester", "gate:devops"]))
+    assert both is not None and both.lane == "needs-tester"
+    assert "gate:tester" in both.reason and "gate:devops" in both.reason
+    dev = gated_pr_lane(_gated_pr_of(2, ["gate:devops"]))
+    assert dev is not None and dev.lane == "needs-devops"
+    assert gated_pr_lane(_gated_pr_of(3, ["gate:tester", "gate:tester-passed"])) is None
+    assert gated_pr_lane(_gated_pr_of(4, [])) is None
+    assert gated_pr_lane(_gated_pr_of(5, None)) is None
+
+
+def test_a_gate_labelled_pr_outside_every_batch_is_one_need_with_the_pass_command() -> None:
+    f, jd = _only_gated(_gated(30, ["gate:devops"]))
+    (need,) = needs_you(f, jd)
+    assert (need.kind, need.ref) == ("needs-devops", "PR #30")
+    assert need.href == "https://github.com/example-org/widgets/pull/30"
+    assert "merged, held by gate:devops" in need.text
+    assert 'fr gate pass --pr 30 --gate devops --notes "' in need.text
+    assert "--no-run-evidence" in need.text
+
+
+def test_the_board_lists_the_gated_pr_in_its_lane_column() -> None:
+    f, jd = _only_gated(_gated(30, ["gate:tester"]), _gated(31, ["gate:devops"]))
+    board = build_board(f, jd, {})
+    assert [g.number for g in board.column("needs-tester").gated] == [30]
+    assert [g.number for g in board.column("needs-devops").gated] == [31]
+    assert "gate:tester" in board.column("needs-tester").gated[0].reason
+
+
+def test_a_pr_whose_batch_is_in_a_lane_is_listed_only_through_its_batch() -> None:
+    f, jd = _merged(["gate:tester"])
+    f = _with_gated(f, _gated(10, ["gate:tester"]))
+    rows = [n for n in needs_you(f, jd) if n.kind in LANES]
+    assert [(n.kind, n.ref) for n in rows] == [("needs-tester", "a")]
+    board = build_board(f, jd, {})
+    assert board.column("needs-tester").gated == ()
+    assert [c.batch.id for c in board.column("needs-tester").cards] == ["a"]
+
+
+def test_a_closed_out_batchs_pr_is_listed_through_gated_prs() -> None:
+    f, jd = _merged(["gate:tester"], [CLOSEOUT])
+    assert not [n for n in needs_you(f, jd) if n.ref == "a" and n.kind in LANES]
+    f = _with_gated(f, _gated(10, ["gate:tester"]))
+    (need,) = [n for n in needs_you(f, jd) if n.kind in LANES]
+    assert (need.kind, need.ref) == ("needs-tester", "PR #10")
+    assert [g.number for g in build_board(f, jd, {}).column("needs-tester").gated] == [10]
+
+
+def test_a_batch_with_an_unread_ledger_does_not_list_its_pr_through_gated_prs() -> None:
+    f, jd = _merged(None)
+    f = _with_gated(f, _gated(10, ["gate:tester"]))
+    kinds = [n.kind for n in needs_you(f, jd)]
+    assert kinds.count("ledger-unread") == 1 and "needs-tester" not in kinds
+    assert build_board(f, jd, {}).column("needs-tester").gated == ()
+
+
+def test_an_unread_gate_listing_is_a_need() -> None:
+    from fr.triage.views import NEED_LABELS
+
+    f, jd = _only_gated(unread=[{"repo": "example-org/widgets", "why": "HTTP 502"}])
+    (need,) = needs_you(f, jd)
+    assert need.kind == "gated-unread"
+    assert need.ref == "example-org/widgets"
+    assert need.text == "gate-labelled PRs of example-org/widgets not read: HTTP 502"
+    assert NEED_LABELS["gated-unread"] == "Gate labels unread"
+
+
+def test_the_rendered_board_shows_a_gated_pr_card() -> None:
+    from datetime import UTC, datetime
+
+    from fr.triage.kanban_render import render_board
+
+    f, jd = _only_gated(_gated(30, ["gate:tester"]))
+    page = render_board(
+        build_board(f, jd, {}),
+        scope_args=["--repo", "example-org/widgets"],
+        rendered_at=datetime(2026, 10, 5, tzinfo=UTC),
+        refresh=30,
+        notes=[],
+    )
+    assert "PR #30" in page and "merged, held by gate:tester" in page
