@@ -19,7 +19,6 @@ from fr.spec import _step, test_plan_steps
 SUMMARY_MAX = 80
 """The longest `summary:` a stub carries; a longer step text is clipped with `…`."""
 
-_HEADING_RE = re.compile(r"^#{1,2}\s+Test Plan\s*$")
 _LEAD_RE = re.compile(
     r"^(?P<lead>\s*(?:\d+[.)]|[-*])\s+(?:\[(?:devops|tester)\](?:\s+|$))?)(?P<rest>.*)$"
 )

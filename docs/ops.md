@@ -281,7 +281,9 @@ run their checks instead of asking.
   like an operations command; a heuristic, so a prose span can false-positive) has an
   ops gap. `fr plan self-review` and the spec review warn about it, and `fr ops gate`
   stage 1 refuses it (exit 2, nothing brought up or recorded), reading the PR head, or
-  the default branch's tip once merged. Fix it on the PR branch.
+  the default branch's tip once merged. Fix it on the PR branch while the PR is open;
+  once it has merged, land the fix on the default branch through a follow-up PR (stage 1
+  then reads the default branch's tip).
 - **`fr ops stub [--plan <dir>] [--yes]`.** For each devops command step without a
   pointer it proposes the op `step-<n>` (`phase: post-merge`, `apply:` the step's
   commands joined with ` && `, `mutating: true`) and the `(op: step-<n>)` pointer. Without
@@ -304,10 +306,13 @@ run their checks instead of asking.
 - **Evidence bound.** The screen shows the last 40 lines of a passing probe (each at most
   200 characters). Only the last three **status lines**, 300 characters in all, are
   recorded, and the rule fails closed: a status line holds only letters, digits, spaces
-  and `, . ; ( ) / % + # _ * -` (no colon, quote, `=` or angle bracket), and output with
-  a `{`, `}`, `[` or `]` anywhere records none of its lines. So a JSON or YAML body, an
-  env assignment or a URL is never committed; the evidence reads `no output` instead.
-  Masking hides secret values, not hostnames or other identifying text, so end a probe
+  and `, . ; ( ) / % + # _ * -` (no colon, quote, `=` or angle bracket); a line starting
+  with `- ` or `* ` (a list item) is dropped; a line with a word of 20 or more characters,
+  or of 12 or more that mixes letters and digits (token-shaped), is dropped; and output
+  with a `{`, `}`, `[` or `]` anywhere records none of its lines. So a JSON or YAML body,
+  an env assignment, a URL, a JWT or a key is never committed; the evidence reads
+  `no output` instead. Masking hides known secret values only; hostnames, IPs and other
+  identifying text are not filtered, so end a probe
   with a plain one-line summary (`converged 3 of 3`) and keep it free of them.
 
 ### Test Plan tags

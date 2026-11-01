@@ -96,7 +96,8 @@ UNVERIFIABLE, CANNOT-VERIFY, ESCALATE) shows its reason and asks `retry`, `na <r
 `owed <why>`; `ran` is refused. A step with no pointer, an N/A op or one closed without a
 check is walked by you, then answered `ran <evidence>`, `na <reason>` or `owed <why>` (`ran: x`
 works too; an answer that does not match is asked again). Committed evidence is only a few
-status lines, so a probe should end with a one-line summary. An `owed` answer is recorded but does not close the step,
+status lines, so a probe should end with a plain summary line: no colon, quote, `=`,
+bracket, list marker or long token, and a bracket anywhere records nothing. An `owed` answer is recorded but does not close the step,
 so stage 6 refuses and prints the `fr closeout outcome` command that records it once you
 have walked it (a later `ran`/`na` supersedes the owed one); then re-run the stage. Steps the Tester gate
 owns are listed in the gate-pass comment and keep `gate:tester` on the PR; they are not
