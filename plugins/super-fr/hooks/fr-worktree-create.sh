@@ -1,8 +1,16 @@
 #!/bin/bash
 # WorktreeCreate (spec 2026-09-04 §5.B.3): session worktrees become fr
-# workspaces; subagent worktrees (agent-*) keep Claude's default shape. The
-# LAST stdout line is the worktree path; everything else goes to stderr. A
-# registered hook cannot decline, so every branch below prints a path or exits 1.
+# workspaces; subagent worktrees (agent-*) are plain detached worktrees OUTSIDE
+# the repo (gh#1270). The LAST stdout line is the worktree path; everything else
+# goes to stderr. A registered hook cannot decline, so every branch below prints
+# a path or exits 1.
+#
+# A registered WorktreeCreate replaces Claude's native creation, and with it the
+# native lifecycle: Claude takes no lock and (measured on 2.1.316) never fires
+# WorktreeRemove for a subagent. Left in `<repo>/.claude/worktrees/` they piled
+# up and nested until Claude refused new isolated dispatches. So agent_worktree
+# files them under `~/.cache/fr/agent-worktrees/<repo-key>/<name>`, locks each
+# with the Claude pid, and `fr isolation gc` reaps the finished, clean ones.
 set -eu
 input=$(cat)
 name=$(printf '%s' "$input" | jq -r '.name // empty')
@@ -19,6 +27,32 @@ mimic_default() {
   mkdir -p "$root/.claude/worktrees"
   base=$(git -C "$root" rev-parse --verify -q origin/HEAD 2>/dev/null || git -C "$root" rev-parse HEAD)
   git -C "$root" worktree add --detach "$dir" "$base" >&2
+  copy_worktreeinclude "$dir"
+  printf '%s\n' "$dir"
+  exit 0
+}
+agent_worktree() {
+  # Claude's default base (origin/HEAD fresh, else the invoking checkout's HEAD),
+  # but filed under the MAIN checkout's key, so a subagent dispatching from its
+  # own worktree makes a sibling, never a nested child. The key is the main
+  # checkout's basename, as `fr.isolation.types.repo_cache_name` computes it.
+  common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
+  case "$common" in */.git) key=$(basename "$(dirname "$common")") ;; *) key=$(basename "$root") ;; esac
+  dir="$HOME/.cache/fr/agent-worktrees/$key/$name"
+  if [ -d "$dir" ]; then
+    # Two repos can share a basename: never hand a subagent the other's checkout.
+    theirs=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+    [ "$theirs" = "$common" ] || {
+      echo "fr-worktree-create: $dir belongs to another repository (${theirs:-not a git worktree})" >&2
+      exit 1; }
+    printf '%s\n' "$dir"; exit 0
+  fi
+  mkdir -p "$(dirname "$dir")"
+  base=$(git -C "$root" rev-parse --verify -q origin/HEAD 2>/dev/null || git -C "$root" rev-parse HEAD)
+  git -C "$root" worktree add --detach "$dir" "$base" >&2
+  # The hook's parent is the Claude process (measured live): while it lives, gc
+  # leaves this worktree alone. Best effort; an unlocked one still ages out.
+  git -C "$root" worktree lock --reason "fr-agent pid=$PPID session=${session_id:-?}" "$dir" >&2 || true
   copy_worktreeinclude "$dir"
   printf '%s\n' "$dir"
   exit 0
@@ -83,7 +117,7 @@ done
 trap 'rm -rf "$lock"' EXIT
 echo $$ > "$lock/pid"
 
-case "$name" in agent-*) mimic_default ;; esac
+case "$name" in agent-*) agent_worktree ;; esac
 if ! fr_enabled || ! command -v fr >/dev/null 2>&1; then mimic_default; fi
 
 branch="$name"; case "$name" in */*) ;; *) branch="wt/$name" ;; esac

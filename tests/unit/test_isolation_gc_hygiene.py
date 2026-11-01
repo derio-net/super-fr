@@ -174,3 +174,23 @@ def test_gc_unlinks_index_whose_state_no_longer_lists_the_session(
     assert expected in actions
     assert not index.exists()
     assert state.worktree.is_dir()
+
+
+# ---------- (c) agent-worktree (gh#1270) ----------
+
+
+def test_gc_runs_the_agent_worktree_sweep(home: Path, target: HostWorktreeTarget) -> None:
+    """`gc` is the reaper Claude Code's missing WorktreeRemove leaves fr to be:
+    the sweep runs as part of it, `--dry-run` included. A worktree created this
+    instant is young, so it is reported and kept."""
+    wt = home / ".cache" / "fr" / "agent-worktrees" / "repo" / "agent-c0ffee"
+    wt.parent.mkdir(parents=True)
+    subprocess.run(
+        ["git", "-C", str(target.repo_root), "worktree", "add", "--detach", str(wt), "HEAD"],
+        check=True,
+        capture_output=True,
+    )
+    for dry in (True, False):
+        mine = [a for a in target.gc(dry_run=dry) if a.verdict == "agent-worktree"]
+        assert [(a.worktree, a.action) for a in mine] == [(str(wt.resolve()), "skipped")]
+    assert wt.is_dir()

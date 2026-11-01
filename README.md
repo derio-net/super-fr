@@ -261,7 +261,7 @@ of them, and knows which agent session holds each workspace:
 |---|---|---|
 | `fr isolation up` | `~/.cache/fr/worktrees/<main-checkout>/<branch-slug>` (keyed on the main checkout even when run from inside another worktree) | `<common-dir>/fr/isolation/<slug>.json` + per-session index `~/.cache/fr/sessions/<session-id>.json` |
 | Claude native (`claude --worktree <name>`, `EnterWorktree`, desktop) | same fr location, branch `wt/<name>` — the `WorktreeCreate` hook calls `fr isolation up --session --print-path` | fr state, session bound in the same call |
-| Agent tool `isolation: "worktree"` (`agent-*` names) | `<repo>/.claude/worktrees/agent-<id>` — Claude's default shape, reproduced by the same hook on purpose | Claude-internal (subagent only) |
+| Agent tool `isolation: "worktree"` (`agent-*` names) | `~/.cache/fr/agent-worktrees/<main-checkout>/agent-<id>`: a detached worktree outside the repo, locked with the Claude pid by the same hook (gh#1270) | none; `fr isolation gc` reaps finished, clean ones, since Claude never fires `WorktreeRemove` for them |
 | superpowers `using-git-worktrees` | routed to `fr isolation up` by the shipped rule `fr-worktree-override.md`; `<repo>/.worktrees/` is never created (CI tripwire) | fr state |
 
 `fr isolation status` lists the sessions holding each workspace. The

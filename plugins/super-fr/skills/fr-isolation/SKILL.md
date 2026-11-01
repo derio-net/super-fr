@@ -82,8 +82,8 @@ Which harness session holds which workspace — traceability only; the edit gate
 `up --session` binds in the same call; `down` detaches everyone AFTER a successful teardown (a refused `down` keeps bindings);
 `gc` prunes stale indexes. Claude transports (plugin hooks, always exit 0): `fr-session-bind.sh` (PostToolUse Bash; parses
 `fr isolation up|exec|down …`, leading `cd` folded), `fr-session-unbind.sh` (SessionEnd), `fr-worktree-create.sh` (`claude --worktree` /
-`EnterWorktree` → `up --session --print-path`, branch `wt/<name>`; `agent-*` keep Claude's default `<repo>/.claude/worktrees/`
-shape), `fr-worktree-remove.sh` (`down --worktree`; a refusal keeps the workspace). Hermes has no bind transport yet.
+`EnterWorktree` → `up --session --print-path`, branch `wt/<name>`; `agent-*` go detached and locked to `~/.cache/fr/agent-worktrees/<repo>/`,
+reaped by `gc` once finished and clean), `fr-worktree-remove.sh` (`down --worktree`; a refusal keeps the workspace). Hermes has no bind transport yet.
 
 **Status line** (spec 2026-09-14): `scripts/fr-statusline-segment.sh` answers "which branch, and is this session in fr-isolation?" —
 shell+jq+git, never fr. Input: status-line JSON on stdin, or `--cwd <dir>` (no stdin). A live binding wins; else the cwd's branch, `fr`
