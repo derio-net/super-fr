@@ -255,3 +255,8 @@ row_kinds:
 run_gate: tester
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-01-auto-migrate-own-commit-p1 created=2026-11-01T11:59:06+00:00 -->
+### tier-2026-11-01-auto-migrate-own-commit-p1 · decision · tier hard: the change rewires the CLI-entry migration gate every fr command passes through
+
+The phase reorders ensure_artifacts_current's refusals and adds a committing context in non-interactive sessions; a mistake either commits where it must not (CI, bridge, default branch) or strands every command behind a refusal.
