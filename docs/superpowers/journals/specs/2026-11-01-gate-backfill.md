@@ -382,3 +382,8 @@ Spec Requirements group; see plan _prose.md.
 ### archive-no-dry-run · finding [open] (reviewer: out of scope) · fr archive files forge issues but has no dry run
 
 Corpus update 1 (decision d14): two triage owners refused to run fr archive during their reconciliation because it files fr:owed and follow-up issues with no preview. fr gate backfill now gives the per-repo sweep its own preview; fr archive itself still has none. Out of scope here (d14).
+
+<!-- fr:journal kind=finding scope=spec id=archive-no-dry-run-resolved created=2026-11-01T21:54:41+00:00 state=open resolves=archive-no-dry-run out_of_scope=true -->
+### archive-no-dry-run-resolved · finding [out-of-scope] · resolves archive-no-dry-run: fr archive files forge issues but has no dry run
+
+fr archive is not changed by this run (decision d14); backfill gives the sweep its own preview.
