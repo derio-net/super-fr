@@ -462,7 +462,9 @@ def ensure_artifacts_current(
                 f'{NON_INTERACTIVE_ENV_VAR} is set — an explicit "do not write to git" — so '
                 "fr will not migrate or commit here:",
                 "the opt-out wins over a TTY and over an fr-isolation workspace alike.",
-                carry=True,
+                # No `carry it:` line (review p1-r3): entering isolation does not
+                # help while the opt-out stays set.
+                carry=False,
             ),
         )
     if where == "ci":
@@ -578,15 +580,6 @@ def _still_stale(root: Path, registry: MigrationRegistry | None) -> bool:
         return True
 
 
-def _ci_veto(root: Path) -> Callable[[Path], str | None]:
-    """`uncommitted_veto`, except that a veto which cannot read git state holds
-    nothing back: a CI checkout with no repo has no edits to protect (§C)."""
-    try:
-        return uncommitted_veto(root)
-    except Exception:
-        return lambda path: None
-
-
 def _migrate_in_place(
     root: Path,
     registry: MigrationRegistry | None,
@@ -618,7 +611,13 @@ def _migrate_in_place(
                 ),
             )
         try:
-            report = run_migrations(root, dry_run=False, registry=registry, veto=_ci_veto(root))
+            # `uncommitted_veto` itself, inside the try (review p1-r1): with no
+            # repo it holds nothing back (`uncommitted_paths` returns an empty
+            # set), and a git state it cannot read raises, which refuses below.
+            # Unknown is never treated as clean.
+            report = run_migrations(
+                root, dry_run=False, registry=registry, veto=uncommitted_veto(root)
+            )
         except Exception as e:
             raise _refuse(
                 emit,

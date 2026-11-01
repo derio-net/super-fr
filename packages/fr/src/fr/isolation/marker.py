@@ -145,6 +145,8 @@ def valid_workspace(root: Path, branch: str | None) -> WorkspaceVerdict:
     `branch` is the CURRENT branch, `None` for a detached HEAD. Drift is a
     present, non-empty `marker["branch"]` that differs from a non-None current
     branch (gh#553); a marker with no branch, or a detached HEAD, is not drift.
+    Drift is checked only for worktree (or empty) mode, as the edit gate's
+    `fr_isolation_drift_reason` does: an external marker belongs to its preparer.
     """
     data = _read(root)
     if isinstance(data, str):
@@ -153,7 +155,14 @@ def valid_workspace(root: Path, branch: str | None) -> WorkspaceVerdict:
     if problem is not None:
         return WorkspaceVerdict(ok=False, reason=problem)
     recorded = data.get("branch")
-    if isinstance(recorded, str) and recorded and branch is not None and branch != recorded:
+    worktree_mode = data.get("mode") in (None, "", "worktree")
+    if (
+        worktree_mode
+        and isinstance(recorded, str)
+        and recorded
+        and branch is not None
+        and branch != recorded
+    ):
         return WorkspaceVerdict(
             ok=False,
             reason=(

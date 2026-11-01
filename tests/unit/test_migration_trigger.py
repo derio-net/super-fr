@@ -1156,6 +1156,9 @@ def test_fr_non_interactive_in_a_valid_workspace_refuses(tmp_path: Path) -> None
     assert code == 2
     assert _g(fx.wt, "rev-parse", "HEAD") == fx.work_sha
     assert "FR_NON_INTERACTIVE" in _flat(lines)
+    # Review p1-r3: "enter isolation and the next command migrates" is false
+    # while the opt-out stays set, so the opt-out refusal does not offer it.
+    assert "carry it:" not in _flat(lines)
 
 
 def test_a_drifted_workspace_refuses_naming_drift(tmp_path: Path) -> None:
@@ -1235,6 +1238,28 @@ def test_ci_holds_back_an_uncommitted_edit(tmp_path: Path) -> None:
     code, _ = _gate(fx.primary, env={"CI": "true"})
     assert code == 2
     assert meta.read_text() == before, "the veto holds in CI too"
+
+
+def test_ci_refuses_when_git_cannot_say_what_is_uncommitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p1-r1: an unreadable git state is not a clean one. The CI veto
+    used to swallow every error and hold nothing back, so a local shell with
+    `CI=1` and a broken git context had edited artifacts rewritten in place."""
+    from fr.artifacts import commit as commit_mod
+
+    fx = _Fixture(tmp_path)
+    meta = fx.meta(fx.primary)
+    before = meta.read_text()
+    monkeypatch.setattr(
+        commit_mod, "git_context", lambda root: commit_mod.GitRefusal(reason="git exploded")
+    )
+
+    code, lines = _gate(fx.primary, env={"CI": "true"})
+
+    assert code == 2, lines
+    assert "git exploded" in _flat(lines)
+    assert meta.read_text() == before, "nothing is migrated over an unknown tree"
 
 
 def test_a_failing_migration_in_ci_refuses(tmp_path: Path) -> None:

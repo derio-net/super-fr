@@ -105,11 +105,12 @@ export function createNagHandler(options: NagHandlerOptions) {
         if (out !== "" && !out.includes("no acceptance debt")) {
           text = `Acceptance debt in this repo (backfill owed — details: fr acceptance status):\n${out}\n`;
         }
-        // The gate may have migrated and committed on the way in (spec
-        // 2026-11-01-auto-migrate-own-commit R11): relay its one-line notice first.
-        const notice = err.split("\n").find((line) => line.startsWith(COMMIT_NOTICE));
-        if (notice) text = `${notice}\n${text ?? ""}`;
       }
+      // The gate may have migrated and committed on the way in (spec
+      // 2026-11-01-auto-migrate-own-commit R11): relay its one-line notice first,
+      // on a refusal too: a partial migration commits, then exits 2 (review p1-r4).
+      const notice = err.split("\n").find((line) => line.startsWith(COMMIT_NOTICE));
+      if (notice) text = `${notice}\n${text ?? ""}`;
       if (text) (event.system as { type: "text"; text: string }[]).push({ type: "text", text });
     } catch {
       // Fail open, always. See the header.

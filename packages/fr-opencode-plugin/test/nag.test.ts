@@ -145,6 +145,18 @@ describe("acceptance nag", () => {
     expect(second.system).toEqual([{ type: "text", text: `${notice}\n` }]);
   });
 
+  test("a partial migration's commit notice is relayed on its refusal too (p1-r4)", async () => {
+    const notice = "fr: migrated and committed 2 artifact(s): chore(fr): migrate 2 plans to fr 9.9.9 (abc1234)";
+    const { runFr } = stub({
+      code: 2,
+      stdout: "",
+      stderr: `${notice}\nfr: 2 artifact(s) migrated and committed; 1 left unmodified.\n`,
+    });
+    const event = ctxEvent("ses_partial");
+    await createNagHandler({ session: topLevel, directory: repo, runFr })(event);
+    expect(event.system).toEqual([{ type: "text", text: `${notice}\n` }]);
+  });
+
   test("never throws", async () => {
     const session = {
       get: async () => {

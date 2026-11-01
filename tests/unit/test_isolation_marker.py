@@ -144,6 +144,18 @@ def test_an_external_marker_with_container_evidence_is_a_workspace(
     assert valid_workspace(primary, "feat/x").ok is True
 
 
+def test_an_external_marker_is_never_branch_drift(
+    primary: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p1-r2: the edit gate checks drift only for worktree (or empty)
+    mode (`fr_isolation_drift_reason`); a preparer's external checkout may
+    switch branches as `fr isolation up --branch` adopts it."""
+    monkeypatch.setattr(marker_mod, "container_evidence", lambda: True)
+    _git(primary, "checkout", "-q", "-b", "feat/other")
+    _write(primary, _marker(primary, mode="external"))
+    assert valid_workspace(primary, "feat/other").ok is True
+
+
 def test_an_unknown_mode_is_not_a_workspace(worktree: Path) -> None:
     _write(worktree, _marker(worktree, mode="vibes"))
     assert "unknown mode" in _bad(valid_workspace(worktree, "feat/x"))

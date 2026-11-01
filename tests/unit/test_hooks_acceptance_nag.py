@@ -195,6 +195,19 @@ def test_the_commit_notice_is_relayed_even_with_no_debt(tmp_path: Path) -> None:
     assert done.stdout.strip() == NOTICE
 
 
+def test_a_partial_migration_still_relays_its_commit(tmp_path: Path) -> None:
+    """Review p1-r4: a partial migration commits what it could and then exits
+    2. The commit has landed, so the session is told about it."""
+    done = _run_with_fake_fr(
+        tmp_path,
+        f"echo '{NOTICE}' >&2\n"
+        "echo 'fr: 2 artifact(s) migrated and committed; 1 left unmodified.' >&2\n"
+        "exit 2\n",
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.startswith(NOTICE + "\n") or done.stdout.strip() == NOTICE, done.stdout
+
+
 def test_a_stale_refusal_names_the_workspace_way_to_carry_it(tmp_path: Path) -> None:
     done = _run_with_fake_fr(
         tmp_path,

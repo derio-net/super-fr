@@ -29,6 +29,9 @@ err_file=$(mktemp) || exit 0
 out=$(cd "$repo_root" && fr acceptance status --brief 2>"$err_file") || {
   err=$(cat "$err_file" 2>/dev/null)
   rm -f "$err_file"
+  # A partial migration commits what it could and then refuses (review p1-r4):
+  # the commit has landed, so say so even though the nag itself is skipped.
+  printf '%s\n' "$err" | grep -m 1 '^fr: migrated and committed' || true
   case "$err" in
     *"must be migrated"*|*"migrate artifacts"*)
       printf 'acceptance nag skipped: artifacts stale — in an fr-isolation workspace (`fr isolation up --branch <branch>`) the next fr command migrates and commits them; elsewhere run `fr migrate artifacts --yes` on a branch\n'
