@@ -355,3 +355,8 @@ Fixed in 0d593cae6, with tests; targeted run 1179 passed (fixer), 253 re-run by 
 ### p3-r11-resolved · finding [fixed] · resolves p3-r11: fr-devops-gate skill omitted the status-line grammar that decides whether evidence is recorded (phase 3)
 
 Fixed in 0d593cae6 (110 lines; mirrors synced), with tests; targeted run 1179 passed (fixer), 253 re-run by the orchestrator.
+
+<!-- fr:journal kind=finding scope=plan id=p1-suite-red-outside-the-phase-resolved-2 created=2026-11-01T21:27:31+00:00 phase=1 state=open resolves=p1-suite-red-outside-the-phase tracked_by=https://github.com/derio-net/super-fr/issues/1292 -->
+### p1-suite-red-outside-the-phase-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1292] · resolves p1-suite-red-outside-the-phase: the full suite is red under -n auto on this host, in tests the phase did not touch (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1292.
