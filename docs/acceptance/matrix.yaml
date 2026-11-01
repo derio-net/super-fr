@@ -10231,9 +10231,11 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R2
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R5
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: scenario named up front; written in plan phase 1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_render.py#test_summary_lists_every_candidate_and_parks_under_their_own_heading
+    status: ci
+    notes: dry run covered by unit tests and the gate-backfill-dry-run scenario
     verify: candidate
     scenario: tests/scenarios/gate-backfill-dry-run.sh
   - id: gate-backfill-apply-ledger
