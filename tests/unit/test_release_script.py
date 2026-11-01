@@ -1941,10 +1941,12 @@ def test_p3_r3_a_suite_job_refuses_an_origin_main_not_pinned_to_the_base(
     assert "origin/main" in err and str(plan["base_sha"]) in err
 
 
-def test_p3_r3_collect_requires_the_plan() -> None:
+def test_p3_r3_collect_requires_the_plan(tmp_path: Path) -> None:
+    cmds = release.Commands(collect=lambda repo, out: pytest.fail("collect ran"))
     with pytest.raises(SystemExit) as exc:
-        release.main(["collect", "--out", "x"])
+        release.main(["collect", "--out", str(tmp_path / "c.txt")], repo=tmp_path, commands=cmds)
     assert exc.value.code == 2
+    assert not (tmp_path / "c.txt").exists()
 
 
 # -- p3-r5: flags a subcommand would ignore are refused ------------------------------
