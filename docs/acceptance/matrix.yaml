@@ -10219,3 +10219,94 @@ rows:
         PR #4 merged 8a15e2daaa9a536bc4f5899acd72eeeddaa31cf7; clean fresh-main tree
         matched the PR #4 source tree; published RC11 source cc133a53b3ed6dcaa8f6e6d64e2bb8b04c6c53b8
         status returned DONE (checked) for both ops, with unchanged marker hashes.'
+  - id: gate-backfill-dry-run-plan
+    capability: gate-backfill
+    acceptance: fr gate backfill without --yes lists every owed item of the repo (debt
+      fold plus manifest) with its delivering PR, its gate and a decision in a plan
+      file outside the repo, keeps decisions already made on re-run, defaults stale
+      manual phases to review, prints the repo-file commands, and writes nothing to
+      the forge.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: gate-backfill-apply-ledger
+    capability: gate-backfill
+    acceptance: fr gate backfill --yes labels each decided item's merged PR with its
+      gate, files or reuses its owed tracker, links a closed issue to it, sets fr:awaiting-live
+      when only a walk remains, writes labels only under tracking none, and a second
+      run writes nothing.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: gate-backfill-delivering-pr
+    capability: gate-backfill
+    acceptance: An old owed item's delivering PR is found from a manifest override,
+      its run branch, the commit that added its plan or spec, or its issue's linked
+      PR, is used only when the forge says it merged, and an item with none is reported
+      and never written.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-backfill-tracker-trust
+    capability: gate-backfill
+    acceptance: Backfill reuses, edits and closes only fr-owned owed trackers; an issue
+      someone else wrote is touched only when the operator adopts it, by a comment and
+      labels; adopting one closes fr's own duplicate tracker for the same item.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-pass-closes-backfill-trackers
+    capability: gate-backfill
+    acceptance: fr gate pass --yes on a merged PR also closes the fr-owned owed trackers
+      naming that PR and gate, and lists any adopted tracker with the command that closes
+      it.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: board-lanes-gated-prs
+    capability: gate-backfill
+    acceptance: The triage board's Needs-you Tester and DevOps lanes list every merged
+      PR whose gate:tester or gate:devops label is held, batch-delivered or not, each
+      once, and a forge that cannot list them is reported rather than shown as an empty
+      lane.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-backfill-first-real-sweep
+    capability: gate-backfill
+    acceptance: On a real repo's first per-repo sweep, the backfilled PRs show in the
+      board's Needs-you lanes, a re-run writes nothing, and one fr gate pass clears
+      a PR's trackers.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live

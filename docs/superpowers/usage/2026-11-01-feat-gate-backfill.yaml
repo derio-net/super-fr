@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-01-feat-gate-backfill
+captures:
+- host: h-e9689b0a
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-01T15:04:07+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 5ab18b04-f071-4e57-899c-6dca1650340f
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 88
+        cache_write: 367460
+        cache_read: 6955631
+        output: 36626
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 17
+      other:
+        usd: null
+        turns: 11
+      paperwork:
+        usd: null
+        turns: 12
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 6
+        cache_write: 90481
+        cache_read: 269607
+        output: 553
+      brainstorm:
+        usd: null
+        turns: 37
+        input: 82
+        cache_write: 276979
+        cache_read: 6686024
+        output: 36073
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 6
+          cache_write: 90481
+          cache_read: 269607
+          output: 553
+        brainstorm:
+          usd: null
+          turns: 37
+          input: 82
+          cache_write: 276979
+          cache_read: 6686024
+          output: 36073
