@@ -23,6 +23,13 @@ import { run, type RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/** The artifact gate's commit notice (`fr.artifacts.trigger.COMMIT_NOTICE_PREFIX`). */
+const COMMIT_NOTICE = "fr: migrated and committed";
+
+const STALE_SKIPPED =
+  "acceptance nag skipped: artifacts stale — in an fr-isolation workspace (`fr isolation up --branch <branch>`) " +
+  "the next fr command migrates and commits them; elsewhere run `fr migrate artifacts --yes` on a branch\n";
+
 /** `globalThis` key for the nag's process-wide once-per-session memory. */
 export const SHARED_SERVED = Symbol.for("super-fr.fr-opencode-plugin.nag.served");
 
@@ -88,16 +95,20 @@ export function createNagHandler(options: NagHandlerOptions) {
 
       const answer = await runFr(root, ["acceptance", "status", "--brief"]);
       let text: string | undefined;
+      const err = answer.stderr ?? "";
       if (answer.code !== 0) {
-        const err = answer.stderr ?? "";
         if (err.includes("must be migrated") || err.includes("migrate artifacts")) {
-          text = "acceptance nag skipped: artifacts stale — run `fr migrate artifacts --yes`\n";
+          text = STALE_SKIPPED;
         }
       } else {
         const out = answer.stdout.replace(/\n+$/, "");
         if (out !== "" && !out.includes("no acceptance debt")) {
           text = `Acceptance debt in this repo (backfill owed — details: fr acceptance status):\n${out}\n`;
         }
+        // The gate may have migrated and committed on the way in (spec
+        // 2026-11-01-auto-migrate-own-commit R11): relay its one-line notice first.
+        const notice = err.split("\n").find((line) => line.startsWith(COMMIT_NOTICE));
+        if (notice) text = `${notice}\n${text ?? ""}`;
       }
       if (text) (event.system as { type: "text"; text: string }[]).push({ type: "text", text });
     } catch {

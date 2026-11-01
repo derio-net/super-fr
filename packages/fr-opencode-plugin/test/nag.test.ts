@@ -29,6 +29,10 @@ function stub(answer: RunAnswer) {
   return { calls, runFr };
 }
 
+const STALE_SKIPPED =
+  "acceptance nag skipped: artifacts stale — in an fr-isolation workspace (`fr isolation up --branch <branch>`) " +
+  "the next fr command migrates and commits them; elsewhere run `fr migrate artifacts --yes` on a branch\n";
+
 const ctxEvent = (sessionID = "ses_1") => ({ sessionID, system: [] as { type: "text"; text: string }[] });
 
 describe("acceptance nag", () => {
@@ -108,8 +112,37 @@ describe("acceptance nag", () => {
     const event = ctxEvent();
     await createNagHandler({ session: topLevel, directory: repo, runFr })(event);
     expect(event.system).toEqual([
-      { type: "text", text: "acceptance nag skipped: artifacts stale — run `fr migrate artifacts --yes`\n" },
+      { type: "text", text: STALE_SKIPPED },
     ]);
+  });
+
+  test("a stale refusal names the fr-isolation workspace and the manual migration", async () => {
+    const { runFr } = stub({ code: 2, stdout: "", stderr: "fr: artifacts in . … must be migrated" });
+    const event = ctxEvent();
+    await createNagHandler({ session: topLevel, directory: repo, runFr })(event);
+    const text = event.system[0]?.text ?? "";
+    expect(text).toContain("fr-isolation workspace");
+    expect(text).toContain("fr isolation up --branch");
+    expect(text).toContain("fr migrate artifacts --yes");
+  });
+
+  test("the gate's commit notice is relayed first (R11)", async () => {
+    const notice = "fr: migrated and committed 2 artifact(s): chore(fr): migrate 2 plans to fr 9.9.9 (abc1234)";
+    const { runFr } = stub({
+      code: 0,
+      stdout: "1 row owes a walk: debt-0\n",
+      stderr: `fr: artifacts in . are out of date — migrating before running the command.\n${notice}\n`,
+    });
+    const event = ctxEvent();
+    await createNagHandler({ session: topLevel, directory: repo, runFr })(event);
+    expect(event.system.length).toBe(1);
+    expect(event.system[0].text.startsWith(`${notice}\n`)).toBe(true);
+    expect(event.system[0].text).toContain("debt-0");
+
+    const quiet = stub({ code: 0, stdout: "no acceptance debt\n", stderr: `${notice}\n` });
+    const second = ctxEvent("ses_2");
+    await createNagHandler({ session: topLevel, directory: repo, runFr: quiet.runFr })(second);
+    expect(second.system).toEqual([{ type: "text", text: `${notice}\n` }]);
   });
 
   test("never throws", async () => {
