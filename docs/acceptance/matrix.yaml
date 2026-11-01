@@ -10233,8 +10233,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R11
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario named up front; written in plan phase 1
     verify: candidate
+    scenario: tests/scenarios/gate-backfill-dry-run.sh
   - id: gate-backfill-apply-ledger
     capability: gate-backfill
     acceptance: fr gate backfill --yes labels each decided item's merged PR with its
