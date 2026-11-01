@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -189,11 +190,9 @@ class TestWorktreeCreate:
         assert expected.is_dir()
         assert str(expected) in worktrees(repo)
         assert not (repo / ".claude" / "worktrees").exists()
-        assert logged(stub_fr) == []
         again = run_hook(CREATE, create_payload("agent-abc123", repo), stub_fr)
         assert again.returncode == 0, again.stderr
         assert last_line(again.stdout) == str(expected)
-        assert logged(stub_fr) == []
 
     def test_agent_worktree_is_locked_with_the_session_pid(
         self, repo: Path, stub_fr: dict[str, str]
@@ -221,6 +220,19 @@ class TestWorktreeCreate:
         assert inner.returncode == 0, inner.stderr
         assert last_line(inner.stdout) == str(agent_dir(stub_fr, "agent-inner"))
         assert str(agent_dir(stub_fr, "agent-inner")) in worktrees(repo)
+
+    def test_agent_worktree_creation_fires_a_detached_agent_sweep(
+        self, repo: Path, stub_fr: dict[str, str]
+    ) -> None:
+        """Claude never fires WorktreeRemove for a subagent, and non-fr repos never
+        run `fr isolation up/down`, so every agent dispatch starts the reaper."""
+        result = run_hook(CREATE, create_payload("agent-sw1", repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        for _ in range(50):
+            if logged(stub_fr):
+                break
+            time.sleep(0.1)
+        assert logged(stub_fr) == [f"isolation gc --agent-worktrees --repo {repo}"]
 
     def test_agent_dir_owned_by_another_repo_fails_closed(
         self, tmp_path: Path, repo: Path, stub_fr: dict[str, str]
@@ -370,7 +382,9 @@ class TestWorktreeRemove:
         assert result.returncode == 0, result.stderr
         assert not wt.exists()
         assert str(wt) not in worktrees(repo)
-        assert logged(stub_fr) == []
+        assert [
+            ln for ln in logged(stub_fr) if "--agent-worktrees" not in ln
+        ] == []  # create's sweep only
 
     # (h) any other path -> fr isolation down --worktree <path>
     def test_other_path_delegates_to_fr_down(
@@ -526,3 +540,35 @@ def test_two_concurrent_agent_worktree_creations_both_succeed(
     expected = str(agent_dir(stub_fr, "agent-twice"))
     assert {last_line(o[0]) for o in outs} == {expected}
     assert worktrees(repo).count(expected) == 1
+
+
+def test_agent_worktree_of_a_bare_repo_is_removed_and_unlocked(
+    tmp_path: Path, stub_fr: dict[str, str]
+) -> None:
+    """A bare repo's common dir has no parent checkout; the remove hook must
+    still unlock and remove, or its `rm -rf` fallback leaves a locked entry."""
+    bare = tmp_path / "b.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", "-q", str(bare), str(seed)], check=True, capture_output=True)
+    (seed / "x").write_text("x")
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-qm", "init")
+    _git(seed, "push", "-q", "origin", "main")
+    wt = agent_dir(stub_fr, "agent-bare1", key="b")
+    wt.parent.mkdir(parents=True)
+    subprocess.run(
+        ["git", "--git-dir", str(bare), "worktree", "add", "--detach", str(wt), "main"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(["git", "--git-dir", str(bare), "worktree", "lock", str(wt)], check=True)
+    result = run_hook(REMOVE, remove_payload(tmp_path, worktree_path=str(wt)), stub_fr)
+    assert result.returncode == 0, result.stderr
+    listed = subprocess.run(
+        ["git", "--git-dir", str(bare), "worktree", "list"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert str(wt) not in listed

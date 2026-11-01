@@ -14,8 +14,10 @@ case "$path" in
   */.claude/worktrees/agent-*|*/.cache/fr/agent-worktrees/*/agent-*)
     common=$(git -C "$path" rev-parse --git-common-dir 2>/dev/null) || { rm -rf "$path"; exit 0; }
     case "$common" in /*) ;; *) common="$path/$common" ;; esac
-    git -C "$(dirname "$common")" worktree unlock "$path" >/dev/null 2>&1 || true
-    git -C "$(dirname "$common")" worktree remove --force "$path" >&2 || rm -rf "$path"
+    # --git-dir, not the common dir's parent: right for bare and
+    # --separate-git-dir layouts too, where that parent is not a repository.
+    git --git-dir="$common" worktree unlock "$path" >/dev/null 2>&1 || true
+    git --git-dir="$common" worktree remove --force "$path" >&2 || rm -rf "$path"
     exit 0 ;;
 esac
 command -v fr >/dev/null 2>&1 || exit 0

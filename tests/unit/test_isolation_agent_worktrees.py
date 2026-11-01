@@ -204,3 +204,58 @@ def test_worktrees_that_are_not_subagents_are_never_touched(tmp_path: Path, repo
 
 def test_a_non_repo_root_yields_nothing(tmp_path: Path) -> None:
     assert _sweep(tmp_path / "nowhere") == []
+
+
+# ---------- review round 1 ----------
+
+
+def test_a_live_lock_older_than_the_cap_is_reaped(repo: Path) -> None:
+    """The lock names the PARENT session, which can live for days (a driver, a
+    coordinator) or hand its pid to an unrelated process once it exits. Past the
+    cap, a clean, ref-reachable worktree goes even under a 'live' lock."""
+    from fr.isolation.agent_worktrees import AGENT_MAX_LOCK_AGE_SECONDS
+
+    wt = _cached(repo, "agent-longlived", lock=f"fr-agent pid={os.getpid()} session=s")
+    later = time.time() + AGENT_MAX_LOCK_AGE_SECONDS + 3600
+    actions = _by_path(_sweep(repo, now=later, pid_alive=lambda pid: True))
+    assert actions[str(wt)].action == "reaped"
+    assert not wt.exists()
+
+
+def test_a_vanished_locked_worktree_is_unlocked_and_pruned(repo: Path) -> None:
+    """`git worktree prune` never prunes a LOCKED entry, so a deleted directory
+    under fr's own dead lock would be listed forever."""
+    import shutil
+
+    wt = _cached(repo, "agent-gone", lock="fr-agent pid=999999 session=s")
+    shutil.rmtree(wt)
+    actions = _by_path(_sweep(repo))
+    assert actions[str(wt)].action == "reaped"
+    assert str(wt) not in _listed(repo)
+
+
+def test_dry_run_previews_a_hold_as_would_skip(repo: Path) -> None:
+    wt = _legacy(repo, "agent-dryyoung")
+    actions = _by_path(_sweep(repo, dry_run=True, now=time.time()))
+    assert actions[str(wt)].action == "would-skip"
+
+
+def test_the_emptied_repo_key_dir_is_removed(repo: Path) -> None:
+    wt = _cached(repo, "agent-last")
+    _sweep(repo)
+    assert not wt.parent.exists()
+
+
+def test_gc_agent_worktrees_runs_only_the_agent_sweep(repo: Path) -> None:
+    """The light entry the WorktreeCreate hook fires on every dispatch: no
+    workspace classification, no forge, no docker; just this sweep."""
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    wt = _cached(repo, "agent-cli1")
+    stray = agent_cache_root().parent / "worktrees" / "repo" / "feat__x"
+    stray.mkdir(parents=True)  # a no-state workspace dir the full gc would warn on
+    result = CliRunner().invoke(app, ["isolation", "gc", "--agent-worktrees", "--repo", str(repo)])
+    assert result.exit_code == 0, result.output
+    assert f"gc: {wt.resolve()}: agent-worktree → skipped" in result.output
+    assert "no-state" not in result.output

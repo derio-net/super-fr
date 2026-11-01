@@ -190,7 +190,7 @@ def test_gc_runs_the_agent_worktree_sweep(home: Path, target: HostWorktreeTarget
         check=True,
         capture_output=True,
     )
-    for dry in (True, False):
+    for dry, held in ((True, "would-skip"), (False, "skipped")):
         mine = [a for a in target.gc(dry_run=dry) if a.verdict == "agent-worktree"]
-        assert [(a.worktree, a.action) for a in mine] == [(str(wt.resolve()), "skipped")]
+        assert [(a.worktree, a.action) for a in mine] == [(str(wt.resolve()), held)]
     assert wt.is_dir()

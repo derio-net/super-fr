@@ -53,6 +53,12 @@ agent_worktree() {
   # The hook's parent is the Claude process (measured live): while it lives, gc
   # leaves this worktree alone. Best effort; an unlocked one still ages out.
   git -C "$root" worktree lock --reason "fr-agent pid=$PPID session=${session_id:-?}" "$dir" >&2 || true
+  # Claude never fires WorktreeRemove for a subagent, and a non-fr repo never
+  # runs `fr isolation up/down`, so each dispatch starts the reaper: detached,
+  # every fd closed so Claude does not wait on it, a no-op when one already runs.
+  if command -v fr >/dev/null 2>&1; then
+    (fr isolation gc --agent-worktrees --repo "$root" </dev/null >/dev/null 2>&1 &)
+  fi
   copy_worktreeinclude "$dir"
   printf '%s\n' "$dir"
   exit 0

@@ -1678,10 +1678,11 @@ rows:
       .worktrees or .claude/worktrees component, and .gitignore lists both. Pinned per-PR.'
   - id: agent-worktrees-reaped-by-fr
     capability: isolation-conformity
-    acceptance: A subagent's isolation worktree is cut outside the repo, locked with
-      its Claude session's pid, and fr isolation gc reaps it once no live session holds
-      it, it is at least 24h old, clean, and every commit on it is reachable from a
-      ref; dirty or unreachable ones are reported, never removed.
+    acceptance: A subagent's isolation worktree is cut outside the repo, locked with its
+      Claude session's pid, and every dispatch fires a sweep that reaps it once it is
+      at least 24h old (72h while its session's pid still answers), clean, and every
+      commit on it is reachable from a ref; dirty or unreachable ones are reported,
+      never removed.
     origin:
     - super-fr:docs/superpowers/journals/debug/2026-11-01-agent-worktrees-accumulate.md
     levels:

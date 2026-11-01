@@ -11,20 +11,26 @@ and locks each with the Claude process's pid. This sweep, part of `fr isolation
 gc`, removes one only when ALL of these hold, and reports every other one:
 
 - no live session holds it: an `fr-agent pid=<N>` lock whose pid is alive is a
-  running subagent; any other lock is someone else's and is respected;
+  running subagent; any other lock is someone else's and is respected. The pid
+  is the PARENT session's, which can outlive its subagents by days (a driver, a
+  coordinator) or be reused once it exits, so past `AGENT_MAX_LOCK_AGE_SECONDS`
+  a live lock no longer protects;
 - it is at least `AGENT_MIN_AGE_SECONDS` old, even with a dead lock pid (that
   pid is the hook's parent; the age is the backstop if it is ever not Claude);
 - `git status --porcelain` is empty (untracked files count; ignored ones don't);
 - every commit on its HEAD is reachable from a branch, tag or remote ref.
   Ancestry, never PR state: removing the checkout loses nothing a ref keeps.
 
-Candidates are the invoking repo's legacy in-repo `.claude/worktrees/agent-*`
-worktrees (nested ones included, removed child first) plus, host-wide, every
-worktree in the cache, the way gc already sweeps every fr workspace.
+Host-wide, like the rest of gc: candidates are the `agent-*` worktrees, cached
+or legacy in-repo `.claude/worktrees/agent-*` (nested ones removed child first),
+of the invoking repo and of every repo with a worktree in the cache. A
+directory deleted under fr's own dead lock is unlocked and pruned, since `git
+worktree prune` never prunes a locked entry.
 """
 
 from __future__ import annotations
 
+import fcntl
 import os
 import re
 import subprocess
@@ -33,10 +39,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO
 
 from .local import GcAction, _home
 
 AGENT_MIN_AGE_SECONDS = 24 * 3600
+AGENT_MAX_LOCK_AGE_SECONDS = 72 * 3600
 AGENT_NAME = re.compile(r"^agent-[0-9a-z]+$")
 FR_LOCK = re.compile(r"^fr-agent pid=(\d+)\b")
 VERDICT = "agent-worktree"
@@ -147,15 +155,18 @@ def _pid_alive(pid: int) -> bool:
 
 def _hold(e: _Entry, now: float, pid_alive: Callable[[int], bool]) -> tuple[str, str] | None:
     """(action, detail) when the worktree must stay, else None."""
+    m = FR_LOCK.match(e.lock) if e.lock is not None else None
+    if e.lock is not None and m is None:
+        return ("skipped", f"locked: {e.lock or 'no reason given'}")
+    pid = int(m.group(1)) if m is not None else None
+    live = pid is not None and pid_alive(pid)
     if not e.path.is_dir():
-        return ("skipped", "worktree directory is gone (git worktree prune retires it)")
-    if e.lock is not None:
-        m = FR_LOCK.match(e.lock)
-        if m is None:
-            return ("skipped", f"locked: {e.lock or 'no reason given'}")
-        if pid_alive(int(m.group(1))):
-            return ("skipped", f"running: session pid {m.group(1)} is alive")
+        if live:
+            return ("skipped", f"directory gone; session pid {pid} is alive")
+        return None  # unlock + prune: nothing on disk to lose
     age = _age(e.path, now)
+    if live and age < AGENT_MAX_LOCK_AGE_SECONDS:
+        return ("skipped", f"running: session pid {pid} is alive")
     if age < AGENT_MIN_AGE_SECONDS:
         return ("skipped", f"younger than {AGENT_MIN_AGE_SECONDS // 3600}h")
     status = _git(e.path, "status", "--porcelain")
@@ -185,11 +196,14 @@ def _remove(e: _Entry) -> str | None:
     """Remove one worktree; the error text on failure."""
     if e.lock is not None:
         _git(e.common, "worktree", "unlock", str(e.path))
+    if not e.path.is_dir():
+        r = _git(e.common, "worktree", "prune")
+        return None if r.returncode == 0 else (r.stderr.strip() or "git worktree prune failed")
     r = _git(e.common, "worktree", "remove", str(e.path))
     if r.returncode != 0:
         return r.stderr.strip() or "git worktree remove failed"
     parent = e.path.parent
-    if parent.parent == agent_cache_root():
+    if parent.parent.resolve() == agent_cache_root().resolve():
         try:
             parent.rmdir()  # only when empty
         except OSError:
@@ -207,11 +221,41 @@ def sweep_agent_worktrees(
     """Classify and (unless `dry_run`) reap finished subagent worktrees. Never
     raises for one worktree: each failure is that worktree's `reap-failed`."""
     t = time.time() if now is None else now
+    lock = _sweep_lock()
+    if lock is None:
+        return []  # another sweep is running; the next dispatch or gc re-runs it
+    try:
+        return _sweep(repo_root, dry_run, t, pid_alive)
+    finally:
+        lock.close()
+
+
+def _sweep_lock() -> IO[str] | None:
+    """Non-blocking flock: every agent dispatch fires a sweep, so concurrent
+    ones are routine; the loser simply returns."""
+    path = agent_cache_root() / ".sweep.lock"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fh = open(path, "w")  # noqa: SIM115 — held for the sweep, closed by the caller
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
+
+
+def _sweep(
+    repo_root: Path, dry_run: bool, t: float, pid_alive: Callable[[int], bool]
+) -> list[GcAction]:
     out: list[GcAction] = []
     for e in _candidates(repo_root):
         held = _hold(e, t, pid_alive)
         if held is not None:
-            out.append(GcAction(str(e.path), None, VERDICT, held[0], held[1]))
+            action = "would-skip" if dry_run and held[0] == "skipped" else held[0]
+            out.append(GcAction(str(e.path), None, VERDICT, action, held[1]))
             continue
         if dry_run:
             out.append(GcAction(str(e.path), None, VERDICT, "would-reap", "finished and clean"))
