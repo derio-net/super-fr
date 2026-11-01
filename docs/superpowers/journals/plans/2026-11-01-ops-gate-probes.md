@@ -125,3 +125,23 @@ One `git archive` per call (plus one cat-file -e per requested top-level path, 4
 ### p1-suite-red-outside-the-phase-resolved · finding [out-of-scope] · resolves p1-suite-red-outside-the-phase: the full suite is red under -n auto on this host, in tests the phase did not touch (phase 1)
 
 Not caused by this change: the failures are in timing/lock-sensitive files the phase never touched (run-evidence visual, sentinel liveness, record commit), all pass alone (p1-rerun.log), and appear only under the shared slot's load average of 350-400. The phase's suite evidence is CI (`tests: ci`, ci-ok green on PR #1281).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-gate-pass-needs-applied-evidence created=2026-11-01T19:56:27+00:00 phase=2 -->
+### p2-gate-pass-needs-applied-evidence · discovery · a post-merge op that is already DONE at stage 4 is never applied, so gate pass says never checked (phase 2)
+
+Found while writing the scenario: an op whose check already passes is skipped by stage 4 and leaves no journal evidence, so `fr gate pass` reports it as never checked. Existing behaviour, not changed here; the scenario's op starts failing so stage 4 applies it.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-01T19:56:27+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+mask helpers and the engine edit were already single-purpose; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-01T19:56:27+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+_ask_outcome is the one small loop; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-01T19:56:27+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+scenario-only task; nothing to clean
