@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-01T11:48:35+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-01T11:48:35+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: 5bbde709-3ae1-4fec-9aef-381cbe81fddc
   plan:
     state: pending
   plan-review:
