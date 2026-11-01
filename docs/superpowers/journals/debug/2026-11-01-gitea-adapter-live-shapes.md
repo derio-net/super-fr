@@ -10,3 +10,8 @@ Walked 2026-11-01 against a self-hosted Gitea (operator's cluster, reached via k
 ### h1 · hypothesis · H1: fixtures modelled Gitea's swagger, but most reads parse tea's rendered output
 
 Evidence: tests/unit/test_real_teaclient.py and test_forge_adapter_lookups.py feed {merged: bool, head: {label}, default_branch} to methods that call tea's --fields/--output json renderings. Live tea 0.16: `pulls list --fields` rejects 'merged' (Error: invalid field) and renders head as a bare string and state as open|closed|merged; `pulls <n>` has hasMerged/mergedAt and no draft key; `repos --fields` has no default_branch (it lists repos); `issues list` renders index as a string and labels SPACE-separated. Methods that go through `tea api` (timeline, contents) got the shapes right.
+
+<!-- fr:journal kind=hypothesis scope=debug id=h2 created=2026-11-01T09:08:40+00:00 -->
+### h2 · hypothesis · H2: tea api exits 0 on an HTTP error, so check=True never fires
+
+Live: `tea api /repos/o/r/contents/nope.txt` prints the 404 error JSON and exits 0; with -i the status line (HTTP/1.1 404 Not Found) goes to stderr. Unit doubles modelled a 404 as a raised TeaError, so file_exists' safe direction was only ever tested against behaviour tea does not have.
