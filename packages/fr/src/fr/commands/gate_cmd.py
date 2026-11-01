@@ -340,10 +340,15 @@ def backfill_command(
             c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else "")
         )
     entries = merge_plan(previous, fresh)
-    write_plan(
-        path,
-        PlanFile(repo=identity, generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), entries=entries),
-    )
+    try:
+        write_plan(
+            path,
+            PlanFile(
+                repo=identity, generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), entries=entries
+            ),
+        )
+    except OSError as exc:
+        refuse(f"plan file {path} cannot be written: {exc}")
     text, refusals = render.summary(entries, plan_file=path, notes=notes, root=root)
     typer.echo(text)
     if refusals:

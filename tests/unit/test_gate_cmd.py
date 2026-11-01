@@ -172,11 +172,19 @@ def test_p4_r4_pass_gate_comments_first_and_never_twice() -> None:
 # --- `fr gate backfill` (spec 2026-11-01-gate-backfill) -----------------------------------
 
 BACKFILL_REPO = "example-org/widgets"
-FORGE_WRITES = (
-    "ensure_labels", "edit_pr_labels", "edit_issue_labels", "edit_issue_body", "edit_issue",
-    "comment_pr", "comment_issue", "close_issue", "close_pr", "create_issue", "create_pr",
-    "edit_pr", "edit_issue_state", "edit_issue_comment",
-)  # fmt: skip
+FORGE_READS = frozenset({
+    "list_issues", "pr_view", "list_prs_by_head", "prs_for_commit", "list_linked_prs",
+    "viewer_login", "authenticated_login", "view_issue", "file_exists", "list_dir", "read_file",
+    "open_pr_in_repo", "open_pr_for_head", "list_open_issues_with_body", "list_issue_comments",
+    "base_rules", "required_check_names", "commit_checks", "label_exists", "pr_required_checks",
+    "closing_ref", "repo_merge_methods", "repo_visibility",
+})  # fmt: skip
+
+
+def _only_reads(fake: FakeGhClient) -> list[str]:
+    """Every recorded forge call that is not a known READ (an allowlist: a new write verb the
+    dry run grew would show up here, a denylist would miss it)."""
+    return [c[0] for c in fake.calls if c[0] not in FORGE_READS]
 
 
 def _backfill_repo(tmp_path: Path) -> Path:
@@ -219,7 +227,7 @@ def test_backfill_is_a_gate_verb_and_dry_run_writes_nothing(backfill_env: Any) -
     result = CliRunner().invoke(app, ["gate", "backfill"])
 
     assert result.exit_code == 0, result.output
-    assert [c[0] for c in fake.calls if c[0] in FORGE_WRITES] == []
+    assert _only_reads(fake) == []
 
 
 def test_the_dry_run_writes_the_plan_file_keeps_edited_decisions_and_never_the_forge(
@@ -250,7 +258,7 @@ def test_the_dry_run_writes_the_plan_file_keeps_edited_decisions_and_never_the_f
     assert again.exit_code == 0, again.output
     assert yaml.safe_load(plan.read_text())["entries"][0]["decision"] == "park"
     assert "Parked (1)" in again.output
-    assert [c[0] for c in fake.calls if c[0] in FORGE_WRITES] == []
+    assert _only_reads(fake) == []
 
 
 def test_backfill_refuses_a_repo_that_disagrees_with_origin_and_yes_before_apply(
@@ -260,3 +268,16 @@ def test_backfill_refuses_a_repo_that_disagrees_with_origin_and_yes_before_apply
     assert bad.exit_code == 2 and "disagrees" in bad.output
     yes = CliRunner().invoke(app, ["gate", "backfill", "--yes"])
     assert yes.exit_code == 2
+
+
+def test_p1_r8_an_unwritable_plan_path_is_an_exit_2_refusal_not_a_traceback(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    blocker = tmp_path / "a-file"
+    blocker.write_text("x")
+
+    result = CliRunner().invoke(app, ["gate", "backfill", "--plan", str(blocker / "plan.yaml")])
+
+    assert result.exit_code == 2, result.output
+    assert "fr gate backfill:" in result.output
+    assert "Traceback" not in result.output and not isinstance(result.exception, OSError)
