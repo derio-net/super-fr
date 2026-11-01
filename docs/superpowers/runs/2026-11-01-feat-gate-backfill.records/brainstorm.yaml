@@ -1,0 +1,128 @@
+schema_version: 10
+run: 2026-11-01-feat-gate-backfill
+step: brainstorm
+outcome: done
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: "Operator brief (coordinator goal file), verbatim; private corpus paths redacted to <org>"
+    body: |
+      # Goal: put old owed work into v6's gate lanes (`fr gate backfill`)
+
+      Work merged before v6 has no exit gates. Its owed live walks and manual operations hide in closed issues, hand-written trackers and audit files. Ship a command, working name `fr gate backfill` (naming is the spec's call), that brings that debt into v6's own machinery, so every repo has **one queue**: the board's "Needs you · Tester/DevOps" lanes, closed through `fr gate pass`.
+
+      Per repo, for each owed item:
+      - add the right `gate:tester` / `gate:devops` label to the merged PR that delivered the work;
+      - file or reuse an owed tracker through fr's marker mechanism (the one `fr archive` uses for owed actions, spec debt-engine R21);
+      - set `fr:awaiting-live` when only a walk remains.
+
+      Dry run by default; `--yes` writes, through the forge adapter only (`GhClient`).
+
+      ## Why a command and not a migration
+
+      Artifact migrations are file-only and must be safe offline in CI; labels and issues live on the forge. A file-only migration may still be part of it: for example, giving old matrix rows that describe live walks `verify: live` so fr can see them.
+
+      ## Read first
+
+      - `fr debt` (`packages/fr/src/fr/debt/`). It already folds every owed item per repo (journal > row > plan > issue), so build on it rather than writing a new finder.
+      - `fr/verification/exit.py` and `fr/gates.py`; `fr/archive_followups.py` (owed issues, `_existing_owed` dedup, markers); `fr/labels.py`.
+      - Real-world corpus: the operator's three org reconciliation reports (`<org>-triage-2026-10-31.md` §6 / §6.8) plus the recovered 2026-10-13 batch audit verdicts. These show which shapes of owed work exist: closed-with-unmet-ask issues, unticked manual phases, walk-owed rows, unfiled audit gaps.
+      - Open questions to settle in the spec: how to find the delivering PR for an old item; what happens to an issue already closed by `Closes` (reopen, or a linked owed tracker; both reconciliations recommend linked trackers); repos with `tracking: none`; and the related super-fr#1268 (labels created only when actually needed).
+
+      ## Constraints
+
+      - fr-goal's normal pipeline. One question round, asked in this pane.
+      - Heavy suites only via the shared test slot. Prefer CI.
+      - Change fragment (minor); never edit versions. The PR stays draft.
+      - Test Plan steps carry a cost line (super-fr#1260). The live walk is "walked on first real use": the per-repo sweep that follows, not a rehearsal.
+      - super-fr is public: the corpus is private, so cite it only by shape, never by repo names outside derio-net. Fixtures use fictional names.
+      - A parallel run is changing the migration gate (super-fr#1242). Stay out of `fr/artifacts/trigger.py`.
+
+      ## Coordinator corpus update (mid-round, 2026-11-01), summarised by shape
+
+      1. `fr archive` has no dry run but files forge issues; backfill must preview by default, archive probably wants `--dry-run` (in scope or follow-up).
+      2. Hand-made pre-v6 trackers carry no `fr-owed` marker, so archive filed duplicates of them; decide adopt-vs-file-and-close and how to match.
+      3. Marker trust: `owned_owed_key` reuses only this account's `fr:owed` issues with the marker last; say what happens to issues opened by others.
+      4. `fr archive --branch` sees only that branch; backfill must be repo-wide.
+      5. Stale unticked manual phases (months old, probably done): a review step before filing (age, ticked count; tick / n/a / keep owed).
+      6. Walk rows `not-implemented` but `verify: live` should be `walk-owed`; pre-v5 `skipped` rows need a strategy; a person's call where evidence is only a note.
+      7. Parked repos/areas need a record-but-don't-surface mode.
+      8. Closed-with-unmet-ask: all three reconciliations chose linked trackers, no reopens, with a link comment.
+      Also: the board's Tester/DevOps lanes show only triage-batch PRs; the spec must say how backfilled items reach them.
+  - {kind: decision, id: d1-input, title: "Candidates = fr debt's fold + an optional operator manifest", body: "Operator (Q1): fr debt + manifest (`--from <yaml>`) for closed-with-unmet-ask issues and audit gaps. Spec R2, §B."}
+  - {kind: decision, id: d2-delivering-pr, title: "Delivering PR by an evidence chain, never guessed", body: "Operator (Q2): manifest pr → run branch → commit that added the plan/spec → linked issue PR; confirmed merged; unresolved reported, not acted on. Spec R3, §C."}
+  - {kind: decision, id: d3-board, title: "The board shows gate-labelled merged PRs in this PR", body: "Operator (Q3): collect reads merged PRs carrying held gate labels (facts schema bump) and the Needs-you Tester/DevOps lanes list them. Spec R13, §I."}
+  - {kind: decision, id: d4-closed-issue, title: "Closed issue with an unmet ask: linked owed tracker, never reopen", body: "Operator (Q4). Spec R6, §F."}
+  - {kind: decision, id: d5-pass-closes, title: "fr gate pass closes the fr-owned trackers naming the PR and gate", body: "Operator (Q5): by the PR marker. Spec R12, §H."}
+  - {kind: decision, id: d6-tracking-none, title: "tracking none: PR gate labels only", body: "Operator (Q6): no tracker, comment or fr:awaiting-live; owed items still reported. Spec R10."}
+  - {kind: decision, id: d7-1268, title: "Adopt #1268's lazy-label rule; leave collect's fix to #1268", body: "Operator (Q7). Spec R6, §G.1."}
+  - {kind: decision, id: d8-repo-files, title: "Forge only; print the repo-file commands; no artifact migration", body: "Operator (Q8): gate stays in READ_ONLY_COMMANDS; nothing in registry.py or trigger.py. Spec R11, R14."}
+  - {kind: decision, id: d9-verification, title: "candidate pre-merge + one live post-merge row under gate tester", body: "Operator (Q9). Spec ## Verification; the live row is walked on first real use (Test Plan 1)."}
+  - {kind: decision, id: d10-unmarked-trackers, title: "Unmarked trackers adopted only by an explicit decision; adoption closes fr's duplicate", body: "Agent, from corpus update 2 (no second round was forecast). Look-alikes are suggestions in the plan file. Spec R9, §E, §F."}
+  - {kind: decision, id: d11-foreign-issues, title: "Issues written by others are never reused, edited or closed", body: "Agent, from corpus update 3: adopt allows a comment and labels only. Spec R8."}
+  - {kind: decision, id: d12-review-step, title: "The plan file is the review step; stale manual phases default to review", body: "Agent, from corpus update 5: dry run → edit decisions → --yes; review entries are skipped. Spec R5, §E."}
+  - {kind: decision, id: d13-park, title: "Parked scope is a persistent park decision", body: "Agent, from corpus update 7. Spec §E."}
+  - {kind: decision, id: d14-archive-dry-run, title: "fr archive --dry-run is a follow-up, not built here", body: "Agent, from corpus update 1: backfill gives the sweep its preview; the archive change is separate scope."}
+acceptance:
+  - id: gate-backfill-dry-run-plan
+    capability: gate-backfill
+    acceptance: fr gate backfill without --yes lists every owed item of the repo (debt fold plus manifest) with its delivering PR, its gate and a decision in a plan file outside the repo, keeps decisions already made on re-run, defaults stale manual phases to review, prints the repo-file commands, and writes nothing to the forge.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R1
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R2
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R5
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R11
+    status: not-implemented
+    verify: candidate
+  - id: gate-backfill-apply-ledger
+    capability: gate-backfill
+    acceptance: fr gate backfill --yes labels each decided item's merged PR with its gate, files or reuses its owed tracker, links a closed issue to it, sets fr:awaiting-live when only a walk remains, writes labels only under tracking none, and a second run writes nothing.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R6
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R7
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R10
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R14
+    status: not-implemented
+    verify: candidate
+  - id: gate-backfill-delivering-pr
+    capability: gate-backfill
+    acceptance: An old owed item's delivering PR is found from a manifest override, its run branch, the commit that added its plan or spec, or its issue's linked PR, is used only when the forge says it merged, and an item with none is reported and never written.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R3
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R4
+    status: not-implemented
+    verify: none
+  - id: gate-backfill-tracker-trust
+    capability: gate-backfill
+    acceptance: Backfill reuses, edits and closes only fr-owned owed trackers; an issue someone else wrote is touched only when the operator adopts it, by a comment and labels; adopting one closes fr's own duplicate tracker for the same item.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R8
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R9
+    status: not-implemented
+    verify: none
+  - id: gate-pass-closes-backfill-trackers
+    capability: gate-backfill
+    acceptance: fr gate pass --yes on a merged PR also closes the fr-owned owed trackers naming that PR and gate, and lists any adopted tracker with the command that closes it.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
+    status: not-implemented
+    verify: none
+  - id: board-lanes-gated-prs
+    capability: gate-backfill
+    acceptance: The triage board's Needs-you Tester and DevOps lanes list every merged PR whose gate:tester or gate:devops label is held, batch-delivered or not, each once, and a forge that cannot list them is reported rather than shown as an empty lane.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
+    status: not-implemented
+    verify: none
+  - id: gate-backfill-first-real-sweep
+    capability: gate-backfill
+    acceptance: On a real repo's first per-repo sweep, the backfilled PRs show in the board's Needs-you lanes, a re-run writes nothing, and one fr gate pass clears a PR's trackers.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
+      - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
+    status: not-implemented
+    verify: live
+emitted:
+  spec: docs/superpowers/specs/2026-11-01-gate-backfill-design.md
+evidence: {}
