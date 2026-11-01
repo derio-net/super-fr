@@ -10279,9 +10279,11 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R8
     - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_apply.py#test_adopting_closes_the_fr_owned_duplicate
+    status: ci
+    notes: adopt/foreign/duplicate unit-tested
     verify: none
   - id: gate-pass-closes-backfill-trackers
     capability: gate-backfill
