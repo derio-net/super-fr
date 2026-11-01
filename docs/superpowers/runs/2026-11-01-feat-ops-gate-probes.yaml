@@ -155,5 +155,13 @@ steps:
     stdout: |
       2 out-of-scope finding(s): p1-suite-red-outside-the-phase, p2-r4
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-01T21:23:42+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-01T21:23:42+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5bbde709-3ae1-4fec-9aef-381cbe81fddc
 fr_version: 6.0.1rc2
