@@ -250,3 +250,31 @@ def test_p7_r4_header_says_the_status_token_is_the_write_capable_workflow_token(
     assert "FR_RELEASE_STATUS_TOKEN is the workflow's github.token" in header
     assert "contents and issues write" in header
     assert "never fr or repo code" in header
+
+
+def test_p3_r7_only_prepare_holds_the_status_token_and_the_dispatch_input() -> None:
+    """Least privilege: `publish` pushes, tags and releases, so it holds GH_TOKEN and
+    nothing else; the forge read and the override are `prepare`'s alone (the override
+    reaches `publish` inside the plan)."""
+    (prepare,) = _release_py_steps("prepare")
+    assert {"GH_TOKEN", "FR_RELEASE_STATUS_TOKEN", "RELEASE_VERSION"} <= set(prepare["env"])
+    (publish,) = _release_py_steps("publish")
+    assert "GH_TOKEN" in publish["env"]
+    assert not {"FR_RELEASE_STATUS_TOKEN", "RELEASE_VERSION"} & set(publish["env"])
+    job = _jobs()["publish"]
+    for env in [job.get("env") or {}] + [s.get("env") or {} for s in job["steps"]]:
+        assert not {"FR_RELEASE_STATUS_TOKEN", "RELEASE_VERSION"} & set(env)
+
+
+def test_p3_r3_collect_and_test_shard_are_handed_the_plan() -> None:
+    """Both refuse unless HEAD is the plan's staged commit, so both must be given it."""
+    for name, verb in (("collect", "release.py collect"), ("test", "release.py test-shard")):
+        (step,) = [s for s in _release_py_steps(name) if verb in str(s["run"])]
+        assert '--plan "${RELEASE_OUT}/release-plan.json"' in str(step["run"]), name
+        assert step["env"]["RELEASE_OUT"] == "${{ runner.temp }}/release-out", name
+
+
+def test_p3_r8_no_comment_claims_the_suite_jobs_run_with_no_token_at_all() -> None:
+    text = " ".join(WORKFLOW.read_text().replace("#", " ").split())
+    assert "no token at all" not in text
+    assert "read-only GITHUB_TOKEN" in text

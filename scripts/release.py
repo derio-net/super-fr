@@ -396,6 +396,8 @@ class Commands:
     migrate: Callable[[Path], str | None] = _run_migrate
     gh_read: Callable[[list[str]], subprocess.CompletedProcess[str]] = _run_gh_read
     decide: Callable[[Path, Path], list[dict[str, object]]] = _run_release_decide
+    shard: Callable[..., str | None] = _run_shard_tests
+    collect: Callable[[Path, Path], str | None] = _run_collect
 
 
 # -- git ---------------------------------------------------------------------
@@ -943,6 +945,24 @@ def materialise(repo: Path, staged: Staged, bundle: Path, *, pin_base: bool) -> 
     print(f"materialised {staged.staged_sha} (base {staged.base_sha})")
 
 
+def check_materialised(repo: Path, staged: Staged) -> None:
+    """Refuse unless HEAD is the plan's staged commit and `origin/main` is pinned to
+    its base: the suite jobs test exactly what `publish` pushes, onto what it lands on."""
+    head = _rev(repo, "HEAD")
+    if head != staged.staged_sha:
+        raise ReleaseError(
+            f"HEAD is {head}, not the plan's staged_sha {staged.staged_sha}; run "
+            "`materialise --pin-base` first, refusing to test a commit the release did not stage"
+        )
+    pinned = _git(repo, "rev-parse", "--verify", f"refs/remotes/{REMOTE}/{BRANCH}", check=False)
+    if pinned.stdout.strip() != staged.base_sha:
+        raise ReleaseError(
+            f"{REMOTE}/{BRANCH} is {pinned.stdout.strip() or '(missing)'}, not the plan's "
+            f"base_sha {staged.base_sha}; run `materialise --pin-base` first, refusing to "
+            "judge the staged commit against a base it does not land on"
+        )
+
+
 def _superseded(staged: Staged, tip: str) -> int:
     """R10: main moved, so a later run releases from the new tip; nothing is pushed."""
     print(f"superseded: main moved to {tip}")
@@ -960,6 +980,10 @@ def publish(repo: Path, staged: Staged, cmds: Commands) -> int:
     """Steps 5-6 for the commit checked out at HEAD: push it only onto the base it
     was staged on, then tag and release it. A protection refusal raises (`push`)."""
     tip = fetch_origin(repo)
+    if tip == staged.staged_sha:
+        # A rerun after a push that landed and a `finish` that failed: tag it.
+        print(f"{RELEASE_PREFIX}{staged.version} is already on main; finishing it")
+        return finish(repo, cmds)
     if tip != staged.base_sha:
         return _superseded(staged, tip)
     if push(repo) == "race":
@@ -1123,18 +1147,20 @@ def _run_subcommand(args: argparse.Namespace, repo: Path, cmds: Commands) -> int
             version=staged.version,
         )
         return EXIT_OK
-    if args.cmd == "collect":
-        failure = _run_collect(repo, Path(args.out))
-        if failure is not None:
-            raise ReleaseError(f"collection failed:\n{failure}")
-        return EXIT_OK
     staged = Staged.read(Path(args.plan))
     if args.cmd == "materialise":
         materialise(repo, staged, Path(args.bundle), pin_base=args.pin_base)
         return EXIT_OK
+    if args.cmd == "collect":
+        check_materialised(repo, staged)
+        failure = cmds.collect(repo, Path(args.out))
+        if failure is not None:
+            raise ReleaseError(f"collection failed:\n{failure}")
+        return EXIT_OK
     if args.cmd == "test-shard":
+        check_materialised(repo, staged)
         print(f"testing shard {args.group}/{args.splits} of {staged.staged_sha}")
-        failure = _run_shard_tests(
+        failure = cmds.shard(
             repo,
             staged.version,
             group=args.group,
@@ -1167,6 +1193,7 @@ def _parser() -> argparse.ArgumentParser:
     m.add_argument("--bundle", required=True)
     m.add_argument("--pin-base", action="store_true", help="pin origin/main to the base")
     c = sub.add_parser("collect", help="list the tests the shards must run")
+    c.add_argument("--plan", required=True)
     c.add_argument("--out", required=True)
     t = sub.add_parser("test-shard", help="step 4 for one shard: probe, then the split")
     t.add_argument("--plan", required=True)
@@ -1183,7 +1210,13 @@ def _parser() -> argparse.ArgumentParser:
 def main(
     argv: list[str] | None = None, repo: Path | None = None, commands: Commands | None = None
 ) -> int:
-    args = _parser().parse_args(sys.argv[1:] if argv is None else argv)
+    parser = _parser()
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    # A subcommand would ignore these silently, so they are refused instead.
+    if args.cmd is not None and args.dry_run:
+        parser.error(f"--dry-run takes no subcommand (got {args.cmd})")
+    if args.cmd not in (None, "prepare") and args.version is not None:
+        parser.error(f"--version applies only to prepare (got {args.cmd})")
     repo = Path(repo or REPO)
     cmds = commands or Commands()
     try:

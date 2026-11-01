@@ -80,12 +80,16 @@ concurrency:
 # The release is a job graph (spec 2026-11-01-ci-speed §3.D, R8-R12). `prepare`
 # stages the release commit and hands it on as a plan and a git bundle; `collect`
 # and six `test` shards each check out exactly that commit, with origin/main
-# pinned to the base it was staged on, and run with no token at all (R9);
+# pinned to the base it was staged on (both refuse any other HEAD or base), and
+# hold only a read-only GITHUB_TOKEN, used by checkout alone and never persisted,
+# with no forge token in the suite's env (R9);
 # `split-check` proves the shards ran the whole suite; `publish` pushes only
 # then, and only onto that base. When main moved meanwhile the run is
 # superseded: it pushes nothing and exits 0, because the push that moved main
-# starts the run that releases (an explicit `version` exits non-zero and names
-# the re-dispatch instead, since no later run carries it).
+# starts the run that releases; a `[skip ci]` or GITHUB_TOKEN push starts no
+# run, so the daily cron picks it up (an explicit `version` exits non-zero and
+# names the re-dispatch instead, since no later run carries it). A rerun whose
+# release commit already landed skips the push and only tags.
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -186,8 +190,11 @@ jobs:
           --bundle "${RELEASE_OUT}/staged.bundle" --pin-base
       - name: Collect the suite with the shards' options
         env:
+          RELEASE_OUT: ${{ runner.temp }}/release-out
           COLLECTED: ${{ runner.temp }}/collected.txt
-        run: uv run --no-project python scripts/release.py collect --out "${COLLECTED}"
+        run: >-
+          uv run --no-project python scripts/release.py collect
+          --plan "${RELEASE_OUT}/release-plan.json" --out "${COLLECTED}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-collected
@@ -195,7 +202,8 @@ jobs:
           retention-days: 1
 
   # Step 4, six ways: the version probe, then one split of the whole suite, on
-  # exactly the staged commit (R8). No token reaches this job (R9).
+  # exactly the staged commit (R8). Only checkout's read-only GITHUB_TOKEN reaches
+  # this job, never persisted, and no forge token reaches the suite (R9).
   test:
     needs: prepare
     if: needs.prepare.outputs.cut == 'true'
