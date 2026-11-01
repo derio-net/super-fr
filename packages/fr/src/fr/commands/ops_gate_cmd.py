@@ -106,6 +106,33 @@ class HostCheckout:
         except GitError as exc:  # a deleted branch: the PR head may still be here
             typer.echo(f"fr ops gate: warning: {exc}", err=True)
 
+    def materialise(self, ref: str, paths: Sequence[str]) -> Path:
+        """*paths* as *ref* carries them, in a fresh temporary directory: each blob
+        `git ls-tree -r <ref> -- <paths>` lists, written from `git show` (what `git
+        archive <ref> -- <paths>` would extract, without a tar step). A path absent at
+        *ref* is skipped."""
+        import tempfile
+
+        from fr.triage.gitseam import GitError, git, git_ok, show_bytes
+
+        present = [p for p in paths if git_ok(["cat-file", "-e", f"{ref}:{p}"], self.primary)]
+        out = Path(tempfile.mkdtemp(prefix="fr-ops-gate-head-"))
+        listed = (
+            git(
+                ["ls-tree", "-r", "--name-only", "--end-of-options", ref, "--", *present],
+                self.primary,
+            )  # fmt: skip
+            if present
+            else ""
+        )
+        for rel in filter(None, listed.splitlines()):
+            data = show_bytes(self.primary, ref, rel)
+            if data is None:
+                raise GitError(f"{ref}:{rel} could not be read")
+            (out / rel).parent.mkdir(parents=True, exist_ok=True)
+            (out / rel).write_bytes(data)
+        return out
+
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
         from fr.triage.gitseam import git
 

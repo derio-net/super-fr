@@ -742,7 +742,9 @@ def test_a_pointer_to_an_undeclared_op_is_an_error(tmp_path, monkeypatch):
 
 
 def test_an_op_whose_check_is_still_todo_is_an_error(tmp_path, monkeypatch):
-    plan = _gated_plan(tmp_path, monkeypatch, "- (op: a) run it", ops_yaml=_OP.replace("CHECK", "TODO"))
+    plan = _gated_plan(
+        tmp_path, monkeypatch, "- (op: a) run it", ops_yaml=_OP.replace("CHECK", "TODO")
+    )
     (issue,) = _ops_issues(plan)
     assert issue.severity == "error" and "`a`" in issue.message and "TODO" in issue.message
 

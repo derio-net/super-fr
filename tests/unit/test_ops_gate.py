@@ -175,6 +175,23 @@ class FakeHost:
         self.tip: str | None = TIP
         self.origin_default: str | None = "main"
         self.how: dict[str, str] = {}
+        self.materialised: list[Path] = []
+
+    def materialise(self, ref: str, paths: Sequence[str]) -> Path:
+        """*paths* as the PR head carries them: copied from the fake's own tree."""
+        import tempfile
+
+        self.calls.append((["materialise", ref, *paths], False))
+        out = Path(tempfile.mkdtemp(prefix="fr-gate-head-"))
+        self.materialised.append(out)
+        for rel in paths:
+            src = self.tree.path / rel
+            if src.is_dir():
+                shutil.copytree(src, out / rel)
+            elif src.is_file():
+                (out / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, out / rel)
+        return out
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
         self.calls.append((["diff", base, head, *paths], False))
@@ -705,3 +722,39 @@ def test_host_state_lives_outside_every_checkout(monkeypatch, tmp_path: Path) ->
     assert gate_state_path(tmp_path / "repo", "r").parent.parent == tmp_path / "xdg/fr/ops-gate"
     HostGateState(tmp_path / "s" / "r.json").mark(1, head=HEAD)
     assert oct((tmp_path / "s" / "r.json").stat().st_mode & 0o777) == "0o600"
+
+
+# ------------------------------------- spec 2026-11-01-ops-gate-probes R5: the ops gap
+
+
+def _gapped(ops_root: Path, ops_yaml: str | None = None) -> None:
+    """A devops-gated spec with a command step, and a plan with no op."""
+    (ops_root / SPEC).write_text(
+        "# S\n\n## Verification\n\nstrategy: none\ngate: devops\n\n## Test Plan\n\n"
+        "- run `pulumi up` on the stack\n- [tester] click the page\n"
+    )
+    (ops_root / PLAN / "ops.yaml").unlink()
+    if ops_yaml is not None:
+        (ops_root / PLAN / "ops.yaml").write_text(ops_yaml)
+
+
+def test_stage_1_refuses_an_ops_gap_before_anything_is_brought_up(ops_root: Path) -> None:
+    _gapped(ops_root)
+    gate, host, *_ = _gate(ops_root)
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_1(gate)
+    assert exc.value.code == 2
+    for needle in ("step 1", "pulumi up", "fr ops stub", "none:", "PR #5"):
+        assert needle in exc.value.why, (needle, exc.value.why)
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+    assert any(a[:2] == ["materialise", HEAD] for a, _ in host.calls)
+    assert host.materialised and not any(p.exists() for p in host.materialised)
+    assert _host(ops_root).head() is None  # nothing recorded
+
+
+def test_stage_1_passes_the_gap_check_with_a_none_acknowledgement(ops_root: Path) -> None:
+    _gapped(ops_root, "schema_version: 2\nnone: converged by hand\n")
+    gate, host, *_ = _gate(ops_root)
+    result = run(gate)
+    assert "ops gap" not in result.why
+    assert any(a[:2] == ["isolation", "up"] for a, _ in host.calls)

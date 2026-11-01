@@ -190,7 +190,9 @@ def test_ops_yaml_op_stays_strict() -> None:
 def test_an_ops_file_may_acknowledge_no_ops() -> None:
     from fr.ops.model import OpsFile
 
-    assert OpsFile.model_validate({"schema_version": 2, "none": "reboot only"}).none == "reboot only"
+    assert (
+        OpsFile.model_validate({"schema_version": 2, "none": "reboot only"}).none == "reboot only"
+    )
     assert OpsFile.model_validate({"schema_version": 2, "none": "x", "ops": []}).ops == ()
     assert OpsFile.model_validate({"schema_version": 2}).none is None
 

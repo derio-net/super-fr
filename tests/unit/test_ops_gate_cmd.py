@@ -303,3 +303,38 @@ def test_the_ops_branch_push_is_leased(monkeypatch, tmp_path: Path) -> None:
     exists[0] = True
     with pytest.raises(gitseam.GitError, match="already has"):
         ws.push("chore/ops-p")
+
+
+def test_the_host_materialises_the_head_paths_skipping_absent_ones(tmp_path: Path) -> None:
+    """spec 2026-11-01-ops-gate-probes R5: the scratch tree stage 1 reads the gap from."""
+    import shutil
+    import subprocess
+
+    from fr.commands.ops_gate_cmd import HostCheckout
+
+    repo = tmp_path / "repo"
+    (repo / "docs/superpowers/plans/p").mkdir(parents=True)
+    (repo / "docs/superpowers/plans/p/ops.yaml").write_text("schema_version: 2\nnone: x\n")
+    (repo / "docs/superpowers/specs").mkdir(parents=True)
+    (repo / "docs/superpowers/specs/s.md").write_text("# S\n")
+    (repo / "other.txt").write_text("not asked for\n")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+         "commit", "-qm", "x"],
+        check=True,
+    )  # fmt: skip
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    (repo / "docs/superpowers/specs/s.md").write_text("# changed after the commit\n")
+    out = HostCheckout(repo).materialise(
+        head, ["docs/superpowers/specs", "docs/superpowers/plans/p", ".fr"]
+    )
+    try:
+        assert (out / "docs/superpowers/specs/s.md").read_text() == "# S\n"
+        assert (out / "docs/superpowers/plans/p/ops.yaml").is_file()
+        assert not (out / "other.txt").exists() and not (out / ".fr").exists()
+    finally:
+        shutil.rmtree(out)

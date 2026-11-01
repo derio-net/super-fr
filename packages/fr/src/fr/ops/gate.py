@@ -69,6 +69,11 @@ class StageFailed(Exception):  # noqa: N818 — a stage's stop, not a fault
 
 
 class GateHost(Protocol):
+    def materialise(self, ref: str, paths: Sequence[str]) -> Path:
+        """A fresh temporary directory holding *paths* as *ref* carries them (`git archive
+        <ref> -- <paths>`), paths absent at *ref* skipped. The caller removes it."""
+        ...
+
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         """This `fr` in the base checkout: (exit, stdout). *terminal*: the operator's
         terminal attached and nothing captured (an `interactive: true` op)."""
@@ -568,6 +573,47 @@ def apply_phase(gate: Gate, phase: str) -> None:
 # ------------------------------------------------------------------------ stages
 
 
+def _head_paths(t: GateTarget, spec_rel: str) -> list[str]:
+    """What the ops-gap check reads at the PR head (spec 2026-11-01-ops-gate-probes §A),
+    plus the run's own spec when it lives elsewhere."""
+    paths = ["docs/superpowers/specs", t.plan_rel, "docs/acceptance/matrix.yaml", ".fr"]
+    return paths if spec_rel.startswith("docs/superpowers/specs/") else [*paths, spec_rel]
+
+
+def _refuse_an_ops_gap(gate: Gate, head: str) -> None:
+    """R5: refuse, before any workspace exists, a PR head whose run has an ops gap. It is
+    decided on a scratch tree materialised from the head, removed afterwards. A head
+    whose Verification section, matrix or ops carriers cannot be read is not decided here:
+    the stages that read them report it."""
+    import shutil
+
+    from fr.acceptance.model import AcceptanceError
+    from fr.ops.gap import gap_message, ops_gap
+    from fr.ops.load import OpsLoadError
+    from fr.requirements import run_spec
+    from fr.verification.exit import exit_for_spec
+
+    t = gate.target
+    spec_rel = run_spec(t.run)
+    if spec_rel is None:
+        return
+    scratch = gate.host.materialise(head, _head_paths(t, spec_rel))
+    try:
+        gates = exit_for_spec(scratch, spec_rel, repo=t.repo.rsplit("/", 1)[-1]).gates
+        gap = ops_gap(scratch, spec_rel, scratch / t.plan_rel, gates)
+    except (ValueError, OSError, AcceptanceError, OpsLoadError) as e:
+        gate.say(f"the ops-gap check could not read PR #{t.pr}'s head ({e}); not checked")
+        gap = []
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    if gap:
+        raise StageFailed(
+            f"PR #{t.pr}'s head has an ops gap. {gap_message(gap, has_plan=True)} "
+            "Fix it on the PR branch, then re-run `fr ops gate`. Nothing was brought up",
+            code=2,
+        )
+
+
 def stage_1(gate: Gate) -> None:
     """Bring up (or reuse) the ops workspace, cut from the PR head (from the default
     branch once the PR merged); pre-merge ops."""
@@ -629,6 +675,7 @@ def stage_1(gate: Gate) -> None:
             f"with the ops credentials. Nothing was brought up: {fix}",
             code=2,
         )
+    _refuse_an_ops_gap(gate, head)
     if reused is None:
         code, _ = gate.host.fr(["isolation", "up", "--repo", str(t.primary), "--profile",
                                 t.profile, "--branch", t.ops_branch, "--base", base])  # fmt: skip
