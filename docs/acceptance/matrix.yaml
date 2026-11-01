@@ -10309,9 +10309,13 @@ rows:
       `none:`
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_stub.py#test_one_op_per_devops_command_step_without_a_pointer
+      - super-fr:tests/unit/test_ops_stub.py#test_the_pointer_goes_after_the_tag
+    status: ci
+    notes: 'R11: pure proposer and CLI tests incl. refusals, append-only ops.yaml, CRLF,
+      rollback'
   - id: auto-migrate-workspace-commits-alone
     capability: artifact migration gate
     acceptance: 'In a non-interactive fr-isolation workspace on a work branch, stale
