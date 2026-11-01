@@ -65,3 +65,63 @@ two new scenario scripts and two registration lines; the matrix moves were made 
 ### no-refactor-p1-t7 · discovery · no-refactor-because P1.T7 (phase 1)
 
 prose, mirrors and a fragment only
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-01T17:23:36+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · _ci_veto swallowed GitRefusal (not just NoRepo) and dropped the uncommitted veto (phase 1)
+
+trigger.py:581-587: unknown git state treated as clean in the CI path.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-01T17:23:36+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · valid_workspace applied branch drift to mode: external (phase 1)
+
+marker.py:155-163 vs fr-isolation-decision.sh:281-283, which checks drift only for worktree/empty mode.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-01T17:23:36+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · The opt-out refusal offered 'carry it: fr isolation up' (phase 1)
+
+False while FR_NON_INTERACTIVE stays set (trigger.py:457-467).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-01T17:23:36+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · Both nags dropped the commit notice on a partial migration (commit landed, exit 2) (phase 1)
+
+fr-acceptance-nag.sh:30-38 and nag.ts:99-102.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-01T17:23:36+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · Stale docstring 'CI refuses rather than migrating' (phase 1)
+
+tests/unit/test_migration_run_provenance.py:137.
+
+<!-- fr:journal kind=review scope=plan id=p1-review-1 created=2026-11-01T17:23:36+00:00 phase=1 -->
+### p1-review-1 · review · phase 1 code review: 5 findings (all in scope, Minor), all fixed (phase 1)
+
+Dispatched general-purpose code reviewer (separate context, read-only against the fr workspace) over d0d7af45..613f2398. Verdict: no Critical or Important issues. 5 Minor in-scope findings p1-r1..p1-r5, each verified against the code and fixed with a test in 122dbe848. Considered-and-set-aside list in the reviewer's return (devcontainer exec toplevel mismatch fails safe; NoRepo+interactive unchanged; CI+FR_NON_INTERACTIVE migrates in place per spec precedence).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-01T17:23:36+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: _ci_veto swallowed GitRefusal (not just NoRepo) and dropped the uncommitted veto (phase 1)
+
+Dropped _ci_veto; the CI path calls uncommitted_veto inside the try, so a GitUnavailableError refuses. Test test_ci_refuses_when_git_cannot_say_what_is_uncommitted (red, then green).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-01T17:23:36+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: valid_workspace applied branch drift to mode: external (phase 1)
+
+Drift is now limited to worktree or empty mode. Test test_an_external_marker_is_never_branch_drift.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-01T17:23:36+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: The opt-out refusal offered 'carry it: fr isolation up' (phase 1)
+
+carry=False on the opt-out refusal; test_fr_non_interactive_in_a_valid_workspace_refuses asserts the line is absent.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-01T17:23:36+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: Both nags dropped the commit notice on a partial migration (commit landed, exit 2) (phase 1)
+
+Both relay the notice from the failure branch too. Tests test_a_partial_migration_still_relays_its_commit (red, then green) and the bun case 'a partial migration's commit notice is relayed on its refusal too'.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-01T17:23:36+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: Stale docstring 'CI refuses rather than migrating' (phase 1)
+
+Docstring rewritten to the new behaviour.
+
+<!-- fr:journal kind=finding scope=plan id=p1-full-suite-red-preexisting-resolved created=2026-11-01T17:23:36+00:00 phase=1 state=open resolves=p1-full-suite-red-preexisting out_of_scope=true -->
+### p1-full-suite-red-preexisting-resolved · finding [out-of-scope] · resolves p1-full-suite-red-preexisting: The local full suite is red on 13 tests that also fail against origin/main's fr source (phase 1)
+
+The 13 local failures (test_install_atomic, test_run_evidence_visual, test_records_commit) are in files and code this change does not touch. The PR's CI test shards, which include them, passed on 9db6c735 (tests: ci evidence). The local failures are host-load-sensitive (load averages 100-300 during the 3 h run), not caused by this change.
