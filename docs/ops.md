@@ -302,9 +302,13 @@ run their checks instead of asking.
   or `-` separator (`ran: x`); a non-matching answer is asked again, and three in a row
   fail the stage.
 - **Evidence bound.** The screen shows the last 40 lines of a passing probe (each at most
-  200 characters). Only the last three non-blank lines, 300 characters in all, are
-  recorded. Masking hides secret values, not hostnames or other identifying text, so end
-  a probe with a one-line summary and keep it free of them.
+  200 characters). Only the last three **status lines**, 300 characters in all, are
+  recorded, and the rule fails closed: a status line holds only letters, digits, spaces
+  and `, . ; ( ) / % + # _ * -` (no colon, quote, `=` or angle bracket), and output with
+  a `{`, `}`, `[` or `]` anywhere records none of its lines. So a JSON or YAML body, an
+  env assignment or a URL is never committed; the evidence reads `no output` instead.
+  Masking hides secret values, not hostnames or other identifying text, so end a probe
+  with a plain one-line summary (`converged 3 of 3`) and keep it free of them.
 
 ### Test Plan tags
 
