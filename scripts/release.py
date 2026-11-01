@@ -2,6 +2,11 @@
 """Turn pending change fragments into a bot release on `main`.
 
     scripts/release.py [--version X.Y.Z] [--dry-run]
+    scripts/release.py prepare --out DIR [--version X.Y.Z] [--github-output FILE]
+    scripts/release.py materialise --plan FILE --bundle FILE [--pin-base]
+    scripts/release.py collect --out FILE
+    scripts/release.py test-shard --plan FILE --group N --splits N --durations FILE --out FILE
+    scripts/release.py publish --plan FILE --bundle FILE
 
 Spec 2026-09-26-version-bump-churn §3.C, §3.E, §5, and 2026-10-14-exit-gates R20,
 R25. Run by `release.yml` on every push to `main`, daily, and by hand through
@@ -35,20 +40,33 @@ waits, the final `X.Y.Z` consumes the fragments. Versions parse through
    see it (the #1058 release, which refused and released nothing).
    Commit `release: vX.Y.Z` as github-actions[bot], the summaries grouped by
    bump in the body.
-4. Test the committed tree AT the new version (`_run_staged_tests`), before the
-   push. The diff check proves which lines changed, not how the code behaves
-   at the new number; 5.0.0 shipped refusing its own plans (gh#854) because
-   the first commit to run at 5.0.0 was the untested release commit. A red
-   suite refuses here, with `main` and the tags untouched.
-5. Push. A non-fast-forward fetches, resets and recomputes from scratch (up to
-   3 attempts) — never a rebase, the newer main may carry more fragments. A
-   refusal by branch protection fails at once: the bot needs a bypass actor.
+4. Test the committed tree AT the new version, before the push. The diff check
+   proves which lines changed, not how the code behaves at the new number;
+   5.0.0 shipped refusing its own plans (gh#854) because the first commit to
+   run at 5.0.0 was the untested release commit. A red suite refuses here, with
+   `main` and the tags untouched.
+5. Push, only if `origin/main` is still the commit the release was staged on.
+   When it moved (or the push loses the race) the run is **superseded**: it
+   pushes nothing and exits 0, because the push that moved main starts the
+   Release run that recomputes from the new tip (spec 2026-11-01-ci-speed
+   §3.D, R10). A run carrying `--version` exits non-zero instead, telling the
+   operator to re-dispatch it: no later run carries the override. A refusal by
+   branch protection still fails at once: the bot needs a bypass actor.
 6. If the version has no `v` tag: check the `fr_version` floors changed since
    the previous tag (§3.E), create the annotated tag and the GitHub Release —
    notes are the release commit's body plus `--generate-notes` — and then, on
    a floor mismatch, open an issue and exit `EXIT_FLOOR`. Idempotent: a rerun
    finds the tag, or reads its notes from the release commit that made the
    version (`git log -1 -S<version> -- pyproject.toml`).
+
+With no subcommand, steps 1-6 run in this one process, the suite unsharded (local
+use and the unit tests). `release.yml` runs them as a job graph instead (spec
+2026-11-01-ci-speed §3.D): `prepare` is steps 1-3 and writes `release-plan.json`
+plus `staged.bundle` (or finishes there, `cut=false`, when there is nothing to
+release); `collect` and six `test-shard` jobs each `materialise` the staged
+commit, pinned to the plan's base, and run step 4 split six ways, credential-free;
+`publish` is steps 5-6, after `scripts/split_check.py` proved the shards ran the
+whole suite.
 
 `--dry-run` reads the working tree as it is (no fetch, no reset), prints what
 it would release, and writes nothing. Stdlib only; the bump, the lock check, the
@@ -65,7 +83,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -78,7 +96,6 @@ from versions import FINAL_RE, FINAL_TAG_RE, RC_TAG_RE, Version  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 REMOTE = "origin"
 BRANCH = "main"
-MAX_ATTEMPTS = 3
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 RELEASE_PREFIX = "release: v"
@@ -86,7 +103,7 @@ GROUP_TITLES = {"major": "Major changes", "minor": "Minor changes", "patch": "Pa
 
 EXIT_OK = 0
 EXIT_REFUSED = 1  # a refusal: invalid input, stale lock, stray diff, protection
-EXIT_RACE = 2  # lost the push race MAX_ATTEMPTS times; the next push retries
+EXIT_SUPERSEDED = 2  # main moved under a run carrying --version: re-dispatch it
 EXIT_FLOOR = 3  # tagged and released, but a floor names another release
 
 # GH006 is classic branch protection, GH013 a ruleset (what `protect main` is);
@@ -199,10 +216,32 @@ def _run_staged_tests(
     The full suite, not a curated "version-sensitive" subset: that list is
     the kind of literal that goes stale, which is how 5.0.0 broke.
     """
-    uv = ["uv", "run", "--locked"]
+    return _probe_then_pytest(repo, new, [], run)
+
+
+_UV_LOCKED = ["uv", "run", "--locked"]
+# The release's shards and its collect job run with these options and no others, so
+# `split_check.py` compares like with like (ci.yml's `collect` and `test` do the same).
+SHARD_ADDOPTS = "addopts=--strict-markers"
+
+
+def _probe_then_pytest(
+    repo: Path,
+    new: str,
+    pytest_args: list[str],
+    run: Callable[..., subprocess.CompletedProcess[str]],
+) -> str | None:
+    """The version probe, then pytest, both credential-free: None when green.
+
+    A probe that reports any number but `new` refuses before pytest runs.
+    """
     env = _credential_free_env()
     probe = run(
-        [*uv, "python", "-c", _FR_VERSION_PROBE], cwd=repo, capture_output=True, text=True, env=env
+        [*_UV_LOCKED, "python", "-c", _FR_VERSION_PROBE],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     installed = probe.stdout.strip()
     if probe.returncode != 0 or not _same_version(installed, new):
@@ -211,12 +250,70 @@ def _run_staged_tests(
             f"refusing to test at the wrong number\n{probe.stderr.strip()}"
         ).strip()
     r = run(
-        [*uv, "pytest", "-q", "--no-cov", "-n", "auto", "-p", "no:cacheprovider"],
+        [*_UV_LOCKED, "pytest", "-q", "--no-cov", "-n", "auto", "-p", "no:cacheprovider"]
+        + pytest_args,
         cwd=repo,
         capture_output=True,
         text=True,
         env=env,
     )
+    if r.returncode == 0:
+        return None
+    return "\n".join(f"{r.stdout}\n{r.stderr}".strip().splitlines()[-_TAIL_LINES:])
+
+
+def _run_shard_tests(
+    repo: Path,
+    new: str,
+    *,
+    group: int,
+    splits: int,
+    durations: Path,
+    out: Path,
+    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> str | None:
+    """One of the release's shards (spec 2026-11-01-ci-speed §3.D): the probe, then
+    group `group` of `splits`, split by the plan's durations file.
+
+    The plan file is copied to `out` first: `--store-durations --clean-durations`
+    rewrites the file it splits by, so `out` ends holding exactly the tests this
+    shard ran, which `split_check.py` compares with `collect`.
+    """
+    out.write_text(durations.read_text())
+    return _probe_then_pytest(
+        repo,
+        new,
+        [
+            "-o",
+            SHARD_ADDOPTS,
+            "--splits",
+            str(splits),
+            "--group",
+            str(group),
+            "--splitting-algorithm",
+            "least_duration",
+            "--durations-path",
+            str(out),
+            "--store-durations",
+            "--clean-durations",
+        ],
+        run,
+    )
+
+
+def _run_collect(
+    repo: Path, out: Path, run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
+) -> str | None:
+    """What the release's shards must run between them, written to `out`: None when
+    collection succeeded."""
+    r = run(
+        [*_UV_LOCKED, "pytest", "-o", SHARD_ADDOPTS, "--collect-only", "-q"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=_credential_free_env(),
+    )
+    out.write_text(r.stdout)
     if r.returncode == 0:
         return None
     return "\n".join(f"{r.stdout}\n{r.stderr}".strip().splitlines()[-_TAIL_LINES:])
@@ -337,9 +434,19 @@ def sync_to_tip(repo: Path) -> None:
     Untracked files are left alone, never cleaned: `git add -A` would stage them
     and `verify_staged` then refuses, which beats deleting a human's work.
     """
-    _git(repo, "fetch", "--quiet", "--force", "--prune", "--prune-tags", "--tags", REMOTE)
+    fetch_origin(repo)
     _git(repo, "checkout", "--quiet", "-B", BRANCH, f"{REMOTE}/{BRANCH}")
     _git(repo, "reset", "--quiet", "--hard", f"{REMOTE}/{BRANCH}")
+
+
+def fetch_origin(repo: Path) -> str:
+    """origin's main and its tags exactly (a deleted tag is gone); returns main's sha."""
+    _git(repo, "fetch", "--quiet", "--force", "--prune", "--prune-tags", "--tags", REMOTE)
+    return _rev(repo, f"refs/remotes/{REMOTE}/{BRANCH}")
+
+
+def _rev(repo: Path, ref: str) -> str:
+    return _out(repo, "rev-parse", "--verify", f"{ref}^{{commit}}").strip()
 
 
 def tag_exists(repo: Path, version: str) -> bool:
@@ -760,30 +867,115 @@ def check_staged_suite(repo: Path, new: str, cmds: Commands) -> None:
         )
 
 
-def release_to_main(repo: Path, override: str | None, cmds: Commands) -> Plan:
-    """Steps 1-5: recompute from the tip until the release commit lands (or there is none)."""
-    for _attempt in range(MAX_ATTEMPTS):
-        sync_to_tip(repo)
-        plan = compute(repo, override, cmds)
-        if plan.new is None:
-            if plan.why:
-                print(f"nothing to release: {plan.why}")
-            return plan
-        if plan.rc:
-            print(f"release candidate: {plan.why}")
-        make_release_commit(repo, plan, cmds)
-        check_staged_suite(repo, plan.new, cmds)
-        if push(repo) == "ok":
-            kind = (
-                "an RC, no fragment consumed" if plan.rc else f"{len(plan.fragments)} fragment(s)"
-            )
-            print(f"pushed {RELEASE_PREFIX}{plan.new} ({kind})")
-            return plan
-        print("main moved under the release; recomputing from the new tip", file=sys.stderr)
-    raise ReleaseError(
-        f"lost the push race to main {MAX_ATTEMPTS} times; the next push to main retries",
-        EXIT_RACE,
+PLAN_FILE = "release-plan.json"
+BUNDLE_FILE = "staged.bundle"
+
+
+@dataclass
+class Staged:
+    """A staged release commit, handed from `prepare` to the jobs that test and push it."""
+
+    version: str
+    rc: bool
+    override: str | None
+    base_sha: str  # origin/main when the release was staged: the only commit it may land on
+    staged_sha: str  # the release commit; every shard tests exactly this
+    fragments: list[str]  # repo-relative, consumed by it
+
+    def write(self, path: Path) -> None:
+        path.write_text(json.dumps(asdict(self), indent=2) + "\n")
+
+    @classmethod
+    def read(cls, path: Path) -> Staged:
+        try:
+            return cls(**json.loads(path.read_text()))
+        except (OSError, ValueError, TypeError) as exc:
+            raise ReleaseError(f"cannot read the release plan {path}: {exc}") from None
+
+
+def prepare(
+    repo: Path, override: str | None, cmds: Commands, out: Path | None = None
+) -> Staged | None:
+    """Steps 1-3: the release commit, staged locally and never pushed; None when there
+    is nothing to release. With `out`, writes the plan and the bundle the other jobs
+    materialise (spec 2026-11-01-ci-speed §3.D)."""
+    sync_to_tip(repo)
+    base = _rev(repo, "HEAD")
+    plan = compute(repo, override, cmds)
+    if plan.new is None:
+        if plan.why:
+            print(f"nothing to release: {plan.why}")
+        return None
+    if plan.rc:
+        print(f"release candidate: {plan.why}")
+    make_release_commit(repo, plan, cmds)
+    staged = Staged(
+        version=plan.new,
+        rc=plan.rc,
+        override=override,
+        base_sha=base,
+        staged_sha=_rev(repo, "HEAD"),
+        fragments=[f.path.relative_to(repo).as_posix() for f in plan.fragments],
     )
+    if out is not None:
+        out.mkdir(parents=True, exist_ok=True)
+        staged.write(out / PLAN_FILE)
+        bundle = out / BUNDLE_FILE
+        _git(repo, "bundle", "create", "--quiet", str(bundle), f"{base}..refs/heads/{BRANCH}")
+    print(f"staged {RELEASE_PREFIX}{staged.version} at {staged.staged_sha} on {base}")
+    return staged
+
+
+def materialise(repo: Path, staged: Staged, bundle: Path, *, pin_base: bool) -> None:
+    """Check out the staged commit from the bundle, refusing any other commit; with
+    `pin_base`, point `origin/main` at the plan's base so tests reading it (the
+    unarchived-plans tripwire) judge the base the release pushes onto."""
+    _git(repo, "fetch", "--quiet", str(bundle), f"refs/heads/{BRANCH}")
+    head = _rev(repo, "FETCH_HEAD")
+    if head != staged.staged_sha:
+        raise ReleaseError(
+            f"the bundle's head {head} is not the plan's staged_sha {staged.staged_sha}; "
+            "refusing to test or push a commit the release did not stage"
+        )
+    _git(repo, "checkout", "--quiet", "--detach", staged.staged_sha)
+    if pin_base:
+        _git(repo, "update-ref", f"refs/remotes/{REMOTE}/{BRANCH}", staged.base_sha)
+    print(f"materialised {staged.staged_sha} (base {staged.base_sha})")
+
+
+def _superseded(staged: Staged, tip: str) -> int:
+    """R10: main moved, so a later run releases from the new tip; nothing is pushed."""
+    print(f"superseded: main moved to {tip}")
+    if staged.override is None:
+        return EXIT_OK
+    raise ReleaseError(
+        f"superseded: main moved to {tip} under the release of --version "
+        f"{staged.override}, and no later run carries the override\n"
+        f"  re-dispatch: gh workflow run release.yml -f version={staged.override}",
+        EXIT_SUPERSEDED,
+    )
+
+
+def publish(repo: Path, staged: Staged, cmds: Commands) -> int:
+    """Steps 5-6 for the commit checked out at HEAD: push it only onto the base it
+    was staged on, then tag and release it. A protection refusal raises (`push`)."""
+    tip = fetch_origin(repo)
+    if tip != staged.base_sha:
+        return _superseded(staged, tip)
+    if push(repo) == "race":
+        return _superseded(staged, fetch_origin(repo))
+    kind = "an RC, no fragment consumed" if staged.rc else f"{len(staged.fragments)} fragment(s)"
+    print(f"pushed {RELEASE_PREFIX}{staged.version} ({kind})")
+    return finish(repo, cmds)
+
+
+def release_to_main(repo: Path, override: str | None, cmds: Commands) -> int:
+    """Steps 1-6 in one process: prepare, one unsharded suite, publish."""
+    staged = prepare(repo, override, cmds)
+    if staged is None:
+        return finish(repo, cmds)
+    check_staged_suite(repo, staged.version, cmds)
+    return publish(repo, staged, cmds)
 
 
 # -- tag, notes, floors ----------------------------------------------------------
@@ -910,23 +1102,99 @@ def dry_run(repo: Path, override: str | None, cmds: Commands) -> int:
     return EXIT_OK
 
 
-def main(
-    argv: list[str] | None = None, repo: Path | None = None, commands: Commands | None = None
-) -> int:
+def _github_output(path: Path | None, **values: str) -> None:
+    if path is not None:
+        with path.open("a") as fh:
+            fh.writelines(f"{k}={v}\n" for k, v in values.items())
+
+
+def _run_subcommand(args: argparse.Namespace, repo: Path, cmds: Commands) -> int:
+    if args.cmd == "prepare":
+        out = Path(args.out)
+        staged = prepare(repo, args.version or None, cmds, out)
+        if staged is None:
+            _github_output(args.github_output, cut="false")
+            return finish(repo, cmds)  # an untagged RC at HEAD is tagged here
+        _github_output(
+            args.github_output,
+            cut="true",
+            base_sha=staged.base_sha,
+            staged_sha=staged.staged_sha,
+            version=staged.version,
+        )
+        return EXIT_OK
+    if args.cmd == "collect":
+        failure = _run_collect(repo, Path(args.out))
+        if failure is not None:
+            raise ReleaseError(f"collection failed:\n{failure}")
+        return EXIT_OK
+    staged = Staged.read(Path(args.plan))
+    if args.cmd == "materialise":
+        materialise(repo, staged, Path(args.bundle), pin_base=args.pin_base)
+        return EXIT_OK
+    if args.cmd == "test-shard":
+        print(f"testing shard {args.group}/{args.splits} of {staged.staged_sha}")
+        failure = _run_shard_tests(
+            repo,
+            staged.version,
+            group=args.group,
+            splits=args.splits,
+            durations=Path(args.durations),
+            out=Path(args.out),
+        )
+        if failure is not None:
+            raise ReleaseError(
+                f"shard {args.group}/{args.splits} is red at {staged.version}; nothing is "
+                f"pushed, tagged or published:\n{failure}"
+            )
+        return EXIT_OK
+    assert args.cmd == "publish"
+    materialise(repo, staged, Path(args.bundle), pin_base=False)
+    return publish(repo, staged, cmds)
+
+
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--version", default=None, help="release exactly this X.Y.Z")
     parser.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
-    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    sub = parser.add_subparsers(dest="cmd")
+    p = sub.add_parser("prepare", help="steps 1-3: stage the release commit, plan and bundle")
+    p.add_argument("--out", required=True, help="directory for the plan and the bundle")
+    p.add_argument("--version", default=argparse.SUPPRESS, help="release exactly this X.Y.Z")
+    p.add_argument("--github-output", type=Path, default=None, help="append cut=... here")
+    m = sub.add_parser("materialise", help="check out the staged commit from the bundle")
+    m.add_argument("--plan", required=True)
+    m.add_argument("--bundle", required=True)
+    m.add_argument("--pin-base", action="store_true", help="pin origin/main to the base")
+    c = sub.add_parser("collect", help="list the tests the shards must run")
+    c.add_argument("--out", required=True)
+    t = sub.add_parser("test-shard", help="step 4 for one shard: probe, then the split")
+    t.add_argument("--plan", required=True)
+    t.add_argument("--group", type=int, required=True)
+    t.add_argument("--splits", type=int, required=True)
+    t.add_argument("--durations", required=True, help="the run's one durations plan")
+    t.add_argument("--out", required=True, help="this shard's measured durations")
+    u = sub.add_parser("publish", help="steps 5-6: push onto the base, tag, release")
+    u.add_argument("--plan", required=True)
+    u.add_argument("--bundle", required=True)
+    return parser
+
+
+def main(
+    argv: list[str] | None = None, repo: Path | None = None, commands: Commands | None = None
+) -> int:
+    args = _parser().parse_args(sys.argv[1:] if argv is None else argv)
     repo = Path(repo or REPO)
     cmds = commands or Commands()
-    override = args.version or None
     try:
+        if args.cmd is not None:
+            return _run_subcommand(args, repo, cmds)
         if args.dry_run:
-            return dry_run(repo, override, cmds)
-        release_to_main(repo, override, cmds)
-        return finish(repo, cmds)
+            return dry_run(repo, args.version or None, cmds)
+        return release_to_main(repo, args.version or None, cmds)
     except ReleaseError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        phase = f"{args.cmd}: " if args.cmd else ""
+        print(f"ERROR: {phase}{exc}", file=sys.stderr)
         return exc.code
 
 
