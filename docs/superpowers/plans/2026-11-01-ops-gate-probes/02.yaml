@@ -1,0 +1,122 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Stage 5 runs a pointed step's probe; full probe output; answer grammar
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - ops-gate-step-probe
+  - ops-gate-answer-grammar
+  tier: standard
+  files:
+  - packages/fr/src/fr/ops/engine.py
+  - packages/fr/src/fr/ops/mask.py
+  - packages/fr/src/fr/ops/gate.py
+  - tests/unit/test_ops_engine.py
+  - tests/unit/test_ops_runner.py
+  - tests/unit/test_ops_reason.py
+  - tests/unit/test_ops_gate.py
+  - tests/scenarios/fr-ops-gate-probes.sh
+  - docs/acceptance/*
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: RED/GREEN — full output through the runner, output/evidence fields (R9)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: test_ops_runner.py: ShellRunner returns the probe's full stdout (3 lines in,
+      3 out). test_ops_engine.py: a failing check's reason is still its last non-blank
+      line; a DONE checked row has `output` (≤40 lines, each ≤200 chars, secret values
+      masked) and `evidence` (last ≤3 non-blank lines, ≤300 chars); both null on OPEN and
+      on attested/proof/legacy DONE; `check: TODO` is UNVERIFIABLE "a stub: write a real
+      probe" without calling the runner. test_ops_reason.py: clip_output/evidence_lines
+      bounds and masking. Run, confirm failures.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: probe/engine: ShellRunner returns full stdout; engine `last_line(out)`
+      where the line was used; StatusRow gains output/evidence, emitted by as_row;
+      mask.clip_output + mask.evidence_lines. Run Task 1 tests + all test_ops_*.py;
+      confirm green.
+- number: 2
+  title: RED/GREEN — the answer grammar and re-prompt loop (R10)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: test_ops_gate.py: a scripted prompt answering `ran: x` records --ran x;
+      `ran:x`, `na - y`, `na- y`, `owed x` accepted; `rancid`, `na-ive`, bare `ran`, and ""
+      are each re-prompted with an echo of the answer and the grammar; three consecutive
+      non-matches fail the stage with that echo. Run, confirm failures.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: gate.py `_ask_outcome(gate, text, allowed)` + the new grammar per spec §C;
+      stage_5's unpointed branch uses it. Run Task 2 tests; confirm green.
+- number: 3
+  title: RED/GREEN — pointed steps are probed (R8)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: test_ops_gate.py with a fake host/tree whose `fr ops status <id> --json`
+      returns scripted rows: DONE checked → closeout --ran with evidence
+      "<id>: check passed — <evidence>" and NO prompt; OPEN → prompt offers retry/na/owed,
+      `retry` re-runs status, `ran x` re-prompted; ESCALATE handled like OPEN; N/A and DONE
+      attested → the usual ran/na/owed prompt; status exit 2 → StageFailed with its
+      output; gate.trust called once before the first probe. Run, confirm failures.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: gate.py `_probe_step` per spec R8/§C; stage_5 loop dispatches on step.op.
+      Run Task 3 tests + test_ops_gate*.py; confirm green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: stage_5 stays a loop over (step, closed) with the two branches as helpers;
+      rerun the same tests.
+- number: 4
+  title: Scenario — probed step and grammar end to end
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Extend tests/scenarios/fr-ops-gate-probes.sh: a run with one post-merge op whose
+      check prints two lines and passes, and a step `(op: <id>)` → stage 5 records `ran`
+      with the evidence line, no prompt; a second pointed op failing → answered `owed`;
+      an unpointed step answered first `ran` (re-prompted) then `ran: walked`. Run it;
+      confirm green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

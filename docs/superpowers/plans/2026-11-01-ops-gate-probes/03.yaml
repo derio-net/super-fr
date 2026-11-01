@@ -1,0 +1,89 @@
+schema_version: 2
+phase:
+  number: 3
+  title: '`fr ops stub`, skills and docs'
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+  acceptance:
+  - ops-stub-cli
+  tier: standard
+  files:
+  - packages/fr/src/fr/ops/stub.py
+  - packages/fr/src/fr/commands/ops_cmd.py
+  - tests/unit/test_ops_stub.py
+  - tests/unit/test_ops_cli.py
+  - plugins/super-fr/skills/fr-plan/SKILL.md
+  - plugins/super-fr/skills/fr-devops-gate/SKILL.md
+  - .opencode/skills/*
+  - .hermes/skills/*
+  - docs/ops.md
+  - docs/explainers/*
+  - .changes/feat-ops-gate-probes.yaml
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: RED/GREEN — fr ops stub (R11)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_ops_stub.py for pure `propose(spec_text, existing_ops,
+      exit_gates)`: one op per devops command step (id step-<n>, clipped summary,
+      phase post-merge, apply = commands joined " && ", mutating true, check TODO) plus
+      the spec edit inserting `(op: step-<n>) ` after the tag; pointed and [tester] steps
+      skipped; duplicate id → refusal. test_ops_cli.py: `fr ops stub --plan <dir>` prints
+      and writes nothing; `--yes` writes ops.yaml (schema_version 2) + spec; refuses with
+      `none:` or no spec, writing nothing. Run, confirm failures.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: fr/ops/stub.py + `stub` command in commands/ops_cmd.py, writes via
+      fr.artifacts.atomic.write_text_atomic. Run Task 1 tests + test_ops_cli.py; green.
+- number: 2
+  title: Prose — skills, docs, mirrors, fragment (R12)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-plan/SKILL.md (≤120 lines, compress an existing
+      line to make room): for a devops-gated spec, runnable Test Plan steps become ops
+      (`fr ops stub`, then a real `check:`), physical/judgement steps stay prose; `none:`
+      in ops.yaml when there are none on purpose. Edit fr-devops-gate SKILL.md: stage 1
+      refuses an ops gap; stage 5 probes `(op: <id>)` steps, DONE records ran, a failing
+      probe offers retry/na/owed; answers take `ran: x`. Keep tool/argument neutrality.
+      Run scripts/sync-opencode.py and scripts/sync-hermes.py; run
+      tests/unit/test_skill_validation.py, the three opencode tripwires,
+      test_tripwire_hermes_skills_sync.py and test_tripwire_skill_tool_neutrality.py;
+      confirm green.
+  - id: P3.T2.S2
+    text: |-
+      docs/ops.md: a "Test Plan probes" section — the `(op: <id>)` pointer, `fr ops stub`
+      and the TODO sentinel, `none:` (schema_version 2), the stage-1 refusal, the
+      stage-5 outcomes, the evidence bound and its privacy note (masking hides secret
+      values, not hostnames; end probes with a one-line summary). grep docs/explainers
+      for `ops gate`/`fr ops`; if a page describes stage 5 or stage 1, update its `.md`
+      and regenerate per .claude/rules/explainers-currency.md, else note none applies.
+      Add .changes/feat-ops-gate-probes.yaml (bump: minor, one-line summary).
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

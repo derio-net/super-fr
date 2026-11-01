@@ -182,3 +182,9 @@ also gets CI unit tests.
 ## Test Plan
 
 1. Walked on first real use: the next devops-gated run's `fr ops gate` shows a pointed step DONE with its probe output recorded as `ran` evidence, and an unpointed step's `ran: …` answer is accepted. **Cost:** none. It is observed on the next real devops-gated run, not rehearsed.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-01-ops-gate-probes | `derio-net/super-fr` | `2026-11-01-ops-gate-probes` | — |

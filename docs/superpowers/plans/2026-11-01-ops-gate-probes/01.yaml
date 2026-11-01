@@ -1,0 +1,238 @@
+schema_version: 2
+phase:
+  number: 1
+  title: The ops gap — Step pointer/raw lines, `none:` acknowledgement (ops kind v2),
+    advisory warnings, stage-1 refusal
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - ops-gap-advisory
+  - ops-none-acknowledgement
+  - ops-gate-gap-refusal
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/spec.py
+  - packages/fr/src/fr/ops/gap.py
+  - packages/fr/src/fr/ops/load.py
+  - packages/fr/src/fr/ops/model.py
+  - packages/fr/src/fr/ops/gate.py
+  - packages/fr/src/fr/commands/ops_gate_cmd.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/artifacts/ops_none.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - docs/superpowers/plans/*/ops.yaml
+  - tests/unit/test_ops_gap.py
+  - tests/unit/test_ops_load.py
+  - tests/unit/test_ops_model.py
+  - tests/unit/test_ops_artifacts.py
+  - tests/unit/test_ops_gate.py
+  - tests/unit/test_spec_test_plan_steps.py
+  - tests/unit/test_plan_ops.py
+  - tests/unit/test_migration_ops_none.py
+  - tests/scenarios/fr-ops-gate-probes.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — scenario skeleton wired into CI
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create tests/scenarios/fr-ops-gate-probes.sh by copying the harness head of
+      tests/scenarios/fr-ops-gate-stage.sh (host-worktree mode, fake forge driver,
+      candidate python, local bare origin). Its first case only asserts the candidate
+      `fr --version` runs and `fr ops gate --help` exits 0. Wire it wherever
+      tests/integration/test_scenarios.py discovers scenarios (check how
+      fr-ops-gate-stage.sh is picked up; add nothing if discovery is by glob). Run it
+      through `uv run pytest tests/integration/test_scenarios.py -k ops-gate-probes -q --no-cov`
+      and confirm green.
+- number: 2
+  title: 'RED/GREEN — Step keeps raw lines and parses the `(op: <id>)` pointer (R6)'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in the test file covering fr.spec.test_plan_steps (grep tests/unit for
+      `test_plan_steps(`), add cases: `- [devops] (op: guest-verify) Run it` →
+      Step(gate="devops", op="guest-verify", text="Run it"); `- (op: x) do` with no tag →
+      op="x"; `(op:x)` with no space after `)` is NOT a pointer (text kept); a pointer
+      in the middle of text is not one; `raw` holds the item's lines as written,
+      fences included (an item with an indented ```bash fence keeps all 4 lines).
+      Run, confirm failures.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: fr/spec.py — `Step` gains `raw: tuple[str, ...] = ()` and
+      `op: str | None = None` (defaults keep every `Step(n, text[, gate])` valid);
+      `_POINTER_RE = ^\(op:\s*(?P<id>[A-Za-z0-9][\w.-]*)\)\s+(?P<rest>\S.*)$` applied
+      after the tag in `_step`; test_plan_steps passes each item's raw lines. Run the
+      new tests and tests/unit/test_ops_testplan.py, test_ops_gate.py; confirm green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep `_step` small (tag then pointer, one return); rerun the same tests.
+- number: 3
+  title: RED/GREEN — `none:` acknowledgement and the ops kind v2 (R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_ops_model.py + test_ops_load.py: OpsFile accepts
+      `none: "reason"` with `ops: []` or no `ops`; refuses `none` beside a non-empty
+      `ops` (message names `none`); refuses an empty `none`. `load.ops_none(plan_dir)`
+      returns the reason, None without the key or file, and raises OpsLoadError when
+      the plan's phase files also carry a `# manual-operation` block. `plan_has_ops` is
+      False for a `none:` file. tests/unit/test_ops_artifacts.py: validate_ops refuses
+      `none:` under schema_version 1 or unstamped. New
+      tests/unit/test_migration_ops_none.py: a v1 ops.yaml migrates 1→2 stamp-only
+      (body otherwise byte-identical) through the shipped MIGRATIONS registry, and the
+      ops kind's hop chain is [2]. Run, confirm failures.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: model.OpsFile gets `none` + validator; load._ops_yaml accepts the key;
+      `ops_none`; structure.validate_ops stamp rule; registry `ops` current_version=2;
+      new fr/artifacts/ops_none.py registering a stamp-only SchemaMigration 1→2 (model it
+      on fr/artifacts/profiles_services.py's registration), imported from
+      fr/artifacts/__init__.py. Run the Task 3 tests plus
+      tests/unit/test_migration_runner.py and test_validate_artifacts.py; confirm green.
+  - id: P1.T3.S3
+    text: |-
+      Run `uv run fr migrate artifacts --yes` in the worktree (every live ops.yaml moves
+      to schema_version 2), then `uv run fr validate artifacts`; confirm clean and
+      commit the migrated files with the code.
+- number: 4
+  title: RED/GREEN — the gap function (R1, R2)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_ops_gap.py. step_commands: an inline `ansible-playbook
+      config/x.yml` span → one command; `pulumi up` (shipped tool) → one; `./scripts/do x`
+      (path) → one; `foo --bar` (flag) → one; `ops gap` and lone `config/x/vault.yml` →
+      none; an indented ```bash fence with two lines → two commands, info string
+      dropped; a pointed step → none. command_steps with exit_gates {"devops"} skips a
+      `[tester]` step. ops_gap(root, spec_rel, plan_dir, gates): [] without devops, [] with
+      any op, [] with `none:`, the command steps otherwise. gap_message names each step
+      number, its commands, `fr ops stub` and `none:`; has_plan=False words it as "will
+      need ops". Run, confirm failures.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/ops/gap.py (CommandStep, step_commands, command_steps,
+      ops_gap, gap_message) per spec §A; SHIPPED_TOOLS a module tuple with the R2 list.
+      Run Task 4 tests, confirm green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: one span/fence scanner shared by both branches of step_commands; rerun.
+- number: 5
+  title: RED/GREEN — advisory callers (R3, R7)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_plan_ops.py: self_review on a plan whose spec has
+      `## Verification` with `gate: devops` and a command step and no ops yields one
+      `warn` naming the step; with `none:` none; a step `(op: missing)` yields an `error`;
+      an op with `check: TODO` yields an `error`; a spec whose Verification section breaks
+      the grammar yields no gap warning (swallowed). A run_cmd test (find the existing
+      spec-review done hook tests near `_spec_review_ids`, e.g. grep tests/unit for
+      `exit when spec-review resolved`) asserts stderr carries the gap warning with "will
+      need ops" when the run has no plan dir yet, and the exit code is unchanged. Run,
+      confirm failures.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: plan_ops.self_review calls ops_gap via exit_for_spec(Plan.repo_root,
+      spec_rel) and checks pointers/TODO against load_ops; run_cmd's spec-review done
+      hook prints gap_message (run_plan_dir when present, run_exit for gates), swallowing
+      SectionError/AcceptanceError/OpsLoadError. Add `TODO_CHECK = "TODO"` to ops/model.py.
+      Run Task 5 tests, confirm green.
+- number: 6
+  title: RED/GREEN — stage 1 refuses an ops gap (R5)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests/unit/test_ops_gate.py: with the existing fake host, a PR head whose spec
+      is devops-gated with a command step and whose plan has no ops → stage_1 raises
+      StageFailed code 2, message names the step + `fr ops stub` + `none:`, and the fake
+      host recorded NO `isolation up`. With `none:` at the head it proceeds as today. The
+      fake host's `materialise(ref, paths)` copies those paths from its own fixture tree.
+      Run, confirm failures.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: GateHost gains `materialise(ref, paths) -> Path`; the real host
+      (commands/ops_gate_cmd.py or wherever GateHost is implemented — grep `def
+      changed_paths`) runs `git archive <ref> -- <paths> | tar -x -C <tmp>` with the paths
+      in spec §A (skip paths absent at the ref). stage_1 runs ops_gap on it after the
+      archive/profile checks and before `isolation up`, removes the tmp dir, raises
+      StageFailed(code=2). Run Task 6 tests + full test_ops_gate*.py; confirm green.
+  - id: P1.T6.S3
+    text: |-
+      Extend tests/scenarios/fr-ops-gate-probes.sh: a devops-gated fixture run with a
+      command step and no ops — `fr ops gate --run <id>` exits 2 naming the step and no
+      ops workspace exists; then add `none: reason` (schema_version 2) on the PR branch
+      and assert stage 1 gets past the gap check. Run the scenario; confirm green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
