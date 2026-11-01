@@ -1,0 +1,14 @@
+schema_version: 10
+run: 2026-11-01-feat-ops-gate-probes
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2]
+refactor:
+  P3.T1: "stub.py and the command are new and small; nothing existing to clean"
+  P3.T2: "prose only; fr-plan took one added line (119 of 120), no compression needed"
+journal:
+  - {kind: discovery, id: p3-no-explainer, title: "No explainer describes stage 1 or 5 detail", phase: 3, body: "docs/explainers/01-fr-goal.md describes the DevOps stage only as eight recorded stages incl. 'record the specification's devops steps'; that remains accurate, so no .md edit or .html regeneration applies."}
+  - {kind: discovery, id: p3-fragment-preexisting, title: "Change fragment already present", phase: 3, body: ".changes/feat-ops-gate-probes.yaml existed before this phase and was left as is (the fragment part of P3.T2.S2 was already done)."}
+resolves: []
+evidence: {tests: ci}
