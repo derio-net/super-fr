@@ -1,6 +1,6 @@
 [project]
 name = "fr-vk"
-version = "6.1.0rc2"
+version = "6.1.0rc3"
 description = "super-fr VK adapter: VibeKanban runner (MCP client, card/workspace dispatch, bridge daemon)"
 requires-python = ">=3.11"
 dependencies = ["fr", "fr-dispatch"]
