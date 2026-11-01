@@ -1,0 +1,6 @@
+schema_version: 2
+plan: 2026-11-01-auto-migrate-own-commit
+spec: 2026-11-01-auto-migrate-own-commit-design.md
+target_repo: derio-net/super-fr
+fr_version: '>=4.20.0,<7.0.0'
+created: '2026-11-01'

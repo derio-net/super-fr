@@ -94,6 +94,8 @@ class CommitOutcome:
     # HEAD: not a refusal — the content is already committed.
     unchanged: bool = False
     message: str | None = None
+    sha: str | None = None
+    """The new commit's short sha, when one was made and git could name it."""
 
 
 @dataclass(frozen=True)
@@ -666,7 +668,17 @@ def commit_paths(
         reason=f"committed {len(rel)} path(s): {', '.join(rel)}",
         paths=paths,
         message=message,
+        sha=_short_head(toplevel),
     )
+
+
+def _short_head(toplevel: Path) -> str | None:
+    """HEAD's short sha, or `None`: naming the commit is a courtesy, never a failure."""
+    try:
+        done = _git(toplevel, "rev-parse", "--short", "HEAD")
+    except GitUnavailableError:
+        return None
+    return done.stdout.strip() or None if done.returncode == 0 else None
 
 
 def _restore_index(toplevel: Path, rel: Sequence[str], before: str) -> str:
