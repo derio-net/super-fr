@@ -358,7 +358,7 @@ class FakeGhClient:
             "mergeable": p["mergeable"],
             "title": p["title"],
             "body": p["body"],
-            "labels": list(p.get("labels", [])),
+            "labels": sorted(set(p.get("labels", [])) | self.pr_labels.get((repo, number), set())),
         }
 
     def prs_for_commit(self, repo: str, sha: str) -> list[dict[str, Any]]:

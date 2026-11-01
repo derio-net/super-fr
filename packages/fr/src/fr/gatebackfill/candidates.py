@@ -318,13 +318,17 @@ def collect_candidates(
     man = {m.key: m for m in (manifest.items if manifest else [])}
     fold_keys = {o.key for o in report.owed}
     for key in man:
-        if key in fold_keys:
+        if key in fold_keys and key not in owned_trackers:
             raise BackfillError(
                 f"manifest entry {key}: `fr debt` already holds this key; drop it from the manifest"
             )
 
+    # a key held only by fr's own tracker (filed by an earlier `--yes`) is the manifest's again:
+    # the manifest supplies its gate and PR, so a second `--yes` over it stays idempotent (R7)
     sources: list[tuple[str, str, str, str, str]] = [
-        (o.key, o.source, o.title, o.how, o.ref) for o in report.owed
+        (o.key, o.source, o.title, o.how, o.ref)
+        for o in report.owed
+        if not (o.key in man and o.key in owned_trackers)
     ]
     sources += [(m.key, "manifest", m.title, "", "") for m in man.values()]
     sources = [src for src in sources if _key_usable(src[0], notes)]

@@ -311,13 +311,22 @@ def backfill_command(
         refuse(f"cannot name this repo: {why}")
     if repo is not None and repo.lower() != identity.lower():
         refuse(f"--repo {repo} disagrees with this checkout's origin {identity}")
+    tracking = ""
     if yes:
-        refuse("--yes (apply) is not available yet: run the dry run and review the plan file")
+        from fr.services import ServicesError
+        from fr.services.resolve import resolve_tracking
+
+        try:
+            tracking = resolve_tracking(root).type
+        except ServicesError as exc:
+            refuse(f"the services declaration cannot be read, nothing was written: {exc}")
     _, forge_host = resolve_target(identity, host, root)
     path = plan_path(identity, plan)
     try:
         manifest = parse_manifest(from_.read_text()) if from_ is not None else None
         previous = load_plan(path)
+        if yes and previous is None:
+            refuse(f"no plan file at {path}: run the dry run first and review it")
         if previous is not None and previous.repo.lower() != identity.lower():
             refuse(f"plan file {path} names {previous.repo}, not {identity}")
         client = client_for_url(f"https://{forge_host}/{identity}")
@@ -339,6 +348,20 @@ def backfill_command(
         fresh.append(
             c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else "")
         )
+    if yes:
+        from fr.gatebackfill.apply import ApplyRefused, apply_plan
+
+        try:
+            report = apply_plan(root, previous, fresh, client, repo=identity, tracking=tracking)
+        except ApplyRefused as exc:
+            refuse(str(exc))
+        typer.echo(f"Applied {path} to {identity} (tracking: {tracking})")
+        for line in report.lines():
+            typer.echo(line)
+        typer.echo(f"{report.writes} change(s), {report.failed} failed")
+        if report.failed:
+            raise typer.Exit(code=1)
+        return
     entries = merge_plan(previous, fresh)
     try:
         write_plan(

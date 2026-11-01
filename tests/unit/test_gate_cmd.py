@@ -267,7 +267,7 @@ def test_backfill_refuses_a_repo_that_disagrees_with_origin_and_yes_before_apply
     bad = CliRunner().invoke(app, ["gate", "backfill", "--repo", "example-org/other"])
     assert bad.exit_code == 2 and "disagrees" in bad.output
     yes = CliRunner().invoke(app, ["gate", "backfill", "--yes"])
-    assert yes.exit_code == 2
+    assert yes.exit_code == 2 and "no plan file" in yes.output
 
 
 def test_p1_r8_an_unwritable_plan_path_is_an_exit_2_refusal_not_a_traceback(
@@ -281,3 +281,65 @@ def test_p1_r8_an_unwritable_plan_path_is_an_exit_2_refusal_not_a_traceback(
     assert result.exit_code == 2, result.output
     assert "fr gate backfill:" in result.output
     assert "Traceback" not in result.output and not isinstance(result.exception, OSError)
+
+
+def _applied_env(backfill_env: Any, tmp_path: Path) -> tuple[Any, FakeGhClient, Path]:
+    """A repo whose manifest names an audit gap delivered by merged PR 12, dry-run once so the plan file exists."""
+    from tests.unit.gatebackfill_fixtures import commit_at, row, write_matrix
+
+    root, fake = backfill_env
+    write_matrix(root, [row("r1", "manual")])
+    commit_at(root, "seed", "2026-10-30T00:00:00+00:00")
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(
+        "schema: 1\nitems:\n"
+        "  - {key: 'plan:2026-04-02-fleet#p3', kind: audit-gap, title: fleet, pr: 12, gate: devops}\n"
+    )
+    fake.add_pr(BACKFILL_REPO, 12, state="MERGED", head_ref="feat/r1")
+    first = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest)])
+    assert first.exit_code == 0, first.output
+    assert _only_reads(fake) == []
+    return root, fake, manifest
+
+
+def test_yes_applies_the_plan_once_and_a_second_run_writes_nothing(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    _root, fake, manifest = _applied_env(backfill_env, tmp_path)
+    args = ["gate", "backfill", "--from", str(manifest), "--yes"]
+
+    result = CliRunner().invoke(app, args)
+
+    assert result.exit_code == 0, result.output
+    assert fake.pr_labels[(BACKFILL_REPO, 12)] == {"gate:devops"}
+    assert fake.issues[(BACKFILL_REPO, 1)].labels == {"fr:owed"}
+    before = fake.attempted_mutations
+    again = CliRunner().invoke(app, args)
+    assert again.exit_code == 0, again.output
+    assert fake.attempted_mutations == before
+
+
+def test_yes_under_tracking_none_labels_the_pr_only(backfill_env: Any, tmp_path: Path) -> None:
+    root, fake, manifest = _applied_env(backfill_env, tmp_path)
+    (root / ".devcontainer").mkdir()
+    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "schema_version: 2\ntracking: {type: none}\n"
+    )
+
+    result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.pr_labels[(BACKFILL_REPO, 12)] == {"gate:devops"} and not fake.issues
+
+
+def test_yes_refuses_an_unreadable_services_declaration_before_any_write(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    root, fake, manifest = _applied_env(backfill_env, tmp_path)
+    (root / ".devcontainer").mkdir()
+    (root / ".devcontainer" / "fr-profiles.yaml").write_text(": : not yaml [\n")
+
+    result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), "--yes"])
+
+    assert result.exit_code == 2 and "services declaration" in result.output
+    assert fake.attempted_mutations == 0
