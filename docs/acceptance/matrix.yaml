@@ -10240,9 +10240,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R2
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R3
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gap.py#test_an_inline_span_starting_with_a_shipped_tool_is_a_command
+      - super-fr:tests/unit/test_plan_ops.py#test_self_review_warns_of_an_ops_gap
+      - super-fr:tests/unit/test_plan_ops.py#test_a_pointer_to_an_undeclared_op_is_an_error
+    status: ci
+    notes: 'R1-R3, R7 unit-pinned: the gap function, self-review warn/errors, spec-review
+      stderr warning; CI test job'
     verify: none
   - id: ops-gate-gap-refusal
     capability: fr ops gate
