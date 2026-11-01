@@ -10270,9 +10270,16 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R3
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_base_clone_on_a_branch_with_no_marker_refuses_and_names_isolation
+      - super-fr:tests/unit/test_migration_trigger.py#test_fr_non_interactive_in_a_valid_workspace_refuses
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_drifted_workspace_refuses_naming_drift
+      - super-fr:tests/unit/test_migration_trigger.py#test_fr_non_interactive_wins_over_a_tty
+      - super-fr:tests/unit/test_isolation_marker.py#test_no_marker_is_not_a_workspace
+    status: ci
+    notes: unit tests over classify and the gate pin the refusal and its carry-it line;
+      the workspace scenario's negative leg checks it installed
     verify: none
   - id: auto-migrate-git-guards-hold
     capability: artifact migration gate
