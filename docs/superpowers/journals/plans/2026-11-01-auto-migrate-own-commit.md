@@ -125,3 +125,8 @@ Docstring rewritten to the new behaviour.
 ### p1-full-suite-red-preexisting-resolved · finding [out-of-scope] · resolves p1-full-suite-red-preexisting: The local full suite is red on 13 tests that also fail against origin/main's fr source (phase 1)
 
 The 13 local failures (test_install_atomic, test_run_evidence_visual, test_records_commit) are in files and code this change does not touch. The PR's CI test shards, which include them, passed on 9db6c735 (tests: ci evidence). The local failures are host-load-sensitive (load averages 100-300 during the 3 h run), not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p1-full-suite-red-preexisting-resolved-2 created=2026-11-01T17:30:19+00:00 phase=1 state=open resolves=p1-full-suite-red-preexisting tracked_by=https://github.com/derio-net/super-fr/issues/1280 -->
+### p1-full-suite-red-preexisting-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1280] · resolves p1-full-suite-red-preexisting: The local full suite is red on 13 tests that also fail against origin/main's fr source (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1280.
