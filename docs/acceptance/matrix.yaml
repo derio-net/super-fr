@@ -6388,6 +6388,17 @@ rows:
     notes: 'Review p1-r5: anchor R3 (--deterministic writes ignored reports) and the
       record-apply commit path the issue is about.'
     verify: none
+  - id: matrix-parse-libyaml
+    capability: acceptance-matrix
+    acceptance: fr parses an acceptance matrix with libyaml when PyYAML has it (pure-Python
+      otherwise) to the same Matrix, and reuses one parse of identical text within a
+      process
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -9591,6 +9602,37 @@ rows:
     notes: 'Phase 3: both workflows trigger on merge_group; change-fragment stays pull-request-only
       and ci-ok treats its skip as a pass.'
     verify: none
+  - id: ci-shards-complete
+    capability: ci
+    acceptance: CI splits every leg's tests across 6 shards by one CI-derived durations
+      file per run, and fails when the shards together did not run exactly the collected
+      test set once each
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: ci-coverage-newest-leg
+    capability: ci
+    acceptance: The combined coverage gate (fail-under 75) is measured on the 3.14 leg;
+      the 3.11 floor leg runs the same tests without coverage
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: ci-budget-watcher-files-breach
+    capability: ci
+    acceptance: The CI budget watcher reads the run's workflow file at its commit and
+      files or updates a ci-budget issue when the run is over budget
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
   - id: release-pushes-as-app
     capability: release
     acceptance: With the app configured, super-fr's release commit and tag are pushed
@@ -9626,6 +9668,28 @@ rows:
     status: ci
     notes: 'configure-main-protection.sh tested with a stub gh: merge-not-overwrite
       body, both refusals, --force, --dry-run, idempotence'
+  - id: release-staged-suite-sharded
+    capability: release
+    acceptance: A release proves its exact staged commit with the full suite in 6 token-free
+      shards, each checking the new fr version, and pushes only when all are green;
+      every existing release outcome still happens
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: release-superseded-not-retried
+    capability: release
+    acceptance: When main moved past the commit a release was staged on, the release
+      exits green as superseded without pushing, and the run that push triggered releases
+      instead
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
