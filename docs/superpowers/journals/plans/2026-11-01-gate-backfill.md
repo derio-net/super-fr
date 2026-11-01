@@ -477,3 +477,88 @@ collect gained one helper beside _closed_in_progress; no shared code to extract
 ### p4-facts-schema-pins-2 · discovery · Correction to p4-facts-schema-pins: six scenario fixtures WERE regenerated (phase 4)
 
 p4-facts-schema-pins says the scenario fixtures were left alone. That is wrong: commit 0f99f1461 regenerated six of them (cancelled-terminal, claims-expired, claims-held, config-skew, retire-sync, settle facts JSON) for the schema 13 facts. The older entry stays as written; this one corrects it.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · board.html never surfaced gated_unread or a gated-prs truncation; an unread repo looked like empty lanes (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · lane_of's batch path printed --no-run-evidence for devops, which gate pass refuses while the run names the branch (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · gated_pr_lane reason had no separator between gate and owed act (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · gated-PR Need ref 'PR #n' was not repo-qualified (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · glab/tea scopes got a permanent gated-unread Need per repo (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · two label reads per collected repo per pass; one OR search would halve it (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · journal p4-facts-schema-pins said fixtures were left alone, but six were regenerated (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-11-01T21:50:41+00:00 phase=4 state=open review_scope=out -->
+### p4-r8 · finding [open] (reviewer: out of scope) · facts schema pinned in three model.py places and seven test modules (phase 4)
+
+Raised by the dispatched phase-4 code reviewer.
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-11-01T21:50:41+00:00 phase=4 -->
+### p4-review · review · phase 4 code review (phase 4)
+
+8 findings raised (p4-r1..p4-r8): r1–r5 and r7 fixed, r6 refuted with reasoning, r8 (out, pre-existing) resolved out-of-scope. 278 affected tests green after the fixes; the 3988-test triage/gate/tripwire/acceptance set was green before them.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: board.html never surfaced gated_unread or a gated-prs truncation; an unread repo looked like empty lanes (phase 4)
+
+Fixed in dc237f1cd: gated_notes() feeds board.html's notes with each unread repo and gated-prs truncation; render test.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: lane_of's batch path printed --no-run-evidence for devops, which gate pass refuses while the run names the branch (phase 4)
+
+Fixed in dc237f1cd: pass_command gained a resolve-run mode omitting both flags, used on the batch path; bare PRs keep --no-run-evidence; test.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: gated_pr_lane reason had no separator between gate and owed act (phase 4)
+
+Fixed in dc237f1cd: 'held by gate:tester (walk its gated rows, or `…`); gate:devops (`…`)'.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: gated-PR Need ref 'PR #n' was not repo-qualified (phase 4)
+
+Fixed in dc237f1cd: ref is <owner/repo>#<n>; two-repo test.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: glab/tea scopes got a permanent gated-unread Need per repo (phase 4)
+
+Fixed in dc237f1cd folds unsupported reads into one Need per backend; 199abe794 (orchestrator) types the unsupported backend from the UnsupportedForgeOperation cause instead of parsing the message, with a test that a look-alike message stays a real failure.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=refuted resolves=p4-r6 -->
+### p4-r6-resolved · finding [refuted] · resolves p4-r6: two label reads per collected repo per pass; one OR search would halve it (phase 4)
+
+GitHub's REST issues?labels= filter ANDs its labels, so the single OR query exists only on the CLI search path; keeping one read shape across both transports (the cloud driver runs REST-only) beats a CLI-only optimisation. The cost stays linear in collected repos either way (2N vs N, same class), and paced/partial passes skip carried repos. Revisit if collect quota becomes the bottleneck.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: journal p4-facts-schema-pins said fixtures were left alone, but six were regenerated (phase 4)
+
+Fixed in 8f592de1f: correcting plan-journal discovery p4-facts-schema-pins-2 (append-only).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-11-01T21:50:41+00:00 phase=4 state=open resolves=p4-r8 out_of_scope=true -->
+### p4-r8-resolved · finding [out-of-scope] · resolves p4-r8: facts schema pinned in three model.py places and seven test modules (phase 4)
+
+Pre-existing pattern from earlier schema bumps; this change moved the pin 12→13 everywhere it already lived and added no new pin site.
