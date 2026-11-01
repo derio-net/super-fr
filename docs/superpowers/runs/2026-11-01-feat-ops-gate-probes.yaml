@@ -155,8 +155,10 @@ steps:
     stdout: |
       2 out-of-scope finding(s): p1-suite-red-outside-the-phase, p2-r4
   deliver:
-    state: running
-    at: '2026-11-01T21:23:42+00:00'
+    state: done
+    at: '2026-11-01T21:43:52+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1281
     units:
       step/deliver:
         attempts:
@@ -164,4 +166,11 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 5bbde709-3ae1-4fec-9aef-381cbe81fddc
+          returned: '2026-11-01T21:43:14+00:00'
+          outcome: done
+        evidence:
+          tests: ci:64728567c29a08bb23be3c0fc807faca4bac7d6f+unknown;tree=ab0c762e603d0ed62bca79bb2e2327fed43b6ec435611a3ab16355dc437b68ae
+          walk: 20261101T213045Z.log@d4a254c90234
+          proportionality: a07feae3e138da7ff5fba10af721911c36da2e5c:bee9be8ebdff22ba22973b0c423c7914378647b7fdb5e843844a86f701ae1005
+          visual: none
 fr_version: 6.0.1rc2
