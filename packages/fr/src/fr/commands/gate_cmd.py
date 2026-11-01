@@ -251,3 +251,100 @@ def pass_command(
         typer.echo(f"release: this was the PR's last gate; cut the final: {release_command(repo)}")
     if not yes:
         typer.echo("nothing done; re-run with --yes to act")
+
+
+@gate_app.command("backfill")
+def backfill_command(
+    from_: Annotated[
+        Path | None,
+        typer.Option("--from", help="An operator manifest (YAML) of items fr cannot infer."),
+    ] = None,
+    plan: Annotated[
+        Path | None,
+        typer.Option(
+            "--plan",
+            help="The plan file; default $HOME/.cache/fr/gate-backfill/<owner--repo>/plan.yaml.",
+        ),
+    ] = None,
+    stale_days: Annotated[
+        int | None,
+        typer.Option("--stale-days", help="A manual phase idle longer defaults to review."),
+    ] = None,
+    repo: Annotated[
+        str | None,
+        typer.Option("--repo", help="OWNER/REPO; must agree with this checkout's origin."),
+    ] = None,
+    host: Annotated[
+        str | None,
+        typer.Option("--host", help="The forge host; default: the origin's, else github.com."),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Apply the plan file to the forge.")] = False,
+) -> None:
+    """Bring pre-v6 owed work into the gate lanes. Without --yes: read the forge, write the
+    plan file outside the repo, print every candidate and the repo-file commands (R1)."""
+    from datetime import UTC, datetime
+
+    from fr.archive import merge_evidence
+    from fr.archive_followups import owed_identity
+    from fr.gatebackfill import delivery, render
+    from fr.gatebackfill.candidates import collect_candidates
+    from fr.gatebackfill.forge import ClientBackfillForge, Git
+    from fr.gatebackfill.model import (
+        BackfillError,
+        PlanFile,
+        load_plan,
+        merge_plan,
+        parse_manifest,
+        plan_path,
+        write_plan,
+    )
+
+    def refuse(message: str) -> NoReturn:
+        typer.echo(f"fr gate backfill: {message}", err=True)
+        raise typer.Exit(code=2)
+
+    root = _repo_root()
+    if root is None:
+        refuse("run this from the repo's checkout")
+    identity, why = owed_identity(root)
+    if identity is None:
+        refuse(f"cannot name this repo: {why}")
+    if repo is not None and repo.lower() != identity.lower():
+        refuse(f"--repo {repo} disagrees with this checkout's origin {identity}")
+    if yes:
+        refuse("--yes (apply) is not available yet: run the dry run and review the plan file")
+    _, forge_host = resolve_target(identity, host, root)
+    path = plan_path(identity, plan)
+    try:
+        manifest = parse_manifest(from_.read_text()) if from_ is not None else None
+        previous = load_plan(path)
+        if previous is not None and previous.repo.lower() != identity.lower():
+            refuse(f"plan file {path} names {previous.repo}, not {identity}")
+        client = client_for_url(f"https://{forge_host}/{identity}")
+        forge = ClientBackfillForge(client, cwd=root, repo=identity)
+        now = datetime.now(UTC)
+        evidence = merge_evidence(root, fetch=False)
+        cands, notes = collect_candidates(
+            root, forge=forge, now=now, manifest=manifest, previous=previous,
+            stale_days=stale_days, evidence=evidence,
+        )  # fmt: skip
+    except (BackfillError, OSError, *_FORGE_FAILURES) as exc:
+        refuse(str(exc))
+    ref = evidence.ref.ref if evidence.ref else None
+    git = Git(root)
+    fresh = []
+    for c in cands:
+        got = delivery.delivering_pr(c, root=root, forge=forge, git=git, ref=ref)
+        fresh.append(c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else ""))
+    entries = merge_plan(previous, fresh)
+    write_plan(
+        path,
+        PlanFile(repo=identity, generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), entries=entries),
+    )
+    text, refusals = render.summary(entries, plan_file=path, notes=notes, root=root)
+    typer.echo(text)
+    if refusals:
+        for r in refusals:
+            typer.echo(f"fr gate backfill: {r}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo("nothing written to the forge; edit the plan file's decisions, then re-run")

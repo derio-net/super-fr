@@ -13,12 +13,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, ConfigDict
 
 from fr.gatebackfill.forge import BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
 from fr.archive_followups import owned_owed_key
 from fr.gatebackfill.trackers import fr_gate_marker, is_ours
+
+if TYPE_CHECKING:
+    from fr.archive import MergeEvidence
 
 PLANS_REL = Path("docs/superpowers/plans")
 IMPLEMENTED_PLANS_REL = Path("docs/superpowers/implemented/plans")
@@ -249,6 +254,7 @@ def collect_candidates(
     manifest: Manifest | None = None,
     previous: PlanFile | None = None,
     stale_days: int | None = None,
+    evidence: MergeEvidence | None = None,
 ) -> tuple[list[Candidate], list[str]]:
     """`(candidates, notes)` for the whole repo, sorted by key. *notes* are degradations that
     stay out of the candidates (an unreadable issue list, a dropped tracker)."""
@@ -259,7 +265,7 @@ def collect_candidates(
     from fr.verification.spec_section import SectionError
 
     notes: list[str] = []
-    ev = merge_evidence(repo_root, fetch=False)
+    ev = evidence if evidence is not None else merge_evidence(repo_root, fetch=False)
     ref = ev.ref.ref if ev.ref else None
     report = compute(repo_root, forge=forge, now=now, stale_days=stale_days, evidence=ev)
     days = report.stale_days
