@@ -60,9 +60,7 @@ def write_matrix(repo: Path, rows: list[dict[str, Any]]) -> None:
     org, name = REPO.split("/")
     p = repo / "docs" / "acceptance" / "matrix.yaml"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(
-        yaml.safe_dump({"schema_version": 5, "org": org, "repo": name, "rows": rows})
-    )
+    p.write_text(yaml.safe_dump({"schema_version": 5, "org": org, "repo": name, "rows": rows}))
 
 
 def row(i: str, status: str, **kw: Any) -> dict[str, Any]:

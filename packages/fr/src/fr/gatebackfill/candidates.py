@@ -11,15 +11,13 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 
+from fr.archive_followups import owned_owed_key
 from fr.gatebackfill.forge import BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
-from fr.archive_followups import owned_owed_key
 from fr.gatebackfill.trackers import fr_gate_marker, is_ours
 
 if TYPE_CHECKING:
@@ -159,7 +157,9 @@ def spec_plans(root: Path, spec_rel: str) -> tuple[str, ...]:
         for cell in line.split("|"):
             name = cell.strip().strip("`")
             if re.fullmatch(r"[\w.-]+", name) and name not in found:
-                if (root / PLANS_REL / name).is_dir() or (root / IMPLEMENTED_PLANS_REL / name).is_dir():
+                if (root / PLANS_REL / name).is_dir() or (
+                    root / IMPLEMENTED_PLANS_REL / name
+                ).is_dir():
                     found.append(name)
     return tuple(found)
 
@@ -222,7 +222,9 @@ def _as_issue(i: dict[str, Any]) -> dict[str, object]:
     return {k: i.get(k) for k in ("number", "body", "author", "labels")}
 
 
-def _lookalikes(c: Candidate, issues: list[dict[str, Any]], manifest: ManifestItem | None) -> list[str]:
+def _lookalikes(
+    c: Candidate, issues: list[dict[str, Any]], manifest: ManifestItem | None
+) -> list[str]:
     """Open issues that read like this item's tracker but that fr did not write: suggestions."""
     kind, name, n = split_key(c.key)
     found = []
@@ -291,7 +293,7 @@ def collect_candidates(
         k: str(i.get("ref")) for i in issues if (k := owned_owed_key(_as_issue(i), me))
     }
     ours = {str(i.get("ref")) for i in issues if is_ours(i, me)}
-    adopted = {e.adopt_ref for e in (previous.entries if previous else []) if e.adopt_ref}
+    adopted = {r for e in (previous.entries if previous else []) if (r := e.adopt_ref)}
     by_ref = {str(i.get("ref")): i for i in issues}
     man = {m.key: m for m in (manifest.items if manifest else [])}
     fold_keys = {o.key for o in report.owed}
@@ -372,7 +374,7 @@ def _settle_trackers(
     issues: list[dict[str, Any]],
     by_ref: dict[str, dict[str, Any]],
     man: dict[str, ManifestItem],
-    adopted: set[str | None],
+    adopted: set[str],
     ours: set[str],
     notes: list[str],
 ) -> list[Candidate]:

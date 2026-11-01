@@ -142,9 +142,7 @@ def test_a_manifest_adds_entries_and_a_fold_key_is_an_error(tmp_path: Path) -> N
     assert cands["row:gap"].gate == "devops" and not cands["row:gap"].walk_only
     assert cands["plan:2026-01-01-x#p1"].gate == "devops"
 
-    clash = parse_manifest(
-        "schema: 1\nitems:\n  - {key: 'row:r1', kind: walk, title: t}\n"
-    )
+    clash = parse_manifest("schema: 1\nitems:\n  - {key: 'row:r1', kind: walk, title: t}\n")
     with pytest.raises(BackfillError, match="row:r1"):
         _collect(repo, manifest=clash)
 
@@ -217,7 +215,9 @@ def test_only_our_own_labelled_issues_are_trackers_or_hide_a_candidate(tmp_path:
         issue(71, "unlabelled", "x\n\n<!-- fr-owed:row:r2 -->", labels=()),
         issue(72, "ours", "x\n\n<!-- fr-owed:row:r3 -->"),
         issue(
-            73, "foreign gate marker", "y\n<!-- fr-gate:devops pr:41 -->\n<!-- fr-owed:no key -->",
+            73,
+            "foreign gate marker",
+            "y\n<!-- fr-gate:devops pr:41 -->\n<!-- fr-owed:no key -->",
             author=STRANGER,
         ),
     ]

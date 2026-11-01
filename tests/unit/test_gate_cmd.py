@@ -194,9 +194,7 @@ def _backfill_repo(tmp_path: Path) -> Path:
     matrix = root / "docs" / "acceptance" / "matrix.yaml"
     matrix.parent.mkdir(parents=True)
     org, name = BACKFILL_REPO.split("/")
-    matrix.write_text(
-        yaml.safe_dump({"schema_version": 5, "org": org, "repo": name, "rows": []})
-    )
+    matrix.write_text(yaml.safe_dump({"schema_version": 5, "org": org, "repo": name, "rows": []}))
     return root
 
 
@@ -222,3 +220,43 @@ def test_backfill_is_a_gate_verb_and_dry_run_writes_nothing(backfill_env: Any) -
 
     assert result.exit_code == 0, result.output
     assert [c[0] for c in fake.calls if c[0] in FORGE_WRITES] == []
+
+
+def test_the_dry_run_writes_the_plan_file_keeps_edited_decisions_and_never_the_forge(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    import yaml
+
+    from tests.unit.gatebackfill_fixtures import commit_at, row, write_matrix
+
+    root, fake = backfill_env
+    write_matrix(root, [row("r1", "walk-owed")])
+    commit_at(root, "seed", "2026-10-30T00:00:00+00:00")
+    plan = tmp_path / "home" / ".cache/fr/gate-backfill/example-org--widgets/plan.yaml"
+
+    first = CliRunner().invoke(app, ["gate", "backfill"])
+
+    assert first.exit_code == 0, first.output
+    assert "row:r1" in first.output and "gate=tester" in first.output
+    data = yaml.safe_load(plan.read_text())
+    assert data["repo"] == BACKFILL_REPO
+    [entry] = data["entries"]
+    assert (entry["key"], entry["decision"]) == ("row:r1", "owed")
+
+    entry["decision"] = "park"
+    plan.write_text(yaml.safe_dump(data))
+    again = CliRunner().invoke(app, ["gate", "backfill"])
+
+    assert again.exit_code == 0, again.output
+    assert yaml.safe_load(plan.read_text())["entries"][0]["decision"] == "park"
+    assert "Parked (1)" in again.output
+    assert [c[0] for c in fake.calls if c[0] in FORGE_WRITES] == []
+
+
+def test_backfill_refuses_a_repo_that_disagrees_with_origin_and_yes_before_apply(
+    backfill_env: Any,
+) -> None:
+    bad = CliRunner().invoke(app, ["gate", "backfill", "--repo", "example-org/other"])
+    assert bad.exit_code == 2 and "disagrees" in bad.output
+    yes = CliRunner().invoke(app, ["gate", "backfill", "--yes"])
+    assert yes.exit_code == 2

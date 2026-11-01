@@ -27,7 +27,10 @@ def _unticked(root: Path, name: str, phase: int) -> tuple[list[str], str | None]
     d = root / PLANS_REL / name
     if not d.is_dir():
         archived = (root / "docs/superpowers/implemented/plans" / name).is_dir()
-        return [], "an archived plan is frozen" if archived else f"plan {name} is not in this checkout"
+        return (
+            [],
+            "an archived plan is frozen" if archived else f"plan {name} is not in this checkout",
+        )
     try:
         plan = parse(d, enforce_fr_version=False)
     except PlanSchemaError as exc:
@@ -57,7 +60,9 @@ def decision_commands(entry: PlanEntry, root: Path) -> tuple[list[str], str | No
         if kind == "tick":
             return [f"fr plan edit {plan_dir} --tick {sid}" for sid in steps], None
         note = shlex.quote(f"n/a: {reason}")
-        return [f"fr plan edit {plan_dir} --tick {sid} --state - --note {note}" for sid in steps], None
+        return [
+            f"fr plan edit {plan_dir} --tick {sid} --state - --note {note}" for sid in steps
+        ], None
     if kind == "na" and k == "spec" and n is not None:
         spec = find_spec(root, name)
         if spec is None:

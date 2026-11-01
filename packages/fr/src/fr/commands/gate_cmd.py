@@ -328,14 +328,16 @@ def backfill_command(
             root, forge=forge, now=now, manifest=manifest, previous=previous,
             stale_days=stale_days, evidence=evidence,
         )  # fmt: skip
-    except (BackfillError, OSError, *_FORGE_FAILURES) as exc:
+    except (BackfillError, OSError, *_FORGE_FAILURES) as exc:  # type: ignore[misc]
         refuse(str(exc))
     ref = evidence.ref.ref if evidence.ref else None
     git = Git(root)
     fresh = []
     for c in cands:
         got = delivery.delivering_pr(c, root=root, forge=forge, git=git, ref=ref)
-        fresh.append(c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else ""))
+        fresh.append(
+            c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else "")
+        )
     entries = merge_plan(previous, fresh)
     write_plan(
         path,

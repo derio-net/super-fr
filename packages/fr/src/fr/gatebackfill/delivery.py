@@ -83,7 +83,7 @@ class _Chain:
 
     def _planning(self, sha: str) -> bool:
         files = self.git.files(sha)
-        return bool(files) and all(f.startswith("docs/") for f in files)
+        return files is not None and bool(files) and all(f.startswith("docs/") for f in files)
 
     # --- the steps -------------------------------------------------------------------------
 
