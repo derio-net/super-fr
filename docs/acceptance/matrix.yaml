@@ -9631,9 +9631,12 @@ rows:
       the 3.11 floor leg runs the same tests without coverage
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
+    status: ci
+    notes: Coverage measured and uploaded on the 3.14 leg only, 3.11 runs --no-cov;
+      coverage job (fail-under 75) unchanged and green on PR run 41340117422.
     verify: none
   - id: ci-budget-watcher-files-breach
     capability: ci
