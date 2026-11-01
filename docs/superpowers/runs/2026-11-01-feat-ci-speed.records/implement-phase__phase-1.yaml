@@ -1,0 +1,12 @@
+schema_version: 10
+run: 2026-11-01-feat-ci-speed
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2, P1.T4.S1]
+refactor:
+  P1.T2: "RED-only task: it adds tests, there was no production code to clean."
+  P1.T3: "The Counter-based duplicate scan went in with the green implementation; nothing left to clean."
+journal:
+  - {kind: discovery, id: p1-corpus-duration, phase: 1, title: "Local durations of the matrix-heavy tests (oversubscribed host)", body: "test_dispatch_lint_corpus.py::test_the_dispatch_gate_scores_zero_on_this_repos_own_plans took 11.56s locally (second: test_agentic_steps_yields_slug_id_state_and_text 9.04s) in a 415-test targeted run (tests/unit/test_acceptance*.py + corpus + new files; 412 passed, 3 fixture failures in the new cache test fixed afterwards: 15/15 pass). No pre-change baseline taken; CI on the PR is the evidence."}
+evidence: {tests: ci}

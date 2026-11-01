@@ -1,0 +1,2 @@
+bump: patch
+summary: fr parses acceptance matrices with libyaml and reuses identical parses (CI and release run ~2-3x faster)

@@ -8,7 +8,9 @@ checks and local links (spec trap 3).
 
 from __future__ import annotations
 
+import functools
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Literal
 
@@ -330,11 +332,22 @@ def load_matrix(path: Path) -> Matrix:
 
 def parse_matrix(text: str) -> Matrix:
     """`load_matrix` over text already in memory — what the step-record engine
-    validates a matrix edit against before it writes anything."""
+    validates a matrix edit against before it writes anything.
+
+    Identical text is parsed once (spec 2026-11-01-ci-speed R1); every call
+    returns its own deep copy, so no caller can change another's result (R2).
+    Errors are raised by the cached function and never cached."""
+    return _parse_matrix_cached(text).model_copy(deep=True)
+
+
+@functools.lru_cache(maxsize=8)
+def _parse_matrix_cached(text: str) -> Matrix:
     import yaml
 
+    from fr import yamlio
+
     try:
-        data = yaml.safe_load(text) or {}
+        data = yamlio.safe_load(text) or {}
     except yaml.YAMLError as e:
         raise AcceptanceError(f"matrix is not valid YAML: {e}") from e
     if not isinstance(data, dict):
@@ -343,8 +356,8 @@ def parse_matrix(text: str) -> Matrix:
         matrix = Matrix.model_validate(data)
     except ValidationError as e:
         raise AcceptanceError(f"matrix schema: {e}") from e
-    ids = [r.id for r in matrix.rows]
-    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    counts = Counter(r.id for r in matrix.rows)
+    dupes = sorted(i for i, n in counts.items() if n > 1)
     if dupes:
         raise AcceptanceError(f"duplicate row ids: {dupes}")
     return matrix
