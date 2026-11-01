@@ -1595,7 +1595,7 @@ rows:
     capability: isolation-conformity
     acceptance: claude --worktree <name> and EnterWorktree in an fr-enabled repo create
       an fr workspace at the fr location with the session bound; subagent worktrees
-      keep the Claude default shape.
+      stay plain detached worktrees (out of the repo since gh#1270).
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-04-worktree-traceability-design.md
     levels:
@@ -1612,8 +1612,8 @@ rows:
       has no hook level): fr-worktree-create.sh (WorktreeCreate -> fr isolation up --repo
       --branch wt/<name>|<name-with-slash> --session --harness claude --print-path in
       an fr-enabled repo, FR_ISOLATION_TARGET=worktree exported when no devcontainer
-      profile; agent-* names and non-fr repos reproduce the Claude default <repo>/.claude/worktrees/<name>
-      detached worktree; non-git cwd exits 1) and fr-worktree-remove.sh (WorktreeRemove
+      profile; non-fr repos reproduce the Claude default <repo>/.claude/worktrees/<name>
+      detached worktree, agent-* names go to ~/.cache/fr/agent-worktrees (row agent-worktrees-reaped-by-fr); non-git cwd exits 1) and fr-worktree-remove.sh (WorktreeRemove
       -> git worktree remove for agent-*, else fr isolation down --worktree, refusal
       reported on stderr with exit 0) exercised via subprocess against a stub fr that
       records argv. LIVE 2026-09-24 (worktree-traceability P7.T2.S2, Claude Code 2.1.281,
@@ -1676,6 +1676,33 @@ rows:
       pins what CAN be checked: the rule exists and carries the claim (using-git-worktrees,
       fr isolation up --branch, never create .worktrees/), git ls-files has no path with a
       .worktrees or .claude/worktrees component, and .gitignore lists both. Pinned per-PR.'
+  - id: agent-worktrees-reaped-by-fr
+    capability: isolation-conformity
+    acceptance: A subagent's isolation worktree is cut outside the repo, locked with its
+      Claude session's pid, and every dispatch fires a sweep that reaps it once it is
+      at least 24h old (72h while its session's pid still answers), clean, and every
+      commit on it is reachable from a ref; dirty or unreachable ones are reported,
+      never removed.
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-11-01-agent-worktrees-accumulate.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_agent_worktrees.py
+      - super-fr:tests/unit/test_isolation_gc_hygiene.py#test_gc_runs_the_agent_worktree_sweep
+      int:
+      - super-fr:tests/unit/test_hooks_worktree.py#TestWorktreeCreate::test_agent_worktree_lands_outside_the_repo
+      - super-fr:tests/unit/test_hooks_worktree.py#TestWorktreeCreate::test_agent_worktree_is_locked_with_the_session_pid
+    status: ci
+    notes: 'gh#1270. Hook level filed under int (no hook level). LIVE 2026-11-01, Claude
+      Code 2.1.316, throwaway repo registering this branch''s fr-worktree-create.sh
+      as its only WorktreeCreate hook: the subagent ran in ~/.cache/fr/agent-worktrees/repo/agent-<id>,
+      locked with the Claude pid; WorktreeRemove was never fired (twice observed); the
+      sweep skipped it as young, then with the clock at +25h and the pid dead reaped
+      and logged it. Claude Code accepted the out-of-repo path for a subagent.'
+    issues:
+    - derio-net/super-fr#1270
+    harnesses:
+    - claude-code
   - id: artifacts-migrate-on-next-command
     capability: Artifact migration
     acceptance: An operator whose fr version changed under in-flight work has their

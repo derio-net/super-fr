@@ -1,0 +1,2 @@
+bump: patch
+summary: Subagent (`agent-*`) worktrees now live outside the repo under `~/.cache/fr/agent-worktrees/`, locked with the Claude session pid, and `fr isolation gc` reaps finished, clean ones; Claude Code never fires WorktreeRemove for them, so they used to pile up and nest inside the repo (#1270).

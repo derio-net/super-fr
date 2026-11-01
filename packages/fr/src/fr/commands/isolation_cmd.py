@@ -976,6 +976,12 @@ def gc(
         False, "--dry-run", help="Classify + report only; mutate nothing."
     ),
     format: str = typer.Option("text", "--format", help="text | json"),
+    agent_worktrees: bool = typer.Option(
+        False,
+        "--agent-worktrees",
+        help="Only reap finished subagent (agent-*) worktrees: no workspace, "
+        "forge or docker step. fr-worktree-create.sh fires this on every dispatch.",
+    ),
 ) -> None:
     """Reconcile isolation workspaces host-wide (#354).
 
@@ -996,9 +1002,17 @@ def gc(
     `--repo` names the repo whose state records to reconcile (the fr worktree
     cache and docker labels are host-wide regardless) — cron and agent runs
     cannot rely on cwd.
+
+    Every mode except external also reaps finished, clean `agent-*` subagent
+    worktrees (gh#1270), which Claude Code never removes itself.
     """
-    target = _target_or_exit(_resolve_repo(repo))
-    actions = _gc_ops(target).gc(dry_run=dry_run)
+    if agent_worktrees:
+        from fr.isolation.agent_worktrees import sweep_agent_worktrees
+
+        actions = sweep_agent_worktrees(_resolve_repo(repo), dry_run=dry_run)
+    else:
+        target = _target_or_exit(_resolve_repo(repo))
+        actions = _gc_ops(target).gc(dry_run=dry_run)
     if format == "json":
         typer.echo(json.dumps([asdict(a) for a in actions], indent=2))
         return
