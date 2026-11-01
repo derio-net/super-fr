@@ -465,7 +465,12 @@ def ensure_artifacts_current(
                 carry=True,
             ),
         )
-    if where in ("refuse", "ci"):
+    if where == "ci":
+        # §C: nothing is committed, so no git-state refusal applies. The lock
+        # and the uncommitted-file veto still do.
+        _migrate_in_place(root, registry, emit, environ)
+        return
+    if where == "refuse":
         raise _refuse(emit, _not_a_workspace(root, registry, "no TTY"))
 
     # Step 3. ONE place asks git anything (review r5-c1/c2/c3). Every branch
@@ -571,6 +576,90 @@ def _still_stale(root: Path, registry: MigrationRegistry | None) -> bool:
         return is_stale(root, registry=registry)
     except Exception:
         return True
+
+
+def _ci_veto(root: Path) -> Callable[[Path], str | None]:
+    """`uncommitted_veto`, except that a veto which cannot read git state holds
+    nothing back: a CI checkout with no repo has no edits to protect (§C)."""
+    try:
+        return uncommitted_veto(root)
+    except Exception:
+        return lambda path: None
+
+
+def _migrate_in_place(
+    root: Path,
+    registry: MigrationRegistry | None,
+    emit: Callable[[str], None],
+    environ: Mapping[str, str],
+) -> None:
+    """The ci row (spec 2026-11-01 §C, R5): migrate the working tree, never commit.
+
+    A CI checkout is discarded, so a commit there is pointless; migrating lets
+    the command run over a tree it can read. Everything is said on STDERR — the
+    `::warning::` annotation included — so a `--json` command's stdout, or a
+    `>> $GITHUB_STEP_SUMMARY` redirect, is never contaminated. No adoption
+    offer: it offers to write run files, which makes no sense here.
+    """
+    with migration_lock(lock_path(root)) as acquired:
+        if not acquired:
+            if not _still_stale(root, registry):
+                emit("  another fr process migrated this tree; continuing.")
+                return
+            raise _refuse(
+                emit,
+                _will_not_act_here(
+                    root,
+                    registry,
+                    "another fr process is migrating this repository right now, so fr "
+                    "will not migrate here:",
+                    "two migrations of one tree race each other. Re-run this command "
+                    "once it finishes.",
+                ),
+            )
+        try:
+            report = run_migrations(root, dry_run=False, registry=registry, veto=_ci_veto(root))
+        except Exception as e:
+            raise _refuse(
+                emit,
+                [
+                    f"fr: artifact migration failed: {type(e).__name__}: {e}",
+                    f"  Nothing was committed. Run `fr migrate artifacts` to inspect, or set "
+                    f"{SKIP_ENV_VAR}=1 to bypass this check.",
+                ],
+            ) from e
+
+    for action in report.applied:
+        emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
+    if report.failed:
+        for failure in report.failed:
+            emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
+            for companion in failure.also_wrote:
+                emit(f"    it had already written {_rel(companion, root)} (uncommitted)")
+        raise _refuse(
+            emit,
+            [
+                f"fr: {len(report.applied)} artifact(s) migrated in place (not committed); "
+                f"{len(report.failed)} left unmodified.",
+                "  Refusing to run over a half-migrated tree. Fix them by hand, or set "
+                f"{SKIP_ENV_VAR}=1 to bypass this check.",
+            ],
+        )
+
+    n = len(report.changed_paths)
+    emit(
+        f"fr: {n} artifact(s) in {root} were written for an older fr; migrated in place "
+        "for this run (NOT committed)."
+    )
+    emit(
+        "  Do not commit these files with other work. Carry the migration on a branch: "
+        "the next fr command in an fr-isolation workspace commits it alone."
+    )
+    if _truthy(environ, "GITHUB_ACTIONS"):
+        emit(
+            f"::warning title=fr artifacts stale::{n} artifact(s) migrated in place for "
+            "this run; carry the migration on a branch."
+        )
 
 
 def _migrate_and_commit(

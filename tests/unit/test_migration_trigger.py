@@ -337,7 +337,7 @@ def test_interactive_migrates_commits_and_returns(tmp_path: Path) -> None:
     assert len(committed) == 1
 
 
-def test_non_interactive_refuses_without_migrating_or_committing(
+def test_the_refuse_context_refuses_without_migrating_or_committing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The single highest-value behaviour in the spec: a loud refusal."""
@@ -348,7 +348,7 @@ def test_non_interactive_refuses_without_migrating_or_committing(
         trigger.ensure_artifacts_current(
             argv=["apply"],
             invoked_subcommand="apply",
-            env={"CI": "true"},
+            env={},
             repo_root=tmp_path,
             context="refuse",
             commit=lambda root, report: committed.append(report),
@@ -565,7 +565,7 @@ def test_a_complete_plan_is_not_offered_by_the_gate(
     assert "fr run adopt" not in capsys.readouterr().err
 
 
-def test_the_non_interactive_refusal_does_not_reach_the_offer(
+def test_the_refuse_context_does_not_reach_the_offer(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A refusal is a refusal: nothing migrated, so there is no "your fr
@@ -577,7 +577,7 @@ def test_the_non_interactive_refusal_does_not_reach_the_offer(
         trigger.ensure_artifacts_current(
             argv=["apply"],
             invoked_subcommand="apply",
-            env={"CI": "true"},
+            env={},
             repo_root=tmp_path,
             context="refuse",
         )
@@ -1177,3 +1177,79 @@ def test_an_uncommitted_edit_in_a_workspace_is_held_back(tmp_path: Path) -> None
     assert code == 2, "a held-back artifact is a refusal, not a silent skip"
     assert meta.read_text() == before
     assert _g(fx.wt, "rev-parse", "HEAD") == fx.work_sha
+
+
+# --- the ci context: in place, never committed (§C, R5 R10) --------------
+
+
+@pytest.mark.parametrize("marker", ["CI", "GITHUB_ACTIONS"])
+def test_ci_migrates_in_place_on_main_and_never_commits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    marker: str,
+) -> None:
+    fx = _Fixture(tmp_path)
+    offered: list[Path] = []
+    monkeypatch.setattr(trigger, "_adoption_offer", lambda root: offered.append(root) or ())
+    head = _g(fx.primary, "rev-parse", "HEAD")
+    assert _g(fx.primary, "branch", "--show-current") == "main"
+
+    code, lines = _gate(fx.primary, env={marker: "true"})
+
+    assert code == 0, lines
+    assert f"<{CEILING_VERSION}" in fx.meta(fx.primary).read_text(), "migrated in the tree"
+    assert _g(fx.primary, "rev-parse", "HEAD") == head, "CI never commits"
+    text = _flat(lines)
+    assert "migrated in place for this run (NOT committed)" in text
+    assert "Do not commit these files with other work." in text
+    assert offered == [], "CI makes no adoption offer"
+    annotation = [line for line in lines if line.startswith("::warning title=fr artifacts stale::")]
+    assert len(annotation) == (1 if marker == "GITHUB_ACTIONS" else 0)
+    assert capsys.readouterr().out == "", "the gate never writes stdout"
+
+
+def test_ci_writes_its_warning_on_stderr_never_stdout(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The default emitter, not the test's `err=`: stdout stays clean for a
+    `--json` command or a `>> $GITHUB_STEP_SUMMARY` redirect."""
+    fx = _Fixture(tmp_path)
+    trigger.ensure_artifacts_current(
+        argv=["apply"],
+        invoked_subcommand="apply",
+        env={"GITHUB_ACTIONS": "true"},
+        repo_root=fx.primary,
+    )
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert "::warning title=fr artifacts stale::" in out.err
+    assert "NOT committed" in out.err
+
+
+def test_ci_holds_back_an_uncommitted_edit(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+    meta = fx.meta(fx.primary)
+    meta.write_text(meta.read_text() + "workflow: fr-goal@1\n")
+    before = meta.read_text()
+    code, _ = _gate(fx.primary, env={"CI": "true"})
+    assert code == 2
+    assert meta.read_text() == before, "the veto holds in CI too"
+
+
+def test_a_failing_migration_in_ci_refuses(tmp_path: Path) -> None:
+    fx = _Fixture(tmp_path)
+
+    def boom(path: Path) -> None:
+        raise RuntimeError("migration exploded")
+
+    kind: ArtifactKind = replace(ARTIFACT_KINDS["plan"], current_version=3)
+    reg = MigrationRegistry(kinds={kind.name: kind})
+    reg.register(SchemaMigration(kind="plan", from_version=2, to_version=3, fn=boom))
+    head = _g(fx.primary, "rev-parse", "HEAD")
+
+    code, lines = _gate(fx.primary, env={"CI": "true"}, registry=reg)
+
+    assert code == 2, lines
+    assert "migration exploded" in _flat(lines)
+    assert _g(fx.primary, "rev-parse", "HEAD") == head
