@@ -9,12 +9,11 @@ import base64
 from collections.abc import Mapping
 from pathlib import Path
 
+import pytest
 from fr.journal.model import journal_path
 from fr.ops.apply import ShellApplier, apply_ops
 from fr.ops.evidence import record_op
 from fr.ops.load import LoadedOp
-import pytest
-
 from fr.ops.mask import clip_output, evidence_lines, passthrough_values, sanitise_reason
 
 from tests.unit.test_ops_apply import FakePrompt, Idents, NoJournal, World, op
@@ -121,9 +120,7 @@ def test_evidence_is_the_last_three_non_blank_lines_within_300_chars() -> None:
 def test_evidence_never_records_a_body_shaped_line() -> None:
     """review p2-r1: committed evidence takes the reason sanitiser's body rule."""
     body = '{"user": "someone@example.invalid", "token": "issued-by-the-server"}'
-    assert evidence_lines(f"checking\n{body}\nconverged 3 of 3\n", ()) == (
-        "checking; converged 3 of 3"
-    )
+    assert evidence_lines(f"checking\n{body}\nconverged 3 of 3\n", ()) == ""
     assert evidence_lines(f"{body}\n[1, 2, 3]\n", ()) == ""
     assert "issued-by-the-server" not in evidence_lines(f"ok\n{body}", ())
 
@@ -155,7 +152,7 @@ def test_evidence_drops_an_indented_multi_line_json_body_as_a_block() -> None:
         "converged 3 of 3\n"
     )
     got = evidence_lines(out, ())
-    assert got == "checking the stack; converged 3 of 3"
+    assert got == ""  # a bracket anywhere: nothing from this output is recorded
     for leaked in ("someone@example.invalid", "issued-by-the-server", '"x"'):
         assert leaked not in got
 
@@ -163,7 +160,8 @@ def test_evidence_drops_an_indented_multi_line_json_body_as_a_block() -> None:
 def test_evidence_drops_stray_member_lines_and_closers() -> None:
     """security review: a member line or a lone closer outside a tracked block."""
     out = '  "token": "issued-by-the-server",\n}\n]\nok\n'
-    assert evidence_lines(out, ()) == "ok"
+    assert evidence_lines(out, ()) == ""
+    assert evidence_lines('  "token": "issued-by-the-server",\nok\n', ()) == "ok"
 
 
 @pytest.mark.parametrize(
@@ -179,8 +177,25 @@ def test_evidence_drops_stray_member_lines_and_closers() -> None:
 )
 def test_evidence_fails_closed_on_data_shaped_lines(data: str) -> None:
     """security review, second pass: only an allowlisted status line is recorded."""
-    got = evidence_lines(
-        f"checking\n{data}\n  more: issued-by-the-server\n}}\nconverged 3 of 3\n", ()
-    )
+    got = evidence_lines(f"checking\n{data}\nconverged 3 of 3\n", ())
     assert "issued-by-the-server" not in got
-    assert got.endswith("converged 3 of 3")
+    assert got in ("checking; converged 3 of 3", "")
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        "can't stop {",  # an apostrophe before a bracket
+        "- token: issued-by-the-server",  # a YAML list item
+        "url https://issued-by-the-server.example.invalid/x",  # a colon anywhere
+    ],
+)
+def test_evidence_third_pass_shapes_are_never_recorded(data: str) -> None:
+    """security review, third pass: no parser to fool — a positive grammar, and any
+    bracket in the output records nothing."""
+    got = evidence_lines(f"ok\n{data}\ndone\n", ())
+    assert "issued-by-the-server" not in got and got in ("ok; done", "")
+
+
+def test_any_bracket_in_the_output_records_no_evidence() -> None:
+    assert evidence_lines("checking\n[1]\nconverged 3 of 3\n", ()) == ""

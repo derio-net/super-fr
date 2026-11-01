@@ -257,7 +257,7 @@ ops:
     summary: converge
     phase: post-merge
     ready: 'true'
-    check: 'test -f "$MARKS/good" && { echo checking the stack; echo "{\"token\": \"from-the-server\"}"; echo converged 3 of 3; }'
+    check: 'test -f "$MARKS/good" && { echo checking the stack; echo "token: from-the-server"; echo converged 3 of 3; }'
     apply: 'touch "$MARKS/good"'
   - id: bad
     summary: no drift

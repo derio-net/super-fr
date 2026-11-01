@@ -121,48 +121,22 @@ def evidence_lines(out: str, secrets: Iterable[str]) -> str:
     return "; ".join(kept[-EVIDENCE_LINES:])[:EVIDENCE_MAX]
 
 
-_STATUS_LINE = re.compile(r"^[^{}\[\]\"'=`<>]*$")
-"""A recordable status line, by ALLOWLIST (security review, second pass): no bracket,
-quote, `=`, backtick or angle bracket anywhere, so no JSON/YAML/XML/env-assignment
-fragment qualifies, however it is indented or wherever on the line it opens."""
-_KEY_VALUE = re.compile(r"^[\w.-]+\s*:(\s|$)")
-"""An unquoted `key: value` line (YAML): data, not status."""
+_STATUS_LINE = re.compile(r"^[A-Za-z0-9 ,.;()/%+#_*-]*$")
+"""A recordable status line, by a narrow POSITIVE grammar (security review, third pass):
+letters, digits, spaces and `, . ; ( ) / % + # _ * -`, nothing else. No colon, quote,
+bracket, `=`, backtick or angle bracket, so no JSON, YAML, env assignment, URL or XML
+fragment qualifies, and no quoting can hide anything because nothing is parsed. `***`
+(a masked secret) is allowed."""
+
+_STRUCTURE = re.compile(r"[{}\[\]]")
+"""Any bracket anywhere in a probe's output: the output carries structured data."""
 
 
 def _status_lines(out: str) -> list[str]:
-    """*out*'s lines that may be recorded, failing closed: a line that opens a bracket
-    anywhere starts a block dropped until its brackets balance (so the members of a
-    multi-line body never stand alone), and outside a block only an allowlisted status
-    line (`_STATUS_LINE`, not `_KEY_VALUE`) is kept. "converged 3 of 3" passes; anything
-    shaped like data does not — evidence may come back "no output", never a body."""
-    kept: list[str] = []
-    depth = 0
-    for line in out.splitlines():
-        stripped = line.strip()
-        delta = _bracket_delta(stripped)
-        if depth > 0 or delta > 0:
-            depth = max(0, depth + delta)
-            continue
-        if _STATUS_LINE.match(stripped) and not _KEY_VALUE.match(stripped):
-            kept.append(line)
-    return kept
-
-
-def _bracket_delta(line: str) -> int:
-    """Net `{`/`[` minus `}`/`]` on *line*, ignoring brackets inside single- or
-    double-quoted strings."""
-    delta, quote, escaped = 0, "", False
-    for ch in line:
-        if escaped:
-            escaped = False
-        elif ch == "\\":
-            escaped = True
-        elif quote:
-            quote = "" if ch == quote else quote
-        elif ch in "\"'":
-            quote = ch
-        elif ch in "{[":
-            delta += 1
-        elif ch in "}]":
-            delta -= 1
-    return delta
+    """*out*'s recordable lines, failing closed. Output with a bracket ANYWHERE records
+    none of its lines: a body's lines cannot be told apart from status by shape, so none
+    is trusted. Otherwise only `_STATUS_LINE` lines are kept. "converged 3 of 3" passes;
+    anything shaped like data does not, and evidence comes back "no output", never a body."""
+    if _STRUCTURE.search(out):
+        return []
+    return [line for line in out.splitlines() if _STATUS_LINE.match(line.strip())]
