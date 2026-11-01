@@ -61,9 +61,9 @@ def _op_entry(eid: str = "op-a-1", result: str = "done") -> JournalEntry:
 # --- the `ops` artifact kind ---------------------------------------------------
 
 
-def test_ops_is_a_registered_kind_at_version_one() -> None:
+def test_ops_is_a_registered_kind_at_version_two() -> None:
     kind = ARTIFACT_KINDS["ops"]
-    assert kind.current_version == 1
+    assert kind.current_version == 2
     assert kind.locator == "docs/superpowers/plans/*/ops.yaml"
 
 
@@ -94,6 +94,24 @@ def test_the_ops_validator_reports_a_bad_file(tmp_path: Path, text: str, needle:
     assert validate is not None
     problems = validate(path)
     assert any(needle in p for p in problems), problems
+
+
+@pytest.mark.parametrize("stamp", ["schema_version: 1\n", ""])
+def test_the_ops_validator_refuses_none_below_version_two(tmp_path: Path, stamp: str) -> None:
+    """spec 2026-11-01-ops-gate-probes R4: `none:` arrived with version 2."""
+    path = tmp_path / "ops.yaml"
+    path.write_text(stamp + "none: nothing to run\n")
+    validate = ARTIFACT_KINDS["ops"].validate
+    assert validate is not None
+    problems = validate(path)
+    assert any("none" in p and "2" in p for p in problems), problems
+
+
+def test_the_ops_validator_accepts_none_at_version_two(tmp_path: Path) -> None:
+    path = tmp_path / "ops.yaml"
+    path.write_text("schema_version: 2\nnone: nothing to run\n")
+    validate = ARTIFACT_KINDS["ops"].validate
+    assert validate is not None and validate(path) == []
 
 
 # --- journal kind 3 ------------------------------------------------------------

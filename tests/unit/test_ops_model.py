@@ -182,3 +182,29 @@ def test_legacy_keeps_non_string_commands_and_verify_as_prose() -> None:
 def test_ops_yaml_op_stays_strict() -> None:
     with pytest.raises(ValidationError, match="note"):
         Op.model_validate({"id": "a", "summary": "s", "phase": "pre-merge", "note": "x"})
+
+
+# --- the `none:` acknowledgement (spec 2026-11-01-ops-gate-probes R4) ------------------
+
+
+def test_an_ops_file_may_acknowledge_no_ops() -> None:
+    from fr.ops.model import OpsFile
+
+    assert OpsFile.model_validate({"schema_version": 2, "none": "reboot only"}).none == "reboot only"
+    assert OpsFile.model_validate({"schema_version": 2, "none": "x", "ops": []}).ops == ()
+    assert OpsFile.model_validate({"schema_version": 2}).none is None
+
+
+def test_none_beside_a_non_empty_ops_is_refused_by_name() -> None:
+    from fr.ops.model import OpsFile
+
+    op = {"id": "a", "summary": "s", "phase": "pre-merge"}
+    with pytest.raises(ValidationError, match="none"):
+        OpsFile.model_validate({"schema_version": 2, "none": "x", "ops": [op]})
+
+
+def test_an_empty_none_is_refused() -> None:
+    from fr.ops.model import OpsFile
+
+    with pytest.raises(ValidationError):
+        OpsFile.model_validate({"schema_version": 2, "none": ""})
