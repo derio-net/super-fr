@@ -265,3 +265,18 @@ The phase reorders ensure_artifacts_current's refusals and adds a committing con
 ### f9-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1279] · resolves f9: fr-acceptance-nag.sh claims `fr acceptance status` is gate-exempt; it is not
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1279.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-01T18:17:30+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: [candidate] Pre-merge — agent-driven: `fr verification walk --run <run-id>` runs `tests/scenarios/auto-migrate-workspace.sh` and `tests/scenarios/auto-migrate-ci-in-place.sh` against the candidate install (§F). **Cost:** fixture (a local `git init` with a bare origin, no network or forge), about a minute per scenario. The same scenarios also run in CI.
+
+Evidence: fr verification walk (candidate) 20261101T172631Z.log@ecd27ac114a7: install, 3 smokes, rows auto-migrate-workspace-commits-alone and auto-migrate-ci-in-place all exit 0; same scenarios run in CI
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-2 created=2026-11-01T18:17:37+00:00 -->
+### test-plan-step-2 · owed · Test Plan step 2 owed
+
+what: Post-merge — operator-driven, **walked on first real use**: in the coming per-repo sweep, with the released fr, the first fr command in each stale repo's isolation workspace migrates and commits `chore(fr): migrate … to fr <version>` alone, and the sweep's PR carries it as its own commit. In at least one consumer repo whose main is red only from stale artifacts, the next acceptance-report run on main is green, and its run page shows the in-place warning annotation (or, failing that, the stderr warning in the log; then file the `$GITHUB_STEP_SUMMARY` follow-up). Record the walk for `auto-migrate-live-sweep` with `fr acceptance set-status --walk`. **Cost:** none: no rehearsal, no fixture, no disposable repo. It rides the sweep that is already planned, and the gate stays held until that sweep runs.
+why: walked on first real use: rides the planned per-repo sweep with the released fr; sweep has not run yet. Record via fr acceptance set-status --walk on auto-migrate-live-sweep
+how: fr journal resolve --scope spec --slug 2026-11-01-auto-migrate-own-commit --id test-plan-step-2 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-01-auto-migrate-own-commit#step2
