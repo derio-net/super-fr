@@ -10307,8 +10307,8 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R9
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: 'walked on first real use: the per-repo sweep'
     verify: live
   - id: auto-migrate-nag-surfaces-commit
     capability: artifact migration gate
