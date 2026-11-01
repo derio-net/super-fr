@@ -481,7 +481,7 @@ rows:
       rendered/observed/diffed/applied as GitLab Issues with correctly-shaped GitLab
       labels (color, length)
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_glab.py
@@ -504,7 +504,7 @@ rows:
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
       rendered/observed/diffed/applied as Gitea Issues with correctly-shaped labels
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tea.py
@@ -524,7 +524,7 @@ rows:
       PR/MR-merge state correctly against a GitLab- or Gitea-backed repo, with zero
       gh-specific calls
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -541,7 +541,7 @@ rows:
     acceptance: The VK dispatch bridge polls PR/MR status and auto-closes tracking Issues
       correctly for a GitLab- or Gitea-backed phase
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_pr_observe.py
@@ -564,7 +564,7 @@ rows:
       CLI into the devcontainer (not github-cli), and fr acceptance init generates a
       working CI workflow in the right location and schema for that backend
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-09-multi-backend-git-host-adapters-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-09-multi-backend-git-host-adapters-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_init_scaffold.py
