@@ -35,3 +35,8 @@ Source: fr/tea.py gains api_result/api_json/api_pages (tea api -i; refuses non-2
 ### review-1 · review · Self-review of the diff: two findings, both fixed tests-first
 
 review-1: api_result named only a 3xx as an SSO proxy, but tea's Go HTTP client follows redirects, so behind a forward-auth proxy the status can be the login page's 200 + HTML; now an HTML body is named the same way (test_a_followed_redirect_onto_an_html_login_page_is_named). review-2: pr_for_branch matched head.ref, which a fork's same-named branch also carries; it now matches head.label (bare branch for same-repo, owner:branch for a fork; test_pr_for_branch_ignores_a_forks_pr_from_a_same_named_branch). Both red before the change. Live re-walk after both: 33/33. Checked and kept: 5xx messages still carry the status digits is_transient matches; reads keep the caller's CommandRunner, so isolation's timeouts still bound default_branch/pr_for_branch (test_isolation_network_timeouts).
+
+<!-- fr:journal kind=finding scope=debug id=ci-1 created=2026-11-01T10:41:14+00:00 state=fixed -->
+### ci-1 · finding [fixed] · CI: three test_isolation.py Gitea doubles still on the tea-rendering contract
+
+test_resolve_default_branch_gitea_backend, test_pr_from_gitea_backend_list_and_filter_fallback and test_pr_from_gitea_backend_merged_state fed FakeRunner tea's rendered shapes with no -i status line; api_json refused them, correctly. FakeRunner now writes a 200 status line for `tea api -i` (as the binary does), and the four Gitea _pr_from/default-branch tests take the API shape (html_url, head.ref+label, merged/merged_at). Missed by the targeted local run, which chose files by import of the tea adapter; these fake tea at the argv level. tests/unit/test_isolation.py: 236 passed.
