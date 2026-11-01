@@ -333,8 +333,9 @@ def backfill_command(
     ref = evidence.ref.ref if evidence.ref else None
     git = Git(root)
     fresh = []
+    cache = delivery.DeliveryCache()
     for c in cands:
-        got = delivery.delivering_pr(c, root=root, forge=forge, git=git, ref=ref)
+        got = delivery.delivering_pr(c, root=root, forge=forge, git=git, ref=ref, cache=cache)
         fresh.append(
             c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else "")
         )

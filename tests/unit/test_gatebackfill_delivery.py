@@ -208,3 +208,138 @@ def test_the_subject_pattern() -> None:
     assert subject_pr("feat: x (#12)") == 12
     assert subject_pr("Merge pull request #34 from a/b") == 34
     assert subject_pr("fix: mentions #9 in passing") is None
+
+
+# --- review fixes (p1-r1, r3, r6, r7) ---------------------------------------------------------
+
+
+def _archive_plan(repo: Path) -> None:
+    dst = repo / SP / "implemented" / "plans"
+    dst.mkdir(parents=True, exist_ok=True)
+    git(repo, "mv", f"{SP}/plans/{PLAN}", f"{SP}/implemented/plans/{PLAN}")
+    commit_at(repo, "archive (#2)", "2026-10-25T00:00:00+00:00")
+    publish(repo)
+
+
+def test_p1_r1_an_archived_plan_resolves_to_the_pr_that_added_it_not_the_archive_pr(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _land_plan(repo, "feat (#1)")
+    _archive_plan(repo)
+    forge = FakeForge()
+    _merged(forge, 1, 2)
+
+    got = _deliver(repo, forge)
+
+    assert got.ambiguous == ()
+    assert got.pr is not None and (got.pr.number, got.pr.basis) == (1, "commit")
+
+
+def test_p1_r1_an_archived_spec_with_no_plans_resolves_to_the_pr_that_added_it(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    name = "2026-05-01-thing-design.md"
+    (repo / SP / "specs").mkdir(parents=True)
+    (repo / SP / "specs" / name).write_text("# t\n")
+    (repo / "src.py").write_text("x = 1\n")
+    commit_at(repo, "feat (#1)", "2026-10-20T00:00:00+00:00")
+    (repo / SP / "implemented" / "specs").mkdir(parents=True)
+    git(repo, "mv", f"{SP}/specs/{name}", f"{SP}/implemented/specs/{name}")
+    commit_at(repo, "archive (#2)", "2026-10-25T00:00:00+00:00")
+    publish(repo)
+    forge = FakeForge()
+    _merged(forge, 1, 2)
+    cand = _cand(
+        key="spec:2026-05-01-thing#step1", plans=(), spec_rel=f"{SP}/implemented/specs/{name}"
+    )
+
+    got = _deliver(repo, forge, cand)
+
+    assert got.ambiguous == ()
+    assert got.pr is not None and got.pr.number == 1
+
+
+def test_p1_r3_an_unconfirmed_manifest_pr_is_never_replaced_by_an_inferred_one(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _land_plan(repo, "feat: ops (#12)")
+    forge = FakeForge()
+    _merged(forge, 12)
+    forge.add_pr(40, state="CLOSED")
+
+    got = _deliver(repo, forge, _cand(manifest_pr=40))
+
+    assert got.pr is None and got.ambiguous == ()
+    assert got.why.startswith("manifest pr #40: ") and "CLOSED" in got.why
+
+
+def test_p1_r6_a_pr_is_viewed_once_per_run_across_candidates(tmp_path: Path) -> None:
+    from fr.gatebackfill.delivery import DeliveryCache
+
+    repo = make_repo(tmp_path)
+    _land_plan(repo, "feat: ops (#12)")
+    forge = FakeForge()
+    _merged(forge, 12)
+    cache = DeliveryCache()
+    for _ in range(2):
+        got = delivering_pr(_cand(), root=repo, forge=forge, git=Git(repo), ref=REF, cache=cache)
+        assert got.pr is not None and got.pr.number == 12
+
+    assert [c for c in forge.calls if c[0] == "pr_view"] == [("pr_view", 12)]
+
+
+def test_p1_r6_one_candidate_views_a_pr_once(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    forge = FakeForge()
+    _merged(forge, 90)
+
+    _deliver(repo, forge, _cand(manifest_pr=90))
+
+    assert [c for c in forge.calls if c[0] == "pr_view"] == [("pr_view", 90)]
+
+
+def test_p1_r6_the_first_parent_line_is_listed_once_per_git(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    sha = _land_plan(repo, "feat: ops (#12)")
+    g = Git(repo)
+    calls: list[tuple[str, ...]] = []
+    real = g._out
+
+    def spy(*args: str) -> str | None:
+        calls.append(args)
+        return real(*args)
+
+    g._out = spy  # type: ignore[method-assign]
+    g.first_containing(REF, sha)
+    g.first_containing(REF, sha)
+
+    assert len([a for a in calls if a[:2] == ("rev-list", "--first-parent")]) == 1
+
+
+def test_p1_r7_an_archived_spec_matches_a_cursor_that_emitted_its_live_path(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    name = "2026-05-01-thing-design.md"
+    p = repo / SP / "implemented" / "runs" / "run-spec.yaml"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "run: run-spec\nworkflow: fr-goal@1\nbranch: feat/thing\n"
+        "started: '2026-01-01T09:00:00Z'\ncursor: deliver\nsteps:\n"
+        f"  spec:\n    state: done\n    emitted: {{spec: {SP}/specs/{name}}}\n"
+    )
+    commit_at(repo, "cursor", "2026-10-21T00:00:00+00:00")
+    publish(repo)
+    forge = FakeForge()
+    _merged(forge, 31)
+    forge.by_head["feat/thing"] = [31]
+    cand = _cand(
+        key="spec:2026-05-01-thing#step1", plans=(), spec_rel=f"{SP}/implemented/specs/{name}"
+    )
+
+    got = _deliver(repo, forge, cand)
+
+    assert got.pr is not None and (got.pr.number, got.pr.basis) == (31, "run")

@@ -99,6 +99,7 @@ class Git:
 
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._lines: dict[str, list[str]] = {}
 
     def _run(self, *args: str) -> subprocess.CompletedProcess[str] | None:
         try:
@@ -115,9 +116,9 @@ class Git:
         done = self._run(*args)
         return done.stdout if done is not None and done.returncode == 0 else None
 
-    def first_add(self, ref: str, path: str) -> str | None:
-        """The oldest commit on *ref* that added a file under *path*."""
-        out = self._out("log", "--diff-filter=A", "--format=%H", "--reverse", ref, "--", path)
+    def first_add(self, ref: str, *paths: str) -> str | None:
+        """The oldest commit on *ref* that added a file under any of *paths*."""
+        out = self._out("log", "--diff-filter=A", "--format=%H", "--reverse", ref, "--", *paths)
         shas = (out or "").split()
         return shas[0] if shas else None
 
@@ -125,8 +126,10 @@ class Git:
         """The oldest commit on *ref*'s first-parent line that contains *sha*: *sha* itself for a
         squash or fast-forward, else the merge that brought its branch in. Containment is
         monotone along that line, so it is found by bisection."""
-        out = self._out("rev-list", "--first-parent", "--reverse", ref)
-        line = (out or "").split()
+        if ref not in self._lines:
+            out = self._out("rev-list", "--first-parent", "--reverse", ref)
+            self._lines[ref] = (out or "").split()
+        line = self._lines[ref]
         if not line:
             return None
         lo, hi = 0, len(line) - 1
