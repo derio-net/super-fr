@@ -86,6 +86,7 @@ class Candidate(BaseModel):
             decision=decision,
             default_decision=decision,
             computed_gate=self.gate,
+            issue=self.issue_number,
         )
 
 

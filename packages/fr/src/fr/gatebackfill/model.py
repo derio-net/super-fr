@@ -84,6 +84,8 @@ class PlanEntry(_Strict):
     it is the operator's, and the only kind carried over."""
     computed_gate: str | None = None
     """The gate this tool computed: `gate` differing from it is the operator's."""
+    issue: int | None = None
+    """The issue whose ask this item is (an `issue:` key, or a manifest `issue:`), if any."""
 
     @field_validator("decision", "default_decision")
     @classmethod
