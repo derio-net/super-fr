@@ -136,3 +136,122 @@ decider: operator (round 1, answered in the goal pane)
 The close-out is held until the sweep walks auto-migrate-live-sweep.
 
 decider: operator (round 1, answered in the goal pane)
+
+<!-- fr:journal kind=finding scope=spec id=f1 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f1 · finding [open] (reviewer: in scope) · §B contradicts itself on the detached-HEAD path: workspace validation runs before the git-state refusals
+
+Validation ran before the git-state refusals, so a detached HEAD read as drift and an in-isolation agent was told to enter isolation; GitRefusal/NoRepo messages were unstated (trigger.py:430-478; hooks/lib/fr-isolation-decision.sh:214-221).
+
+<!-- fr:journal kind=finding scope=spec id=f2 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f2 · finding [open] (reviewer: in scope) · Existing gate tests pin 'CI refuses' and their CI scrub leaves GITHUB_ACTIONS set
+
+~22 tests drive context via interactive= or patch is_interactive; two assert CI never migrates; _invoke deletes only CI, so GITHUB_ACTIONS on runners would flip classification (test_migration_trigger.py:336-357,414-426,564-578).
+
+<!-- fr:journal kind=finding scope=spec id=f3 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f3 · finding [open] (reviewer: in scope) · A Python marker validator already exists (fr/run/workspace.py); the spec added a third
+
+run/workspace.py:37-134 already implements the checks; 'one reader' claim false; R2 diverged from the hook lib on missing mode/branch.
+
+<!-- fr:journal kind=finding scope=spec id=f4 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f4 · finding [open] (reviewer: in scope) · The ::warning:: line on stdout corrupts machine-readable output in CI
+
+Breaks the gate's stderr-only invariant (trigger.py:336-340); a --json or summary redirect gets a stray line only on stale runs.
+
+<!-- fr:journal kind=finding scope=spec id=f5 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f5 · finding [open] (reviewer: in scope) · The CI in-place path dropped uncommitted_veto
+
+CI=1 is exported in local/agent shells; dropping the veto rewrites edited files and a later git add -A folds the migration into work (commit.py:364-387).
+
+<!-- fr:journal kind=finding scope=spec id=f6 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f6 · finding [open] (reviewer: in scope) · d5's candidate scenarios were missing from the spec
+
+Rows cite two scenarios the spec never described; no Test Plan step or cost line; _common.sh exports CI=true and FR_SKIP_MIGRATION=1.
+
+<!-- fr:journal kind=finding scope=spec id=f7 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f7 · finding [open] (reviewer: in scope) · The SessionStart acceptance nag would make the migration commit silently
+
+fr-acceptance-nag.sh:29 discards stderr on success; it is the first gated command of most sessions.
+
+<!-- fr:journal kind=finding scope=spec id=f8 created=2026-11-01T11:56:33+00:00 state=open review_scope=in -->
+### f8 · finding [open] (reviewer: in scope) · §E edited a nonexistent AGENTS.md paragraph and omitted the OpenCode mirror
+
+AGENTS.md has no such paragraph; .opencode/instructions/artifact-versioning.md is generated and tripwired.
+
+<!-- fr:journal kind=finding scope=spec id=f9 created=2026-11-01T11:56:33+00:00 state=open review_scope=out -->
+### f9 · finding [open] (reviewer: out of scope) · fr-acceptance-nag.sh claims `fr acceptance status` is gate-exempt; it is not
+
+plugins/super-fr/hooks/fr-acceptance-nag.sh:24-25 vs trigger.py:82-96.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-01T11:56:33+00:00 -->
+### spec-review-1 · review · independent spec review: 9 findings (8 in scope, 1 out)
+
+Dispatched fr-spec-reviewer (read-only, this workspace). 8 in-scope findings fixed in the spec; f9 out of scope. Verified citations listed in the reviewer return: trigger.py gate sequencing, commit.py, fr_version.py, where.py, scaffold.py, ci.yml, acceptance-report.yml, release.py, the Verification grammar and the five rows.
+
+<!-- fr:journal kind=finding scope=spec id=f1-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f1 -->
+### f1-resolved · finding [fixed] · resolves f1: §B contradicts itself on the detached-HEAD path: workspace validation runs before the git-state refusals
+
+§B now gives the numbered order: git_context → GitRefusal (today's message) / NoRepo (R3 'not a git repository') → wrong-root and detached refusals → valid_workspace → default branch. Detached is never drift (R2).
+
+<!-- fr:journal kind=finding scope=spec id=f2-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f2 -->
+### f2-resolved · finding [fixed] · resolves f2: Existing gate tests pin 'CI refuses' and their CI scrub leaves GITHUB_ACTIONS set
+
+§A names the seam (interactive= → context=, mapping kept), splits the two CI tests, and requires an autouse conftest fixture clearing every CI_ENV_VARS marker and FR_NON_INTERACTIVE.
+
+<!-- fr:journal kind=finding scope=spec id=f3-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f3 -->
+### f3-resolved · finding [fixed] · resolves f3: A Python marker validator already exists (fr/run/workspace.py); the spec added a third
+
+§B moves run/workspace.py's helpers into fr.isolation.marker as valid_workspace (one implementation, two callers), drops the one-reader claim, cites the lib; R2 now reads missing mode as worktree and missing branch as not drift.
+
+<!-- fr:journal kind=finding scope=spec id=f4-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f4 -->
+### f4-resolved · finding [fixed] · resolves f4: The ::warning:: line on stdout corrupts machine-readable output in CI
+
+§C emits the annotation on stderr; stdout invariant kept; the stderr-processing belief is checked by the live row, with a $GITHUB_STEP_SUMMARY follow-up if it does not render.
+
+<!-- fr:journal kind=finding scope=spec id=f5-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f5 -->
+### f5-resolved · finding [fixed] · resolves f5: The CI in-place path dropped uncommitted_veto
+
+R5 and §C keep uncommitted_veto; the warning says not to commit the files with other work; the rule records the ride-along caveat.
+
+<!-- fr:journal kind=finding scope=spec id=f6-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f6 -->
+### f6-resolved · finding [fixed] · resolves f6: d5's candidate scenarios were missing from the spec
+
+§F specifies both scenarios (fixture, env contract unsetting CI markers/FR_NON_INTERACTIVE/FR_SKIP_MIGRATION, assertions per R); Test Plan gains a [candidate] step with a cost line; they run in CI via test_scenarios.py.
+
+<!-- fr:journal kind=finding scope=spec id=f7-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f7 -->
+### f7-resolved · finding [fixed] · resolves f7: The SessionStart acceptance nag would make the migration commit silently
+
+New R11 + §D: the gate prints 'fr: migrated and committed …'; the hook and nag.ts relay it, and the refused-context nag line names isolation. New row auto-migrate-nag-surfaces-commit.
+
+<!-- fr:journal kind=finding scope=spec id=f8-resolved created=2026-11-01T11:56:33+00:00 state=fixed resolves=f8 -->
+### f8-resolved · finding [fixed] · resolves f8: §E edited a nonexistent AGENTS.md paragraph and omitted the OpenCode mirror
+
+AGENTS.md bullet dropped; §E adds sync-opencode.py (and sync-hermes.py) and keeps the prose test_the_rule_prose_names_every_read_only_command reads.
+
+<!-- fr:journal kind=finding scope=spec id=f9-resolved created=2026-11-01T11:56:33+00:00 state=open resolves=f9 out_of_scope=true -->
+### f9-resolved · finding [out-of-scope] · resolves f9: fr-acceptance-nag.sh claims `fr acceptance status` is gate-exempt; it is not
+
+The misleading comment predates this change (it was written for review r5-c5); this change does not make it wrong, only more relevant. Left for a later edit of the hook.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-01T11:56:36+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  auto-migrate-ci-in-place: tester
+  auto-migrate-git-guards-hold: none
+  auto-migrate-live-sweep: tester
+  auto-migrate-nag-surfaces-commit: none
+  auto-migrate-refuses-outside-workspace: none
+  auto-migrate-workspace-commits-alone: tester
+row_kinds:
+  auto-migrate-ci-in-place: candidate
+  auto-migrate-git-guards-hold: none
+  auto-migrate-live-sweep: live
+  auto-migrate-nag-surfaces-commit: none
+  auto-migrate-refuses-outside-workspace: none
+  auto-migrate-workspace-commits-alone: candidate
+run_gate: tester
+run_kind: candidate
+```

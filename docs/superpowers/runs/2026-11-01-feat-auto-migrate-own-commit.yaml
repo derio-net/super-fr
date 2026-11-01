@@ -3,7 +3,7 @@ run: 2026-11-01-feat-auto-migrate-own-commit
 workflow: fr-goal@1
 branch: feat/auto-migrate-own-commit
 started: '2026-11-01T11:31:57+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md
   spec-review:
-    state: running
-    at: '2026-11-01T11:45:38+00:00'
+    state: done
+    at: '2026-11-01T11:56:36+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-11-01T11:45:38+00:00'
+          agent: a2d1f05a2891db57d
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: opus
           session: 1c93bd61-6acb-461a-b9ba-095bb092d0ac
+          returned: '2026-11-01T11:56:35+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a2d1f05a2891db57d
+          findings: f1,f2,f3,f4,f5,f6,f7,f8,f9
   plan:
     state: pending
   plan-review:

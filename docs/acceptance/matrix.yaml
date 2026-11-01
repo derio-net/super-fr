@@ -10284,3 +10284,14 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: auto-migrate-nag-surfaces-commit
+    capability: artifact migration gate
+    acceptance: When a session's first fr command (the SessionStart acceptance nag)
+      migrates and commits, the session is told which commit was made; a refused context's
+      nag names fr isolation up
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
