@@ -384,3 +384,37 @@ def test_p3_r3_op_body_takes_the_na_result() -> None:
     from fr.journal.model import op_body
 
     assert "result: na" in op_body(op="a", result="na", phase="pre-merge")
+
+
+# --- R9: full output, output/evidence fields; the TODO stub --------------------
+
+
+def test_a_failing_checks_reason_is_still_the_last_non_blank_line() -> None:
+    row = _one(_lo(check="probe"), FakeRunner({"probe": (1, "first\nHTTP 404: gone\n\n")}))
+    assert row.reason == "HTTP 404: gone"
+    assert (row.output, row.evidence) == (None, None)
+
+
+def test_a_checked_done_row_carries_output_and_evidence() -> None:
+    out = "\n".join(f"line {i}" for i in range(1, 51)) + "\n\n"
+    row = _one(_lo(check="probe"), FakeRunner({"probe": (0, out)}))
+    assert row.output is not None and row.output.splitlines()[0] == "line 11"
+    assert len(row.output.splitlines()) == 40
+    assert row.evidence == "line 48; line 49; line 50"
+    assert row.as_row()["evidence"] == row.evidence and row.as_row()["output"] == row.output
+
+
+def test_non_checked_rows_have_no_output() -> None:
+    attested = _one(_lo(), journal=FakeJournal({"a": _ev("attested", attested_by="operator")}))
+    legacy = _one(_lo(legacy="done"))
+    open_ = _one(_lo(check="probe"), FakeRunner({"probe": (1, "x")}))
+    for row in (attested, legacy, open_):
+        assert (row.output, row.evidence) == (None, None)
+        assert row.as_row()["output"] is None and row.as_row()["evidence"] is None
+
+
+def test_a_todo_check_is_a_stub_and_the_runner_is_never_called() -> None:
+    runner = FakeRunner({"TODO": (0, "")})
+    row = _one(_lo(check="TODO"), runner)
+    assert row.state == "UNVERIFIABLE" and row.reason == "a stub: write a real probe"
+    assert runner.calls == []

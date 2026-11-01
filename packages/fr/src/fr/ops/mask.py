@@ -87,3 +87,31 @@ def sanitise_reason(line: str, secrets: Iterable[str], *, typed: bool = False) -
     if typed:
         return "" if len(line) > REASON_MAX else line
     return "" if looks_like_a_body(line, REASON_MAX) else line
+
+
+OUTPUT_LINES = 40
+OUTPUT_LINE_MAX = 200
+EVIDENCE_LINES = 3
+EVIDENCE_MAX = 300
+
+
+def last_line(out: str) -> str:
+    """The last non-blank line of a probe's stdout, stripped: the line a reason used."""
+    lines = [line for line in out.splitlines() if line.strip()]
+    return lines[-1].strip() if lines else ""
+
+
+def clip_output(out: str, secrets: Iterable[str]) -> str:
+    """A checked probe's output for the screen: the last `OUTPUT_LINES` lines, secrets
+    masked, each line clipped to `OUTPUT_LINE_MAX` characters."""
+    lines = mask(out.rstrip(), secrets).splitlines()[-OUTPUT_LINES:]
+    return "\n".join(line.rstrip()[:OUTPUT_LINE_MAX] for line in lines).strip("\n")
+
+
+def evidence_lines(out: str, secrets: Iterable[str]) -> str:
+    """The recordable evidence: the last `EVIDENCE_LINES` non-blank lines of `out`,
+    masked, whitespace-collapsed per line, joined with `; ` and clipped to
+    `EVIDENCE_MAX` characters. The only part of a probe's output ever committed."""
+    kept = [line for line in mask(out, secrets).splitlines() if line.strip()]
+    text = "; ".join(" ".join(line.split()) for line in kept[-EVIDENCE_LINES:])
+    return text[:EVIDENCE_MAX]

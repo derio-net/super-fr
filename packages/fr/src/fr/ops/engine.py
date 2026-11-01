@@ -2,7 +2,7 @@
 
 Pure over three injected ports, so its tests run no subprocess:
 
-- a `Runner` runs a shell string with an env and returns `(exit, last line)`;
+- a `Runner` runs a shell string with an env and returns `(exit, stdout)`;
 - an `IdentityResolver` turns an identity name into its env (R5);
 - a `Journal` answers an op's latest recorded evidence (R7).
 
@@ -23,7 +23,14 @@ from typing import Any, Literal, Protocol
 from fr.ops.evidence import OpEvidence
 from fr.ops.identity import IdentityError, IdentityResolver
 from fr.ops.load import LoadedOp
-from fr.ops.mask import passthrough_values, sanitise_reason
+from fr.ops.model import TODO_CHECK
+from fr.ops.mask import (
+    clip_output,
+    evidence_lines,
+    last_line,
+    passthrough_values,
+    sanitise_reason,
+)
 from fr.ops.probe import DEFAULT_TIMEOUT, NOT_FOUND, TIMED_OUT, run_probe
 
 State = Literal["DONE", "OPEN", "N/A", "UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"]
@@ -58,6 +65,10 @@ class StatusRow:
     vacuous_if: str | None = None
     where: str = ""
     runbook: bool = False
+    output: str | None = None
+    """A DONE (checked) row's probe output for the screen (R9); `None` otherwise."""
+    evidence: str | None = None
+    """The few recordable lines of it; `None` otherwise. Only this is ever recorded."""
 
     @property
     def label(self) -> str:
@@ -76,6 +87,8 @@ class StatusRow:
             "vacuous_if": self.vacuous_if,
             "source": self.where,
             "runbook": self.runbook,
+            "output": self.output,
+            "evidence": self.evidence,
         }
 
 
@@ -98,8 +111,7 @@ class ShellRunner:
             return rc, f"timed out after {self.timeout:g}s"
         if rc == NOT_FOUND and not out.strip():
             return rc, "bash could not run"
-        lines = [line for line in out.splitlines() if line.strip()]
-        return rc, lines[-1].strip() if lines else ""
+        return rc, out
 
 
 def runner_secrets(runner: object) -> list[str]:
@@ -112,6 +124,9 @@ def runner_secrets(runner: object) -> list[str]:
 def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityResolver) -> StatusRow:
     check = lo.op.check
     assert check is not None
+    if check == TODO_CHECK:
+        return replace(row, state="UNVERIFIABLE", reason="a stub: write a real probe")
+    last_out, last_secrets = "", []
     names: Sequence[str | None] = lo.op.identities or (None,)
     for name in names:
         env: dict[str, str] = {}
@@ -120,9 +135,11 @@ def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityRes
                 env = dict(identities(name))
             except IdentityError as e:
                 return replace(row, state="CANNOT-VERIFY", reason=str(e), identity=name)
-        rc, line = runner(check, env)
+        rc, out = runner(check, env)
+        line = last_line(out)
         secrets = [*env.values(), *runner_secrets(runner)]
         if rc == 0:
+            last_out, last_secrets = out, secrets
             continue
         if rc == TIMED_OUT:
             return replace(row, state="CANNOT-VERIFY", reason="timed out", identity=name)
@@ -131,7 +148,13 @@ def _check(lo: LoadedOp, row: StatusRow, runner: Runner, identities: IdentityRes
             return replace(row, state="CANNOT-VERIFY", reason=reason, identity=name)
         reason = sanitise_reason(line, secrets) or f"exit {rc}"
         return replace(row, state="OPEN", reason=reason, identity=name)
-    return replace(row, state="DONE", how="checked")
+    return replace(
+        row,
+        state="DONE",
+        how="checked",
+        output=clip_output(last_out, last_secrets),
+        evidence=evidence_lines(last_out, last_secrets),
+    )
 
 
 def _evaluate(
@@ -152,7 +175,8 @@ def _evaluate(
     if lo.legacy == "n/a":
         return replace(row, state="N/A", how="legacy")
     if op.na_if and not op.disables:
-        rc, line = runner(op.na_if, {})
+        rc, out = runner(op.na_if, {})
+        line = last_line(out)
         if rc == 0:
             return replace(row, state="N/A")
         if rc == TIMED_OUT:

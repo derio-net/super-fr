@@ -302,7 +302,7 @@ def _report_ready(sel: Selection, runner: Any) -> int:
     """R11, for the DevOps stage's stage 3: each selected op's `ready:` probe (no identity
     variables, like `apply`'s), READY or NOT READY with its reason; 0 when all pass."""
     from fr.ops.engine import runner_secrets
-    from fr.ops.mask import sanitise_reason
+    from fr.ops.mask import last_line, sanitise_reason
 
     probed = [lo for lo in sel.ordered if lo.op.ready]
     if not probed:
@@ -310,7 +310,8 @@ def _report_ready(sel: Selection, runner: Any) -> int:
         return 0
     failed = 0
     for lo in probed:
-        rc, line = runner(lo.op.ready, {})
+        rc, out = runner(lo.op.ready, {})
+        line = last_line(out)
         if rc == 0:
             typer.echo(f"READY      {lo.op.id}")
             continue

@@ -13,7 +13,7 @@ from fr.journal.model import journal_path
 from fr.ops.apply import ShellApplier, apply_ops
 from fr.ops.evidence import record_op
 from fr.ops.load import LoadedOp
-from fr.ops.mask import passthrough_values, sanitise_reason
+from fr.ops.mask import clip_output, evidence_lines, passthrough_values, sanitise_reason
 
 from tests.unit.test_ops_apply import FakePrompt, Idents, NoJournal, World, op
 
@@ -101,3 +101,22 @@ def test_a_json_check_line_on_a_non_identity_op_reads_exit_n_in_status() -> None
         journal=FakeJournal(),
     )
     assert row.state == "OPEN" and row.reason == "exit 1"
+
+
+def test_clip_output_keeps_the_last_40_lines_each_at_most_200_chars() -> None:
+    out = "\n".join(["x" * 300] + [f"l{i}" for i in range(45)])
+    lines = clip_output(out, ()).splitlines()
+    assert lines == [f"l{i}" for i in range(5, 45)]
+    assert all(len(line) <= 200 for line in clip_output("y" * 500, ()).splitlines())
+
+
+def test_evidence_is_the_last_three_non_blank_lines_within_300_chars() -> None:
+    assert evidence_lines("a\n\nb\nc\n\nd\n", ()) == "b; c; d"
+    assert len(evidence_lines("z" * 1000, ())) == 300
+
+
+def test_output_and_evidence_mask_secret_values() -> None:
+    secret = "s3cr3t-value-123"
+    assert secret not in clip_output(f"token={secret}\nok", [secret])
+    assert secret not in evidence_lines(f"token={secret}\nok", [secret])
+    assert "***" in evidence_lines(f"token={secret}", [secret])

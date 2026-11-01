@@ -176,6 +176,8 @@ class FakeHost:
         self.origin_default: str | None = "main"
         self.how: dict[str, str] = {}
         self.materialised: list[Path] = []
+        # `fr ops status <id> --json`, scripted per op: each call pops (exit, rows | text)
+        self.by_id: dict[str, list[tuple[int, Any]]] = {}
 
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:
         """*paths* as the PR head carries them: copied from the fake's own tree."""
@@ -227,6 +229,10 @@ class FakeHost:
             verb = inner[1:3]
             if verb == ["ops", "status"] and "--ready" in inner:
                 return self.ready_code, "READY post"
+            if verb == ["ops", "status"] and "--phase" not in inner:
+                op = inner[3]
+                code, payload = self.by_id[op].pop(0)
+                return code, payload if isinstance(payload, str) else json.dumps(payload)
             if verb == ["ops", "status"]:
                 phase = inner[inner.index("--phase") + 1]
                 rows = [
@@ -561,9 +567,9 @@ def test_an_owed_devops_step_is_refused_at_stage_6(ops_root: Path) -> None:
 
 
 def test_an_unanswered_devops_step_stops_stage_5(ops_root: Path) -> None:
-    gate, *_ = _gate(ops_root, prompt=FakePrompt(answers=[""]))
+    gate, *_ = _gate(ops_root, prompt=FakePrompt(answers=["", "", ""]))
     result = run(gate)
-    assert result.failed == 5 and "step 1" in result.why
+    assert result.failed == 5 and "Not understood: ''" in result.why
 
 
 def test_stage_7_keeps_gate_tester_and_the_pass_comment_lists_its_steps(ops_root: Path) -> None:
@@ -800,3 +806,119 @@ def test_stage_1_passes_the_gap_check_with_a_none_acknowledgement(ops_root: Path
     result = run(gate)
     assert "ops gap" not in result.why
     assert any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+# ----------------------------------------------- R10: the answer grammar (stage 5)
+
+
+def _run5(ops_root: Path, answers: list[str]) -> tuple[Any, FakePrompt, FakeTree]:
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, prompt=FakePrompt(answers=answers)
+    )
+    return run(gate), prompt, tree
+
+
+def _outcome_args(tree: FakeTree) -> list[list[str]]:
+    return [c[1][0] for c in tree.calls if c[0] == "fr" and c[1][0][:2] == ["closeout", "outcome"]]
+
+
+@pytest.mark.parametrize(
+    ("answer", "flag", "text"),
+    [
+        ("ran: x", "--ran", "x"),
+        ("ran:x", "--ran", "x"),
+        ("na - y", "--na", "y"),
+        ("na- y", "--na", "y"),
+        ("owed x", "--owed", "x"),
+        ("N/A: z", "--na", "z"),
+    ],
+)
+def test_the_answer_grammar_accepts(ops_root: Path, answer: str, flag: str, text: str) -> None:
+    result, prompt, tree = _run5(ops_root, [answer])
+    assert result.failed != 5
+    (args,) = _outcome_args(tree)
+    assert args[args.index(flag) + 2] == text and len(prompt.asked) == 1
+
+
+@pytest.mark.parametrize("bad", ["rancid", "na-ive", "ran", "", "ran:", "retry"])
+def test_a_non_matching_answer_is_reprompted_with_an_echo(ops_root: Path, bad: str) -> None:
+    result, prompt, tree = _run5(ops_root, [bad, "ran: walked"])
+    assert len(prompt.asked) == 2
+    assert repr(bad) in prompt.asked[1] and "`ran <evidence>`" in prompt.asked[1]
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--evidence") + 1] == "walked"
+
+
+def test_three_non_matches_in_a_row_fail_the_stage_with_the_echo(ops_root: Path) -> None:
+    result, prompt, tree = _run5(ops_root, ["rancid", "ran", "na-ive"])
+    assert result.failed == 5 and "'na-ive'" in result.why and len(prompt.asked) == 3
+    assert _outcome_args(tree) == []
+
+
+# ------------------------------------------------ R8: a pointed step is probed
+
+
+def _row(op: str, state: str, how: str | None = None, **kw: Any) -> dict[str, Any]:
+    return {"op": op, "state": state, "label": state, "how": how, "reason": kw.pop("reason", ""),
+            "output": kw.pop("output", None), "evidence": kw.pop("evidence", None), **kw}  # fmt: skip
+
+
+def _point(ops_root: Path, op: str = "post") -> None:
+    spec = ops_root / SPEC
+    spec.write_text(spec.read_text().replace("[devops] walk", f"[devops] (op: {op}) walk"))
+
+
+def _probe(ops_root: Path, script: list[tuple[int, Any]], answers: list[str] | None = None):
+    _point(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, said = _gate(
+        ops_root, up=True, prompt=FakePrompt(answers=answers or [])
+    )
+    host.by_id["post"] = list(script)
+    return run(gate), host, tree, prompt, said
+
+
+def test_a_passing_probe_records_ran_with_its_evidence_and_asks_nothing(ops_root: Path) -> None:
+    done = [_row("post", "DONE", "checked", output="a\nb", evidence="a; b")]
+    result, host, tree, prompt, said = _probe(ops_root, [(0, done)])
+    assert result.failed != 5 and prompt.asked == []
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--ran") :][:3] == ["--ran", "--evidence", "post: check passed — a; b"]
+    trusts = [c for c in tree.calls if c[0] == "fr" and c[1][0][:2] == ["ops", "trust"]]
+    assert len(trusts) == 1 and any("a\nb" in line for line in said)
+
+
+def test_an_open_probe_offers_retry_na_owed_and_retry_reruns_it(ops_root: Path) -> None:
+    script = [(1, [_row("post", "OPEN", reason="HTTP 404")]),
+              (1, [_row("post", "OPEN", reason="HTTP 404")]),
+              (0, [_row("post", "DONE", "checked", evidence="ok")])]  # fmt: skip
+    result, host, tree, prompt, _ = _probe(ops_root, script, ["retry", "ran x", "retry"])
+    assert len(prompt.asked) == 3 and "`retry`" in prompt.asked[0]
+    assert "Not understood: 'ran x'" in prompt.asked[2]
+    (args,) = _outcome_args(tree)
+    assert "post: check passed — ok" in args
+
+
+def test_an_escalate_probe_is_handled_like_open(ops_root: Path) -> None:
+    result, host, tree, prompt, _ = _probe(
+        ops_root, [(3, [_row("post", "ESCALATE", reason="p1")])], ["owed later"]
+    )
+    (args,) = _outcome_args(tree)
+    assert "--owed" in args and "`retry`" in prompt.asked[0]
+
+
+@pytest.mark.parametrize("row", [_row("post", "N/A"), _row("post", "DONE", "attested")])
+def test_na_and_attested_ask_the_usual_question_and_record_no_ran_on_their_own(
+    ops_root: Path, row: dict[str, Any]
+) -> None:
+    result, host, tree, prompt, _ = _probe(ops_root, [(0, [row])], ["ran: by hand"])
+    assert "`ran <evidence>`" in prompt.asked[0] and "retry" not in prompt.asked[0]
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--evidence") + 1] == "by hand"
+
+
+def test_a_refused_status_fails_the_stage_with_its_output(ops_root: Path) -> None:
+    result, host, tree, prompt, _ = _probe(ops_root, [(2, "untrusted op set")])
+    assert result.failed == 5 and "untrusted op set" in result.why and prompt.asked == []
+    assert _outcome_args(tree) == []
