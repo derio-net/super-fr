@@ -67,4 +67,4 @@ journal:
       above took": these are timing-sensitive under load. Not shown pre-existing on main
       (no main run was afforded); CI is the arbiter.
 resolves: []
-evidence: {tests: /Users/derio/.cache/fr/coord/goals/ops-gate-probes/p1-suite.log}
+evidence: {tests: ci}
