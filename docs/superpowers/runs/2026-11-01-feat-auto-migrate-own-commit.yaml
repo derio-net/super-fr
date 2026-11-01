@@ -3,11 +3,14 @@ run: 2026-11-01-feat-auto-migrate-own-commit
 workflow: fr-goal@1
 branch: feat/auto-migrate-own-commit
 started: '2026-11-01T11:31:57+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-01T11:32:18+00:00'
+    state: done
+    at: '2026-11-01T11:45:34+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md
   spec-review:
     state: pending
   plan:

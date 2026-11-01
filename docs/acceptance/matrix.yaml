@@ -10219,3 +10219,68 @@ rows:
         PR #4 merged 8a15e2daaa9a536bc4f5899acd72eeeddaa31cf7; clean fresh-main tree
         matched the PR #4 source tree; published RC11 source cc133a53b3ed6dcaa8f6e6d64e2bb8b04c6c53b8
         status returned DONE (checked) for both ops, with unchanged marker hashes.'
+  - id: auto-migrate-workspace-commits-alone
+    capability: artifact migration gate
+    acceptance: 'In a non-interactive fr-isolation workspace on a work branch, stale
+      artifacts (including an excluded fr_version ceiling) are migrated and committed
+      alone as chore(fr): migrate ..., on top of any existing work, and the command
+      then runs'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/auto-migrate-workspace.sh
+  - id: auto-migrate-ci-in-place
+    capability: artifact migration gate
+    acceptance: In CI a stale but migratable checkout is migrated in place, never committed,
+      with a warning (and a GitHub annotation), and the command runs; an unmigratable
+      tree still fails
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/auto-migrate-ci-in-place.sh
+  - id: auto-migrate-refuses-outside-workspace
+    capability: artifact migration gate
+    acceptance: A non-interactive non-CI context outside a valid workspace (or with
+      FR_NON_INTERACTIVE set) refuses, writes nothing, and names fr isolation up as
+      the way to carry the migration
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: auto-migrate-git-guards-hold
+    capability: artifact migration gate
+    acceptance: No committing context ever auto-commits on the default branch, a detached
+      HEAD, the wrong root, or over a file with uncommitted edits
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: auto-migrate-live-sweep
+    capability: artifact migration gate
+    acceptance: With the released fr, real stale repos get their migration as its own
+      commit in the sweep's PRs, and a consumer main red only from stale artifacts goes
+      green
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
