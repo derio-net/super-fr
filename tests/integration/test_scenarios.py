@@ -236,6 +236,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "fr-ops-seal",
         "fr-ops-gate-stage",
         "gate-backfill-dry-run",
+        "gate-backfill-apply",
     }
     assert on_disk == here
 
@@ -282,6 +283,10 @@ def test_debt_report(installed: Path, tmp_path: Path) -> None:
 
 def test_gate_backfill_dry_run(installed: Path, tmp_path: Path) -> None:
     _scenario("gate-backfill-dry-run", installed, tmp_path)
+
+
+def test_gate_backfill_apply(installed: Path, tmp_path: Path) -> None:
+    _scenario("gate-backfill-apply", installed, tmp_path)
 
 
 def test_closeout_owed(installed: Path, tmp_path: Path) -> None:
