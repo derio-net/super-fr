@@ -10281,9 +10281,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R6
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_passing_probe_records_ran_with_its_evidence_and_asks_nothing
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R6, R8, R9: unit plus the scenario asserting the committed ran evidence
+      omits data lines'
     verify: candidate
     scenario: tests/scenarios/fr-ops-gate-probes.sh
   - id: ops-gate-answer-grammar
