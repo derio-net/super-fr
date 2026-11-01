@@ -357,3 +357,88 @@ one new helper module; both routes call it, nothing duplicated or existing to cl
 ### p3-driver-prints-discharge · decision · the driver route prints the adopt close and discharge lines (supersedes p3-driver-prints-no-discharge) (phase 3)
 
 The earlier rationale was wrong: the driver does know the repo's checkout (_Driver.path_of). _pass_gate now passes root=path_of(repo) and emits the adopt gh issue close lines and the discharge lines after the gate-pass line, as R12 requires on both routes. With no checkout path the discharge lines are omitted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · retry hint omitted the required --notes (and --repo/--host), so the printed command failed (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · driver route passed no root and printed no adopt/discharge commands (R12) (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · retry trusted a hand-applied gate:<g>-passed label (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · an empty viewer_login let author-less (ghost) comments match (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · no test asserted the fr:owed label bound on list_issues (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · driver close failure path untested (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · GatedWorld.trackers was a shared mutable class attribute (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-01T20:50:31+00:00 phase=3 state=open review_scope=out -->
+### p3-r8 · finding [open] (reviewer: out of scope) · non-forge exceptions escape close_gate_trackers and could crash the driver after the pass (phase 3)
+
+Raised by the dispatched phase-3 code reviewer.
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-11-01T20:50:31+00:00 phase=3 -->
+### p3-review · review · phase 3 code review (phase 3)
+
+8 findings raised (p3-r1..p3-r8): p3-r1..p3-r7 fixed; p3-r8 (out, pre-existing driver exception boundary) resolved out-of-scope. 126 targeted and 1230 FakeGhClient-using tests pass after the fixes.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: retry hint omitted the required --notes (and --repo/--host), so the printed command failed (phase 3)
+
+Fixed in 357ba3f6c: the hint carries --notes (quoted), --repo and a non-default --host; the test re-invokes the printed line.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: driver route passed no root and printed no adopt/discharge commands (R12) (phase 3)
+
+Fixed in 89daa45fa: _pass_gate passes root=self.path_of(repo) and emits adopt close lines and discharge lines after the pass line; tested via _drive --once --yes; journal p3-driver-prints-discharge supersedes p3-driver-prints-no-discharge.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: retry trusted a hand-applied gate:<g>-passed label (phase 3)
+
+Fixed in 625712643: the retry requires this account's fr:gate-pass <g> comment on the PR, else exit 2; tests for hand-labelled and fr-passed PRs.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: an empty viewer_login let author-less (ghost) comments match (phase 3)
+
+Fixed in 625712643: empty login records an error and closes/adopts nothing.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: no test asserted the fr:owed label bound on list_issues (phase 3)
+
+Fixed in 89daa45fa: fakes record labels; test asserts ["fr:owed"].
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: driver close failure path untested (phase 3)
+
+Fixed in 89daa45fa: test pins the pass reported as success, failed_write false, exit 0 on a close failure.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: GatedWorld.trackers was a shared mutable class attribute (phase 3)
+
+Fixed in 89daa45fa: moved into __init__.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-01T20:50:31+00:00 phase=3 state=open resolves=p3-r8 out_of_scope=true -->
+### p3-r8-resolved · finding [out-of-scope] · resolves p3-r8: non-forge exceptions escape close_gate_trackers and could crash the driver after the pass (phase 3)
+
+The same exposure already exists for the driver's pass_gate call (non-forge exceptions are not caught there either); this change adds no new exception class to that path. Hardening the driver's exception boundary is the driver's concern.
