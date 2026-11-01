@@ -190,3 +190,8 @@ Added test_a_failing_state_offers_only_retry_na_owed (UNVERIFIABLE, CANNOT-VERIF
 ### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: an op already DONE at stage 4 is skipped by apply_phase, so `fr gate pass` reports it 'never checked' (phase 2)
 
 Not caused by this change: apply_phase and recorded_state are unchanged here, and stage 5 writes only spec-journal outcomes. Recorded by the executor as discovery p2-gate-pass-needs-applied-evidence; filed as a follow-up at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p2-sec-1 created=2026-11-01T20:15:31+00:00 phase=2 state=open review_scope=in -->
+### p2-sec-1 · finding [open] (reviewer: in scope) · committed probe evidence let a pretty-printed JSON body's member lines through (per-line body check) (phase 2)
+
+Automated security review of 738a7d0bb: evidence_lines judged body shape per line, so an indented multi-line JSON document's member lines and closers survived into the committed ran evidence.
