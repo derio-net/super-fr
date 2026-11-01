@@ -195,3 +195,8 @@ Not caused by this change: apply_phase and recorded_state are unchanged here, an
 ### p2-sec-1 · finding [open] (reviewer: in scope) · committed probe evidence let a pretty-printed JSON body's member lines through (per-line body check) (phase 2)
 
 Automated security review of 738a7d0bb: evidence_lines judged body shape per line, so an indented multi-line JSON document's member lines and closers survived into the committed ran evidence.
+
+<!-- fr:journal kind=finding scope=plan id=p2-sec-1-resolved created=2026-11-01T20:15:37+00:00 state=fixed resolves=p2-sec-1 -->
+### p2-sec-1-resolved · finding [fixed] · resolves p2-sec-1: committed probe evidence let a pretty-printed JSON body's member lines through (per-line body check)
+
+1cb930211: mask._status_lines removes a body as a block (bracket depth, quoted brackets ignored) plus stray member lines and lone closers; tests test_evidence_drops_an_indented_multi_line_json_body_as_a_block, test_evidence_drops_stray_member_lines_and_closers.
