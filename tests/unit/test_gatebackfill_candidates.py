@@ -249,3 +249,43 @@ def test_p1_r5_a_full_open_issue_page_is_reported_as_possibly_capped(
     forge.issues = forge.issues[:1]
     _, quiet = _collect(repo, forge)
     assert not any("cap" in n for n in quiet)
+
+
+def test_p1_r11_a_look_alike_never_names_any_fr_owned_tracker(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed"), row("r2", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [
+        issue(90, "owed r2", "mentions r1 too\n\n<!-- fr-owed:row:r2 -->"),
+        issue(91, "a stranger's r1", "r1 is broken", author=STRANGER, labels=()),
+    ]
+
+    cands, _ = _collect(repo, forge)
+
+    assert cands["row:r2"].tracker_ref == f"{REPO}#90"
+    assert cands["row:r1"].tracker_candidates == (f"{REPO}#91",)  # not r2's own tracker
+
+
+def test_p1_r13_a_marker_key_that_is_a_path_never_reaches_the_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gatebackfill import candidates
+
+    seen: list[str] = []
+    real = candidates._plan_dir
+
+    def spy(root: Path, name: str):  # type: ignore[no-untyped-def]
+        seen.append(name)
+        return real(root, name)
+
+    monkeypatch.setattr(candidates, "_plan_dir", spy)
+    repo = make_repo(tmp_path)
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [_marker_issue(95, "plan:../../x#p1")]
+
+    cands, notes = _collect(repo, forge)
+
+    assert not any(".." in k for k in cands) and not any(".." in n for n in seen)
+    assert any("plan:../../x#p1" in n and "dropped" in n for n in notes)

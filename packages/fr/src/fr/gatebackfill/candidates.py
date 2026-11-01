@@ -27,10 +27,6 @@ PLANS_REL = Path("docs/superpowers/plans")
 IMPLEMENTED_PLANS_REL = Path("docs/superpowers/implemented/plans")
 SPECS_REL = Path("docs/superpowers/specs")
 IMPLEMENTED_SPECS_REL = Path("docs/superpowers/implemented/specs")
-_KEY = re.compile(
-    r"^(?:(?P<kind>spec|plan|row|issue):(?P<name>[^#]+?)(?:#(?:step|p)(?P<n>\d+))?)$"
-    r"|^(?P<ikind>issue):(?P<iref>[^#]+/[^#]+)#(?P<inum>\d+)$"
-)
 
 
 class Candidate(BaseModel):
@@ -225,14 +221,17 @@ def _as_issue(i: dict[str, Any]) -> dict[str, object]:
 
 
 def _lookalikes(
-    c: Candidate, issues: list[dict[str, Any]], manifest: ManifestItem | None
+    c: Candidate,
+    issues: list[dict[str, Any]],
+    manifest: ManifestItem | None,
+    owned: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Open issues that read like this item's tracker but that fr did not write: suggestions."""
     kind, name, n = split_key(c.key)
     found = []
     for i in issues:
         ref = str(i.get("ref"))
-        if ref == c.ref or ref == c.tracker_ref:
+        if ref == c.ref or ref == c.tracker_ref or ref in owned:
             continue
         text = f"{i.get('title', '')}\n{i.get('body', '')}"
         hit = False
@@ -245,6 +244,19 @@ def _lookalikes(
         if hit:
             found.append(ref)
     return found
+
+
+def _key_usable(key: str, notes: list[str]) -> bool:
+    """Whether *key* may be used at all: a key from an issue marker is text anyone wrote, and
+    its name reaches the filesystem (`_plan_dir`) and argv, so only the canonical shape, with
+    no dot-only name, passes."""
+    from fr.journal.model import OWED_KEY_RE
+
+    name = key.partition(":")[2].rpartition("#")[0] or key.partition(":")[2]
+    if OWED_KEY_RE.match(key) and name.strip(".") != "":
+        return True
+    notes.append(f"{key}: owed key dropped (not a valid owed key)")
+    return False
 
 
 # --- the collection -------------------------------------------------------------------------
@@ -314,6 +326,7 @@ def collect_candidates(
         (o.key, o.source, o.title, o.how, o.ref) for o in report.owed
     ]
     sources += [(m.key, "manifest", m.title, "", "") for m in man.values()]
+    sources = [src for src in sources if _key_usable(src[0], notes)]
     out: list[Candidate] = []
     for key, source, title, how, iref in sources:
         item = man.get(key)
@@ -372,7 +385,9 @@ def collect_candidates(
         )
         out.append(cand)
 
-    out = _settle_trackers(out, issues, by_ref, man, adopted, ours, notes)
+    out = _settle_trackers(
+        out, issues, by_ref, man, adopted, ours, notes, frozenset(owned_trackers.values())
+    )
     return sorted(out, key=lambda c: c.key), notes
 
 
@@ -384,10 +399,13 @@ def _settle_trackers(
     adopted: set[str],
     ours: set[str],
     notes: list[str],
+    owned: frozenset[str] = frozenset(),
 ) -> list[Candidate]:
     """Attach look-alike trackers, then settle the `issue:` candidates that are trackers."""
     withs = [
-        c.model_copy(update={"tracker_candidates": tuple(_lookalikes(c, issues, man.get(c.key)))})
+        c.model_copy(
+            update={"tracker_candidates": tuple(_lookalikes(c, issues, man.get(c.key), owned))}
+        )
         for c in cands
     ]
     suggested: dict[str, str] = {}

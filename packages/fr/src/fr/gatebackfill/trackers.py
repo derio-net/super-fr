@@ -25,13 +25,7 @@ def fr_gate_marker(body: str) -> tuple[str, int] | None:
 
 def is_ours(issue: dict[str, object], me: str) -> bool:
     """Whether fr wrote this open issue: this account's, labelled `fr:owed`. A marker on any
-    other issue is only text (R8)."""
-    from fr.labels import FR_OWED
+    other issue is only text (R8). The same author/label rule `owned_owed_key` applies."""
+    from fr.archive_followups import is_owned_issue
 
-    author = issue.get("author")
-    login = author.get("login") if isinstance(author, dict) else author
-    labels = {
-        str(lab.get("name", "")) if isinstance(lab, dict) else str(lab)
-        for lab in (issue.get("labels") or [])  # type: ignore[attr-defined]
-    }
-    return bool(me) and login == me and FR_OWED.name in labels
+    return is_owned_issue(issue, me)
