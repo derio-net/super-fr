@@ -10249,9 +10249,16 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_trigger.py#test_ci_migrates_in_place_on_main_and_never_commits
+      - super-fr:tests/unit/test_migration_trigger.py#test_ci_writes_its_warning_on_stderr_never_stdout
+      - super-fr:tests/unit/test_migration_trigger.py#test_a_failing_migration_in_ci_refuses
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_auto_migrate_ci_in_place
+    status: ci
+    notes: pinned by the trigger's CI in-place tests and the installed-CLI CI scenario,
+      both in CI
     verify: candidate
     scenario: tests/scenarios/auto-migrate-ci-in-place.sh
   - id: auto-migrate-refuses-outside-workspace
