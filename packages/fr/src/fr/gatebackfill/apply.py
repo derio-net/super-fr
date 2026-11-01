@@ -18,7 +18,7 @@ from fr.archive_followups import owned_owed_key
 from fr.gatebackfill import trackers
 from fr.gatebackfill.model import BackfillError, PlanEntry, PlanFile
 from fr.ghclient import GhClient, UnsupportedForgeOperation
-from fr.hostclient import FORGE_ERRORS
+from fr.hostclient import FORGE_ERRORS, forge_error_kind
 from fr.labels import FR_AWAITING_LIVE, FR_OWED, LabelDef, gate_label
 
 OPEN_FIELDS = "number,title,body,labels,author"
@@ -36,6 +36,8 @@ class ApplyRefusedError(BackfillError):
 class EntryResult:
     key: str
     actions: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    """Informational lines; never a write, so `ApplyReport.writes` does not count them."""
     skipped: str | None = None
     error: str | None = None
     discharge: str | None = None
@@ -47,7 +49,8 @@ class EntryResult:
             return f"  {self.key}: skipped: {self.skipped}"
         if self.discharge:
             return f"  {self.key}: {self.discharge}"
-        return f"  {self.key}: {'; '.join(self.actions) or 'nothing to do'}"
+        said = "; ".join([*self.actions, *self.notes])
+        return f"  {self.key}: {said or 'nothing to do'}"
 
 
 @dataclass
@@ -126,6 +129,13 @@ class _Apply:
         self.w = _Writer(client, repo)
         self.me = ""
         self.open: list[dict[str, Any]] = []
+        self._runs: dict[str, list[str]] | None = None
+
+    def run_for(self, head_ref: str) -> str | None:
+        """The run naming *head_ref*; the cursors are read once per apply (p2-r8)."""
+        if self._runs is None:
+            self._runs = trackers.runs_by_head(self.root)
+        return trackers.run_for_head(self.root, head_ref, index=self._runs)
 
     def read(self) -> None:
         """The facts every tracker decision needs; read before the first write."""
@@ -139,9 +149,13 @@ class _Apply:
                 "exists yet, and would file duplicates"
             )
 
-    def owned(self, key: str) -> dict[str, Any] | None:
+    def owned_all(self, key: str) -> list[dict[str, Any]]:
         hits = [i for i in self.open if owned_owed_key(i, self.me) == key]
-        return min(hits, key=lambda i: int(i["number"])) if hits else None
+        return sorted(hits, key=lambda i: int(i["number"]))
+
+    def owned(self, key: str) -> dict[str, Any] | None:
+        hits = self.owned_all(key)
+        return hits[0] if hits else None
 
     def _authored(self, comments: list[dict[str, Any]]) -> list[str]:
         return [str(c.get("body") or "") for c in comments if c.get("author") == self.me]
@@ -187,7 +201,9 @@ class _Apply:
                 return i, ""
         try:
             state = str(self.client.view_issue(self.repo, n).get("state") or "").upper()
-        except Exception:  # noqa: BLE001 — any failure to read it means it cannot be adopted
+        except _FAILURES as exc:
+            if forge_error_kind(exc) != "info":
+                raise  # only a not-found reads as "does not exist"; the rest is the entry's error
             return None, f"adopt target {ref} does not exist"
         if state == "CLOSED":
             return None, f"adopt target {ref} is closed"
@@ -211,12 +227,19 @@ class _Apply:
             marker = trackers.fr_gate_marker(str(existing.get("body") or ""))
             if marker is not None and marker != (gate, pr):
                 res.skipped = (
-                    f"fr-owned tracker {self.repo}#{existing['number']} names PR #{marker[1]} "
-                    f"({marker[0]}), not #{pr} ({gate})"
+                    f"fr-owned tracker {self.repo}#{existing['number']} names gate:{marker[0]} "
+                    f"pr:{marker[1]}, not gate:{gate} pr:{pr}; fix the plan entry's gate or "
+                    "close the tracker, then re-run"
                 )
                 return
         own_open = tracked and adopt_ref is None and e.issue is not None and issue_state == "OPEN"
         own_open = own_open and e.key.startswith("issue:")
+        if own_open:
+            res.skipped = (
+                f"{e.key} is itself open: adopt it (decision: adopt {e.key.removeprefix('issue:')})"
+                " or give the manifest entry an issue:"
+            )
+            return
         view = self.client.pr_view(self.repo, pr)
         if str(view.get("state") or "") != "MERGED":
             res.skipped = f"PR #{pr} is {view.get('state') or 'unknown'}, not merged"
@@ -233,10 +256,7 @@ class _Apply:
             res.actions.append(f"PR #{pr}: + {gate_label(gate).name}")
         if not tracked:
             return
-        if own_open:
-            res.actions.append(f"{e.key} is itself open: adopt it to label it; no tracker filed")
-            return
-        run_id = trackers.run_for_head(self.root, str(view.get("head_ref") or ""))
+        run_id = self.run_for(str(view.get("head_ref") or ""))
         extra = [FR_AWAITING_LIVE] if e.walk_only else []
         if target is not None:
             ref = self._adopt(e, target, pr, gate, run_id, extra, res)
@@ -280,10 +300,10 @@ class _Apply:
         if missing:
             self.w.issue_labels(n, missing)
             res.actions.append(f"{ref}: + {', '.join(lab.name for lab in missing)}")
-        dup = self.owned(e.key)
-        if dup is not None and dup.get("number") != n:
-            self.w.close(int(dup["number"]), f"Duplicate of {ref}; tracking moved there.")
-            res.actions.append(f"closed duplicate {self.repo}#{dup['number']}")
+        for dup in self.owned_all(e.key):
+            if dup.get("number") != n:
+                self.w.close(int(dup["number"]), f"Duplicate of {ref}; tracking moved there.")
+                res.actions.append(f"closed duplicate {self.repo}#{dup['number']}")
         return ref
 
     def _link(self, e: PlanEntry, ref: str, res: EntryResult) -> None:

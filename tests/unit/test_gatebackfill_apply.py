@@ -12,7 +12,7 @@ from fr.gatebackfill.apply import ApplyRefusedError, ApplyReport, apply_plan
 from fr.gatebackfill.model import PlanEntry, PlanFile, PrHit
 from fr.ghclient import UnsupportedForgeOperation
 
-from tests.unit.fakes import FakeGhClient
+from tests.unit.fakes import FakeGhClient, FakeGhError
 from tests.unit.gatebackfill_fixtures import REPO, STRANGER
 
 KEY = "plan:2026-04-02-fleet#p3"
@@ -127,7 +127,9 @@ def test_a_marker_less_owned_tracker_is_rewritten_and_another_prs_is_skipped() -
     other = "plan:2026-05-01-other#p1"
     tracker(fresh, 6, t.tracker_body(other, "x", "devops", 42))
     rep = run(fresh, entry(other, pr=41))
-    assert "names PR #42" in (rep.results[0].skipped or "")
+    why = rep.results[0].skipped or ""
+    assert "names gate:devops pr:42" in why and "not gate:devops pr:41" in why
+    assert "fix the plan entry's gate or close the tracker, then re-run" in why
     assert fresh.attempted_mutations == 0
 
 
@@ -298,3 +300,97 @@ def test_an_issue_whose_marker_someone_else_wrote_is_never_reused() -> None:
     run(c, entry())
     assert c.issues[(REPO, 8)].body.startswith("text") and (REPO, 1) in c.issues
     assert not [kw for n, kw in c.calls if n in ("edit_issue_body", "close_issue")]
+
+
+# --- the review fixes (p2-r2 .. r8) --------------------------------------------------------
+
+
+def test_p2_r2_a_bare_owed_on_an_open_issue_key_writes_nothing_and_says_how_to_adopt() -> None:
+    c = client()
+    foreign(c, 8)
+    e = entry(f"issue:{REPO}#8", issue=8)
+    rep = run(c, e)
+    assert c.attempted_mutations == 0 and rep.writes == 0
+    assert "adopt it (decision: adopt" in (rep.results[0].skipped or "")
+    assert "give the manifest entry an issue:" in (rep.results[0].skipped or "")
+
+
+def test_p2_r2_notes_are_not_writes() -> None:
+    from fr.gatebackfill.apply import EntryResult
+
+    rep = ApplyReport(results=[EntryResult("k", actions=["a"], notes=["n1", "n2"])])
+    assert rep.writes == 1 and "n1" in rep.lines()[0]
+
+
+def test_p2_r2_adopting_the_open_issue_key_is_the_idempotent_route() -> None:
+    c = client()
+    foreign(c, 8)
+    e = entry(f"issue:{REPO}#8", issue=8, decision=f"adopt {REPO}#8")
+    run(c, e)
+    assert c.attempted_mutations > 0
+    before = c.attempted_mutations
+    assert run(c, e).writes == 0 and c.attempted_mutations == before
+
+
+def test_p2_r4_only_a_not_found_reads_as_does_not_exist() -> None:
+    class Flaky(FakeGhClient):
+        def view_issue(self, repo: str, number: int) -> dict[str, Any]:
+            raise FakeGhError("HTTP 500: server error")
+
+    c = Flaky()
+    c.add_pr(REPO, 41, state="MERGED")
+    rep = run(c, entry(decision=f"adopt {REPO}#99"))
+    assert rep.failed == 1 and "500" in (rep.results[0].error or "")
+    assert rep.results[0].skipped is None
+
+
+def test_p2_r5_every_fr_owned_duplicate_is_closed_in_one_run() -> None:
+    c = client()
+    foreign(c, 8)
+    tracker(c, 5, t.tracker_body(KEY, "x", "devops", 41))
+    tracker(c, 6, t.tracker_body(KEY, "x", "devops", 41))
+    run(c, entry(decision=f"adopt {REPO}#8"))
+    assert c.issues[(REPO, 5)].state == "CLOSED" and c.issues[(REPO, 6)].state == "CLOSED"
+    before = c.attempted_mutations
+    assert run(c, entry(decision=f"adopt {REPO}#8")).writes == 0
+    assert c.attempted_mutations == before
+
+
+def test_p2_r7_a_foreign_comment_with_a_valid_adopt_marker_is_not_trusted() -> None:
+    c = client()
+    foreign(c, 8)
+    c.issue_comments[(REPO, 8)] = [{"body": t.adopt_comment(KEY, "devops", 41), "author": STRANGER}]
+    run(c, entry(decision=f"adopt {REPO}#8"))
+    mine = [kw for n, kw in c.calls if n == "comment_issue"]
+    assert len(mine) == 1 and t.fr_adopt_marker(mine[0]["body"]) == (KEY, "devops", 41)
+
+
+def test_p2_r7_the_same_holds_for_an_open_issue_key_adopted() -> None:
+    c = client()
+    foreign(c, 8)
+    ikey = f"issue:{REPO}#8"
+    c.issue_comments[(REPO, 8)] = [
+        {"body": t.adopt_comment(ikey, "devops", 41), "author": STRANGER}
+    ]
+    run(c, entry(ikey, issue=8, decision=f"adopt {REPO}#8"))
+    assert len([1 for n, _ in c.calls if n == "comment_issue"]) == 1
+
+
+def test_p2_r8_the_cursors_are_read_once_per_apply(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import fr.run.cursors as cursors
+
+    calls: list[Path] = []
+
+    def counting(root: Path) -> list[Path]:
+        calls.append(root)
+        return []
+
+    monkeypatch.setattr(cursors, "all_cursors", counting)
+    c = client(41, 42, 43)
+    run(
+        c, entry(), entry("plan:2026-05-01-w#p1", pr=42), entry("plan:2026-06-01-a#p2", pr=43),
+        tmp=tmp_path,
+    )  # fmt: skip
+    assert len(calls) == 1

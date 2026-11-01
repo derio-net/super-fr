@@ -373,6 +373,7 @@ def backfill_command(
     except OSError as exc:
         refuse(f"plan file {path} cannot be written: {exc}")
     text, refusals = render.summary(entries, plan_file=path, notes=notes, root=root)
+    refusals += render.open_issue_refusals(entries, {c.key: c.source for c in cands})
     typer.echo(text)
     if refusals:
         for r in refusals:

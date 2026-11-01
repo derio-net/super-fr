@@ -58,23 +58,32 @@ def fr_adopt_marker(body: str) -> tuple[str, str, int] | None:
     return (m.group("key"), m.group("gate"), int(m.group("pr"))) if m else None
 
 
-def run_for_head(root: Path, head_ref: str) -> str | None:
-    """The one run whose cursor names *head_ref* as its branch; `None` when none or several do
-    (or a cursor cannot be read): the printed command then falls back to `--no-run-evidence`,
-    and `fr gate pass` itself refuses if a run does name the branch."""
+def runs_by_head(root: Path) -> dict[str, list[str]]:
+    """Every readable cursor's run id, by the branch it names: read once, then asked per entry."""
     from fr.run.cursors import all_cursors
     from fr.run.model import RunStateError, parse_run_state
 
-    if not head_ref:
-        return None
-    found = []
+    index: dict[str, list[str]] = {}
     for path in all_cursors(root):
         try:
             state = parse_run_state(path.read_text())
         except (RunStateError, OSError):
             continue
-        if state.branch == head_ref:
-            found.append(state.run)
+        if state.branch:
+            index.setdefault(state.branch, []).append(state.run)
+    return index
+
+
+def run_for_head(
+    root: Path, head_ref: str, *, index: dict[str, list[str]] | None = None
+) -> str | None:
+    """The one run whose cursor names *head_ref* as its branch; `None` when none or several do
+    (or a cursor cannot be read): the printed command then falls back to `--no-run-evidence`,
+    and `fr gate pass` itself refuses if a run does name the branch. *index* is `runs_by_head`'s,
+    for a caller asking about many heads."""
+    if not head_ref:
+        return None
+    found = (index if index is not None else runs_by_head(root)).get(head_ref, [])
     return found[0] if len(found) == 1 else None
 
 

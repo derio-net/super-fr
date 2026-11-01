@@ -289,3 +289,33 @@ def test_p1_r13_a_marker_key_that_is_a_path_never_reaches_the_filesystem(
 
     assert not any(".." in k for k in cands) and not any(".." in n for n in seen)
     assert any("plan:../../x#p1" in n and "dropped" in n for n in notes)
+
+
+def test_p2_r3_a_manifest_cannot_take_back_a_key_a_row_holds_even_with_a_tracker(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r3", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [issue(72, "ours", "x\n\n<!-- fr-owed:row:r3 -->")]
+    manifest = parse_manifest("schema: 1\nitems:\n  - {key: 'row:r3', kind: walk, title: t}\n")
+
+    cands, _ = _collect(repo, forge)
+    assert cands["row:r3"].tracker_ref == f"{REPO}#72"
+    with pytest.raises(BackfillError, match="row:r3"):
+        _collect(repo, forge, manifest=manifest)
+
+
+def test_p2_r3_a_manifest_takes_back_a_key_only_fr_s_tracker_holds(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [issue(72, "ours", "x\n\n<!-- fr-owed:row:gap -->")]
+    manifest = parse_manifest(
+        "schema: 1\nitems:\n  - {key: 'row:gap', kind: audit-gap, title: t, gate: devops}\n"
+    )
+
+    cands, _ = _collect(repo, forge, manifest=manifest)
+
+    assert cands["row:gap"].source == "manifest" and cands["row:gap"].gate == "devops"

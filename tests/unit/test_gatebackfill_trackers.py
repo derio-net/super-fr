@@ -87,4 +87,6 @@ def test_discharge_command_per_key_kind(tmp_path: Path) -> None:
     )  # fmt: skip
     append_journal_entry(journal_path(tmp_path, "spec", "some-slug"), "some-slug", entry)
     got = t.discharge_command(key, repo_root=tmp_path)
-    assert got.startswith("fr journal resolve --scope spec --slug some-slug --id owed-1 --state fixed")
+    assert got.startswith(
+        "fr journal resolve --scope spec --slug some-slug --id owed-1 --state fixed"
+    )

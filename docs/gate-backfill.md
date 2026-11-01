@@ -57,8 +57,12 @@ how a second `--yes` knows what is already done: it makes no forge write.
 fr reuses, rewrites and closes only trackers `owned_owed_key` accepts: written by the account fr
 acts as, labelled `fr:owed`, last line an owed marker. Any other issue is touched only through an
 explicit `adopt`, by one comment and labels (`fr:owed`, plus `fr:awaiting-live` when only a walk
-remains); its body is never edited and it is never closed. Adopting while an fr-owned tracker holds
-the key closes that one as a duplicate. A PR already carrying `gate:<g>-passed` gets no write and
+remains); its body is never edited and it is never closed. Adopting while fr-owned trackers hold
+the key closes every one of them as a duplicate. A bare `owed` on an `issue:` key that is itself an
+open issue is refused at the dry run (it would file nothing and leave no marker): adopt it, or give
+the manifest entry an `issue:`. An entry whose fr-owned tracker names another gate or PR than the
+plan's is skipped, and the line says why: fix the plan entry's gate or close the tracker, then
+re-run. A PR already carrying `gate:<g>-passed` gets no write and
 no tracker; the run prints the command that discharges the owed key itself (`set-status --walk` for a row,
 `closeout outcome --ran` for a spec step, the `--tick` lines for a plan phase, `journal resolve` for
 a journal entry, "close it by hand" for an issue), never `fr gate pass`.

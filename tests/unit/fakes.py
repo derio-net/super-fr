@@ -136,6 +136,8 @@ class FakeGhClient:
     # ---- read methods ----
 
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
+        if (repo, number) not in self.issues:
+            raise FakeGhError(f"HTTP 404: issue {repo}#{number} not found")
         i = self.issues[(repo, number)]
         return {
             "state": i.state,

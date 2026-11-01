@@ -316,9 +316,15 @@ def collect_candidates(
     adopted = {r for e in (previous.entries if previous else []) if (r := e.adopt_ref)}
     by_ref = {str(i.get("ref")): i for i in issues}
     man = {m.key: m for m in (manifest.items if manifest else [])}
-    fold_keys = {o.key for o in report.owed}
+    fold_source = {o.key: o.source for o in report.owed}
+
+    def _taken_back(key: str) -> bool:
+        """A manifest may take a key back only when the fold holds it through fr's own tracker
+        alone (source `issue`); a row, plan or journal that also has a tracker keeps it (p2-r3)."""
+        return key in man and fold_source.get(key) == "issue" and key in owned_trackers
+
     for key in man:
-        if key in fold_keys and key not in owned_trackers:
+        if key in fold_source and not _taken_back(key):
             raise BackfillError(
                 f"manifest entry {key}: `fr debt` already holds this key; drop it from the manifest"
             )
@@ -326,9 +332,7 @@ def collect_candidates(
     # a key held only by fr's own tracker (filed by an earlier `--yes`) is the manifest's again:
     # the manifest supplies its gate and PR, so a second `--yes` over it stays idempotent (R7)
     sources: list[tuple[str, str, str, str, str]] = [
-        (o.key, o.source, o.title, o.how, o.ref)
-        for o in report.owed
-        if not (o.key in man and o.key in owned_trackers)
+        (o.key, o.source, o.title, o.how, o.ref) for o in report.owed if not _taken_back(o.key)
     ]
     sources += [(m.key, "manifest", m.title, "", "") for m in man.values()]
     sources = [src for src in sources if _key_usable(src[0], notes)]

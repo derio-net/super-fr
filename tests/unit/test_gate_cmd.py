@@ -344,3 +344,26 @@ def test_yes_refuses_an_unreadable_services_declaration_before_any_write(
 
     assert result.exit_code == 2 and "services declaration" in result.output
     assert fake.attempted_mutations == 0
+
+
+def test_a_bare_owed_on_an_open_issue_key_is_refused_at_the_dry_run(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    """p2-r2: an open `issue:` candidate files no tracker, so `owed` is only valid as `adopt`."""
+    import yaml
+
+    _root, fake = backfill_env
+    plan = tmp_path / "home" / ".cache/fr/gate-backfill/example-org--widgets/plan.yaml"
+    fake.add_issue(BACKFILL_REPO, 8, labels={"fr:owed"}, body="please do it")
+    fake.issue_authors[(BACKFILL_REPO, 8)] = "some-stranger"
+
+    assert CliRunner().invoke(app, ["gate", "backfill"]).exit_code == 0
+    data = yaml.safe_load(plan.read_text())
+    data["entries"][0]["decision"] = "owed"
+    plan.write_text(yaml.safe_dump(data))
+
+    result = CliRunner().invoke(app, ["gate", "backfill"])
+
+    assert f"issue:{BACKFILL_REPO}#8" in result.output
+    assert result.exit_code == 2, result.output
+    assert "adopt it" in result.output and "give the manifest entry an issue:" in result.output
