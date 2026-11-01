@@ -17,8 +17,9 @@ what this checkout recorded. It never runs a probe.
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
 import typer
 
@@ -26,7 +27,14 @@ from fr.gates import GATES, POST_MERGE_GATES
 from fr.ghclient import UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.labels import gate_label, held_gates
-from fr.verification.labels import gate_pass_comment, pass_gate
+from fr.run.cursors import all_cursors
+from fr.verification.labels import (
+    GATE_PASS_MARKER,
+    CloseReport,
+    close_gate_trackers,
+    gate_pass_comment,
+    pass_gate,
+)
 
 if TYPE_CHECKING:
     from fr.run.model import RunState
@@ -44,15 +52,6 @@ _FORGE_FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeO
 NO_RUN_EVIDENCE = "--no-run-evidence"
 
 
-def _cursors(root: Path) -> list[Path]:
-    """Every run cursor this checkout holds, live then archived (R14: archived runs count)."""
-    from fr.record.model import RUNS_REL
-    from fr.run.model import IMPLEMENTED_RUNS_REL
-
-    dirs = (root / RUNS_REL, root / IMPLEMENTED_RUNS_REL)
-    return [p for d in dirs if d.is_dir() for p in sorted(d.glob("*.yaml"))]
-
-
 class RunLookupError(Exception):
     """A named run this checkout does not hold, or cannot read."""
 
@@ -62,7 +61,7 @@ def find_run(root: Path, run: str) -> RunState:
     naming why when it is absent or unreadable. `fr ops gate` reads it too."""
     from fr.run.model import RunStateError, parse_run_state
 
-    for path in _cursors(root):
+    for path in all_cursors(root):
         if path.stem == run:
             try:
                 return parse_run_state(path.read_text())
@@ -85,7 +84,7 @@ def _run_for(root: Path, run: str | None, head_ref: str) -> RunState | None:
         except RunLookupError as exc:
             _refuse(str(exc))
     found = []
-    for path in _cursors(root):
+    for path in all_cursors(root):
         try:
             state = parse_run_state(path.read_text())
         except (RunStateError, OSError) as exc:
@@ -162,6 +161,35 @@ def _repo_root() -> Path | None:
         return None
 
 
+def _require_fr_pass(client: Any, repo: str, pr: int, gate: str, passed: str) -> None:
+    """Refuse (exit 2) a retry unless we commented `fr:gate-pass <gate>` on the PR."""
+    marker = f"{GATE_PASS_MARKER}{gate} -->"
+    try:
+        me = client.viewer_login()
+        comments = client.list_issue_comments(repo, pr)  # a PR is an issue on GitHub
+    except UnsupportedForgeOperation as exc:
+        _refuse(f"cannot read the comments of PR #{pr} to confirm fr passed {gate}: {exc}")
+        return
+    except _FORGE_FAILURES as exc:
+        _refuse(f"cannot read the comments of PR #{pr} of {repo}: {exc}")
+        return
+    if me and any(
+        c.get("author") == me and str(c.get("body") or "").lstrip().startswith(marker)
+        for c in comments
+    ):
+        return
+    _refuse(
+        f"{passed} on #{pr} was not set by fr gate pass (no fr:gate-pass comment by "
+        f"{me or 'the viewer'}): nothing to retry"
+    )
+
+
+def _echo_close(report: CloseReport) -> None:
+    """Print what a pass closed (or would), the discharge commands, and any tracker error."""
+    for line in report.lines():
+        typer.echo(line, err=line.startswith("tracker error"))
+
+
 def release_command(repo: str) -> str:
     """The dispatch that cuts the final once the last gate passed (R20)."""
     return f"gh workflow run {RELEASE_WORKFLOW} --repo {repo}"
@@ -236,6 +264,20 @@ def pass_command(
     if state != "MERGED":
         _refuse(f"PR #{pr} of {repo} is {state}, not merged: a post-merge gate passes on a merge")
     labels = {str(n) for n in view.get("labels") or []}
+    if held not in labels and passed in labels:
+        # R12's retry: the gate already passed, so only the tracker close is owed. But only
+        # when fr passed it (p3-r3): a label set by hand proves nothing was recorded.
+        _require_fr_pass(client, repo, pr, gate, passed)
+        typer.echo(f"gate {gate} already passed on #{pr}; closing its trackers")
+        report = close_gate_trackers(
+            client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes
+        )
+        _echo_close(report)
+        if not yes:
+            typer.echo("nothing done; re-run with --yes to act")
+        elif report.errors:
+            raise typer.Exit(code=1)
+        return
     if held not in labels:
         have = ", ".join(sorted(n for n in labels if n.startswith("gate:"))) or "no gate label"
         _refuse(f"PR #{pr} of {repo} does not carry {held} ({have}): nothing to pass")
@@ -253,9 +295,146 @@ def pass_command(
             typer.echo(f"fr gate pass: the forge refused: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         typer.echo(f"passed: PR #{pr} now carries {passed}")
+    report = close_gate_trackers(client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes)
+    _echo_close(report)
+    if yes and report.errors:
+        again = f"fr gate pass --pr {pr} --gate {gate} --notes {shlex.quote(notes)}"
+        again += f" --repo {shlex.quote(repo)}"
+        if forge_host != "github.com":
+            again += f" --host {shlex.quote(forge_host)}"
+        typer.echo(f"re-run `{again} --yes` to retry the close")
     if left:  # p4-r9: no final while a post-merge gate still holds this PR
         typer.echo(f"{', '.join(f'gate:{g}' for g in left)} still holds PR #{pr}: no release yet")
     else:
         typer.echo(f"release: this was the PR's last gate; cut the final: {release_command(repo)}")
     if not yes:
         typer.echo("nothing done; re-run with --yes to act")
+
+
+@gate_app.command("backfill")
+def backfill_command(
+    from_: Annotated[
+        Path | None,
+        typer.Option("--from", help="An operator manifest (YAML) of items fr cannot infer."),
+    ] = None,
+    plan: Annotated[
+        Path | None,
+        typer.Option(
+            "--plan",
+            help="The plan file; default $HOME/.cache/fr/gate-backfill/<owner--repo>/plan.yaml.",
+        ),
+    ] = None,
+    stale_days: Annotated[
+        int | None,
+        typer.Option("--stale-days", help="A manual phase idle longer defaults to review."),
+    ] = None,
+    repo: Annotated[
+        str | None,
+        typer.Option("--repo", help="OWNER/REPO; must agree with this checkout's origin."),
+    ] = None,
+    host: Annotated[
+        str | None,
+        typer.Option("--host", help="The forge host; default: the origin's, else github.com."),
+    ] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Apply the plan file to the forge.")] = False,
+) -> None:
+    """Bring pre-v6 owed work into the gate lanes. Without --yes: read the forge, write the
+    plan file outside the repo, print every candidate and the repo-file commands (R1)."""
+    from datetime import UTC, datetime
+
+    from fr.archive import merge_evidence
+    from fr.archive_followups import owed_identity
+    from fr.gatebackfill import delivery, render
+    from fr.gatebackfill.candidates import collect_candidates
+    from fr.gatebackfill.forge import ClientBackfillForge, Git
+    from fr.gatebackfill.model import (
+        BackfillError,
+        PlanFile,
+        load_plan,
+        merge_plan,
+        parse_manifest,
+        plan_path,
+        write_plan,
+    )
+
+    def refuse(message: str) -> NoReturn:
+        typer.echo(f"fr gate backfill: {message}", err=True)
+        raise typer.Exit(code=2)
+
+    root = _repo_root()
+    if root is None:
+        refuse("run this from the repo's checkout")
+    identity, why = owed_identity(root)
+    if identity is None:
+        refuse(f"cannot name this repo: {why}")
+    if repo is not None and repo.lower() != identity.lower():
+        refuse(f"--repo {repo} disagrees with this checkout's origin {identity}")
+    tracking = ""
+    if yes:
+        from fr.services import ServicesError
+        from fr.services.resolve import resolve_tracking
+
+        try:
+            tracking = resolve_tracking(root).type
+        except ServicesError as exc:
+            refuse(f"the services declaration cannot be read, nothing was written: {exc}")
+    _, forge_host = resolve_target(identity, host, root)
+    path = plan_path(identity, plan)
+    try:
+        manifest = parse_manifest(from_.read_text()) if from_ is not None else None
+        previous = load_plan(path)
+        if yes and previous is None:
+            refuse(f"no plan file at {path}: run the dry run first and review it")
+        if previous is not None and previous.repo.lower() != identity.lower():
+            refuse(f"plan file {path} names {previous.repo}, not {identity}")
+        client = client_for_url(f"https://{forge_host}/{identity}")
+        forge = ClientBackfillForge(client, cwd=root, repo=identity)
+        now = datetime.now(UTC)
+        evidence = merge_evidence(root, fetch=False)
+        cands, notes = collect_candidates(
+            root, forge=forge, now=now, manifest=manifest, previous=previous,
+            stale_days=stale_days, evidence=evidence,
+        )  # fmt: skip
+    except (BackfillError, OSError, *_FORGE_FAILURES) as exc:  # type: ignore[misc]
+        refuse(str(exc))
+    ref = evidence.ref.ref if evidence.ref else None
+    git = Git(root)
+    fresh = []
+    cache = delivery.DeliveryCache()
+    for c in cands:
+        got = delivery.delivering_pr(c, root=root, forge=forge, git=git, ref=ref, cache=cache)
+        fresh.append(
+            c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else "")
+        )
+    if yes:
+        from fr.gatebackfill.apply import ApplyRefusedError, apply_plan
+
+        try:
+            report = apply_plan(root, previous, fresh, client, repo=identity, tracking=tracking)
+        except ApplyRefusedError as exc:
+            refuse(str(exc))
+        typer.echo(f"Applied {path} to {identity} (tracking: {tracking})")
+        for line in report.lines():
+            typer.echo(line)
+        typer.echo(f"{report.writes} change(s), {report.failed} failed")
+        if report.failed:
+            raise typer.Exit(code=1)
+        return
+    entries = merge_plan(previous, fresh)
+    try:
+        write_plan(
+            path,
+            PlanFile(
+                repo=identity, generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), entries=entries
+            ),
+        )
+    except OSError as exc:
+        refuse(f"plan file {path} cannot be written: {exc}")
+    text, refusals = render.summary(entries, plan_file=path, notes=notes, root=root)
+    refusals += render.open_issue_refusals(entries, {c.key: c.source for c in cands})
+    typer.echo(text)
+    if refusals:
+        for r in refusals:
+            typer.echo(f"fr gate backfill: {r}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo("nothing written to the forge; edit the plan file's decisions, then re-run")

@@ -252,6 +252,17 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`commands/debt_cmd.py`), read-only, so `debt` is in `READ_ONLY_COMMANDS`;
     `fr acceptance digest` re-renders the report's Acceptance section. `DEBT_STATUSES`
     (`acceptance/model.py`) is the one status set `open_rows`, status and the digest count.
+  - **`fr/gatebackfill`** (2026-11-01 spec, `gate-backfill`) — brings pre-v6 owed work
+    into the gate lanes, per repo: `fr gate backfill` (`commands/gate_cmd.py`) reads the
+    forge and writes a plan file OUTSIDE the repo (`$HOME/.cache/fr/gate-backfill/<owner--repo>/plan.yaml`,
+    so `gate` stays forge-only and in `READ_ONLY_COMMANDS`); `--yes` applies it. `candidates.py`
+    (the debt fold plus the operator manifest), `delivery.py` (the evidence chain to the merged
+    PR), `model.py` (strict plan file and manifest), `render.py` (summary and the repo-file
+    commands), `forge.py` (the read port and `Git`), `trackers.py` (the two marker lines
+    `fr_gate_marker` reads, the adopt/link markers, the printed `fr gate pass` command) and
+    `apply.py` (`apply_plan`: every forge write through the one `GhClient`, labels ensured
+    lazily, idempotent, only `owned_owed_key`-accepted trackers reused or closed; an adopted
+    foreign issue gets a comment and labels only). Operator doc: `docs/gate-backfill.md`.
   - **`fr/record`** (2026-09-25 spec, `lean-cost-aware-process` §5.C) — step
     records: one YAML per agent step at
     `docs/superpowers/runs/<run-id>.records/<step>[__<item>].yaml` (artifact kind

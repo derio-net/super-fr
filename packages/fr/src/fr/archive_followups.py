@@ -52,6 +52,7 @@ __all__ = [
     "owed_ends",
     "owed_identity",
     "owed_marker",
+    "is_owned_issue",
     "owned_owed_key",
     "write_manual_owed",
     "write_owed_back",
@@ -422,27 +423,31 @@ def _matrix_identity(repo_root: Path) -> str | None:
     return None
 
 
-def owned_owed_key(issue: dict[str, object], me: str) -> str | None:
-    """The owed key an open issue stands for, when it is one fr may act on —
-    THE predicate reuse (`fr archive`) and closing (`fr journal resolve`) share
-    (review p3-r4): written by this account, labelled `fr:owed`, a numeric
-    `number`, and its LAST line exactly an owed marker. `None` otherwise."""
+def is_owned_issue(issue: dict[str, object], me: str) -> bool:
+    """Whether fr wrote this issue: authored by *me* (a non-empty login) and labelled
+    `fr:owed`. The author/label half of `owned_owed_key`, shared with `fr gate backfill`."""
     from fr.labels import FR_OWED
 
     author = issue.get("author")
     login = author.get("login") if isinstance(author, dict) else author
-    number = issue.get("number")
-    body = str(issue.get("body") or "").rstrip()
     raw_labels = issue.get("labels")
     labels = {
         str(lab.get("name", "")) if isinstance(lab, dict) else str(lab)
         for lab in (raw_labels if isinstance(raw_labels, list) else [])
     }
-    if not me or login != me or not body:
+    return bool(me) and login == me and FR_OWED.name in labels
+
+
+def owned_owed_key(issue: dict[str, object], me: str) -> str | None:
+    """The owed key an open issue stands for, when it is one fr may act on —
+    THE predicate reuse (`fr archive`) and closing (`fr journal resolve`) share
+    (review p3-r4): written by this account, labelled `fr:owed`, a numeric
+    `number`, and its LAST line exactly an owed marker. `None` otherwise."""
+    number = issue.get("number")
+    body = str(issue.get("body") or "").rstrip()
+    if not body or not is_owned_issue(issue, me):
         return None
     if not isinstance(number, int) or isinstance(number, bool):
-        return None
-    if FR_OWED.name not in labels:
         return None
     m = _OWED_MARKER_LINE.match(body.splitlines()[-1].strip())
     return m.group(1) if m else None

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.gatebackfill.close import CloseReport, close_gate_trackers
 from fr.gates import POST_MERGE_GATES
 from fr.ghclient import GhClient, HostRefusedError, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for
@@ -30,11 +31,13 @@ if TYPE_CHECKING:
     from fr.run.model import RunState
 
 __all__ = [
+    "CloseReport",
     "ForgeUndeterminable",
     "LabelSyncError",
     "PrNotFound",
     "SyncOutcome",
     "GATE_PASS_MARKER",
+    "close_gate_trackers",
     "desired_labels",
     "gate_pass_comment",
     "pass_gate",

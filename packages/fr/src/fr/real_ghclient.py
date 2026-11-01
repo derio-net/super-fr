@@ -398,6 +398,10 @@ class RealGhClient:
         return _gh.list_prs_by_head(repo=repo, branch=branch)
 
     @_hosted
+    def prs_for_commit(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        return _gh.prs_for_commit(repo=repo, sha=sha)
+
+    @_hosted
     def ref_kind(self, repo: str, number: int) -> Literal["issue", "pr"] | None:
         payload = json.loads(_gh._run_gh(["api", f"repos/{repo}/issues/{number}"]) or "null")
         if not isinstance(payload, dict):
@@ -668,6 +672,13 @@ class RealGhClient:
     @_hosted
     def list_open_prs(self, repo: str, limit: int) -> list[dict[str, Any]]:
         return cast("list[dict[str, Any]]", _gh.list_open_prs(repo=repo, limit=limit))
+
+    @_hosted
+    def list_merged_prs_by_label(self, repo: str, label: str, limit: int) -> list[dict[str, Any]]:
+        return cast(
+            "list[dict[str, Any]]",
+            _gh.list_merged_prs_by_label(repo=repo, label=label, limit=limit),
+        )
 
     @_hosted
     def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:

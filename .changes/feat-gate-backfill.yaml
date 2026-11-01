@@ -1,0 +1,2 @@
+bump: minor
+summary: fr gate backfill brings pre-v6 owed work into the gate lanes; the board lists gate-labelled merged PRs; fr gate pass closes their trackers

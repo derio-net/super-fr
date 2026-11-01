@@ -1,0 +1,201 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Dry run — candidates, delivering PR, gate, plan file, summary (R1–R5, R11)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - gate-backfill-dry-run-plan
+  - gate-backfill-delivering-pr
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/gatebackfill/*
+  - packages/fr/src/fr/commands/gate_cmd.py
+  - packages/fr/src/fr/run/cursors.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/gh.py
+  - tests/unit/fakes.py
+  - tests/unit/test_gatebackfill_*.py
+  - tests/unit/test_gate_cmd.py
+  - tests/scenarios/gate-backfill-dry-run.sh
+  - tests/scenarios/fixtures/gate-backfill/*
+  - .changes/feat-gate-backfill.yaml
+  - docs/acceptance/*
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Smoke — the `fr gate backfill` verb exists and its dry run writes nothing
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_gate_cmd.py add `test_backfill_is_a_gate_verb_and_dry_run_writes_nothing`:
+      invoke `fr gate backfill --help` through `CliRunner(app)` (exit 0, names `--yes`, `--plan`, `--from`),
+      then a dry run in a `tmp_path` git repo whose origin is `https://github.com/example-org/widgets.git`
+      with an empty v5 matrix, against a FakeGhClient monkeypatched in via `gate_cmd.client_for_url`;
+      assert exit 0 and that the fake recorded no write call (no `ensure_labels`, `edit_*`, `create_*`,
+      `comment_*`, `close_*`). Run `uv run pytest tests/unit/test_gate_cmd.py -q --no-cov -k backfill` — red.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add the `backfill` command to `gate_app` in packages/fr/src/fr/commands/gate_cmd.py with the
+      options of spec §A (`--from`, `--plan`, `--stale-days`, `--repo`, `--host`, `--yes`), resolving the
+      repo through `fr.archive_followups.owed_identity` (refuse, exit 2, when it fails or disagrees with
+      `--repo`). For now it prints "no owed items" and exits 0. Add `.changes/feat-gate-backfill.yaml`
+      (`bump: minor`, summary "fr gate backfill brings pre-v6 owed work into the gate lanes; the board
+      lists gate-labelled merged PRs; fr gate pass closes their trackers"). Re-run the test — green. Commit.
+- number: 2
+  title: Model and plan file (spec §E)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_gatebackfill_model.py — `PlanFile`/`PlanEntry`/`Manifest` are strict pydantic models
+      (`extra="forbid"`, `schema: Literal[1]`); a decision parses from `owed | tick | na | park | review` and
+      `adopt <owner/repo#n>` (anything else refused); `merge_plan(old, candidates)` keeps an existing entry's
+      `decision`, adopt target and operator-written `gate` for keys still owed, refreshes other fields, drops
+      keys no longer owed; `load_plan`/`write_plan` round-trip through `$HOME/.cache/fr/gate-backfill/<owner--repo>/plan.yaml`
+      (monkeypatch HOME) and `--plan` overrides it; a manifest entry duplicating a fold key, an unknown field, or
+      an `audit-gap` without `gate:` is refused naming the entry. Red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/gatebackfill/__init__.py and model.py (Candidate, PlanEntry, PrHit
+      {number, basis, planning}, TrackerInfo {ref, candidates}, PlanFile, Manifest, ManifestItem,
+      `merge_plan`, `load_plan`, `write_plan` via `fr.artifacts.atomic.write_text_atomic`). Green. Commit.
+- number: 3
+  title: Candidates and gates (spec §B, §D)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_gatebackfill_candidates.py over a tmp repo fixture: a walk-owed row → `row:<id>`,
+      gate tester, walk_only; a merged plan with an unticked `[manual]` phase → gate devops; with an unticked
+      agentic phase → gate None, decision review, note "unfinished agentic phase"; an owed Test Plan step
+      `spec:<slug>#step<n>` → tester, and devops when the spec's `## Verification` says `gate: devops`; an
+      `issue:` candidate with no manifest gate → None/review; an `issue:` candidate whose ref is another entry's
+      adopt target is dropped, one carrying a PR marker is dropped, one listed in another entry's
+      `tracker.candidates` defaults to review with "looks like the tracker of <key>"; a manual phase whose plan
+      is older than `stale_days` defaults to review with `age_days` and `ticked` "k/n". Red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/gatebackfill/candidates.py — `collect_candidates(repo_root, *, forge, now,
+      manifest, previous)` over `fr.debt.engine.compute(...).owed` plus the manifest; reads phase headers via
+      the plan parser for `plan:` keys; `gate_for` in the §D table (pure, `exit_for_spec` for `spec:` keys);
+      tracker look-alikes (open issues naming plan slug + `phase <n>`/`p<n>`, the row id, or the manifest
+      issue) from the forge's open-issue list, never auto-adopted. Green. Commit.
+- number: 4
+  title: Delivering PR evidence chain (spec §C)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_gatebackfill_delivery.py with real `git` fixture histories in tmp_path and a fake
+      forge: (a) manifest `pr:` wins, basis manifest; (b) an ARCHIVED run cursor emitting the plan → its
+      branch's merged PR, basis run; (c) a squash commit `feat: x (#12)` that added the plan → #12, basis
+      commit; (d) a merge commit `Merge pull request #34 from …` whose branch added the plan → #34; (e) a
+      subject naming no PR → `prs_for_commit`; on a forge raising `UnsupportedForgeOperation` the step yields
+      nothing; (f) a closed issue → its single merged linked PR, basis issue; (g) two merged PRs at one step
+      → ambiguity listing both, decision review; (h) a hit `pr_view` says is CLOSED is dropped with its reason;
+      (i) a merge whose diff touches only `docs/` → `planning: true`, review; (j) nothing found → unresolved.
+      Red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: move `gate_cmd._cursors` onto a shared `fr.run.cursors.all_cursors(root)` (live then archived) and
+      point `gate_cmd` at it; add `GhClient.prs_for_commit(repo, sha)` to the protocol in packages/fr/src/fr/ghclient.py
+      (unsupported default raising `UnsupportedForgeOperation`), its GitHub implementation in real_ghclient.py /
+      gh.py (`gh api repos/{repo}/commits/{sha}/pulls`) and the REST client, and to tests/unit/fakes.py; write
+      packages/fr/src/fr/gatebackfill/delivery.py (`delivering_pr(candidate, …) -> PrHit | Unresolved |
+      Ambiguous`) using the `(#N)|^Merge pull request #N` pattern and `git diff --name-only <m>^1 <m>` for
+      planning PRs. Green. Commit.
+- number: 5
+  title: Summary, R11 commands and the dry-run CLI (spec §A, §E)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_gatebackfill_render.py — the summary lists every candidate one per line with key,
+      gate, PR+basis and decision, parked ones under a `Parked (n)` heading; the R11 table: a `tick` on a live
+      plan's phase prints one `fr plan edit <plan> --tick P<n>.T<t>.S<s>` per unticked step; `na` on a `spec:`
+      step prints `fr closeout outcome --spec <spec> --step <n> --na --reason "<note>"`; `na` on a `row:` prints
+      `fr acceptance set-status --id <row> --status manual --notes "<note>"`; a `tick` on an archived plan, a
+      `tick` on a `row:`, and an `na` with no note are refused naming the accepted decisions; a not-implemented
+      row whose effective strategy is post-merge prints the `--status walk-owed` line. Extend test_gate_cmd.py:
+      the dry run writes the plan file, keeps an edited decision on re-run, and still writes nothing to the forge. Red.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: packages/fr/src/fr/gatebackfill/render.py and the dry-run path of `gate backfill` (compute →
+      merge → validate → write plan → print summary and commands). A forge read failure degrades its candidate
+      only. Green. Commit.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: dedupe any helper the phase copied (e.g. the PR-subject regex — import it from one fr module
+      rather than re-typing scripts/release.py's), keep gatebackfill pure (no subprocess outside one git port),
+      run `uv run ruff format packages/ tests/ && uv run ruff check packages/ tests/` and `uv run mypy
+      packages/fr/src`. Commit.
+- number: 6
+  title: Dry-run scenario and matrix wiring
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Write tests/scenarios/gate-backfill-dry-run.sh in the style of tests/scenarios/closeout-owed.sh (fresh
+      git repo, bare origin reached through `insteadOf` from `https://github.com/example-org/widgets.git`, a
+      recording `gh` under tests/scenarios/fixtures/gate-backfill/bin/gh answering `pr view`, `pr list`,
+      `issue list`, `api user` and `api …/commits/…/pulls` from fixture JSON): a walk-owed row, a merged plan
+      with an unticked manual phase, a squash-merged delivering commit; assert the plan file names both items
+      with their PR and gate, the summary prints, and the gh log holds no write verb. Run it through
+      `uv run pytest tests/integration/test_scenarios.py -q --no-cov -k gate-backfill`. Then
+      `uv run fr acceptance set-status --id gate-backfill-dry-run-plan --status ci --notes "dry run covered by unit tests and the gate-backfill-dry-run scenario" --level unit=super-fr:tests/unit/test_gatebackfill_render.py --scenario tests/scenarios/gate-backfill-dry-run.sh`
+      and `uv run fr acceptance set-status --id gate-backfill-delivering-pr --status ci --notes "evidence chain unit-tested over fixture histories" --level unit=super-fr:tests/unit/test_gatebackfill_delivery.py`
+      (anchor refs on test names per the acceptance-matrix rule). Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-01T18:22:53+00:00'
+      note: null
+  completion:
+    at: '2026-11-01T18:22:53+00:00'
+    note: null
+    observed_prs: []
