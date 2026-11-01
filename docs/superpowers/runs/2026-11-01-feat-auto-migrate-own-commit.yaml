@@ -3,7 +3,7 @@ run: 2026-11-01-feat-auto-migrate-own-commit
 workflow: fr-goal@1
 branch: feat/auto-migrate-own-commit
 started: '2026-11-01T11:31:57+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -89,7 +89,11 @@ steps:
           visual: none
           findings: p1-full-suite-red-preexisting,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-01T17:24:02+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-full-suite-red-preexisting
   deliver:
     state: pending
 fr_version: 6.0.1rc2
