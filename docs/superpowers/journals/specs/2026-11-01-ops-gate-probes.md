@@ -230,3 +230,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-01-ops-gate-probes-p3 created=2026-11-01T12:01:56+00:00 -->
 ### phase-split-2026-11-01-ops-gate-probes-p3 · decision · ask: fr ops stub and the fr-plan/devops-gate guidance are their own ask (#1273 part 3)
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-01-ops-gate-probes-p1 created=2026-11-01T12:02:02+00:00 -->
+### tier-2026-11-01-ops-gate-probes-p1 · decision · phase 1 moves the ops artifact kind 1->2 (a migration every reader relies on) and adds a refusal to a gate stage
