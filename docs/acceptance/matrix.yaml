@@ -10317,7 +10317,11 @@ rows:
       nag names fr isolation up
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-auto-migrate-own-commit-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_acceptance_nag.py#test_the_gates_commit_notice_is_relayed_first
+      - super-fr:tests/unit/test_hooks_acceptance_nag.py#test_a_stale_refusal_names_the_workspace_way_to_carry_it
+      - super-fr:packages/fr-opencode-plugin/test/nag.test.ts
+    status: ci
+    notes: the hook and nag.ts are pinned by their shell and bun tests in CI
     verify: none
