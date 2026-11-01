@@ -121,39 +121,48 @@ def evidence_lines(out: str, secrets: Iterable[str]) -> str:
     return "; ".join(kept[-EVIDENCE_LINES:])[:EVIDENCE_MAX]
 
 
-_MEMBER = re.compile(r"""^\s*(?:"[^"]*"|'[^']*')\s*:""")
-"""A JSON/YAML member line (`"token": …`), the inside of a pretty-printed body."""
+_STATUS_LINE = re.compile(r"^[^{}\[\]\"'=`<>]*$")
+"""A recordable status line, by ALLOWLIST (security review, second pass): no bracket,
+quote, `=`, backtick or angle bracket anywhere, so no JSON/YAML/XML/env-assignment
+fragment qualifies, however it is indented or wherever on the line it opens."""
+_KEY_VALUE = re.compile(r"^[\w.-]+\s*:(\s|$)")
+"""An unquoted `key: value` line (YAML): data, not status."""
 
 
 def _status_lines(out: str) -> list[str]:
-    """*out*'s lines with every body removed as a BLOCK, not line by line (security
-    review): a line opening `{`/`[` starts a body that runs until its brackets balance,
-    so the members of an indented, multi-line JSON document never survive as lines of
-    their own; a stray member line or a lone closer is dropped too."""
+    """*out*'s lines that may be recorded, failing closed: a line that opens a bracket
+    anywhere starts a block dropped until its brackets balance (so the members of a
+    multi-line body never stand alone), and outside a block only an allowlisted status
+    line (`_STATUS_LINE`, not `_KEY_VALUE`) is kept. "converged 3 of 3" passes; anything
+    shaped like data does not — evidence may come back "no output", never a body."""
     kept: list[str] = []
     depth = 0
     for line in out.splitlines():
         stripped = line.strip()
-        if depth == 0 and not stripped.startswith(("{", "[")):
-            if not _MEMBER.match(stripped) and stripped not in ("}", "]", "},", "],"):
-                kept.append(line)
+        delta = _bracket_delta(stripped)
+        if depth > 0 or delta > 0:
+            depth = max(0, depth + delta)
             continue
-        depth = max(0, depth + _bracket_delta(stripped))
+        if _STATUS_LINE.match(stripped) and not _KEY_VALUE.match(stripped):
+            kept.append(line)
     return kept
 
 
 def _bracket_delta(line: str) -> int:
-    """Net `{`/`[` minus `}`/`]` on *line*, ignoring brackets inside double-quoted strings."""
-    delta, quoted, escaped = 0, False, False
+    """Net `{`/`[` minus `}`/`]` on *line*, ignoring brackets inside single- or
+    double-quoted strings."""
+    delta, quote, escaped = 0, "", False
     for ch in line:
         if escaped:
             escaped = False
         elif ch == "\\":
             escaped = True
-        elif ch == '"':
-            quoted = not quoted
-        elif not quoted and ch in "{[":
+        elif quote:
+            quote = "" if ch == quote else quote
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "{[":
             delta += 1
-        elif not quoted and ch in "}]":
+        elif ch in "}]":
             delta -= 1
     return delta

@@ -210,3 +210,84 @@ def test_status_phase_filter_keeps_a_need_on_an_op_of_the_other_phase(
     result = _status(root, monkeypatch, "--plan", PLAN_REL, "--phase", "post-merge", "--json")
     assert result.exit_code == 1, result.output
     assert [r["op"] for r in json.loads(result.stdout)] == ["rotate"]
+
+
+# --- fr ops stub (spec 2026-11-01-ops-gate-probes R11) -----------------------------------
+
+STUB_SPEC_REL = "docs/superpowers/specs/2026-11-01-s-design.md"
+STUB_SPEC = "# S\n\n## Test Plan\n\n1. [devops] converge `pulumi up --yes`\n2. look at it\n"
+
+
+def _stub_repo(tmp_path: Path, monkeypatch, *, ops: str | None = None, spec: bool = True) -> Path:
+    from types import SimpleNamespace
+
+    root = _repo(tmp_path, ops or OPS)
+    if ops is None:
+        (root / PLAN_REL / "ops.yaml").unlink()
+    if spec:
+        (root / STUB_SPEC_REL).parent.mkdir(parents=True, exist_ok=True)
+        (root / STUB_SPEC_REL).write_text(STUB_SPEC)
+    monkeypatch.setattr(
+        "fr.parser.parse",
+        lambda plan_dir: SimpleNamespace(spec_path=STUB_SPEC_REL if spec else None),
+    )
+    monkeypatch.setattr(
+        "fr.verification.exit.exit_for_spec", lambda *a, **k: SimpleNamespace(gates={"devops"})
+    )
+    monkeypatch.chdir(root)
+    return root
+
+
+def test_stub_prints_and_writes_nothing_without_yes(tmp_path: Path, monkeypatch) -> None:
+    root = _stub_repo(tmp_path, monkeypatch)
+    result = runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL])
+    assert result.exit_code == 0, result.output
+    assert "step-1" in result.output and "(op: step-1)" in result.output
+    assert not (root / PLAN_REL / "ops.yaml").exists()
+    assert (root / STUB_SPEC_REL).read_text() == STUB_SPEC
+
+
+def test_stub_yes_writes_ops_yaml_at_version_2_and_the_spec(tmp_path: Path, monkeypatch) -> None:
+    import yaml
+
+    root = _stub_repo(tmp_path, monkeypatch)
+    result = runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"])
+    assert result.exit_code == 0, result.output
+    data = yaml.safe_load((root / PLAN_REL / "ops.yaml").read_text())
+    assert data["schema_version"] == 2
+    assert data["ops"][0]["id"] == "step-1" and data["ops"][0]["check"] == "TODO"
+    assert "1. [devops] (op: step-1) converge" in (root / STUB_SPEC_REL).read_text()
+
+
+def test_stub_keeps_the_ops_already_declared(tmp_path: Path, monkeypatch) -> None:
+    import yaml
+
+    root = _stub_repo(tmp_path, monkeypatch, ops=OPS)
+    assert runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"]).exit_code == 0
+    ids = [o["id"] for o in yaml.safe_load((root / PLAN_REL / "ops.yaml").read_text())["ops"]]
+    assert ids == ["create-key", "rotate", "step-1"]
+
+
+def test_stub_refuses_a_declared_id_writing_nothing(tmp_path: Path, monkeypatch) -> None:
+    ops = OPS + "  - {id: step-1, summary: s, phase: post-merge, check: 'true'}\n"
+    root = _stub_repo(tmp_path, monkeypatch, ops=ops)
+    result = runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"])
+    assert result.exit_code == 2, result.output
+    assert (root / PLAN_REL / "ops.yaml").read_text() == ops
+    assert (root / STUB_SPEC_REL).read_text() == STUB_SPEC
+
+
+def test_stub_refuses_a_none_acknowledgement(tmp_path: Path, monkeypatch) -> None:
+    ops = "schema_version: 2\nnone: nothing to run\n"
+    root = _stub_repo(tmp_path, monkeypatch, ops=ops)
+    result = runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"])
+    assert result.exit_code == 2, result.output
+    assert (root / PLAN_REL / "ops.yaml").read_text() == ops
+    assert (root / STUB_SPEC_REL).read_text() == STUB_SPEC
+
+
+def test_stub_refuses_a_plan_with_no_spec(tmp_path: Path, monkeypatch) -> None:
+    root = _stub_repo(tmp_path, monkeypatch, spec=False)
+    result = runner.invoke(app, ["ops", "stub", "--plan", PLAN_REL, "--yes"])
+    assert result.exit_code == 2, result.output
+    assert not (root / PLAN_REL / "ops.yaml").exists()

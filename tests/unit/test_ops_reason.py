@@ -13,6 +13,8 @@ from fr.journal.model import journal_path
 from fr.ops.apply import ShellApplier, apply_ops
 from fr.ops.evidence import record_op
 from fr.ops.load import LoadedOp
+import pytest
+
 from fr.ops.mask import clip_output, evidence_lines, passthrough_values, sanitise_reason
 
 from tests.unit.test_ops_apply import FakePrompt, Idents, NoJournal, World, op
@@ -136,7 +138,8 @@ def test_output_and_evidence_mask_secret_values() -> None:
     secret = "s3cr3t-value-123"
     assert secret not in clip_output(f"token={secret}\nok", [secret])
     assert secret not in evidence_lines(f"token={secret}\nok", [secret])
-    assert "***" in evidence_lines(f"token={secret}", [secret])
+    assert evidence_lines(f"token={secret}", [secret]) == ""  # an assignment: dropped
+    assert evidence_lines(f"login ok as {secret}", [secret]) == "login ok as ***"
 
 
 def test_evidence_drops_an_indented_multi_line_json_body_as_a_block() -> None:
@@ -161,3 +164,23 @@ def test_evidence_drops_stray_member_lines_and_closers() -> None:
     """security review: a member line or a lone closer outside a tracked block."""
     out = '  "token": "issued-by-the-server",\n}\n]\nok\n'
     assert evidence_lines(out, ()) == "ok"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        'result = {"token": "issued-by-the-server",',  # a body opened mid-line
+        "  'token': 'issued-by-the-server',",  # single-quoted member
+        "token: issued-by-the-server",  # unquoted YAML key: value
+        '  "issued-by-the-server",',  # bare quoted scalar
+        "TOKEN=issued-by-the-server",  # env assignment
+        "<token>issued-by-the-server</token>",  # XML
+    ],
+)
+def test_evidence_fails_closed_on_data_shaped_lines(data: str) -> None:
+    """security review, second pass: only an allowlisted status line is recorded."""
+    got = evidence_lines(
+        f"checking\n{data}\n  more: issued-by-the-server\n}}\nconverged 3 of 3\n", ()
+    )
+    assert "issued-by-the-server" not in got
+    assert got.endswith("converged 3 of 3")

@@ -602,6 +602,60 @@ def scratch(
     raise typer.Exit(code=helpers.scratch(cleanup, command))
 
 
+@ops_app.command("stub")
+def stub(
+    plan: Annotated[Path | None, PLAN_OPTION] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Write ops.yaml and the spec edits.")] = False,
+) -> None:
+    """Propose an op stub per devops command step of the plan's spec (R11).
+
+    Prints the stubs and the `(op: step-<n>)` pointers and writes nothing; `--yes`
+    writes `ops.yaml` (schema_version 2) and the spec. Each stub's `check:` is `TODO`:
+    replace it with a real probe."""
+    import yaml
+
+    from fr.artifacts.atomic import write_text_atomic
+    from fr.ops.load import OPS_FILE, OpsLoadError, load_ops, ops_none
+    from fr.ops.stub import StubError, apply_edits, propose
+    from fr.parser import parse
+    from fr.verification.exit import exit_for_spec
+
+    root, plan_dir = _plan_dir("stub", plan)
+    try:
+        parsed = parse(plan_dir)
+        if parsed.spec_path is None:
+            _refuse("the plan has no spec to read", "stub")
+        spec = root / parsed.spec_path
+        if ops_none(plan_dir) is not None:
+            _refuse("the plan's ops.yaml says `none:`; remove it first", "stub")
+        existing = {lo.op.id for lo in load_ops(plan_dir, root).ops}
+        spec_text = spec.read_text()
+        new_ops, edits = propose(spec_text, existing, exit_for_spec(root, parsed.spec_path).gates)
+        new_spec = apply_edits(spec_text, edits)
+    except (StubError, OpsLoadError, ValueError, OSError) as e:
+        _refuse(str(e), "stub")
+    if not new_ops:
+        typer.echo("fr ops stub: no devops command step without an op pointer")
+        return
+    ops_path = plan_dir / OPS_FILE
+    data = yaml.safe_load(ops_path.read_text()) if ops_path.is_file() else None
+    data = dict(data or {})
+    data["schema_version"] = 2
+    data["ops"] = [*(data.get("ops") or []), *new_ops]
+    ops_text = yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    typer.echo(yaml.safe_dump({"ops": new_ops}, sort_keys=False).rstrip())
+    for edit in edits:
+        typer.echo(
+            f"{parsed.spec_path}: step {edit.n}: {edit.old.strip()}\n  -> {edit.new.strip()}"
+        )
+    if not yes:
+        typer.echo("fr ops stub: nothing written; pass --yes to write")
+        return
+    write_text_atomic(ops_path, ops_text)
+    write_text_atomic(spec, new_spec)
+    typer.echo(f"fr ops stub: wrote {len(new_ops)} op(s) to {ops_path} and the spec")
+
+
 # --- the DevOps stage (R15): its own module, registered here ------------------------
 
 from fr.commands.ops_gate_cmd import gate as _gate  # noqa: E402
