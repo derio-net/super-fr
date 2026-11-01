@@ -280,3 +280,8 @@ what: Post-merge — operator-driven, **walked on first real use**: in the comin
 why: walked on first real use: rides the planned per-repo sweep with the released fr; sweep has not run yet. Record via fr acceptance set-status --walk on auto-migrate-live-sweep
 how: fr journal resolve --scope spec --slug 2026-11-01-auto-migrate-own-commit --id test-plan-step-2 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-01-auto-migrate-own-commit#step2
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved created=2026-11-01T18:19:05+00:00 state=open resolves=test-plan-step-2 filed_as=derio-net/super-fr#1282 -->
+### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1282] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Filed at archive as derio-net/super-fr#1282; still owed until discharged.
