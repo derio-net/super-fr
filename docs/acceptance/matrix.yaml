@@ -10261,9 +10261,15 @@ rows:
       fixes; a `none:` acknowledgement lets it proceed
     origin:
     - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_1_refuses_an_ops_gap_before_anything_is_brought_up
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_1_reads_a_merged_prs_gap_from_the_default_branch_tip
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R5: unit (open and merged PR) plus the fr-ops-gate-probes scenario, which
+      CI runs via test_scenarios'
     verify: candidate
     scenario: tests/scenarios/fr-ops-gate-probes.sh
   - id: ops-gate-step-probe
