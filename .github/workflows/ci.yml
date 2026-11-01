@@ -186,11 +186,16 @@ jobs:
           pattern: collected-py*
           path: collected
       - name: Shards ran exactly what each leg collects
+        # The legs come from `collect`'s artifacts (its matrix is pinned equal to
+        # `test`'s), so an added leg is checked too; a leg with no shard files
+        # leaves the glob unmatched and the load fails loudly.
         run: |
-          for py in 3.11 3.14; do
+          set -euo pipefail
+          for dir in collected/collected-py*; do
+            py="${dir#collected/collected-py}"
             uv run --no-project python scripts/split_check.py check \
-              --collected "collected/collected-py$py/collected.txt" \
-              shards/durations-py$py-shard-*/shard-durations.json
+              --collected "$dir/collected.txt" \
+              shards/durations-py"$py"-shard-*/shard-durations.json
           done
       - name: Merge the 3.14 leg's measured durations
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

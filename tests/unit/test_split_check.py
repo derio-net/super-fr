@@ -85,7 +85,7 @@ def test_cli_check_and_merge(tmp_path: Path) -> None:
     bad = _cli("check", "--collected", str(tmp_path / "c.txt"), str(tmp_path / "s1.json"))
     assert bad.returncode == 1
     assert "tests/b.py::TestX::test_3" in bad.stdout
-    out = tmp_path / "m.json"
+    out = tmp_path / "not-yet" / "m.json"
     m = _cli("merge", "-o", str(out), str(tmp_path / "s1.json"), str(tmp_path / "s2.json"))
     assert m.returncode == 0, m.stderr
     assert sorted(json.loads(out.read_text())) == sorted(

@@ -89,6 +89,20 @@ def test_split_check_gates_and_saves_the_cache_only_on_main_pushes() -> None:
     assert save["with"]["key"] == "test-durations-${{ github.run_id }}"
     merge = next(s for s in sc["steps"] if "split_check.py merge" in str(s.get("run", "")))
     assert "py3.14" in merge["run"]
+    # One file, three places: merge writes it, save stores it, plan restores it.
+    restore = next(
+        s for s in JOBS["plan"]["steps"] if "actions/cache/restore" in str(s.get("uses", ""))
+    )
+    out = merge["run"].split("-o", 1)[1].split()[0]
+    assert out == save["with"]["path"] == restore["with"]["path"]
+
+
+def test_split_check_covers_every_test_leg() -> None:
+    test_legs = JOBS["test"]["strategy"]["matrix"]["python"]
+    assert JOBS["collect"]["strategy"]["matrix"]["python"] == test_legs
+    text = _steps_text("split-check")
+    assert "for dir in collected/collected-py*" in text
+    assert "3.11 3.14" not in text
 
 
 def test_ci_ok_needs_the_new_jobs() -> None:

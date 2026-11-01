@@ -70,7 +70,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"split-check: {len(set(collected))} tests, {len(shards)} shards, complete")
         return 0
-    Path(args.output).write_text(json.dumps(merge(shards), indent=4) + "\n")
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(merge(shards), indent=4) + "\n")
     return 0
 
 

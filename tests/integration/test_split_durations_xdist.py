@@ -24,8 +24,13 @@ def _make_package(root: Path) -> None:
         )
 
 
-def _run_group(root: Path, group: int) -> dict[str, float]:
+STALE = "test_gone.py::test_removed"
+
+
+def _run_group(root: Path, group: int, plan: dict[str, float]) -> dict[str, float]:
+    # Seeded like CI: the shard copies the run's whole plan to its own path first.
     out = root / f"durations-{group}.json"
+    out.write_text(json.dumps(plan))
     proc = subprocess.run(
         [
             sys.executable,
@@ -63,9 +68,12 @@ def test_each_groups_file_is_the_controllers_and_the_groups_partition(tmp_path: 
     pkg = tmp_path / "pkg"
     pkg.mkdir()
     _make_package(pkg)
-    one = set(_run_group(pkg, 1))
-    two = set(_run_group(pkg, 2))
     everything = {f"{f}::test_x[{n}]" for f in ("test_a.py", "test_b.py") for n in range(3)}
+    plan = {**dict.fromkeys(everything, 1.0), STALE: 1.0}
+    one = set(_run_group(pkg, 1, plan))
+    two = set(_run_group(pkg, 2, plan))
+    # --clean-durations drops the plan's other-group and stale ids.
+    assert STALE not in one | two
     assert len(everything) == 6
     assert one and two
     assert not one & two, "a test ran in both groups"
