@@ -15,3 +15,8 @@ Tested 2026-11-01 (Claude Code 2.1.316) in a throwaway repo with project-only se
 ### h2-outside-path-rejected · ruled-out · Ruled out: Claude Code rejects a WorktreeCreate path outside the repo for a subagent
 
 Same probe: the hook printed <scratch>/outside/agent-<id> (not under the repo). The subagent ran there: pwd = that path, --show-toplevel = that path, --git-common-dir = <repo>/.git. Claude's checkout verification is git-identity based, not location based. Moving agent-* out of the repo is safe.
+
+<!-- fr:journal kind=root-cause scope=debug id=c0932134179b created=2026-11-01T19:53:02+00:00 -->
+### c0932134179b · root-cause · agent-* worktrees leak because spec 2026-09-04 d2 assumed Claude's lifecycle survives a WorktreeCreate takeover
+
+d2 kept agent-* in Claude's default SHAPE and the spec's table calls them 'Claude-internal, swept by cleanupPeriodDays'. But a registered WorktreeCreate replaces native creation, so the native lifecycle is gone: no lock while running, and (H1, confirmed live) WorktreeRemove is never fired for these subagents, so fr-worktree-remove.sh's agent-* branch never runs. Nothing else removes them. In-repo, a subagent that dispatches its own isolated subagent nests them (frank: 4 nested), until Claude refuses new isolated dispatches as unverifiable.
