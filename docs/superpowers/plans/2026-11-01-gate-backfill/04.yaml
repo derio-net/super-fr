@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The board lists gate-labelled merged PRs (R13)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - board-lanes-gated-prs
+  tier: standard
+  files:
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/lanes.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - tests/unit/fakes.py
+  - tests/unit/test_triage_*.py
+  - tests/fixtures/**
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - docs/acceptance/*
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: The forge read
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests for `GhClient.list_merged_prs_by_label(repo, label, limit)` — the GitHub CLI argv
+      (`pr list --repo r --state merged --label l --limit n --json …,labels`), the REST path filtering
+      `issues?labels=l&state=closed` to merged pull requests, glab/tea raising `UnsupportedForgeOperation`,
+      and `ClientForge.list_merged_prs_by_label(*, repo, label, limit)` mapping errors through `_forge_errors`. Red.
+  - id: P4.T1.S2
+    text: |-
+      GREEN — implement across ghclient.py (protocol + unsupported default), gh.py, real_ghclient.py, real_ghrestclient.py, the triage Forge protocol and ClientForge, and tests/unit/fakes.py. Green. Commit.
+- number: 2
+  title: Facts and collect
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_collect.py — collect stores `Facts.gated_prs` per collected repo, deduped by
+      (repo, number) when a PR holds both gates, only PRs whose `held_gates` is non-empty; a list returning its
+      limit adds a `Truncation` of the new `TruncatedList` value `gated-prs`; a failing or unsupported read adds
+      `Facts.gated_unread` (`GatedUnread(repo, why)`, describe "gate-labelled PRs of <repo> not read: <why>");
+      tests/unit/test_triage_collect_partial.py — `--only` carries `gated_prs`/`gated_unread` of carried repos;
+      an older-schema facts file reads with both fields `[]`. Red.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: `FACTS_SCHEMA` → the next free number (13 unless main moved it), the `schema_` Literal extended,
+      the new fields and models in triage/model.py, the reads in collect.py, the carry beside `_kept_links`;
+      regenerate any committed facts fixtures the schema pins. Green. Commit.
+- number: 3
+  title: Lanes, Needs-you and kanban
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: tests/unit/test_triage_board_lanes.py — `gated_pr_lane(pr)` puts a PR holding both gates in Tester,
+      devops-only in DevOps, none when passed; `lane_of`'s landed branch gives the same verdict as before (existing
+      tests stay green); `needs_you` and `kanban.column_of`/the board list a non-batch gated PR once with the pass
+      command (with `--notes`) in its reason; a PR whose batch `lane_of` placed is listed only through its batch;
+      a closed-out batch's PR (close-out event present) IS listed via `gated_prs`; a `gated_unread` repo yields one
+      `gated-unread` Need ("Gate labels unread"). Red.
+  - id: P4.T3.S2
+    text: |-
+      GREEN — lanes.py (`gated_pr_lane`, `lane_of` calling it), views.py (`needs_you`, NEED_LABELS), kanban.py cards. Green. Commit.
+  - id: P4.T3.S3
+    text: |-
+      REFACTOR + docs: one held-gate rule (no copy between lane_of and gated_pr_lane); add one line to
+      plugins/super-fr/skills/fr-triage/SKILL.md that the Needs-you Tester/DevOps lanes also list gate-labelled
+      merged PRs outside batches (stay within the 120-line cap), run `uv run --no-project python scripts/sync-opencode.py`
+      and `uv run --no-project python scripts/sync-hermes.py`; ruff format/check, mypy; then
+      `uv run fr acceptance set-status --id board-lanes-gated-prs --status ci --notes "collect and lanes unit-tested over fixture facts" --level unit=super-fr:tests/unit/test_triage_board_lanes.py`
+      (name-anchored). Commit.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

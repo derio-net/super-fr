@@ -474,5 +474,6 @@ gate: tester
 
 ## Implementation Plans
 
-| Plan | Status |
-|---|---|
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-11-01-gate-backfill | `derio-net/super-fr` | `2026-11-01-gate-backfill` | — |

@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Gate pass closes backfill trackers, on both routes, with a retry (R12)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - gate-pass-closes-backfill-trackers
+  tier: standard
+  files:
+  - packages/fr/src/fr/verification/labels.py
+  - packages/fr/src/fr/commands/gate_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_gate_cmd.py
+  - tests/unit/test_verification_labels*.py
+  - tests/unit/test_triage_batch_drive_cmd.py
+  - tests/unit/fakes.py
+  - docs/acceptance/*
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: close_gate_trackers beside pass_gate
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: a test module for `fr.verification.labels.close_gate_trackers(client, repo, pr, gate, notes)`:
+      it lists only open `fr:owed` issues, closes each fr-owned tracker whose `fr_gate_marker` names this PR and
+      gate (comment "Gate <g> passed on #<pr>: <notes>"), leaves one naming another PR or gate open, never
+      closes a foreign or adopted issue but returns the adopted one (its `fr-gate-adopt` comment matches) with a
+      `gh issue close` line, returns each key's discharge command (row/journal/spec/plan), and reports a list or
+      close failure without raising. Red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN — implement it in packages/fr/src/fr/verification/labels.py, importing the marker reader from fr.gatebackfill.trackers. Green. Commit.
+- number: 2
+  title: Both pass routes and the retry
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: test_gate_cmd.py — `fr gate pass --yes` calls `close_gate_trackers` after `pass_gate` and prints what
+      it closed and the discharge commands; the dry run lists what it would close; a merged PR carrying
+      `gate:<g>-passed` and no `gate:<g>` no longer refuses: it prints "gate <g> already passed on #<pr>;
+      closing its trackers" and runs only the close; a PR with neither label still refuses (exit 2). In
+      tests/unit/test_triage_batch_drive_cmd.py: the driver's rows-walked pass also closes the PR's fr-owned
+      trackers. Red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: wire both routes (gate_cmd.pass_command; the driver's pass call site in
+      packages/fr/src/fr/commands/triage_batch_cmd.py that calls `pass_gate`). Green. Commit.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: one helper call per route, no duplicated close logic; ruff format/check, mypy; then
+      `uv run fr acceptance set-status --id gate-pass-closes-backfill-trackers --status ci --notes "both routes and the retry unit-tested" --level unit=super-fr:tests/unit/test_gate_cmd.py`
+      with a name-anchored ref. Commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
