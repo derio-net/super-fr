@@ -215,3 +215,8 @@ Automated security review of 1cb930211.
 ### p2-sec-3 · finding [open] (reviewer: in scope) · quote-aware bracket tracking could be fooled by an unmatched apostrophe; '- key: value' list items passed (phase 2)
 
 Automated security review of the second-pass filter.
+
+<!-- fr:journal kind=finding scope=plan id=p2-sec-3-resolved created=2026-11-01T20:28:36+00:00 state=fixed resolves=p2-sec-3 -->
+### p2-sec-3-resolved · finding [fixed] · resolves p2-sec-3: quote-aware bracket tracking could be fooled by an unmatched apostrophe; '- key: value' list items passed
+
+656830495 (swept into the phase-3 docs commit): no parsing at all — any bracket in the output records nothing, else a narrow positive status-line grammar (no colon, quote, =); tests test_evidence_third_pass_shapes_are_never_recorded, test_any_bracket_in_the_output_records_no_evidence; scenario probe prints a key: value line that must not be committed
