@@ -82,16 +82,15 @@ journal:
 - kind: finding
   id: p1-r13
   title: owed keys from issue markers reached filesystem paths unvalidated (path traversal)
-  body: 'Raised by the dispatched phase-1 code reviewer. Reviewer tagged it out (source is the debt fold);
-    reclassified in: the path read happens in this change''s code.'
-  review_scope: in
+  body: Raised by the dispatched phase-1 code reviewer.
+  review_scope: out
   phase: 1
 - kind: review
   id: p1-review
   phase: 1
   title: phase 1 code review
-  body: 13 findings raised (p1-r1..p1-r13), all fixed (p1-r13 reclassified out → in); 115 targeted tests
-    pass after the fixes.
+  body: 13 findings raised (p1-r1..p1-r13), p1-r1..p1-r12 fixed; p1-r13 (out) resolved out-of-scope, hardened
+    here anyway; 115 targeted tests pass after the fixes.
 resolves:
 - id: p1-r1
   state: fixed
@@ -135,10 +134,10 @@ resolves:
   state: fixed
   body: 'Fixed in 14cf38207: hint names the exact --ran … --supersede command.'
 - id: p1-r13
-  state: fixed
-  body: 'Fixed in 46909de7a: keys filtered through OWED_KEY_RE (dot-only names rejected) and dropped with
-    a note; traversal test. Reclassified out → in: this change''s candidates.py is what turns a marker
-    key into a path.'
+  state: out-of-scope
+  body: The key source is the pre-existing debt fold, as the reviewer says; this change hardened its own
+    use of it anyway in 46909de7a (keys filtered through OWED_KEY_RE, traversal test). Whether the debt
+    engine itself should filter is the debt fold's concern.
 - id: p1-load-flakes
   state: out-of-scope
   body: Six timing-bound tests (idle guard, records commit, visual evidence) failed only in a 2-hour run
