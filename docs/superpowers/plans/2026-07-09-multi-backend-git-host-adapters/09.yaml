@@ -110,6 +110,10 @@ state:
         Gitea because issues_enabled is unknown there (spec 3.C), though the API''s
         repository.has_issues could now answer it.'
   completion:
-    at: null
-    note: null
+    at: '2026-11-01T11:25:02+00:00'
+    note: 'Real-CLI verification walked 2026-11-01 on gitlab.com and a self-hosted
+      Gitea: GitLab adapter (Task 1, 2026-09-24), Gitea adapter (Task 2; seven bugs
+      found and fixed forward in #1272, re-walk 33/33, also on the pinned tea 0.14.2),
+      scaffold + isolation lifecycle + forge default-branch resolution on both (Task
+      3).'
     observed_prs: []
