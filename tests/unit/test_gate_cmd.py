@@ -284,7 +284,7 @@ def test_p1_r8_an_unwritable_plan_path_is_an_exit_2_refusal_not_a_traceback(
 
 
 def _applied_env(backfill_env: Any, tmp_path: Path) -> tuple[Any, FakeGhClient, Path]:
-    """A repo whose manifest names an audit gap delivered by merged PR 12, dry-run once so the plan file exists."""
+    """A repo whose manifest names an audit gap delivered by merged PR 12; dry-run once."""
     from tests.unit.gatebackfill_fixtures import commit_at, row, write_matrix
 
     root, fake = backfill_env
@@ -293,7 +293,8 @@ def _applied_env(backfill_env: Any, tmp_path: Path) -> tuple[Any, FakeGhClient, 
     manifest = tmp_path / "m.yaml"
     manifest.write_text(
         "schema: 1\nitems:\n"
-        "  - {key: 'plan:2026-04-02-fleet#p3', kind: audit-gap, title: fleet, pr: 12, gate: devops}\n"
+        "  - {key: 'plan:2026-04-02-fleet#p3', kind: audit-gap, title: fleet,"
+        " pr: 12, gate: devops}\n"
     )
     fake.add_pr(BACKFILL_REPO, 12, state="MERGED", head_ref="feat/r1")
     first = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest)])

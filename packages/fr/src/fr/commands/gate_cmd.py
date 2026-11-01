@@ -349,11 +349,11 @@ def backfill_command(
             c.to_entry(got.pr, ambiguous=got.ambiguous, why=got.why if got.pr is None else "")
         )
     if yes:
-        from fr.gatebackfill.apply import ApplyRefused, apply_plan
+        from fr.gatebackfill.apply import ApplyRefusedError, apply_plan
 
         try:
             report = apply_plan(root, previous, fresh, client, repo=identity, tracking=tracking)
-        except ApplyRefused as exc:
+        except ApplyRefusedError as exc:
             refuse(str(exc))
         typer.echo(f"Applied {path} to {identity} (tracking: {tracking})")
         for line in report.lines():

@@ -28,7 +28,7 @@ _ISSUE_URL = re.compile(r"/(\d+)/?$")
 _REF = re.compile(r"^(?P<repo>[\w.-]+/[\w.-]+)#(?P<n>\d+)$")
 
 
-class ApplyRefused(BackfillError):
+class ApplyRefusedError(BackfillError):
     """The plan cannot be applied at all: nothing was written."""
 
 
@@ -82,9 +82,7 @@ class _Writer:
 
     def pr_label(self, pr: int, label: LabelDef) -> None:
         self._ensure([label])
-        self.client.edit_pr_labels(
-            self.repo, pr, add=frozenset({label.name}), remove=frozenset()
-        )
+        self.client.edit_pr_labels(self.repo, pr, add=frozenset({label.name}), remove=frozenset())
 
     def issue_labels(self, number: int, labels: list[LabelDef]) -> None:
         self._ensure(labels)
@@ -136,7 +134,7 @@ class _Apply:
         self.me = self.client.viewer_login()
         self.open = self.client.list_issues(self.repo, "open", OPEN_LIMIT, OPEN_FIELDS)
         if len(self.open) >= OPEN_LIMIT:
-            raise ApplyRefused(
+            raise ApplyRefusedError(
                 f"{len(self.open)} open issues is the read cap: fr cannot be sure no tracker "
                 "exists yet, and would file duplicates"
             )
@@ -312,18 +310,18 @@ def apply_plan(
 ) -> ApplyReport:
     """Apply *plan*'s `owed` / `adopt` decisions. *candidates* are the entries re-resolved NOW
     (delivering PR and gate); what is applied is what the plan recorded, and an entry whose
-    re-resolution differs is skipped. Raises `ApplyRefused` before any write when the plan is
+    re-resolution differs is skipped. Raises `ApplyRefusedError` before any write when the plan is
     missing or names another repo; a forge error is recorded on its entry and the rest go on."""
     if plan is None:
-        raise ApplyRefused("no plan file: run the dry run first and review it")
+        raise ApplyRefusedError("no plan file: run the dry run first and review it")
     if plan.repo.lower() != repo.lower():
-        raise ApplyRefused(f"the plan file names {plan.repo}, not {repo}")
+        raise ApplyRefusedError(f"the plan file names {plan.repo}, not {repo}")
     report = ApplyReport()
     run = _Apply(repo_root, client, repo, tracking, report)
     try:
         run.read()
     except _FAILURES as exc:
-        raise ApplyRefused(f"cannot read the forge: {exc}") from exc
+        raise ApplyRefusedError(f"cannot read the forge: {exc}") from exc
     fresh = {c.key: c for c in candidates}
     seen: set[str] = set()
     for e in sorted(plan.entries, key=lambda x: x.key):
@@ -334,5 +332,7 @@ def apply_plan(
         if res is not None:
             report.results.append(res)
     for key in sorted(set(fresh) - {e.key for e in plan.entries}):
-        report.notes.append(f"  {key}: a new candidate, not in the plan: dry-run again to decide it")
+        report.notes.append(
+            f"  {key}: a new candidate, not in the plan: dry-run again to decide it"
+        )
     return report

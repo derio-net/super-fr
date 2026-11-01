@@ -86,9 +86,7 @@ def pass_command(gate: str, pr: int, *, run_id: str | None = None) -> str:
     return cmd
 
 
-def tracker_body(
-    key: str, title: str, gate: str, pr: int, *, run_id: str | None = None
-) -> str:
+def tracker_body(key: str, title: str, gate: str, pr: int, *, run_id: str | None = None) -> str:
     """The backfill tracker's body; its two marker lines end it (PR marker, then owed marker)."""
     from fr.archive_followups import owed_marker
 

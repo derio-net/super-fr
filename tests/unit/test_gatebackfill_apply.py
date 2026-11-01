@@ -1,5 +1,5 @@
-"""P2.T2/T3: `apply_plan` against `FakeGhClient` (spec 2026-11-01-gate-backfill §F, §G; R6-R10, R15).
-Names are fictional."""
+"""P2.T2/T3: `apply_plan` against `FakeGhClient` (spec 2026-11-01-gate-backfill §F, §G).
+R6-R10 and R15. Names are fictional."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from fr.gatebackfill import trackers as t
-from fr.gatebackfill.apply import ApplyRefused, ApplyReport, apply_plan
+from fr.gatebackfill.apply import ApplyRefusedError, ApplyReport, apply_plan
 from fr.gatebackfill.model import PlanEntry, PlanFile, PrHit
 from fr.ghclient import UnsupportedForgeOperation
-from tests.unit.fakes import FakeGhClient, FakeGhError
+
+from tests.unit.fakes import FakeGhClient
 from tests.unit.gatebackfill_fixtures import REPO, STRANGER
 
 KEY = "plan:2026-04-02-fleet#p3"
@@ -133,7 +133,7 @@ def test_tracking_none_writes_only_the_pr_label() -> None:
     c = client()
     run(c, entry(walk_only=True), tracking="none")
     assert names(c) == ["ensure_labels", "edit_pr_labels"]
-    assert ("list_issues" not in [n for n, _ in c.calls])
+    assert "list_issues" not in [n for n, _ in c.calls]
 
 
 @pytest.mark.parametrize("decision", ["review", "tick", "na", "park"])
@@ -191,7 +191,7 @@ def test_a_second_apply_makes_no_write() -> None:
 
 def test_no_plan_file_refuses_before_any_write() -> None:
     c = client()
-    with pytest.raises(ApplyRefused):
+    with pytest.raises(ApplyRefusedError):
         apply_plan(Path("/x"), None, [entry()], c, repo=REPO, tracking="github")
     assert c.attempted_mutations == 0
 
@@ -199,7 +199,7 @@ def test_no_plan_file_refuses_before_any_write() -> None:
 def test_a_plan_for_another_repo_refuses() -> None:
     c = client()
     plan = PlanFile(repo="example-org/gadgets", entries=[entry()])
-    with pytest.raises(ApplyRefused, match="gadgets"):
+    with pytest.raises(ApplyRefusedError, match="gadgets"):
         apply_plan(Path("/x"), plan, [entry()], c, repo=REPO, tracking="github")
     assert c.attempted_mutations == 0
 
@@ -236,7 +236,9 @@ def test_a_plan_entry_no_longer_a_candidate_is_skipped() -> None:
 # --- T3.S1: adopt, foreign issues, duplicates -----------------------------------------------
 
 
-def foreign(c: FakeGhClient, n: int, body: str = "please do it", labels: set[str] | None = None) -> None:
+def foreign(
+    c: FakeGhClient, n: int, body: str = "please do it", labels: set[str] | None = None
+) -> None:
     c.add_issue(REPO, n, body=body, labels=labels or set())
     c.issue_authors[(REPO, n)] = STRANGER
 

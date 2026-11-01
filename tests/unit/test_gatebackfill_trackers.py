@@ -1,13 +1,13 @@
-"""P2.T1: tracker bodies, markers and the printed pass command (spec 2026-11-01-gate-backfill §F)."""
+"""P2.T1: tracker bodies, markers and the printed pass command (spec gate-backfill §F)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 from fr.archive_followups import owned_owed_key
 from fr.gatebackfill import trackers as t
+
 from tests.unit.gatebackfill_fixtures import ME
 
 KEY = "plan:2026-04-02-fleet#p3"
