@@ -224,3 +224,6 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-01-ops-gate-probes-p2 created=2026-11-01T12:01:50+00:00 -->
+### phase-split-2026-11-01-ops-gate-probes-p2 · decision · ask: stage-5 probes, probe output and the answer grammar are their own ask (#1273 part 2 + the _ANSWER bug)
