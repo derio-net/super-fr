@@ -1,0 +1,36 @@
+schema_version: 10
+run: 2026-11-01-feat-gate-backfill
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T2.S3]
+refactor:
+  P3.T1: "one new helper module; both routes call it, nothing duplicated or existing to clean"
+journal:
+  - kind: decision
+    id: p3-close-lives-in-gatebackfill
+    title: close_gate_trackers lives in fr/gatebackfill/close.py and fr.verification.labels re-exports it
+    body: |
+      Keeps the fr.gatebackfill -> fr.verification direction free of a cycle (close.py imports
+      only ghclient/labels/archive_followups; trackers are imported lazily). Both routes import
+      it via fr.verification.labels. It returns a CloseReport (closed, adopt commands,
+      discharge commands, errors) and takes optional root (discharge commands) and dry_run.
+    phase: 3
+  - kind: decision
+    id: p3-driver-prints-no-discharge
+    title: the driver route passes no repo root, so it prints no discharge commands
+    body: |
+      The driver has no checkout of the repo the PR is in at that point; its one-line output
+      names the closed trackers and any error. The discharge commands print from `fr gate pass`.
+    phase: 3
+  - kind: decision
+    id: p3-retry-exit-code
+    title: the retry path exits 1 when the close failed; the normal path exits 0
+    body: |
+      After a normal pass the pass itself succeeded, so a tracker failure is reported and the
+      retry command printed with exit 0; on the retry path the close is the whole job, so a
+      failure exits 1. The old test that a gate:<g>-passed PR refuses was dropped: it is now the
+      retry (a PR with neither label still refuses, tested).
+    phase: 3
+resolves: []
+evidence: {}

@@ -138,7 +138,8 @@ def _one(
         got = trackers.fr_adopt_marker(str(c.get("body") or ""))
         if got is not None and got[1:] == (gate, pr):
             report.adopt_commands.append(
-                f"gh issue close {number} --repo {shlex.quote(repo)} --comment {shlex.quote(comment)}"
+                f"gh issue close {number} --repo {shlex.quote(repo)} "
+                f"--comment {shlex.quote(comment)}"
             )
             _discharge(report, got[0], root, trackers)
             return
