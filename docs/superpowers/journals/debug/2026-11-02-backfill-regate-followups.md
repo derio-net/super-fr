@@ -10,3 +10,8 @@ Source: ~/.cache/fr/coord/goals/review-1324/findings.md (F1 major, F2/F3 minor, 
 ### 6434af8bcf6d · root-cause · tracked-only form added text and a marker read without updating the operator-facing strings
 
 #1324 introduced the passed tracker form but kept the held form's skip wording and gave the body no closing step, while no fr path ever closes it (§H skips it by design).
+
+<!-- fr:journal kind=finding scope=debug id=f3-f4 created=2026-11-02T20:41:34+00:00 state=fixed -->
+### f3-f4 · finding [fixed] · close line on tracked-only texts; passed-form mismatch skip
+
+trackers._CLOSE_LINE appended before the markers (owed marker stays last, so owned_owed_key is unchanged); apply._apply names a passed marker as gate:<g>-passed pr:<n> (tracked only). F1 tests: test_gh1322_another_gate_passed_still_gates_this_one (both directions) + test_gate_cmd test_gh1322_the_dry_run_does_not_call_another_gates_pass_this_ones. F2: test_gh1322_both_labels_present_is_tracked_only_with_no_label_write, test_gh1322_passed_removed_later_rewrites_to_held. Auto-close filed as #1328. F5/F6 reviewed, deferred (no change).
