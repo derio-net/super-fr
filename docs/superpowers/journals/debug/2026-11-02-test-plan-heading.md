@@ -15,3 +15,8 @@ Root cause: `fr/spec.py` _SECTION_RE (^## Test Plan\s*$) is exact while four oth
 ### 61d90c52d637 · ruled-out · A tolerant matcher (accept 'N.' prefixes and suffixes) — rejected by the operator
 
 Making _SECTION_RE accept '## 6. Test Plan (…)' would have fixed the 41 existing specs silently, but left the contract unstated and every future variant (### level, 'Test plan', '§6') one more regex edit away from the same silent miss. Operator's decision (brief): keep the heading exact, make near-misses loud.
+
+<!-- fr:journal kind=hypothesis scope=debug id=d70592a8bc18 created=2026-11-02T15:48:26+00:00 -->
+### d70592a8bc18 · hypothesis · A ValueError-based near-miss error would recreate the bug inside existing handlers — confirmed, so it is a plain Exception
+
+debt_cmd._held catches (PlanSchemaError, OSError, ValueError, …) and returns []; plan_ops' ops_gap guard catches ValueError and sets gap=[]; ops/gate's ops-gap read says 'not checked'. A near-miss raised as ValueError would be read as 'no hold' / 'no gap' — the original defect, one layer down. TestPlanHeadingError subclasses Exception; tests/unit/test_test_plan_heading.py::test_the_error_is_not_a_value_error pins it, and each handler that should see it names it explicitly.
