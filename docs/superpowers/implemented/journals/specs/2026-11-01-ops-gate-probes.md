@@ -241,3 +241,8 @@ what: Walked on first real use: the next devops-gated run's `fr ops gate` shows 
 why: Walked on first real use: no devops-gated run has executed fr ops gate since #1281 merged (2026-11-02 ~13:55Z, released as v6.1.0-rc.7); observed on the next real devops-gated run, not rehearsed (tracked by #1273, left open).
 how: fr journal resolve --scope spec --slug 2026-11-01-ops-gate-probes --id test-plan-step-1 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-01-ops-gate-probes#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-02T14:14:41+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1312 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1312] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1312; still owed until discharged.
