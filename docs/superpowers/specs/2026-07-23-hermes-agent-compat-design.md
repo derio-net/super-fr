@@ -350,7 +350,9 @@ operator to a wrong model.
   Mitigation: the shared shell decision core DRYs the two shell ones; OpenCode's
   `marker.ts` stays as-is (already tested). Full unification is a non-goal.
 
-## 6. Test Plan (post-merge, operator-driven)
+## Test Plan
+
+_(post-merge, operator-driven)_
 
 Requires a real Hermes Agent install (operator has one). Post-merge:
 
