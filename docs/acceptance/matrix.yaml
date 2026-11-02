@@ -1684,7 +1684,7 @@ rows:
       commit on it is reachable from a ref; dirty or unreachable ones are reported,
       never removed.
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-11-01-agent-worktrees-accumulate.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-11-01-agent-worktrees-accumulate.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_agent_worktrees.py
