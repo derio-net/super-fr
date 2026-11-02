@@ -10377,10 +10377,10 @@ rows:
       manual phases to review, prints the repo-file commands, and writes nothing to
       the forge.
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_gatebackfill_render.py#test_summary_lists_every_candidate_and_parks_under_their_own_heading
@@ -10395,10 +10395,10 @@ rows:
       when only a walk remains, writes labels only under tracking none, and a second
       run writes nothing.
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R14
     levels:
       unit:
       - super-fr:tests/unit/test_gatebackfill_apply.py#test_a_second_apply_makes_no_write
@@ -10413,8 +10413,8 @@ rows:
       PR, is used only when the forge says it merged, and an item with none is reported
       and never written.
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_gatebackfill_delivery.py#test_a_squash_subject_names_the_pr_that_added_the_plan
@@ -10427,8 +10427,8 @@ rows:
       someone else wrote is touched only when the operator adopts it, by a comment and
       labels; adopting one closes fr's own duplicate tracker for the same item.
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_gatebackfill_apply.py#test_adopting_closes_the_fr_owned_duplicate
@@ -10441,7 +10441,7 @@ rows:
       naming that PR and gate, and lists any adopted tracker with the command that closes
       it.
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_gate_cmd.py#test_a_passed_gate_retries_only_the_close
@@ -10456,7 +10456,7 @@ rows:
       once, and a forge that cannot list them is reported rather than shown as an empty
       lane.
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_triage_board_lanes.py#test_a_closed_out_batchs_pr_is_listed_through_gated_prs
@@ -10469,8 +10469,8 @@ rows:
       board's Needs-you lanes, a re-run writes nothing, and one fr gate pass clears
       a PR's trackers.
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-11-01-gate-backfill-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R12
     levels: {}
     status: walk-owed
     notes: 'post-merge live walk owed: walked on first real use (the first per-repo

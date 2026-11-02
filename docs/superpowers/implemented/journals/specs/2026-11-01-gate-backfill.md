@@ -392,3 +392,16 @@ fr archive is not changed by this run (decision d14); backfill gives the sweep i
 ### archive-no-dry-run-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1301] · resolves archive-no-dry-run: fr archive files forge issues but has no dry run
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1301.
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-11-02T14:55:16+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: **First real sweep (walked on first real use).** In one repo of the corpus, during its planned per-repo chore (isolation → `fr migrate artifacts --yes` → archive → row reconcile → chore PR), run `fr gate backfill`, review the plan file (adopt the hand-made trackers, `review` → tick/na/owed), run `--yes`, then `fr triage collect` and open the board. Pass: every confirmed `owed`/`adopt` entry's PR carries its gate label and shows in the right Needs-you lane; re-running `--yes` writes nothing; one `fr gate pass` closes that PR's fr-owned trackers. Row: `gate-backfill-first-real-sweep`. **Cost:** none beyond the sweep itself (no rehearsal repo). It is walked on the first real sweep, and the tester gate stays held until then.
+why: Walked on first real use: no per-repo gate backfill sweep has run since #1295 merged (2026-11-02 14:38Z, released as v6.1.0-rc.8). The scripted per-repo sweep across the operator's three orgs is its first real use and is not rehearsed; gate:tester stays held until then.
+how: fr journal resolve --scope spec --slug 2026-11-01-gate-backfill --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-01-gate-backfill#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-02T14:55:57+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1316 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1316] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1316; still owed until discharged.

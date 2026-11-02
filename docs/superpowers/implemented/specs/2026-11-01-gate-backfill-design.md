@@ -459,7 +459,9 @@ strategy: candidate
 - gate-backfill-first-real-sweep: live — only a real repo's pre-v6 history and forge show the chain and the lanes working end to end
 gate: tester
 
-## 6. Test Plan (post-merge, operator-driven)
+## Test Plan
+
+Post-merge, operator-driven. (Heading un-numbered at close-out so fr can read it: #1315.)
 
 1. **First real sweep (walked on first real use).** In one repo of the corpus,
    during its planned per-repo chore (isolation → `fr migrate artifacts --yes`
