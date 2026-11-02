@@ -222,11 +222,17 @@ class _Apply:
                 return
         elif tracked and existing is not None:
             old = str(existing.get("body") or "")
-            marker = trackers.fr_gate_marker(old) or trackers.fr_passed_marker(old)
+            held = trackers.fr_gate_marker(old)
+            marker = held or trackers.fr_passed_marker(old)
             if marker is not None and marker != (gate, pr):
+                named = (
+                    f"gate:{marker[0]} pr:{marker[1]}"
+                    if held is not None
+                    else f"gate:{marker[0]}-passed pr:{marker[1]} (tracked only)"
+                )
                 res.skipped = (
-                    f"fr-owned tracker {self.repo}#{existing['number']} names gate:{marker[0]} "
-                    f"pr:{marker[1]}, not gate:{gate} pr:{pr}; fix the plan entry's gate or "
+                    f"fr-owned tracker {self.repo}#{existing['number']} names {named}, "
+                    f"not gate:{gate} pr:{pr}; fix the plan entry's gate or "
                     "close the tracker, then re-run"
                 )
                 return

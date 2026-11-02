@@ -215,6 +215,11 @@ def tracker_body(key: str, title: str, gate: str, pr: int, *, run_id: str | None
     )
 
 
+# A tracked-only tracker is never closed by fr (no gate pass reaches it), so its text says who
+# closes it (review of #1324, F3; auto-close is a separate issue).
+_CLOSE_LINE = "Then close this issue."
+
+
 def _discharge_block(key: str, repo_root: Path) -> list[str]:
     return ["```", discharge_command(key, repo_root=repo_root), "```"]
 
@@ -233,6 +238,8 @@ def passed_tracker_body(key: str, title: str, gate: str, pr: int, *, repo_root: 
             "done:",
             "",
             *_discharge_block(key, repo_root),
+            "",
+            _CLOSE_LINE,
             "",
             passed_marker(gate, pr),
             owed_marker(key),
@@ -266,6 +273,8 @@ def adopt_passed_comment(key: str, gate: str, pr: int, *, repo_root: Path) -> st
             "not held again; the item itself is still owed. Discharge it once done:",
             "",
             *_discharge_block(key, repo_root),
+            "",
+            _CLOSE_LINE,
             "",
             adopt_passed_marker(key, gate, pr),
         ]

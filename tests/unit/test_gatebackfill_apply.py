@@ -162,6 +162,91 @@ def test_gh1322_passing_the_gate_again_does_not_close_a_tracked_only_tracker(gat
     assert "close_issue" not in names(c)
 
 
+@pytest.mark.parametrize(("other", "gate"), [("devops", "tester"), ("tester", "devops")])
+def test_gh1322_another_gate_passed_still_gates_this_one(other: str, gate: str) -> None:
+    """The operator's decision on PR #1228 (journal pr1228-other-gate): only THIS gate's
+    `-passed` label makes an entry tracked only; another gate's pass does not."""
+    c = client()
+    passed(c, other)
+    rep = run(c, entry(gate=gate))
+    assert c.pr_labels[(REPO, 41)] == {f"gate:{gate}"}  # added; the other pass is untouched
+    body = c.issues[(REPO, 1)].body
+    assert t.fr_gate_marker(body) == (gate, 41) and t.fr_passed_marker(body) is None
+    assert "tracked only" not in rep.lines()[0]
+
+
+@pytest.mark.parametrize("gate", ["tester", "devops"])
+def test_gh1322_both_labels_present_is_tracked_only_with_no_label_write(gate: str) -> None:
+    c = client()
+    c.prs[(REPO, 41)]["labels"] = [f"gate:{gate}", f"gate:{gate}-passed"]
+    rep = run(c, entry(gate=gate))
+    assert "edit_pr_labels" not in names(c)
+    assert t.fr_passed_marker(c.issues[(REPO, 1)].body) == (gate, 41)
+    assert "tracked only" in rep.lines()[0]
+
+
+@pytest.mark.parametrize("gate", ["tester", "devops"])
+def test_gh1322_passed_removed_later_rewrites_to_held(gate: str) -> None:
+    c = client()
+    passed(c, gate)
+    run(c, entry(gate=gate))
+    c.prs[(REPO, 41)]["labels"] = []  # the operator took the pass back
+    before = names(c)
+    rep = run(c, entry(gate=gate))
+    assert c.pr_labels[(REPO, 41)] == {f"gate:{gate}"}
+    body = c.issues[(REPO, 1)].body
+    assert t.fr_gate_marker(body) == (gate, 41) and t.fr_passed_marker(body) is None
+    assert "rewrote tracker example-org/widgets#1" in rep.lines()[0]
+    assert "create_issue" not in names(c)[len(before) :]  # reused, not refiled
+
+
+def test_gh1322_tracked_only_texts_tell_the_operator_to_close_the_issue() -> None:
+    root = Path("/nonexistent")
+    body = t.passed_tracker_body(KEY, "x", "tester", 41, repo_root=root)
+    comment = t.adopt_passed_comment(KEY, "tester", 41, repo_root=root)
+    for text in (body, comment):
+        prose = [ln for ln in text.splitlines() if ln and not ln.startswith("<!--")]
+        assert prose[-1] == "Then close this issue."
+    # the markers are still where their readers look: passed second-to-last, owed last
+    assert t.fr_passed_marker(body) == ("tester", 41)
+    assert body.splitlines()[-1] == f"<!-- fr-owed:{KEY} -->"
+    assert t.fr_adopt_passed_marker(comment) == (KEY, "tester", 41)
+
+
+def _without_close_line(text: str) -> str:
+    return text.replace("\n\nThen close this issue.", "")
+
+
+def test_gh1322_a_tracked_only_text_from_before_the_close_line_is_not_rewritten() -> None:
+    from tests.unit.gatebackfill_fixtures import ME
+
+    c = client()
+    c.comment_author = ME
+    passed(c, "tester")
+    foreign(c, 8)
+    entries = (entry(gate="tester"), entry("plan:2026-06-01-a#p2", gate="tester",
+                                           decision=f"adopt {REPO}#8"))  # fmt: skip
+    run(c, *entries)
+    # age both texts back to the #1324 form, which had no close line
+    issue = c.issues[(REPO, 1)]
+    issue.body = _without_close_line(issue.body)
+    [comment] = c.issue_comments[(REPO, 8)]
+    comment["body"] = _without_close_line(comment["body"])
+    assert "close this issue" not in issue.body + comment["body"]
+    before = c.attempted_mutations
+    run(c, *entries)
+    assert c.attempted_mutations == before  # matched by marker: no rewrite, no second comment
+
+
+def test_gh1322_a_mismatched_tracked_only_tracker_is_named_in_its_passed_form() -> None:
+    c = client()
+    tracker(c, 5, t.passed_tracker_body(KEY, "x", "devops", 41, repo_root=Path("/nonexistent")))
+    rep = run(c, entry(gate="tester"))
+    why = rep.results[0].skipped or ""
+    assert "names gate:devops-passed pr:41 (tracked only), not gate:tester pr:41" in why
+    assert c.attempted_mutations == 0
+
+
 def test_a_walk_only_tracker_is_filed_with_awaiting_live() -> None:
     c = client()
     run(c, entry(gate="tester", walk_only=True))
