@@ -20,3 +20,8 @@ The dry run (gate_cmd.backfill_command -> render.summary) never reads the delive
 ### fix · finding [fixed] · tracked-only path for an already-passed gate
 
 apply._apply: a passed PR is never relabelled; its tracker is filed, reused or adopted via trackers.passed_tracker_body / adopt_passed_comment, whose markers (fr-gate-passed:, fr-gate-adopt-passed:) fr_gate_marker / fr_adopt_marker read as None, so close_gate_trackers never closes them. Dry run: delivery.mark_gate_passed sets PlanEntry.gate_passed from the cached pr_view, and render prints it. Decision stays 'owed'. Failing-first tests: test_gatebackfill_apply.py::test_gh1322_* (tester+devops, file, rewrite held, adopt, re-run, §H converse), test_gate_cmd.py::test_gh1322_the_dry_run_says_a_passed_gate_is_tracked_only_and_never_re_gated. Converse (§H closes held trackers of still-owed keys on a partial pass) filed as gh#1323.
+
+<!-- fr:journal kind=discovery scope=debug id=pr1228-other-gate created=2026-11-02T19:10:14+00:00 -->
+### pr1228-other-gate · discovery · PR #1228 passed devops, backfill computes tester: not a re-gate, a new gate
+
+Live check after the fix: #1228 carries gate:devops-passed (not gate:tester-passed as the brief says). spec:2026-10-22-fr-ops#step1 resolves to gate=tester, so the fix rightly does not flag it, and --yes would ADD gate:tester to #1228, a gate it never had, which would hold the release. That is the backfill's ordinary job, but on a PR already passed under another gate. Left for the operator: set the entry's decision (park/na) or gate: in the plan file, or decide a rule 'any passed post-merge gate counts'. Not changed in this PR.
