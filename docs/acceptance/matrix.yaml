@@ -10492,10 +10492,25 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R13
     - super-fr:docs/superpowers/implemented/specs/2026-11-01-gate-backfill-design.md#R12
     levels: {}
-    status: walk-owed
-    notes: 'post-merge live walk owed: walked on first real use (the first per-repo
-      sweep), gate tester holds the close-out'
+    status: walked
+    notes: walked on first real use (cross-repo sweep 2026-11-02)
     verify: live
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-02T21:29:11Z'
+      evidence: 'Walked 2026-11-02 on first real use (cross-repo sweep, fr 6.1.0rc12-rc14)
+        in derio-net/the-typist: fr gate backfill --yes put gate:tester on the delivering
+        PRs (#1, #10) and filed fr-owned trackers (#15, #16, #17, #19); the triage board
+        (fr triage collect/render, throwaway state dir) listed both PRs in Needs-you
+        as held by gate:tester with their pass commands; two further --yes runs wrote
+        nothing (0 changes); after the operator walked live-session-check on the published
+        site, one fr gate pass --pr 10 --gate tester closed exactly that PR''s tracker
+        (#19) and left PR #1''s (#15-#17) open. Sweep findings filed: #1322/#1324 (passed-PR
+        re-gate), #1327 (row-link commands lack --status); a row reconcile can create
+        a new candidate, so the order is reconcile then backfill.'
   - id: ops-gap-advisory
     capability: fr ops gap
     acceptance: A devops-gated run with no ops and Test Plan steps containing commands
