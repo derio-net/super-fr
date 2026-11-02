@@ -285,3 +285,8 @@ owed_key: spec:2026-11-01-auto-migrate-own-commit#step2
 ### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1282] · resolves test-plan-step-2: Test Plan step 2 owed
 
 Filed at archive as derio-net/super-fr#1282; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved-2 created=2026-11-02T21:19:06+00:00 state=fixed resolves=test-plan-step-2 -->
+### test-plan-step-2-resolved-2 · finding [fixed] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Walked 2026-11-02 on first real use: workspace auto-migrate committed alone; CI on a stale consumer main migrated in place and went green; recorded on row auto-migrate-live-sweep (walked). Consumer repos private, names redacted.
