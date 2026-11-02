@@ -20,3 +20,8 @@ Every "missing" id has a matching "extra" id differing only by the `super-fr/sup
 ### 234d002c27d7 · finding [fixed] · Shard/collect argv share a rootdir; durations path is one = token
 
 `scripts/release.py`: `_shard_pytest_args` / `_collect_pytest_args` (both `--rootdir=<repo>`; `--durations-path=<out>`). Failing test first: `tests/integration/test_release_shard_ids.py` (red: split_check reported the 3 ids missing/extra; green after). Unit pin updated in `test_release_script.py`. Verified against this repo: rootdir = checkout, configfile pyproject.toml, plain `tests/...` ids with an outside durations path. Matrix `release-staged-suite-sharded` gains the int ref, stays walk-owed.
+
+<!-- fr:journal kind=review scope=debug id=5b5203fb2985 created=2026-11-02T05:12:21+00:00 -->
+### 5b5203fb2985 · review · Self-review of the fix diff: no findings
+
+Reviewed scripts/release.py + the two tests. Shard and collect now share one prefix (`-o SHARD_ADDOPTS --rootdir=<repo>`), so they cannot drift apart again. Side effect, intended: pytest-split now finds the plan durations keyed `tests/...`, so release shards are duration-balanced instead of falling back to equal counts. No change fragment needed (scripts/release.py is not a fragment path; gate passed). No findings raised.
