@@ -13,6 +13,22 @@ would refuse it outright. With the app's token the commit is pushed by a named
 identity that the ruleset can exempt, and CI runs on it. `release.yml` then runs
 once more on the release commit and finds nothing to do.
 
+The release is a job graph, not one job (spec `2026-11-01-ci-speed` §3.D).
+`prepare` and `publish` mint the app token; `prepare` stages the release
+commit, six `test` shards and a `collect` job run the suite on exactly that
+commit with a read-only `GITHUB_TOKEN`, used only by checkout and never
+persisted, and no forge token in the suite's env, and `publish` pushes it only after `split-check`
+has proved the shards ran every collected test. `publish` pushes only onto the
+commit the release was staged on. If `main` moved in the meantime, or the push
+loses the race, the run is superseded: it pushes nothing and exits 0, because
+the push that moved `main` starts the Release run that releases. A push made
+with `[skip ci]` or with the `GITHUB_TOKEN` starts no run, so the daily cron
+picks that one up instead. It never retries. A rerun whose release commit
+already landed skips the push and only tags it. A run dispatched with an explicit `version` exits non-zero instead and
+prints the `gh workflow run release.yml -f version=<X>` that re-dispatches it.
+A refusal by the ruleset is never treated as superseded: it fails, naming the
+bypass actor.
+
 `release.yml` chooses the mode by the repo variable `FR_AUTOMATION_APP_ID`.
 Unset, it falls back to `GITHUB_TOKEN`, which is why a repo that has not
 adopted any of this keeps working.

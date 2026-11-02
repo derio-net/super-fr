@@ -302,7 +302,7 @@ def _report_ready(sel: Selection, runner: Any) -> int:
     """R11, for the DevOps stage's stage 3: each selected op's `ready:` probe (no identity
     variables, like `apply`'s), READY or NOT READY with its reason; 0 when all pass."""
     from fr.ops.engine import runner_secrets
-    from fr.ops.mask import sanitise_reason
+    from fr.ops.mask import last_line, sanitise_reason
 
     probed = [lo for lo in sel.ordered if lo.op.ready]
     if not probed:
@@ -310,7 +310,8 @@ def _report_ready(sel: Selection, runner: Any) -> int:
         return 0
     failed = 0
     for lo in probed:
-        rc, line = runner(lo.op.ready, {})
+        rc, out = runner(lo.op.ready, {})
+        line = last_line(out)
         if rc == 0:
             typer.echo(f"READY      {lo.op.id}")
             continue
@@ -599,6 +600,83 @@ def scratch(
     from fr.ops import helpers
 
     raise typer.Exit(code=helpers.scratch(cleanup, command))
+
+
+def _write_bytes_atomic(path: Path, data: bytes) -> None:
+    """Replace `path` with `data` byte for byte (no newline translation), atomically."""
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        if path.exists():
+            os.chmod(tmp, path.stat().st_mode & 0o7777)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+@ops_app.command("stub")
+def stub(
+    plan: Annotated[Path | None, PLAN_OPTION] = None,
+    yes: Annotated[bool, typer.Option("--yes", help="Write ops.yaml and the spec edits.")] = False,
+) -> None:
+    """Propose an op stub per devops command step of the plan's spec (R11).
+
+    Prints the stubs and the `(op: step-<n>)` pointers and writes nothing; `--yes`
+    writes `ops.yaml` (schema_version 2) and the spec. Each stub's `check:` is `TODO`:
+    replace it with a real probe."""
+    import yaml
+
+    from fr.ops.load import OPS_FILE, OpsLoadError, load_ops, ops_none
+    from fr.ops.stub import StubError, append_ops, apply_edits, propose
+    from fr.parser import parse
+    from fr.verification.exit import exit_for_spec
+
+    root, plan_dir = _plan_dir("stub", plan)
+    try:
+        parsed = parse(plan_dir)
+        if parsed.spec_path is None:
+            _refuse("the plan has no spec to read", "stub")
+        spec = root / parsed.spec_path
+        if ops_none(plan_dir) is not None:
+            _refuse("the plan's ops.yaml says `none:`; remove it first", "stub")
+        existing = {lo.op.id for lo in load_ops(plan_dir, root).ops}
+        spec_bytes = spec.read_bytes()
+        spec_text = spec_bytes.decode()
+        new_ops, edits = propose(spec_text, existing, exit_for_spec(root, parsed.spec_path).gates)
+        new_spec = apply_edits(spec_text, edits)
+    except (StubError, OpsLoadError, ValueError, OSError) as e:
+        _refuse(str(e), "stub")
+    if not new_ops:
+        typer.echo("fr ops stub: no devops command step without an op pointer")
+        return
+    ops_path = plan_dir / OPS_FILE
+    try:
+        ops_bytes = ops_path.read_bytes() if ops_path.is_file() else None
+        ops_text = append_ops(ops_bytes.decode() if ops_bytes is not None else None, new_ops)
+    except (StubError, ValueError, OSError) as e:
+        _refuse(str(e), "stub")
+    typer.echo(yaml.safe_dump({"ops": new_ops}, sort_keys=False).rstrip())
+    for edit in edits:
+        typer.echo(
+            f"{parsed.spec_path}: step {edit.n}: {edit.old.strip()}\n  -> {edit.new.strip()}"
+        )
+    if not yes:
+        typer.echo("fr ops stub: nothing written; pass --yes to write")
+        return
+    # the spec first: if ops.yaml then fails, the spec is restored, and a re-run sees
+    # no pointers and no stubs (review p3-r6)
+    _write_bytes_atomic(spec, new_spec.encode())
+    try:
+        _write_bytes_atomic(ops_path, ops_text.encode())
+    except BaseException:
+        _write_bytes_atomic(spec, spec_bytes)
+        raise
+    typer.echo(f"fr ops stub: wrote {len(new_ops)} op(s) to {ops_path} and the spec")
 
 
 # --- the DevOps stage (R15): its own module, registered here ------------------------

@@ -573,8 +573,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ArtifactKind(
             name="ops",
             # A plan's manual operations, canonical carrier (spec
-            # `2026-10-22-fr-ops-design` R1, R2, R17). Born at 1.
-            current_version=1,
+            # `2026-10-22-fr-ops-design` R1, R2, R17). Born at 1; 2 adds the
+            # `none:` acknowledgement (spec 2026-11-01-ops-gate-probes R4, stamp only).
+            current_version=2,
             locator="docs/superpowers/plans/*/ops.yaml",
             stamp="`schema_version` in `ops.yaml`",
             read_stamp=_read_yaml_stamp,

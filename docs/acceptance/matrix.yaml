@@ -1684,7 +1684,7 @@ rows:
       commit on it is reachable from a ref; dirty or unreachable ones are reported,
       never removed.
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-11-01-agent-worktrees-accumulate.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-11-01-agent-worktrees-accumulate.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation_agent_worktrees.py
@@ -6415,6 +6415,22 @@ rows:
     notes: 'Review p1-r5: anchor R3 (--deterministic writes ignored reports) and the
       record-apply commit path the issue is about.'
     verify: none
+  - id: matrix-parse-libyaml
+    capability: acceptance-matrix
+    acceptance: fr parses an acceptance matrix with libyaml when PyYAML has it (pure-Python
+      otherwise) to the same Matrix, and reuses one parse of identical text within a
+      process
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_yamlio.py#test_loader_falls_back_without_the_c_loader
+      - super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_matrix_equals_plain_pyyaml_build
+    status: ci
+    notes: Unit tests in CI pin loader choice + pure fallback parse (test_yamlio), memoized
+      parse with per-caller deep copy, uncached errors and real-matrix equality (test_acceptance_parse_cache).
+      Phase 1 of plan 2026-11-01-ci-speed.
+    verify: none
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
@@ -9618,6 +9634,50 @@ rows:
     notes: 'Phase 3: both workflows trigger on merge_group; change-fragment stays pull-request-only
       and ci-ok treats its skip as a pass.'
     verify: none
+  - id: ci-shards-complete
+    capability: ci
+    acceptance: CI splits every leg's tests across 6 shards by one CI-derived durations
+      file per run, and fails when the shards together did not run exactly the collected
+      test set once each
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_split_check.py
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_covers_every_test_leg
+      int:
+      - super-fr:tests/integration/test_split_durations_xdist.py#test_each_groups_file_is_the_controllers_and_the_groups_partition
+    status: ci
+    notes: 'split-check job runs on every CI run (both legs: 13770 tests, 6 shards,
+      complete on PR run 41340117422); shape and pure check/merge pinned by unit tests;
+      xdist writer pinned by integration test.'
+    verify: none
+  - id: ci-coverage-newest-leg
+    capability: ci
+    acceptance: The combined coverage gate (fail-under 75) is measured on the 3.14 leg;
+      the 3.11 floor leg runs the same tests without coverage
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
+    status: ci
+    notes: Coverage measured and uploaded on the 3.14 leg only, 3.11 runs --no-cov;
+      coverage job (fail-under 75) unchanged and green on PR run 41340117422.
+    verify: none
+  - id: ci-budget-watcher-files-breach
+    capability: ci
+    acceptance: The CI budget watcher reads the run's workflow file at its commit and
+      files or updates a ci-budget issue when the run is over budget
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_budget.py#test_fetch_workflow_text_sends_the_ref_as_a_get_query_parameter
+    status: walk-owed
+    notes: GET fix unit-pinned (argv test); the live proof is the watcher's first workflow_run
+      after merge (Test Plan 3).
+    verify: live
   - id: release-pushes-as-app
     capability: release
     acceptance: With the app configured, super-fr's release commit and tag are pushed
@@ -9653,6 +9713,53 @@ rows:
     status: ci
     notes: 'configure-main-protection.sh tested with a stub gh: merge-not-overwrite
       body, both refusals, --force, --dry-run, idempotence'
+  - id: release-staged-suite-sharded
+    capability: release
+    acceptance: A release proves its exact staged commit with the full suite in 6 token-free
+      shards, each checking the new fr version, and pushes only when all are green;
+      every existing release outcome still happens
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_materialise_refuses_a_bundle_whose_head_is_not_the_planned_commit
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_probes_the_version_before_pytest_and_refuses_a_wrong_number
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_runs_its_split_credential_free_with_the_durations_options
+      int:
+      - super-fr:tests/integration/test_release_shard_ids.py#test_a_shard_with_its_durations_file_outside_the_checkout_reports_collects_ids
+    status: walked
+    notes: 'Walked on the first Release run after #1304 fixed shard node ids (run 41394832265,
+      275 s, v6.1.0-rc.4). Job graph and gate also pinned by unit tests; real-pytest
+      shard/collect id parity by the int test.'
+    verify: live
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-02T05:39:16Z'
+      evidence: 'Release run 41394832265 (merge of #1304, 2026-11-02): prepare -> collect
+        + 6 test shards -> split-check (pass) -> publish; tagged and published v6.1.0-rc.4
+        (pre-release, gate:tester held). Wall clock 275 s (05:34:41-05:39:16 UTC) vs
+        the 600-1000 s single-job baseline. The first attempt, run 41389896526, failed
+        split-check on the shard rootdir bug fixed by #1304.'
+  - id: release-superseded-not-retried
+    capability: release
+    acceptance: When main moved past the commit a release was staged on, the release
+      exits green as superseded without pushing, and the run that push triggered releases
+      instead
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_a_race_at_the_push_itself_is_superseded
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_redispatch
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_tests_once_and_never_retests
+    status: walk-owed
+    notes: Superseded outcomes pinned by unit tests against a real bare remote (moved
+      base, real non-fast-forward race, override exits non-zero with re-dispatch, never
+      retests). Live walk owed on the first real merge race (Test Plan 2).
+    verify: live
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
@@ -10151,6 +10258,22 @@ rows:
       audit placement, and status use of the unchanged per-plan grant; status remains
       ci.
     scenario: tests/scenarios/fr-ops-status-apply.sh
+  - id: ops-none-acknowledgement
+    capability: fr ops
+    acceptance: 'A plan''s ops.yaml can declare `none: <reason>` (no ops on purpose);
+      it is refused beside a non-empty op list, never promotes the devops gate, and
+      older ops.yaml files migrate to the new version'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_load.py#test_ops_none_beside_step_blocks_is_refused_by_name
+      - super-fr:tests/unit/test_ops_load.py#test_a_none_file_loads_no_ops_and_never_counts_as_ops
+      - super-fr:tests/unit/test_migration_ops_none.py#test_the_ops_chain_is_one_hop_to_two
+    status: ci
+    notes: 'R4 unit-pinned: loader/model refusals, plan_has_ops false, ops kind 1->2
+      stamp-only migration chain'
+    verify: none
   - id: fr-ops-testplan-tags
     capability: Test Plan
     acceptance: Test Plan steps tagged [devops] or [tester] route to their gate; any
@@ -10353,6 +10476,105 @@ rows:
     notes: 'post-merge live walk owed: walked on first real use (the first per-repo
       sweep), gate tester holds the close-out'
     verify: live
+  - id: ops-gap-advisory
+    capability: fr ops gap
+    acceptance: A devops-gated run with no ops and Test Plan steps containing commands
+      is warned about by fr plan self-review and at spec-review (naming the steps and
+      commands), and a step pointer naming an undeclared op is a self-review error
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gap.py#test_an_inline_span_starting_with_a_shipped_tool_is_a_command
+      - super-fr:tests/unit/test_plan_ops.py#test_self_review_warns_of_an_ops_gap
+      - super-fr:tests/unit/test_plan_ops.py#test_a_pointer_to_an_undeclared_op_is_an_error
+    status: ci
+    notes: 'R1-R3, R7 unit-pinned: the gap function, self-review warn/errors, spec-review
+      stderr warning; CI test job'
+    verify: none
+  - id: ops-gate-gap-refusal
+    capability: fr ops gate
+    acceptance: fr ops gate stage 1 refuses, bringing nothing up, a devops-gated run
+      whose plan has no ops and whose Test Plan has command steps, naming them and both
+      fixes; a `none:` acknowledgement lets it proceed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_1_refuses_an_ops_gap_before_anything_is_brought_up
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_1_reads_a_merged_prs_gap_from_the_default_branch_tip
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R5: unit (open and merged PR) plus the fr-ops-gate-probes scenario, which
+      CI runs via test_scenarios'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-gate-probes.sh
+  - id: ops-gate-step-probe
+    capability: fr ops gate
+    acceptance: 'A Test Plan step pointing at an op is probed at stage 5: DONE records
+      `ran` with the probe''s output without asking, a failing probe shows its reason
+      and asks retry/na/owed only'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_passing_probe_records_ran_with_its_evidence_and_asks_nothing
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R6, R8, R9: unit plus the scenario asserting the committed ran evidence
+      omits data lines'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-gate-probes.sh
+  - id: ops-gate-answer-grammar
+    capability: fr ops gate
+    acceptance: 'Stage 5 accepts `ran: x` and `na - y`, and re-prompts a malformed answer
+      echoing it and the grammar instead of failing the stage'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_a_non_matching_answer_is_reprompted_with_an_echo
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_fr_ops_gate_probes
+    status: ci
+    notes: 'R10: unit (accepted/re-prompted cases, three-miss failure) plus the scenario''s
+      re-prompted bare ran'
+    verify: candidate
+    scenario: tests/scenarios/fr-ops-gate-probes.sh
+  - id: ops-gate-probes-first-real-use
+    capability: fr ops gate
+    acceptance: On a real devops-gated run, pointed steps are probed and recorded with
+      real output and natural `ran:` answers are accepted
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
+    levels: {}
+    status: walk-owed
+    notes: 'walked on first real use: the next real devops-gated run (tracked derio-net/super-fr#1294)'
+    verify: live
+    issues:
+    - derio-net/super-fr#1294
+  - id: ops-stub-cli
+    capability: fr ops stub
+    acceptance: fr ops stub previews, and with --yes writes, ops.yaml stubs and step
+      pointers for a spec's command steps, refusing a duplicate id or an acknowledged
+      `none:`
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_stub.py#test_one_op_per_devops_command_step_without_a_pointer
+      - super-fr:tests/unit/test_ops_stub.py#test_the_pointer_goes_after_the_tag
+    status: ci
+    notes: 'R11: pure proposer and CLI tests incl. refusals, append-only ops.yaml, CRLF,
+      rollback'
   - id: auto-migrate-workspace-commits-alone
     capability: artifact migration gate
     acceptance: 'In a non-interactive fr-isolation workspace on a work branch, stale

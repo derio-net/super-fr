@@ -175,6 +175,25 @@ class FakeHost:
         self.tip: str | None = TIP
         self.origin_default: str | None = "main"
         self.how: dict[str, str] = {}
+        self.materialised: list[Path] = []
+        # `fr ops status <id> --json`, scripted per op: each call pops (exit, rows | text)
+        self.by_id: dict[str, list[tuple[int, Any]]] = {}
+
+    def materialise(self, ref: str, paths: Sequence[str]) -> Path:
+        """*paths* as the PR head carries them: copied from the fake's own tree."""
+        import tempfile
+
+        self.calls.append((["materialise", ref, *paths], False))
+        out = Path(tempfile.mkdtemp(prefix="fr-gate-head-"))
+        self.materialised.append(out)
+        for rel in paths:
+            src = self.tree.path / rel
+            if src.is_dir():
+                shutil.copytree(src, out / rel)
+            elif src.is_file():
+                (out / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, out / rel)
+        return out
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
         self.calls.append((["diff", base, head, *paths], False))
@@ -210,6 +229,10 @@ class FakeHost:
             verb = inner[1:3]
             if verb == ["ops", "status"] and "--ready" in inner:
                 return self.ready_code, "READY post"
+            if verb == ["ops", "status"] and "--phase" not in inner:
+                op = inner[3]
+                code, payload = self.by_id[op].pop(0)
+                return code, payload if isinstance(payload, str) else json.dumps(payload)
             if verb == ["ops", "status"]:
                 phase = inner[inner.index("--phase") + 1]
                 rows = [
@@ -544,9 +567,9 @@ def test_an_owed_devops_step_is_refused_at_stage_6(ops_root: Path) -> None:
 
 
 def test_an_unanswered_devops_step_stops_stage_5(ops_root: Path) -> None:
-    gate, *_ = _gate(ops_root, prompt=FakePrompt(answers=[""]))
+    gate, *_ = _gate(ops_root, prompt=FakePrompt(answers=["", "", ""]))
     result = run(gate)
-    assert result.failed == 5 and "step 1" in result.why
+    assert result.failed == 5 and "Not understood: ''" in result.why
 
 
 def test_stage_7_keeps_gate_tester_and_the_pass_comment_lists_its_steps(ops_root: Path) -> None:
@@ -705,3 +728,245 @@ def test_host_state_lives_outside_every_checkout(monkeypatch, tmp_path: Path) ->
     assert gate_state_path(tmp_path / "repo", "r").parent.parent == tmp_path / "xdg/fr/ops-gate"
     HostGateState(tmp_path / "s" / "r.json").mark(1, head=HEAD)
     assert oct((tmp_path / "s" / "r.json").stat().st_mode & 0o777) == "0o600"
+
+
+# ------------------------------------- spec 2026-11-01-ops-gate-probes R5: the ops gap
+
+
+def _gapped(ops_root: Path, ops_yaml: str | None = None) -> None:
+    """A devops-gated spec with a command step, and a plan with no op."""
+    (ops_root / SPEC).write_text(
+        "# S\n\n## Verification\n\nstrategy: none\ngate: devops\n\n## Test Plan\n\n"
+        "- run `pulumi up` on the stack\n- [tester] click the page\n"
+    )
+    (ops_root / PLAN / "ops.yaml").unlink()
+    if ops_yaml is not None:
+        (ops_root / PLAN / "ops.yaml").write_text(ops_yaml)
+
+
+def test_stage_1_refuses_an_ops_gap_before_anything_is_brought_up(ops_root: Path) -> None:
+    _gapped(ops_root)
+    gate, host, *_ = _gate(ops_root)
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_1(gate)
+    assert exc.value.code == 2
+    for needle in ("step 1", "pulumi up", "fr ops stub", "none:", "PR #5"):
+        assert needle in exc.value.why, (needle, exc.value.why)
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+    assert any(a[:2] == ["materialise", HEAD] for a, _ in host.calls)
+    assert host.materialised and not any(p.exists() for p in host.materialised)
+    assert _host(ops_root).head() is None  # nothing recorded
+
+
+def test_stage_1_reads_a_merged_prs_gap_from_the_default_branch_tip(ops_root: Path) -> None:
+    """review p1-r1 (gh#1266 family): a merged PR gains no commits, so the gap is read
+    from the default branch's tip, where a follow-up fix lands, and the refusal says so."""
+    _gapped(ops_root)
+    gate, host, *_ = _gate(ops_root, forge=FakeForge(state="MERGED"))
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_1(gate)
+    assert exc.value.code == 2
+    assert any(a[:2] == ["materialise", TIP] for a, _ in host.calls)
+    assert not any(a[:2] == ["materialise", HEAD] for a, _ in host.calls)
+    assert "follow-up PR" in exc.value.why and "on the PR branch" not in exc.value.why
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_stage_1_passes_a_merged_pr_once_the_tip_carries_the_fix(ops_root: Path) -> None:
+    """review p1-r1: the way out — `none:` (or ops) landed on the default branch."""
+    _gapped(ops_root, "schema_version: 2\nnone: converged by hand\n")
+    gate, host, *_ = _gate(ops_root, forge=FakeForge(state="MERGED"))
+    gate_mod.stage_1(gate)
+    assert any(a[:2] == ["materialise", TIP] for a, _ in host.calls)
+    assert any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_stage_1_reports_a_git_failure_in_the_gap_read_as_not_checked(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """review p1-r3: the advisory read never escapes the stage as a raw GitError."""
+    from fr.triage.gitseam import GitError
+
+    _gapped(ops_root)
+    gate, host, *_ = _gate(ops_root)
+    said: list[str] = []
+    monkeypatch.setattr(gate, "say", said.append)
+
+    def boom(ref: str, paths: object) -> Path:
+        raise GitError("archive failed")
+
+    monkeypatch.setattr(host, "materialise", boom)
+    gate_mod.stage_1(gate)
+    assert any("not checked" in line for line in said)
+
+
+def test_stage_1_passes_the_gap_check_with_a_none_acknowledgement(ops_root: Path) -> None:
+    _gapped(ops_root, "schema_version: 2\nnone: converged by hand\n")
+    gate, host, *_ = _gate(ops_root)
+    result = run(gate)
+    assert "ops gap" not in result.why
+    assert any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+# ----------------------------------------------- R10: the answer grammar (stage 5)
+
+
+def _run5(ops_root: Path, answers: list[str]) -> tuple[Any, FakePrompt, FakeTree]:
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, prompt=FakePrompt(answers=answers)
+    )
+    return run(gate), prompt, tree
+
+
+def _outcome_args(tree: FakeTree) -> list[list[str]]:
+    return [c[1][0] for c in tree.calls if c[0] == "fr" and c[1][0][:2] == ["closeout", "outcome"]]
+
+
+@pytest.mark.parametrize(
+    ("answer", "flag", "text"),
+    [
+        ("ran: x", "--ran", "x"),
+        ("ran:x", "--ran", "x"),
+        ("na - y", "--na", "y"),
+        ("na- y", "--na", "y"),
+        ("owed x", "--owed", "x"),
+        ("N/A: z", "--na", "z"),
+    ],
+)
+def test_the_answer_grammar_accepts(ops_root: Path, answer: str, flag: str, text: str) -> None:
+    result, prompt, tree = _run5(ops_root, [answer])
+    assert result.failed != 5
+    (args,) = _outcome_args(tree)
+    assert args[args.index(flag) + 2] == text and len(prompt.asked) == 1
+
+
+@pytest.mark.parametrize("bad", ["rancid", "na-ive", "ran", "", "ran:", "retry"])
+def test_a_non_matching_answer_is_reprompted_with_an_echo(ops_root: Path, bad: str) -> None:
+    result, prompt, tree = _run5(ops_root, [bad, "ran: walked"])
+    assert len(prompt.asked) == 2
+    assert repr(bad) in prompt.asked[1] and "`ran <evidence>`" in prompt.asked[1]
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--evidence") + 1] == "walked"
+
+
+def test_three_non_matches_in_a_row_fail_the_stage_with_the_echo(ops_root: Path) -> None:
+    result, prompt, tree = _run5(ops_root, ["rancid", "ran", "na-ive"])
+    assert result.failed == 5 and "'na-ive'" in result.why and len(prompt.asked) == 3
+    assert "`ran <evidence>`" in result.why  # review p2-r3: the grammar is echoed too
+    assert _outcome_args(tree) == []
+
+
+# ------------------------------------------------ R8: a pointed step is probed
+
+
+def _row(op: str, state: str, how: str | None = None, **kw: Any) -> dict[str, Any]:
+    row = {"op": op, "state": state, "label": state, "how": how, "reason": "", "output": None,
+           "evidence": None}  # fmt: skip
+    return {**row, **kw}
+
+
+def _point(ops_root: Path, op: str = "post") -> None:
+    spec = ops_root / SPEC
+    spec.write_text(spec.read_text().replace("[devops] walk", f"[devops] (op: {op}) walk"))
+
+
+def _probe(ops_root: Path, script: list[tuple[int, Any]], answers: list[str] | None = None):
+    _point(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, said = _gate(
+        ops_root, up=True, prompt=FakePrompt(answers=answers or [])
+    )
+    host.by_id["post"] = list(script)
+    return run(gate), host, tree, prompt, said
+
+
+def test_a_passing_probe_records_ran_with_its_evidence_and_asks_nothing(ops_root: Path) -> None:
+    done = [_row("post", "DONE", "checked", output="a\nb", evidence="a; b")]
+    result, host, tree, prompt, said = _probe(ops_root, [(0, done)])
+    assert result.failed != 5 and prompt.asked == []
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--ran") :][:3] == ["--ran", "--evidence", "post: check passed — a; b"]
+    trusts = [c for c in tree.calls if c[0] == "fr" and c[1][0][:2] == ["ops", "trust"]]
+    assert len(trusts) == 1 and any("a\nb" in line for line in said)
+
+
+def test_trust_is_granted_before_the_first_probe_runs(ops_root: Path) -> None:
+    """review p2-r3: R8's `gate.trust(tree)` precedes the first `fr ops status <id>`."""
+    order: list[str] = []
+    done = [_row("post", "DONE", "checked", evidence="ok")]
+    _point(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, said = _gate(ops_root, up=True)
+    host.by_id["post"] = [(0, done)]
+    real_trust, real_fr = gate.trust, host.fr
+
+    def trust(t: Any) -> None:
+        order.append("trust")
+        real_trust(t)
+
+    def fr(args: Any, *, terminal: bool = False) -> tuple[int, str]:
+        if "status" in list(args):
+            order.append("status")
+        return real_fr(args, terminal=terminal)
+
+    gate.trust = trust  # type: ignore[method-assign]
+    host.fr = fr  # type: ignore[method-assign]
+    run(gate)
+    assert "status" in order and order.index("trust") < order.index("status")
+
+
+@pytest.mark.parametrize("state", ["UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"])
+def test_a_failing_state_offers_only_retry_na_owed(ops_root: Path, state: str) -> None:
+    """review p2-r3: every not-done state is treated as OPEN is (R8)."""
+    script = [(1, [_row("post", state, reason="why")])]
+    result, host, tree, prompt, _ = _probe(ops_root, script, ["ran x", "owed chase it"])
+    assert "`retry`" in prompt.asked[0] and "`ran <evidence>`" not in prompt.asked[0]
+    assert "Not understood: 'ran x'" in prompt.asked[1]
+    (args,) = _outcome_args(tree)
+    assert "--owed" in args
+
+
+@pytest.mark.parametrize("how", ["proof", "legacy", "attested"])
+def test_a_done_that_ran_no_check_asks_the_usual_question(ops_root: Path, how: str) -> None:
+    """review p2-r3: no probe ran, so fr records no `ran` on its own (R8)."""
+    script = [(0, [_row("post", "DONE", how)])]
+    result, host, tree, prompt, _ = _probe(ops_root, script, ["ran: walked it"])
+    assert len(prompt.asked) == 1 and "`ran <evidence>`" in prompt.asked[0]
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--evidence") + 1] == "walked it"
+
+
+def test_an_open_probe_offers_retry_na_owed_and_retry_reruns_it(ops_root: Path) -> None:
+    script = [(1, [_row("post", "OPEN", reason="HTTP 404")]),
+              (1, [_row("post", "OPEN", reason="HTTP 404")]),
+              (0, [_row("post", "DONE", "checked", evidence="ok")])]  # fmt: skip
+    result, host, tree, prompt, _ = _probe(ops_root, script, ["retry", "ran x", "retry"])
+    assert len(prompt.asked) == 3 and "`retry`" in prompt.asked[0]
+    assert "Not understood: 'ran x'" in prompt.asked[2]
+    (args,) = _outcome_args(tree)
+    assert "post: check passed — ok" in args
+
+
+def test_an_escalate_probe_is_handled_like_open(ops_root: Path) -> None:
+    result, host, tree, prompt, _ = _probe(
+        ops_root, [(3, [_row("post", "ESCALATE", reason="p1")])], ["owed later"]
+    )
+    (args,) = _outcome_args(tree)
+    assert "--owed" in args and "`retry`" in prompt.asked[0]
+
+
+@pytest.mark.parametrize("row", [_row("post", "N/A"), _row("post", "DONE", "attested")])
+def test_na_and_attested_ask_the_usual_question_and_record_no_ran_on_their_own(
+    ops_root: Path, row: dict[str, Any]
+) -> None:
+    result, host, tree, prompt, _ = _probe(ops_root, [(0, [row])], ["ran: by hand"])
+    assert "`ran <evidence>`" in prompt.asked[0] and "retry" not in prompt.asked[0]
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--evidence") + 1] == "by hand"
+
+
+def test_a_refused_status_fails_the_stage_with_its_output(ops_root: Path) -> None:
+    result, host, tree, prompt, _ = _probe(ops_root, [(2, "untrusted op set")])
+    assert result.failed == 5 and "untrusted op set" in result.why and prompt.asked == []
+    assert _outcome_args(tree) == []

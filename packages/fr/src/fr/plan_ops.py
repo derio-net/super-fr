@@ -1482,6 +1482,7 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # release that ships `fr ops`, so an older fr refuses it rather than
     # silently ignoring its ops.
     issues.extend(_ops_floor_issues(plan))
+    issues.extend(_ops_gap_issues(plan))
 
     # The refactor-or-justify gate moved to `fr run resolve` (spec 2026-09-25
     # §5.C.2.2, `fr.record.gates.refactor_gaps`): at plan time "nothing to
@@ -1843,6 +1844,63 @@ def _ops_floor_issues(plan: Plan) -> list[ReviewIssue]:
             ),
         )
     ]
+
+
+def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
+    """Spec 2026-11-01-ops-gate-probes R3, R7: a `warn` for an ops gap, an `error` per
+    Test Plan step pointing at an op the plan does not declare, and one per op whose
+    `check:` is still the stub sentinel. An unreadable Verification section, matrix or
+    ops carrier skips what it would decide (the ops floor reports the carrier)."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.ops.gap import gap_message, ops_gap
+    from fr.ops.load import OpsLoadError, load_ops
+    from fr.ops.model import TODO_CHECK
+    from fr.spec import test_plan_steps
+    from fr.verification.exit import exit_for_spec
+
+    root = plan.repo_root
+    spec_rel = plan.spec_path or plan.meta.spec
+    if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
+        return []
+    issues: list[ReviewIssue] = []
+    try:  # `SectionError` is a ValueError, as an undecodable spec's error is
+        spec_text = (root / spec_rel).read_text() if (root / spec_rel).is_file() else ""
+    except (ValueError, OSError):
+        return []
+    try:
+        gap = ops_gap(root, spec_rel, plan.dir, exit_for_spec(root, spec_rel).gates)
+    except (ValueError, OSError, AcceptanceError, OpsLoadError):
+        gap = []
+    if gap:
+        issues.append(ReviewIssue(severity="warn", message=gap_message(gap, has_plan=True)))
+    try:
+        ops = load_ops(plan.dir, root).ops
+    except OpsLoadError:
+        return issues
+    declared = {lo.op.id for lo in ops}
+    for step in test_plan_steps(spec_text):
+        if step.op is not None and step.op not in declared:
+            issues.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"Test Plan step {step.n} points at `(op: {step.op})`, but the plan "
+                        "declares no such op"
+                    ),
+                )
+            )
+    for lo in ops:
+        if lo.op.check == TODO_CHECK:
+            issues.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"op `{lo.op.id}` ({lo.where}) still has the stub `check: {TODO_CHECK}`"
+                        " — write a real probe"
+                    ),
+                )
+            )
+    return issues
 
 
 def _version_floor_issue(
