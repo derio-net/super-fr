@@ -11,7 +11,7 @@ description: >
   on the shared feature branch one phase at a time (parallel phase execution is
   `fr apply --to <runner>`'s job).
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
-fr_artifact_version: 1
+fr_artifact_version: 2
 ---
 
 # fr-phase-executor
