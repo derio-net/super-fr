@@ -23,8 +23,9 @@ from fr.gatebackfill.candidates import (
     Candidate,
 )
 from fr.gatebackfill.forge import BackfillForge, Git, pr_number_of
-from fr.gatebackfill.model import PrHit
+from fr.gatebackfill.model import PlanEntry, PrHit
 from fr.ghclient import UnsupportedForgeOperation
+from fr.labels import gate_label
 
 PR_SUBJECT_RE = re.compile(r"\(#(\d+)\)\s*$|^Merge pull request #(\d+)\b")
 """A squash merge's `(#N)` subject or a merge commit's `Merge pull request #N`."""
@@ -213,6 +214,23 @@ class _Chain:
             if (n := pr_number_of(r))
         ]  # fmt: skip
         return self.settle(numbers, "issue", None) if numbers else None
+
+
+def mark_gate_passed(entries: list[PlanEntry], cache: DeliveryCache) -> list[PlanEntry]:
+    """*entries* with `gate_passed` set from the delivering PR's labels (gh#1322). It reads only
+    the views the delivery chain already cached, so it adds no forge read; a PR the chain could
+    not read stays `False`. Run it after `merge_plan`: an operator-written `gate:` counts."""
+    out = []
+    for e in entries:
+        view = cache.views.get(e.pr.number) if e.pr is not None else None
+        labels = view.get("labels") if isinstance(view, dict) else None
+        passed = (
+            e.gate is not None
+            and isinstance(labels, list)
+            and gate_label(e.gate, passed=True).name in {str(n) for n in labels}
+        )
+        out.append(e.model_copy(update={"gate_passed": passed}))
+    return out
 
 
 def delivering_pr(

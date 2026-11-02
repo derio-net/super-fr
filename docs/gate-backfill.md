@@ -75,10 +75,21 @@ the key closes every one of them as a duplicate. A bare `owed` on an `issue:` ke
 open issue is refused at the dry run (it would file nothing and leave no marker): adopt it, or give
 the manifest entry an `issue:`. An entry whose fr-owned tracker names another gate or PR than the
 plan's is skipped, and the line says why: fix the plan entry's gate or close the tracker, then
-re-run. A PR already carrying `gate:<g>-passed` gets no write and
-no tracker; the run prints the command that discharges the owed key itself (`set-status --walk` for a row,
-`closeout outcome --ran` for a spec step, the `--tick` lines for a plan phase, `journal resolve` for
-a journal entry, "close it by hand" for an issue), never `fr gate pass`.
+re-run.
+
+**A gate that already passed is never put back** (gh#1322). When the delivering PR already carries
+`gate:<g>-passed`, the dry run says so on the entry's line ("gate:<g> already passed on PR #n:
+tracked only, never re-gated") and records `gate_passed: true` in the plan file. The decision stays
+`owed`, because the item really is still owed. `--yes` re-reads the PR's labels itself, so a stale
+plan file cannot re-gate it. It never adds `gate:<g>` to that PR, because doing so would re-hold the
+release and reverse the pass. It still files, reuses or adopts the item's tracker, in a "tracked
+only" form. Its body ends with `<!-- fr-gate-passed:<g> pr:<n> -->` instead of the gate marker (an
+adopt comment ends with `fr-gate-adopt-passed:`), and it shows the command that discharges the owed
+key itself, never `fr gate pass`: `set-status --walk` for a row, `closeout outcome --ran` for a spec
+step, the `--tick` lines for a plan phase, `journal resolve` for a journal entry, "close it by hand"
+for an issue. Because it carries no gate marker, re-running `fr gate pass` on that PR never closes
+it. An open fr tracker filed before the gate passed is rewritten into this form. A re-run writes
+nothing.
 
 Labels (`gate:<g>`, `fr:owed`, `fr:awaiting-live`) are created only right before the first write
 that uses them. Forge errors, including a forge that cannot do an operation, are recorded on their

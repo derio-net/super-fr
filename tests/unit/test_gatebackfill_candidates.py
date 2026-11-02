@@ -159,6 +159,11 @@ def test_tracker_issues_are_not_candidates_of_their_own(tmp_path: Path) -> None:
             63, "backfill tracker", "Owed.\n<!-- fr-gate:devops pr:41 -->\n<!-- fr-owed:bad key -->"
         ),
         issue(64, "plain one", "unrelated"),
+        issue(
+            65,
+            "tracked only",
+            "Owed.\n<!-- fr-gate-passed:tester pr:41 -->\n<!-- fr-owed:bad key -->",
+        ),  # gh#1322: a tracked-only tracker is a tracker too
     ]
     previous = PlanFile(
         repo=REPO,
@@ -169,6 +174,7 @@ def test_tracker_issues_are_not_candidates_of_their_own(tmp_path: Path) -> None:
 
     assert f"issue:{REPO}#61" not in cands  # another entry's adopt target
     assert f"issue:{REPO}#63" not in cands  # carries a PR marker
+    assert f"issue:{REPO}#65" not in cands  # carries a tracked-only marker
     assert any("63" in n for n in notes)
     looks = cands[f"issue:{REPO}#62"]
     assert looks.decision == "review"

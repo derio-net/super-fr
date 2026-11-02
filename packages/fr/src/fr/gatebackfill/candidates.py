@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from fr.archive_followups import owned_owed_key
 from fr.gatebackfill.forge import OPEN_ISSUE_LIMIT, BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
-from fr.gatebackfill.trackers import fr_gate_marker, is_ours
+from fr.gatebackfill.trackers import fr_gate_marker, fr_passed_marker, is_ours
 
 if TYPE_CHECKING:
     from fr.archive import MergeEvidence
@@ -426,7 +426,8 @@ def _settle_trackers(
         if split_key(c.key)[0] == "issue" and c.key not in man:
             ref = c.key.removeprefix("issue:")
             body = str(by_ref.get(ref, {}).get("body") or "")
-            if ref in adopted or (ref in ours and fr_gate_marker(body) is not None):
+            marked = fr_gate_marker(body) or fr_passed_marker(body)  # held or tracked only
+            if ref in adopted or (ref in ours and marked is not None):
                 notes.append(f"{c.key}: a tracker, not a candidate")
                 continue
             if ref in suggested:

@@ -79,13 +79,87 @@ def test_a_pr_already_holding_the_gate_gets_no_label_write() -> None:
     assert names(c) == []
 
 
-def test_a_passed_gate_writes_nothing_and_reports_the_discharge_command() -> None:
+# --- gh#1322: a PR whose gate already passed is tracked only, never re-gated ----------------
+
+
+def passed(c: FakeGhClient, gate: str, pr: int = 41) -> None:
+    c.prs[(REPO, pr)]["labels"] = [f"gate:{gate}-passed"]
+
+
+@pytest.mark.parametrize("gate", ["tester", "devops"])
+def test_gh1322_a_passed_gate_is_never_re_added_and_the_item_is_still_tracked(gate: str) -> None:
     c = client()
-    c.prs[(REPO, 41)]["labels"] = ["gate:devops-passed"]
-    rep = run(c, entry())
+    passed(c, gate)
+    rep = run(c, entry(gate=gate))
+    assert "edit_pr_labels" not in names(c)
+    assert c.pr_labels.get((REPO, 41), set()) == set()
+    assert names(c) == ["ensure_labels", "create_issue"]
+    issue = c.issues[(REPO, 1)]
+    assert issue.labels == {"fr:owed"}
+    assert issue.body == t.passed_tracker_body(
+        KEY, "fleet: phase 3", gate, 41, repo_root=Path("/nonexistent")
+    )
+    assert t.fr_gate_marker(issue.body) is None  # never a held tracker: §H must not close it
+    assert t.fr_passed_marker(issue.body) == (gate, 41)
+    assert "fr gate pass" not in issue.body
     line = rep.lines()[0]
-    assert names(c) == [] and "fr gate pass" not in line
-    assert "nothing to tick" in line or "fr plan edit" in line
+    assert f"gate:{gate} already passed on PR #{41}; tracked only" in line
+    assert "filed tracker example-org/widgets#1" in line
+    assert rep.failed == 0 and rep.writes == 1
+
+
+@pytest.mark.parametrize("gate", ["tester", "devops"])
+def test_gh1322_a_re_run_on_a_passed_gate_writes_nothing(gate: str) -> None:
+    c = client()
+    passed(c, gate)
+    run(c, entry(gate=gate, walk_only=True))
+    before = c.attempted_mutations
+    rep = run(c, entry(gate=gate, walk_only=True))
+    assert c.attempted_mutations == before and rep.writes == 0
+    assert "tracked only" in rep.lines()[0]
+
+
+def test_gh1322_a_held_tracker_whose_gate_since_passed_becomes_tracked_only() -> None:
+    c = client()
+    passed(c, "tester")
+    tracker(c, 5, t.tracker_body(KEY, "x", "tester", 41))
+    run(c, entry(gate="tester"))
+    body = c.issues[(REPO, 5)].body
+    assert t.fr_gate_marker(body) is None and t.fr_passed_marker(body) == ("tester", 41)
+    assert "create_issue" not in names(c) and "edit_pr_labels" not in names(c)
+
+
+def test_gh1322_adopting_on_a_passed_gate_comments_tracked_only_once() -> None:
+    c = client()
+    passed(c, "tester")
+    foreign(c, 8)
+    e = entry(gate="tester", decision=f"adopt {REPO}#8")
+    run(c, e)
+    assert "edit_pr_labels" not in names(c)
+    [comment] = c.issue_comments[(REPO, 8)]
+    assert t.fr_adopt_marker(comment["body"]) is None  # §H's step 3 must not list it
+    assert t.fr_adopt_passed_marker(comment["body"]) == (KEY, "tester", 41)
+    assert c.issues[(REPO, 8)].labels == {"fr:owed"}
+    before = c.attempted_mutations
+    run(c, e)
+    assert c.attempted_mutations == before
+
+
+@pytest.mark.parametrize("gate", ["tester", "devops"])
+def test_gh1322_passing_the_gate_again_does_not_close_a_tracked_only_tracker(gate: str) -> None:
+    from fr.verification.labels import close_gate_trackers
+
+    from tests.unit.gatebackfill_fixtures import ME
+
+    c = client()
+    c.comment_author = ME
+    passed(c, gate)
+    foreign(c, 8)
+    run(c, entry(gate=gate), entry("plan:2026-06-01-a#p2", gate=gate, decision=f"adopt {REPO}#8"))
+    assert (REPO, 1) in c.issues
+    rep = close_gate_trackers(c, REPO, 41, gate, "retry", root=Path("/nonexistent"))
+    assert rep.closed == [] and rep.adopt_commands == [] and rep.errors == []
+    assert "close_issue" not in names(c)
 
 
 def test_a_walk_only_tracker_is_filed_with_awaiting_live() -> None:

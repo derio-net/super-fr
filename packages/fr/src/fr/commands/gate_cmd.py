@@ -423,7 +423,7 @@ def backfill_command(
         if report.failed:
             raise typer.Exit(code=1)
         return
-    entries = merge_plan(previous, fresh)
+    entries = delivery.mark_gate_passed(merge_plan(previous, fresh), cache)
     try:
         write_plan(
             path,
