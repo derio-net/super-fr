@@ -10,3 +10,8 @@ On super-fr (v6.1.0-rc.11), `fr gate backfill --plan <scratch>` lists row:releas
 ### h1-relabel · hypothesis · --yes re-adds gate:tester to a passed PR
 
 Ruled out by reading apply.py:247-253. Both pr_view clients (real_ghclient, real_ghrestclient) flatten labels to names, and gate_label(gate, passed=True) is checked before any add. --yes never relabels. The re-gate fear comes from the dry run reading as 'owed' with the passed state hidden.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc created=2026-11-02T19:00:42+00:00 -->
+### rc · root-cause · the plan path has no 'gate already passed' state
+
+The dry run (gate_cmd.backfill_command -> render.summary) never reads the delivering PR's labels, so a passed PR's entry reads 'owed' like any other. Apply's passed branch (spec §G step 1) returns before step 2, so the still-owed item goes untracked. The operator decided against both: the item stays tracked, only the relabel is skipped.
