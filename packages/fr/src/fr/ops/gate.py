@@ -593,6 +593,7 @@ def _refuse_an_ops_gap(gate: Gate, ref: str, *, merged: bool) -> None:
     from fr.ops.gap import gap_message, ops_gap
     from fr.ops.load import OpsLoadError
     from fr.requirements import run_spec
+    from fr.spec import TestPlanHeadingError
     from fr.triage.gitseam import GitError
     from fr.verification.exit import exit_for_spec
 
@@ -606,7 +607,14 @@ def _refuse_an_ops_gap(gate: Gate, ref: str, *, merged: bool) -> None:
         scratch = gate.host.materialise(ref, _head_paths(t, spec_rel))
         gates = exit_for_spec(scratch, spec_rel, repo=t.repo.rsplit("/", 1)[-1]).gates
         gap = ops_gap(scratch, spec_rel, scratch / t.plan_rel, gates)
-    except (ValueError, OSError, AcceptanceError, OpsLoadError, GitError) as e:
+    except (
+        ValueError,
+        OSError,
+        AcceptanceError,
+        OpsLoadError,
+        GitError,
+        TestPlanHeadingError,
+    ) as e:
         gate.say(f"the ops-gap check could not read {where} ({e}); not checked")
         gap = []
     finally:

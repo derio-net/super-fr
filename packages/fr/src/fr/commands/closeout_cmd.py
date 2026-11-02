@@ -95,11 +95,11 @@ def outcome(
     nothing is written for any step of the range, unless `--supersede` is given; then a
     new entry is appended and the old one stays, as a journal is a log.
     """
-    from fr.archive import outcome_id, recorded_outcomes, spec_slug_of
+    from fr.archive import display_path, outcome_id, recorded_outcomes, spec_slug_of
     from fr.journal.model import owed_body, resolve_journal_read_path
     from fr.record import apply as engine
     from fr.record.model import JournalItem, StepRecord
-    from fr.spec import test_plan_steps
+    from fr.spec import TestPlanHeadingError, test_plan_steps
 
     chosen = [name for name, on in (("ran", ran), ("owed", owed), ("na", na)) if on]
     if len(chosen) != 1:
@@ -118,7 +118,10 @@ def outcome(
 
     root = resolve_repo_root()
     spec_path = _spec_of_run(root, run) if run is not None else _spec_arg(root, spec or "")
-    steps = test_plan_steps(spec_path.read_text())
+    try:
+        steps = test_plan_steps(spec_path.read_text(), source=display_path(root, spec_path))
+    except TestPlanHeadingError as e:
+        raise _refuse(str(e)) from e
     if not steps:
         raise _refuse(f"{spec_path.name} has no `## Test Plan` section — nothing to record")
     numbers = _parse_range(step, len(steps))

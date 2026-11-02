@@ -1454,6 +1454,9 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # be dispatched at all.
     issues.extend(_workflow_issues(plan))
 
+    # The spec's Test Plan heading is exactly `## Test Plan` (super-fr#1315).
+    issues.extend(_test_plan_heading_issues(plan))
+
     # Acceptance linkage (2026-07-04 acceptance-matrix spec, decision 2).
     issues.extend(_acceptance_link_issues(plan))
 
@@ -1704,6 +1707,26 @@ def _verification_issues(plan: Plan) -> list[ReviewIssue]:
     ]
 
 
+def _test_plan_heading_issues(plan: Plan) -> list[ReviewIssue]:
+    """super-fr#1315: an error when the plan's own-repo spec spells its Test Plan
+    heading as a near-miss of `## Test Plan` (`## 6. Test Plan (post-merge)`).
+    Every gate after this one (archive's R19 hold, `fr closeout outcome`, the
+    owed lane) would read it as no Test Plan at all and hold nothing."""
+    from fr.spec import find_test_plan_heading, near_miss_message
+
+    root = plan.repo_root
+    spec_rel = plan.spec_path or plan.meta.spec
+    if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
+        return []
+    try:
+        heading = find_test_plan_heading((root / spec_rel).read_text())
+    except (OSError, ValueError):
+        return []  # an unreadable spec is reported by the checks that need it
+    if heading is None or heading.exact:
+        return []
+    return [ReviewIssue(severity="error", message=near_miss_message(heading, spec_rel))]
+
+
 def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     """Decision 2 of the acceptance-matrix spec: a plan whose spec carries a
     Test Plan must link >=1 matrix row (`acceptance: [row-ids]` on phases),
@@ -1719,8 +1742,12 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     spec_rel = plan.spec_path or plan.meta.spec
     if not spec_rel or is_cross_repo_spec(spec_rel):
         return []
+    from fr.spec import find_test_plan_heading
+
     spec_file = root / spec_rel
-    if not spec_file.exists() or "## Test Plan" not in spec_file.read_text():
+    # A near-miss heading still counts here: its rows are owed all the same, and
+    # `_test_plan_heading_issues` refuses the heading itself (#1315).
+    if not spec_file.exists() or find_test_plan_heading(spec_file.read_text()) is None:
         return []
 
     linked: dict[str, int] = {}  # row id → first phase that links it
@@ -1855,7 +1882,7 @@ def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
     from fr.ops.gap import gap_message, ops_gap
     from fr.ops.load import OpsLoadError, load_ops
     from fr.ops.model import TODO_CHECK
-    from fr.spec import test_plan_steps
+    from fr.spec import TestPlanHeadingError, test_plan_steps
     from fr.verification.exit import exit_for_spec
 
     root = plan.repo_root
@@ -1869,8 +1896,8 @@ def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
         return []
     try:
         gap = ops_gap(root, spec_rel, plan.dir, exit_for_spec(root, spec_rel).gates)
-    except (ValueError, OSError, AcceptanceError, OpsLoadError):
-        gap = []
+    except (ValueError, OSError, AcceptanceError, OpsLoadError, TestPlanHeadingError):
+        gap = []  # a near-miss heading is `_test_plan_heading_issues`' error
     if gap:
         issues.append(ReviewIssue(severity="warn", message=gap_message(gap, has_plan=True)))
     try:
@@ -1878,7 +1905,11 @@ def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
     except OpsLoadError:
         return issues
     declared = {lo.op.id for lo in ops}
-    for step in test_plan_steps(spec_text):
+    try:
+        steps = test_plan_steps(spec_text)
+    except TestPlanHeadingError:
+        steps = []  # reported once, by `_test_plan_heading_issues`
+    for step in steps:
         if step.op is not None and step.op not in declared:
             issues.append(
                 ReviewIssue(

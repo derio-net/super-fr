@@ -86,7 +86,7 @@ worktree), with a `## Requirements` section before `## Design`: a plain
 numbered list, one requirement per line — `R1. <text>`, `R2. <text>` — in the
 spec author's own words, with no quote, no source and no gate on its content.
 It is what the questions settled: a requirement the spec does not state is not
-built, and a spec defect is fixed in the spec. **Standalone:** resolve the cursor §0 started with its step
+built, and a spec defect is fixed in the spec. The Test Plan heading is exactly `## Test Plan` — unnumbered, no suffix, even when every other section is numbered: fr reads that line alone, and refuses a near-miss such as `## 6. Test Plan (post-merge)` (`fr validate artifacts`, `fr plan self-review`, archive, close-out). **Standalone:** resolve the cursor §0 started with its step
 record — `emitted: {spec: <path>}`, each answer a `decision` in `journal:`,
 the brief from §1, each §3 row in `acceptance:` — in ONE `fr run
 resolve <run-id> --step brainstorm --record <file>`, then `fr run advance

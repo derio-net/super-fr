@@ -590,7 +590,8 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # changes either canonical agent moves this AND registers
             # `fr.artifacts.agents_kind.rerender_migration` for the hop
             # (`tests/unit/test_tripwire_agents_data.py` pins the pair).
-            current_version=1,
+            # 2: fr-spec-reviewer checks the `## Test Plan` heading (#1315).
+            current_version=2,
             locator=".claude/agents/fr-*.md",
             stamp=f"`{AGENTS_STAMP_KEY}` in the agent's front matter",
             read_stamp=_read_agents_stamp,

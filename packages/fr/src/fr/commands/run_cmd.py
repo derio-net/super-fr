@@ -6190,6 +6190,7 @@ def _warn_ops_gap(repo_root: Path, state: RunState) -> None:
     from fr.ops.gap import gap_message, ops_gap
     from fr.ops.load import OpsLoadError
     from fr.requirements import run_spec
+    from fr.spec import TestPlanHeadingError
     from fr.verification.exit import run_exit, run_plan_dir
 
     spec_rel = run_spec(state)
@@ -6198,6 +6199,9 @@ def _warn_ops_gap(repo_root: Path, state: RunState) -> None:
     plan_dir = run_plan_dir(repo_root, state)
     try:
         gap = ops_gap(repo_root, spec_rel, plan_dir, run_exit(repo_root, state).gates)
+    except TestPlanHeadingError as e:  # never silent: it hides every step (#1315)
+        err_console.print(f"warning: {e}", markup=False, soft_wrap=True)
+        return
     except (ValueError, OSError, AcceptanceError, OpsLoadError):
         return
     if gap:

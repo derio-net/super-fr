@@ -79,6 +79,10 @@ def _render_current(path: Path) -> None:
     rerender(path, ARTIFACT_KINDS[KIND].current_version)
 
 
+MIGRATIONS.register(rerender_migration(1, 2))
+"""1 -> 2: `fr-spec-reviewer` checks the Test Plan heading is exactly `## Test Plan`
+(super-fr#1315)."""
+
 MIGRATIONS.register(
     Repair(
         kind=KIND,

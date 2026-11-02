@@ -329,8 +329,11 @@ MISSING_FIELD_CASES = {
     ),
     "agents": (
         ".claude/agents/fr-spec-reviewer.md",
-        "---\nname: fr-spec-reviewer\ndescription: x\n---\nbody\n",
-        "fr_artifact_version",
+        # Stamped current, so the structure check runs: an unstamped one reads as
+        # version 1, which is stale since the kind moved past 1 (super-fr#1315).
+        "---\ndescription: x\nfr_artifact_version: "
+        f"{ARTIFACT_KINDS['agents'].current_version}\n---\nbody\n",
+        "name",
     ),
 }
 
@@ -647,7 +650,7 @@ def _splice_like_commit_7ece5a9(spec_text: str, replacement: str) -> str:
     """Reproduce the bad splice verbatim: `index` finds the FIRST occurrence,
     which here is an inline mention inside the prose, so `end < start` and the
     tail is re-appended."""
-    start = spec_text.index("## 5. Test Plan")
+    start = spec_text.index("## Test Plan")
     end = spec_text.index("## Implementation Plans")
     return spec_text[:start] + replacement + spec_text[end:]
 
@@ -663,7 +666,7 @@ SPLICEABLE_SPEC = """# Thermosiphon rebuild
 
 It does not leak.
 
-## 5. Test Plan
+## Test Plan
 
 1. Old step.
 
@@ -677,7 +680,7 @@ It does not leak.
 
 def test_a_duplicated_section_block_is_caught(tmp_path: Path) -> None:
     seed_good_repo(tmp_path)
-    spliced = _splice_like_commit_7ece5a9(SPLICEABLE_SPEC, "## 5. Test Plan\n\n1. New step.\n\n")
+    spliced = _splice_like_commit_7ece5a9(SPLICEABLE_SPEC, "## Test Plan\n\n1. New step.\n\n")
     assert spliced.count("## 2. Goal") == 2, "the fixture must actually be duplicated"
     path = _w(tmp_path, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", spliced)
 

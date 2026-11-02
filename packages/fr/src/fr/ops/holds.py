@@ -118,5 +118,5 @@ def gated_steps(
     outcomes = _step_outcomes(repo_root, spec, exclude)
     return [
         (step, outcomes.get(step.n))
-        for step in steps_gated(test_plan_steps(spec.read_text()), gates, gate)
+        for step in steps_gated(test_plan_steps(spec.read_text(), source=spec_rel), gates, gate)
     ]
