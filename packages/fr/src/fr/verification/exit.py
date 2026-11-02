@@ -87,13 +87,25 @@ def _build(verification: SpecVerification, rows: list[Row]) -> Exit:
     )
 
 
-def exit_for_spec(repo_root: Path, spec_rel: str, shape_default: str | None = None) -> Exit:
+def exit_for_spec(
+    repo_root: Path, spec_rel: str, shape_default: str | None = None, *, repo: str | None = None
+) -> Exit:
     """The exit of the spec at `spec_rel` (`SectionError` / `AcceptanceError`
-    when its section or the matrix is unreadable)."""
+    when its section or the matrix is unreadable). *repo* names the repository when
+    `repo_root` is not a checkout (a tree materialised from a ref, spec
+    2026-11-01-ops-gate-probes R5); the matrix's own `repo:` key still wins."""
     from fr.requirements import load_spec_matrix, rows_citing
 
     verification = spec_verification(repo_root, spec_rel, shape_default)
-    matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
+    if repo is None:
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
+    else:
+        from fr.acceptance.model import Matrix, load_matrix
+        from fr.commands.acceptance_cmd import MATRIX_REL
+
+        path = repo_root / MATRIX_REL
+        matrix = load_matrix(path) if path.exists() else Matrix()
+        spec_ref = f"{matrix.repo or repo}:{spec_rel}"
     return _build(verification, rows_citing(matrix, spec_ref))
 
 

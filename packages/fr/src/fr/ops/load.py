@@ -178,20 +178,38 @@ def _to_loaded(parsed: Op | LegacyOp, path: Path, line: int, *, runbook: bool) -
 # --- carriers ----------------------------------------------------------------
 
 
-def _ops_yaml(plan_dir: Path) -> list[LoadedOp]:
+def _ops_yaml_data(plan_dir: Path) -> tuple[Path, yaml.Node | None, dict[str, Any]] | None:
+    """The plan's `ops.yaml` as read, its keys checked; `None` when there is none."""
     path = plan_dir / OPS_FILE
     if not path.is_file():
-        return []
+        return None
     root = _compose(path.read_text(), path)
     data = _safe_load(path.read_text(), path, 0) or {}
     if not isinstance(data, dict):
         raise OpsLoadError(f"{path}:1: expected `schema_version` and `ops:`")
-    unknown = sorted(set(data) - {"schema_version", "ops"})
+    unknown = sorted(set(data) - {"schema_version", "ops", "none"})
     if unknown:
         raise OpsLoadError(
             f"{path}:{_key_line(root, unknown[0], 1)}: unknown key {unknown[0]!r} "
-            "(expected `schema_version` and `ops:`)"
+            "(expected `schema_version` and `ops:`, or `none:`)"
         )
+    if "none" in data:
+        none = data["none"]
+        line = _key_line(root, "none", 1)
+        if not isinstance(none, str) or not none.strip():
+            raise OpsLoadError(f"{path}:{line}: `none:` must be a non-empty reason")
+        if data.get("ops"):
+            raise OpsLoadError(
+                f"{path}:{line}: `none:` says the plan has no ops, but `ops:` declares some"
+            )
+    return path, root, data
+
+
+def _ops_yaml(plan_dir: Path) -> list[LoadedOp]:
+    read = _ops_yaml_data(plan_dir)
+    if read is None:
+        return []
+    path, root, data = read
     items = data.get("ops") or []
     if not isinstance(items, list):
         raise OpsLoadError(f"{path}:{_key_line(root, 'ops', 1)}: `ops:` must be a list")
@@ -202,6 +220,25 @@ def _ops_yaml(plan_dir: Path) -> list[LoadedOp]:
         line = int(node.start_mark.line) + 1 if node is not None else 1
         out.append(_to_loaded(_validate(Op, item, path, line, node), path, line, runbook=False))
     return out
+
+
+def ops_none(plan_dir: Path) -> str | None:
+    """The plan's `none:` acknowledgement (spec 2026-11-01-ops-gate-probes R4): its
+    reason, or `None` without the key or the file. A `none:` beside `# manual-operation`
+    step blocks in the plan's phase files is refused by name."""
+    if not plan_dir.is_dir():
+        return None
+    read = _ops_yaml_data(plan_dir)
+    if read is None or "none" not in read[2]:
+        return None
+    path, root, data = read
+    blocks = _step_blocks(plan_dir)
+    if blocks:
+        raise OpsLoadError(
+            f"{path}:{_key_line(root, 'none', 1)}: `none:` says the plan has no ops, but "
+            f"{blocks[0].where} carries a `# manual-operation` block"
+        )
+    return str(data["none"])
 
 
 def _value_node(node: yaml.Node | None, key: str) -> yaml.Node | None:
@@ -326,6 +363,7 @@ def load_ops(
     runbook ops the selection asks for. `ids` restricts the result to the named
     ops, which may be runbook ops."""
     plan_ops = _ops_yaml(plan_dir) + _step_blocks(plan_dir) if plan_dir.is_dir() else []
+    ops_none(plan_dir)  # refuses `none:` beside step blocks, by name
     seen: dict[str, LoadedOp] = {}
     for lo in plan_ops:
         prior = seen.get(lo.op.id)

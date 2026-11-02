@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr ops gate refuses a devops-gated run whose plan has no ops but whose Test Plan has commands (ops.yaml `none:` acknowledges it); Test Plan steps can point at an op with `(op: <id>)` so stage 5 runs its probe and records the output; `fr ops stub` drafts ops for command steps; stage 5 accepts `ran: …` and re-prompts a malformed answer"

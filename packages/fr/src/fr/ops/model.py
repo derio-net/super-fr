@@ -24,6 +24,10 @@ PHASES: tuple[OpPhase, ...] = ("pre-merge", "post-merge")
 PROOF = "proof"
 """The reserved `check:` value: DONE only once a recorded `result: proof` says so (R7)."""
 
+TODO_CHECK = "TODO"
+"""The stub sentinel `check:` (spec 2026-11-01-ops-gate-probes R11): an op `fr ops stub`
+wrote and nobody has given a real probe yet. `fr plan self-review` refuses it (R7)."""
+
 OP_ID_PATTERN = r"^[A-Za-z0-9][\w.-]*$"
 
 
@@ -164,3 +168,11 @@ class OpsFile(BaseModel):
 
     schema_version: int = 1
     ops: tuple[Op, ...] = ()
+    none: StrictStr | None = Field(default=None, min_length=1)
+    """`none: <reason>`: no ops on purpose (spec 2026-11-01-ops-gate-probes R4)."""
+
+    @model_validator(mode="after")
+    def _none_or_ops(self) -> OpsFile:
+        if self.none is not None and self.ops:
+            raise ValueError("`none:` says the plan has no ops, but `ops:` declares some")
+        return self

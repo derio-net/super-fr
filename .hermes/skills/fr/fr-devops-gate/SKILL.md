@@ -31,11 +31,11 @@ writes one).
 
 | Stage | What it does |
 |---|---|
-| 1 | Brings up the ops workspace `chore/ops-<slug>` from the PR head (from the default branch once the PR merged) on the ops profile, asks you to trust the op set when it changed (`fr ops trust`, on the host), then runs pre-merge status and applies each open op after its own confirmation |
+| 1 | Refuses an ops gap (a devops-gated run with command steps and no op, no `none:`), reading the PR head, or the default branch's tip once merged; then brings up the ops workspace `chore/ops-<slug>` from the PR head (from the default branch once the PR merged) on the ops profile, asks you to trust the op set when it changed (`fr ops trust`, on the host), then runs pre-merge status and applies each open op after its own confirmation |
 | 2 | Merges the PR, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state |
 | 3 | `fr isolation verify-merge`, rebases the ops branch onto the default branch, runs every `ready:` |
 | 4 | Post-merge status and apply |
-| 5 | Asks for each devops Test Plan step's outcome and records it (`fr closeout outcome`) |
+| 5 | Probes each `(op: <id>)` step, asks for the others' outcome, and records it (`fr closeout outcome`) |
 | 6 | `fr gate pass --gate devops --run <id>` from the ops workspace |
 | 7 | Keeps `gate:tester` and lists the steps the Tester gate owns |
 | 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
@@ -90,8 +90,14 @@ naming the manual merge; merge in the forge at that head, then re-run.
 
 ## Devops steps and the tester hand-off
 
-Stage 5 asks for each devops Test Plan step: walk it, then answer `ran <evidence>`,
-`na <reason>` or `owed <why>`. An `owed` answer is recorded but does not close the step,
+Stage 5 runs the probe of each step that points at an op (`(op: <id>)`). A passing check
+records `ran` with the check's evidence lines and asks nothing. A probe that fails (OPEN,
+UNVERIFIABLE, CANNOT-VERIFY, ESCALATE) shows its reason and asks `retry`, `na <reason>` or
+`owed <why>`; `ran` is refused. A step with no pointer, an N/A op or one closed without a
+check is walked by you, then answered `ran <evidence>`, `na <reason>` or `owed <why>` (`ran: x`
+works too; an answer that does not match is asked again). Committed evidence is only a few
+status lines, so a probe should end with a plain summary line: no colon, quote, `=`,
+bracket, list marker or long token, and a bracket anywhere records nothing. An `owed` answer is recorded but does not close the step,
 so stage 6 refuses and prints the `fr closeout outcome` command that records it once you
 have walked it (a later `ran`/`na` supersedes the owed one); then re-run the stage. Steps the Tester gate
 owns are listed in the gate-pass comment and keep `gate:tester` on the PR; they are not

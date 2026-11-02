@@ -199,3 +199,60 @@ def test_self_review_tolerates_frank_keys_in_step_blocks(tmp_path: Path, monkeyp
     )
     errors = [i.message for i in self_review(parse_plan(plan_dir)) if i.severity == "error"]
     assert not [e for e in errors if "do not load" in e], errors
+
+
+# --- the `none:` acknowledgement (spec 2026-11-01-ops-gate-probes R4) ------------------
+
+
+def _plan_with(tmp_path: Path, ops_yaml: str | None) -> tuple[Path, Path]:
+    root = tmp_path / "repo"
+    plan = root / PLAN
+    plan.mkdir(parents=True)
+    if ops_yaml is not None:
+        (plan / "ops.yaml").write_text(ops_yaml)
+    return root, plan
+
+
+def test_ops_none_reads_the_reason(tmp_path: Path) -> None:
+    from fr.ops.load import ops_none
+
+    _, plan = _plan_with(tmp_path, "schema_version: 2\nnone: physical steps only\n")
+    assert ops_none(plan) == "physical steps only"
+
+
+def test_ops_none_is_none_without_the_key_or_the_file(tmp_path: Path) -> None:
+    from fr.ops.load import ops_none
+
+    _, plan = _plan_with(tmp_path, "schema_version: 2\nops: []\n")
+    assert ops_none(plan) is None
+    (plan / "ops.yaml").unlink()
+    assert ops_none(plan) is None
+    assert ops_none(tmp_path / "missing") is None
+
+
+def test_ops_none_beside_step_blocks_is_refused_by_name(tmp_path: Path) -> None:
+    from fr.ops.load import ops_none
+
+    root = _repo(tmp_path, "step-blocks")
+    (root / PLAN / "ops.yaml").write_text("schema_version: 2\nnone: nothing\n")
+    with pytest.raises(OpsLoadError, match="none"):
+        ops_none(root / PLAN)
+    with pytest.raises(OpsLoadError, match="none"):
+        load_ops(root / PLAN, root)
+
+
+def test_a_none_file_loads_no_ops_and_never_counts_as_ops(tmp_path: Path) -> None:
+    from fr.ops.load import plan_has_ops
+
+    root, plan = _plan_with(tmp_path, "schema_version: 2\nnone: nothing to run\n")
+    assert load_ops(plan, root).ops == ()
+    assert plan_has_ops(root, plan) is False
+
+
+def test_none_beside_ops_is_refused_by_the_loader(tmp_path: Path) -> None:
+    root, plan = _plan_with(
+        tmp_path,
+        "schema_version: 2\nnone: x\nops:\n  - {id: a, summary: s, phase: pre-merge}\n",
+    )
+    with pytest.raises(OpsLoadError, match="none"):
+        load_ops(plan, root)

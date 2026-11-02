@@ -9,11 +9,12 @@ import base64
 from collections.abc import Mapping
 from pathlib import Path
 
+import pytest
 from fr.journal.model import journal_path
 from fr.ops.apply import ShellApplier, apply_ops
 from fr.ops.evidence import record_op
 from fr.ops.load import LoadedOp
-from fr.ops.mask import passthrough_values, sanitise_reason
+from fr.ops.mask import clip_output, evidence_lines, passthrough_values, sanitise_reason
 
 from tests.unit.test_ops_apply import FakePrompt, Idents, NoJournal, World, op
 
@@ -101,3 +102,127 @@ def test_a_json_check_line_on_a_non_identity_op_reads_exit_n_in_status() -> None
         journal=FakeJournal(),
     )
     assert row.state == "OPEN" and row.reason == "exit 1"
+
+
+def test_clip_output_keeps_the_last_40_lines_each_at_most_200_chars() -> None:
+    out = "\n".join(["x" * 300] + [f"l{i}" for i in range(45)])
+    lines = clip_output(out, ()).splitlines()
+    assert lines == [f"l{i}" for i in range(5, 45)]
+    assert all(len(line) <= 200 for line in clip_output("y" * 500, ()).splitlines())
+
+
+def test_evidence_is_the_last_three_non_blank_lines_within_300_chars() -> None:
+    assert evidence_lines("a\n\nb\nc\n\nd\n", ()) == "b; c; d"
+    row = " ".join(["yy"] * 50)  # 149 chars, no long word
+    assert len(evidence_lines("\n".join([row] * 3), ())) == 300
+    assert evidence_lines("z " * 500, ()) == ""  # one over-long line is a body: dropped
+
+
+def test_evidence_never_records_a_body_shaped_line() -> None:
+    """review p2-r1: committed evidence takes the reason sanitiser's body rule."""
+    body = '{"user": "someone@example.invalid", "token": "issued-by-the-server"}'
+    assert evidence_lines(f"checking\n{body}\nconverged 3 of 3\n", ()) == ""
+    assert evidence_lines(f"{body}\n[1, 2, 3]\n", ()) == ""
+    assert "issued-by-the-server" not in evidence_lines(f"ok\n{body}", ())
+
+
+def test_evidence_lines_respect_the_output_line_bound() -> None:
+    """review p2-r2: evidence is drawn from the bounded output lines, never a longer one."""
+    assert evidence_lines("x " * 101 + "\nshort", ()) == "short"
+    assert evidence_lines("x " * 99 + "x", ()) == "x " * 99 + "x"
+
+
+@pytest.mark.parametrize(
+    "leak",
+    [
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r",
+        "AKIAIOSFODNN7EXAMPLE wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
+        "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+        "- alpha beta",
+        "* alpha beta",
+        "deployed a1b2c3d4e5f6a7",
+    ],
+)
+def test_evidence_drops_token_shaped_and_list_lines(leak: str) -> None:
+    """review p3-r8: a JWT, keys, a sha and a YAML/Markdown list item never record."""
+    assert evidence_lines(f"{leak}\nconverged 3 of 3\n", ()) == "converged 3 of 3"
+    assert evidence_lines(f"{leak}\n", ()) == ""
+
+
+def test_evidence_still_passes_plain_summaries() -> None:
+    out = "converged 3 of 3\nchecking the stack\ndeployed ref 1a2b3c4\n"
+    assert evidence_lines(out, ()) == "converged 3 of 3; checking the stack; deployed ref 1a2b3c4"
+
+
+def test_a_yaml_block_sequence_records_nothing() -> None:
+    assert evidence_lines("items\n- one\n- two\n", ()) == "items"
+
+
+def test_output_and_evidence_mask_secret_values() -> None:
+    secret = "s3cr3t-value-123"
+    assert secret not in clip_output(f"token={secret}\nok", [secret])
+    assert secret not in evidence_lines(f"token={secret}\nok", [secret])
+    assert evidence_lines(f"token={secret}", [secret]) == ""  # an assignment: dropped
+    assert evidence_lines(f"login ok as {secret}", [secret]) == "login ok as ***"
+
+
+def test_evidence_drops_an_indented_multi_line_json_body_as_a_block() -> None:
+    """security review: a pretty-printed body's members are not status lines."""
+    out = (
+        "checking the stack\n"
+        "{\n"
+        '  "user": "someone@example.invalid",\n'
+        '  "nested": {"token": "issued-by-the-server", "list": [1, 2]},\n'
+        '  "brace_in_string": "}",\n'
+        '  "tail": [\n    "x"\n  ]\n'
+        "}\n"
+        "converged 3 of 3\n"
+    )
+    got = evidence_lines(out, ())
+    assert got == ""  # a bracket anywhere: nothing from this output is recorded
+    for leaked in ("someone@example.invalid", "issued-by-the-server", '"x"'):
+        assert leaked not in got
+
+
+def test_evidence_drops_stray_member_lines_and_closers() -> None:
+    """security review: a member line or a lone closer outside a tracked block."""
+    out = '  "token": "issued-by-the-server",\n}\n]\nok\n'
+    assert evidence_lines(out, ()) == ""
+    assert evidence_lines('  "token": "issued-by-the-server",\nok\n', ()) == "ok"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        'result = {"token": "issued-by-the-server",',  # a body opened mid-line
+        "  'token': 'issued-by-the-server',",  # single-quoted member
+        "token: issued-by-the-server",  # unquoted YAML key: value
+        '  "issued-by-the-server",',  # bare quoted scalar
+        "TOKEN=issued-by-the-server",  # env assignment
+        "<token>issued-by-the-server</token>",  # XML
+    ],
+)
+def test_evidence_fails_closed_on_data_shaped_lines(data: str) -> None:
+    """security review, second pass: only an allowlisted status line is recorded."""
+    got = evidence_lines(f"checking\n{data}\nconverged 3 of 3\n", ())
+    assert "issued-by-the-server" not in got
+    assert got in ("checking; converged 3 of 3", "")
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        "can't stop {",  # an apostrophe before a bracket
+        "- token: issued-by-the-server",  # a YAML list item
+        "url https://issued-by-the-server.example.invalid/x",  # a colon anywhere
+    ],
+)
+def test_evidence_third_pass_shapes_are_never_recorded(data: str) -> None:
+    """security review, third pass: no parser to fool — a positive grammar, and any
+    bracket in the output records nothing."""
+    got = evidence_lines(f"ok\n{data}\ndone\n", ())
+    assert "issued-by-the-server" not in got and got in ("ok; done", "")
+
+
+def test_any_bracket_in_the_output_records_no_evidence() -> None:
+    assert evidence_lines("checking\n[1]\nconverged 3 of 3\n", ()) == ""
