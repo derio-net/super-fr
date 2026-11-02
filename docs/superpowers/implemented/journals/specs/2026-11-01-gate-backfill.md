@@ -405,3 +405,8 @@ owed_key: spec:2026-11-01-gate-backfill#step1
 ### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1316] · resolves test-plan-step-1: Test Plan step 1 owed
 
 Filed at archive as derio-net/super-fr#1316; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved-2 created=2026-11-02T21:29:24+00:00 state=fixed resolves=test-plan-step-1 -->
+### test-plan-step-1-resolved-2 · finding [fixed] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Walked 2026-11-02 on first real use in derio-net/the-typist; recorded on row gate-backfill-first-real-sweep (walked). All four Test Plan checks passed.
