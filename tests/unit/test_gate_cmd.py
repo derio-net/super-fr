@@ -294,6 +294,29 @@ def test_gh1322_the_dry_run_says_a_passed_gate_is_tracked_only_and_never_re_gate
     ]  # the delivery read is reused: no second read per PR
 
 
+@pytest.mark.parametrize(("other", "gate"), [("devops", "tester"), ("tester", "devops")])
+def test_gh1322_the_dry_run_does_not_call_another_gates_pass_this_ones(
+    backfill_env: Any, tmp_path: Path, other: str, gate: str
+) -> None:
+    import yaml
+
+    root, fake = backfill_env
+    fake.add_pr(BACKFILL_REPO, 41, state="MERGED", labels=[f"gate:{other}-passed"])
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(yaml.safe_dump({"schema": 1, "items": [
+        {"key": "row:cross-gate", "kind": "walk", "title": "a", "pr": 41, "gate": gate},
+    ]}))  # fmt: skip
+    plan = tmp_path / "home" / ".cache/fr/gate-backfill/example-org--widgets/plan.yaml"
+
+    result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest)])
+
+    assert result.exit_code == 0, result.output
+    [line] = [ln for ln in result.output.splitlines() if "row:cross-gate" in ln]
+    assert "-> owed" in line and "already passed" not in line
+    [e] = yaml.safe_load(plan.read_text())["entries"]
+    assert e["gate_passed"] is False
+
+
 def test_backfill_refuses_a_repo_that_disagrees_with_origin_and_yes_before_apply(
     backfill_env: Any,
 ) -> None:
