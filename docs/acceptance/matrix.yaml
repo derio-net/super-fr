@@ -10264,7 +10264,7 @@ rows:
       it is refused beside a non-empty op list, never promotes the devops gate, and
       older ops.yaml files migrate to the new version'
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_ops_load.py#test_ops_none_beside_step_blocks_is_refused_by_name
@@ -10482,10 +10482,10 @@ rows:
       is warned about by fr plan self-review and at spec-review (naming the steps and
       commands), and a step pointer naming an undeclared op is a self-review error
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_ops_gap.py#test_an_inline_span_starting_with_a_shipped_tool_is_a_command
@@ -10501,7 +10501,7 @@ rows:
       whose plan has no ops and whose Test Plan has command steps, naming them and both
       fixes; a `none:` acknowledgement lets it proceed
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R5
     levels:
       unit:
       - super-fr:tests/unit/test_ops_gate.py#test_stage_1_refuses_an_ops_gap_before_anything_is_brought_up
@@ -10519,9 +10519,9 @@ rows:
       `ran` with the probe''s output without asking, a failing probe shows its reason
       and asks retry/na/owed only'
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_ops_gate.py#test_a_passing_probe_records_ran_with_its_evidence_and_asks_nothing
@@ -10537,7 +10537,7 @@ rows:
     acceptance: 'Stage 5 accepts `ran: x` and `na - y`, and re-prompts a malformed answer
       echoing it and the grammar instead of failing the stage'
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_ops_gate.py#test_a_non_matching_answer_is_reprompted_with_an_echo
@@ -10553,8 +10553,8 @@ rows:
     acceptance: On a real devops-gated run, pointed steps are probed and recorded with
       real output and natural `ran:` answers are accepted
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R10
     levels: {}
     status: walk-owed
     notes: 'walked on first real use: the next real devops-gated run (tracked derio-net/super-fr#1294)'
@@ -10567,7 +10567,7 @@ rows:
       pointers for a spec's command steps, refusing a duplicate id or an acknowledged
       `none:`
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ops-gate-probes-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ops-gate-probes-design.md#R11
     levels:
       unit:
       - super-fr:tests/unit/test_ops_stub.py#test_one_op_per_devops_command_step_without_a_pointer
