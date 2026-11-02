@@ -10,3 +10,8 @@ Repro: spec with `## 6. Test Plan (post-merge, operator-driven)` and one list it
 ### 679804c51cd7 · root-cause · The Test Plan heading is a keyword in code with no stated contract and no shared reader
 
 Root cause: `fr/spec.py` _SECTION_RE (^## Test Plan\s*$) is exact while four other modules carry their own literal (acceptance/check.py TEST_PLAN_MARKER, run/closeout.py TEST_PLAN_MARKER, plan_ops.py, acceptance_cmd via check), each a substring test. No skill/agent/rule tells a spec writer the exact spelling, writers number sections, and every reader treats a near-miss as 'absent' — the one answer that makes every downstream gate (R19 hold, closeout outcome, owed/debt) pass silently. Operator's fix: one shared matcher returning exact | near-miss | none; near-miss is an error everywhere, never absent.
+
+<!-- fr:journal kind=ruled-out scope=debug id=61d90c52d637 created=2026-11-02T15:48:23+00:00 -->
+### 61d90c52d637 · ruled-out · A tolerant matcher (accept 'N.' prefixes and suffixes) — rejected by the operator
+
+Making _SECTION_RE accept '## 6. Test Plan (…)' would have fixed the 41 existing specs silently, but left the contract unstated and every future variant (### level, 'Test plan', '§6') one more regex edit away from the same silent miss. Operator's decision (brief): keep the heading exact, make near-misses loud.
