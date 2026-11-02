@@ -150,6 +150,10 @@ def _line(e: PlanEntry) -> str:
     else:
         pr = "no delivering PR"
     extra = []
+    if e.gate_passed and e.pr is not None:
+        extra.append(
+            f"gate:{e.gate} already passed on PR #{e.pr.number}: tracked only, never re-gated"
+        )
     if e.age_days is not None:
         extra.append(f"{e.age_days}d old")
     if e.ticked:

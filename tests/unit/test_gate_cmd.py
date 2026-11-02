@@ -261,6 +261,39 @@ def test_the_dry_run_writes_the_plan_file_keeps_edited_decisions_and_never_the_f
     assert _only_reads(fake) == []
 
 
+@pytest.mark.parametrize("gate", ["tester", "devops"])
+def test_gh1322_the_dry_run_says_a_passed_gate_is_tracked_only_and_never_re_gated(
+    backfill_env: Any, tmp_path: Path, gate: str
+) -> None:
+    import yaml
+
+    root, fake = backfill_env
+    fake.add_pr(BACKFILL_REPO, 41, state="MERGED", labels=[f"gate:{gate}-passed"])
+    fake.add_pr(BACKFILL_REPO, 42, state="MERGED", labels=[])
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(yaml.safe_dump({"schema": 1, "items": [
+        {"key": "row:done-gate", "kind": "walk", "title": "a", "pr": 41, "gate": gate},
+        {"key": "row:held-gate", "kind": "walk", "title": "b", "pr": 42, "gate": gate},
+    ]}))  # fmt: skip
+    plan = tmp_path / "home" / ".cache/fr/gate-backfill/example-org--widgets/plan.yaml"
+
+    result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest)])
+
+    assert result.exit_code == 0, result.output
+    [done] = [ln for ln in result.output.splitlines() if "row:done-gate" in ln]
+    [held] = [ln for ln in result.output.splitlines() if "row:held-gate" in ln]
+    assert f"gate:{gate} already passed on PR #41: tracked only, never re-gated" in done
+    assert "-> owed" in done and "already passed" not in held
+    entries = {e["key"]: e for e in yaml.safe_load(plan.read_text())["entries"]}
+    assert entries["row:done-gate"]["gate_passed"] is True
+    assert entries["row:held-gate"]["gate_passed"] is False
+    assert _only_reads(fake) == []
+    assert [c for c in fake.calls if c[0] == "pr_view"] == [
+        ("pr_view", {"repo": BACKFILL_REPO, "number": 41}),
+        ("pr_view", {"repo": BACKFILL_REPO, "number": 42}),
+    ]  # the delivery read is reused: no second read per PR
+
+
 def test_backfill_refuses_a_repo_that_disagrees_with_origin_and_yes_before_apply(
     backfill_env: Any,
 ) -> None:

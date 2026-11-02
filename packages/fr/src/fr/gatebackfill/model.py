@@ -86,6 +86,10 @@ class PlanEntry(_Strict):
     """The gate this tool computed: `gate` differing from it is the operator's."""
     issue: int | None = None
     """The issue whose ask this item is (an `issue:` key, or a manifest `issue:`), if any."""
+    gate_passed: bool = False
+    """The delivering PR already carries `gate:<gate>-passed` (computed, refreshed on every dry
+    run; gh#1322). Informational: `--yes` re-reads the PR's labels itself, never re-gates a
+    passed PR, and files the item's tracker as tracked only."""
 
     @field_validator("decision", "default_decision")
     @classmethod

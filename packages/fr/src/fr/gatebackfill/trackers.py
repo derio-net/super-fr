@@ -5,6 +5,11 @@ A backfill tracker's body ends with two marker lines, the PR marker before the o
 
     <!-- fr-gate:devops pr:41 -->
     <!-- fr-owed:plan:2026-04-02-fleet#p3 -->
+
+A tracker for a PR whose gate already passed (gh#1322) carries `fr-gate-passed:<g> pr:<n>` in
+the PR marker's place instead. It is "tracked only": the PR is never re-gated, and
+`fr_gate_marker` reads it as `None`, so passing the gate again (§H) never closes it. The item
+itself is discharged by its key's own command.
 """
 
 from __future__ import annotations
@@ -14,15 +19,25 @@ import shlex
 from pathlib import Path
 
 _GATE_MARKER = re.compile(r"^<!-- fr-gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
+_PASSED_MARKER = re.compile(r"^<!-- fr-gate-passed:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
+
+
+def _second_to_last(body: str, pattern: re.Pattern[str]) -> tuple[str, int] | None:
+    lines = [ln.strip() for ln in body.rstrip().splitlines()]
+    if len(lines) < 2:
+        return None
+    m = pattern.match(lines[-2])
+    return (m.group("gate"), int(m.group("pr"))) if m else None
 
 
 def fr_gate_marker(body: str) -> tuple[str, int] | None:
     """`(gate, pr)` from the second-to-last line of *body*, exact match only."""
-    lines = [ln.strip() for ln in body.rstrip().splitlines()]
-    if len(lines) < 2:
-        return None
-    m = _GATE_MARKER.match(lines[-2])
-    return (m.group("gate"), int(m.group("pr"))) if m else None
+    return _second_to_last(body, _GATE_MARKER)
+
+
+def fr_passed_marker(body: str) -> tuple[str, int] | None:
+    """`(gate, pr)` of a tracked-only tracker (the gate had already passed), else `None`."""
+    return _second_to_last(body, _PASSED_MARKER)
 
 
 def is_ours(issue: dict[str, object], me: str) -> bool:
@@ -36,6 +51,9 @@ def is_ours(issue: dict[str, object], me: str) -> bool:
 _ADOPT_MARKER = re.compile(
     r"^<!-- fr-gate-adopt:(?P<key>\S+) gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$"
 )
+_ADOPT_PASSED_MARKER = re.compile(
+    r"^<!-- fr-gate-adopt-passed:(?P<key>\S+) gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$"
+)
 _PLACEHOLDER = "<what you did>"
 
 
@@ -47,6 +65,14 @@ def adopt_marker(key: str, gate: str, pr: int) -> str:
     return f"<!-- fr-gate-adopt:{key} gate:{gate} pr:{pr} -->"
 
 
+def passed_marker(gate: str, pr: int) -> str:
+    return f"<!-- fr-gate-passed:{gate} pr:{pr} -->"
+
+
+def adopt_passed_marker(key: str, gate: str, pr: int) -> str:
+    return f"<!-- fr-gate-adopt-passed:{key} gate:{gate} pr:{pr} -->"
+
+
 def link_marker(key: str, tracker: str) -> str:
     return f"<!-- fr-gate-link:{key} tracker:{tracker} -->"
 
@@ -55,6 +81,13 @@ def fr_adopt_marker(body: str) -> tuple[str, str, int] | None:
     """`(key, gate, pr)` from the LAST line of an adopt comment, exact match only."""
     lines = [ln.strip() for ln in body.rstrip().splitlines()]
     m = _ADOPT_MARKER.match(lines[-1]) if lines else None
+    return (m.group("key"), m.group("gate"), int(m.group("pr"))) if m else None
+
+
+def fr_adopt_passed_marker(body: str) -> tuple[str, str, int] | None:
+    """`(key, gate, pr)` from the LAST line of a tracked-only adopt comment, exact match only."""
+    lines = [ln.strip() for ln in body.rstrip().splitlines()]
+    m = _ADOPT_PASSED_MARKER.match(lines[-1]) if lines else None
     return (m.group("key"), m.group("gate"), int(m.group("pr"))) if m else None
 
 
@@ -182,6 +215,31 @@ def tracker_body(key: str, title: str, gate: str, pr: int, *, run_id: str | None
     )
 
 
+def _discharge_block(key: str, repo_root: Path) -> list[str]:
+    return ["```", discharge_command(key, repo_root=repo_root), "```"]
+
+
+def passed_tracker_body(key: str, title: str, gate: str, pr: int, *, repo_root: Path) -> str:
+    """A tracked-only tracker's body (gh#1322): PR *pr* already carries `gate:<gate>-passed`, so
+    it is never re-gated; the item is still owed and is discharged by its own command."""
+    from fr.archive_followups import owed_marker
+
+    return "\n".join(
+        [
+            f"Owed: {title}",
+            "",
+            f"Delivered by #{pr} (merged). Its gate:{gate} already passed, so the PR is not "
+            "held again; this item is still owed and is tracked here only. Discharge it once "
+            "done:",
+            "",
+            *_discharge_block(key, repo_root),
+            "",
+            passed_marker(gate, pr),
+            owed_marker(key),
+        ]
+    )
+
+
 def adopt_comment(key: str, gate: str, pr: int, *, run_id: str | None = None) -> str:
     return "\n".join(
         [
@@ -197,4 +255,18 @@ def adopt_comment(key: str, gate: str, pr: int, *, run_id: str | None = None) ->
 def link_comment(key: str, tracker: str) -> str:
     return "\n".join(
         [f"The ask of this issue is tracked by {tracker} (`{key}`).", "", link_marker(key, tracker)]
+    )
+
+
+def adopt_passed_comment(key: str, gate: str, pr: int, *, repo_root: Path) -> str:
+    """The tracked-only adopt comment (gh#1322): no pass command, the key's discharge instead."""
+    return "\n".join(
+        [
+            f"fr is tracking `{key}` here. PR #{pr}'s gate:{gate} already passed, so the PR is "
+            "not held again; the item itself is still owed. Discharge it once done:",
+            "",
+            *_discharge_block(key, repo_root),
+            "",
+            adopt_passed_marker(key, gate, pr),
+        ]
     )

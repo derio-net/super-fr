@@ -40,15 +40,12 @@ class EntryResult:
     """Informational lines; never a write, so `ApplyReport.writes` does not count them."""
     skipped: str | None = None
     error: str | None = None
-    discharge: str | None = None
 
     def line(self) -> str:
         if self.error:
             return f"  {self.key}: FAILED: {self.error}"
         if self.skipped:
             return f"  {self.key}: skipped: {self.skipped}"
-        if self.discharge:
-            return f"  {self.key}: {self.discharge}"
         said = "; ".join([*self.actions, *self.notes])
         return f"  {self.key}: {said or 'nothing to do'}"
 
@@ -224,7 +221,8 @@ class _Apply:
                 res.skipped = why
                 return
         elif tracked and existing is not None:
-            marker = trackers.fr_gate_marker(str(existing.get("body") or ""))
+            old = str(existing.get("body") or "")
+            marker = trackers.fr_gate_marker(old) or trackers.fr_passed_marker(old)
             if marker is not None and marker != (gate, pr):
                 res.skipped = (
                     f"fr-owned tracker {self.repo}#{existing['number']} names gate:{marker[0]} "
@@ -245,38 +243,49 @@ class _Apply:
             res.skipped = f"PR #{pr} is {view.get('state') or 'unknown'}, not merged"
             return
         labels = {str(n) for n in view.get("labels") or []}
-        if gate_label(gate, passed=True).name in labels:
-            res.discharge = (
-                f"PR #{pr} already passed {gate}; discharge the key itself:\n    "
-                + trackers.discharge_command(e.key, repo_root=self.root).replace("\n", "\n    ")
-            )
-            return
-        if gate_label(gate).name not in labels:
+        # gh#1322: a passed gate is never put back (that would re-hold the release and reverse
+        # the operator's pass). The item is still owed, so it is tracked only.
+        passed = gate_label(gate, passed=True).name in labels
+        if passed:
+            res.notes.append(f"gate:{gate} already passed on PR #{pr}; tracked only, no relabel")
+        elif gate_label(gate).name not in labels:
             self.w.pr_label(pr, gate_label(gate))
             res.actions.append(f"PR #{pr}: + {gate_label(gate).name}")
-        if not tracked:
-            return
-        run_id = self.run_for(str(view.get("head_ref") or ""))
-        extra = [FR_AWAITING_LIVE] if e.walk_only else []
-        if target is not None:
-            ref = self._adopt(e, target, pr, gate, run_id, extra, res)
-        else:
-            ref = self._own(e, existing, pr, gate, run_id, extra, res)
-        if issue_state == "CLOSED" and e.issue is not None:
-            self._link(e, ref, res)
+        if tracked:
+            run_id = self.run_for(str(view.get("head_ref") or ""))
+            extra = [FR_AWAITING_LIVE] if e.walk_only else []
+            if target is not None:
+                ref = self._adopt(e, target, pr, gate, run_id, extra, res, passed=passed)
+            else:
+                ref = self._own(e, existing, pr, gate, run_id, extra, res, passed=passed)
+            if issue_state == "CLOSED" and e.issue is not None:
+                self._link(e, ref, res)
+        if passed:
+            cmd = trackers.discharge_command(e.key, repo_root=self.root)
+            res.notes.append("discharge the key itself: " + cmd.replace("\n", "; "))
 
     def _own(
         self, e: PlanEntry, existing: dict[str, Any] | None, pr: int, gate: str,
-        run_id: str | None, extra: list[LabelDef], res: EntryResult,
+        run_id: str | None, extra: list[LabelDef], res: EntryResult, *, passed: bool = False,
     ) -> str:  # fmt: skip
-        body = trackers.tracker_body(e.key, e.title or e.key, gate, pr, run_id=run_id)
+        title = e.title or e.key
+        if passed:
+            body = trackers.passed_tracker_body(e.key, title, gate, pr, repo_root=self.root)
+        else:
+            body = trackers.tracker_body(e.key, title, gate, pr, run_id=run_id)
         if existing is None:
             ref = self.w.create_issue(f"Owed: {e.title or e.key}", body, [FR_OWED, *extra])
             res.actions.append(f"filed tracker {ref}")
             return ref
         n = int(existing["number"])
         ref = f"{self.repo}#{n}"
-        if trackers.fr_gate_marker(str(existing.get("body") or "")) is None:
+        old = str(existing.get("body") or "")
+        current = (
+            trackers.fr_passed_marker(old) == (gate, pr)
+            if passed
+            else trackers.fr_gate_marker(old) is not None
+        )  # a held tracker whose gate has since passed becomes tracked only (gh#1322)
+        if not current:
             self.w.rewrite_body(n, body)
             res.actions.append(f"rewrote tracker {ref}")
         missing = [lab for lab in extra if lab.name not in _names(existing)]
@@ -287,14 +296,20 @@ class _Apply:
 
     def _adopt(
         self, e: PlanEntry, target: dict[str, Any], pr: int, gate: str,
-        run_id: str | None, extra: list[LabelDef], res: EntryResult,
+        run_id: str | None, extra: list[LabelDef], res: EntryResult, *, passed: bool = False,
     ) -> str:  # fmt: skip
         n = int(target["number"])
         ref = f"{self.repo}#{n}"
         want = (e.key, gate, pr)
+        read = trackers.fr_adopt_passed_marker if passed else trackers.fr_adopt_marker
         comments = self.client.list_issue_comments(self.repo, n)
-        if not any(trackers.fr_adopt_marker(b) == want for b in self._authored(comments)):
-            self.w.comment(n, trackers.adopt_comment(e.key, gate, pr, run_id=run_id))
+        if not any(read(b) == want for b in self._authored(comments)):
+            text = (
+                trackers.adopt_passed_comment(e.key, gate, pr, repo_root=self.root)
+                if passed
+                else trackers.adopt_comment(e.key, gate, pr, run_id=run_id)
+            )
+            self.w.comment(n, text)
             res.actions.append(f"commented on {ref}")
         missing = [lab for lab in [FR_OWED, *extra] if lab.name not in _names(target)]
         if missing:
