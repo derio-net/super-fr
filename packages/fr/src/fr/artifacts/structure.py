@@ -568,6 +568,14 @@ def validate_spec(path: Path) -> list[str]:
 
     if not has_title:
         problems.append("missing required `# ` title heading on the first heading level")
+
+    # super-fr#1315: `## Test Plan` is a keyword heading. A near-miss
+    # (`## 6. Test Plan (post-merge)`) reads as no Test Plan to every gate.
+    from fr.spec import find_test_plan_heading, near_miss_message
+
+    heading = find_test_plan_heading(path.read_text())
+    if heading is not None and not heading.exact:
+        problems.append(near_miss_message(heading))
     return problems
 
 

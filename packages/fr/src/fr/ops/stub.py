@@ -46,13 +46,17 @@ def _clip(text: str) -> str:
 
 
 def propose(
-    spec_text: str, existing_ops: Collection[str], exit_gates: Set[str]
+    spec_text: str,
+    existing_ops: Collection[str],
+    exit_gates: Set[str],
+    *,
+    source: object = None,
 ) -> tuple[list[dict[str, object]], list[SpecEdit]]:
     """`(new ops as ops.yaml mappings, spec edits)` for the devops command steps of
     `spec_text` that have no pointer. `StubError` for an id already declared."""
     ops: list[dict[str, object]] = []
     edits: list[SpecEdit] = []
-    steps = {s.n: s for s in test_plan_steps(spec_text)}
+    steps = {s.n: s for s in test_plan_steps(spec_text, source=source)}
     for cs in command_steps(list(steps.values()), exit_gates):
         op_id = f"step-{cs.n}"
         if op_id in existing_ops:

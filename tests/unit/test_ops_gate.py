@@ -7,6 +7,7 @@ files are real, so the ledger, the op evidence and the Test Plan are the real re
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import shutil
 from collections.abc import Sequence
@@ -970,3 +971,37 @@ def test_a_refused_status_fails_the_stage_with_its_output(ops_root: Path) -> Non
     result, host, tree, prompt, _ = _probe(ops_root, [(2, "untrusted op set")])
     assert result.failed == 5 and "untrusted op set" in result.why and prompt.asked == []
     assert _outcome_args(tree) == []
+
+
+def test_stage_1_refuses_a_near_miss_test_plan_heading(ops_root: Path) -> None:
+    """super-fr#1315: a numbered Test Plan heading hides every devops step, so stage 1
+    refuses it before anything comes up — never `not checked`."""
+    _gapped(ops_root)
+    spec = ops_root / SPEC
+    spec.write_text(spec.read_text().replace("## Test Plan", "## 6. Test Plan (post-merge)"))
+    gate, host, *_ = _gate(ops_root)
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_1(gate)
+    assert exc.value.code == 2
+    assert 'rename it to "## Test Plan"' in exc.value.why
+    assert not any(a[:2] == ["isolation", "up"] for a, _ in host.calls)
+
+
+def test_a_stage_that_meets_a_near_miss_heading_fails_cleanly(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A later stage reading the steps (`gated_steps`) refuses through the runner, not a
+    traceback (super-fr#1315)."""
+    from fr.spec import TestPlanHeading, TestPlanHeadingError
+
+    def boom(gate: object) -> None:
+        raise TestPlanHeadingError(TestPlanHeading(4, "## 6. Test Plan", False), SPEC)
+
+    first = gate_mod.STAGES[0]
+    monkeypatch.setattr(
+        gate_mod, "STAGES", (dataclasses.replace(first, act=boom), *gate_mod.STAGES[1:])
+    )
+    gate, *_ = _gate(ops_root)
+    result = gate_mod.run(gate)
+    assert not result.ok and result.code == 2
+    assert 'rename it to "## Test Plan"' in result.why

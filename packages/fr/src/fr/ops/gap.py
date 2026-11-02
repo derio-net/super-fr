@@ -158,7 +158,7 @@ def ops_gap(
     spec = root / spec_rel
     if not spec.is_file():
         return []
-    return command_steps(test_plan_steps(spec.read_text()), exit_gates)
+    return command_steps(test_plan_steps(spec.read_text(), source=spec_rel), exit_gates)
 
 
 def gap_message(steps: list[CommandStep], *, has_plan: bool) -> str:

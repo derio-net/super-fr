@@ -473,9 +473,88 @@ def render_status_md(status: SpecStatus) -> str:
 # --- Test Plan steps (spec 2026-10-11-debt-engine §E, R17) -----------------
 
 TEST_PLAN_HEADING = "## Test Plan"
+"""The ONE spelling of the section fr reads (super-fr#1315): exactly this line,
+unnumbered and with no suffix, even in a spec whose other sections are numbered.
+Every reader goes through `find_test_plan_heading`; nothing else spells it."""
 EMPTY_TEST_PLAN = "(Test Plan section has no steps)"
-_SECTION_RE = re.compile(r"^## Test Plan\s*$", re.MULTILINE)
+_SECTION_RE = re.compile(r"^" + re.escape(TEST_PLAN_HEADING) + r"\s*$")
 _NEXT_SECTION_RE = re.compile(r"^#{1,2} ", re.MULTILINE)
+_CANDIDATE_RE = re.compile(r"^(#{1,3})\s+(\S.*?)\s*$")
+"""A `#`/`##`/`###` heading: the levels a writer might give the section."""
+_NUMBER_PREFIX_RE = re.compile(r"^(?:§\s*)?\d+(?:\.\d+)*[.)]?\s+")
+"""A section number a writer puts before the name: `6.`, `6)`, `§6`, `6.1`."""
+_PAREN_SUFFIX_RE = re.compile(r"\s*\([^()]*\)$")
+"""A trailing parenthetical: `(post-merge, operator-driven)`."""
+
+
+@dataclass(frozen=True)
+class TestPlanHeading:
+    """Where a spec's Test Plan heading is: `line` is the 0-based index in the spec's
+    `splitlines()`, `text` the heading as written, `exact` whether it is
+    `TEST_PLAN_HEADING` itself (False: a near-miss, which every reader refuses)."""
+
+    __test__ = False  # not a pytest test class
+
+    line: int
+    text: str
+    exact: bool
+
+
+class TestPlanHeadingError(Exception):
+    """A spec whose Test Plan heading is a near-miss of `## Test Plan`.
+
+    Deliberately NOT a `ValueError`: several callers read a `ValueError` as "nothing
+    here", and a near-miss read as nothing is exactly the defect (super-fr#1315)."""
+
+    __test__ = False  # not a pytest test class
+
+    def __init__(self, heading: TestPlanHeading, source: object = None) -> None:
+        self.heading = heading
+        self.source = source
+        super().__init__(near_miss_message(heading, source))
+
+
+def near_miss_message(heading: TestPlanHeading, source: object = None) -> str:
+    """`<file>:<line>: …` naming the heading and the fix; `line <n>` with no file."""
+    where = f"{source}:{heading.line + 1}" if source is not None else f"line {heading.line + 1}"
+    return (
+        f"{where}: heading {heading.text.strip()!r} is not the Test Plan section fr reads — "
+        f'rename it to "{TEST_PLAN_HEADING}" (exactly: unnumbered, no suffix), or fr sees '
+        "no Test Plan and holds nothing for it"
+    )
+
+
+def _is_near_miss(line: str) -> bool:
+    m = _CANDIDATE_RE.match(line)
+    if m is None:
+        return False
+    name = _NUMBER_PREFIX_RE.sub("", m.group(2))
+    name = _PAREN_SUFFIX_RE.sub("", name)
+    return name.casefold() == "test plan"
+
+
+def find_test_plan_heading(text: str | list[str]) -> TestPlanHeading | None:
+    """The spec's Test Plan heading: the exact one, else the first near-miss (a `#`
+    to `###` heading that reads `test plan` once a section number and a trailing
+    parenthetical are stripped and case is folded), else `None`. Headings inside a
+    code fence are not headings. *text* may be the spec or its `splitlines()`."""
+    lines = text.splitlines() if isinstance(text, str) else text
+    fenced = False
+    near: TestPlanHeading | None = None
+    for i, raw in enumerate(lines):
+        if FENCE_RE.match(raw):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        line = raw.rstrip("\r\n")
+        if _SECTION_RE.match(line):
+            return TestPlanHeading(i, line.rstrip(), True)
+        if near is None and _is_near_miss(line):
+            near = TestPlanHeading(i, line.rstrip(), False)
+    return near
+
+
 _ITEM_RE = re.compile(r"^(?:\d+[.)]|[-*])\s+(.*)$")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 """A line that opens or closes a code fence: anchored, so a fence mid-prose never does."""
@@ -520,36 +599,38 @@ def _step(n: int, text: str, raw: tuple[str, ...] = (), line: int | None = None)
     return Step(n, text, gate, raw, op, line)
 
 
-def _test_plan_span(lines: list[str]) -> tuple[int, int] | None:
-    """`(start, end)` line indexes of the Test Plan body in `lines`, fences tracked."""
+def _test_plan_span(lines: list[str], source: object = None) -> tuple[int, int] | None:
+    """`(start, end)` line indexes of the Test Plan body in `lines`, fences tracked.
+    `TestPlanHeadingError` (naming *source*) when the heading is a near-miss."""
+    heading = find_test_plan_heading(lines)
+    if heading is None:
+        return None
+    if not heading.exact:
+        raise TestPlanHeadingError(heading, source)
     fenced = False
-    start: int | None = None
-    for i, line in enumerate(lines):
+    for i in range(heading.line + 1, len(lines)):
+        line = lines[i]
         if FENCE_RE.match(line):
             fenced = not fenced
             continue
-        if fenced:
-            continue
-        if start is None:
-            if _SECTION_RE.match(line.rstrip("\r\n")):
-                start = i + 1
-        elif _NEXT_SECTION_RE.match(line):
-            return start, i
-    return None if start is None else (start, len(lines))
+        if not fenced and _NEXT_SECTION_RE.match(line):
+            return heading.line + 1, i
+    return heading.line + 1, len(lines)
 
 
-def test_plan_section(text: str) -> str | None:
+def test_plan_section(text: str, *, source: object = None) -> str | None:
     """The body of a spec's `## Test Plan` section, or `None` when it has none.
 
     Scanned line by line with code fences tracked (review p3-r2): a `## Test
     Plan` inside a fence never starts the section, and a `# comment` inside a
-    fence never ends it — only a real `#`/`##` heading does."""
+    fence never ends it — only a real `#`/`##` heading does. A near-miss heading
+    raises `TestPlanHeadingError` naming *source* (super-fr#1315)."""
     lines = text.splitlines(keepends=True)
-    span = _test_plan_span(lines)
+    span = _test_plan_span(lines, source)
     return None if span is None else "".join(lines[span[0] : span[1]])
 
 
-def test_plan_steps(text: str) -> list[Step]:
+def test_plan_steps(text: str, *, source: object = None) -> list[Step]:
     """Every top-level list item under `## Test Plan` is a step, numbered by
     position, its continuation lines joined (R17). A section with no list item
     is ONE step: its prose. No section, no steps.
@@ -557,9 +638,10 @@ def test_plan_steps(text: str) -> list[Step]:
     A continuation is an indented line, or an unindented line directly under
     the item (a lazy continuation); an unindented line after a blank line is
     section prose and ends the item. Nothing inside a code fence starts one.
+    A near-miss heading raises `TestPlanHeadingError` naming *source*.
     """
     all_lines = text.splitlines(keepends=True)
-    span = _test_plan_span(all_lines)
+    span = _test_plan_span(all_lines, source)
     if span is None:
         return []
     section = "".join(all_lines[span[0] : span[1]])

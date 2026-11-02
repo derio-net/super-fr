@@ -1261,6 +1261,7 @@ def test_scaffold_renders_and_commits_the_agents_artifact(repo: Path) -> None:
     makes the repo fr-enabled, so it also gains fr's two dispatched agents, stamped
     and committed with the profile."""
     from fr.agents import AGENT_NAMES, render_agent
+    from fr.artifacts.registry import ARTIFACT_KINDS
 
     _initial_commit(repo)
     res = scaffold(repo)
@@ -1268,4 +1269,6 @@ def test_scaffold_renders_and_commits_the_agents_artifact(repo: Path) -> None:
     for name in AGENT_NAMES:
         rel = f".claude/agents/{name}.md"
         assert rel in _tracked(repo)
-        assert (repo / rel).read_text() == render_agent(name, 1)
+        assert (repo / rel).read_text() == render_agent(
+            name, ARTIFACT_KINDS["agents"].current_version
+        )

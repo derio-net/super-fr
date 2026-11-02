@@ -958,7 +958,7 @@ def backfill_cmd() -> None:
     """Emit the agent backfill protocol + deterministic inventory (markdown)."""
     import yaml
 
-    from fr.acceptance.check import SPEC_DIRS, TEST_PLAN_MARKER
+    from fr.acceptance.check import SPEC_DIRS, spec_test_plan
     from fr.acceptance.model import archive_twin, split_ref
 
     root = resolve_repo_root()
@@ -979,7 +979,7 @@ def backfill_cmd() -> None:
         str(spec.relative_to(root))
         for spec_dir in SPEC_DIRS
         for spec in sorted((root / spec_dir).glob("*.md"))
-        if TEST_PLAN_MARKER in spec.read_text() and str(spec.relative_to(root)) not in referenced
+        if spec_test_plan(root, spec)[0] and str(spec.relative_to(root)) not in referenced
     ]
 
     unlinked_plans: list[str] = []

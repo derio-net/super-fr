@@ -634,6 +634,7 @@ def stub(
     from fr.ops.load import OPS_FILE, OpsLoadError, load_ops, ops_none
     from fr.ops.stub import StubError, append_ops, apply_edits, propose
     from fr.parser import parse
+    from fr.spec import TestPlanHeadingError
     from fr.verification.exit import exit_for_spec
 
     root, plan_dir = _plan_dir("stub", plan)
@@ -647,9 +648,14 @@ def stub(
         existing = {lo.op.id for lo in load_ops(plan_dir, root).ops}
         spec_bytes = spec.read_bytes()
         spec_text = spec_bytes.decode()
-        new_ops, edits = propose(spec_text, existing, exit_for_spec(root, parsed.spec_path).gates)
+        new_ops, edits = propose(
+            spec_text,
+            existing,
+            exit_for_spec(root, parsed.spec_path).gates,
+            source=parsed.spec_path,
+        )
         new_spec = apply_edits(spec_text, edits)
-    except (StubError, OpsLoadError, ValueError, OSError) as e:
+    except (StubError, OpsLoadError, ValueError, OSError, TestPlanHeadingError) as e:
         _refuse(str(e), "stub")
     if not new_ops:
         typer.echo("fr ops stub: no devops command step without an op pointer")

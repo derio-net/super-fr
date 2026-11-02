@@ -11,7 +11,7 @@ description: >
   NOT a general-purpose reviewer and NOT for code review — `review-phase` owns
   that.
 tools: Read, Grep, Glob
-fr_artifact_version: 1
+fr_artifact_version: 2
 ---
 
 # fr-spec-reviewer
@@ -56,7 +56,9 @@ expected, never a finding.
 3. **Internal consistency.** Sections agree with each other: the design, the Test
    Plan and the Scope describe the same change; a field, flag or state has one
    name throughout; nothing the Test Plan tests is missing from the design, and
-   nothing the design promises is missing from the Test Plan.
+   nothing the design promises is missing from the Test Plan. The Test Plan's
+   heading is exactly `## Test Plan`: a numbered or suffixed one (`## 6. Test
+   Plan (post-merge)`) is a finding, because fr reads no Test Plan from it.
 
 Do not review prose style, and do not propose features the spec does not need.
 

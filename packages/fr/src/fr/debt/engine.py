@@ -43,6 +43,7 @@ DEFAULT_STALE_DAYS = 14
 CONFIG_REL = Path(".fr/debt.yaml")
 MATRIX_REL = Path("docs/acceptance/matrix.yaml")
 PLANS_REL = "docs/superpowers/plans"
+SPECS_REL = "docs/superpowers/specs"
 RUNS_REL = Path("docs/superpowers/runs")
 OWED_MARKER = re.compile(r"<!--\s*fr-owed:(\S+?)\s*-->")
 _CONFIG_KEYS = frozenset({"stale_days"})
@@ -152,6 +153,24 @@ def _plan_owed(manual_open: Iterable[ManualOpenPlan]) -> list[OwedItem]:
         for m in manual_open
         for n in m.phases
     ]
+
+
+def spec_heading_problems(repo_root: Path) -> list[str]:
+    """One line per live spec whose Test Plan heading is a near-miss of `## Test Plan`
+    (super-fr#1315): its steps cannot be read, so what they owe is unknown — never
+    zero. Archived specs are frozen and not read."""
+    from fr.spec import find_test_plan_heading, near_miss_message
+
+    specs = repo_root / SPECS_REL
+    out: list[str] = []
+    for spec in sorted(specs.glob("*.md")) if specs.is_dir() else []:
+        try:
+            heading = find_test_plan_heading(spec.read_text())
+        except (OSError, ValueError):
+            continue
+        if heading is not None and not heading.exact:
+            out.append(near_miss_message(heading, f"{SPECS_REL}/{spec.name}"))
+    return out
 
 
 def journal_owed(repo_root: Path) -> tuple[list[OwedItem], set[str], list[str]]:
@@ -436,6 +455,16 @@ def compute(
         SourceStatus(state="read", why=forge_note)
         if forge_ok and forge is not None
         else SourceStatus(state="unavailable", why=forge_why)
+    )
+
+    near_misses = spec_heading_problems(repo_root)
+    sources["specs"] = (
+        SourceStatus(
+            state="unavailable",
+            why="Test Plan steps unreadable, what they owe is unknown: " + "; ".join(near_misses),
+        )
+        if near_misses
+        else SourceStatus(state="read")
     )
 
     journal_items, discharged, unreadable = journal_owed(repo_root)

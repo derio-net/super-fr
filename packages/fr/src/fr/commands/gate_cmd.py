@@ -106,6 +106,7 @@ def _devops_evidence(run: str | None, head_ref: str, *, no_run_evidence: bool) -
     from fr.acceptance.model import AcceptanceError
     from fr.ops.holds import devops_blockers
     from fr.ops.load import OpsLoadError
+    from fr.spec import TestPlanHeadingError
     from fr.verification.spec_section import SectionError
 
     if no_run_evidence and run is not None:
@@ -133,6 +134,8 @@ def _devops_evidence(run: str | None, head_ref: str, *, no_run_evidence: bool) -
         blockers = devops_blockers(root, state)
     except OpsLoadError as exc:
         _refuse(f"run {state.run}: the plan's ops cannot be read: {exc}")
+    except TestPlanHeadingError as exc:  # never a traceback, never "nothing held" (#1315)
+        _refuse(f"run {state.run}: {exc}")
     except (SectionError, AcceptanceError, OSError) as exc:
         _refuse(f"run {state.run}: its exit cannot be read: {exc}")
     if blockers:

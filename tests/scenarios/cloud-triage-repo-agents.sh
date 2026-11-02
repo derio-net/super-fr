@@ -8,12 +8,13 @@
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 
+AGENTS_VERSION=2  # the `agents` kind's current_version (2 since super-fr#1315)
 run_fr out init agents
 require_exit 0 "$out"
 for name in fr-spec-reviewer fr-phase-executor; do
   f=".claude/agents/$name.md"
   [ -f "$f" ] || fail "$f was not written"
-  grep -qx 'fr_artifact_version: 1' "$f" || fail "$f carries no stamp"
+  grep -qx "fr_artifact_version: $AGENTS_VERSION" "$f" || fail "$f carries no stamp"
   grep -qx "name: $name" "$f" || fail "$f does not name $name"
   git ls-files --error-unmatch "$f" >/dev/null 2>&1 || fail "$f was not committed"
 done
@@ -31,7 +32,7 @@ expect_grep 'fr_artifact_version' "$out" "the failure names the stamp"
 
 run_fr out migrate artifacts --yes
 require_exit 0 "$out"
-grep -qx 'fr_artifact_version: 1' .claude/agents/fr-phase-executor.md \
+grep -qx "fr_artifact_version: $AGENTS_VERSION" .claude/agents/fr-phase-executor.md \
   || fail "migrate did not re-render the agent"
 run_fr out validate artifacts
 require_exit 0 "$out"

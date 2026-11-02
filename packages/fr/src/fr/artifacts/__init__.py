@@ -71,6 +71,7 @@ from fr.artifacts import agents_kind as _agents_kind  # noqa: F401  (isort: skip
 from fr.artifacts import journal_owed as _journal_owed  # noqa: F401  (isort: skip)
 from fr.artifacts import journal_op as _journal_op  # noqa: F401  (isort: skip)
 from fr.artifacts import ops_none as _ops_none  # noqa: F401  (isort: skip)
+from fr.artifacts import spec_test_plan_heading as _spec_test_plan_heading  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",

@@ -9226,6 +9226,26 @@ rows:
       entry are unit-tested in CI; the candidate scenario closeout-owed runs in CI via
       test_scenarios'
     scenario: tests/scenarios/closeout-owed.sh
+  - id: test-plan-heading-near-miss-refused
+    capability: closeout
+    acceptance: 'A spec whose Test Plan heading is a near-miss of "## Test Plan" (numbered,
+      suffixed, other level or case) is never read as having no Test Plan: fr validate
+      artifacts, fr plan self-review, fr archive, fr closeout outcome and the acceptance
+      staleness guard refuse it naming file, line and fix, fr debt reports the specs
+      source unavailable, and a level-two near-miss is renamed by the spec repair; archived
+      specs are never judged.'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-11-02-test-plan-heading.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_plan_heading.py
+      int:
+      - super-fr:tests/unit/test_test_plan_heading.py#test_archive_holds_a_plan_whose_spec_heading_is_a_near_miss
+      - super-fr:tests/unit/test_test_plan_heading.py#test_closeout_outcome_refuses_a_near_miss_naming_the_fix
+      - super-fr:tests/unit/test_test_plan_heading.py#test_the_staleness_guard_refuses_a_live_near_miss
+    status: ci
+    notes: gh#1315. One matcher (fr.spec.find_test_plan_heading); the near-miss error
+      is deliberately not a ValueError.
   - id: herdr-opencode-launch
     capability: herdr OpenCode batch lifecycle
     acceptance: OpenCode batches launch autonomously with the selected model from the

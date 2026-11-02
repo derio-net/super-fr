@@ -143,8 +143,12 @@ def test_validate_fails_an_unstamped_one(tmp_path: Path) -> None:
 
     issues = _issues(repo)
 
+    # An absent stamp reads as version 1 (registry property 1). Since the kind moved
+    # past 1 (super-fr#1315) that is stale, and the one fix is the same command.
     assert len(issues) == 1
-    assert issues[0].startswith("fr-spec-reviewer.md") and STAMP_KEY in issues[0]
+    assert issues[0].startswith("fr-spec-reviewer.md")
+    assert "version 1" in issues[0] and STAMP_KEY in issues[0]
+    assert "fr migrate artifacts --yes" in issues[0]
 
 
 def test_validate_fails_a_mismatched_name(tmp_path: Path) -> None:
@@ -200,9 +204,12 @@ def test_the_unstamped_repair_re_renders_the_file(tmp_path: Path) -> None:
     assert _issues(repo) == []
 
 
-def test_no_schema_migration_is_registered_while_the_kind_is_at_one() -> None:
-    assert KIND.current_version == 1
-    assert MIGRATIONS.schema_migrations("agents") == ()
+def test_every_version_bump_registers_its_re_render_hop() -> None:
+    """The kind left 1 when fr-spec-reviewer learned the `## Test Plan` heading rule
+    (super-fr#1315): every hop from 1 to the current version is registered."""
+    assert KIND.current_version == 2
+    chain = MIGRATIONS.chain("agents", 1)
+    assert [m.to_version for m in chain] == list(range(2, KIND.current_version + 1))
 
 
 def test_a_version_bump_re_renders_both_files_from_the_wheel(tmp_path: Path) -> None:

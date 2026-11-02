@@ -593,6 +593,7 @@ def _refuse_an_ops_gap(gate: Gate, ref: str, *, merged: bool) -> None:
     from fr.ops.gap import gap_message, ops_gap
     from fr.ops.load import OpsLoadError
     from fr.requirements import run_spec
+    from fr.spec import TestPlanHeadingError
     from fr.triage.gitseam import GitError
     from fr.verification.exit import exit_for_spec
 
@@ -606,6 +607,9 @@ def _refuse_an_ops_gap(gate: Gate, ref: str, *, merged: bool) -> None:
         scratch = gate.host.materialise(ref, _head_paths(t, spec_rel))
         gates = exit_for_spec(scratch, spec_rel, repo=t.repo.rsplit("/", 1)[-1]).gates
         gap = ops_gap(scratch, spec_rel, scratch / t.plan_rel, gates)
+    except TestPlanHeadingError as e:
+        # A near-miss heading hides every devops step: refuse, never "not checked" (#1315).
+        raise StageFailed(f"{where}: {e}", code=2) from e
     except (ValueError, OSError, AcceptanceError, OpsLoadError, GitError) as e:
         gate.say(f"the ops-gap check could not read {where} ({e}); not checked")
         gap = []
@@ -1126,13 +1130,20 @@ def preview(gate: Gate) -> list[str]:
 
 def run(gate: Gate) -> GateResult:
     """Every stage not yet done, in order; stop at the first failure, naming it."""
+    from fr.spec import TestPlanHeadingError
+
     ran: list[int] = []
     for s in STAGES:
         if s.done(gate, gate.recorded()):
             continue
         gate.say(f"stage {s.number} ({s.name}) …")
         try:
-            s.act(gate)
+            try:
+                s.act(gate)
+            except TestPlanHeadingError as exc:
+                # The spec's Test Plan heading is a near-miss: its steps cannot be read,
+                # so no stage may decide them (super-fr#1315). A refusal, not a traceback.
+                raise StageFailed(str(exc), code=2) from exc
         except StageFailed as exc:
             why = f"stage {s.number} ({s.name}) failed: {exc.why}"
             gate.say(why)

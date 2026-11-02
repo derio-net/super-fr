@@ -24,7 +24,27 @@ from fr.acceptance.model import (
 )
 
 SPEC_DIRS = ("docs/superpowers/specs", "docs/superpowers/implemented/specs")
-TEST_PLAN_MARKER = "## Test Plan"
+LIVE_SPEC_DIR = SPEC_DIRS[0]
+
+
+def spec_test_plan(root: Path, spec: Path) -> tuple[bool, str | None]:
+    """`(has a Test Plan, problem)` for the staleness guard (super-fr#1315).
+
+    A live spec whose heading is a near-miss of `## Test Plan` is a problem (the
+    line and the fix), and counts as having one. An archived spec is frozen and
+    never judged: only its exact heading counts, a near-miss there is ignored."""
+    from fr.spec import find_test_plan_heading, near_miss_message
+
+    heading = find_test_plan_heading(spec.read_text())
+    if heading is None:
+        return False, None
+    if heading.exact:
+        return True, None
+    rel = spec.relative_to(root).as_posix()
+    if not rel.startswith(LIVE_SPEC_DIR + "/"):
+        return False, None
+    return True, near_miss_message(heading, rel)
+
 
 # Generalized beyond the original github.com-only pattern (multi-backend
 # design, docs/superpowers/specs/
@@ -269,7 +289,10 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
                 referenced.add(twin)
     for spec_dir in SPEC_DIRS:
         for spec in sorted((root / spec_dir).glob("*.md")):
-            if TEST_PLAN_MARKER not in spec.read_text():
+            has_plan, problem = spec_test_plan(root, spec)
+            if problem:
+                result.errors.append(f"test-plan heading: {problem}")
+            if not has_plan:
                 continue
             rel = str(spec.relative_to(root))
             if rel not in referenced:

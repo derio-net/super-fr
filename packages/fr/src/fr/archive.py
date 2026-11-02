@@ -774,15 +774,26 @@ def recorded_outcomes(journal: Path) -> set[str]:
     return {e.id for e in entries if e.resolves is None and e.id.startswith(OUTCOME_PREFIX)}
 
 
+def display_path(repo_root: Path, path: Path) -> str:
+    """*path* relative to *repo_root* when it is inside it, for messages."""
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def missing_outcomes(repo_root: Path, spec_path: Path) -> list[Step]:
-    """The spec's Test Plan steps with no recorded outcome (R19), in order."""
+    """The spec's Test Plan steps with no recorded outcome (R19), in order.
+    `fr.spec.TestPlanHeadingError` when the spec's heading is a near-miss."""
     from fr.journal.model import resolve_journal_read_path
     from fr.spec import test_plan_steps
 
     try:
-        steps = test_plan_steps(spec_path.read_text())
+        text = spec_path.read_text()
     except OSError:
         return []
+    # A near-miss heading raises `TestPlanHeadingError`: never "no steps" (#1315).
+    steps = test_plan_steps(text, source=display_path(repo_root, spec_path))
     if not steps:
         return []
     journal = resolve_journal_read_path(repo_root, "spec", spec_slug_of(spec_path))
@@ -817,10 +828,16 @@ def outcome_hold(repo_root: Path, plan: Plan, plan_rel: Path) -> list[str]:
     one-line reason, then one indented line per missing step and its command —
     or `[]` when nothing is missing (R19). Every archive mode calls this before
     it moves anything."""
+    from fr.spec import TestPlanHeadingError
+
     spec = plan_spec_path(repo_root, plan)
     if spec is None:
         return []
-    missing = missing_outcomes(repo_root, spec)
+    try:
+        missing = missing_outcomes(repo_root, spec)
+    except TestPlanHeadingError as e:
+        # A near-miss heading holds the plan: archiving it would skip every step (#1315).
+        return [str(e)]
     if missing:
         selector = outcome_selector(repo_root, plan_rel, spec)
         lines = [

@@ -157,6 +157,7 @@ def closeout_read(checkout: Checkout, ref: str, branch: str, repo: str) -> Close
     from fr.record.pr_body import normalize_issue_ref
     from fr.requirements import run_spec
     from fr.run.model import RunStateError, parse_run_state
+    from fr.spec import TestPlanHeadingError
 
     found = _run_text(checkout, ref, branch)
     if found is None:
@@ -192,6 +193,6 @@ def closeout_read(checkout: Checkout, ref: str, branch: str, repo: str) -> Close
                             n for ref_ in e.narrows
                             if (n := normalize_issue_ref(ref_, (owner, name))) is not None
                         ]  # fmt: skip
-    except (RunStateError, JournalParseError, OSError, ValueError) as exc:
+    except (RunStateError, JournalParseError, OSError, ValueError, TestPlanHeadingError) as exc:
         raise TriageError(f"run {run} cannot be read for its close-out: {exc}") from exc
     return CloseoutRead(run, missing, rows, tuple(dict.fromkeys(narrowed)))
