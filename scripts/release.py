@@ -281,24 +281,38 @@ def _run_shard_tests(
     """
     out.write_text(durations.read_text())
     return _probe_then_pytest(
-        repo,
-        new,
-        [
-            "-o",
-            SHARD_ADDOPTS,
-            "--splits",
-            str(splits),
-            "--group",
-            str(group),
-            "--splitting-algorithm",
-            "least_duration",
-            "--durations-path",
-            str(out),
-            "--store-durations",
-            "--clean-durations",
-        ],
-        run,
+        repo, new, _shard_pytest_args(repo, group=group, splits=splits, out=out), run
     )
+
+
+def _shard_pytest_args(repo: Path, *, group: int, splits: int, out: Path) -> list[str]:
+    """The pytest options one shard runs with, beside `_collect_pytest_args`.
+
+    Every path rides in `--opt=value` form and the rootdir is named. pytest picks
+    its rootdir before pytest-split registers `--durations-path`, so a two-token
+    `--durations-path <runner.temp>/x.json` reads as a test path: the rootdir
+    becomes the common ancestor of the checkout and `runner.temp`, every nodeid
+    gains an `<org>/<repo>/` prefix, and split-check sees nothing match (the
+    first release cut by this job graph, run 41389896526).
+    """
+    return [
+        *_collect_pytest_args(repo),
+        "--splits",
+        str(splits),
+        "--group",
+        str(group),
+        "--splitting-algorithm",
+        "least_duration",
+        f"--durations-path={out}",
+        "--store-durations",
+        "--clean-durations",
+    ]
+
+
+def _collect_pytest_args(repo: Path) -> list[str]:
+    """The pytest options `collect` lists the suite with (`--collect-only` aside):
+    the shards' own prefix, so both name every test from the same rootdir."""
+    return ["-o", SHARD_ADDOPTS, f"--rootdir={repo}"]
 
 
 def _run_collect(
@@ -307,7 +321,7 @@ def _run_collect(
     """What the release's shards must run between them, written to `out`: None when
     collection succeeded."""
     r = run(
-        [*_UV_LOCKED, "pytest", "-o", SHARD_ADDOPTS, "--collect-only", "-q"],
+        [*_UV_LOCKED, "pytest", *_collect_pytest_args(repo), "--collect-only", "-q"],
         cwd=repo,
         capture_output=True,
         text=True,
