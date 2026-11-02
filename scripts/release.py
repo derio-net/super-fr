@@ -515,9 +515,11 @@ _PR_SUBJECT_RE = re.compile(r"\(#(\d+)\)\s*$|^Merge pull request #(\d+)\b")
 
 
 def logged_prs(repo: Path, tag: Version) -> set[int]:
-    """The PR numbers `git log <tag>..HEAD` names: a squash merge's `(#N)` subject or a
-    merge commit's `Merge pull request #N`; the release bot's own commits are skipped."""
-    out = _out(repo, "log", f"refs/tags/{tag.tag}..HEAD", "--format=%an%x00%s")
+    """The PR numbers `git log --first-parent <tag>..HEAD` names: a squash merge's `(#N)`
+    subject or a merge commit's `Merge pull request #N`; the release bot's own commits
+    are skipped. Only the first-parent line: a commit inside a merge-committed branch
+    is not a landing, and its `(#N)` is usually an issue ref, not a PR (gh#1333)."""
+    out = _out(repo, "log", "--first-parent", f"refs/tags/{tag.tag}..HEAD", "--format=%an%x00%s")
     numbers: set[int] = set()
     for line in out.splitlines():
         author, _, subject = line.partition("\x00")
