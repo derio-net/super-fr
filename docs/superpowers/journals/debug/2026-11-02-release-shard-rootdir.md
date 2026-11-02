@@ -15,3 +15,8 @@ Every "missing" id has a matching "extra" id differing only by the `super-fr/sup
 ### 8acc89f983e3 · root-cause · Two-token --durations-path makes pytest compute rootdir from the outside path
 
 `scripts/release.py` `_run_shard_tests` passes `--durations-path` and `${runner.temp}/shard-durations.json` as separate argv tokens. pytest determines rootdir in `_initini` before entry-point plugins (pytest-split) register their options, so the unknown option value is taken as a path argument; with no positional test path, rootdir becomes the common ancestor of cwd and that path (`/home/runner/work` on CI), every nodeid gains the checkout-relative prefix, and pyproject config may not load. `ci.yml` is unaffected because its durations path is inside the repo. Unit tests fake `run`, so no real argv ever reached pytest.
+
+<!-- fr:journal kind=finding scope=debug id=234d002c27d7 created=2026-11-02T05:10:59+00:00 state=fixed -->
+### 234d002c27d7 · finding [fixed] · Shard/collect argv share a rootdir; durations path is one = token
+
+`scripts/release.py`: `_shard_pytest_args` / `_collect_pytest_args` (both `--rootdir=<repo>`; `--durations-path=<out>`). Failing test first: `tests/integration/test_release_shard_ids.py` (red: split_check reported the 3 ids missing/extra; green after). Unit pin updated in `test_release_script.py`. Verified against this repo: rootdir = checkout, configfile pyproject.toml, plain `tests/...` ids with an outside durations path. Matrix `release-staged-suite-sharded` gains the int ref, stays walk-owed.
