@@ -20,3 +20,8 @@ Making _SECTION_RE accept '## 6. Test Plan (…)' would have fixed the 41 existi
 ### d70592a8bc18 · hypothesis · A ValueError-based near-miss error would recreate the bug inside existing handlers — confirmed, so it is a plain Exception
 
 debt_cmd._held catches (PlanSchemaError, OSError, ValueError, …) and returns []; plan_ops' ops_gap guard catches ValueError and sets gap=[]; ops/gate's ops-gap read says 'not checked'. A near-miss raised as ValueError would be read as 'no hold' / 'no gap' — the original defect, one layer down. TestPlanHeadingError subclasses Exception; tests/unit/test_test_plan_heading.py::test_the_error_is_not_a_value_error pins it, and each handler that should see it names it explicitly.
+
+<!-- fr:journal kind=ruled-out scope=debug id=96037aead0db created=2026-11-02T15:48:28+00:00 -->
+### 96037aead0db · ruled-out · Counting archived near-misses as 'has a Test Plan' in the staleness guard
+
+Measured over this repo: 3 archived specs with a numbered heading are uncited, so treating archived near-misses as Test Plans would add 3 new staleness errors on frozen specs. Archived specs now count only an exact heading and are never judged for near-misses; the old substring test and the new exact-only test agree on every archived spec here (no verdict changed).
