@@ -217,7 +217,7 @@ def tracker_body(key: str, title: str, gate: str, pr: int, *, run_id: str | None
 
 # A tracked-only tracker is never closed by fr (no gate pass reaches it), so its text says who
 # closes it (review of #1324, F3; auto-close is a separate issue).
-_CLOSE_LINE = "then close this issue."
+_CLOSE_LINE = "Then close this issue."
 
 
 def _discharge_block(key: str, repo_root: Path) -> list[str]:

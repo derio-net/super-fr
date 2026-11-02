@@ -88,8 +88,9 @@ adopt comment ends with `fr-gate-adopt-passed:`), and it shows the command that 
 key itself, never `fr gate pass`: `set-status --walk` for a row, `closeout outcome --ran` for a spec
 step, the `--tick` lines for a plan phase, `journal resolve` for a journal entry, "close it by hand"
 for an issue. Because it carries no gate marker, re-running `fr gate pass` on that PR never closes
-it, and nothing else does either: its text ends "then close this issue.", because closing it after
-the discharge is yours (automating that is gh#1328). Only the entry's own gate counts: a PR that
+it, and nothing else does either: its text ends "Then close this issue.", because closing it after
+the discharge is yours (automating that is gh#1328; trackers filed before this line existed keep
+their older text and are not rewritten). Only the entry's own gate counts: a PR that
 passed `gate:devops` still gets `gate:tester` for an item owed under tester. A mismatch skip names
 such a tracker in its passed form (`gate:<g>-passed pr:<n> (tracked only)`). An open fr tracker
 filed before the gate passed is rewritten into this form, and back into the held form if the

@@ -206,7 +206,36 @@ def test_gh1322_tracked_only_texts_tell_the_operator_to_close_the_issue() -> Non
     comment = t.adopt_passed_comment(KEY, "tester", 41, repo_root=root)
     for text in (body, comment):
         prose = [ln for ln in text.splitlines() if ln and not ln.startswith("<!--")]
-        assert prose[-1] == "then close this issue."
+        assert prose[-1] == "Then close this issue."
+    # the markers are still where their readers look: passed second-to-last, owed last
+    assert t.fr_passed_marker(body) == ("tester", 41)
+    assert body.splitlines()[-1] == f"<!-- fr-owed:{KEY} -->"
+    assert t.fr_adopt_passed_marker(comment) == (KEY, "tester", 41)
+
+
+def _without_close_line(text: str) -> str:
+    return text.replace("\n\nThen close this issue.", "")
+
+
+def test_gh1322_a_tracked_only_text_from_before_the_close_line_is_not_rewritten() -> None:
+    from tests.unit.gatebackfill_fixtures import ME
+
+    c = client()
+    c.comment_author = ME
+    passed(c, "tester")
+    foreign(c, 8)
+    entries = (entry(gate="tester"), entry("plan:2026-06-01-a#p2", gate="tester",
+                                           decision=f"adopt {REPO}#8"))  # fmt: skip
+    run(c, *entries)
+    # age both texts back to the #1324 form, which had no close line
+    issue = c.issues[(REPO, 1)]
+    issue.body = _without_close_line(issue.body)
+    [comment] = c.issue_comments[(REPO, 8)]
+    comment["body"] = _without_close_line(comment["body"])
+    assert "close this issue" not in issue.body + comment["body"]
+    before = c.attempted_mutations
+    run(c, *entries)
+    assert c.attempted_mutations == before  # matched by marker: no rewrite, no second comment
 
 
 def test_gh1322_a_mismatched_tracked_only_tracker_is_named_in_its_passed_form() -> None:
