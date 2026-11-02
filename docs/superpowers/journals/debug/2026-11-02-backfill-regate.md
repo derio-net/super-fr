@@ -15,3 +15,8 @@ Ruled out by reading apply.py:247-253. Both pr_view clients (real_ghclient, real
 ### rc · root-cause · the plan path has no 'gate already passed' state
 
 The dry run (gate_cmd.backfill_command -> render.summary) never reads the delivering PR's labels, so a passed PR's entry reads 'owed' like any other. Apply's passed branch (spec §G step 1) returns before step 2, so the still-owed item goes untracked. The operator decided against both: the item stays tracked, only the relabel is skipped.
+
+<!-- fr:journal kind=finding scope=debug id=fix created=2026-11-02T19:08:20+00:00 state=fixed -->
+### fix · finding [fixed] · tracked-only path for an already-passed gate
+
+apply._apply: a passed PR is never relabelled; its tracker is filed, reused or adopted via trackers.passed_tracker_body / adopt_passed_comment, whose markers (fr-gate-passed:, fr-gate-adopt-passed:) fr_gate_marker / fr_adopt_marker read as None, so close_gate_trackers never closes them. Dry run: delivery.mark_gate_passed sets PlanEntry.gate_passed from the cached pr_view, and render prints it. Decision stays 'owed'. Failing-first tests: test_gatebackfill_apply.py::test_gh1322_* (tester+devops, file, rewrite held, adopt, re-run, §H converse), test_gate_cmd.py::test_gh1322_the_dry_run_says_a_passed_gate_is_tracked_only_and_never_re_gated. Converse (§H closes held trackers of still-owed keys on a partial pass) filed as gh#1323.
