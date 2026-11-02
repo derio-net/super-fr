@@ -15,3 +15,8 @@ Source: ~/.cache/fr/coord/goals/review-1324/findings.md (F1 major, F2/F3 minor, 
 ### f3-f4 · finding [fixed] · close line on tracked-only texts; passed-form mismatch skip
 
 trackers._CLOSE_LINE appended before the markers (owed marker stays last, so owned_owed_key is unchanged); apply._apply names a passed marker as gate:<g>-passed pr:<n> (tracked only). F1 tests: test_gh1322_another_gate_passed_still_gates_this_one (both directions) + test_gate_cmd test_gh1322_the_dry_run_does_not_call_another_gates_pass_this_ones. F2: test_gh1322_both_labels_present_is_tracked_only_with_no_label_write, test_gh1322_passed_removed_later_rewrites_to_held. Auto-close filed as #1328. F5/F6 reviewed, deferred (no change).
+
+<!-- fr:journal kind=discovery scope=debug id=post-merge-review created=2026-11-02T20:42:59+00:00 -->
+### post-merge-review · discovery · independent post-merge review of #1324 ran; recorded here because its journal is archived
+
+A cold, read-only reviewer reviewed #1324 after merge: no blocker, F1 major, F2/F3 minor, F4-F6 nits (findings file host-local at ~/.cache/fr/coord/goals/review-1324/findings.md). #1324's own journal (implemented/journals/debug/2026-11-02-backfill-regate.md) was archived by close-out PR #1326 before this entry could be written there, and archived artifacts are frozen, so the record lives in this follow-up's journal. This branch's PR is the follow-up.
