@@ -25,3 +25,8 @@ apply._apply: a passed PR is never relabelled; its tracker is filed, reused or a
 ### pr1228-other-gate · discovery · PR #1228 passed devops, backfill computes tester: not a re-gate, a new gate
 
 Live check after the fix: #1228 carries gate:devops-passed (not gate:tester-passed as the brief says). spec:2026-10-22-fr-ops#step1 resolves to gate=tester, so the fix rightly does not flag it, and --yes would ADD gate:tester to #1228, a gate it never had, which would hold the release. That is the backfill's ordinary job, but on a PR already passed under another gate. Left for the operator: set the entry's decision (park/na) or gate: in the plan file, or decide a rule 'any passed post-merge gate counts'. Not changed in this PR.
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-11-02T19:14:09+00:00 -->
+### review · review · self-review of the diff: one finding, fixed
+
+Raised: (1) candidates._settle_trackers hid fr trackers from issue: candidacy only by the held fr-gate: marker; a tracked-only tracker (fr-gate-passed:) with an unparseable owed key would re-enter as its own issue: candidate. Fixed (reads either marker), pinned in test_tracker_issues_are_not_candidates_of_their_own (#65). Checked and clean: close.py reads only fr_gate_marker / fr_adopt_marker, so tracked-only trackers and adopt comments are never closed or listed by a gate pass; tracking none passes adds no write for a passed PR; the plan-file field is informational only, since --yes re-reads labels live. Out of scope, filed: #1323 (§H closes held trackers of still-owed keys on a partial pass). Raised for the operator: PR #1228 carries gate:devops-passed while its entry computes tester (journal pr1228-other-gate).
