@@ -329,11 +329,8 @@ MISSING_FIELD_CASES = {
     ),
     "agents": (
         ".claude/agents/fr-spec-reviewer.md",
-        # Stamped current, so the structure check runs: an unstamped one reads as
-        # version 1, which is stale since the kind moved past 1 (super-fr#1315).
-        "---\ndescription: x\nfr_artifact_version: "
-        f"{ARTIFACT_KINDS['agents'].current_version}\n---\nbody\n",
-        "name",
+        "---\nname: fr-spec-reviewer\ndescription: x\n---\nbody\n",
+        "fr_artifact_version",
     ),
 }
 

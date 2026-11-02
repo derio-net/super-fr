@@ -147,7 +147,8 @@ def test_validate_fails_an_unstamped_one(tmp_path: Path) -> None:
     # past 1 (super-fr#1315) that is stale, and the one fix is the same command.
     assert len(issues) == 1
     assert issues[0].startswith("fr-spec-reviewer.md")
-    assert "version 1" in issues[0] and "fr migrate artifacts --yes" in issues[0]
+    assert "version 1" in issues[0] and STAMP_KEY in issues[0]
+    assert "fr migrate artifacts --yes" in issues[0]
 
 
 def test_validate_fails_a_mismatched_name(tmp_path: Path) -> None:

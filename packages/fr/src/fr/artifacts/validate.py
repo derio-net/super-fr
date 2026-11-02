@@ -105,7 +105,8 @@ def validate_artifact(kind: ArtifactKind, path: Path) -> tuple[ValidationIssue, 
         )
     if version < kind.current_version:
         return issue(
-            f"stale: written for {kind.name} artifact version {version}, this fr writes "
+            f"stale: written for {kind.name} artifact version {version} (stamp: "
+            f"{kind.stamp}; an absent one reads as 1), this fr writes "
             f"version {kind.current_version} — run `fr migrate artifacts --yes`"
         )
 

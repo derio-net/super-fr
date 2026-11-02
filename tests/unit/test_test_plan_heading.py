@@ -310,20 +310,37 @@ def test_the_closeout_brief_says_to_fix_the_heading_first(tmp_path) -> None:  # 
     assert "FIX FIRST" in brief and 'rename it to "## Test Plan"' in brief
 
 
+def test_the_run_closeout_brief_turns_a_near_miss_into_its_fix_first_line(
+    tmp_path,
+    monkeypatch,  # noqa: ANN001
+) -> None:
+    """End to end through `closeout_brief`: the run's spec has a near-miss heading, and
+    the brief says FIX FIRST naming the file — it neither drops the Test Plan nor dies."""
+    from tests.unit.test_closeout_awaiting_live import _brief
+    from tests.unit.test_verification_walk import SPEC, _repo
+
+    root = _repo(tmp_path)
+    spec = root / SPEC
+    spec.write_text(spec.read_text() + f"\n{NEAR}\n\n1. Walk it live.\n")
+    brief = _brief(root, monkeypatch, "body")
+    assert f"run the spec's Test Plan: {SPEC}" in brief
+    assert "FIX FIRST" in brief and f"{SPEC}:" in brief
+    assert 'rename it to "## Test Plan"' in brief
+
+
 def test_no_reader_outside_fr_spec_spells_the_heading() -> None:
-    """One matcher: the literal lives in `fr.spec` alone (super-fr#1315)."""
+    """One matcher: the heading's literal lives in `fr.spec` alone (super-fr#1315). Any
+    quote style, a regex or an f-string, in any shipped package, counts."""
+    import re
     from pathlib import Path
 
-    import fr
-
-    src = Path(fr.__file__).parent
+    root = Path(__file__).resolve().parents[2] / "packages"
+    spelled = re.compile(r"""["'^]\s*#{1,3}\s*Test Plan""")
     offenders = [
-        f"{p.relative_to(src)}:{n}"
-        for p in sorted(src.rglob("*.py"))
-        if p.name != "spec.py"
+        f"{p.relative_to(root)}:{n}"
+        for p in sorted(root.glob("*/src/**/*.py"))
+        if p.as_posix().endswith("/fr/spec.py") is False
         for n, line in enumerate(p.read_text().splitlines(), 1)
-        if '"## Test Plan"' in line
-        and ("in " in line or "==" in line or "= " in line)
-        and "rename it to" not in line
+        if spelled.search(line) and "rename it to" not in line
     ]
     assert offenders == []

@@ -65,7 +65,8 @@ SPEC_TEST_PLAN_HEADING_REPAIR = Repair(
     applies=_applies,
     fn=_fn,
     description=(
-        'spec: rename a near-miss Test Plan heading (`## 6. Test Plan (…)`) to "## Test Plan"'
+        "spec: rename a near-miss Test Plan heading (`## 6. Test Plan (…)`) to "
+        f'"{TEST_PLAN_HEADING}"'
     ),
 )
 

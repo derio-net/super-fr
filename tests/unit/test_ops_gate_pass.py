@@ -267,3 +267,16 @@ def test_a_legacy_done_op_is_closed_by_its_status(repo: Path, forge: Any) -> Non
     forge(["gate:devops"])
     res = _pass("--gate", "devops", "--run", "run-1")
     assert res.exit_code == 0, res.output
+
+
+def test_a_near_miss_test_plan_heading_is_a_refusal_not_a_traceback(repo: Path, forge: Any) -> None:
+    """super-fr#1315: a numbered `## 6. Test Plan` hides every devops step. `fr gate
+    pass` must refuse naming the fix — never pass, never die in a traceback."""
+    _all_recorded(repo)
+    text = (repo / SPEC).read_text().replace("## Test Plan", "## 6. Test Plan (post-merge)")
+    (repo / SPEC).write_text(text)
+    forge(["gate:devops"])
+    res = _pass("--gate", "devops", "--run", "run-1")
+    assert res.exit_code == 2, res.output
+    assert res.exception is None or isinstance(res.exception, SystemExit)
+    assert 'rename it to "## Test Plan"' in " ".join(res.output.split())
