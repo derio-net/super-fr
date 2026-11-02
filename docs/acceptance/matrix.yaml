@@ -6421,7 +6421,7 @@ rows:
       otherwise) to the same Matrix, and reuses one parse of identical text within a
       process
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R1
     levels:
       unit:
       - super-fr:tests/unit/test_yamlio.py#test_loader_falls_back_without_the_c_loader
@@ -9640,7 +9640,7 @@ rows:
       file per run, and fails when the shards together did not run exactly the collected
       test set once each
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R4
     levels:
       unit:
       - super-fr:tests/unit/test_split_check.py
@@ -9657,7 +9657,7 @@ rows:
     acceptance: The combined coverage gate (fail-under 75) is measured on the 3.14 leg;
       the 3.11 floor leg runs the same tests without coverage
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
@@ -9670,7 +9670,7 @@ rows:
     acceptance: The CI budget watcher reads the run's workflow file at its commit and
       files or updates a ci-budget issue when the run is over budget
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R13
     levels:
       unit:
       - super-fr:tests/unit/test_ci_budget.py#test_fetch_workflow_text_sends_the_ref_as_a_get_query_parameter
@@ -9719,7 +9719,7 @@ rows:
       shards, each checking the new fr version, and pushes only when all are green;
       every existing release outcome still happens
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_release_script.py#test_materialise_refuses_a_bundle_whose_head_is_not_the_planned_commit
@@ -9742,7 +9742,7 @@ rows:
       exits green as superseded without pushing, and the run that push triggered releases
       instead
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-01-ci-speed-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-11-01-ci-speed-design.md#R10
     levels:
       unit:
       - super-fr:tests/unit/test_release_script.py#test_a_race_at_the_push_itself_is_superseded
