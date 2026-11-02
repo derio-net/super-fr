@@ -10683,9 +10683,24 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R5
     - super-fr:docs/superpowers/implemented/specs/2026-11-01-auto-migrate-own-commit-design.md#R9
     levels: {}
-    status: walk-owed
-    notes: 'walked on first real use: the per-repo sweep'
+    status: walked
+    notes: walked on first real use (cross-repo sweep 2026-11-02)
     verify: live
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-02T21:18:53Z'
+      evidence: 'Walked 2026-11-02 on first real use, fr 6.1.0rc14 (consumer repos private,
+        names redacted). (1) Workspace: in a stale private consumer repo''s fr workspace,
+        the first ordinary command (fr acceptance status --brief) migrated 4 artifacts
+        and committed them alone as ''chore(fr): migrate 4 artifacts to fr 6.1.0rc14''.
+        (2) CI in place: a second private consumer''s main still carries a schema-4
+        matrix with 13 skipped rows; its acceptance-report matrix job (fr from super-fr@main,
+        Gitea runner) read them as 13 unwired and passed, so it migrated in place without
+        committing. The in-place warning line was not visible in that step''s log. The
+        sweep''s migrate PRs (17 repos) each carried the migration as its own commit.'
   - id: auto-migrate-nag-surfaces-commit
     capability: artifact migration gate
     acceptance: When a session's first fr command (the SessionStart acceptance nag)
