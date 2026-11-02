@@ -1620,7 +1620,10 @@ def test_test_shard_runs_its_split_credential_free_with_the_durations_options(
     assert argv[:4] == ["uv", "run", "--locked", "pytest"]
     assert _arg(argv, "--splits") == "6" and _arg(argv, "--group") == "3"
     assert _arg(argv, "--splitting-algorithm") == "least_duration"
-    assert _arg(argv, "--durations-path") == str(shard)
+    # One `=` token each: a separate path value reads as a test path to pytest's
+    # early rootdir scan (tests/integration/test_release_shard_ids.py).
+    assert f"--durations-path={shard}" in argv and "--durations-path" not in argv
+    assert f"--rootdir={tmp_path}" in argv
     assert _arg(argv, "-n") == "auto"
     for flag in ("--no-cov", "--store-durations", "--clean-durations"):
         assert flag in argv
@@ -1646,6 +1649,7 @@ def test_collect_lists_the_suite_with_the_shards_options_credential_free(
     assert argv[:4] == ["uv", "run", "--locked", "pytest"]
     assert "--collect-only" in argv
     assert _arg(argv, "-o") == release.SHARD_ADDOPTS
+    assert f"--rootdir={tmp_path}" in argv
     assert "tests/a.py::t" in out.read_text()
     (env,) = run.envs
     assert isinstance(env, dict) and "GH_TOKEN" not in env
