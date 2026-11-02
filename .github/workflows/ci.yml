@@ -34,15 +34,81 @@ jobs:
       - run: uv sync
       - run: uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src packages/fr-claude-cloud/src
 
-  test:
+  # Shard weights (spec 2026-11-01-ci-speed §3.B). ONE durations file is chosen
+  # per run and uploaded, so a cache save landing mid-run cannot make two
+  # shards split differently: the newest `test-durations-*` cache entry (saved
+  # by `split-check` from main's own CI measurements), else the committed
+  # `.test_durations`.
+  plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: cache/test-durations.json
+          key: test-durations-none
+          restore-keys: test-durations-
+      - name: Choose the durations file for this run
+        run: |
+          mkdir -p plan
+          if [ -f cache/test-durations.json ]; then
+            cp cache/test-durations.json plan/durations-plan.json
+          else
+            cp .test_durations plan/durations-plan.json
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: durations-plan
+          path: plan/durations-plan.json
+          retention-days: 1
+
+  # What each leg collects, with the shards' own addopts and no split or
+  # coverage; `split-check` proves the shards ran exactly this set (R5).
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+    name: collect (py${{ matrix.python }})
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uv sync
+      - run: >-
+          uv run pytest -o addopts="--strict-markers" --collect-only -q
+          > collected.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: collected-py${{ matrix.python }}
+          path: collected.txt
+          retention-days: 1
+
+  test:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         # The floor, and the newest stable Python, so a version-specific
         # break shows up from either end (#940).
         python: ["3.11", "3.14"]
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
+        include:
+          # Coverage is measured on the newest leg only (R7): both legs would
+          # upload the same artifact name, and the gate needs one run of the
+          # suite, not two.
+          - python: "3.11"
+            cov_args: "--no-cov"
+          - python: "3.14"
+            cov_args: "--cov --cov-report="
     name: test (py${{ matrix.python }}, ${{ matrix.shard }})
     env:
       UV_PYTHON: ${{ matrix.python }}
@@ -55,19 +121,29 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: uv sync
-      # Sharded with pytest-split (CI time budget, spec 2026-09-26 §3.A).
-      # addopts is CLEARED, not patched, and --strict-markers/--cov are
-      # re-added explicitly: pytest-cov accumulates --cov-report values into
-      # a dict, so a CLI --cov-report= cannot cancel addopts' term-missing,
-      # and each shard would otherwise print a whole-codebase coverage table
-      # for a quarter of the tests. The `coverage` job below holds the
-      # --cov-fail-under=75 gate that addopts holds for a local run.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: durations-plan
+      - name: Every shard splits by the plan's one file
+        run: cp durations-plan.json shard-durations.json
+      # Sharded with pytest-split (spec 2026-09-26 §3.A, 2026-11-01 §3.B).
+      # addopts is CLEARED, not patched, and --strict-markers is re-added
+      # explicitly; the coverage options come per leg (matrix.cov_args), since
+      # pytest-cov accumulates --cov-report values into a dict, so a CLI
+      # --cov-report= cannot cancel addopts' term-missing. The `coverage` job
+      # below holds the --cov-fail-under=75 gate that addopts holds locally.
+      # --clean-durations makes shard-durations.json hold exactly the tests
+      # this shard ran; `split-check` compares those files to `collect`.
       - run: >-
-          uv run pytest -o addopts="--strict-markers --cov" --cov-report=
-          -n auto --splits 4 --group ${{ matrix.shard }}
+          uv run pytest -o addopts="--strict-markers" $COV_ARGS
+          -n auto --splits 6 --group $SHARD
           --splitting-algorithm least_duration
+          --durations-path shard-durations.json --store-durations --clean-durations
+          --durations=25
           --junitxml=junit-shard.xml
         env:
+          COV_ARGS: ${{ matrix.cov_args }}
+          SHARD: ${{ matrix.shard }}
           COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
       # A failed test as a check-run annotation, readable through the REST API
       # (`check-runs/{id}/annotations`) where the job log is not: the log is
@@ -77,9 +153,13 @@ jobs:
       - if: failure()
         run: >-
           uv run --no-project python scripts/junit_annotations.py junit-shard.xml
-      # Coverage is measured on the floor leg only: both legs would upload the
-      # same artifact name, and the gate needs one run of the suite, not two.
-      - if: matrix.python == '3.11'
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: durations-py${{ matrix.python }}-shard-${{ matrix.shard }}
+          path: shard-durations.json
+          retention-days: 7
+      - if: matrix.python == '3.14'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-shard-${{ matrix.shard }}
@@ -87,7 +167,50 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
-  # Combines the 4 shards' coverage data and holds the --cov-fail-under=75
+  # R5: per leg, the tests the shards ran are exactly the tests collected, none
+  # twice. On a push to main it also saves the 3.14 leg's measured durations
+  # as the next run's plan.
+  split-check:
+    needs: [test, collect]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: durations-py*-shard-*
+          path: shards
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: collected-py*
+          path: collected
+      - name: Shards ran exactly what each leg collects
+        # The legs come from `collect`'s artifacts (its matrix is pinned equal to
+        # `test`'s), so an added leg is checked too; a leg with no shard files
+        # leaves the glob unmatched and the load fails loudly.
+        run: |
+          set -euo pipefail
+          for dir in collected/collected-py*; do
+            py="${dir#collected/collected-py}"
+            uv run --no-project python scripts/split_check.py check \
+              --collected "$dir/collected.txt" \
+              shards/durations-py"$py"-shard-*/shard-durations.json
+          done
+      - name: Merge the 3.14 leg's measured durations
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: >-
+          uv run --no-project python scripts/split_check.py merge
+          -o cache/test-durations.json
+          shards/durations-py3.14-shard-*/shard-durations.json
+      - name: Save them as the next run's plan
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: cache/test-durations.json
+          key: test-durations-${{ github.run_id }}
+
+  # Combines the 6 shards' coverage data and holds the --cov-fail-under=75
   # gate that a single unsharded `test` job used to hold via addopts.
   coverage:
     needs: test
@@ -185,8 +308,9 @@ jobs:
   # One stable check name for a future required-check rule (#706).
   ci-ok:
     if: always()
-    needs: [lint, typecheck, test, coverage, validate-artifacts,
-            opencode-plugin-test, version-sync, change-fragment]
+    needs: [lint, typecheck, plan, collect, test, split-check, coverage,
+            validate-artifacts, opencode-plugin-test, version-sync,
+            change-fragment]
     runs-on: ubuntu-latest
     steps:
       - name: Every CI job succeeded or was skipped by its own condition

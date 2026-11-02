@@ -1,0 +1,143 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Release — prepare / collect / sharded test / split-check / publish, superseded
+    instead of retry
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - release-staged-suite-sharded
+  - release-superseded-not-retried
+  tier: hard
+  files:
+  - .github/workflows/release.yml
+  - scripts/release.py
+  - tests/unit/test_release_script.py
+  - tests/unit/test_release_workflow.py
+  - docs/merge-protection.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: RED — release.py subcommands and the superseded outcome
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: rewrite tests/unit/test_release_script.py:322
+      (`test_a_push_lost_to_a_new_commit_recomputes_and_includes_its_fragment`),
+      :344 (`test_three_lost_races_exit_non_zero`) and :594
+      (`test_a_lost_race_retests_the_recomputed_tree`) to the superseded
+      outcome: a `race` from push → exit 0, "superseded" printed, nothing
+      pushed, no tag, no `gh release`, exactly one bump and one suite. Add:
+      a run with an explicit override that loses the race exits non-zero
+      and prints `gh workflow run release.yml -f version=<X>`; a
+      protection refusal still raises as today; a base moved before
+      publish (origin/main != plan base) is superseded without attempting
+      the push. Reuse the file's existing fake-Commands / fake-remote
+      fixtures.
+  - id: P3.T1.S2
+    text: |-
+      RED: subcommand tests: `prepare` writes release-plan.json (version,
+      rc, override, base_sha, staged_sha, fragments) and a git bundle
+      that, fetched into a fresh clone at base, yields staged_sha, and
+      reports cut=false (no plan file) for nothing-to-release and for
+      the untagged-RC-at-HEAD path (which still tags); `materialise`
+      refuses a bundle whose head != plan.staged_sha and, with --pin-base,
+      leaves refs/remotes/origin/main == base_sha; `test-shard` runs the
+      version probe before pytest and refuses a wrong version without
+      running pytest, and its pytest argv carries --splits/--group,
+      --no-cov, -n auto, --durations-path, --store-durations,
+      --clean-durations, least_duration, under `_credential_free_env()`;
+      `publish` on success pushes then calls finish. Run via testslot
+      (targeted file only) → red.
+- number: 2
+  title: GREEN — split release.py into phases
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      GREEN: in scripts/release.py add argparse subcommands
+      prepare/materialise/test-shard/publish, each a thin wrapper over
+      functions: `prepare(repo, override, cmds) -> Plan | None`
+      (sync_to_tip, compute, make_release_commit; writes plan + bundle
+      into --out), `materialise(repo, plan_path, bundle, pin_base)`,
+      `test_shard(repo, plan, group, splits, durations, run)`,
+      `publish(repo, plan, cmds) -> outcome`. Remove MAX_ATTEMPTS,
+      EXIT_RACE and the recompute loop; rewrite release_to_main as
+      prepare → check_staged_suite (one unsharded run) → publish for the
+      no-subcommand path. Keep `--dry-run` compute-only. Update the
+      module docstring's step list (release.py:38-45). Superseded:
+      override is None → print and return 0; override set → ReleaseError
+      with the re-dispatch line and a non-zero code.
+- number: 3
+  title: RED/GREEN — release.yml job graph and its tripwires
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_release_workflow.py — make the checkout/token
+      assertions per job: every job's checkout has
+      persist-credentials false; jobs prepare and publish take
+      `steps.app-token.outputs.token || github.token`; jobs collect and
+      test have `permissions: {contents: read}`, no
+      create-github-app-token step, and no GH_TOKEN /
+      FR_RELEASE_STATUS_TOKEN in any env; test is a 6-shard matrix;
+      split-check needs [collect, test]; publish needs split-check;
+      collect/test/split-check/publish are `if:` on prepare's `cut`
+      output; every job has timeout-minutes (prepare 10, collect 10,
+      test 20, split-check 5, publish 10); the workflow-level
+      concurrency pin stays (the budget pin moved in phase 2).
+  - id: P3.T3.S2
+    text: |-
+      GREEN: rewrite .github/workflows/release.yml per spec §3.D: prepare
+      runs `release.py prepare --out release-out` and uploads it
+      (plan, bundle, durations restored via actions/cache/restore with
+      .test_durations fallback); collect and test download it, run
+      `release.py materialise --pin-base`, then the collect command /
+      `release.py test-shard --group N --splits 6`, uploading shard
+      durations; split-check runs scripts/split_check.py check; publish
+      runs `release.py publish` with GH_TOKEN, RELEASE_VERSION and
+      FR_RELEASE_STATUS_TOKEN as today. Values reach the shell only
+      through env. Run test_release_workflow.py and test_release_script.py
+      via testslot; green.
+- number: 4
+  title: REFACTOR + docs + quality gate
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      REFACTOR: dedupe the materialise/pin logic shared by collect, test
+      and publish; make sure every error names its phase ("prepare:",
+      "publish: superseded …"). Update docs/merge-protection.md's
+      "Why an app" paragraph to say the release is now a job graph and
+      superseded runs stop instead of retrying. ruff format/check, mypy
+      (scripts are not in mypy's list; keep annotations consistent).
+      Commit, push, wait for CI; evidence `tests: ci`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-01T19:51:40+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-01T19:51:40+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-01T19:51:40+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-01T19:51:40+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-01T19:51:40+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-01T19:51:40+00:00'
+      note: null
+  completion:
+    at: '2026-11-01T19:51:40+00:00'
+    note: null
+    observed_prs: []

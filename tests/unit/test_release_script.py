@@ -316,11 +316,15 @@ def test_two_runs_back_to_back_are_safe(world: World) -> None:
     assert len(_release_calls(world)) == 1
 
 
-# -- the race ----------------------------------------------------------------
+# -- superseded, never retried (spec 2026-11-01-ci-speed §3.D, R10) ----------------
 
 
-def test_a_push_lost_to_a_new_commit_recomputes_and_includes_its_fragment(
-    world: World,
+def _tip(world: World) -> str:
+    return _git(world.origin, "rev-parse", "main").strip()
+
+
+def test_a_push_lost_to_a_new_commit_is_superseded_and_pushes_nothing(
+    world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
     world.fragment("fix-a", "patch", "fix the thing")
 
@@ -330,26 +334,54 @@ def test_a_push_lost_to_a_new_commit_recomputes_and_includes_its_fragment(
 
     world.before_push = race
     assert world.run() == 0
-    assert world.bump_calls == ["4.23.1", "4.24.0"]
-    assert world.origin_version() == "4.24.0"
-    assert world.origin_show(".changes/feat-late.yaml") is None
-    assert world.origin_show(".changes/fix-a.yaml") is None
-    body = "\n".join(world.origin_log("%b"))
-    assert "landed while releasing" in body and "fix the thing" in body
-    # Recomputed from scratch, never rebased: one release commit on origin.
-    assert world.origin_log().count("release: v4.24.0") == 1
-    assert not any(s.startswith("release: v4.23.1") for s in world.origin_log())
+    # One bump, one suite, nothing pushed: the next run releases both fragments.
+    assert world.bump_calls == ["4.23.1"]
+    assert len(world.test_calls) == 1
+    assert not any(s.startswith("release:") for s in world.origin_log())
+    assert world.origin_tags() == [f"v{BASE}"]
+    assert world.gh_calls == []
+    assert world.origin_show(".changes/feat-late.yaml") is not None
+    assert world.origin_show(".changes/fix-a.yaml") is not None
+    assert f"superseded: main moved to {_tip(world)}" in capsys.readouterr().out
 
 
-def test_three_lost_races_exit_non_zero(world: World, capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_redispatch(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
     world.fragment("fix-a", "patch", "fix the thing")
     world.before_push = lambda n: world.land(f"docs/n{n}.md", f"{n}\n")
-    code = world.run()
-    assert code != 0
-    assert len(world.bump_calls) == 3
+    code = world.run("--version", "4.30.0")
+    assert code == release.EXIT_SUPERSEDED
+    assert world.bump_calls == ["4.30.0"]
     assert not any(s.startswith("release:") for s in world.origin_log())
     assert world.gh_calls == []
-    assert "3" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert f"superseded: main moved to {_tip(world)}" in captured.out
+    # No later run carries the override, so the operator is told to re-dispatch it.
+    assert "re-dispatch: gh workflow run release.yml -f version=4.30.0" in captured.err
+
+
+def test_a_race_at_the_push_itself_is_superseded(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    monkeypatch.setattr(release, "push", lambda repo: "race")
+    assert world.run() == 0
+    assert world.origin_tags() == [f"v{BASE}"]
+    assert _release_calls(world) == []
+    assert "superseded: main moved to" in capsys.readouterr().out
+
+
+def test_a_base_moved_before_publish_is_superseded_without_attempting_the_push(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    pushes: list[Path] = []
+    monkeypatch.setattr(release, "push", lambda repo: pushes.append(repo) or "ok")
+    world.before_push = lambda n: world.land("docs/late.md", "late\n")
+    assert world.run() == 0
+    assert pushes == []
+    assert world.gh_calls == []
 
 
 @pytest.mark.parametrize(
@@ -591,7 +623,7 @@ def test_no_release_commit_means_no_test_run(world: World) -> None:
     assert world.test_calls == []
 
 
-def test_a_lost_race_retests_the_recomputed_tree(world: World) -> None:
+def test_a_superseded_run_tests_once_and_never_retests(world: World) -> None:
     world.fragment("fix-a", "patch", "fix the thing")
 
     def race(n: int) -> None:
@@ -600,7 +632,7 @@ def test_a_lost_race_retests_the_recomputed_tree(world: World) -> None:
 
     world.before_push = race
     assert world.run() == 0
-    assert [v for v, _ in world.test_calls] == ["4.23.1", "4.24.0"]
+    assert world.test_calls == [("4.23.1", BASE)]
 
 
 # -- the default test command ---------------------------------------------------
@@ -1414,3 +1446,604 @@ def test_the_merged_pr_read_uses_the_workflow_token(
 def test_the_default_test_command_accepts_the_pep440_spelling_of_an_rc(tmp_path: Path) -> None:
     assert release._run_staged_tests(tmp_path, "5.0.0-rc.1", run=_FakeRun("5.0.0rc1")) is None
     assert release._run_staged_tests(tmp_path, "5.0.0", run=_FakeRun("5.0.0rc1")) is not None
+
+
+# -- the release as a job graph: prepare / materialise / test-shard / publish ------
+# (spec 2026-11-01-ci-speed §3.D, R8-R11). Each job runs in its own fresh checkout,
+# so these cases hand the plan and the bundle between separate clones of origin.
+
+
+def _fresh(world: World, name: str, at: str) -> Path:
+    """A new clone of origin, detached at `at`: a job's checkout of the plan's base."""
+    path = world.origin.parent / name
+    _git(world.origin.parent, "clone", "-q", str(world.origin), str(path))
+    _git(path, "checkout", "-q", "--detach", at)
+    return path
+
+
+def _prepare(world: World, *extra: str) -> tuple[Path, dict[str, object]]:
+    out = world.origin.parent / "release-out"
+    assert world.run("prepare", "--out", str(out), *extra) == 0
+    return out, json.loads((out / release.PLAN_FILE).read_text())
+
+
+def _job(world: World, repo: Path, *argv: str) -> int:
+    return release.main(list(argv), repo=repo, commands=world.commands())
+
+
+def test_prepare_writes_the_plan_and_a_bundle_and_pushes_nothing(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    base = _tip(world)
+    gh_out = world.origin.parent / "gh-output"
+
+    out, plan = _prepare(world, "--github-output", str(gh_out))
+
+    staged = _git(world.clone, "rev-parse", "HEAD").strip()
+    assert plan == {
+        "version": "4.24.0",
+        "rc": False,
+        "override": None,
+        "base_sha": base,
+        "staged_sha": staged,
+        "fragments": [".changes/feat-b.yaml"],
+    }
+    assert _tip(world) == base  # prepare never pushes
+    assert world.test_calls == []  # the suite is the test jobs', not prepare's
+    assert world.gh_calls == []
+    lines = gh_out.read_text().splitlines()
+    assert "cut=true" in lines and f"base_sha={base}" in lines
+    # The bundle, fetched into a fresh clone at base, yields exactly the staged commit.
+    fresh = _fresh(world, "fresh", base)
+    _git(fresh, "fetch", "-q", str(out / release.BUNDLE_FILE), "refs/heads/main")
+    assert _git(fresh, "rev-parse", "FETCH_HEAD").strip() == staged
+
+
+def test_prepare_with_nothing_to_release_writes_no_plan_and_reports_no_cut(world: World) -> None:
+    gh_out = world.origin.parent / "gh-output"
+    out = world.origin.parent / "release-out"
+    assert world.run("prepare", "--out", str(out), "--github-output", str(gh_out)) == 0
+    assert not (out / release.PLAN_FILE).exists()
+    assert "cut=false" in gh_out.read_text().splitlines()
+    assert world.gh_calls == []
+
+
+def test_prepare_tags_an_untagged_rc_at_head_and_reports_no_cut(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    _git(world.origin, "tag", "-d", "v4.24.0-rc.1")  # the tag push failed
+    head = world.origin_log("%H")
+    world.gh_calls.clear()
+    gh_out = world.origin.parent / "gh-output"
+    out = world.origin.parent / "release-out"
+
+    assert world.run("prepare", "--out", str(out), "--github-output", str(gh_out)) == 0
+
+    assert not (out / release.PLAN_FILE).exists()
+    assert "cut=false" in gh_out.read_text().splitlines()
+    assert world.origin_log("%H") == head
+    assert "v4.24.0-rc.1" in world.origin_tags()
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0-rc.1"
+
+
+def test_prepare_records_an_override(world: World) -> None:
+    _out, plan = _prepare(world, "--version", "4.30.0")
+    assert plan["override"] == "4.30.0" and plan["version"] == "4.30.0"
+
+
+def test_materialise_checks_out_the_staged_commit_and_pins_origin_main_to_base(
+    world: World,
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    world.land("docs/late.md", "late\n")  # main moves on while the jobs run
+    job = _fresh(world, "job", str(plan["base_sha"]))
+    assert _git(job, "rev-parse", "refs/remotes/origin/main").strip() == _tip(world)
+
+    code = _job(
+        world,
+        job,
+        "materialise",
+        "--plan",
+        str(out / release.PLAN_FILE),
+        "--bundle",
+        str(out / release.BUNDLE_FILE),
+        "--pin-base",
+    )
+
+    assert code == 0
+    assert _git(job, "rev-parse", "HEAD").strip() == plan["staged_sha"]
+    # Tests that read origin/main judge the base the release pushes onto.
+    assert _git(job, "rev-parse", "refs/remotes/origin/main").strip() == plan["base_sha"]
+
+
+def test_materialise_refuses_a_bundle_whose_head_is_not_the_planned_commit(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    forged = dict(plan, staged_sha=plan["base_sha"])
+    (out / release.PLAN_FILE).write_text(json.dumps(forged))
+    job = _fresh(world, "job", str(plan["base_sha"]))
+
+    code = _job(
+        world,
+        job,
+        "materialise",
+        "--plan",
+        str(out / release.PLAN_FILE),
+        "--bundle",
+        str(out / release.BUNDLE_FILE),
+    )
+
+    assert code == release.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "materialise" in err and str(plan["staged_sha"]) in err
+    assert _git(job, "rev-parse", "HEAD").strip() == plan["base_sha"]
+
+
+def test_test_shard_probes_the_version_before_pytest_and_refuses_a_wrong_number(
+    tmp_path: Path,
+) -> None:
+    run = _FakeRun("4.40.1")
+    plan = tmp_path / "durations-plan.json"
+    plan.write_text("{}")
+
+    failure = release._run_shard_tests(
+        tmp_path, "5.0.0", group=2, splits=6, durations=plan, out=tmp_path / "s.json", run=run
+    )
+
+    assert failure is not None and "4.40.1" in failure and "5.0.0" in failure
+    assert not any("pytest" in c for c in run.calls)
+
+
+def test_test_shard_runs_its_split_credential_free_with_the_durations_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for var in ("GH_TOKEN", "GITHUB_TOKEN", "FR_RELEASE_STATUS_TOKEN"):
+        monkeypatch.setenv(var, "secret")
+    run = _FakeRun("5.0.0")
+    plan = tmp_path / "durations-plan.json"
+    plan.write_text('{"tests/a.py::t": 1.0}')
+    shard = tmp_path / "shard-durations.json"
+
+    assert (
+        release._run_shard_tests(
+            tmp_path, "5.0.0", group=3, splits=6, durations=plan, out=shard, run=run
+        )
+        is None
+    )
+
+    assert "pytest" not in run.calls[0]  # the probe first
+    argv = run.calls[1]
+    assert argv[:4] == ["uv", "run", "--locked", "pytest"]
+    assert _arg(argv, "--splits") == "6" and _arg(argv, "--group") == "3"
+    assert _arg(argv, "--splitting-algorithm") == "least_duration"
+    assert _arg(argv, "--durations-path") == str(shard)
+    assert _arg(argv, "-n") == "auto"
+    for flag in ("--no-cov", "--store-durations", "--clean-durations"):
+        assert flag in argv
+    # Same options as the collect job, or split-check compares different sets.
+    assert _arg(argv, "-o") == release.SHARD_ADDOPTS
+    # Every shard splits by the plan's one file; its own run writes the copy.
+    assert shard.read_text() == plan.read_text()
+    for env in run.envs:
+        assert isinstance(env, dict)
+        assert not {"GH_TOKEN", "GITHUB_TOKEN", "FR_RELEASE_STATUS_TOKEN"} & set(env)
+
+
+def test_collect_lists_the_suite_with_the_shards_options_credential_free(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GH_TOKEN", "secret")
+    run = _FakeRun("5.0.0", tail="tests/a.py::t")
+    out = tmp_path / "collected.txt"
+
+    assert release._run_collect(tmp_path, out, run=run) is None
+
+    (argv,) = run.calls
+    assert argv[:4] == ["uv", "run", "--locked", "pytest"]
+    assert "--collect-only" in argv
+    assert _arg(argv, "-o") == release.SHARD_ADDOPTS
+    assert "tests/a.py::t" in out.read_text()
+    (env,) = run.envs
+    assert isinstance(env, dict) and "GH_TOKEN" not in env
+
+
+def _publish(world: World, out: Path, plan: dict[str, object]) -> int:
+    job = _fresh(world, "publisher", str(plan["base_sha"]))
+    return _job(
+        world,
+        job,
+        "publish",
+        "--plan",
+        str(out / release.PLAN_FILE),
+        "--bundle",
+        str(out / release.BUNDLE_FILE),
+    )
+
+
+def test_publish_pushes_the_staged_commit_then_tags_and_releases_it(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+
+    assert _publish(world, out, plan) == 0
+
+    assert _tip(world) == plan["staged_sha"]
+    assert world.origin_version() == "4.24.0"
+    assert "v4.24.0" in world.origin_tags()
+    (call,) = _release_calls(world)
+    assert "add the feature" in _arg(call, "--notes")
+
+
+def test_publish_when_main_moved_is_superseded_and_exits_zero(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    world.land("docs/late.md", "late\n")
+    tip = _tip(world)
+
+    assert _publish(world, out, plan) == 0
+
+    assert _tip(world) == tip
+    assert world.origin_tags() == [f"v{BASE}"]
+    assert world.gh_calls == []
+    assert f"superseded: main moved to {tip}" in capsys.readouterr().out
+
+
+def test_publish_superseded_with_an_override_exits_non_zero(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out, plan = _prepare(world, "--version", "4.30.0")
+    world.land("docs/late.md", "late\n")
+
+    assert _publish(world, out, plan) == release.EXIT_SUPERSEDED
+
+    err = capsys.readouterr().err
+    assert "publish: superseded" in err
+    assert "re-dispatch: gh workflow run release.yml -f version=4.30.0" in err
+
+
+def test_publish_still_raises_a_protection_refusal(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    hook = world.origin / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'error: GH013: Repository rule violations' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+    assert _publish(world, out, plan) == release.EXIT_REFUSED
+
+    err = capsys.readouterr().err
+    assert "bypass actor" in err and "superseded" not in err
+    assert world.gh_calls == []
+
+
+def _racing_push(world: World, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """The real `push`, but main moves after publish's base check and before the push."""
+    real = release.push
+    replies: list[str] = []
+
+    def push(repo: Path) -> str:
+        world.land("docs/racer.md", "racer\n", "landed between the check and the push")
+        replies.append(real(repo))
+        return replies[-1]
+
+    monkeypatch.setattr(release, "push", push)
+    return replies
+
+
+def test_p3_r2_a_real_non_fast_forward_at_the_push_is_superseded(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    replies = _racing_push(world, monkeypatch)
+
+    assert _publish(world, out, plan) == 0
+
+    assert replies == ["race"]  # git itself refused the non-fast-forward
+    tip = _tip(world)
+    assert tip != plan["staged_sha"]
+    assert world.origin_tags() == [f"v{BASE}"]
+    assert world.gh_calls == []
+    assert f"superseded: main moved to {tip}" in capsys.readouterr().out
+
+
+def test_p3_r2_a_real_non_fast_forward_with_an_override_names_the_redispatch(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out, plan = _prepare(world, "--version", "4.30.0")
+    replies = _racing_push(world, monkeypatch)
+
+    assert _publish(world, out, plan) == release.EXIT_SUPERSEDED
+
+    assert replies == ["race"]
+    assert world.gh_calls == []
+    assert "re-dispatch: gh workflow run release.yml -f version=4.30.0" in capsys.readouterr().err
+
+
+def test_p3_r1_a_rerun_after_a_landed_push_skips_the_push_and_finishes(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    # The first publish pushed the release commit, then `finish` failed (no tag).
+    _git(world.clone, "push", "-q", "origin", f"{plan['staged_sha']}:refs/heads/main")
+    assert world.origin_tags() == [f"v{BASE}"]
+    pushes: list[Path] = []
+    monkeypatch.setattr(release, "push", lambda repo: pushes.append(repo) or "ok")
+
+    assert _publish(world, out, plan) == 0
+
+    assert pushes == []  # already on main: nothing to push
+    assert _tip(world) == plan["staged_sha"]
+    assert "v4.24.0" in world.origin_tags()
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0"
+    assert "superseded" not in capsys.readouterr().out
+
+
+# -- p3-r3 / p3-r4: collect and test-shard read the plan, through the seam ---------
+
+
+def _materialised(world: World, out: Path, plan: dict[str, object], name: str = "job") -> Path:
+    job = _fresh(world, name, str(plan["base_sha"]))
+    code = _job(
+        world,
+        job,
+        "materialise",
+        "--plan",
+        str(out / release.PLAN_FILE),
+        "--bundle",
+        str(out / release.BUNDLE_FILE),
+        "--pin-base",
+    )
+    assert code == 0
+    return job
+
+
+def _shard_argv(out: Path, tmp: Path) -> list[str]:
+    durations = tmp / "durations-plan.json"
+    durations.write_text("{}")
+    return [
+        "test-shard",
+        "--plan",
+        str(out / release.PLAN_FILE),
+        "--group",
+        "2",
+        "--splits",
+        "6",
+        "--durations",
+        str(durations),
+        "--out",
+        str(tmp / "shard.json"),
+    ]
+
+
+def _recording(
+    world: World, failure: str | None = None
+) -> tuple[release.Commands, list[tuple[str, object]]]:
+    calls: list[tuple[str, object]] = []
+    cmds = world.commands()
+
+    def shard(repo: Path, new: str, **kw: object) -> str | None:
+        calls.append(("shard", (repo, new, kw)))
+        return failure
+
+    def collect(repo: Path, out: Path) -> str | None:
+        calls.append(("collect", (repo, out)))
+        return failure
+
+    cmds.shard = shard
+    cmds.collect = collect
+    return cmds, calls
+
+
+def test_p3_r4_test_shard_hands_the_plans_version_to_the_shard_seam(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    job = _materialised(world, out, plan)
+    cmds, calls = _recording(world)
+    argv = _shard_argv(out, world.origin.parent)
+
+    assert release.main(argv, repo=job, commands=cmds) == 0
+
+    ((what, (repo, new, kw)),) = calls
+    assert what == "shard" and repo == job and new == "4.24.0"
+    assert kw["group"] == 2 and kw["splits"] == 6
+    assert kw["durations"] == Path(argv[argv.index("--durations") + 1])
+    assert kw["out"] == Path(argv[argv.index("--out") + 1])
+
+
+def test_p3_r4_a_red_shard_refuses_naming_the_shard_and_version(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    job = _materialised(world, out, plan)
+    cmds, _calls = _recording(world, failure="1 failed, 3515 passed")
+
+    assert release.main(_shard_argv(out, world.origin.parent), repo=job, commands=cmds) == (
+        release.EXIT_REFUSED
+    )
+
+    err = capsys.readouterr().err
+    assert "test-shard: shard 2/6 is red at 4.24.0" in err
+    assert "1 failed, 3515 passed" in err
+
+
+def test_p3_r4_collect_writes_through_the_seam_and_refuses_a_failed_collection(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    job = _materialised(world, out, plan)
+    collected = world.origin.parent / "collected.txt"
+    argv = ["collect", "--plan", str(out / release.PLAN_FILE), "--out", str(collected)]
+
+    cmds, calls = _recording(world)
+    assert release.main(argv, repo=job, commands=cmds) == 0
+    assert calls == [("collect", (job, collected))]
+
+    cmds, _ = _recording(world, failure="ImportError: boom")
+    assert release.main(argv, repo=job, commands=cmds) == release.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "collect: collection failed" in err and "ImportError: boom" in err
+
+
+@pytest.mark.parametrize("cmd", ["collect", "test-shard"])
+def test_p3_r3_a_suite_job_refuses_a_head_that_is_not_the_staged_commit(
+    world: World, capsys: pytest.CaptureFixture[str], cmd: str
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    job = _fresh(world, "unmaterialised", str(plan["base_sha"]))  # never materialised
+    cmds, calls = _recording(world)
+    tmp = world.origin.parent
+    argv = (
+        _shard_argv(out, tmp)
+        if cmd == "test-shard"
+        else ["collect", "--plan", str(out / release.PLAN_FILE), "--out", str(tmp / "c.txt")]
+    )
+
+    assert release.main(argv, repo=job, commands=cmds) == release.EXIT_REFUSED
+
+    assert calls == []
+    err = capsys.readouterr().err
+    assert f"{cmd}: " in err and str(plan["staged_sha"]) in err
+
+
+@pytest.mark.parametrize("cmd", ["collect", "test-shard"])
+def test_p3_r3_a_suite_job_refuses_an_origin_main_not_pinned_to_the_base(
+    world: World, capsys: pytest.CaptureFixture[str], cmd: str
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    out, plan = _prepare(world)
+    job = _materialised(world, out, plan)
+    world.land("docs/late.md", "late\n")
+    _git(job, "fetch", "-q", "origin")  # origin/main is no longer the pinned base
+    cmds, calls = _recording(world)
+    tmp = world.origin.parent
+    argv = (
+        _shard_argv(out, tmp)
+        if cmd == "test-shard"
+        else ["collect", "--plan", str(out / release.PLAN_FILE), "--out", str(tmp / "c.txt")]
+    )
+
+    assert release.main(argv, repo=job, commands=cmds) == release.EXIT_REFUSED
+
+    assert calls == []
+    err = capsys.readouterr().err
+    assert "origin/main" in err and str(plan["base_sha"]) in err
+
+
+def test_p3_r3_collect_requires_the_plan(tmp_path: Path) -> None:
+    cmds = release.Commands(collect=lambda repo, out: pytest.fail("collect ran"))
+    with pytest.raises(SystemExit) as exc:
+        release.main(["collect", "--out", str(tmp_path / "c.txt")], repo=tmp_path, commands=cmds)
+    assert exc.value.code == 2
+    assert not (tmp_path / "c.txt").exists()
+
+
+# -- p3-r5: flags a subcommand would ignore are refused ------------------------------
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--dry-run", "prepare", "--out", "o"],
+        ["--dry-run", "publish", "--plan", "p", "--bundle", "b"],
+        ["--version", "9.0.0", "publish", "--plan", "p", "--bundle", "b"],
+        ["--version", "9.0.0", "materialise", "--plan", "p", "--bundle", "b"],
+        ["--version", "9.0.0", "collect", "--plan", "p", "--out", "o"],
+        [
+            "--version",
+            "9.0.0",
+            "test-shard",
+            "--plan",
+            "p",
+            "--group",
+            "1",
+            "--splits",
+            "6",
+            "--durations",
+            "d",
+            "--out",
+            "o",
+        ],
+    ],
+    ids=["dry-prepare", "dry-publish", "v-publish", "v-materialise", "v-collect", "v-shard"],
+)
+def test_p3_r5_a_flag_the_subcommand_would_ignore_is_refused(
+    argv: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        release.main(argv, repo=tmp_path)
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert ("--dry-run" if "--dry-run" in argv else "--version") in err
+
+
+def test_p3_r5_the_top_level_version_still_reaches_prepare(world: World) -> None:
+    out = world.origin.parent / "release-out"
+    assert world.run("--version", "4.30.0", "prepare", "--out", str(out)) == 0
+    assert json.loads((out / release.PLAN_FILE).read_text())["override"] == "4.30.0"
+
+
+# -- p3-r6: RC, floor and gate-unknown through prepare -> publish ---------------------
+
+
+def test_p3_r6_a_job_graph_rc_is_published_as_a_prerelease(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    out, plan = _prepare(world)
+    assert plan["rc"] is True and plan["version"] == "4.24.0-rc.1"
+    assert plan["fragments"] == []
+
+    assert _publish(world, out, plan) == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+    assert world.origin_show(".changes/feat-b.yaml") is not None  # not consumed
+    assert "v4.24.0-rc.1" in world.origin_tags()
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0-rc.1" and "--prerelease" in call
+
+
+def test_p3_r6_a_job_graph_floor_mismatch_files_an_issue_and_exits_floor(world: World) -> None:
+    world.land(
+        "packages/demo/src/demo/new.py", 'SCOPE_FR_VERSION = ">=4.24.0,<5.0.0"\n', "floor PR"
+    )
+    world.fragment("feat-b", "minor", "the floor's feature")
+    world.fragment("big", "major", "a breaking change")
+    out, plan = _prepare(world)
+    assert plan["version"] == "5.0.0"
+
+    assert _publish(world, out, plan) == release.EXIT_FLOOR
+
+    assert "v5.0.0" in world.origin_tags()
+    assert len(_release_calls(world)) == 1
+    (issue,) = _issue_calls(world)
+    assert "packages/demo/src/demo/new.py" in _arg(issue, "--body")
+
+
+def test_p3_r6_a_gate_state_unknown_makes_prepare_plan_an_rc(world: World) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    cmds = world.commands()
+    cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
+    out = world.origin.parent / "release-out"
+
+    assert release.main(["prepare", "--out", str(out)], repo=world.clone, commands=cmds) == 0
+
+    plan = json.loads((out / release.PLAN_FILE).read_text())
+    assert plan["rc"] is True and plan["version"] == "4.24.0-rc.1"
+    assert plan["fragments"] == []
+    assert world.origin_tags() == [f"v{BASE}"]  # prepare pushes and tags nothing
+
+
+def test_the_recompute_loop_is_gone() -> None:
+    assert not hasattr(release, "MAX_ATTEMPTS")
+    assert not hasattr(release, "EXIT_RACE")

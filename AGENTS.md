@@ -567,21 +567,34 @@ require` then adds the required `ci-ok` check and refuses until a release was
 pushed by the app. Order and consumer adoption: `docs/merge-protection.md`.
 
 On every push to `main`, `.github/workflows/release.yml` runs
-`scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`
-and then `fr migrate artifacts --yes` at the new number (at a major that widens
-this repo's own live plans' `fr_version` ceilings, which only the release can
-know; gh#861, and that moves the stamp of a live artifact a PR merged with after
-another PR bumped its kind — the #1058 release), `git rm`s the consumed fragments, commits `release: vX.Y.Z` locally, **runs the
-whole suite on that staged tree with `fr` installed at the new number**, and only
-then pushes it to `main` (the only commits that land there without a PR), tags
-it and publishes a GitHub Release whose notes are the fragment summaries. In the
-`GITHUB_TOKEN` fallback no CI runs on the release commit, so that pre-push run is
-the only test the new number gets (an app push does run CI): a red suite pushes, tags and
-publishes nothing (gh#854 — 5.0.0 shipped refusing its own plans before it
-existed). It is why the Release job has its own budget in
-`.github/ci-budget.yaml`. To release a specific
-number, run the workflow by hand (`workflow_dispatch`) with an explicit
-`version`. `main`'s ruleset forbids only force-push and deletion today; **once
+`scripts/release.py` as a **job graph** (spec `2026-11-01-ci-speed` §3.D):
+`prepare` → `collect` + six `test` shards → `split-check` → `publish`.
+`prepare` takes the highest pending bump, runs `bump-version.py` and then
+`fr migrate artifacts --yes` at the new number (at a major that widens this
+repo's own live plans' `fr_version` ceilings, which only the release can know;
+gh#861, and that moves the stamp of a live artifact a PR merged with after
+another PR bumped its kind — the #1058 release), `git rm`s the consumed
+fragments and commits `release: vX.Y.Z` locally, handing it on as a plan and a
+git bundle. `collect` and each shard check out exactly that commit (refusing any
+other, with `origin/main` pinned to its base) and **run the whole suite between
+them with `fr` installed at the new number**; `split-check` proves the shards ran
+every collected test. Only then does `publish` push it to `main` (the only
+commits that land there without a PR), tag it and publish a GitHub Release whose
+notes are the fragment summaries. In the `GITHUB_TOKEN` fallback no CI runs on
+the release commit, so that pre-push suite is the only test the new number gets
+(an app push does run CI): a red shard pushes, tags and publishes nothing (gh#854
+— 5.0.0 shipped refusing its own plans before it existed). It is why the Release
+workflow has its own budget in `.github/ci-budget.yaml`.
+
+`publish` pushes only onto the base `prepare` staged on. If `main` moved
+meanwhile, or the push loses the race, the run is **superseded**: it pushes
+nothing and exits 0, with no retry loop, because the push that moved `main`
+starts the run that releases. A rerun whose release commit already landed skips
+the push and only tags. To release a specific number, run the workflow by hand
+(`workflow_dispatch`) with an explicit `version`; a superseded `--version` run
+exits non-zero and prints the `gh workflow run release.yml -f version=<X>` that
+re-dispatches it, since no later run carries the override. `main`'s ruleset
+forbids only force-push and deletion today; **once
 a required-PR or required-checks rule is added (`--stage require`), the app must
 be the bypass actor on it and `FR_AUTOMATION_APP_ID` must stay set (unsetting the
 variable after `require` falls back to `GITHUB_TOKEN`, which cannot bypass)**, or
@@ -609,11 +622,13 @@ stays the explicit override for a final. A computed version at or below HEAD's
 releases nothing (a removed fragment never moves the version backwards), and an
 untagged RC at HEAD (a failed tag push) is tagged on the next run.
 `FR_RELEASE_STATUS_TOKEN` is the workflow's `github.token`, so it also carries
-the job's contents and issues write; it reaches only the `gh` read, never `fr`
-or repo code. Exactly these calls authenticate: the `gh` read, the `gh release`
-and `gh issue` writes, and the two pushes. The bump, `uv lock --check`, the
-migration, the staged suite, `fr`'s decision and every other git command run
-credential-free.
+the `prepare` job's contents and issues write; it reaches only the `gh` read,
+never `fr` or repo code, and `publish` holds only `GH_TOKEN`. Exactly these calls
+authenticate: the `gh` read, the `gh release` and `gh issue` writes, and the two
+pushes. The bump, `uv lock --check`, the migration, `fr`'s decision and every
+other git command run credential-free; the suite jobs get a read-only
+`GITHUB_TOKEN`, used only by checkout and never persisted, and no forge token in
+the suite's env.
 An RC is spelled `X.Y.ZrcN` (PEP 440) in `pyproject.toml`/`uv.lock` and
 `X.Y.Z-rc.N` everywhere else. `scripts/versions.py`'s `Version` is the one
 parser every script reads both spellings through. `fr_version` floors admit an RC of the

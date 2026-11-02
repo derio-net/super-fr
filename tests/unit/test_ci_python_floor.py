@@ -60,11 +60,25 @@ def test_ci_tests_the_floor_and_a_newer_python() -> None:
     assert job.get("env", {}).get("UV_PYTHON") == "${{ matrix.python }}"
 
 
-def test_only_the_floor_leg_feeds_coverage() -> None:
-    # Two legs uploading coverage-shard-N would collide on the artifact name.
+def test_only_the_newest_leg_feeds_coverage() -> None:
+    # Two legs uploading coverage-shard-N would collide on the artifact name;
+    # the newest leg carries the gate (spec 2026-11-01-ci-speed R7).
     job = _workflow("ci.yml")["jobs"]["test"]
-    upload = next(s for s in job["steps"] if "upload-artifact" in str(s.get("uses", "")))
-    assert upload.get("if") == f"matrix.python == '{_floor()}'"
+    pythons = [str(p) for p in job["strategy"]["matrix"]["python"]]
+    newest = max(pythons, key=_version)
+    upload = next(
+        s
+        for s in job["steps"]
+        if "upload-artifact" in str(s.get("uses", ""))
+        and str(s.get("with", {}).get("name", "")).startswith("coverage-shard-")
+    )
+    assert upload.get("if") == f"matrix.python == '{newest}'"
+    # The cov options reach the pytest step through the matrix `include:` entries.
+    cov = {str(i["python"]): i["cov_args"] for i in job["strategy"]["matrix"]["include"]}
+    assert cov[_floor()] == "--no-cov"
+    assert cov[newest].split()[0] == "--cov"
+    pytest_step = next(s for s in job["steps"] if "uv run pytest" in str(s.get("run", "")))
+    assert "matrix.cov_args" in str(pytest_step.get("env", {})) + pytest_step["run"]
 
 
 def test_pr_gating_workflows_run_once_per_pr_push() -> None:

@@ -575,7 +575,9 @@ class GhAdapter:
 
     def fetch_workflow_text(self, path: str, ref: str) -> str | None:
         try:
-            raw = self._run(["api", f"repos/{self.repo}/contents/{path}", "-f", f"ref={ref}"])
+            raw = self._run(
+                ["api", "-X", "GET", f"repos/{self.repo}/contents/{path}", "-f", f"ref={ref}"]
+            )
         except subprocess.CalledProcessError:
             return None
         data = json.loads(raw)

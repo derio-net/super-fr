@@ -597,3 +597,31 @@ def test_watcher_workflow_never_interpolates_expressions_into_shell() -> None:
             run = step.get("run", "")
             assert "${{" not in run, f"expression interpolated into run: {run!r}"
             assert run.strip() != "uv sync", "the --no-project watcher needs no uv sync"
+
+
+# ── spec 2026-11-01-ci-speed §3.E (R13, R14) ─────────────────────────────
+
+
+def test_fetch_workflow_text_sends_the_ref_as_a_get_query_parameter() -> None:
+    # `gh api -f` alone switches the method to POST, which the contents route
+    # refuses, so a breach never filed its issue.
+    import base64
+
+    calls: list[list[str]] = []
+
+    def gh(argv: list[str]) -> str:
+        calls.append(argv)
+        return json.dumps({"content": base64.b64encode(b"name: CI\n").decode()})
+
+    adapter = ci_budget.GhAdapter("derio-net/super-fr", run=gh)
+    assert adapter.fetch_workflow_text(".github/workflows/ci.yml", "abc123") == "name: CI\n"
+    argv = calls[0]
+    assert argv[argv.index("-X") + 1] == "GET"
+    assert argv.index("-X") < argv.index("-f")
+    assert "ref=abc123" in argv
+
+
+def test_repo_budgets_match_the_ci_speed_targets() -> None:
+    config = yaml.safe_load((REPO / ".github" / "ci-budget.yaml").read_text())
+    assert config["workflows"]["ci.yml"]["budget_seconds"] == 360
+    assert config["workflows"]["release.yml"]["budget_seconds"] == 600
