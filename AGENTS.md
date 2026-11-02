@@ -626,7 +626,9 @@ the fragments. `release.yml` also runs daily, because a gate passes with no push
 The read is cross-checked against the code: every PR `git log --first-parent <last final>..HEAD`
 names (`(#N)` or `Merge pull request #N`, the release bot's own commits skipped)
 must be in it. First parent only: a commit inside a merge-committed branch is no
-landing, and its `(#N)` is an issue ref (gh#1333). A failed read, a read at its 1000 cap, a PR the read misses, or a
+landing, and its `(#N)` is usually an issue ref (gh#1333). A rebase merge puts
+the branch's own subjects on that line, so an issue ref there still reads as a
+missed PR: land PRs by merge commit or squash. A failed read, a read at its 1000 cap, a PR the read misses, or a
 failed `fr` decision makes the gate state **unknown**, which cuts an RC, never a
 final and never a refusal (nothing when nothing merged since the newest RC). So a
 token that cannot read labels means **RCs only** until it is fixed; `--version`

@@ -1422,6 +1422,9 @@ def test_gh1333_logged_prs_reads_the_first_parent_line_and_skips_the_release_bot
     (world.other / "b.txt").write_text("b\n")
     _git(world.other, "add", "-A")
     _git(world.other, "-c", f"user.name={BOT}", "commit", "-q", "-m", "chore: sync (#99)")
+    (world.other / "c.txt").write_text("c2\n")  # skipped by its prefix, whoever wrote it
+    _git(world.other, "add", "-A")
+    _git(world.other, "commit", "-q", "-m", "release: v9.9.9 (#98)")
     _git(world.other, "push", "-q", "origin", "HEAD:main")
     _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
 
