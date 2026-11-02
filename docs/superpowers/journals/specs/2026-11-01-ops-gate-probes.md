@@ -233,3 +233,11 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-01-ops-gate-probes-p1 created=2026-11-01T12:02:02+00:00 -->
 ### tier-2026-11-01-ops-gate-probes-p1 · decision · phase 1 moves the ops artifact kind 1->2 (a migration every reader relies on) and adds a refusal to a gate stage
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-11-02T14:12:15+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: Walked on first real use: the next devops-gated run's `fr ops gate` shows a pointed step DONE with its probe output recorded as `ran` evidence, and an unpointed step's `ran: …` answer is accepted. **Cost:** none. It is observed on the next real devops-gated run, not rehearsed.
+why: Walked on first real use: no devops-gated run has executed fr ops gate since #1281 merged (2026-11-02 ~13:55Z, released as v6.1.0-rc.7); observed on the next real devops-gated run, not rehearsed (tracked by #1273, left open).
+how: fr journal resolve --scope spec --slug 2026-11-01-ops-gate-probes --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-01-ops-gate-probes#step1
