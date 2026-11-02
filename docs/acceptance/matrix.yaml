@@ -9235,7 +9235,7 @@ rows:
       source unavailable, and a level-two near-miss is renamed by the spec repair; archived
       specs are never judged.'
     origin:
-    - super-fr:docs/superpowers/journals/debug/2026-11-02-test-plan-heading.md
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-11-02-test-plan-heading.md
     levels:
       unit:
       - super-fr:tests/unit/test_test_plan_heading.py
