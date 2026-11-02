@@ -400,3 +400,8 @@ what: **First real sweep (walked on first real use).** In one repo of the corpus
 why: Walked on first real use: no per-repo gate backfill sweep has run since #1295 merged (2026-11-02 14:38Z, released as v6.1.0-rc.8). The scripted per-repo sweep across the operator's three orgs is its first real use and is not rehearsed; gate:tester stays held until then.
 how: fr journal resolve --scope spec --slug 2026-11-01-gate-backfill --id test-plan-step-1 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-01-gate-backfill#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-02T14:55:57+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1316 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1316] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1316; still owed until discharged.
