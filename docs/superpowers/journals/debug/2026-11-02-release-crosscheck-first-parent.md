@@ -10,3 +10,8 @@ On origin/main at 2755e97c5 (v6.1.0-rc.17), release.logged_prs(repo, v6.0.0) ret
 ### root-cause · root-cause · full-DAG log walks into merged branches
 
 scripts/release.py logged_prs runs git log <tag>..HEAD over the whole DAG, so _PR_SUBJECT_RE's squash alternative also matches every commit inside a merge-committed branch, where (#N) is an issue ref, not the PR that landed it. Only first-parent commits name the PR that landed them (merge: 'Merge pull request #N'; squash/rebase: trailing (#N)).
+
+<!-- fr:journal kind=finding scope=debug id=fix-first-parent created=2026-11-02T22:18:30+00:00 state=fixed -->
+### fix-first-parent · finding [fixed] · logged_prs uses git log --first-parent
+
+scripts/release.py logged_prs now runs git log --first-parent <tag>..HEAD. Pinned by three tests in tests/unit/test_release_script.py (test_gh1333_*): a merge commit whose branch commits cite (#7)/(#8) gives a known state and the final is cut; a missed merge is named by its PR (#50) and never by its issues; logged_prs over squash + merge + bot commit returns exactly {42, 50}. All three were red first (output reproduced the production 'misses #7, #8'). Release tests: 178 passed. On the real history, logged_prs(v6.0.0) now names 25 PRs and no issue.
