@@ -25,3 +25,8 @@ debt_cmd._held catches (PlanSchemaError, OSError, ValueError, …) and returns [
 ### 96037aead0db · ruled-out · Counting archived near-misses as 'has a Test Plan' in the staleness guard
 
 Measured over this repo: 3 archived specs with a numbered heading are uncited, so treating archived near-misses as Test Plans would add 3 new staleness errors on frozen specs. Archived specs now count only an exact heading and are never judged for near-misses; the old substring test and the new exact-only test agree on every archived spec here (no verdict changed).
+
+<!-- fr:journal kind=finding scope=debug id=cac893e4c386 created=2026-11-02T15:48:31+00:00 state=fixed -->
+### cac893e4c386 · finding [fixed] · One Test Plan heading matcher; every reader refuses a near-miss
+
+fr.spec.find_test_plan_heading (exact | near-miss | None) replaces _SECTION_RE and the four substring literals (acceptance/check.py, run/closeout.py, plan_ops.py, acceptance_cmd). Near-miss -> validate_spec problem, fr plan self-review error, fr archive hold, fr closeout outcome refusal, acceptance staleness error (live only), fr debt 'specs' source unavailable, pickup brief FIX FIRST line, triage close-out TriageError. Repair test-plan-heading renames a '##' near-miss in live specs (dogfooded on 2026-07-23-hermes-agent-compat). Contract stated in fr-brainstorming + fr-spec-reviewer (agents kind 1->2). Pinned by tests/unit/test_test_plan_heading.py (38 tests, matcher red first: ImportError).
