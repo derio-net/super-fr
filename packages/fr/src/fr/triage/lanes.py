@@ -13,12 +13,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from fr.gatebackfill.trackers import pass_command
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
 from fr.triage.approval import approval_verdict, is_approved
 from fr.triage.batch import batch_pr, derive_batch_stage
-from fr.triage.batch_drive import LANDED, closeout_event, fact_ledgers
+from fr.triage.batch_drive import LANDED, closeout_event, fact_ledger_unknown, fact_ledgers
 from fr.triage.merge_stops import MergeStop, live_stop
-from fr.triage.model import Batch, Facts
+from fr.triage.model import Batch, Facts, PullRequest
 
 Lane = Literal["needs-developer", "needs-reviewer", "needs-tester", "needs-devops"]
 
@@ -58,16 +59,51 @@ def lane_of(batch: Batch, facts: Facts, stop: MergeStop | None = None) -> LaneVe
         return None
     if stage in LANDED and closeout_event(batch) is None:
         ledger = fact_ledgers([batch], facts, {batch.id: stage}).get(batch.id)
-        held = held_gates(ledger.labels) if ledger is not None else frozenset()
-        if ledger is not None and ("tester" in held or "devops" in held):
-            owed = "; ".join(
-                f"{g}: walk its gated rows, or `fr gate pass --pr {ledger.pr} --gate {g}`"
-                for g in ("tester", "devops")
-                if g in held
-            )
-            lane: Lane = "needs-tester" if "tester" in held else "needs-devops"
-            return LaneVerdict(lane, f"landed, held by a post-merge gate ({owed})")
+        if ledger is not None and pr is not None:
+            return gated_pr_lane(pr, in_batch=True)  # the ledger is this very PR's labels
     return None
+
+
+def gated_pr_lane(pr: PullRequest, *, in_batch: bool = False) -> LaneVerdict | None:
+    """The lane a MERGED PR's held post-merge gate puts it in: Tester first, else DevOps;
+    None when no gate is held (none labelled, or each passed) or its labels were never
+    read. The ONE held-gate rule: `lane_of`'s landed batches and the board's gate-labelled
+    PRs outside batches (gate-backfill R13) both ask it.
+
+    The reason carries `trackers.pass_command`, which names `--notes`; for devops it
+    names `--no-run-evidence`, as the board has no checkout to find the run in. A BATCH PR
+    (*in_batch*) has a run cursor naming its branch, which refuses that escape, so its
+    devops command names neither flag and `fr gate pass` resolves the run itself."""
+    held = held_gates(pr.labels or [])
+    gates = [g for g in ("tester", "devops") if g in held]
+    if not gates:
+        return None
+    owed = "; ".join(
+        f"gate:{g} ({'walk its gated rows, or ' if g == 'tester' else ''}"
+        f"`{pass_command(g, pr.number, resolve_run=in_batch)}`)"
+        for g in gates
+    )
+    lane: Lane = "needs-tester" if gates[0] == "tester" else "needs-devops"
+    return LaneVerdict(lane, f"merged, held by {owed}")
+
+
+def unlisted_gated_prs(
+    batches: Sequence[Batch], facts: Facts, stops: Mapping[str, MergeStop]
+) -> list[PullRequest]:
+    """The `facts.gated_prs` that are NOT already a Needs-you lane card of their batch: a
+    PR whose batch `lane_of` places is listed through that batch, and one whose batch's
+    ledger could not be read waits on `ledger-unread` (gate-backfill R13). A closed-out
+    batch's PR is `lane_of`-less, so it is listed here."""
+    covered: set[tuple[str, int]] = set()
+    for b in batches:
+        pr = batch_pr(b, facts)
+        if pr is None:
+            continue
+        stage = derive_batch_stage(b, facts)
+        unread = b.id in fact_ledger_unknown([b], facts, {b.id: stage})
+        if unread or lane_of(b, facts, stops.get(b.id)) is not None:
+            covered.add((pr.repo, pr.number))
+    return [p for p in facts.gated_prs if (p.repo, p.number) not in covered]
 
 
 def live_stops(

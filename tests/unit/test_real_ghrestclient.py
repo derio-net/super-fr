@@ -31,6 +31,7 @@ SHA_1080 = "095092b8f4ec27dffd445d5c8f1f717f9cd216e0"
 
 READS = (
     "view_issue view_issue_record list_issues list_prs list_open_prs list_prs_by_head pr_view "
+    "list_merged_prs_by_label "
     "pr_checks pr_required_checks pr_status_by_url pr_body list_issue_comments list_linked_prs "
     "file_exists list_dir read_file read_file_at_ref list_repos viewer_login repo_merge_methods "
     "closing_ref default_branch pr_for_branch issues_enabled rate_limit"
@@ -456,6 +457,7 @@ def _every_call(client: RealGhRestClient, repo_dir: Path, run: Any) -> dict[str,
         "list_issues": lambda: client.list_issues(REPO, "open", 5),
         "list_prs": lambda: client.list_prs(REPO, "all", 5),
         "list_open_prs": lambda: client.list_open_prs(REPO, 5),
+        "list_merged_prs_by_label": lambda: client.list_merged_prs_by_label(REPO, "x", 5),
         "list_prs_by_head": lambda: client.list_prs_by_head(REPO, "b"),
         "pr_view": lambda: client.pr_view(REPO, 1),
         "pr_checks": lambda: client.pr_checks(REPO, 1),

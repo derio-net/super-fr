@@ -1,5 +1,5 @@
 {
-  "schema": 12,
+  "schema": 13,
   "scope": "derio-net--super-fr",
   "kind": "repo",
   "collected_at": "2026-10-14T00:00:00Z",
@@ -46,5 +46,7 @@
   "viewer": "operator",
   "visibility": {},
   "stale_in_progress": [],
-  "config_ignored": {}
+  "config_ignored": {},
+  "gated_prs": [],
+  "gated_unread": []
 }

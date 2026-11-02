@@ -195,3 +195,40 @@ def test_a_carried_repo_s_unviewed_key_is_viewed_again() -> None:
     assert [kw["number"] for kw in forge.called("view_issue")] == [99]
     assert facts.unviewed == []
     assert next(i for i in facts.issues if i.key == "beta#99").state == "closed"
+
+
+def test_a_partial_collect_carries_the_gated_fields_of_carried_repos() -> None:
+    def gated(number: int) -> dict:  # type: ignore[type-arg]
+        return {
+            "number": number,
+            "title": "m",
+            "state": "MERGED",
+            "isDraft": False,
+            "createdAt": None,
+            "mergedAt": "2026-10-02T00:00:00Z",
+            "url": f"https://github.com/example-org/x/pull/{number}",
+            "headRefName": "",
+            "closingIssuesReferences": [],
+            "labels": [{"name": "gate:tester"}],
+        }
+
+    def forge() -> FakeForge:
+        f = _forge()
+        f.gated = {A: [gated(11)], B: [gated(22)]}
+        return f
+
+    previous = _collect(forge())
+    assert sorted(p.number for p in previous.gated_prs) == [11, 22]
+    read = forge()
+    read.gated = {A: [gated(11), gated(12)]}
+    read.gated_failing = {}
+    facts = _collect(read, only={A}, previous=previous)
+    assert {kw["repo"] for kw in read.called("list_merged_prs_by_label")} == {A}
+    assert sorted((p.repo, p.number) for p in facts.gated_prs) == [(A, 11), (A, 12), (B, 22)]
+
+    failing = forge()
+    failing.gated_failing = {B: "HTTP 502"}
+    prior = _collect(failing)
+    assert [u.repo for u in prior.gated_unread] == [B]
+    again = _collect(forge(), only={A}, previous=prior)
+    assert [u.repo for u in again.gated_unread] == [B]  # carried, as B was not re-read

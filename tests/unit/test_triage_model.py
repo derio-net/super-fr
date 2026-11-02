@@ -369,7 +369,7 @@ def test_one_key_in_both_duplicate_fields_is_refused(tmp_path: Path) -> None:
 def test_facts_schemas_3_to_10_load(tmp_path: Path, schema: int) -> None:
     from fr.triage.model import FACTS_READS, FACTS_SCHEMA, load_facts
 
-    assert FACTS_SCHEMA == 12 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+    assert FACTS_SCHEMA == 13 and FACTS_READS == (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
     path = tmp_path / "facts.json"
     doc = {
         "schema": schema,

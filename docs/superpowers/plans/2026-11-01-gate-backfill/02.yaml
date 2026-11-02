@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Apply — PR labels, trackers, adopt, idempotency, refusals (R6–R10, R14, R15)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - gate-backfill-apply-ledger
+  - gate-backfill-tracker-trust
+  tier: standard
+  files:
+  - packages/fr/src/fr/gatebackfill/*
+  - packages/fr/src/fr/commands/gate_cmd.py
+  - tests/unit/fakes.py
+  - tests/unit/test_gatebackfill_*.py
+  - tests/unit/test_gate_cmd.py
+  - tests/scenarios/gate-backfill-apply.sh
+  - tests/scenarios/fixtures/gate-backfill/*
+  - docs/gate-backfill.md
+  - AGENTS.md
+  - docs/acceptance/*
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Tracker bodies and markers (spec §F)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_gatebackfill_trackers.py — `tracker_body(entry)` ends with `<!-- fr-gate:<g> pr:<n> -->`
+      then `<!-- fr-owed:<key> -->`, and `owned_owed_key` accepts the result unchanged; `fr_gate_marker` reads
+      only an exact second-to-last line; the printed pass command carries `--notes`, and for devops `--run <id>`
+      when a cursor names the PR's head ref, else `--no-run-evidence`; the adopt comment ends with
+      `<!-- fr-gate-adopt:<key> gate:<g> pr:<n> -->`, the link comment with `<!-- fr-gate-link:<key> tracker:<ref> -->`. Red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN — packages/fr/src/fr/gatebackfill/trackers.py (bodies, markers, `fr_gate_marker`, `pass_command`). Green. Commit.
+- number: 2
+  title: Apply engine (spec §G, R15)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_gatebackfill_apply.py against FakeGhClient (add `list_issues`, `viewer_login`,
+      and a write log to tests/unit/fakes.py if absent): an owed entry adds `gate:<g>` to its PR and files one
+      `fr:owed` tracker; `ensure_labels` is called for a label only right before its first use and never when
+      nothing needs it; a PR already carrying `gate:<g>` gets no label write; a PR carrying `gate:<g>-passed`
+      gets no write at all and the entry reports its discharge command; a walk_only entry's tracker gets
+      `fr:awaiting-live`; a closed-issue entry gets one link comment and is never reopened; a reused fr-owned
+      tracker without a PR marker has its body rewritten, one naming another PR is skipped; tracking `none`
+      (fixture `.devcontainer/fr-profiles.yaml`) writes PR labels only; `review`, `tick`, `na`, `park` and a
+      None-gate entry write nothing; a forge error or `UnsupportedForgeOperation` is recorded on its entry and
+      the rest proceed, exit 1; a second apply over the same plan makes zero writes. Red.
+  - id: P2.T2.S2
+    text: |-
+      RED: same file — R15: `--yes` with no plan file refuses (exit 2) before any write; a plan whose `repo:`
+      disagrees with `owed_identity` refuses; an entry whose PR or gate re-resolves differently from the plan's
+      is skipped with a line; a new candidate missing from the plan is reported, not applied. Red.
+  - id: P2.T2.S3
+    text: |-
+      GREEN: packages/fr/src/fr/gatebackfill/apply.py (`apply_plan(repo_root, plan, candidates, client, *,
+      tracking) -> ApplyReport`) and the `--yes` path in gate_cmd (tracking via
+      `fr.services.resolve_tracking`; an unreadable services declaration refuses before any write). Green. Commit.
+- number: 3
+  title: Adopt, foreign issues, duplicates (spec §F, R8, R9)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: test_gatebackfill_apply.py — `adopt` of an issue written by someone else posts one adopt comment and
+      adds `fr:owed` (+ `fr:awaiting-live` when walk_only) and never calls `edit_issue_body` or `close_issue`
+      on it; a second apply posts nothing (this account's marker comment exists); adopting while an fr-owned
+      tracker holds the key closes the fr-owned one with "Duplicate of <ref>; tracking moved there."; an adopt
+      target in another repo, missing, closed, or itself fr-owned is skipped with its reason; an issue whose
+      marker someone else wrote is never reused. Red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN — adopt and duplicate handling in apply.py. Green. Commit.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: one write path per forge verb in apply.py (no duplicated label-ensure bookkeeping), `uv run ruff
+      format packages/ tests/ && uv run ruff check packages/ tests/ && uv run mypy packages/fr/src`. Commit.
+- number: 4
+  title: Apply scenario, operator doc, matrix
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Write tests/scenarios/gate-backfill-apply.sh reusing the dry-run fixture: dry run, edit the plan file's
+      decisions with `sed` (one owed, one adopt of a hand-made tracker, one park), `--yes`, assert the recorded
+      gh log holds exactly the expected label/issue writes, re-run `--yes` and assert no new write. Run it via
+      `uv run pytest tests/integration/test_scenarios.py -q --no-cov -k gate-backfill`.
+  - id: P2.T4.S2
+    text: |-
+      Write docs/gate-backfill.md (operator doc: the per-repo flow dry run → review plan file → `--yes` →
+      collect → board → `fr gate pass`; the decision table; markers; trust rules; tracking none) and add a
+      one-paragraph `fr/gatebackfill` entry to AGENTS.md's Repo shape list. Then
+      `uv run fr acceptance set-status --id gate-backfill-apply-ledger --status ci --notes "apply unit-tested and walked by the gate-backfill-apply scenario" --level unit=super-fr:tests/unit/test_gatebackfill_apply.py --scenario tests/scenarios/gate-backfill-apply.sh`
+      and `uv run fr acceptance set-status --id gate-backfill-tracker-trust --status ci --notes "adopt/foreign/duplicate unit-tested" --level unit=super-fr:tests/unit/test_gatebackfill_apply.py`
+      (name-anchored refs). Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-11-01T19:11:33+00:00'
+      note: null
+  completion:
+    at: '2026-11-01T19:11:33+00:00'
+    note: null
+    observed_prs: []

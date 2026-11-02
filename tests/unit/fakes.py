@@ -49,6 +49,8 @@ class FakeGhClient:
         self.label_checks: list[tuple[str, str]] = []
         # (repo, pr) -> labels `edit_pr_labels` leaves on the PR (exit-gates R7).
         self.pr_labels: dict[tuple[str, int], set[str]] = {}
+        # repo -> the merged PR records `list_merged_prs_by_label` filters by label.
+        self.merged_prs: dict[str, list[dict[str, Any]]] = {}
         self.labels_missing: set[str] = set()
         self.attempted_mutations: int = 0
         self._next_issue_number: dict[str, int] = {}
@@ -86,6 +88,9 @@ class FakeGhClient:
         self.required_names: dict[tuple[str, str], list[str]] = {}
         # OWNER/REPO -> visibility; a repo missing here cannot be read (GhError).
         self.visibility: dict[str, str] = {}
+        # (repo, sha) -> PRs `prs_for_commit` maps the commit to (gate-backfill R3).
+        self.commit_prs: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        self.commit_prs_error: Exception | None = None
 
     # ---- preload helpers (test setup) ----
 
@@ -133,6 +138,8 @@ class FakeGhClient:
     # ---- read methods ----
 
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
+        if (repo, number) not in self.issues:
+            raise FakeGhError(f"HTTP 404: issue {repo}#{number} not found")
         i = self.issues[(repo, number)]
         return {
             "state": i.state,
@@ -207,6 +214,16 @@ class FakeGhClient:
     def comment_pr(self, repo: str, pr: int, body: str) -> None:
         self._gate()
         self.calls.append(("comment_pr", {"repo": repo, "pr": pr, "body": body}))
+        self.next_comment_id += 1  # like GitHub, a PR comment is an issue comment
+        self.issue_comments.setdefault((repo, pr), []).append(
+            {
+                "association": self.comment_association,
+                "author": self.comment_author,
+                "body": body,
+                "created_at": self.comment_created_at,
+                "id": self.next_comment_id,
+            }
+        )
 
     def edit_issue_state(
         self,
@@ -306,6 +323,16 @@ class FakeGhClient:
                     return
         raise FakeGhError(f"no comment {comment_id} on {repo}")
 
+    def list_merged_prs_by_label(self, repo: str, label: str, limit: int) -> list[dict[str, Any]]:
+        self.calls.append(
+            ("list_merged_prs_by_label", {"repo": repo, "label": label, "limit": limit})
+        )
+        return [
+            dict(p)
+            for p in self.merged_prs.get(repo, [])
+            if label in {lb["name"] for lb in p.get("labels", [])}
+        ][:limit]
+
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         """`gh pr list --head` records (`number, title, state, isDraft, createdAt, url,
         headRefName, author, isCrossRepository`)."""
@@ -355,8 +382,44 @@ class FakeGhClient:
             "mergeable": p["mergeable"],
             "title": p["title"],
             "body": p["body"],
-            "labels": list(p.get("labels", [])),
+            "labels": sorted(set(p.get("labels", [])) | self.pr_labels.get((repo, number), set())),
         }
+
+    def prs_for_commit(self, repo: str, sha: str) -> list[dict[str, Any]]:
+        """`GET repos/{repo}/commits/{sha}/pulls`: what a test loaded into `commit_prs`;
+        a sha it never loaded maps to no PR. A test sets `commit_prs_error` to raise."""
+        self.calls.append(("prs_for_commit", {"repo": repo, "sha": sha}))
+        if self.commit_prs_error is not None:
+            raise self.commit_prs_error
+        return [dict(p) for p in self.commit_prs.get((repo, sha), [])]
+
+    def viewer_login(self) -> str:
+        return self.comment_author
+
+    def list_issues(
+        self,
+        repo: str,
+        state: str,
+        limit: int,
+        fields: str | None = None,
+        labels: Any = None,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(
+            ("list_issues", {"repo": repo, "state": state, "labels": list(labels or ())})
+        )
+        want = {state.upper()} if state != "all" else {"OPEN", "CLOSED"}
+        return [
+            {
+                "number": n,
+                "title": self.issue_titles.get((r, n), ""),
+                "body": i.body,
+                "labels": [{"name": x} for x in sorted(i.labels)],
+                "author": {"login": self.issue_authors.get((r, n), self.comment_author)},
+                "state": i.state,
+            }
+            for (r, n), i in sorted(self.issues.items())
+            if r == repo and i.state in want and set(labels or ()) <= i.labels
+        ][:limit]
 
     def pr_ready(self, repo: str, number: int) -> None:
         self.calls.append(("pr_ready", {"repo": repo, "number": number}))

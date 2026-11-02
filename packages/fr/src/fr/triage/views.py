@@ -60,7 +60,7 @@ from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
 from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
-from fr.triage.lanes import lane_of, live_stops
+from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
@@ -179,6 +179,7 @@ class Need:
     # approve-pr | failing-ci | foreign-pr | blocked-batch | post-merge | stale-dispatch
     # | needs-developer | needs-reviewer | needs-tester | needs-devops (the board's lanes)
     # | ledger-unread (a landed batch whose gate labels could not be read)
+    # | gated-unread (a repo whose gate-labelled merged PRs could not be listed)
     # | closeout-held (a landed batch the close-out verb held, exit-gates R15)
     # | closeout-pr-closed | closeout-needs-review | closeout-unrecorded | closeout-reopened
     #   (a collected close-out PR the driver will not merge unasked, R15)
@@ -186,7 +187,7 @@ class Need:
     # | unplaced | merge-conflict | session-blocked | red-pr | queue-ejected | enqueue-refused
     # | archive-conflict
     kind: str
-    ref: str  # the batch id, `PR #n`, or issue key the row names
+    ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
     href: str | None  # an https URL, or `#batch-<id>` on the page itself
 
@@ -206,6 +207,7 @@ NEED_LABELS = {
     "archive-conflict": "Archive PR conflict",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
+    "gated-unread": "Gate labels unread",
     "closeout-held": "Close-out held: Test Plan outcome owed",
     "closeout-stuck": "Close-out PR stuck",
     "closeout-pr-closed": "Close-out PR closed unmerged",
@@ -245,6 +247,28 @@ def queue_needs(snap: Snapshot) -> list[Need]:
                     Need("enqueue-refused", entry.batch.id,
                          f"PR #{live.number} cannot be put in the merge queue{why}", entry.pr.url)
                 )  # fmt: skip
+    return out
+
+
+def gated_unread_needs(facts: Facts) -> list[Need]:
+    """One `gated-unread` Need per repo whose gate-labelled merged PRs could not be read
+    (gate-backfill R13); a backend that cannot list PRs by label at all (glab, tea) is a
+    permanent absence, so it folds into ONE Need per backend naming the repos it covers.
+    The board's notes print these same texts, so an unread repo never looks like an empty lane."""
+    out: list[Need] = []
+    unsupported: dict[str, list[str]] = {}
+    for u in facts.gated_unread:
+        if (backend := u.unsupported_backend) is not None:
+            unsupported.setdefault(backend, []).append(u.repo)  # permanent: one Need a backend
+        else:
+            out.append(Need("gated-unread", u.repo, u.describe(), None))
+    for backend, repos in unsupported.items():
+        n = len(repos)
+        out.append(
+            Need("gated-unread", backend,
+                 f"gate-labelled PRs not read: this forge ({backend}) cannot list PRs by label "
+                 f"({n} repo{'s' if n != 1 else ''}: {', '.join(sorted(repos))})", None)
+        )  # fmt: skip
     return out
 
 
@@ -408,6 +432,15 @@ def needs_you(
         if lane_pr is not None and conflicting(lane_pr.mergeable, lane_pr.merge_state):
             text += f" (PR #{lane_pr.number} is also conflicting)"
         out.append(Need(placed.lane, b.id, text, f"#batch-{b.id}"))
+
+    for g in unlisted_gated_prs(judgements.batches, facts, held_stops):
+        placed = gated_pr_lane(g)
+        if placed is not None:
+            out.append(
+                Need(placed.lane, f"{g.repo}#{g.number}", f"{g.repo} PR #{g.number}: "
+                     f"{placed.reason}", g.url)
+            )  # fmt: skip
+    out.extend(gated_unread_needs(facts))
 
     for s in stale_dispatches(facts):
         out.append(

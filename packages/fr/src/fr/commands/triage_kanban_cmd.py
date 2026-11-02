@@ -71,6 +71,7 @@ from fr.triage.model import Facts, Judgements, Scope
 from fr.triage.quota import budget_from_json
 from fr.triage.render import plural
 from fr.triage.scope_config import load_scope_config, publish_board, scope_id
+from fr.triage.views import gated_unread_needs
 
 if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
@@ -374,6 +375,18 @@ def in_progress_note(facts: Facts, scope_args: Sequence[str]) -> str | None:
     return f"{n} {noun} still labelled fr:in-progress or fr:claimed: {rule}"
 
 
+def gated_notes(facts: Facts) -> list[str]:
+    """What the Tester/DevOps columns cannot say by being empty (gate-backfill R13): the
+    repos whose gate-labelled PRs were never read, and the gate-labelled lists that may be
+    cut short. Both print on board.html, so neither passes for "nothing is held"."""
+    notes = [n.text for n in gated_unread_needs(facts)]
+    for w in facts.warnings:
+        if w.source == "gated-prs":
+            said = w.describe(w.target)
+            notes.append(said[:1].upper() + said[1:])
+    return notes
+
+
 def write_board(
     scope: Scope,
     target: Path,
@@ -398,6 +411,7 @@ def write_board(
         notes.append(f"claims are not shown: {one_line(exc)}")
     if (labels_note := in_progress_note(facts, scope_args)) is not None:
         notes.append(labels_note)
+    notes.extend(gated_notes(facts))
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,
