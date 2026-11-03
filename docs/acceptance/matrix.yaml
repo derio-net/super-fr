@@ -8423,8 +8423,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R12
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1365
     verify: live
+    issues:
+    - derio-net/super-fr#1365
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
