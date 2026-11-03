@@ -121,9 +121,13 @@ class PlanFile(_Strict):
 
 
 class ManifestItem(_Strict):
+    """A NEW item fr cannot infer (`kind:` and `title:` set), or an OVERRIDE of a key `fr debt`
+    already holds (no `kind:`; only `pr:`, `gate:`, `walk_only:`), which is how the operator
+    settles an ambiguous or planning delivering PR (spec §C; gh#1369)."""
+
     key: str
-    kind: Literal["closed-issue", "audit-gap", "walk", "op"]
-    title: str
+    kind: Literal["closed-issue", "audit-gap", "walk", "op"] | None = None
+    title: str = ""
     issue: int | None = None
     pr: int | None = None
     gate: str | None = None

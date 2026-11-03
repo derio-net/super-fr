@@ -52,6 +52,23 @@ adopt target is in another repo, missing, closed or an fr-owned tracker. A new c
 from the plan is reported and waits for a dry run. A missing plan file, or one naming another
 repo, refuses before any write (exit 2).
 
+**Settling a PR fr could not** (gh#1369). Several merged PRs (an ambiguity) or a planning PR leave
+an entry in `review`. Pick the delivering one in a manifest **override**: an item for the key fr
+already holds, with no `kind:` or `title:`, setting only `pr:` (and, if you need to, `gate:` or
+`walk_only:`):
+
+```yaml
+schema: 1
+items:
+  - {key: "plan:2026-10-20-ops#p1", pr: 22}
+```
+
+Pass it to the dry run and to `--yes` alike (`--from m.yaml`): the PR is then found with basis
+`manifest`, the entry defaults to `owed`, and `--yes` labels that PR and files the tracker. Setting
+`pr:` in the plan file instead does not work, because `--yes` re-resolves every PR and skips an
+entry whose PR moved; the skip line says so. A `kind:` item for a key fr already holds is still
+refused, and an override for a key fr does not hold is refused as a new item missing its `kind:`.
+
 ## Markers
 
 A tracker body ends with two lines, in this order:

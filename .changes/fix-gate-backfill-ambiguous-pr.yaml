@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr gate backfill: a manifest override (`{key, pr:}`, no `kind:`) now settles an ambiguous or planning delivering PR for a key fr debt already holds (gh#1369)"

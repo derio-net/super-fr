@@ -561,3 +561,83 @@ def test_a_forge_without_pr_comment_reads_refuses_the_retry(forge: Any) -> None:
     fake.list_issue_comments = nope  # type: ignore[method-assign]
     result = _pass("--gate", "tester", "--yes")
     assert result.exit_code == 2 and "cannot read the comments" in result.output
+
+
+# --- gh#1369: an ambiguous delivering PR is resolved by a manifest `pr:` override -------------
+
+AMBIG_PLAN = "2026-10-20-ops"
+AMBIG_KEY = f"plan:{AMBIG_PLAN}#p1"
+
+
+def _ambiguous_env(backfill_env: Any) -> tuple[Path, FakeGhClient]:
+    """An open manual phase whose plan two run cursors emitted, on two branches whose PRs
+    (21, 22) both merged: the `run` step finds two delivering PRs, an ambiguity."""
+    from tests.unit.gatebackfill_fixtures import commit_at, git
+    from tests.unit.test_merge_evidence import _write_plan
+
+    root, fake = backfill_env
+    _write_plan(root, AMBIG_PLAN, [("manual", False)])
+    for rel, branch in (("runs", "feat/ops"), ("implemented/runs", "feat/ops-2")):
+        p = root / "docs/superpowers" / rel / "run-ops.yaml"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(
+            f"run: run-ops\nworkflow: fr-goal@1\nbranch: {branch}\n"
+            "started: '2026-01-01T09:00:00Z'\ncursor: deliver\nsteps:\n"
+            "  plan:\n    state: done\n"
+            f"    emitted: {{plan: docs/superpowers/plans/{AMBIG_PLAN}}}\n"
+        )
+    commit_at(root, "seed", "2026-10-30T00:00:00+00:00")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")  # published, without a push
+    git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    fake.add_pr(BACKFILL_REPO, 21, state="MERGED", head_ref="feat/ops")
+    fake.add_pr(BACKFILL_REPO, 22, state="MERGED", head_ref="feat/ops-2")
+    return root, fake
+
+
+def test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    import yaml
+
+    _root, fake = _ambiguous_env(backfill_env)
+    plan = tmp_path / "home" / ".cache/fr/gate-backfill/example-org--widgets/plan.yaml"
+    assert CliRunner().invoke(app, ["gate", "backfill"]).exit_code == 0
+    (before,) = yaml.safe_load(plan.read_text())["entries"]
+    assert before["key"] == AMBIG_KEY and before["ambiguous"] == [21, 22]
+    assert before["decision"] == "review" and "--from" in before["why"]
+
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(f"schema: 1\nitems:\n  - {{key: '{AMBIG_KEY}', pr: 22}}\n")
+    dry = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest)])
+    assert dry.exit_code == 0, dry.output
+    (after,) = yaml.safe_load(plan.read_text())["entries"]
+    assert after["pr"] == {"number": 22, "basis": "manifest", "planning": False}
+    assert after["decision"] == "owed" and after["gate"] == "devops" and after["ambiguous"] == []
+
+    result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.pr_labels.get((BACKFILL_REPO, 22)) == {"gate:devops"}
+    assert (BACKFILL_REPO, 21) not in fake.pr_labels
+    assert [i.labels for i in fake.issues.values()] == [{"fr:owed"}]
+
+
+def test_gh1369_an_ambiguous_entry_applied_without_its_manifest_says_how_to_resolve_it(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    """Hand-editing the plan file's `pr:` is not the route (R15 re-resolves it): the skip says
+    which one is."""
+    import yaml
+
+    _root, fake = _ambiguous_env(backfill_env)
+    plan = tmp_path / "home" / ".cache/fr/gate-backfill/example-org--widgets/plan.yaml"
+    assert CliRunner().invoke(app, ["gate", "backfill"]).exit_code == 0
+    data = yaml.safe_load(plan.read_text())
+    data["entries"][0].update(pr={"number": 22, "basis": "manifest"}, decision="owed")
+    plan.write_text(yaml.safe_dump(data))
+
+    result = CliRunner().invoke(app, ["gate", "backfill", "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert "ambiguous (#21, #22)" in result.output and "--from" in result.output
+    assert fake.attempted_mutations == 0

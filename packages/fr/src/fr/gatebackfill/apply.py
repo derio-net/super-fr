@@ -16,6 +16,7 @@ from typing import Any
 
 from fr.archive_followups import owned_owed_key
 from fr.gatebackfill import trackers
+from fr.gatebackfill.candidates import MANIFEST_HINT
 from fr.gatebackfill.model import BackfillError, PlanEntry, PlanFile
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, forge_error_kind
@@ -171,8 +172,13 @@ class _Apply:
             res.skipped = "no delivering PR" if e.pr is None else "no gate: set gate: in the plan"
             return res
         if fresh.pr is None or fresh.pr.number != e.pr.number:
-            now = f"#{fresh.pr.number}" if fresh.pr else "none"
-            res.skipped = f"delivering PR re-resolves to {now}, plan recorded #{e.pr.number}"
+            if fresh.ambiguous:
+                now = f"is ambiguous ({', '.join(f'#{n}' for n in fresh.ambiguous)})"
+            else:
+                now = f"re-resolves to {f'#{fresh.pr.number}' if fresh.pr else 'none'}"
+            res.skipped = (
+                f"delivering PR {now}, plan recorded #{e.pr.number}; set pr: {MANIFEST_HINT}"
+            )
             return res
         if fresh.gate != e.computed_gate:
             res.skipped = f"gate re-resolves to {fresh.gate}, plan recorded {e.computed_gate}"
