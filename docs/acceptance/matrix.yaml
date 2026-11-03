@@ -7075,8 +7075,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R9
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1344
     verify: live
+    issues:
+    - derio-net/super-fr#1344
   - id: drive-merge-train-head-only
     capability: triage-batch-drive
     acceptance: The drive acts only on the head of each repo's merge train — PRs behind
