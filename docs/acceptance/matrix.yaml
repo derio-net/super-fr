@@ -5198,8 +5198,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R7
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: triage-severity-and-duplicates
     capability: Backlog triage
