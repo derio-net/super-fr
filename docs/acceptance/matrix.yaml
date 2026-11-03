@@ -5199,8 +5199,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R7
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1342
     verify: live
+    issues:
+    - derio-net/super-fr#1342
   - id: triage-severity-and-duplicates
     capability: Backlog triage
     acceptance: A judgement can carry severity and duplicate_of; triage check lists
