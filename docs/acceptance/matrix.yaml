@@ -5189,8 +5189,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R1
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1346
     verify: live
+    issues:
+    - derio-net/super-fr#1346
   - id: drive-carry-keeps-settled-set
     capability: Backlog triage
     acceptance: After drive passes that carried facts over, fr triage check reports
