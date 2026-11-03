@@ -6359,8 +6359,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
     status: walk-owed
-    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    notes: tracked by derio-net/super-fr#1358
     verify: live
+    issues:
+    - derio-net/super-fr#1358
   - id: pages-acceptance-report-discoverable
     capability: acceptance-matrix
     acceptance: The explainers landing page links to the published acceptance report
