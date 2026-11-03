@@ -8408,8 +8408,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R2
     - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R12
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: fr-binary-identity
     capability: harness-parity
