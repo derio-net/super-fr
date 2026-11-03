@@ -9445,9 +9445,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_debt_archive_pr_real.py#test_the_real_fr_archive_moves_the_plan_and_the_sweep_opens_a_draft_pr
     status: walk-owed
-    notes: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
-      scheduled run on main is the post-merge Test Plan step 2.'
+    notes: tracked by derio-net/super-fr#1341
     verify: live
+    issues:
+    - derio-net/super-fr#1341
   - id: debt-owed-discharge
     capability: debt
     acceptance: '`fr debt` lists owed actions from owed/awaiting-live issues, held manual
