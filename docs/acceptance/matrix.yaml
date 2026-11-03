@@ -5188,8 +5188,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R1
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: drive-carry-keeps-settled-set
     capability: Backlog triage
