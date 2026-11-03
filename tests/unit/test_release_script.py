@@ -137,6 +137,23 @@ class World:
         _git(self.other, "commit", "-q", "-m", message)
         _git(self.other, "push", "-q", "origin", "HEAD:main")
 
+    def land_merge(self, pr: int, branch: str, commits: list[tuple[str, str, str]]) -> None:
+        """Land *commits* (path, text, subject) on *branch* and merge it into main with a
+        merge commit, as GitHub's "Create a merge commit" does: the branch commits sit on
+        the merge's second parent, and their subjects may carry issue refs `(#N)`."""
+        _git(self.other, "pull", "-q", "--ff-only", "origin", "main")
+        _git(self.other, "checkout", "-q", "-b", branch)
+        for rel, text, subject in commits:
+            path = self.other / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+            _git(self.other, "add", "-A")
+            _git(self.other, "commit", "-q", "-m", subject)
+        _git(self.other, "checkout", "-q", "main")
+        message = f"Merge pull request #{pr} from o/{branch}"
+        _git(self.other, "merge", "-q", "--no-ff", "-m", message, branch)
+        _git(self.other, "push", "-q", "origin", "HEAD:main")
+
     def fragment(self, name: str, bump: str, summary: str) -> None:
         self.land(f".changes/{name}.yaml", f"bump: {bump}\nsummary: {summary}\n")
 
@@ -1352,6 +1369,68 @@ def test_p7_r2_a_read_covering_every_logged_pr_still_cuts_the_final(world: World
     world.merged = [{"number": 42, "mergedAt": "2030-01-01T00:00:00Z", "labels": []}]
     assert world.run() == 0
     assert world.origin_log()[0] == "release: v4.24.0"
+
+
+def _merge_with_issue_refs(world: World) -> None:
+    """#50 lands by merge commit; its branch commits cite issues #7 and #8 (gh#1333)."""
+    world.land_merge(
+        50,
+        "feat-c",
+        [
+            (".changes/feat-c.yaml", "bump: minor\nsummary: c\n", "feat: c (#7)"),
+            ("c.txt", "c\n", "fix: c's edge case (#8)"),
+        ],
+    )
+
+
+def test_gh1333_issue_refs_inside_a_merged_branch_are_not_prs_so_the_final_is_cut(
+    world: World,
+) -> None:
+    _merge_with_issue_refs(world)
+    world.merged = [{"number": 50, "mergedAt": "2030-01-01T00:00:00Z", "labels": []}]
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0"
+
+
+def test_gh1333_a_merge_commit_the_read_misses_is_named_by_its_pr_not_its_issues(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _merge_with_issue_refs(world)
+    world.merged = []  # the search index has not caught up with #50
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+    out = capsys.readouterr().out
+    assert "misses #50," in out
+    assert "#7" not in out and "#8" not in out
+
+
+def test_gh1333_logged_prs_reads_the_first_parent_line_and_skips_the_release_bot(
+    world: World,
+) -> None:
+    world.land("a.txt", "a\n", "feat: a (#42)")  # a squash merge: its title names the PR
+    _merge_with_issue_refs(world)
+    world.merged = [
+        {"number": n, "mergedAt": "2030-01-01T00:00:00Z", "labels": []} for n in (42, 50)
+    ]
+    world.waiting = list(WAITS)
+    assert world.run() == 0  # the bot's `release: v4.24.0-rc.1` lands on main
+    _git(world.other, "pull", "-q", "--ff-only", "origin", "main")
+    (world.other / "b.txt").write_text("b\n")
+    _git(world.other, "add", "-A")
+    _git(world.other, "-c", f"user.name={BOT}", "commit", "-q", "-m", "chore: sync (#99)")
+    (world.other / "c.txt").write_text("c2\n")  # skipped by its prefix, whoever wrote it
+    _git(world.other, "add", "-A")
+    _git(world.other, "commit", "-q", "-m", "release: v9.9.9 (#98)")
+    _git(world.other, "push", "-q", "origin", "HEAD:main")
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+
+    tag = release.last_final(world.clone)
+    assert tag is not None
+    assert release.logged_prs(world.clone, tag) == {42, 50}
 
 
 def test_p7_r3_bump_and_lock_check_run_with_no_forge_token(
