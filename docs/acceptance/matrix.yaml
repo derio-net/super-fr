@@ -4555,10 +4555,9 @@ rows:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both
-      harnesses were walked live (PR #609, PR #679), but the row stays owed until #637
-      (Claude Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit
-      binding until #636.'
+    notes: tracked by derio-net/super-fr#1350
+    issues:
+    - derio-net/super-fr#1350
   - id: light-path-shape
     capability: fr-goal-cost
     acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light`
