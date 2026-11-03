@@ -6499,8 +6499,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1366
     verify: live
+    issues:
+    - derio-net/super-fr#1366
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
     acceptance: 'fr-execute, fr-goal and the phase-executor agent carry a browser-check
