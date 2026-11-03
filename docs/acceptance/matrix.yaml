@@ -79,9 +79,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_plan_acceptance_links.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
-      end-to-end toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap.
-      Mechanics unit-pinned per-PR.'
+    notes: tracked by derio-net/super-fr#1338
+    issues:
+    - derio-net/super-fr#1338
   - id: acceptance-added-since
     capability: Acceptance matrix
     acceptance: Mid-flight row additions are diffable against a base ref and defended
@@ -677,10 +677,9 @@ rows:
       - super-fr:tests/unit/test_phase_executor_agent.py
       - super-fr:tests/unit/test_install_allowlists_phase_executor.py
     status: walk-owed
-    notes: 'walk-owed, not walked (p1-r2): the notes say the live per-phase dispatch
-      was demonstrated by the feature''s own fr-goal run, but name no dated evidence
-      to record as a walk; wiring unit-pinned. Re-walk and record it with set-status
-      --walk.'
+    notes: tracked by derio-net/super-fr#1351
+    issues:
+    - derio-net/super-fr#1351
   - id: fr-goal-journal-handoff-complete
     capability: fr-goal subagent execution
     acceptance: A fresh subagent given only fr journal render + spec + its phase yaml
@@ -693,9 +692,9 @@ rows:
       - super-fr:tests/unit/test_fr_goal_journal.py
       - super-fr:tests/unit/test_journal_cmd.py
     status: walk-owed
-    notes: 'walk-owed, not walked (p1-r2): the notes say the completeness bar was met
-      live in the feature''s own run, but name no dated evidence to record as a walk;
-      render/check unit-pinned. Re-walk and record it with set-status --walk.'
+    notes: tracked by derio-net/super-fr#1349
+    issues:
+    - derio-net/super-fr#1349
   - id: fr-goal-phase-tiering
     capability: fr-goal subagent execution
     acceptance: fr-plan annotates each phase with a tier; the orchestrator dispatches
@@ -2163,9 +2162,9 @@ rows:
       - super-fr:tests/unit/test_glab.py
       - super-fr:tests/unit/test_pr_observe.py
     status: walk-owed
-    notes: 'walk-owed, not walked (p1-r2): the notes record a live check from a checkout
-      against a self-hosted GitLab (host redacted) but give no date to record a walk
-      with; unit refs in CI. Re-walk and record it with set-status --walk.'
+    notes: tracked by derio-net/super-fr#1352
+    issues:
+    - derio-net/super-fr#1352
   - id: forge-errors-are-not-absence
     capability: Multi-backend git hosting
     acceptance: A malformed or unauthorized GitLab request surfaces as an error rather
@@ -4555,10 +4554,9 @@ rows:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): both
-      harnesses were walked live (PR #609, PR #679), but the row stays owed until #637
-      (Claude Code omits subagent cost) is fixed and re-walked; OpenCode needs an explicit
-      binding until #636.'
+    notes: tracked by derio-net/super-fr#1350
+    issues:
+    - derio-net/super-fr#1350
   - id: light-path-shape
     capability: fr-goal-cost
     acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light`
@@ -4610,8 +4608,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R8
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1355
     verify: live
+    issues:
+    - derio-net/super-fr#1355
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
@@ -5189,8 +5189,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R1
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1346
     verify: live
+    issues:
+    - derio-net/super-fr#1346
   - id: drive-carry-keeps-settled-set
     capability: Backlog triage
     acceptance: After drive passes that carried facts over, fr triage check reports
@@ -5199,8 +5201,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R7
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1342
     verify: live
+    issues:
+    - derio-net/super-fr#1342
   - id: triage-severity-and-duplicates
     capability: Backlog triage
     acceptance: A judgement can carry severity and duplicate_of; triage check lists
@@ -5322,8 +5326,10 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_adopt_renames_the_tab_then_the_agent_and_returns_the_tab
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1362
     verify: live
+    issues:
+    - derio-net/super-fr#1362
   - id: triage-batch-adopt-branch-rename
     capability: Backlog triage
     acceptance: Adopting a session renames its branch to the batch branch everywhere
@@ -5338,8 +5344,10 @@ rows:
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
       - super-fr:tests/unit/test_triage_gitseam.py#test_publish_branch_pushes_it_and_sets_its_upstream
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1363
     verify: live
+    issues:
+    - derio-net/super-fr#1363
   - id: triage-batch-adopt-refusals
     capability: Backlog triage
     acceptance: Adopt prints its plan without --yes and, with --yes, refuses every unsafe
@@ -6131,9 +6139,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_ci_shards.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
-      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
-      is owed.'
+    notes: tracked by derio-net/super-fr#1340
+    issues:
+    - derio-net/super-fr#1340
   - id: ci-budget-ticket-dedup
     capability: CI
     acceptance: A CI file that runs over its budget gets exactly one open ci-budget
@@ -6184,9 +6192,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_actions_pinned.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): dependabot.yml
-      shape is unit-pinned; the first weekly Dependabot run is a post-merge observation
-      still owed.'
+    notes: tracked by derio-net/super-fr#1339
+    issues:
+    - derio-net/super-fr#1339
   - id: ci-ok-single-required-check
     capability: CI
     acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
@@ -6341,8 +6349,10 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py
       - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
     status: walk-owed
-    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    notes: tracked by derio-net/super-fr#1357
     verify: live
+    issues:
+    - derio-net/super-fr#1357
   - id: pages-explainers-preserved
     capability: acceptance-matrix
     acceptance: Publishing the acceptance report keeps every explainer page at its current
@@ -6353,8 +6363,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_pages_workflow.py
     status: walk-owed
-    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    notes: tracked by derio-net/super-fr#1358
     verify: live
+    issues:
+    - derio-net/super-fr#1358
   - id: pages-acceptance-report-discoverable
     capability: acceptance-matrix
     acceptance: The explainers landing page links to the published acceptance report
@@ -6487,8 +6499,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1366
     verify: live
+    issues:
+    - derio-net/super-fr#1366
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
     acceptance: 'fr-execute, fr-goal and the phase-executor agent carry a browser-check
@@ -7020,8 +7034,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R5
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1367
     verify: live
+    issues:
+    - derio-net/super-fr#1367
   - id: drive-wave-workspaces
     capability: triage-batch-drive
     acceptance: The driver opens each batch's session, and its close-out, in a herdr
@@ -7073,8 +7089,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R9
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1344
     verify: live
+    issues:
+    - derio-net/super-fr#1344
   - id: drive-merge-train-head-only
     capability: triage-batch-drive
     acceptance: The drive acts only on the head of each repo's merge train — PRs behind
@@ -7129,8 +7147,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R2
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1345
     verify: live
+    issues:
+    - derio-net/super-fr#1345
   - id: drive-exports-finished-wave
     capability: triage-batch-drive
     acceptance: With export configured, once a wave is finished the driver opens one
@@ -7159,8 +7179,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R13
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1343
     verify: live
+    issues:
+    - derio-net/super-fr#1343
   - id: merge-train-red-recovery
     capability: triage-batch-drive
     acceptance: A batch PR made red by the driver's own update is updated again once
@@ -7360,8 +7382,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R1
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1359
     verify: live
+    issues:
+    - derio-net/super-fr#1359
   - id: quota-secondary-backoff
     capability: triage-batch-drive
     acceptance: A secondary rate limit backs off from --interval, doubling to a 15-minute
@@ -8403,8 +8427,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R12
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1365
     verify: live
+    issues:
+    - derio-net/super-fr#1365
   - id: fr-binary-identity
     capability: harness-parity
     acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
@@ -8735,8 +8761,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1361
     verify: live
+    issues:
+    - derio-net/super-fr#1361
   - id: triage-claims-identity
     capability: triage-claims
     acceptance: Each triage scope on a host has a stable scope id that carries no hostname,
@@ -8945,8 +8973,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R3
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1354
     verify: live
+    issues:
+    - derio-net/super-fr#1354
   - id: herdr-outside-refusal
     capability: herdr runner
     acceptance: Outside a herdr session the herdr runner refuses and tells the operator
@@ -9077,8 +9107,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R8
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1356
     verify: live
+    issues:
+    - derio-net/super-fr#1356
   - id: model-binding-probe-cache
     capability: model-bindings
     acceptance: Probe verdicts are cached per harness and model for 6 hours, set and
@@ -9264,19 +9296,11 @@ rows:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
     status: walk-owed
-    notes: RC10 unit coverage now checks OpenCode 2.1.4 default-variant normalization
-      and fail-closed model mismatches. The actual RC10 fixture launch still failed
-      during session confirmation and Herdr automatically closed its newly created tab;
-      no managed launch pass is claimed, so a live walk remains owed. Startup-metadata
-      unit replay now covers a narrowly fingerprinted incomplete frame to ready, finite
-      timeout without submission, and draft/overlay/process/session/status refusals
-      on repeated observations. Strict input admission is unchanged; the later diagnostic
-      PASS is not a native launch or live-walk PASS. Status remains walk-owed. R1 deadline
-      regressions additionally enforce rejection at/after expiry, no calls after expiry
-      and remaining-time limits for each native startup observation; no live walk or
-      status change.
+    notes: tracked by derio-net/super-fr#1353
     verify: candidate
     scenario: tests/scenarios/herdr-opencode.sh
+    issues:
+    - derio-net/super-fr#1353
   - id: herdr-batch-replace
     capability: audited batch harness replacement
     acceptance: An operator replaces an idle unmerged batch harness/model without a
@@ -9445,9 +9469,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_debt_archive_pr_real.py#test_the_real_fr_archive_moves_the_plan_and_the_sweep_opens_a_draft_pr
     status: walk-owed
-    notes: 'Shipped in #1139: archive-pr unit- and integration-tested in CI; the real
-      scheduled run on main is the post-merge Test Plan step 2.'
+    notes: tracked by derio-net/super-fr#1341
     verify: live
+    issues:
+    - derio-net/super-fr#1341
   - id: debt-owed-discharge
     capability: debt
     acceptance: '`fr debt` lists owed actions from owed/awaiting-live issues, held manual
@@ -9760,10 +9785,10 @@ rows:
       - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_redispatch
       - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_tests_once_and_never_retests
     status: walk-owed
-    notes: Superseded outcomes pinned by unit tests against a real bare remote (moved
-      base, real non-fast-forward race, override exits non-zero with re-dispatch, never
-      retests). Live walk owed on the first real merge race (Test Plan 2).
+    notes: tracked by derio-net/super-fr#1360
     verify: live
+    issues:
+    - derio-net/super-fr#1360
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
@@ -10024,17 +10049,10 @@ rows:
       - super-fr:tests/unit/test_triage_batch_closeout_cmd.py
       - super-fr:tests/unit/test_triage_collected_closeout_drive.py
     status: walk-owed
-    notes: 'The collected close-out is unit-tested against a fake worktree and forge:
-      the engine''s per-batch steps, holds and one PR (test_triage_batch_closeout),
-      the verb (test_triage_batch_closeout_cmd), and the driver''s one-per-repo plan,
-      shared-head attribution, ready-and-merge and single hand-back (test_triage_collected_closeout_drive).
-      Live walk owed: one close-out over a real merged queue with a real housekeeping
-      PR (Test Plan step 3). v6.0.0 was cut on 2026-10-31 via the release workflow version
-      override (operator decision) with #1195 and #1217 gate:tester left held; this
-      walk was deferred, not certified. A disposable two-batch rehearsal was started
-      and paused unfinished; it is not evidence.'
+    notes: tracked by derio-net/super-fr#1347
     issues:
     - derio-net/super-fr#1206
+    - derio-net/super-fr#1347
   - id: exit-gates-release-gating
     capability: exit-gates
     acceptance: A push to main cuts a vX.Y.Z-rc.N pre-release while any change merged
@@ -10052,19 +10070,10 @@ rows:
       - super-fr:tests/unit/test_version_rc.py
       - super-fr:tests/unit/test_release_workflow.py
     status: walk-owed
-    notes: 'fr release status, release.py''s RC/final decision (RC tag, pre-release,
-      no fragment consumed; final once nothing waits), both RC spellings and RC-admitting
-      floors are unit-tested against fake forges and temp git repos. Observed on super-fr
-      itself: RC13-RC16 were cut as pre-releases consuming no fragment while #1195/#1217
-      waited (e.g. run 41007180324). Still owed: the held-gate RC then verified-gate
-      final transition through the ordinary workflow, with installer channel checks
-      (see docs/exit-gates-release-walk.md). v6.0.0 was cut on 2026-10-31 via the release
-      workflow version override (operator decision) with #1195 and #1217 gate:tester
-      left held; this walk was deferred, not certified. The final itself was the ungated
-      --version path (run 41214190564, 13 fragments consumed), so it is not the gated
-      transition.'
+    notes: tracked by derio-net/super-fr#1348
     issues:
     - derio-net/super-fr#1207
+    - derio-net/super-fr#1348
   - id: triage-closed-recovery
     capability: Triage batch recovery
     acceptance: A closed batch session can recover into a fresh held OpenCode session
@@ -10131,14 +10140,12 @@ rows:
       int:
       - super-fr:tests/integration/test_scenarios.py#test_herdr_closed_recovery_live_instructions
     status: walk-owed
-    notes: 'Disposable actual-client walk remains owed post-merge at Tester; the named
-      instruction test is not live evidence. v6.0.0 was cut on 2026-10-31 via the release
-      workflow version override (operator decision) with #1195 and #1217 gate:tester
-      left held; this walk was deferred, not certified.'
+    notes: tracked by derio-net/super-fr#1364
     verify: live
     scenario: tests/scenarios/herdr-closed-recovery-live.sh
     issues:
     - derio-net/super-fr#1257
+    - derio-net/super-fr#1364
   - id: fr-ops-model-carriers
     capability: fr ops
     acceptance: A plan's ops are read from ops.yaml and from legacy manual-operation
