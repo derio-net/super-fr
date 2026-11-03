@@ -4609,8 +4609,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R8
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
@@ -5188,8 +5188,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R1
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: drive-carry-keeps-settled-set
     capability: Backlog triage
@@ -5198,8 +5198,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-scoped-collect-design.md#R7
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: triage-severity-and-duplicates
     capability: Backlog triage
@@ -5321,10 +5321,8 @@ rows:
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
       - super-fr:tests/unit/test_triage_batch_drive.py#test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_adopt_renames_the_tab_then_the_agent_and_returns_the_tab
-    status: not-implemented
-    notes: Unit-covered on fakes (and herdr against a live capture); stays not-implemented
-      until the post-merge operator sweep of the six hand-started sessions (spec Test
-      Plan 5) proves it live.
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: triage-batch-adopt-branch-rename
     capability: Backlog triage
@@ -5339,10 +5337,8 @@ rows:
       - super-fr:tests/unit/test_isolation_branch_rename.py#test_rename_moves_branch_record_marker_indexes_and_cursor
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
       - super-fr:tests/unit/test_triage_gitseam.py#test_publish_branch_pushes_it_and_sets_its_upstream
-    status: not-implemented
-    notes: rename_branch is unit-tested over a real tmp repo and linked worktree; the
-      supersede over a fake forge. Stays not-implemented until the post-merge live sweep
-      shows a renamed session keep working on the batch branch.
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: triage-batch-adopt-refusals
     capability: Backlog triage
@@ -6490,8 +6486,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R4
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
@@ -6788,8 +6784,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R13
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: run-cost-positive-attribution
     capability: usage
@@ -7023,14 +7019,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R4
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R5
     levels: {}
-    status: not-implemented
-    notes: 'Live run 2026-10-03 (Test Plan 16, fr 5.2.1/5.2.2): batches arch-card-clip
-      (#905, archive #907) and unplaced-prs (#906, archive #908) each ran dispatch ->
-      merge -> release -> post_merge -> close-out -> archive merge, with the operator
-      readying the batch PRs. Not counted as passing: during a GitHub API degradation
-      the driver needed one manual restart (a hung forge read, then exit 2 on its failure)
-      and #907''s CI one re-run (a setup-bun 503). Rerun owed after #909 (read timeouts)
-      and #910 (retry failed reads in loop mode); see also #911, #912, #913.'
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: drive-wave-workspaces
     capability: triage-batch-drive
@@ -7082,8 +7072,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R7
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R9
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: drive-merge-train-head-only
     capability: triage-batch-drive
@@ -7138,8 +7128,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R2
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: drive-exports-finished-wave
     capability: triage-batch-drive
@@ -7168,8 +7158,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R13
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: merge-train-red-recovery
     capability: triage-batch-drive
@@ -7369,8 +7359,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R1
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: quota-secondary-backoff
     capability: triage-batch-drive
@@ -8412,8 +8402,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R2
     - super-fr:docs/superpowers/implemented/specs/2026-10-14-merge-truth-design.md#R12
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: fr-binary-identity
     capability: harness-parity
@@ -8744,8 +8734,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-11-batch-adopt-safety-2-design.md#R1
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: triage-claims-identity
     capability: triage-claims
@@ -8954,8 +8944,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R3
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: herdr-outside-refusal
     capability: herdr runner
@@ -9086,14 +9076,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R7
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R8
     levels: {}
-    status: not-implemented
-    notes: 'Partial live evidence 2026-10-06 at close-out: on a real OpenCode 1.18.34
-      install, fr models check (off a terminal) classified a binding the provider genuinely
-      retired (github-copilot/gpt-6-sol) as dead from ProviderModelNotFoundError, offered
-      the provider''s Did-you-mean hint as an operator-only replacement, reported the
-      three live bindings live, and exited 1. Still owed: interactive accept materialising
-      the agent file, the fr-goal gate question, and the unattended advance substitution
-      verified in opencode.db.'
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: model-binding-probe-cache
     capability: model-bindings
@@ -9706,8 +9690,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R16
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: main-requires-ci-ok
     capability: release
@@ -9716,8 +9700,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R18
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: main-protection-script
     capability: release
