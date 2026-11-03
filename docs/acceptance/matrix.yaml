@@ -9700,8 +9700,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-11-merge-train-safety-design.md#R16
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: main-requires-ci-ok
     capability: release
