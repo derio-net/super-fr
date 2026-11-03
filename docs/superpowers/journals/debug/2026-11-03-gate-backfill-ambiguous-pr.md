@@ -10,3 +10,8 @@ Open manual phase whose plan two run cursors emitted on branches with merged PRs
 ### 71e741ef20cb · root-cause · The manifest accepts only keys the fold lacks, so the spec's one resolution route is closed
 
 Spec 2026-11-01-gate-backfill §C says an ambiguity 'stays unwritten until the operator sets pr: in a manifest', but §B says 'a key the fold already holds is an error', and candidates.collect_candidates implements §B (only the p2-r3 tracker-only take-back is exempt). ManifestItem also requires kind/title, which describe a NEW item. The plan-file route is closed by design: --yes re-resolves (R15) and an ambiguity re-resolves to no PR. Same trap for a planning PR, whose why text says 'set pr: to the delivering one' (the plan file).
+
+<!-- fr:journal kind=finding scope=debug id=fix-manifest-override created=2026-11-03T18:35:44+00:00 state=fixed -->
+### fix-manifest-override · finding [fixed] · Manifest override (no kind:) for a held key sets pr:/gate:/walk_only:
+
+ManifestItem.kind/title optional; candidates._check_manifest_item: a held key takes only an override (pr/gate/walk_only, no title/issue), an unheld key only a new item (kind+title); a kind: item for a held key still refuses, naming the override. Override keeps the fold source and shape gate (gate: replaces it if given). to_entry's why and apply's R15 skip line now say 'in a manifest entry for this key (--from), not in the plan file'. Tests failing first: test_gate_cmd.py#test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds (end to end: label on #22 only, one fr:owed tracker), #test_gh1369_an_ambiguous_entry_applied_without_its_manifest_says_how_to_resolve_it, test_gatebackfill_candidates.py#test_gh1369_*. docs/gate-backfill.md documents the override.
