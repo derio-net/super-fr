@@ -6486,8 +6486,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R4
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
