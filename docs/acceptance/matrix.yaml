@@ -5337,10 +5337,8 @@ rows:
       - super-fr:tests/unit/test_isolation_branch_rename.py#test_rename_moves_branch_record_marker_indexes_and_cursor
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
       - super-fr:tests/unit/test_triage_gitseam.py#test_publish_branch_pushes_it_and_sets_its_upstream
-    status: not-implemented
-    notes: rename_branch is unit-tested over a real tmp repo and linked worktree; the
-      supersede over a fake forge. Stays not-implemented until the post-merge live sweep
-      shows a renamed session keep working on the batch branch.
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: triage-batch-adopt-refusals
     capability: Backlog triage
