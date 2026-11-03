@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr gate backfill never re-gates a PR whose gate already passed: the dry run flags it, and --yes still tracks the owed item with a tracked-only tracker that a later gate pass will not close (#1322)"

@@ -1,2 +1,0 @@
-bump: minor
-summary: "`## Test Plan` is now a stated, enforced heading: a near-miss such as `## 6. Test Plan (post-merge)` is refused by validate, self-review, archive, closeout outcome and the acceptance check, reported by `fr debt`, and renamed in live specs by a migration repair, instead of silently reading as no Test Plan (#1315)"
