@@ -4609,8 +4609,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R8
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
