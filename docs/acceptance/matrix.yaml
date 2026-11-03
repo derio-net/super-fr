@@ -5344,8 +5344,10 @@ rows:
       - super-fr:tests/unit/test_triage_batch_adopt.py#test_adopt_with_an_open_pr_moves_everything_in_order
       - super-fr:tests/unit/test_triage_gitseam.py#test_publish_branch_pushes_it_and_sets_its_upstream
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1363
     verify: live
+    issues:
+    - derio-net/super-fr#1363
   - id: triage-batch-adopt-refusals
     capability: Backlog triage
     acceptance: Adopt prints its plan without --yes and, with --yes, refuses every unsafe
