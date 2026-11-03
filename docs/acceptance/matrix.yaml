@@ -9773,10 +9773,10 @@ rows:
       - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_redispatch
       - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_tests_once_and_never_retests
     status: walk-owed
-    notes: Superseded outcomes pinned by unit tests against a real bare remote (moved
-      base, real non-fast-forward race, override exits non-zero with re-dispatch, never
-      retests). Live walk owed on the first real merge race (Test Plan 2).
+    notes: tracked by derio-net/super-fr#1360
     verify: live
+    issues:
+    - derio-net/super-fr#1360
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
