@@ -6131,9 +6131,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_ci_shards.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): shard
-      layout + partition unit-pinned; branch CI run took 155s; the post-merge main observation
-      is owed.'
+    notes: tracked by derio-net/super-fr#1340
+    issues:
+    - derio-net/super-fr#1340
   - id: ci-budget-ticket-dedup
     capability: CI
     acceptance: A CI file that runs over its budget gets exactly one open ci-budget
