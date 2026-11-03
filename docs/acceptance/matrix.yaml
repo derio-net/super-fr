@@ -6788,8 +6788,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R13
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: run-cost-positive-attribution
     capability: usage
