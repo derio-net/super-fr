@@ -79,9 +79,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_plan_acceptance_links.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
-      end-to-end toy walk (Test Plan item 4) is owed post-merge, not a CI wiring gap.
-      Mechanics unit-pinned per-PR.'
+    notes: tracked by derio-net/super-fr#1338
+    issues:
+    - derio-net/super-fr#1338
   - id: acceptance-added-since
     capability: Acceptance matrix
     acceptance: Mid-flight row additions are diffable against a base ref and defended
