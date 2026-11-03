@@ -6184,9 +6184,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_actions_pinned.py
     status: walk-owed
-    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): dependabot.yml
-      shape is unit-pinned; the first weekly Dependabot run is a post-merge observation
-      still owed.'
+    notes: tracked by derio-net/super-fr#1339
+    issues:
+    - derio-net/super-fr#1339
   - id: ci-ok-single-required-check
     capability: CI
     acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
