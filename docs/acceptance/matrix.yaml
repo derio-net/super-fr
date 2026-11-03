@@ -7138,8 +7138,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R2
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: drive-exports-finished-wave
     capability: triage-batch-drive
