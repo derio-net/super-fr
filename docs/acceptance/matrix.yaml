@@ -7161,8 +7161,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R13
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1343
     verify: live
+    issues:
+    - derio-net/super-fr#1343
   - id: merge-train-red-recovery
     capability: triage-batch-drive
     acceptance: A batch PR made red by the driver's own update is updated again once
