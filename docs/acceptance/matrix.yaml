@@ -7082,8 +7082,8 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R7
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-drive-herdr-sessions-design.md#R9
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: drive-merge-train-head-only
     capability: triage-batch-drive
