@@ -7374,8 +7374,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R1
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1359
     verify: live
+    issues:
+    - derio-net/super-fr#1359
   - id: quota-secondary-backoff
     capability: triage-batch-drive
     acceptance: A secondary rate limit backs off from --interval, doubling to a 15-minute
