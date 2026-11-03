@@ -7133,8 +7133,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-04-drive-merge-train-design.md#R2
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1345
     verify: live
+    issues:
+    - derio-net/super-fr#1345
   - id: drive-exports-finished-wave
     capability: triage-batch-drive
     acceptance: With export configured, once a wave is finished the driver opens one
