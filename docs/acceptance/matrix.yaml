@@ -6345,8 +6345,10 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py
       - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
     status: walk-owed
-    notes: Workflow shape unit-pinned; the live Pages deploy is verified post-merge.
+    notes: tracked by derio-net/super-fr#1357
     verify: live
+    issues:
+    - derio-net/super-fr#1357
   - id: pages-explainers-preserved
     capability: acceptance-matrix
     acceptance: Publishing the acceptance report keeps every explainer page at its current
