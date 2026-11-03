@@ -4608,8 +4608,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R8
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1355
     verify: live
+    issues:
+    - derio-net/super-fr#1355
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
