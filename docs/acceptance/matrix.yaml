@@ -7168,8 +7168,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-05-triage-pages-goal-design.md#R13
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: merge-train-red-recovery
     capability: triage-batch-drive
