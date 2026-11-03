@@ -9089,8 +9089,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-06-model-binding-churn-design.md#R8
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1356
     verify: live
+    issues:
+    - derio-net/super-fr#1356
   - id: model-binding-probe-cache
     capability: model-bindings
     acceptance: Probe verdicts are cached per harness and model for 6 hours, set and
