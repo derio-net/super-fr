@@ -7369,8 +7369,8 @@ rows:
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-10-12-quota-pacing-design.md#R1
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: post-merge walk owed (gate backfill)
     verify: live
   - id: quota-secondary-backoff
     capability: triage-batch-drive
