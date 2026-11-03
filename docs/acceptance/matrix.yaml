@@ -7034,8 +7034,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-wave-driver-design.md#R5
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1367
     verify: live
+    issues:
+    - derio-net/super-fr#1367
   - id: drive-wave-workspaces
     capability: triage-batch-drive
     acceptance: The driver opens each batch's session, and its close-out, in a herdr
