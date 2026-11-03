@@ -5326,8 +5326,10 @@ rows:
       - super-fr:tests/unit/test_triage_batch_drive.py#test_an_adopted_batch_matches_its_new_pr_and_is_driven_like_a_dispatched_one
       - super-fr:tests/unit/test_fr_herdr_runner.py#test_adopt_renames_the_tab_then_the_agent_and_returns_the_tab
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1362
     verify: live
+    issues:
+    - derio-net/super-fr#1362
   - id: triage-batch-adopt-branch-rename
     capability: Backlog triage
     acceptance: Adopting a session renames its branch to the batch branch everywhere
