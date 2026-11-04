@@ -1,2 +1,0 @@
-bump: patch
-summary: "OpenCode plugin: the idle guard asks fr in the session's own directory (`location.directory`), not the plugin's, so a session in another checkout is neither nudged about a foreign run nor silently missed (gh#1371)"
