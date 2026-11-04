@@ -18,7 +18,7 @@
 // handler with a fake client. That needs a live run (the gh#494 standard), and
 // until one exists the parity row for this surface stays `partial`.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -447,6 +447,19 @@ describe("idle guard (OpenCode): wired into the plugin, running a real process",
     expect(readFileSync(join(dir, "fr.log"), "utf8")).toBe(`${dir}|run check --idle --format json\n`);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.text).toContain("fr run advance r1");
+  });
+
+  // gh#1371, end to end: the loaded plugin's location is `dir`, the session
+  // lives in another checkout, and the real `fr` process must start there.
+  test("the fr process runs in the session's directory, not the plugin's", async () => {
+    stubFr(`printf '%s\\n' '${JSON.stringify(IDLE)}'\nexit 3`);
+    const checkout = join(dir, "checkout-b");
+    mkdirSync(checkout);
+    const { client, sent } = fakeClient({ location: { directory: checkout } });
+    await plugin(client, [succeededEvent()]);
+
+    expect(readFileSync(join(dir, "fr.log"), "utf8")).toBe(`${checkout}|run check --idle --format json\n`);
+    expect(sent).toHaveLength(1);
   });
 
   test("exit 2 from the process → silent", async () => {
