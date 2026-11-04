@@ -1,0 +1,26 @@
+schema_version: 10
+run: 2026-11-04-feat-repo-feature-settings
+workflow: fr-goal@1
+branch: feat/repo-feature-settings
+started: '2026-11-04T13:49:38+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
+driver: standalone
+fr_version: 6.1.0
