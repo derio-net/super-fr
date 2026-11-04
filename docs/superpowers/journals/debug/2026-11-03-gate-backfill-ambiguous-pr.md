@@ -15,3 +15,8 @@ Spec 2026-11-01-gate-backfill §C says an ambiguity 'stays unwritten until the o
 ### fix-manifest-override · finding [fixed] · Manifest override (no kind:) for a held key sets pr:/gate:/walk_only:
 
 ManifestItem.kind/title optional; candidates._check_manifest_item: a held key takes only an override (pr/gate/walk_only, no title/issue), an unheld key only a new item (kind+title); a kind: item for a held key still refuses, naming the override. Override keeps the fold source and shape gate (gate: replaces it if given). to_entry's why and apply's R15 skip line now say 'in a manifest entry for this key (--from), not in the plan file'. Tests failing first: test_gate_cmd.py#test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds (end to end: label on #22 only, one fr:owed tracker), #test_gh1369_an_ambiguous_entry_applied_without_its_manifest_says_how_to_resolve_it, test_gatebackfill_candidates.py#test_gh1369_*. docs/gate-backfill.md documents the override.
+
+<!-- fr:journal kind=review scope=debug id=064a3820b4cd created=2026-11-04T03:10:35+00:00 -->
+### 064a3820b4cd · review · Self-review of the diff: no findings
+
+Read the full source diff. Checked: the p2-r3 take-back now requires a kind: item, so an override never turns a row/plan key into a manifest-source candidate; _settle_trackers keys on source == manifest (same set as before for new items); gate_for only ever gets a new item. Full suite via testslot: 14063 passed, 5 failed (test_records_commit stuck-index-lock timing, 3 test_run_evidence_visual, 1 test_status_owed), all outside gatebackfill; the 62 tests of those files pass in isolation, so load-timing, not this change.
