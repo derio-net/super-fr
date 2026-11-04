@@ -20,3 +20,8 @@ Fixed in 6539c05e2. `src/idle.ts`: `isTopLevel` became `topLevelInfo`, which ret
 ### r1-1 · finding [fixed] (reviewer: in scope) · Real-process wiring test never exercised a session location
 
 Raised by the independent reviewer. Every test under "wired into the plugin, running a real process" used a session info with no location, so the session-directory path was covered only through the runFr seam. Fixed in e16dd4864: a test loads the plugin at dir, gives the session a location in a second checkout, and asserts the stub fr logs that checkout as its cwd. Red against the pre-fix idle.ts, green after.
+
+<!-- fr:journal kind=finding scope=debug id=r1-2 created=2026-11-04T13:49:40+00:00 state=open review_scope=out -->
+### r1-2 · finding [open] (reviewer: out of scope) · Sibling handlers still assume the plugin directory is the session's
+
+Raised by the reviewer, confirmed by reading the code: `src/nag.ts:90` (`repoRootOf(options.directory)` for `fr acceptance status`), `src/bind.ts:109` (`shellCwd(options.directory, input.workdir)`, so a relative or missing workdir resolves against the plugin) and `:130`, and `src/claim.ts:104` all run fr in the plugin location. This is the same premise as gh#1371, but this change did not cause it: only `createIdleHandler` was edited. Each one needs its own decision on whether it is deliberately plugin-scoped. Follow-up, not this PR.
