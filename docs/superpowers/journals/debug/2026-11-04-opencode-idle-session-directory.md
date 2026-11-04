@@ -25,3 +25,8 @@ Raised by the independent reviewer. Every test under "wired into the plugin, run
 ### r1-2 · finding [open] (reviewer: out of scope) · Sibling handlers still assume the plugin directory is the session's
 
 Raised by the reviewer, confirmed by reading the code: `src/nag.ts:90` (`repoRootOf(options.directory)` for `fr acceptance status`), `src/bind.ts:109` (`shellCwd(options.directory, input.workdir)`, so a relative or missing workdir resolves against the plugin) and `:130`, and `src/claim.ts:104` all run fr in the plugin location. This is the same premise as gh#1371, but this change did not cause it: only `createIdleHandler` was edited. Each one needs its own decision on whether it is deliberately plugin-scoped. Follow-up, not this PR.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-11-04T13:49:42+00:00 -->
+### review-1 · review · Independent code review of the fix
+
+Dispatched a separate read-only reviewer over 6539c05e2. It confirmed the schema match (`Session.Info.location.directory` is required in 2.1.0), that all rules still hold (never throws, clean-verdict-only, once per position, children and failed lookups left alone), and that the tests kill the revert-to-options.directory and drop-the-fallback mutations. Findings: r1-1 (in scope, fixed) and r1-2 (out of scope, follow-up). No other findings.
