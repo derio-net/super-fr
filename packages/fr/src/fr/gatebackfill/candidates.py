@@ -27,6 +27,8 @@ PLANS_REL = Path("docs/superpowers/plans")
 IMPLEMENTED_PLANS_REL = Path("docs/superpowers/implemented/plans")
 SPECS_REL = Path("docs/superpowers/specs")
 IMPLEMENTED_SPECS_REL = Path("docs/superpowers/implemented/specs")
+MANIFEST_HINT = "in a manifest entry for this key (--from), not in the plan file"
+"""Where an operator's delivering PR goes: `--yes` re-resolves a plan file's `pr:` (R15)."""
 
 
 class Candidate(BaseModel):
@@ -68,10 +70,11 @@ class Candidate(BaseModel):
             reasons.append(why)
         if pr is not None and pr.planning:
             decision = "review"
-            reasons.append("planning PR; set pr: to the delivering one")
+            reasons.append(f"planning PR; set the delivering one as pr: {MANIFEST_HINT}")
         if ambiguous:
+            numbers = ", ".join(f"#{n}" for n in ambiguous)
             decision = "review"
-            reasons.append(f"several merged PRs: {', '.join(f'#{n}' for n in ambiguous)}")
+            reasons.append(f"several merged PRs: {numbers}; pick one as pr: {MANIFEST_HINT}")
         return PlanEntry(
             key=self.key,
             title=self.title,
@@ -114,7 +117,7 @@ def gate_for(
     if manifest is not None:
         if manifest.gate is not None:
             return manifest.gate
-        return {"op": "devops", "walk": "tester", "closed-issue": "tester"}.get(manifest.kind)
+        return {"op": "devops", "walk": "tester", "closed-issue": "tester"}.get(manifest.kind or "")
     if kind == "row":
         return "tester"
     if kind == "plan":
@@ -319,26 +322,28 @@ def collect_candidates(
     fold_source = {o.key: o.source for o in report.owed}
 
     def _taken_back(key: str) -> bool:
-        """A manifest may take a key back only when the fold holds it through fr's own tracker
-        alone (source `issue`); a row, plan or journal that also has a tracker keeps it (p2-r3)."""
-        return key in man and fold_source.get(key) == "issue" and key in owned_trackers
+        """A manifest NEW item may take a key back only when the fold holds it through fr's own
+        tracker alone (source `issue`); a row, plan or journal that also has a tracker keeps it
+        (p2-r3)."""
+        item = man.get(key)
+        held_by_tracker = fold_source.get(key) == "issue" and key in owned_trackers
+        return item is not None and item.kind is not None and held_by_tracker
 
-    for key in man:
-        if key in fold_source and not _taken_back(key):
-            raise BackfillError(
-                f"manifest entry {key}: `fr debt` already holds this key; drop it from the manifest"
-            )
+    for key, entry in man.items():
+        _check_manifest_item(entry, held=key in fold_source, taken_back=_taken_back(key))
 
     # a key held only by fr's own tracker (filed by an earlier `--yes`) is the manifest's again:
     # the manifest supplies its gate and PR, so a second `--yes` over it stays idempotent (R7)
     sources: list[tuple[str, str, str, str, str]] = [
         (o.key, o.source, o.title, o.how, o.ref) for o in report.owed if not _taken_back(o.key)
     ]
-    sources += [(m.key, "manifest", m.title, "", "") for m in man.values()]
+    sources += [(m.key, "manifest", m.title, "", "") for m in man.values() if m.kind is not None]
     sources = [src for src in sources if _key_usable(src[0], notes)]
     out: list[Candidate] = []
     for key, source, title, how, iref in sources:
         item = man.get(key)
+        # the manifest item when it is a new one; an override only sets pr, gate and walk_only
+        new = item if item is not None and item.kind is not None else None
         kind, name, n = split_key(key)
         fields: dict[str, Any] = {
             "key": key, "source": source, "title": title, "how": how, "ref": iref,
@@ -382,9 +387,11 @@ def collect_candidates(
             fields["plans"] = spec_plans(repo_root, fields["spec_rel"])
         if item is not None and item.walk_only is not None:
             walk_only = item.walk_only
-        elif item is not None:
-            walk_only = item.kind in ("walk", "closed-issue")
-        gate = gate_for(key, manifest=item, manual_phase=manual, spec_run_gate=run_gate)
+        elif new is not None:
+            walk_only = new.kind in ("walk", "closed-issue")
+        gate = gate_for(key, manifest=new, manual_phase=manual, spec_run_gate=run_gate)
+        if new is None and item is not None and item.gate is not None:
+            gate = item.gate
         if gate is None and not why:
             why.append("no gate: set gate: in the plan file")
         if why:
@@ -398,6 +405,37 @@ def collect_candidates(
         out, issues, by_ref, man, adopted, ours, notes, frozenset(owned_trackers.values())
     )
     return sorted(out, key=lambda c: c.key), notes
+
+
+def _check_manifest_item(item: ManifestItem, *, held: bool, taken_back: bool) -> None:
+    """Refuse a manifest entry that is neither a valid new item nor a valid override (gh#1369):
+    a held key takes only an override, an unheld one only a new item."""
+    key = item.key
+    if item.kind is None:
+        if not held:
+            raise BackfillError(
+                f"manifest entry {key}: `fr debt` does not hold this key, so it is a new item "
+                "and needs `kind:` and `title:`"
+            )
+        stray = [f for f in ("title", "issue") if getattr(item, f) not in (None, "")]
+        if stray:
+            raise BackfillError(
+                f"manifest entry {key}: an override of a key `fr debt` holds sets only `pr:`, "
+                f"`gate:` and `walk_only:`, not {', '.join(f'`{f}:`' for f in stray)}"
+            )
+        if item.pr is None and item.gate is None and item.walk_only is None:
+            raise BackfillError(
+                f"manifest entry {key}: an override of a key `fr debt` holds sets `pr:`, "
+                "`gate:` or `walk_only:`"
+            )
+        return
+    if not item.title:
+        raise BackfillError(f"manifest entry {key}: a new item needs `title:`")
+    if held and not taken_back:
+        raise BackfillError(
+            f"manifest entry {key}: `fr debt` already holds this key; to set its delivering PR "
+            "or gate, drop `kind:` (and `title:`/`issue:`) and keep only `pr:`/`gate:`"
+        )
 
 
 def _settle_trackers(
@@ -423,7 +461,7 @@ def _settle_trackers(
             suggested.setdefault(t, c.key)
     out = []
     for c in withs:
-        if split_key(c.key)[0] == "issue" and c.key not in man:
+        if split_key(c.key)[0] == "issue" and c.source != "manifest":
             ref = c.key.removeprefix("issue:")
             body = str(by_ref.get(ref, {}).get("body") or "")
             marked = fr_gate_marker(body) or fr_passed_marker(body)  # held or tracked only

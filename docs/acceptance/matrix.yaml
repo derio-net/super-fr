@@ -10429,8 +10429,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_gatebackfill_delivery.py#test_a_squash_subject_names_the_pr_that_added_the_plan
+      - super-fr:tests/unit/test_gate_cmd.py#test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds
     status: ci
-    notes: evidence chain unit-tested over fixture histories
+    notes: 'evidence chain unit-tested over fixture histories; gh#1369: a manifest override
+      settles an ambiguous PR end to end'
     verify: none
   - id: gate-backfill-tracker-trust
     capability: gate-backfill

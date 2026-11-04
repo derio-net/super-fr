@@ -325,3 +325,42 @@ def test_p2_r3_a_manifest_takes_back_a_key_only_fr_s_tracker_holds(tmp_path: Pat
     cands, _ = _collect(repo, forge, manifest=manifest)
 
     assert cands["row:gap"].source == "manifest" and cands["row:gap"].gate == "devops"
+
+
+def test_gh1369_a_manifest_override_sets_pr_and_gate_of_a_key_fr_debt_holds(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed")])
+    _write_plan(repo, "2026-10-20-ops", [("manual", False)])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    manifest = parse_manifest(
+        "schema: 1\nitems:\n"
+        "  - {key: 'row:r1', pr: 41}\n"
+        "  - {key: 'plan:2026-10-20-ops#p1', pr: 42, gate: tester, walk_only: true}\n"
+    )
+
+    cands, _ = _collect(repo, manifest=manifest)
+
+    r1 = cands["row:r1"]  # keeps its own source, title and shape-derived gate
+    assert (r1.source, r1.manifest_pr, r1.gate, r1.walk_only) == ("row", 41, "tester", True)
+    p1 = cands["plan:2026-10-20-ops#p1"]
+    assert (p1.source, p1.manifest_pr, p1.gate, p1.walk_only) == ("plan", 42, "tester", True)
+
+
+def test_gh1369_an_override_needs_pr_or_gate_and_a_new_key_needs_kind_and_title(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+
+    empty = parse_manifest("schema: 1\nitems:\n  - {key: 'row:r1'}\n")
+    with pytest.raises(BackfillError, match="row:r1.*pr:"):
+        _collect(repo, manifest=empty)
+    stray = parse_manifest("schema: 1\nitems:\n  - {key: 'row:r1', pr: 4, issue: 9}\n")
+    with pytest.raises(BackfillError, match="row:r1.*issue"):
+        _collect(repo, manifest=stray)
+    new = parse_manifest("schema: 1\nitems:\n  - {key: 'row:gap', pr: 4}\n")
+    with pytest.raises(BackfillError, match="row:gap.*kind"):
+        _collect(repo, manifest=new)
