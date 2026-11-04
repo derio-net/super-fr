@@ -15,3 +15,8 @@ gh#1371, observed live on fr 6.1.0 with the OpenCode 2.x plugin. A session in ch
 ### fix-1 · finding [fixed] · Idle guard resolves fr's cwd per session
 
 Fixed in 6539c05e2. `src/idle.ts`: `isTopLevel` became `topLevelInfo`, which returns the `Session.Info` it already fetched, and `sessionDirectory(info, options.directory)` picks `location.directory`, falling back to the plugin directory when it is missing, null, empty or not a string. Pinned by `test/idle.test.ts` "asks fr in the SESSION's directory": both session-directory cases were red before the fix and green after; the five fallback cases pin the fail-open path. Full plugin suite 254 pass, tsc clean.
+
+<!-- fr:journal kind=finding scope=debug id=r1-1 created=2026-11-04T13:49:39+00:00 state=fixed review_scope=in -->
+### r1-1 · finding [fixed] (reviewer: in scope) · Real-process wiring test never exercised a session location
+
+Raised by the independent reviewer. Every test under "wired into the plugin, running a real process" used a session info with no location, so the session-directory path was covered only through the runFr seam. Fixed in e16dd4864: a test loads the plugin at dir, gives the session a location in a second checkout, and asserts the stub fr logs that checkout as its cwd. Red against the pre-fix idle.ts, green after.
