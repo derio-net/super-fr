@@ -47,6 +47,14 @@
 // `ctx.session.get({sessionID})` (the info itself, throwing on failure) and the
 // nudge `ctx.session.prompt`.
 //
+// WHERE fr is asked is the SESSION's directory, the info's `location.directory`
+// (required in `@opencode/schema` 2.1.x), not the plugin's (gh#1371). A session
+// moved to another checkout, or one of several under `opencode serve`, lives
+// elsewhere: asking in the plugin's directory nudged a run from the wrong repo
+// and silently missed the idle run in the session's own. The same lookup that
+// rules out child sessions supplies it, so no new failure mode appears; an info
+// with no usable directory falls back to the plugin's, as before.
+//
 // `session.execution.succeeded` is DURABLE, so a reconnecting stream can replay
 // it. The once-per-position memory below is what makes a replay free, and the
 // same memory is why accepting an event that fires more often than "the session
@@ -75,6 +83,8 @@ export const SHARED_ACTED_ON = Symbol.for("super-fr.fr-opencode-plugin.idle.acte
 export type IdleHandlerOptions = {
   /** `ctx.session` — `get({sessionID})` and `prompt({sessionID, text})`. */
   session: unknown;
+  /** The plugin's location: where fr is asked only when the session's own
+   * `location.directory` is unknown. */
   directory: string;
   /** Test seam. Default: `fr run check --idle --format json` in `cwd`. */
   runFr?: (cwd: string) => Promise<FrAnswer>;
@@ -137,12 +147,21 @@ function sessionApi(session: unknown): SessionApi | undefined {
   return api as SessionApi;
 }
 
-/** True only when the lookup SUCCEEDED and named no parent. */
-async function isTopLevel(api: SessionApi, id: string): Promise<boolean> {
-  const info = (await api.get({ sessionID: id })) as { id?: unknown; parentID?: unknown } | null | undefined;
+type SessionInfo = { id?: unknown; parentID?: unknown; location?: { directory?: unknown } | null };
+
+/** The session's info only when the lookup SUCCEEDED and named no parent. */
+async function topLevelInfo(api: SessionApi, id: string): Promise<SessionInfo | undefined> {
+  const info = (await api.get({ sessionID: id })) as SessionInfo | null | undefined;
   // A successful lookup names the session it found; anything else is unknown.
-  if (!info || typeof info !== "object" || info.id !== id) return false;
-  return info.parentID === undefined || info.parentID === null;
+  if (!info || typeof info !== "object" || info.id !== id) return undefined;
+  return info.parentID === undefined || info.parentID === null ? info : undefined;
+}
+
+/** Where fr is asked: the session's own `location.directory` (gh#1371 — a
+ * session can live in another checkout than the plugin), else `fallback`. */
+function sessionDirectory(info: SessionInfo, fallback: string): string {
+  const directory = info.location?.directory;
+  return typeof directory === "string" && directory !== "" ? directory : fallback;
 }
 
 export function createIdleHandler(options: IdleHandlerOptions) {
@@ -157,9 +176,10 @@ export function createIdleHandler(options: IdleHandlerOptions) {
 
       const api = sessionApi(options.session);
       if (!api) return;
-      if (!(await isTopLevel(api, sessionID))) return;
+      const info = await topLevelInfo(api, sessionID);
+      if (!info) return;
 
-      const verdict = parseVerdict(await runFr(options.directory));
+      const verdict = parseVerdict(await runFr(sessionDirectory(info, options.directory)));
       if (!verdict) return;
 
       if (actedOn.get(sessionID) === verdict.position) return;
