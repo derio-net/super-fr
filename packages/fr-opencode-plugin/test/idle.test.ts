@@ -18,7 +18,7 @@
 // handler with a fake client. That needs a live run (the gh#494 standard), and
 // until one exists the parity row for this surface stays `partial`.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -39,17 +39,27 @@ const IDLE = {
 type Sent = { sessionID: string; text: string };
 
 function fakeClient(
-  opts: { parentID?: string; getThrows?: boolean; promptThrows?: boolean; getReturns?: unknown } = {}
+  opts: {
+    parentID?: string;
+    getThrows?: boolean;
+    promptThrows?: boolean;
+    getReturns?: unknown;
+    location?: unknown;
+  } = {}
 ) {
   const sent: Sent[] = [];
   const attempted: string[] = [];
   // OpenCode 2's `ctx.session`: `get({sessionID})` resolves to the info itself
-  // (throwing on a failed lookup); `prompt({sessionID, text})` sends.
+  // (throwing on a failed lookup); `prompt({sessionID, text})` sends. The info
+  // carries `location: {directory}` in 2.1.x — given here only when a test
+  // asks, so a session without one exercises the plugin-directory fallback.
   const client = {
     get: async (req: { sessionID: string }) => {
       if (opts.getThrows) throw new Error("boom");
       if ("getReturns" in opts) return opts.getReturns;
-      return { id: req.sessionID, parentID: opts.parentID };
+      const info: Record<string, unknown> = { id: req.sessionID, parentID: opts.parentID };
+      if ("location" in opts) info.location = opts.location;
+      return info;
     },
     prompt: async (req: Sent) => {
       attempted.push(req.sessionID);
@@ -85,7 +95,7 @@ const ok = (body: unknown, code: number | null = 3): FrAnswer => ({
 });
 
 describe("idle guard (OpenCode): continues an idle run", () => {
-  test("on session.idle it asks fr in the session's directory and sends the next command back in", async () => {
+  test("on session.idle it asks fr and sends the next command back in", async () => {
     const { client, sent } = fakeClient();
     const { runFr, calls } = answers(ok(IDLE));
     const handler = createIdleHandler({ session: client, directory: "/work/tree", runFr });
@@ -93,9 +103,10 @@ describe("idle guard (OpenCode): continues an idle run", () => {
     await handler(idleEvent());
 
     expect(calls).toEqual(["/work/tree"]);
+    // This session's info carries no location, so fr runs in the handler's
+    // directory (see "asks fr in the SESSION's directory" for the other case).
     expect(sent).toHaveLength(1);
-    // V2's prompt takes the session and the text; the directory is the
-    // plugin's location, so there is no per-call directory to assert.
+    // V2's prompt takes the session and the text, no directory.
     expect(sent[0]!.sessionID).toBe("ses_1");
     expect(typeof sent[0]!.text).toBe("string");
     expect(sent[0]!.text).toContain("fr run advance r1");
@@ -148,6 +159,59 @@ describe("idle guard (OpenCode): continues an idle run", () => {
     expect(calls).toEqual([]);
     expect(sent).toEqual([]);
   });
+});
+
+// gh#1371: the handler's `directory` is the PLUGIN's location. A session moved
+// to another checkout, or one of several under `opencode serve`, lives
+// elsewhere — asking fr in the plugin's directory nudged a run from the wrong
+// repo, and silently missed the idle run in the session's own.
+describe("idle guard (OpenCode): asks fr in the SESSION's directory", () => {
+  test("a session whose location differs from the plugin's runs fr in the session's directory", async () => {
+    const { client, sent } = fakeClient({ location: { directory: "/checkout/b" } });
+    const { runFr, calls } = answers(ok(IDLE));
+    const handler = createIdleHandler({ session: client, directory: "/checkout/a", runFr });
+
+    await handler(succeededEvent());
+
+    expect(calls).toEqual(["/checkout/b"]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toContain("fr run advance r1");
+  });
+
+  test("each session is asked about in its own directory", async () => {
+    const dirs: Record<string, string> = { ses_a: "/checkout/a", ses_b: "/checkout/b" };
+    const client = {
+      get: async (req: { sessionID: string }) => ({ id: req.sessionID, location: { directory: dirs[req.sessionID] } }),
+      prompt: async () => ({}),
+    };
+    const { runFr, calls } = answers(ok(IDLE));
+    const handler = createIdleHandler({ session: client, directory: "/plugin", runFr });
+
+    await handler(succeededEvent("ses_b"));
+    await handler(succeededEvent("ses_a"));
+
+    expect(calls).toEqual(["/checkout/b", "/checkout/a"]);
+  });
+
+  // Fail open: a session the lookup cannot place keeps today's behaviour.
+  for (const [label, location] of [
+    ["no location", undefined],
+    ["a null location", null],
+    ["a location with no directory", {}],
+    ["an empty directory", { directory: "" }],
+    ["a directory that is not a string", { directory: 7 }],
+  ] as const) {
+    test(`a session with ${label} runs fr in the handler's directory`, async () => {
+      const { client, sent } = fakeClient(location === undefined ? {} : { location });
+      const { runFr, calls } = answers(ok(IDLE));
+      const handler = createIdleHandler({ session: client, directory: "/plugin", runFr });
+
+      await handler(succeededEvent());
+
+      expect(calls).toEqual(["/plugin"]);
+      expect(sent).toHaveLength(1);
+    });
+  }
 });
 
 describe("idle guard (OpenCode): silent otherwise", () => {
@@ -383,6 +447,19 @@ describe("idle guard (OpenCode): wired into the plugin, running a real process",
     expect(readFileSync(join(dir, "fr.log"), "utf8")).toBe(`${dir}|run check --idle --format json\n`);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.text).toContain("fr run advance r1");
+  });
+
+  // gh#1371, end to end: the loaded plugin's location is `dir`, the session
+  // lives in another checkout, and the real `fr` process must start there.
+  test("the fr process runs in the session's directory, not the plugin's", async () => {
+    stubFr(`printf '%s\\n' '${JSON.stringify(IDLE)}'\nexit 3`);
+    const checkout = join(dir, "checkout-b");
+    mkdirSync(checkout);
+    const { client, sent } = fakeClient({ location: { directory: checkout } });
+    await plugin(client, [succeededEvent()]);
+
+    expect(readFileSync(join(dir, "fr.log"), "utf8")).toBe(`${checkout}|run check --idle --format json\n`);
+    expect(sent).toHaveLength(1);
   });
 
   test("exit 2 from the process → silent", async () => {
