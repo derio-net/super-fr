@@ -1,0 +1,97 @@
+schema_version: 10
+run: 2026-11-04-feat-repo-feature-settings
+step: brainstorm
+outcome: done
+journal:
+  - kind: decision
+    id: d1-use-cases
+    title: All four use cases drive this — third-party repos, lighter process, different conventions, forge-side quiet
+    body: The operator selected every option, so the settings are a general surface rather than one targeted mode. decider operator.
+  - kind: decision
+    id: d2-trace-home
+    title: Memory kinds (spec, plan, journals, runs) quiet by moving to an operator-owned state repo, never by being off
+    body: Chosen over local cache, an orphan branch in the same remote, and a per-repo choice of backend. Durable, invisible to the third party, and it reuses triage's state-repo machinery. decider operator.
+  - kind: decision
+    id: d3-settings-layers
+    title: Layered settings — committed .fr/settings.yaml, overridden key by key by an operator-side entry keyed by remote
+    body: Chosen over operator-side only and committed only. A committed file is itself a trace in third-party repos, so the operator layer wins. decider operator.
+  - kind: decision
+    id: d4-mode-model
+    title: One mode per kind (repo | elsewhere | off); off is schema-refused for the memory kinds; also covers commit templates, push/PR authorization and squash
+    body: The operator approved the mode model and added commit-message templates (with and without issue), push/PR authorization and squash-before-push. Missing keys take documented defaults, explained in the generated settings.yaml. decider operator.
+  - kind: decision
+    id: d5-history
+    title: git.history is keep | squash-unpushed — no force-push mode
+    body: Evidence is tree-keyed (run/code_tree.py, verification/walk.py), so a squash orphans none of it. Rewriting already-pushed history would break the devops gate's head_oid pin, the review-ok guard and tests ci. decider operator.
+  - kind: decision
+    id: d6-push-pr
+    title: git.push and git.pr are auto | ask; ask is an operator gate on the cursor; ready and merge are never settable
+    body: Chosen over adding pr never and over a single remote switch. Correction recorded after the question - push ask with pr auto is coherent (the PR opens once the push is approved), so the spec does not refuse it. decider operator.
+  - kind: decision
+    id: d7-commit-templates
+    title: Commit templates are briefed to agents, applied to fr's own commits, and checked at fr push
+    body: Chosen over brief-only and over templating fr's own commits only. decider operator.
+  - kind: decision
+    id: d8-pr-body
+    title: forge.pr_body is full | minimal; under minimal the full body is rendered to the run's records and deliver's gate checks that copy
+    body: Chosen over adding none and over full only. decider operator.
+  - kind: decision
+    id: d9-slicing
+    title: One spec, two plans, two PRs — settings core first, then the path resolver and the elsewhere backend
+    body: Plan 1 accepts elsewhere in the schema but refuses it as not yet available. decider operator.
+  - kind: decision
+    id: d10-verification
+    title: Run strategy candidate, plus one post-merge live row gated tester for a real quiet-repo fr-goal run
+    body: decider operator.
+acceptance:
+  - id: repo-settings-layered
+    capability: repo-feature-settings
+    acceptance: A repo's super-fr settings are read from a committed .fr/settings.yaml overridden key by key by an operator-side entry; fr settings init/show/check generate a fully commented defaults file, show each key's source, and refuse unknown keys or values
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R1]
+    status: not-implemented
+    verify: candidate
+  - id: repo-settings-modes-coherence
+    capability: repo-feature-settings
+    acceptance: Each artifact kind takes repo, elsewhere or off; off is refused for spec, plan, journals and runs, and incoherent settings (gates off with ops, home in the committed layer, elsewhere without home, a mode change under a live run) are refused naming the conflict
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R4]
+    status: not-implemented
+    verify: candidate
+  - id: repo-settings-policy-off
+    capability: repo-feature-settings
+    acceptance: With acceptance, test_plan or gates off, fr writes none of that feature, refuses the commands and record sections that would, and every surface reports it as disabled by repo setting rather than none
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R6]
+    status: not-implemented
+    verify: candidate
+  - id: repo-settings-forge-quiet
+    capability: repo-feature-settings
+    acceptance: With forge labels, comments or issues off, fr makes no such forge write anywhere; under pr_body minimal the live PR carries no fr marker or section while deliver still checks the full rendered body
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R9]
+    status: not-implemented
+    verify: candidate
+  - id: repo-settings-push-pr-ask
+    capability: repo-feature-settings
+    acceptance: Under git push or pr ask, fr push and PR creation wait for an operator answer given after the gate opened; marking ready and merging are never settable
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R11]
+    status: not-implemented
+    verify: candidate
+  - id: repo-settings-push-history-templates
+    capability: repo-feature-settings
+    acceptance: fr push squashes only unpushed commits under squash-unpushed, never force-pushes, keeps tree-keyed evidence valid, and refuses commits whose subjects do not match the repo's with-issue or without-issue template
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R13]
+    status: not-implemented
+    verify: candidate
+  - id: repo-settings-elsewhere
+    capability: repo-feature-settings
+    acceptance: An artifact kind set to elsewhere lives only in the operator's state repo, with no file or chore(fr) commit reaching the product repo; the privacy guard refuses a more visible state repo, and the isolation gates still treat the repo as fr-enabled
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R16]
+    status: not-implemented
+    verify: candidate
+  - id: repo-settings-quiet-repo-live
+    capability: repo-feature-settings
+    acceptance: A real fr-goal run in a repo with quiet forge settings, push and PR ask and squash-unpushed leaves no fr label, comment, issue or PR-body section on the forge, and pushes one templated commit per approved push
+    origin: [super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R10]
+    status: not-implemented
+    verify: live
+emitted:
+  spec: docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md
+evidence: {}
