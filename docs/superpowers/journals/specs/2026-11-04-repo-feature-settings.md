@@ -75,3 +75,8 @@ The operator raised that a later feature must change rows owned by earlier featu
 ### d14-derived-reports · decision · Acceptance reports are derived, never committed; CI publishes a per-PR summary/artifact and Pages on the default branch, with a README badge; Pages only where no wider than the repo
 
 The operator asked for discoverability in the README and fr help, and raised private repos: Pages from a private repo is public on GitHub paid plans except Enterprise Cloud's access-controlled Pages. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
+
+<!-- fr:journal kind=decision scope=spec id=d15-placement-moves created=2026-11-05T17:35:12+00:00 -->
+### d15-placement-moves · decision · fr placement move migrates between any placements, whole repo including archive and live runs' shared artifacts; in-flight branches migrate themselves before merging
+
+The operator chose the whole-repo unit and stated that in-flight features landing after a move must migrate first. Row refs become logical so a move never rewrites rows. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
