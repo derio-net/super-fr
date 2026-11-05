@@ -80,3 +80,8 @@ The operator asked for discoverability in the README and fr help, and raised pri
 ### d15-placement-moves · decision · fr placement move migrates between any placements, whole repo including archive and live runs' shared artifacts; in-flight branches migrate themselves before merging
 
 The operator chose the whole-repo unit and stated that in-flight features landing after a move must migrate first. Row refs become logical so a move never rewrites rows. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
+
+<!-- fr:journal kind=decision scope=spec id=d16-three-plans created=2026-11-05T17:35:13+00:00 -->
+### d16-three-plans · decision · Delivery is three plans, three PRs: settings core; acceptance model and derived reports; resolver, quiet, stealth and moves; supersedes d9
+
+Chosen over four plans and matrix-first. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
