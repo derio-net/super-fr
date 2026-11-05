@@ -1,0 +1,81 @@
+schema_version: 2
+run: 2026-11-04-feat-repo-feature-settings
+captures:
+- host: h-7cb5999b
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-05T14:07:38+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 8b56d9b2-ef08-4390-b0b3-f0296e3ac2b9
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 300
+        cache_write: 631364
+        cache_read: 13568099
+        output: 78859
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 109
+      other:
+        usd: null
+        turns: 20
+      paperwork:
+        usd: null
+        turns: 20
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 4
+        cache_write: 74272
+        cache_read: 127793
+        output: 439
+      brainstorm:
+        usd: null
+        turns: 144
+        input: 296
+        cache_write: 557092
+        cache_read: 13440306
+        output: 78420
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 4
+          cache_write: 74272
+          cache_read: 127793
+          output: 439
+        brainstorm:
+          usd: null
+          turns: 35
+          input: 78
+          cache_write: 310782
+          cache_read: 4560809
+          output: 37131
+      subagent:
+        brainstorm:
+          usd: null
+          turns: 109
+          input: 218
+          cache_write: 246310
+          cache_read: 8879497
+          output: 41289
+    units:
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 109
+          input: 218
+          cache_write: 246310
+          cache_read: 8879497
+          output: 41289
+    briefs:
+      a3da18153f74c0160: 1963
+      a3915ca71a9110e20: 2286
