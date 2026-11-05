@@ -55,3 +55,8 @@ Plan 1 accepts elsewhere in the schema but refuses it as not yet available. deci
 ### d10-verification · decision · Run strategy candidate, plus one post-merge live row gated tester for a real quiet-repo fr-goal run
 
 decider operator.
+
+<!-- fr:journal kind=decision scope=spec id=d11-placements created=2026-11-05T17:34:46+00:00 decided_by=operator -->
+### d11-placements · decision · Three placements replace 'elsewhere': repo, quiet (fr branch in the same remote), stealth (tracking repo, per run); supersedes d2, d3 and d4's elsewhere mode
+
+Raised by the operator: elsewhere in a host-local or separate repo does not travel with the work when it is resumed on another host. Stealth: a tracking repo and branch, fails fast if missing, needs no .fr/settings.yaml, triggered per fr-goal/fr-debugging with mode=stealth, or started from the tracking repo pointing at the local target. Quiet: an fr branch in the same repo, a unique path per feature, updated atomically and append-only. Settings live with the placement; the host-local layer is dropped. decider operator.
