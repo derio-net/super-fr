@@ -60,3 +60,8 @@ decider operator.
 ### d11-placements · decision · Three placements replace 'elsewhere': repo, quiet (fr branch in the same remote), stealth (tracking repo, per run); supersedes d2, d3 and d4's elsewhere mode
 
 Raised by the operator: elsewhere in a host-local or separate repo does not travel with the work when it is resumed on another host. Stealth: a tracking repo and branch, fails fast if missing, needs no .fr/settings.yaml, triggered per fr-goal/fr-debugging with mode=stealth, or started from the tracking repo pointing at the local target. Quiet: an fr branch in the same repo, a unique path per feature, updated atomically and append-only. Settings live with the placement; the host-local layer is dropped. decider operator.
+
+<!-- fr:journal kind=decision scope=spec id=d12-quiet-switch created=2026-11-05T17:35:08+00:00 -->
+### d12-quiet-switch · decision · Quiet is switched on by the fr branch itself carrying a root settings.yaml with placement quiet; nothing on main
+
+Chosen over a committed .fr/settings.yaml on main, and over either. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
