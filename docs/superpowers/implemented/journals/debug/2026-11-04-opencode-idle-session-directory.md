@@ -30,3 +30,8 @@ Raised by the reviewer, confirmed by reading the code: `src/nag.ts:90` (`repoRoo
 ### review-1 · review · Independent code review of the fix
 
 Dispatched a separate read-only reviewer over 6539c05e2. It confirmed the schema match (`Session.Info.location.directory` is required in 2.1.0), that all rules still hold (never throws, clean-verdict-only, once per position, children and failed lookups left alone), and that the tests kill the revert-to-options.directory and drop-the-fallback mutations. Findings: r1-1 (in scope, fixed) and r1-2 (out of scope, follow-up). No other findings.
+
+<!-- fr:journal kind=finding scope=debug id=r1-2-resolved created=2026-11-05T07:44:51+00:00 state=open resolves=r1-2 tracked_by=derio-net/super-fr#1375 -->
+### r1-2-resolved · finding [deferred → derio-net/super-fr#1375] · resolves r1-2: Sibling handlers still assume the plugin directory is the session's
+
+Real, but #1372 did not cause it and edited only createIdleHandler; filed as #1375 so each sibling handler (nag, bind, claim) gets its own plugin-vs-session-scope decision.
