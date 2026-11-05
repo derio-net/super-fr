@@ -65,3 +65,8 @@ Raised by the operator: elsewhere in a host-local or separate repo does not trav
 ### d12-quiet-switch · decision · Quiet is switched on by the fr branch itself carrying a root settings.yaml with placement quiet; nothing on main
 
 Chosen over a committed .fr/settings.yaml on main, and over either. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
+
+<!-- fr:journal kind=decision scope=spec id=d13-matrix-fragments created=2026-11-05T17:35:10+00:00 -->
+### d13-matrix-fragments · decision · The acceptance matrix becomes per-feature fragments plus appended amendments, folded over merged features with per-row base revisions, in every placement
+
+The operator raised that a later feature must change rows owned by earlier features; amendments in the amending feature's own fragment keep append-only. Chosen over quiet/stealth-only and over last-writer amendments. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
