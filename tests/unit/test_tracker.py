@@ -534,3 +534,25 @@ def test_tick_with_no_tracker_configured_never_refuses_on_tracker_state():
     result = tick(plan, gh, runner, required_tracker_states=frozenset({"in_review"}))
 
     assert result.synced == 1
+
+
+@pytest.mark.parametrize(("setting", "to"), [("labels", "in_progress"), ("issues", "done")])
+def test_p3_r2_github_tracker_transition_answers_to_the_repos_forge_policy(
+    setting: str, to: ItemState
+) -> None:
+    """R9: the label lifecycle is a tracker write of `labels` (and `issues` for a close),
+    decided by the repo's `.fr/settings.yaml` read through the tracker's client."""
+    from fr.settings import ForgeQuietError
+    from fr.workflow.shapes import FR_GOAL_PHASE_DISPATCH
+    from fr_dispatch.item_graph import build_items
+
+    plan, repo, n = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (n,))
+    gh.remote_tree[(repo, ".fr/settings.yaml")] = f"forge:\n  {setting}: 'off'\n"
+    item = build_items(FR_GOAL_PHASE_DISPATCH, plan, repo=repo)[0]
+    before = gh.attempted_mutations
+
+    with pytest.raises(ForgeQuietError, match=f"forge.{setting}: off"):
+        _github_tracker(gh).transition(item, to)
+    assert gh.attempted_mutations == before
