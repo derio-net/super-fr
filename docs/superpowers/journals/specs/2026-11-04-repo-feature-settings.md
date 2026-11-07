@@ -482,3 +482,8 @@ Security review of load.py: deleting tracking refs locally would otherwise hand 
 ### forge-gate-ledger-rule · decision · The PR gate ledger answers to forge.labels/comments only; remote repos' policy is read via the forge; reads ungated
 
 Phase 3 review p3-r1/p3-r2/p3-r7. Before this, fr gate pass wrote gate labels under tracking: none, while deliver's sync_exit_labels skipped them: one ledger under two rules. The DevOps stage and release gating need the ledger under tracking: none, so the ledger is carved out of tracking: none and both paths follow forge.labels/forge.comments. With no checkout of the target repo, the policy is read from the forge contents API at the default branch: absent means defaults, a failed read refuses the write. That replaces the fail-open defaults in _Driver.forge_off and gate_cmd._forge_policy. Reads (fr debt's forge reads) are never gated. R9 amended.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-23-resolved-2 created=2026-11-07T16:32:07+00:00 state=open resolves=sr1-23 tracked_by=https://github.com/derio-net/super-fr/issues/1378 -->
+### sr1-23-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1378] · resolves sr1-23: DevOps gate already force-pushes with a lease
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1378.
