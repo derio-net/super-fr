@@ -93,6 +93,9 @@ def _repo(tmp_path: Path) -> Path:
     (tmp_path / "docs/acceptance/matrix.yaml").write_text(
         "schema_version: 5\norg: acme\nrepo: widgets\nrows: []\n"
     )
+    from tests.unit.settings_repo import seed_origin_default
+
+    seed_origin_default(tmp_path)
     return tmp_path
 
 
@@ -243,6 +246,9 @@ def test_an_owed_entry_resolves_only_to_fixed(
 def git_repo(tmp_path: Path) -> Path:
     r = _init(tmp_path / "r")
     _add_remote(r, tmp_path / "o.git")
+    from tests.unit.settings_repo import seed_origin_default
+
+    seed_origin_default(r)
     return r
 
 

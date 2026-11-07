@@ -18,8 +18,27 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 [ -n "$cwd" ] && [ -d "$cwd" ] || exit 0
 
 repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
-[ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
 command -v fr >/dev/null 2>&1 || exit 0
+
+# Repo setting `artifacts.acceptance: off` (spec 2026-11-04-repo-feature-settings R6): say
+# so in one line instead of the debt nag. Fail-open like every other precondition.
+if settings=$(cd "$repo_root" && fr settings show --json 2>/dev/null); then
+  if [ "$(printf '%s' "$settings" | jq -r '.["artifacts.acceptance"].value // empty' 2>/dev/null)" = "off" ]; then
+    message="acceptance disabled by repo setting"
+    event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty')
+    if [ "$event" = "pre_llm_call" ]; then
+      first_turn=$(printf '%s' "$input" | jq -r '.extra.is_first_turn // false')
+      [ "$first_turn" = "true" ] || exit 0
+      jq -n --arg context "$message" '{context: $context}'
+    elif [ "$event" = "on_session_start" ]; then
+      jq -n --arg context "$message" '{context: $context}'
+    else
+      printf '%s\n' "$message"
+    fi
+    exit 0
+  fi
+fi
+[ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
 
 # Capture stderr separately: `fr acceptance status` is exempt from the
 # artifact-migration gate, but `fr` still refuses when it cannot establish the

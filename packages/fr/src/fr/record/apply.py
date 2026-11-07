@@ -789,6 +789,10 @@ def _acceptance_writes(
 ) -> tuple[dict[str, int], list[str]]:
     if not record.acceptance:
         return {}, []
+    from fr.settings import disabled, disabled_because
+
+    if disabled(repo_root, "acceptance"):
+        raise RecordRefusedError(disabled_because("acceptance", "a record's `acceptance:` section"))
     from typing import get_args
 
     from fr.acceptance.anchors import line_anchor_error

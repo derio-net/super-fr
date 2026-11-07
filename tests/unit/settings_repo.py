@@ -47,3 +47,14 @@ def land_on_main(repo: Path, text: str) -> None:
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "settings")
     git(repo, "push", "-q", "origin", "main")
+
+
+def seed_origin_default(root: Path, branch: str = "main") -> None:
+    """Give a repo whose `origin` is unreachable a resolvable default ref (the loader refuses
+    a remote whose default it cannot name). Commits an empty seed when HEAD has none."""
+    try:
+        git(root, "rev-parse", "-q", "--verify", "HEAD")
+    except subprocess.CalledProcessError:
+        git(root, "commit", "-q", "--allow-empty", "-m", "seed")
+    git(root, "update-ref", f"refs/remotes/origin/{branch}", "HEAD")
+    git(root, "symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{branch}")

@@ -344,6 +344,10 @@ def acceptance_from_matrix(matrix: Matrix) -> AcceptanceDebt:
 
 def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, SourceStatus]:
     """The Acceptance section; an unreadable matrix is unavailable, never zero."""
+    from fr.settings import DISABLED, disabled
+
+    if disabled(repo_root, "acceptance"):
+        return AcceptanceDebt(available=False), None, SourceStatus(state="read", why=DISABLED)
     path = repo_root / MATRIX_REL
     try:
         matrix = load_matrix(path)

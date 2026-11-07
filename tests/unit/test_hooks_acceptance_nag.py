@@ -219,3 +219,13 @@ def test_a_stale_refusal_names_the_workspace_way_to_carry_it(tmp_path: Path) -> 
     assert "fr-isolation workspace" in done.stdout
     assert "fr isolation up --branch" in done.stdout
     assert "fr migrate artifacts --yes" in done.stdout
+
+
+def test_nag_says_acceptance_is_disabled_when_the_repo_setting_is_off(tmp_path: Path) -> None:
+    from tests.unit.settings_repo import land_on_main, make_repo
+
+    root = make_repo(tmp_path)
+    land_on_main(root, "artifacts:\n  acceptance: off\n")
+    result = run_hook(root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "acceptance disabled by repo setting"

@@ -653,6 +653,11 @@ def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
     """Every operator-driven pre-merge row citing the run's spec with its walk
     command, then the Ready-checklist line the operator ticks after the walk —
     or `None.` (spec §D, R12). `deliver` does not wait for the walk."""
+    from fr.settings import disabled, disabled_because
+
+    if disabled(repo_root, "acceptance"):
+        return disabled_because("acceptance", "no acceptance rows") + "."
+
     from fr.acceptance.model import AcceptanceError
     from fr.commands.acceptance_cmd import MATRIX_REL
     from fr.requirements import load_spec_matrix, run_spec
@@ -717,6 +722,11 @@ def holds_open_for_run(
 def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     """Every row citing the run's spec whose effective strategy is post-merge
     (spec 2026-09-28 §F, 2026-10-06 §B), or `None.`."""
+    from fr.settings import disabled, disabled_because
+
+    if disabled(repo_root, "acceptance"):
+        return disabled_because("acceptance", "no acceptance rows") + "."
+
     from fr.acceptance.model import AcceptanceError
     from fr.commands.acceptance_cmd import MATRIX_REL
     from fr.requirements import load_spec_matrix, run_spec
