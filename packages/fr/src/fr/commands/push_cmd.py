@@ -87,8 +87,12 @@ def push_still_current(repo_root: Path, git_dir: Path, branch: str, head: str) -
         return True
     if run_git(repo_root, ["merge-base", "--is-ancestor", request.head, head]).returncode != 0:
         return False
-    changed = run_git(repo_root, ["diff", "--name-only", request.head, head]).stdout.split()
-    return all(p.startswith(JOURNALS_PREFIX) for p in changed)
+    # `--no-renames`: a rename-following diff names only a moved file's destination,
+    # so code moved into the journals tree would keep a stale approval (p4-r6).
+    diff = run_git(repo_root, ["diff", "--name-only", "--no-renames", request.head, head])
+    if diff.returncode != 0:  # a diff fr cannot read keeps nothing approved
+        return False
+    return all(p.startswith(JOURNALS_PREFIX) for p in diff.stdout.splitlines())
 
 
 def refuse_closed_pr(repo_root: Path) -> None:

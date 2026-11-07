@@ -581,3 +581,22 @@ def test_a_migration_commit_written_before_the_trailer_is_still_recognised(
         {},
     )
     assert not is_migration(settings, bookkeeping)
+
+
+def test_moving_code_into_the_journals_tree_makes_the_request_stale(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p4-r6: a rename shows only its destination to a rename-following diff,
+    so code moved under docs/superpowers/journals/ kept a stale approval valid."""
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True)
+    rid = _request_id(_push(repo).output)
+    _approve(repo, rid)
+    git(repo, "mv", "a", "docs/superpowers/journals/specs/a.md")
+    git(repo, "commit", "-qm", "feat(x): move a")
+
+    result = _push(repo)
+
+    assert result.exit_code == 2, result.output
+    assert _request_id(result.output) != rid
+    assert not [c for c in argv if c[0] == "push"]
