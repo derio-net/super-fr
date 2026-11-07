@@ -475,3 +475,8 @@ ad7330976: decision p4-approval-in-runs-own-journal; the debugging push and PR p
 ### p4-r6-resolved · finding [fixed] · resolves p4-r6: Staleness diff followed renames (phase 4)
 
 84918f125: --no-renames, and a failing diff counts as stale.
+
+<!-- fr:journal kind=finding scope=plan id=p4-deliver-r1 created=2026-11-07T16:23:43+00:00 phase=4 state=open review_scope=in -->
+### p4-deliver-r1 · finding [open] (reviewer: in scope) · Default commit template refuses scope-less conventional subjects at fr push (phase 4)
+
+Found dogfooding fr push at deliver: under the DEFAULT without_issue template '{type}({scope}): {summary}', fr push refused 'test: follow the agents kind to 4 …'. 62 of origin/main's last 300 subjects have no scope (fr's own 'chore: close out …' among them), so the default would refuse ordinary history in every consumer repo, which is not today's behaviour. Fix: a scope is optional when matching (Conventional Commits), and a composed subject with no scope renders without the parentheses; R14 amended.
