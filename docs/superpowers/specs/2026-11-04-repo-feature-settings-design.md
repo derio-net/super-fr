@@ -155,11 +155,13 @@ order:
    these resolves, fr refuses with the fix (`git fetch`, `git remote set-head
    -a`). A local branch is never read here, because it may carry unpushed edits
    to the remote's policy.
-2. **No remote, or a remote with no tracking refs yet** (added but never fetched
-   or pushed) reads the local `refs/heads/<init.defaultBranch | main | master>`.
-   With no remote policy to override, this bootstrap state works offline. If no
-   such branch exists, there are no commits to hold a policy, so fr uses the
-   defaults and prints a note.
+2. **No remote at all** reads the local `refs/heads/<init.defaultBranch | main |
+   master>`. If no such branch exists, there are no commits to hold a policy, so
+   fr uses the defaults and prints a note.
+3. **A remote with no tracking refs yet** (added but never fetched or pushed)
+   uses the built-in defaults and prints a note naming that state, so a fresh
+   repo works offline. It never reads a local branch: deleting tracking refs
+   must not hand the policy to a branch that `init.defaultBranch` picks.
 
 A file that exists at the resolved commit but cannot be read refuses. It is
 never read as absent.
