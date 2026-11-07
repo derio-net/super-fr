@@ -1165,11 +1165,12 @@ than quietly falling back to the defaults.
 - **Asking before a push or a pull request.** The skills push with `fr push` and
   open the draft with `fr pr create`, never with `git push` or the forge's own
   command. Under `git.push: ask` or `git.pr: ask` each of them stops once, prints a
-  request, and waits for you: the agent asks you, naming the request in its
-  question, records your answer as a decision in the run's own journal (the spec's,
-  or a debugging session's debug journal), and fr checks the session's transcript
-  for that question and a yes before it writes anything. Any other answer is a no.
-  Where it cannot read the transcript, or your answer in it, it refuses rather than
+  request, and waits for you: the agent asks you a question naming the request and
+  offering the option `Approve <request-id>`, records your answer as a decision in
+  the run's own journal (the spec's, or a debugging session's debug journal), and
+  fr checks the session's transcript for that exact answer to that question before
+  it writes anything. Any other answer is a no. Where it cannot read the
+  transcript, or pair your answer with its question, it refuses rather than
   trusting the claim. Marking the pull request ready and merging it stay yours
   either way.
 - **Squashing what was never pushed.** Under `git.history: squash-unpushed`, `fr

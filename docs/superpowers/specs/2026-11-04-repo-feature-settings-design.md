@@ -283,11 +283,13 @@ operator answer given after its request was printed.
   run's own journal: the spec journal of a spec-driven run, the debug journal of
   an fr-debugging session, which has no spec.
 - The verified answer is an answered question, asked after the request, whose
-  text names the request's id, and whose answer starts with an approving word
-  (yes, y, approve(d), go ahead, ok/okay, proceed, push it, open it, lgtm,
-  sure). Any other answer is refused, naming it.
-- Where fr cannot read the transcript, or cannot read the answer's text, the
-  request is refused, naming the harness. The `--no-questions` bypass does not
+  text names the request's id. The request names the option to offer,
+  `Approve <request-id>`, and the answer to that question, read as a
+  (question, answer) pair, must equal it exactly after trimming whitespace.
+  Answers to other questions are ignored; any other answer is refused, naming
+  it.
+- Where fr cannot read the transcript, or cannot pair the answers with their
+  questions, the request is refused, naming the harness. The `--no-questions` bypass does not
   apply.
 
 Marking a PR ready and merging it are not settable.
