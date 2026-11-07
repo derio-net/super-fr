@@ -284,6 +284,10 @@ def test_debt_report(installed: Path, tmp_path: Path) -> None:
     _scenario("debt-report", installed, tmp_path)
 
 
+def test_repo_settings_file(installed: Path, tmp_path: Path) -> None:
+    _scenario("repo-settings-file", installed, tmp_path)
+
+
 def test_gate_backfill_dry_run(installed: Path, tmp_path: Path) -> None:
     _scenario("gate-backfill-dry-run", installed, tmp_path)
 
