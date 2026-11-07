@@ -10763,10 +10763,13 @@ rows:
       marker or section while the full body is kept for the operator
     origin:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: scenario path declared at planning (plan 2026-11-07-repo-settings-core);
-      the phase that builds the row writes it
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_quiet_pr_body.py#test_minimal_a_plain_live_body_delivers_and_keeps_the_render_durable
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_forge_quiet
+    status: ci
+    notes: forge quiet built; scenario in CI
     verify: candidate
     scenario: tests/scenarios/repo-settings-forge-quiet.sh
   - id: repo-settings-git-policy
