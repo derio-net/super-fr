@@ -487,3 +487,16 @@ Phase 3 review p3-r1/p3-r2/p3-r7. Before this, fr gate pass wrote gate labels un
 ### sr1-23-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1378] · resolves sr1-23: DevOps gate already force-pushes with a lease
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1378.
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-7 created=2026-11-07T20:11:49+00:00 -->
+### exit-change-7 · decision · exit change: row acceptance-fragments-amendments -> strategy candidate
+
+restore the spec-review baseline so the operator's approved lowering is recorded as its own change
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: agent
+lowered: []
+```
