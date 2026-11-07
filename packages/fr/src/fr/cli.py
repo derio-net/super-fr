@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import click
 import typer
 from typer.core import TyperGroup
 
@@ -65,7 +64,7 @@ from fr.commands.workflow_cmd import workflow_app
 class _FrGroup(TyperGroup):
     """The root group: maps a settings refusal from any subcommand to a clean exit 2."""
 
-    def invoke(self, ctx: click.Context) -> Any:
+    def invoke(self, ctx: Any) -> Any:  # a click Context; fr never imports click
         from fr.settings import SettingsError
 
         try:
