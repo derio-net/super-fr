@@ -90,3 +90,282 @@ Chosen over four plans and matrix-first. Recorded by the agent from the operator
 ### d17-confirm-round-2 · decision · Operator confirms d12–d16 and the eleven redesigned acceptance rows
 
 Confirmed in one answered question after the revised spec was presented. decider operator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-1 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-1 · finding [open] (reviewer: in scope) · R11 ask gate reuses a predicate that cannot observe answers on most harnesses
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-2 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-2 · finding [open] (reviewer: in scope) · git.pr ask has no fr-owned seam: agents open the PR
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-3 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-3 · finding [open] (reviewer: in scope) · pr_body minimal checks fr's render against itself and the render is deleted
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-4 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-4 · finding [open] (reviewer: in scope) · Repo settings revision unspecified: a branch could turn off its own controls
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-5 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-5 · finding [open] (reviewer: in scope) · Quiet switch: network dependence and fail-open on deleted branch, old fr, plan-1 loaders
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-6 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-6 · finding [open] (reviewer: in scope) · fr branch orphan-ness, contention, solo pushes and append-only underspecified
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-7 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-7 · finding [open] (reviewer: in scope) · Stealth: commands in the target workspace cannot know the run is stealth; CAS push only warns
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-8 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-8 · finding [open] (reviewer: in scope) · Stealth forge-write contradiction and settings precedence undefined
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-9 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-9 · finding [open] (reviewer: in scope) · Stale-base amendments can land; fold ordering and quiet merged-status are wrong
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-10 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-10 · finding [open] (reviewer: in scope) · Fragment migration does not fit the single-file matrix kind; record kind also changes
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-11 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-11 · finding [open] (reviewer: in scope) · Branch self-migration cannot ride the CLI-entry trigger
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-12 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-12 · finding [open] (reviewer: in scope) · squash-unpushed undefined on first push; breaks migration own-commit and merges
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-13 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-13 · finding [open] (reviewer: in scope) · fr push does not own every push fr makes
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-14 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-14 · finding [open] (reviewer: in scope) · Pages visibility check has no reader, is scaffold-time only, ignores GitLab/Gitea
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-15 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-15 · finding [open] (reviewer: in scope) · Derived-report CI/Pages/badge not scoped to repo placement; scaffolded CI files issues
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-16 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-16 · finding [open] (reviewer: in scope) · acceptance off with row gates and walks incoherent
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-17 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-17 · finding [open] (reviewer: in scope) · R7/R8 refusals sit in plan self-review, after spec-review
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-18 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-18 · finding [open] (reviewer: in scope) · Plan split: R18 needs plan-3 resolver; quiet/stealth parts in plan 1
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-19 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-19 · finding [open] (reviewer: in scope) · OpenCode plugin and Hermes hook detection omitted
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-20 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-20 · finding [open] (reviewer: in scope) · Quiet/stealth artifacts never reach origin/HEAD: dispatch reachability always refuses
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-21 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-21 · finding [open] (reviewer: in scope) · tracking none checks miscounted
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-22 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-22 · finding [open] (reviewer: in scope) · settings exemption justified falsely; paths command missing from R3
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-24 created=2026-11-07T07:18:36+00:00 state=open review_scope=in -->
+### sr1-24 · finding [open] (reviewer: in scope) · §3.D names fr/acceptance/ci.py as holding CI templates
+
+Raised by the independent fr-spec-reviewer; verified against the code by the orchestrator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-23 created=2026-11-07T07:18:36+00:00 state=open review_scope=out -->
+### sr1-23 · finding [open] (reviewer: out of scope) · DevOps gate already force-pushes with a lease
+
+Raised by the independent fr-spec-reviewer.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-07T07:18:36+00:00 -->
+### spec-review-1 · review · Independent spec review: 24 findings, 23 in scope fixed, 1 out of scope
+
+Dispatched fr-spec-reviewer (read-only, claude-opus-5-5) against decisions d1-d17, the cited code and the spec itself. Load-bearing claims re-verified by the orchestrator (tracking-none sites, operator_answered_since None, pr-body unlink, marker.ts plans test, reachability on origin/HEAD).
+
+<!-- fr:journal kind=finding scope=spec id=sr1-1-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-1 -->
+### sr1-1-resolved · finding [fixed] · resolves sr1-1: R11 ask gate reuses a predicate that cannot observe answers on most harnesses
+
+Fixed in the spec: R11: approval is a verified operator journal decision; an unobservable transcript refuses; --no-questions does not apply.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-2-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-2 -->
+### sr1-2-resolved · finding [fixed] · resolves sr1-2: git.pr ask has no fr-owned seam: agents open the PR
+
+Fixed in the spec: R12 adds fr pr create; deliver refuses a PR it did not open under pr: ask.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-3-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-3 -->
+### sr1-3-resolved · finding [fixed] · resolves sr1-3: pr_body minimal checks fr's render against itself and the render is deleted
+
+Fixed in the spec: R10: full body kept durable in the placement, deliver prints it as what the operator reviews; closing-keyword and marker checks stay on the live body.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-4-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-4 -->
+### sr1-4-resolved · finding [fixed] · resolves sr1-4: Repo settings revision unspecified: a branch could turn off its own controls
+
+Fixed in the spec: R2: policy keys read from the default ref's revision; branch edits take effect only once landed.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-5-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-5 -->
+### sr1-5-resolved · finding [fixed] · resolves sr1-5: Quiet switch: network dependence and fail-open on deleted branch, old fr, plan-1 loaders
+
+Fixed in the spec: R23: read origin/fr fetched at up/run start, refuse when unreachable, no origin = repo; sticky placement in isolation state; old-fr limitation stated; R4: loader refuses unservable placements.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-6-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-6 -->
+### sr1-6-resolved · finding [fixed] · resolves sr1-6: fr branch orphan-ness, contention, solo pushes and append-only underspecified
+
+Fixed in the spec: R23: orphan branch; history append-only, not files; atomic push with fetch-replay-retry; solo fr pushes for late bookkeeping.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-7-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-7 -->
+### sr1-7-resolved · finding [fixed] · resolves sr1-7: Stealth: commands in the target workspace cannot know the run is stealth; CAS push only warns
+
+Fixed in the spec: R24: isolation state and marker record stealth and the tracking ref; every write checks reachability; a failed tracking push refuses the resolve.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-8-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-8 -->
+### sr1-8-resolved · finding [fixed] · resolves sr1-8: Stealth forge-write contradiction and settings precedence undefined
+
+Fixed in the spec: R24: code and one minimal draft PR reach the target, nothing else; R5: explicit contrary forge keys refused; tracking file wins over a target file, printed.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-9-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-9 -->
+### sr1-9-resolved · finding [fixed] · resolves sr1-9: Stale-base amendments can land; fold ordering and quiet merged-status are wrong
+
+Fixed in the spec: R17: order by first-parent introduction per amendment; deliver and CI fetch the default ref before the base check; a merged stale amendment marks the row contested (debt) until any feature re-amends; quiet/stealth order from the code merge, merged records are a cache; R27 synthesises merged records.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-10-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-10 -->
+### sr1-10-resolved · finding [fixed] · resolves sr1-10: Fragment migration does not fit the single-file matrix kind; record kind also changes
+
+Fixed in the spec: R19/§5: new acceptance-fragment kind with its own locator, matrix retired with a frozen v5 reader, record kind stamp moves for the amendment shape.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-11-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-11 -->
+### sr1-11-resolved · finding [fixed] · resolves sr1-11: Branch self-migration cannot ride the CLI-entry trigger
+
+Fixed in the spec: R28: dedicated fr placement migrate-branch; the gate only detects and refuses; CI never migrates.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-12-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-12 -->
+### sr1-12-resolved · finding [fixed] · resolves sr1-12: squash-unpushed undefined on first push; breaks migration own-commit and merges
+
+Fixed in the spec: R13: first push base is the merge-base; segments split at merge and migration commits which stay as-is; R14 exempts merge commits; with-issue chosen by a new optional run-cursor issue.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-13-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-13 -->
+### sr1-13-resolved · finding [fixed] · resolves sr1-13: fr push does not own every push fr makes
+
+Fixed in the spec: R12 scoped to skill-driven feature-branch pushes and PR creation; internal pushers listed; R5 refuses push ask for triage drive; §2.3 reworded about the ops lease push.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-14-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-14 -->
+### sr1-14-resolved · finding [fixed] · resolves sr1-14: Pages visibility check has no reader, is scaffold-time only, ignores GitLab/Gitea
+
+Fixed in the spec: R21: readers named per forge, fail closed where unreadable (Gitea, errors); the published job re-checks before each deploy; R20 names Gitea Actions.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-15-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-15 -->
+### sr1-15-resolved · finding [fixed] · resolves sr1-15: Derived-report CI/Pages/badge not scoped to repo placement; scaffolded CI files issues
+
+Fixed in the spec: R20: CI, Pages and badge under repo only; R9: forge off covers scaffolded CI steps such as the debt issue.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-16-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-16 -->
+### sr1-16-resolved · finding [fixed] · resolves sr1-16: acceptance off with row gates and walks incoherent
+
+Fixed in the spec: R6: row-level gate lines refused under acceptance off, run-level gates stay; walk evidence is the run-bound log only.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-17-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-17 -->
+### sr1-17-resolved · finding [fixed] · resolves sr1-17: R7/R8 refusals sit in plan self-review, after spec-review
+
+Fixed in the spec: R7/R8: refused at brainstorm/spec-review resolve and by the spec structure validator.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-18-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-18 -->
+### sr1-18-resolved · finding [fixed] · resolves sr1-18: Plan split: R18 needs plan-3 resolver; quiet/stealth parts in plan 1
+
+Fixed in the spec: R18 interim repo-only resolution in plan 2; R29 moves init --quiet/--stealth, R5 stealth rule and the atomic push to plan 3.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-19-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-19 -->
+### sr1-19-resolved · finding [fixed] · resolves sr1-19: OpenCode plugin and Hermes hook detection omitted
+
+Fixed in the spec: R1 and R26 name the OpenCode plugin and Hermes hook with parity rows; §5 runs bun test in plan 3.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-20-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-20 -->
+### sr1-20-resolved · finding [fixed] · resolves sr1-20: Quiet/stealth artifacts never reach origin/HEAD: dispatch reachability always refuses
+
+Fixed in the spec: R23/R24 and non-goals: runner dispatch refused under quiet and stealth, naming the placement.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-21-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-21 -->
+### sr1-21-resolved · finding [fixed] · resolves sr1-21: tracking none checks miscounted
+
+Fixed in the spec: Background corrected (18 modules); R9/§3.A: one forge_allows predicate replaces every existing check, site list from a grep.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-22-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-22 -->
+### sr1-22-resolved · finding [fixed] · resolves sr1-22: settings exemption justified falsely; paths command missing from R3
+
+Fixed in the spec: §3.A restates the criterion and names the pinned test update; R3 lists fr settings paths --shell.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-24-resolved created=2026-11-07T07:18:36+00:00 state=fixed resolves=sr1-24 -->
+### sr1-24-resolved · finding [fixed] · resolves sr1-24: §3.D names fr/acceptance/ci.py as holding CI templates
+
+Fixed in the spec: §3.D points at fr/acceptance/scaffold.py.
+
+<!-- fr:journal kind=finding scope=spec id=sr1-23-resolved created=2026-11-07T07:18:36+00:00 state=open resolves=sr1-23 out_of_scope=true -->
+### sr1-23-resolved · finding [out-of-scope] · resolves sr1-23: DevOps gate already force-pushes with a lease
+
+Pre-existing behaviour, not caused by this spec; §2.3 now says so explicitly.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-07T07:18:42+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  acceptance-fragments-amendments: none
+  acceptance-matrix-migration: none
+  acceptance-reports-derived-published: none
+  placement-move-and-drift: none
+  placement-quiet: none
+  placement-stealth: none
+  repo-settings-file: none
+  repo-settings-forge-quiet: none
+  repo-settings-git-policy: none
+  repo-settings-policy-off: none
+  repo-settings-quiet-repo-live: tester
+row_kinds:
+  acceptance-fragments-amendments: candidate
+  acceptance-matrix-migration: candidate
+  acceptance-reports-derived-published: candidate
+  placement-move-and-drift: candidate
+  placement-quiet: candidate
+  placement-stealth: candidate
+  repo-settings-file: candidate
+  repo-settings-forge-quiet: candidate
+  repo-settings-git-policy: candidate
+  repo-settings-policy-off: candidate
+  repo-settings-quiet-repo-live: live
+run_gate: none
+run_kind: candidate
+```

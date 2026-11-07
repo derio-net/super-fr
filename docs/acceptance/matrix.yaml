@@ -10722,3 +10722,122 @@ rows:
     status: ci
     notes: the hook and nag.ts are pinned by their shell and bun tests in CI
     verify: none
+  - id: repo-settings-file
+    capability: repo-feature-settings
+    acceptance: Settings live with the placement and are read from the default ref;
+      fr settings init/show/paths/check generate a fully commented defaults file, show
+      each key's source, and refuse unknown keys, unservable placements and incoherent
+      combinations
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: repo-settings-policy-off
+    capability: repo-feature-settings
+    acceptance: With acceptance, test_plan or gates off, fr writes none of that feature,
+      refuses what would write it at authoring time, and every surface reports it as
+      disabled by repo setting rather than none
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: repo-settings-forge-quiet
+    capability: repo-feature-settings
+    acceptance: With forge labels, comments or issues off, neither fr nor the CI it
+      scaffolds makes such a write; under pr_body minimal the live PR carries no fr
+      marker or section while the full body is kept for the operator
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: repo-settings-git-policy
+    capability: repo-feature-settings
+    acceptance: Under push or pr ask nothing reaches the remote without a verified operator
+      answer; squash-unpushed never rewrites pushed history or migration commits; pushed
+      subjects follow the repo's with-issue or without-issue template
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: acceptance-fragments-amendments
+    capability: repo-feature-settings
+    acceptance: A later feature changes an earlier feature's rows only by appending
+      amendments in its own fragment; the effective matrix is the fold over merged features,
+      and a stale-base amendment is refused before merge or marks its row contested
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: acceptance-matrix-migration
+    capability: repo-feature-settings
+    acceptance: An existing repo's single matrix migrates to per-feature fragments with
+      logical refs and no row lost
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R19
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: acceptance-reports-derived-published
+    capability: repo-feature-settings
+    acceptance: Acceptance reports are one documented command away and are published
+      per PR and on Pages in repo placement, never on Pages wider than the repo
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R20
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: placement-quiet
+    capability: repo-feature-settings
+    acceptance: In a quiet repo no fr file or commit reaches the default or feature
+      branches, the fr branch is append-only and pushed atomically with code, and a
+      missing or changed switch refuses instead of falling back
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R23
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: placement-stealth
+    capability: repo-feature-settings
+    acceptance: A stealth run leaves only code and one minimal draft PR in the target,
+      fails fast without its tracking repo, and resumes from the tracking repo on any
+      host
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R24
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: placement-move-and-drift
+    capability: repo-feature-settings
+    acceptance: A repo moves between any two placements with equal folds before and
+      after, and an in-flight branch under the old placement is refused until migrate-branch
+      moves it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R27
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: repo-settings-quiet-repo-live
+    capability: repo-feature-settings
+    acceptance: On a real forge, quiet and stealth fr-goal runs leave no fr trace in
+      the product repo or on its forge
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R23
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
