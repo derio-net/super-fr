@@ -143,3 +143,37 @@ def test_every_problem_is_reported_at_once(repo: Path) -> None:
         True,
         True,
     ]
+
+
+@pytest.mark.parametrize(
+    ("setting", "section", "named"),
+    [
+        ("test_plan: off", "\n## Test Plan\n\n1. x\n", "test_plan"),
+        ("gates: off", "\n## Verification\n\nstrategy: none\ngate: tester\n", "gates"),
+        ("gates: off", "\n## Verification\n\nstrategy: none\ngate: row-a=tester\n", "gates"),
+    ],
+    ids=["test-plan", "run-level-gate", "row-level-gate"],
+)
+def test_p2_r5_resolve_refuses_the_spec_at_spec_review(
+    tmp_path: Path, setting: str, section: str, named: str
+) -> None:
+    from tests.unit.record_support import fr, git, write_record
+    from tests.unit.test_record_apply import (
+        RUN,
+        _at_spec_review,
+        _resolve,
+        _spec_review_record,
+    )
+
+    root = _at_spec_review(tmp_path)
+    land_on_main(tmp_path / "base", f"artifacts:\n  {setting}\n")
+    git(root, "fetch", "-q", "origin")
+    spec = root / "docs" / "spec.md"
+    spec.write_text(spec.read_text() + section)
+    rec = write_record(root, _spec_review_record())
+    before = rec.read_bytes()
+    out = _resolve(root, rec, step="spec-review", item=None)
+    assert out.exit_code == 2, out.output
+    assert DISABLED in out.output and f"artifacts.{named}: off" in out.output
+    assert rec.read_bytes() == before
+    assert "spec-review" in fr(root, ["run", "status", RUN]).output

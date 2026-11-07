@@ -99,15 +99,26 @@ def test_status_says_disabled(repo: Path) -> None:
 
 def test_debt_says_disabled(repo: Path) -> None:
     result = runner.invoke(app, ["debt", "--offline"])
-    assert DISABLED in result.output, result.output
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[lines.index("Acceptance:") + 1] == f"  {DISABLED}", result.output
 
 
 def test_pr_body_owed_sections_say_disabled(repo: Path) -> None:
     from fr.record import pr_body
+    from fr.run.model import RunState, StepRecord
 
-    state: Any = None
-    assert DISABLED in pr_body._pre_merge_owed(repo, state)
-    assert DISABLED in pr_body._post_merge_owed(repo, state)
+    state = RunState(
+        run="r",
+        workflow="fr-goal@1",
+        branch="feat/x",
+        started="2026-11-07T00:00:00+00:00",
+        cursor="deliver",
+        steps={"brainstorm": StepRecord(state="done", emitted={"spec": "docs/s.md"})},
+    )
+    want = f"no acceptance rows: {DISABLED} (artifacts.acceptance: off)."
+    assert pr_body._pre_merge_owed(repo, state) == want
+    assert pr_body._post_merge_owed(repo, state) == want
 
 
 def test_self_review_and_proportionality_say_disabled(repo: Path) -> None:
@@ -161,3 +172,15 @@ def test_p2_r6_the_staleness_guard_demands_no_rows_under_acceptance_off(repo: Pa
     spec.write_text("# S\n\n## Test Plan\n\n1. x\n")
     result = check(load_matrix(repo / "docs" / "acceptance" / "matrix.yaml"), repo)
     assert not [e for e in result.errors if e.startswith("staleness")], result.errors
+
+
+def test_p2_r5_digest_says_disabled_and_report_backfill_are_refused(repo: Path) -> None:
+    _with_matrix(repo)
+    digest = runner.invoke(app, ["acceptance", "digest"])
+    assert digest.exit_code == 0, digest.output
+    assert DISABLED in digest.output
+    for argv in (["acceptance", "report", "--deterministic"], ["acceptance", "backfill"]):
+        result = runner.invoke(app, argv)
+        _refused(result)
+    d = repo / "docs" / "acceptance"
+    assert not any((d / n).exists() for n in ("report_local.html", "report_linked.md"))

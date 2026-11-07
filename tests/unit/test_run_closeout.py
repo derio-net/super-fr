@@ -527,3 +527,21 @@ def test_closeout_brief_without_a_plan_still_resolves_off_the_default_branch(
     i_push = brief.index("git push -u origin chore/closeout-r1")
     assert i_up < i_finding < i_archive < i_push
     assert "chore: close out feat/x" in brief
+
+
+def test_p2_r5_test_plan_off_owes_no_test_plan_outcomes_in_the_brief(tmp_path: Path) -> None:
+    """R7: the spec carries a Test Plan, but `test_plan: off` on the default branch means
+    the close-out owes none of its outcomes."""
+    from tests.unit.settings_repo import git
+
+    _spec_file(tmp_path, with_test_plan=True)
+    _plan_dir(tmp_path)
+    git(tmp_path, "init", "-q", "-b", "main")
+    assert f"Test Plan: {SPEC_REL}" in closeout_brief(tmp_path, _state())
+    (tmp_path / ".fr").mkdir()
+    (tmp_path / ".fr" / "settings.yaml").write_text("artifacts:\n  test_plan: off\n")
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-qm", "settings")
+    brief = closeout_brief(tmp_path, _state())
+    assert f"Test Plan: {SPEC_REL}" not in brief
+    assert "fr archive --branch" in brief

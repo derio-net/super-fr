@@ -137,3 +137,21 @@ def test_a_gate_tester_label_does_not_hold_the_merge(
     forge.prs[1001]["labels"] = [*forge.prs[1001]["labels"], "gate:tester"]
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
     assert merge_ready(ctx, slot, None).outcome == "merged"
+
+
+def test_p2_r5_gates_off_promotes_no_devops_gate(tmp_path: Path) -> None:
+    """R8: under `gates: off` a plan with ops is still not promoted to `devops`."""
+    from fr.verification.exit import _promote
+
+    from tests.unit.settings_repo import git
+
+    state = _repo(tmp_path, ops="pre-merge")
+    assert run_exit(tmp_path, state).ops_promoted is True
+    git(tmp_path, "init", "-q", "-b", "main")
+    (tmp_path / ".fr").mkdir()
+    (tmp_path / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: off\n")
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-qm", "settings")
+    exit_ = run_exit(tmp_path, state)
+    assert "devops" not in exit_.gates and exit_.ops_promoted is False
+    assert _promote(exit_, tmp_path, state) is exit_
