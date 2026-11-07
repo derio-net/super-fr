@@ -467,3 +467,8 @@ lowered: []
 ### settings-ci-policy-source · decision · CI with no default ref reads HEAD's committed settings, with a notice; elsewhere refuse
 
 Found at phase 2: a depth-1 actions/checkout PR checkout (refs/remotes/pull/N/merge only) made `fr acceptance check` die with a SettingsError traceback, because phase 1's p1-r3 refusal reached every disabled() call. That would turn this repo's acceptance-report job and every consumer's scaffolded workflow red on upgrade. Rejected: fetching the default ref (network side effect; fails with persist-credentials: false) and editing CI templates (breaks consumers until they update). Chosen: in a CI context only, read HEAD's committed tree and print a notice naming that source. The checkout is the candidate merge, so a settings edit is visible in the PR diff. Outside CI the refusal stands. R2 amended. Every SettingsError surfaces as a clean exit 2.
+
+<!-- fr:journal kind=decision scope=spec id=settings-bootstrap-remote created=2026-11-07T10:29:54+00:00 decided_by=agent -->
+### settings-bootstrap-remote · decision · A remote with no tracking refs reads the local default branch
+
+Phase 2 review p2-r2: git init + git remote add origin (never fetched) made fr acceptance init/add, debt, archive and deliver refuse. A remote with zero refs/remotes/<remote>/* refs holds no policy for a local edit to override, so p1-r3's hazard (unpushed local edits shadowing the remote's policy) cannot arise. Treat it as no remote. The refusal stays for a remote that has tracking refs but no resolvable default. The CI exception (settings-ci-policy-source) applies after both steps. R2 amended.
