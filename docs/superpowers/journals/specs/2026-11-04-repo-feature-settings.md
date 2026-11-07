@@ -410,3 +410,16 @@ after: kinds ['candidate', 'live'], gates ['tester']
 answered_by: agent
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-3 created=2026-11-07T07:38:41+00:00 -->
+### exit-change-3 · decision · exit change: row acceptance-reports-derived-published -> strategy none
+
+built by plan 2 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 2, which sets this row back to candidate with its scenario
+
+before: kinds ['candidate', 'live'], gates ['tester']
+after: kinds ['candidate', 'live'], gates ['tester']
+
+```yaml
+answered_by: agent
+lowered: []
+```
