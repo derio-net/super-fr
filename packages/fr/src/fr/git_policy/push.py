@@ -210,7 +210,9 @@ def squash(
         if not segment:
             return parent
         if len(segment) == 1 and segment[0].parents[0] == parent:
-            return segment[0].sha  # one commit, parent unchanged: nothing to rewrite
+            # One commit, parent unchanged: nothing to rewrite. It is still flushed:
+            # a segment left behind would be folded again at the next flush (p4-r1).
+            return segment.pop().sha
         message = _composed(settings, segment, issue)
         new = _git(
             root,

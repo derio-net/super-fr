@@ -435,3 +435,74 @@ def test_squash_composes_through_a_template_that_names_no_type(
 
     assert result.exit_code == 0, result.output
     assert _remote_log(repo) == ["[api] add a"]
+
+
+# --- review p4-r1: a one-commit segment is flushed once ----------------------
+
+
+def _parents(repo: Path, ref: str) -> list[str]:
+    return git(repo, "rev-list", "--parents", "-n", "1", ref).split()[1:]
+
+
+def test_squash_a_single_commit_then_a_migration_keeps_both(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    repo = make_repo(tmp_path)
+    land_on_main(repo, SQUASH)
+    _feature(repo)
+    a = _commit(repo, "a", "feat(api): a")
+    m = _commit(repo, "m", "chore(fr): migrate 1 artifact to fr 6.1.0")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert _remote_log(repo) == ["feat(api): a", "chore(fr): migrate 1 artifact to fr 6.1.0"]
+    assert git(repo, "rev-parse", "HEAD").strip() == m, "nothing needed rewriting"
+    assert _parents(repo, "HEAD") == [a]
+
+
+def test_squash_a_single_commit_then_a_merge_keeps_both(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    repo = make_repo(tmp_path)
+    land_on_main(repo, SQUASH)
+    _feature(repo)
+    a = _commit(repo, "a", "feat(api): a")
+    git(repo, "switch", "-q", "main")
+    other = _commit(repo, "o", "chore(main): o")
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "switch", "-q", BRANCH)
+    git(repo, "merge", "-q", "--no-ff", "--no-edit", "main")
+    tree = _tree(repo, "HEAD")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert _remote_log(repo) == ["feat(api): a", "Merge branch 'main' into feat/x"]
+    assert _tree(repo, "HEAD") == tree
+    assert _parents(repo, "HEAD") == [a, other]
+
+
+def test_squash_a_single_commit_a_migration_and_another_keeps_each_subject(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    repo = make_repo(tmp_path)
+    land_on_main(repo, SQUASH)
+    _feature(repo)
+    a = _commit(repo, "a", "feat(api): a")
+    m = _commit(repo, "m", "chore(fr): migrate 1 artifact to fr 6.1.0")
+    b = _commit(repo, "b", "fix(api): b")
+    tree = _tree(repo, "HEAD")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert _remote_log(repo) == [
+        "feat(api): a",
+        "chore(fr): migrate 1 artifact to fr 6.1.0",
+        "fix(api): b",
+    ]
+    assert git(repo, "rev-parse", "HEAD").strip() == b
+    assert _parents(repo, "HEAD") == [m] and _parents(repo, m) == [a]
+    assert _tree(repo, "HEAD") == tree
+    assert "Squashed by fr push" not in git(repo, "log", "-1", "--format=%B", "HEAD")
