@@ -10758,8 +10758,10 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R9
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario path declared at planning (plan 2026-11-07-repo-settings-core);
+      the phase that builds the row writes it
     verify: candidate
+    scenario: tests/scenarios/repo-settings-forge-quiet.sh
   - id: repo-settings-git-policy
     capability: repo-feature-settings
     acceptance: Under push or pr ask nothing reaches the remote without a verified operator
