@@ -200,6 +200,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "matrix-status-split",
         "debt-report",
         "repo-settings-file",
+        "repo-settings-policy-off",
         "opencode-store-v2",
         "opencode-plugin-v2",
         "closeout-owed",
@@ -287,6 +288,10 @@ def test_debt_report(installed: Path, tmp_path: Path) -> None:
 
 def test_repo_settings_file(installed: Path, tmp_path: Path) -> None:
     _scenario("repo-settings-file", installed, tmp_path)
+
+
+def test_repo_settings_policy_off(installed: Path, tmp_path: Path) -> None:
+    _scenario("repo-settings-policy-off", installed, tmp_path)
 
 
 def test_gate_backfill_dry_run(installed: Path, tmp_path: Path) -> None:
