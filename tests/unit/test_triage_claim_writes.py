@@ -55,7 +55,7 @@ def _markers(gh: FakeGhClient, number: int = 1) -> list[Marker]:
 
 
 def _ops(gh: FakeGhClient) -> list[str]:
-    return [name for name, _ in gh.calls if name != "list_issue_comments"]
+    return [name for name, _ in gh.calls if name not in ("list_issue_comments", "read_file")]
 
 
 def _claim(gh: FakeGhClient, batch: str = "mine", number: int = 1) -> cw.Outcome:
@@ -553,3 +553,41 @@ def test_settle_closed_with_no_release_label_edits_no_label_and_still_releases(
     assert _markers(gh)[0].released == NOW
     assert "edit_issue_labels" not in [n for n, _ in gh.calls]
     assert len(views) == 1
+
+
+# --- R9 (amended), p3-r2: a claim is a label and a marker comment, so both kinds gate it ---
+
+
+@pytest.mark.parametrize("kind", ["labels", "comments"])
+def test_p3_r2_a_repo_with_labels_or_comments_off_takes_no_claim_write(
+    gh: FakeGhClient, kind: str
+) -> None:
+    gh.remote_tree[(REPO, ".fr/settings.yaml")] = f"forge:\n  {kind}: 'off'\n"
+    for call in (
+        lambda: cw.claim(gh, REPO, 1, me=ME, batch="b1", expiry=DAY, now=NOW, trusted=TRUSTED),
+        lambda: cw.refresh(gh, REPO, 1, me=ME, expiry=DAY, now=NOW, trusted=TRUSTED),
+        lambda: cw.release(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED),
+        lambda: cw.settle_closed(gh, REPO, 1, me=ME, now=NOW, trusted=TRUSTED),
+        lambda: cw.take(gh, REPO, 1, me=ME, batch="b1", expiry=DAY, now=NOW, trusted=TRUSTED),
+    ):
+        with pytest.raises(cw.ClaimError, match=f"forge.{kind}: off"):
+            call()
+    assert gh.attempted_mutations == 0
+
+
+def test_p3_r2_an_unreadable_policy_refuses_the_claim(gh: FakeGhClient) -> None:
+    from tests.unit.fakes import FakeGhError
+
+    def broken(repo: str, path: str) -> str:
+        raise FakeGhError("HTTP 502: bad gateway")
+
+    gh.read_file = broken  # type: ignore[method-assign]
+    with pytest.raises(cw.ClaimError, match="cannot read .fr/settings.yaml"):
+        cw.claim(gh, REPO, 1, me=ME, batch="b1", expiry=DAY, now=NOW, trusted=TRUSTED)
+    assert gh.attempted_mutations == 0
+
+
+def test_p3_r2_an_absent_policy_is_the_defaults(gh: FakeGhClient) -> None:
+    out = cw.claim(gh, REPO, 1, me=ME, batch="b1", expiry=DAY, now=NOW, trusted=TRUSTED)
+    assert out == cw.Done("posted", out.comment_id)  # type: ignore[union-attr]
+    assert ("read_file", {"repo": REPO, "path": ".fr/settings.yaml"}) in gh.calls

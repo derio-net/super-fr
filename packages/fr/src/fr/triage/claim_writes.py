@@ -51,6 +51,27 @@ class Done:
 Outcome = Done | Held
 
 
+def quiet_block(client: GhClient, repo: str) -> str | None:
+    """Why *repo* takes no claim write (R9), else None. A claim is an `fr:claimed` label
+    plus a marker comment, so it needs both kinds; the policy is *repo*'s
+    `.fr/settings.yaml` at its default branch, read through *client*
+    (`fr.settings.remote.client_policy`), and an unreadable one refuses."""
+    from fr.settings import SettingsError
+    from fr.settings.remote import client_policy
+
+    try:
+        return client_policy(client, repo).first_block("labels", "comments")
+    except SettingsError as exc:
+        return str(exc)
+
+
+def _gate(client: GhClient, repo: str, number: int) -> None:
+    """Raise `ClaimError` before any write when *repo*'s policy forbids claims (R9)."""
+    why = quiet_block(client, repo)
+    if why is not None:
+        raise ClaimError(f"{repo}#{number}: no claim is written — {why}")
+
+
 def _read(
     client: GhClient, repo: str, number: int, trusted: Collection[str]
 ) -> tuple[list[dict[str, Any]], list[Claim]]:
@@ -143,6 +164,7 @@ def claim(
     posted, then the comments are re-read and R4 applied over every un-released claim,
     expired ones included: a writer that lost withdraws its marker and reports Held.
     """
+    _gate(client, repo, number)
     _, claims = _read(client, repo, number, trusted)
     own = _own(claims, me)
     rival = holder(claims, me)
@@ -199,6 +221,7 @@ def refresh(
     """Edit this scope's un-released marker in place with a new heartbeat and expiry
     (R8). When another scope's take released it, write nothing and report Held.
     *due_only* writes only when `needs_refresh` says the heartbeat is due."""
+    _gate(client, repo, number)
     _, claims = _read(client, repo, number, trusted)
     own = _own(claims, me)
     rival = holder(claims, me)
@@ -233,6 +256,7 @@ def release(
     released only once expired (R9), and its released form names this scope as
     `released_by`. With *batch*, the release is that batch's: a marker naming any other
     batch serves it and is left standing (p1-r3)."""
+    _gate(client, repo, number)
     signer = of or me
     _, claims = _read(client, repo, number, trusted)
     target = _own(claims, signer)
@@ -270,6 +294,7 @@ def settle_closed(
     Re-reads the issue and its comments first and writes nothing (`Done("none")`) when it
     reopened or a trusted, un-released claim of another scope stands. `_remove_label`
     keeps the restore race: a claim that lands during the edit gets its labels back."""
+    _gate(client, repo, number)
     view = client.view_issue(repo, number)
     if str(view.get("state") or "").upper() != "CLOSED":
         return Done("none")
@@ -323,6 +348,7 @@ def take(
     """Replace another scope's EXPIRED claim with this scope's claim for *batch* (R9), or
     a STALE one under `allow="stale"` (gh#1123). Refused otherwise; the operator's
     decision, never automatic."""
+    _gate(client, repo, number)
     _, claims = _read(client, repo, number, trusted)
     rival = holder(claims, me)
     if rival is None:

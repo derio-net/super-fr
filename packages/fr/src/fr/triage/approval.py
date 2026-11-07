@@ -133,6 +133,9 @@ def settle_approvals(
             was = verdict.approved_head
             if dry_run:
                 say(f"would void approval of PR #{number} at {was[:12]}: head moved to {head[:12]}")
+            elif (off := _labels_off(client, repo)) is not None:
+                # R9: the label stays, so no void is recorded and nothing is approved
+                say(f"approval of PR #{number} at {was[:12]} not voided: {off}")
             else:
                 client.edit_issue_labels(
                     repo, number, add=frozenset(), remove=frozenset({APPROVED_FR.name})
@@ -224,6 +227,18 @@ def voided_at(events: Sequence[BatchEvent], pr: int) -> str | None:
     return last.head if last is not None and last.voided_at is not None else None
 
 
+def _labels_off(client: Any, repo: str) -> str | None:
+    """Why fr writes no label on *repo* (R9: its `.fr/settings.yaml` at the default
+    branch, through *client*), or why that policy is unknown; None when it may."""
+    from fr.settings import SettingsError
+    from fr.settings.remote import client_policy
+
+    try:
+        return client_policy(client, repo).block("labels")
+    except SettingsError as exc:
+        return str(exc)
+
+
 def ensure_approval_label(
     client: Any, repo: str, say: Callable[[str], None], *, seen: set[str]
 ) -> None:
@@ -237,6 +252,9 @@ def ensure_approval_label(
     from fr.hostclient import FORGE_ERRORS
 
     soft: tuple[type[Exception], ...] = (UnsupportedForgeOperation, *FORGE_ERRORS)
+    if (off := _labels_off(client, repo)) is not None:
+        say(f"label {APPROVED_FR.name} not ensured on {repo}: {off}")
+        return
     try:
         if client.label_exists(repo, APPROVED_FR.name):
             return

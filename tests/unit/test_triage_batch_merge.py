@@ -58,6 +58,15 @@ class MergeForge:
         self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
         self.labels_defined: set[str] = {"approved-fr"}
         self.created_labels: list[str] = []
+        self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
+
+    def read_file(self, repo: str, path: str) -> str:
+        """The contents API at the default branch (R9): `files` serves `.fr/settings.yaml`."""
+        from fr.gh import GhError
+
+        if path not in self.files:
+            raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
+        return self.files[path]
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         self.method_reads += 1

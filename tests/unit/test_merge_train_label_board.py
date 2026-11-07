@@ -39,6 +39,15 @@ class Labels:
     def __init__(self, *, exists: bool = False, unsupported: bool = False) -> None:
         self.exists, self.unsupported = exists, unsupported
         self.calls: list[str] = []
+        self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
+
+    def read_file(self, repo: str, path: str) -> str:
+        """The contents API at the default branch (R9): `files` serves `.fr/settings.yaml`."""
+        from fr.gh import GhError
+
+        if path not in self.files:
+            raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
+        return self.files[path]
 
     def label_exists(self, repo: str, name: str) -> bool:
         self.calls.append(f"exists {repo} {name}")
@@ -49,6 +58,16 @@ class Labels:
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
         self.calls.append(f"create {repo} {[getattr(x, 'name', x) for x in labels]}")
         self.exists = True
+
+
+def test_p3_r2_labels_off_creates_no_label_and_says_so() -> None:
+    client, said, seen = Labels(), [], set()  # type: ignore[var-annotated]
+    client.files[".fr/settings.yaml"] = "forge:\n  labels: 'off'\n"
+    ensure_approval_label(client, "o/r", said.append, seen=seen)
+    assert client.calls == []
+    assert said == [
+        "label approved-fr not ensured on o/r: forge.labels: off (disabled by repo setting)"
+    ]
 
 
 def test_a_missing_label_is_created_once_per_repo_and_said() -> None:
