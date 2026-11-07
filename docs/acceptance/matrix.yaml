@@ -10732,8 +10732,10 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R2
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario path declared at planning (plan 2026-11-07-repo-settings-core);
+      the phase that builds the row writes it
     verify: candidate
+    scenario: tests/scenarios/repo-settings-file.sh
   - id: repo-settings-policy-off
     capability: repo-feature-settings
     acceptance: With acceptance, test_plan or gates off, fr writes none of that feature,
