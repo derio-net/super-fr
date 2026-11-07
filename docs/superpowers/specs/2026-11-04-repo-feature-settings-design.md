@@ -279,10 +279,16 @@ R11. `git.push` and `git.pr` each take `auto` (today's behaviour) or `ask`.
 Under `ask`, each push or PR creation fr performs proceeds only on a verified
 operator answer given after its request was printed.
 
-- The approval is recorded as a spec-journal decision with
-  `answered_by: operator`.
-- Where fr cannot read the transcript, the request is refused, naming the
-  harness. The `--no-questions` bypass does not apply.
+- The approval is recorded as a decision with `answered_by: operator` in the
+  run's own journal: the spec journal of a spec-driven run, the debug journal of
+  an fr-debugging session, which has no spec.
+- The verified answer is an answered question, asked after the request, whose
+  text names the request's id, and whose answer starts with an approving word
+  (yes, y, approve(d), go ahead, ok/okay, proceed, push it, open it, lgtm,
+  sure). Any other answer is refused, naming it.
+- Where fr cannot read the transcript, or cannot read the answer's text, the
+  request is refused, naming the harness. The `--no-questions` bypass does not
+  apply.
 
 Marking a PR ready and merging it are not settable.
 
