@@ -656,6 +656,11 @@ class Round:
 
     question_texts: tuple[str, ...]
     answer_texts: tuple[str, ...] = ()
+    answer_pairs: tuple[tuple[str, str], ...] | None = None
+    """(question text, the operator's answer to it), read STRUCTURALLY from the
+    harness's answers record (Claude Code's `toolUseResult.answers` map, OpenCode's
+    `metadata.answers` aligned with `input.questions`) — `None` when the reader
+    cannot pair them, never a guess from the flat `answer_texts` (review p4-r3)."""
 
 
 def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | None:
@@ -713,6 +718,7 @@ def answered_rounds_in(transcript: Path, start: _dt.datetime) -> list[Round] | N
         neutral=ROUND_NEUTRAL_TOOLS,
         answered=lambda: _answered_ids(records),
         answers=lambda: _answer_texts(records),
+        pairs=lambda: _answer_pairs(records),
     )
 
 
@@ -729,6 +735,7 @@ def question_rounds(
     neutral: frozenset[str],
     answered: Callable[[], set[str]],
     answers: Callable[[], Mapping[str, list[str]]] | None = None,
+    pairs: Callable[[], Mapping[str, list[tuple[str, str]]]] | None = None,
 ) -> list[Round]:
     """THE round rule (spec 2026-09-26 §3.C), shared by the Claude Code and
     OpenCode readers so the two cannot drift: consecutive `question_tool` calls
@@ -752,10 +759,14 @@ def question_rounds(
         return []
     done = answered()
     said = answers() if answers is not None else {}
+    paired = pairs() if pairs is not None else None
     return [
         Round(
             question_texts=tuple(texts),
             answer_texts=tuple(a for i in ids for a in said.get(i, ())),
+            answer_pairs=(
+                None if paired is None else tuple(p for i in ids for p in paired.get(i, ()))
+            ),
         )
         for ids, texts in groups
         if any(i in done for i in ids)
@@ -795,6 +806,28 @@ def _answer_texts(records: list[dict[str, Any]]) -> dict[str, list[str]]:
                 and isinstance(block.get("tool_use_id"), str)
             ):
                 found.setdefault(block["tool_use_id"], []).extend(texts)
+    return found
+
+
+def _answer_pairs(records: list[dict[str, Any]]) -> dict[str, list[tuple[str, str]]]:
+    """tool_use id -> its `toolUseResult.answers` map as (question, answer) pairs.
+    A non-string answer is kept as its JSON text, so it never equals a label."""
+    found: dict[str, list[tuple[str, str]]] = {}
+    for record in records:
+        result = record.get("toolUseResult") if record.get("type") == "user" else None
+        answers = result.get("answers") if isinstance(result, Mapping) else None
+        if not isinstance(answers, Mapping) or not answers:
+            continue
+        pairs = [(str(q), a if isinstance(a, str) else json.dumps(a)) for q, a in answers.items()]
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and isinstance(block.get("tool_use_id"), str)
+            ):
+                found.setdefault(block["tool_use_id"], []).extend(pairs)
     return found
 
 

@@ -11,12 +11,13 @@ given after its request was printed:
    (which has no spec, review p4-r5), with the request's id and
    `answered_by: operator` (`decided_by=operator`), created after the request.
 3. fr reads the session transcript (`answered_rounds_since`) for an ANSWERED
-   question round since the request whose question text names the request id
-   (review p4-r3: any answer, to any question, was accepted before), and whose
-   answer positively approves (`APPROVAL`, an allowlist: fail closed). A round
-   whose answer text is not observable (OpenCode records none in the round) is
-   treated like an unreadable transcript: a refusal naming the harness. There is
-   no `--no-questions` bypass.
+   question since the request whose text names the request id, and the answer to
+   THAT question, read structurally as a (question, answer) pair, must be exactly
+   `Approve <request-id>` (`approval_label`) after trimming whitespace (review
+   p4-r3: any answer, to any question, was accepted before). Answers to other
+   questions are ignored. Where the pairs cannot be read, or the transcript cannot
+   be read at all, the request is refused naming the harness. There is no
+   `--no-questions` bypass.
 
 A push request goes stale when a commit other than journal bookkeeping lands
 after it: the operator approved pushing what was there, not what came later.
@@ -88,8 +89,10 @@ class RemoteWriteRequest:
         return "\n".join(
             [
                 f"fr asks before it writes to the remote ({setting}: ask): request {self.id}.",
-                f"  Ask the operator, with your harness's question tool, whether fr may {what},",
-                f"  and put the request id {self.id} in the question text: fr looks for it.",
+                f"  Ask the operator, with your harness's question tool, whether fr may {what}:",
+                f"  put the request id {self.id} in the question text, and offer exactly the",
+                f"  option {approval_label(self.id)!r} plus a decline option. Only that exact",
+                "  answer to that question approves.",
                 "  When the operator approves, record it, then run this command again:",
                 f"    {self.journal_command()}",
             ]
@@ -152,21 +155,24 @@ def _approved(repo_root: Path, request: RemoteWriteRequest) -> bool:
     )
 
 
-APPROVAL = re.compile(
-    r"^\s*(yes|y|approved?|go ahead|ok|okay|proceed|push it|open it|lgtm|sure)\b",
-    re.IGNORECASE,
-)
-"""An answer that approves: it STARTS with one of these words (case-insensitive).
-Fail closed: anything else — "no", "wait", "hmm, later", a question back — is not
-an approval. The question tool's answers are the option labels the agent offered
-(`Yes, push` / `No`) or the operator's own words."""
+def approval_label(request_id: str) -> str:
+    """The one answer that approves a request: fr names it, the agent offers it."""
+    return f"Approve {request_id}"
 
 
-def answers(round_: Round) -> list[str]:
-    """The operator's answers in *round_*. `answer_texts` holds the answers map's
-    keys (the questions) and values; the questions are skipped."""
-    questions = set(round_.question_texts)
-    return [a for a in round_.answer_texts if a not in questions]
+def answers_to(round_: Round, request_id: str) -> list[str] | None:
+    """The operator's answers to the question(s) of *round_* whose text names
+    *request_id*, read from the round's structural (question, answer) pairs.
+    Answers to other questions are ignored. `None` when the pairs are not readable."""
+    if round_.answer_pairs is None:
+        return None
+    return [a for q, a in round_.answer_pairs if request_id in q]
+
+
+def approves(question_answers: list[str], request_id: str) -> bool:
+    """Exactly the label, after trimming whitespace: nothing else approves."""
+    label = approval_label(request_id)
+    return bool(question_answers) and all(a.strip() == label for a in question_answers)
 
 
 def require_approval(
@@ -223,17 +229,20 @@ def require_approval(
                 "approved; fr can read the transcript here and it does not show it. Ask the "
                 "operator, with the request id in the question, then run this again."
             )
-        said = [a for r in asked for a in answers(r)]
-        if said:
-            if all(APPROVAL.match(a) for a in said):
+        paired = [answers_to(r, request.id) for r in asked]
+        if all(p is not None for p in paired):
+            said = [a for p in paired if p is not None for a in p]
+            if approves(said, request.id):
                 return request
-            refused = next(a for a in said if not APPROVAL.match(a))
+            saw = next((a for a in said if a.strip() != approval_label(request.id)), None)
             raise AskRefusedError(
-                f"request {request.id}: the operator answered {refused!r}, which is not an "
-                f"approval (fr needs a yes). fr will not {request.kind} on it."
+                f"request {request.id}: the operator's answer to the question naming it was "
+                + (f"{saw!r}" if saw is not None else "not found")
+                + f", not {approval_label(request.id)!r}. Only that exact option approves; "
+                f"fr will not {request.kind} on it."
             )
-        # A round names the request but its answer text is not observable (OpenCode
-        # records none in the round): treated as an unreadable transcript, below.
+        # The answers cannot be paired with their questions here: treated as an
+        # unreadable transcript, below. Never the id match alone.
     from fr.harness.detect import detect_harness
     from fr.harness.model import HarnessError
 

@@ -295,17 +295,24 @@ def _approve(repo: Path, request_id: str) -> None:
     assert result.exit_code == 0, result.output
 
 
+APPROVE = object()
+"""`_answered`'s default answer: the exact `Approve <request-id>` label."""
+
+
 def _answered(
     monkeypatch: pytest.MonkeyPatch,
     value: bool | None,
     *,
-    answer: str | None = "Yes",
+    answer: object = APPROVE,
     names_request: bool = True,
+    pairs: bool = True,
+    extra: tuple[tuple[str, str], ...] = (),
 ) -> None:
-    """The transcript fr reads: True is one answered round whose question names
-    every stored request's id (unless *names_request* is False) and whose answer is
-    *answer* (None: an answer text fr cannot see); False is no answered round;
-    None is a transcript fr cannot read."""
+    """The transcript fr reads. True is one answered round whose question names
+    every stored request's id (unless *names_request* is False) and is answered
+    *answer* (default: the exact approval label), plus the *extra* (question,
+    answer) pairs; *pairs* False is a round whose pairs fr cannot read. False is
+    no answered round; None is a transcript fr cannot read."""
     from fr.run.telemetry import Round
 
     def rounds(env: dict[str, str], since: str) -> list[Round] | None:
@@ -314,8 +321,19 @@ def _answered(
         requests = Path(env["VK_REPO_ROOT"]) / ".git" / "fr" / "requests"
         ids = [json.loads(p.read_text())["id"] for p in requests.glob("*.json")]
         question = "May fr do this? " + (" ".join(ids) if names_request else "(no id)")
-        said = (question, answer) if answer is not None else ()
-        return [Round(question_texts=(question,), answer_texts=said)]
+        said = (
+            " ".join(f"Approve {i}" for i in ids)
+            if answer is APPROVE
+            else (question if answer == "<echo>" else str(answer))
+        )
+        all_pairs = ((question, said), *extra)
+        return [
+            Round(
+                question_texts=(question, *(q for q, _ in extra)),
+                answer_texts=tuple(x for pair in all_pairs for x in pair),
+                answer_pairs=all_pairs if pairs else None,
+            )
+        ]
 
     monkeypatch.setattr(ask_mod, "answered_rounds_since", rounds)
 
@@ -640,21 +658,6 @@ def test_push_ask_refuses_an_answer_to_a_question_that_does_not_name_the_request
     assert not [c for c in argv if c[0] == "push"]
 
 
-def test_push_ask_refuses_when_the_operator_answered_no(
-    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    repo = _ask_repo(tmp_path)
-    _answered(monkeypatch, True, answer="No, not yet")
-    rid = _request_id(_push(repo).output)
-    _approve(repo, rid)
-
-    result = _push(repo)
-
-    assert result.exit_code == 2, result.output
-    assert "not an approval" in result.output
-    assert not [c for c in argv if c[0] == "push"]
-
-
 def test_the_request_text_tells_the_agent_to_name_the_request_in_the_question(
     tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -775,46 +778,79 @@ def test_a_branch_with_two_debug_journals_refuses_naming_them(
     assert not [c for c in argv if c[0] == "push"]
 
 
-@pytest.mark.parametrize("answer", ["hmm, later", "wait", "what does it change?", "No"])
-def test_push_ask_refuses_an_answer_that_does_not_approve(
+# --- review p4-r3: only the exact approval label, to the request's question ----
+
+
+def _approved_push(repo: Path) -> str:
+    rid = _request_id(_push(repo).output)
+    _approve(repo, rid)
+    return rid
+
+
+def test_push_ask_passes_on_the_exact_approval_label(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True)
+    _approved_push(repo)
+
+    assert _push(repo).exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "answer", ["Yes, but don't push yet", "Yes", "Decline", "Approve", "?", "<echo>"]
+)
+def test_push_ask_refuses_any_answer_but_the_exact_label(
     tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch, answer: str
 ) -> None:
-    """Fail closed: only an answer that positively approves counts."""
     repo = _ask_repo(tmp_path)
     _answered(monkeypatch, True, answer=answer)
-    _approve(repo, _request_id(_push(repo).output))
+    _approved_push(repo)
 
     result = _push(repo)
 
     assert result.exit_code == 2, result.output
-    flat = " ".join(result.output.split())
-    assert "not an approval" in flat and repr(answer) in flat
+    assert "Only that exact option approves" in " ".join(result.output.split())
     assert not [c for c in argv if c[0] == "push"]
 
 
-@pytest.mark.parametrize("answer", ["Yes, push", "y", "OK", "Go ahead", "LGTM"])
-def test_push_ask_passes_on_an_approving_answer(
-    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch, answer: str
+def test_an_approve_label_answering_an_unrelated_question_does_not_count(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The label given to another question in the same round is ignored."""
     repo = _ask_repo(tmp_path)
-    _answered(monkeypatch, True, answer=answer)
-    _approve(repo, _request_id(_push(repo).output))
+    rid = _request_id(_push(repo).output)
+    _approve(repo, rid)
+    _answered(monkeypatch, True, answer="Decline", extra=(("Which colour?", f"Approve {rid}"),))
 
     result = _push(repo)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 2, result.output
+    assert "'Decline'" in result.output
+    assert not [c for c in argv if c[0] == "push"]
 
 
-def test_push_ask_refuses_a_matching_round_whose_answer_text_is_not_observable(
+def test_a_round_whose_answers_cannot_be_paired_refuses_naming_the_harness(
     tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Never the id match alone: an unseen answer is an unreadable transcript."""
     repo = _ask_repo(tmp_path)
-    _answered(monkeypatch, True, answer=None)
-    _approve(repo, _request_id(_push(repo).output))
+    _answered(monkeypatch, True, pairs=False)
+    _approved_push(repo)
 
     result = _push(repo, env={"FR_HARNESS": "opencode"})
 
     assert result.exit_code == 2, result.output
     assert "cannot read the operator's answer on opencode" in " ".join(result.output.split())
     assert not [c for c in argv if c[0] == "push"]
+
+
+def test_the_request_text_names_the_exact_option_to_offer(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True)
+
+    result = _push(repo)
+
+    rid = _request_id(result.output)
+    assert f"offer exactly the option 'Approve {rid}'" in " ".join(result.output.split())
