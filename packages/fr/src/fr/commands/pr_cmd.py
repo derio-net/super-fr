@@ -71,7 +71,7 @@ def create_cmd(
     ),
 ) -> None:
     """Open this run's PR as a draft and record it on the run cursor."""
-    from fr.commands.push_cmd import branch_context, branch_runs, spec_slug_of_run
+    from fr.commands.push_cmd import approval_journal, branch_context, branch_runs
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
     from fr.git_policy.push import PushRefusedError
     from fr.records_commit import commit_records
@@ -83,13 +83,14 @@ def create_cmd(
         settings = load_settings(repo_root).settings
         branch, head, git_dir = branch_context(repo_root)
         runs = branch_runs(repo_root)
-        if len(runs) != 1:
+        if len(runs) > 1:
             raise PushRefusedError(
                 f"branch {branch!r} has {len(runs)} runs; fr pr create records the PR on the "
                 "branch's one run"
             )
-        state = runs[0]
-        _refuse_recorded_pr(repo_root, state.pr)
+        # No run is an fr-debugging session (p4-r5): nothing to record the PR on.
+        state = runs[0] if runs else None
+        _refuse_recorded_pr(repo_root, state.pr if state is not None else None)
         try:
             body = body_file.read_text()
         except (OSError, UnicodeDecodeError) as e:
@@ -100,7 +101,7 @@ def create_cmd(
                 kind="pr",
                 branch=branch,
                 head=head,
-                spec_slug=spec_slug_of_run(repo_root),
+                journal=approval_journal(repo_root),
                 git_dir=git_dir,
                 still_current=True,
             )
@@ -120,6 +121,9 @@ def create_cmd(
         err_console.print(escape(f"fr pr create: {e}"), soft_wrap=True)
         raise typer.Exit(2) from e
     url = str(made["url"])
+    if state is None:
+        console.print(f"opened draft PR {url} (this branch has no run to record it on)")
+        return
     save_run_state(repo_root, state.model_copy(update={"pr": url}))
     commit_records(
         repo_root, [run_path(repo_root, state.run)], f"chore(fr): run {state.run} — pr create"

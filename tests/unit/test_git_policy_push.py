@@ -299,12 +299,13 @@ def _answered(
     monkeypatch: pytest.MonkeyPatch,
     value: bool | None,
     *,
-    answer: str = "Yes",
+    answer: str | None = "Yes",
     names_request: bool = True,
 ) -> None:
     """The transcript fr reads: True is one answered round whose question names
     every stored request's id (unless *names_request* is False) and whose answer is
-    *answer*; False is no answered round; None is a transcript fr cannot read."""
+    *answer* (None: an answer text fr cannot see); False is no answered round;
+    None is a transcript fr cannot read."""
     from fr.run.telemetry import Round
 
     def rounds(env: dict[str, str], since: str) -> list[Round] | None:
@@ -313,7 +314,8 @@ def _answered(
         requests = Path(env["VK_REPO_ROOT"]) / ".git" / "fr" / "requests"
         ids = [json.loads(p.read_text())["id"] for p in requests.glob("*.json")]
         question = "May fr do this? " + (" ".join(ids) if names_request else "(no id)")
-        return [Round(question_texts=(question,), answer_texts=(question, answer))]
+        said = (question, answer) if answer is not None else ()
+        return [Round(question_texts=(question,), answer_texts=said)]
 
     monkeypatch.setattr(ask_mod, "answered_rounds_since", rounds)
 
@@ -663,3 +665,156 @@ def test_the_request_text_tells_the_agent_to_name_the_request_in_the_question(
 
     rid = _request_id(result.output)
     assert f"put the request id {rid} in the question text" in " ".join(result.output.split())
+
+
+# --- review p4-r5: a debugging session approves in its own debug journal ------
+
+DEBUG_SLUG = "2026-11-07-flaky-thing"
+
+
+def _journal(repo: Path, scope: str, slug: str, *args: str):
+    return runner.invoke(
+        app,
+        ["journal", "add", "--scope", scope, "--slug", slug, *args],
+        env={"VK_REPO_ROOT": str(repo)},
+    )
+
+
+def _debug_repo(tmp_path: Path, settings: str) -> Path:
+    """An fr-debugging branch: no run cursor, no spec, one debug journal."""
+    repo = make_repo(tmp_path)
+    land_on_main(repo, settings)
+    git(repo, "switch", "-q", "-c", "fix/flaky")
+    added = _journal(
+        repo, "debug", DEBUG_SLUG, "--kind", "discovery", "--id", "d1", "--title", "root cause"
+    )
+    assert added.exit_code == 0, added.output
+    _commit(repo, "fix", "fix(x): the flaky thing")
+    return repo
+
+
+def test_a_debugging_session_pushes_after_approving_in_its_debug_journal(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _debug_repo(tmp_path, ASK)
+    _answered(monkeypatch, True)
+
+    first = _push(repo)
+
+    assert first.exit_code == 2, first.output
+    flat = " ".join(first.output.split())
+    rid = _request_id(first.output)
+    assert f"fr journal add --scope debug --slug {DEBUG_SLUG} --kind decision --id {rid}" in flat
+    approved = _journal(
+        repo, "debug", DEBUG_SLUG, "--kind", "decision", "--id", rid,
+        "--title", "push approved", "--answered-by", "operator",
+    )  # fmt: skip
+    assert approved.exit_code == 0, approved.output
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert [c for c in argv if c[0] == "push"] == [["push", "-u", "origin", "fix/flaky"]]
+
+
+def test_a_debugging_session_opens_its_pr_after_approving_in_its_debug_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import pr_cmd
+
+    from tests.unit.fakes import FakeGhClient
+
+    forge = FakeGhClient()
+    monkeypatch.setattr(pr_cmd, "client_for", lambda root: forge)
+    monkeypatch.setattr(pr_cmd, "origin_slug", lambda root: "derio-net/demo")
+    repo = _debug_repo(tmp_path, "git:\n  pr: ask\n")
+    _answered(monkeypatch, True)
+    (tmp_path / "body.md").write_text("Fix.\n")
+
+    def create():
+        return runner.invoke(
+            app,
+            ["pr", "create", "--title", "t", "--body-file", str(tmp_path / "body.md")],
+            env={"VK_REPO_ROOT": str(repo)},
+        )
+
+    first = create()
+    assert first.exit_code == 2, first.output
+    rid = next(
+        w.rstrip(".,:;") for w in first.output.replace("`", " ").split() if w.startswith("pr-")
+    )
+    assert f"--scope debug --slug {DEBUG_SLUG}" in " ".join(first.output.split())
+    approved = _journal(
+        repo, "debug", DEBUG_SLUG, "--kind", "decision", "--id", rid,
+        "--title", "PR approved", "--answered-by", "operator",
+    )  # fmt: skip
+    assert approved.exit_code == 0, approved.output
+
+    result = create()
+
+    assert result.exit_code == 0, result.output
+    assert [c[0] for c in forge.calls] == ["create_pr"]
+    assert "https://github.com/derio-net/demo/pull/100" in result.output
+
+
+def test_a_branch_with_two_debug_journals_refuses_naming_them(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _debug_repo(tmp_path, ASK)
+    other = _journal(
+        repo, "debug", "2026-11-07-other", "--kind", "discovery", "--id", "d1", "--title", "x"
+    )
+    assert other.exit_code == 0, other.output
+    _answered(monkeypatch, True)
+
+    result = _push(repo)
+
+    assert result.exit_code == 2, result.output
+    flat = " ".join(result.output.split())
+    assert DEBUG_SLUG in flat and "2026-11-07-other" in flat
+    assert not [c for c in argv if c[0] == "push"]
+
+
+@pytest.mark.parametrize("answer", ["hmm, later", "wait", "what does it change?", "No"])
+def test_push_ask_refuses_an_answer_that_does_not_approve(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch, answer: str
+) -> None:
+    """Fail closed: only an answer that positively approves counts."""
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True, answer=answer)
+    _approve(repo, _request_id(_push(repo).output))
+
+    result = _push(repo)
+
+    assert result.exit_code == 2, result.output
+    flat = " ".join(result.output.split())
+    assert "not an approval" in flat and repr(answer) in flat
+    assert not [c for c in argv if c[0] == "push"]
+
+
+@pytest.mark.parametrize("answer", ["Yes, push", "y", "OK", "Go ahead", "LGTM"])
+def test_push_ask_passes_on_an_approving_answer(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch, answer: str
+) -> None:
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True, answer=answer)
+    _approve(repo, _request_id(_push(repo).output))
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+
+
+def test_push_ask_refuses_a_matching_round_whose_answer_text_is_not_observable(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never the id match alone: an unseen answer is an unreadable transcript."""
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True, answer=None)
+    _approve(repo, _request_id(_push(repo).output))
+
+    result = _push(repo, env={"FR_HARNESS": "opencode"})
+
+    assert result.exit_code == 2, result.output
+    assert "cannot read the operator's answer on opencode" in " ".join(result.output.split())
+    assert not [c for c in argv if c[0] == "push"]

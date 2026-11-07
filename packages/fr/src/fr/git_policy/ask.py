@@ -6,15 +6,17 @@ given after its request was printed:
 1. The first attempt prints a `RemoteWriteRequest` and refuses. The request (its
    id, the head it was made at, the time it was printed) is kept in the git dir,
    never committed: a committed request would move HEAD and so its own id.
-2. The approval is a spec-journal decision with the request's id and
+2. The approval is a decision in the run's OWN journal (`ApprovalJournal`): the
+   spec journal of a spec-driven run, the debug journal of an fr-debugging session
+   (which has no spec, review p4-r5), with the request's id and
    `answered_by: operator` (`decided_by=operator`), created after the request.
 3. fr reads the session transcript (`answered_rounds_since`) for an ANSWERED
    question round since the request whose question text names the request id
-   (review p4-r3: any answer, to any question, was accepted before). Where the
-   harness exposes the answer text (Claude Code), an answer that reads as a refusal
-   (`REFUSAL`) refuses; where it does not (OpenCode records no answer text in the
-   round), the id match alone is checked. Not observable is a refusal naming the
-   harness; there is no `--no-questions` bypass.
+   (review p4-r3: any answer, to any question, was accepted before), and whose
+   answer positively approves (`APPROVAL`, an allowlist: fail closed). A round
+   whose answer text is not observable (OpenCode records none in the round) is
+   treated like an unreadable transcript: a refusal naming the harness. There is
+   no `--no-questions` bypass.
 
 A push request goes stale when a commit other than journal bookkeeping lands
 after it: the operator approved pushing what was there, not what came later.
@@ -33,6 +35,16 @@ from typing import Literal
 from fr.run.telemetry import Round, answered_rounds_since
 
 RequestKind = Literal["push", "pr"]
+ApprovalScope = Literal["spec", "debug"]
+
+
+@dataclass(frozen=True)
+class ApprovalJournal:
+    """Where a request's approval is recorded and read: the run's own journal."""
+
+    scope: ApprovalScope
+    slug: str
+
 
 JOURNALS_PREFIX = "docs/superpowers/journals/"
 """Commits after a push request that touch only this tree (the approval itself) keep it."""
@@ -54,12 +66,14 @@ class RemoteWriteRequest:
     head: str
     at: str
     """`journal_now()` stamp of when the request was printed."""
-    spec_slug: str
+    scope: ApprovalScope
+    slug: str
+    """The journal the approval goes in (`ApprovalJournal`)."""
 
     def journal_command(self) -> str:
         what = "push" if self.kind == "push" else "PR creation"
         return (
-            f"fr journal add --scope spec --slug {self.spec_slug} --kind decision "
+            f"fr journal add --scope {self.scope} --slug {self.slug} --kind decision "
             f"--id {self.id} --title {_quote(f'operator approved the {what}')} "
             "--answered-by operator"
         )
@@ -121,13 +135,13 @@ def _approved(repo_root: Path, request: RemoteWriteRequest) -> bool:
         resolve_journal_read_path,
     )
 
-    path = resolve_journal_read_path(repo_root, "spec", request.spec_slug)
+    path = resolve_journal_read_path(repo_root, request.scope, request.slug)
     try:
         entries = parse_journal(path.read_text())
     except FileNotFoundError:
         return False
     except (OSError, JournalParseError) as e:
-        raise AskRefusedError(f"cannot read the spec journal {path}: {e}") from e
+        raise AskRefusedError(f"cannot read the {request.scope} journal {path}: {e}") from e
     since = journal_stamp_as_utc(request.at)
     return any(
         e.kind == "decision"
@@ -138,22 +152,21 @@ def _approved(repo_root: Path, request: RemoteWriteRequest) -> bool:
     )
 
 
-REFUSAL = re.compile(
-    r"^\s*(no|nope|deny|denied|decline|declined|reject|rejected|refuse|refused|"
-    r"cancel|stop|abort|don'?t|do not|not now|never)\b",
+APPROVAL = re.compile(
+    r"^\s*(yes|y|approved?|go ahead|ok|okay|proceed|push it|open it|lgtm|sure)\b",
     re.IGNORECASE,
 )
-"""An answer that reads as a refusal: it STARTS with one of these words. Kept simple
-on purpose: the question tool's answers are the option labels the agent offered
-(`Yes, push` / `No`) or the operator's own words, and a leading negative is how
-both say no. Anything else counts as an answer to the question that was asked."""
+"""An answer that approves: it STARTS with one of these words (case-insensitive).
+Fail closed: anything else — "no", "wait", "hmm, later", a question back — is not
+an approval. The question tool's answers are the option labels the agent offered
+(`Yes, push` / `No`) or the operator's own words."""
 
 
-def refusals(round_: Round) -> list[str]:
-    """The answers of *round_* that read as refusals. `answer_texts` holds the
-    answers map's keys (the questions) and values; the questions are skipped."""
+def answers(round_: Round) -> list[str]:
+    """The operator's answers in *round_*. `answer_texts` holds the answers map's
+    keys (the questions) and values; the questions are skipped."""
     questions = set(round_.question_texts)
-    return [a for a in round_.answer_texts if a not in questions and REFUSAL.match(a)]
+    return [a for a in round_.answer_texts if a not in questions]
 
 
 def require_approval(
@@ -162,32 +175,38 @@ def require_approval(
     kind: RequestKind,
     branch: str,
     head: str,
-    spec_slug: str | None,
+    journal: ApprovalJournal | str,
     git_dir: Path,
     still_current: bool,
     env: Mapping[str, str] | None = None,
 ) -> RemoteWriteRequest:
     """The approved request, or `AskRefusedError` (after printing a new request when
     there was none, or it went stale). *still_current* says whether a stored push
-    request still covers HEAD (the caller checked the commits after it)."""
+    request still covers HEAD (the caller checked the commits after it). *journal* is
+    where the approval goes, or why the branch has none (a refusal)."""
     from fr.journal.model import journal_now, journal_stamp_as_utc
 
     env = os.environ if env is None else env
-    if spec_slug is None:
+    if isinstance(journal, str):
         raise AskRefusedError(
-            f"{kind}: ask needs the run's spec journal to record the operator's approval, "
-            "and this run has no spec yet"
+            f"{kind}: ask records the operator's approval in the run's own journal (the "
+            f"spec journal, or a debugging session's debug journal): {journal}"
         )
     path = _store(git_dir, kind, branch)
     request = _load(path)
-    if request is None or not still_current or request.spec_slug != spec_slug:
+    if (
+        request is None
+        or not still_current
+        or (request.scope, request.slug) != (journal.scope, journal.slug)
+    ):
         request = RemoteWriteRequest(
             kind=kind,
             id=request_id(kind, branch, head),
             branch=branch,
             head=head,
             at=journal_now(),
-            spec_slug=spec_slug,
+            scope=journal.scope,
+            slug=journal.slug,
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(asdict(request)))
@@ -204,13 +223,17 @@ def require_approval(
                 "approved; fr can read the transcript here and it does not show it. Ask the "
                 "operator, with the request id in the question, then run this again."
             )
-        declined = [a for r in asked for a in refusals(r)]
-        if declined:
+        said = [a for r in asked for a in answers(r)]
+        if said:
+            if all(APPROVAL.match(a) for a in said):
+                return request
+            refused = next(a for a in said if not APPROVAL.match(a))
             raise AskRefusedError(
-                f"request {request.id}: the operator answered {declined[0]!r}, which is not "
-                f"an approval. fr will not {request.kind} on it."
+                f"request {request.id}: the operator answered {refused!r}, which is not an "
+                f"approval (fr needs a yes). fr will not {request.kind} on it."
             )
-        return request
+        # A round names the request but its answer text is not observable (OpenCode
+        # records none in the round): treated as an unreadable transcript, below.
     from fr.harness.detect import detect_harness
     from fr.harness.model import HarnessError
 

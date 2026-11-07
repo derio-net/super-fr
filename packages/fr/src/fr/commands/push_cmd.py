@@ -21,6 +21,7 @@ from rich.markup import escape
 from fr.commands.common import resolve_repo_root
 
 if TYPE_CHECKING:
+    from fr.git_policy.ask import ApprovalJournal
     from fr.run.model import RunState
 
 err_console = Console(stderr=True)
@@ -56,16 +57,47 @@ def remote_of(repo_root: Path) -> str:
     return remote
 
 
-def spec_slug_of_run(repo_root: Path) -> str | None:
-    """The spec-journal slug of the branch's run (where an approval is recorded)."""
+def approval_journal(repo_root: Path) -> ApprovalJournal | str:
+    """Where `ask` records and reads the operator's approval: the run's own journal
+    (review p4-r5). The spec journal of the branch's spec-driven run; else, for an
+    fr-debugging session (no run, no spec), the one debug journal the branch added
+    since it left the default branch. A string says why there is none."""
     from fr.archive import spec_slug_of
+    from fr.git import GitRefusal, remote_default_ref
+    from fr.git_policy.ask import ApprovalJournal
+    from fr.git_policy.push import run_git
+    from fr.journal.model import JOURNALS_REL, SCOPE_DIRS
     from fr.requirements import run_spec
 
     for state in branch_runs(repo_root):
         spec = run_spec(state)
         if spec:
-            return spec_slug_of(Path(spec))
-    return None
+            return ApprovalJournal("spec", spec_slug_of(Path(spec)))
+    default = remote_default_ref(repo_root)
+    if default is None or isinstance(default, GitRefusal):
+        why = default.reason if isinstance(default, GitRefusal) else "no default ref"
+        return f"this branch has no spec-driven run, and fr cannot find its base ({why})"
+    base = run_git(repo_root, ["merge-base", "HEAD", default])
+    debug_dir = (JOURNALS_REL / SCOPE_DIRS["debug"]).as_posix()
+    added = run_git(
+        repo_root,
+        ["diff", "--name-only", "--no-renames", "--diff-filter=A", base.stdout.strip(), "HEAD",
+         "--", f"{debug_dir}/"],
+    )  # fmt: skip
+    if base.returncode != 0 or added.returncode != 0:
+        return "this branch has no spec-driven run, and fr cannot read its debug journals"
+    slugs = sorted(Path(p).stem for p in added.stdout.splitlines() if p.endswith(".md"))
+    if len(slugs) == 1:
+        return ApprovalJournal("debug", slugs[0])
+    if not slugs:
+        return (
+            "this branch has no spec-driven run and added no debug journal; record the "
+            "investigation with `fr journal add --scope debug` first"
+        )
+    return (
+        f"this branch has no spec-driven run and added {len(slugs)} debug journals "
+        f"({', '.join(slugs)}); fr does not guess which one is this session's"
+    )
 
 
 def branch_runs(repo_root: Path) -> list[RunState]:
@@ -141,7 +173,7 @@ def push_cmd() -> None:
                 kind="push",
                 branch=branch,
                 head=head,
-                spec_slug=spec_slug_of_run(repo_root),
+                journal=approval_journal(repo_root),
                 git_dir=git_dir,
                 still_current=push_still_current(repo_root, git_dir, branch, head),
             )
