@@ -1,0 +1,32 @@
+schema_version: 10
+run: 2026-11-04-feat-repo-feature-settings
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T2.S3, P2.T3.S1, P2.T4.S1, P2.T4.S2]
+refactor:
+  P2.T1: "each guard is a one-line predicate call at an existing absence branch; nothing to clean"
+  P2.T4: "a scenario script, one test registration and a matrix move; nothing to clean"
+journal:
+  - kind: decision
+    id: p2-disabled-wording
+    title: one constant, fr.settings.DISABLED, is the "disabled by repo setting" wording
+    body: "Python surfaces read fr.settings.DISABLED / disabled_because(); the one shell hook (fr-acceptance-nag.sh) cannot import it, so test_one_wording_for_a_disabled_feature pins it to the constant and scans for any other spelling."
+    phase: 2
+  - kind: decision
+    id: p2-debt-disabled-source
+    title: debt reports acceptance-off as a read source with why=DISABLED, not unavailable
+    body: "DebtReport schema 1 is frozen, so no field was added. The matrix source is state=read with why='disabled by repo setting'; render.py reads that to print the line and still prints 'No technical debt' when nothing else is owed."
+    phase: 2
+  - kind: discovery
+    id: p2-ledger-snapshot-repo
+    title: Checkout.snapshot_paths made a repo the settings loader could not resolve
+    body: "The ledger read copies exit inputs into a fresh git repo with origin set and no refs; run_exit now asks disabled(root, 'gates'), and the loader refuses a remote whose default ref it cannot name. snapshot_paths now commits the copy and sets refs/remotes/origin/main + origin/HEAD, so the policy read there is the default branch's (.fr is already in EXIT_INPUTS). 45 fixture repos with an unreachable origin and no default ref (acceptance init, gate backfill, debt) needed tests.unit.settings_repo.seed_origin_default: the refuse-never-default principle reaches every command that now calls disabled()."
+    phase: 2
+  - kind: discovery
+    id: p2-spec-policy-undecodable
+    title: spec_policy_problems must tolerate an undecodable spec
+    body: "test_exit_label_sync_points feeds a non-UTF-8 spec; the helper reads it, so UnicodeDecodeError is caught alongside OSError and left to the other validators to report."
+    phase: 2
+resolves: []
+evidence: {}
