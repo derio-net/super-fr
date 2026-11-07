@@ -378,3 +378,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-07-repo-settings-core-p4 created=2026-11-07T07:37:28+00:00 -->
 ### phase-split-2026-11-07-repo-settings-core-p4 · decision · ask: git policy — fr push, fr pr create, squash-unpushed, templates (R11–R14), row repo-settings-git-policy
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-07-repo-settings-core-p3 created=2026-11-07T07:37:29+00:00 -->
+### tier-2026-11-07-repo-settings-core-p3 · decision · hard: changes deliver's PR-body gate and every tracking-none call site that callers rely on
