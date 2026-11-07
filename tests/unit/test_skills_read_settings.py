@@ -29,3 +29,13 @@ def test_the_spec_reviewer_raises_nothing_a_setting_turned_off() -> None:
     text = " ".join((ROOT / READERS[-1]).read_text().split())
     assert "Under `artifacts.test_plan: off` a missing Test Plan is not a finding" in text
     assert "under `artifacts.acceptance: off` absent or unlinked rows are not a finding" in text
+
+
+def test_p3_r4_fr_goal_states_the_filing_and_ledger_rules_the_code_applies() -> None:
+    """Filing is skipped only when the tracker cannot take it (`_has_tracker`: issues or
+    labels off); comments off alone files; PR labels are the ledger (`forge.labels`)."""
+    text = " ".join((ROOT / "plugins/super-fr/skills/fr-goal/SKILL.md").read_text().split())
+    assert "under `forge.issues` or `forge.labels` `off` (or `tracking: none`) run no" in text
+    assert "`forge.comments: off` alone does not stop filing" in text
+    assert "follow `forge.labels` alone, so under `forge.issues: off` alone" in text
+    assert "or `forge.comments` `off` (or `tracking none`) run no" not in text
