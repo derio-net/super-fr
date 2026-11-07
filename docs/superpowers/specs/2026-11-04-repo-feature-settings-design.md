@@ -147,6 +147,21 @@ A branch that edits them gets no effect until the edit lands there, and the
 edit itself is not subject to the policy it changes. A missing key takes its
 documented default, and every default is today's behaviour.
 
+The default ref is named fully qualified and read by commit SHA, once. When it
+cannot be resolved, or its file cannot be read, fr refuses with the fix (`git
+fetch`, `git remote set-head -a`). It never silently falls back to defaults or
+to a local branch. A repo with no remote reads its local default branch.
+
+There is one exception: a CI context (any truthy CI marker fr's migration gate
+already reads) whose checkout has no default ref, such as a depth-1
+pull-request checkout. There fr reads the file from HEAD's committed tree (never
+the working tree) and prints one notice naming that source. CI's checkout is the
+candidate merge itself, so a PR that edits `.fr/settings.yaml` shows the edit in
+its own diff. Refusing there would turn every consumer's existing CI red on
+upgrade.
+
+A settings refusal is always a clean message and exit 2, never a traceback.
+
 R3. The `fr settings` commands:
 
 - `fr settings init` writes the placement's file, with every key commented out
