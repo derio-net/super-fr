@@ -147,10 +147,22 @@ A branch that edits them gets no effect until the edit lands there, and the
 edit itself is not subject to the policy it changes. A missing key takes its
 documented default, and every default is today's behaviour.
 
-The default ref is named fully qualified and read by commit SHA, once. When it
-cannot be resolved, or its file cannot be read, fr refuses with the fix (`git
-fetch`, `git remote set-head -a`). It never silently falls back to defaults or
-to a local branch. A repo with no remote reads its local default branch.
+The default ref is named fully qualified and read by commit SHA, once, in this
+order:
+
+1. **A remote with remote-tracking refs** (any `refs/remotes/origin/*`) reads
+   `origin/HEAD`, then `origin/<init.defaultBranch | main | master>`. If none of
+   these resolves, fr refuses with the fix (`git fetch`, `git remote set-head
+   -a`). A local branch is never read here, because it may carry unpushed edits
+   to the remote's policy.
+2. **No remote, or a remote with no tracking refs yet** (added but never fetched
+   or pushed) reads the local `refs/heads/<init.defaultBranch | main | master>`.
+   With no remote policy to override, this bootstrap state works offline. If no
+   such branch exists, there are no commits to hold a policy, so fr uses the
+   defaults and prints a note.
+
+A file that exists at the resolved commit but cannot be read refuses. It is
+never read as absent.
 
 There is one exception: a CI context (any truthy CI marker fr's migration gate
 already reads) whose checkout has no default ref, such as a depth-1
