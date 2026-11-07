@@ -158,6 +158,30 @@ def test_resolve_discharges_an_owed_entry_and_closes_its_issue(
     assert "close it yourself" not in res.output
 
 
+def test_p3_r5_comments_off_closes_the_owed_issue_with_no_comment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R9: under `forge.comments: off` the discharge closes the issue silently."""
+    from tests.unit.settings_repo import git
+
+    root = _repo(tmp_path)
+    (root / ".fr").mkdir()
+    (root / ".fr/settings.yaml").write_text("forge:\n  comments: 'off'\n")
+    git(root, "add", ".fr/settings.yaml")
+    git(root, "commit", "-qm", "quiet")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")  # as a push leaves it
+    git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    owed = _owed()
+    _journal(root, [owed, _filed(owed, f"{OWN}#12")])
+    gh = OwnedGh()
+    _owned_issue(gh)
+    res = _resolve(monkeypatch, root, gh)
+    assert res.exit_code == 0, res.output
+    assert _calls(gh, "comment_issue") == []
+    (close,) = _calls(gh, "edit_issue_state")
+    assert close["number"] == 12 and close["state"] == "CLOSED"
+
+
 def test_an_unreachable_forge_prints_the_close_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
