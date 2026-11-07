@@ -90,6 +90,29 @@ def test_tracking_none_means_git_only_and_says_why(
     assert report.sources["forge"].why.startswith("tracking: none")
 
 
+def test_p3_r7_forge_issues_off_keeps_the_forge_reads(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R9: reads are never gated. `forge.issues: off` stops `fr debt issue` writing; the
+    report still reads the forge."""
+    import types
+
+    from fr.settings.model import parse_settings
+
+    quiet = parse_settings({"forge": {"issues": "off"}}, source="test")
+    monkeypatch.setattr(
+        "fr.settings.load_settings", lambda _root: types.SimpleNamespace(settings=quiet)
+    )
+    monkeypatch.setattr(
+        "fr.services.resolve.resolve_tracking",
+        lambda *_a, **_k: types.SimpleNamespace(type="github"),
+    )
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: "o/r")
+    monkeypatch.setattr("fr.commands.archive_cmd._make_gh_client", lambda: object())
+    forge, why = debt_cmd._forge(repo)
+    assert forge is not None and why == ""
+
+
 def test_a_repo_without_a_remote_says_so_rather_than_offline(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

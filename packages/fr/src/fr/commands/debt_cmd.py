@@ -40,13 +40,13 @@ def _now() -> datetime:
 
 
 def _forge(root: Path) -> tuple[DebtForge | None, str]:
-    """The repo's forge adapter and, when there is none, the reason why. An
-    unreadable settings file refuses (`SettingsError`), never reads as a forge."""
-    from fr.settings import forge_block
+    """The repo's forge adapter and, when there is none, the reason why. Reads are never
+    gated (R9): `forge.issues: off` stops `fr debt issue` writing, not this report reading.
+    A repo that declares no tracker (`tracking: none`) has no issues to read."""
+    from fr.settings import TRACKING_NONE, tracking_none
 
-    off = forge_block(root, "issues", lenient=True)
-    if off is not None:
-        return None, off
+    if tracking_none(root, lenient=True):
+        return None, TRACKING_NONE
     try:
         from fr import _hosts
         from fr.commands.archive_cmd import _make_gh_client
