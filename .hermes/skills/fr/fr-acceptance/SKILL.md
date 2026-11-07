@@ -15,6 +15,8 @@ The matrix (`docs/acceptance/matrix.yaml`) is the registry of business-level acc
 
 **Announce at start:** "I'm using fr-acceptance to work the acceptance matrix."
 
+**Check the setting first.** If `fr settings show --json` reports `artifacts.acceptance` as `off`, this repo's matrix is disabled by repo setting: there is nothing to backfill, and `fr acceptance add`, `set-status` and `init` refuse. Stop here.
+
 ## Statuses — the honesty scale
 
 `ci` / `scheduled` = automated · `walked` = proven live (dated by its walk) ·
