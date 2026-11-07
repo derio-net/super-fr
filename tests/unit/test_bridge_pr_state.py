@@ -7,6 +7,8 @@ so the unit tests stub the observation source. Phase 5's
 
 from __future__ import annotations
 
+from fr.gh import GhError
+
 from tests.unit.fakes import FakeMcpClient, forge_of
 
 
@@ -378,6 +380,9 @@ def test_default_close_gh_issue_routes_through_edit_issue_state(monkeypatch):
     calls: list[tuple[str, int, str]] = []
 
     class _FakeClient:
+        def read_file(self, repo: str, path: str) -> str:
+            raise GhError("gh: Not Found (HTTP 404)")  # no .fr/settings.yaml: defaults
+
         def edit_issue_state(self, repo: str, number: int, *, state: str) -> None:
             calls.append((repo, number, state))
 
@@ -409,6 +414,9 @@ def _recording_clients(monkeypatch):
     closes: list[tuple[str, int, str]] = []
 
     class _FakeClient:
+        def read_file(self, repo: str, path: str) -> str:
+            raise GhError("gh: Not Found (HTTP 404)")  # no .fr/settings.yaml: defaults
+
         def edit_issue_state(self, repo: str, number: int, *, state: str) -> None:
             closes.append((repo, number, state))
 
@@ -460,3 +468,35 @@ def test_the_default_close_passes_no_host_for_a_saas_url(monkeypatch):
 
     assert built == [("github", None)]
     assert closes == [("derio-net/superpowers-for-vk", 100, "CLOSED")]
+
+
+def test_p3_r2_the_close_backstop_honours_the_repos_forge_issues_setting():
+    """R9: under `forge.issues: off` (the repo's `.fr/settings.yaml` read through the
+    resolved client) the backstop closes nothing; an unreadable policy closes nothing."""
+    from fr.gh import GhError
+    from fr_vk.pr_state import _default_close_gh_issue
+
+    class _Client:
+        def __init__(self, settings: str | None, *, broken: bool = False) -> None:
+            self.settings, self.broken = settings, broken
+            self.closed: list[int] = []
+
+        def read_file(self, repo: str, path: str) -> str:
+            if self.broken:
+                raise GhError("HTTP 502", stderr="HTTP 502")
+            if self.settings is None:
+                raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
+            return self.settings
+
+        def edit_issue_state(self, repo: str, number: int, *, state: str) -> None:
+            self.closed.append(number)
+
+    off = _Client("forge:\n  issues: 'off'\n")
+    _default_close_gh_issue("o/r", "7", off)  # type: ignore[arg-type]
+    assert off.closed == []
+    broken = _Client(None, broken=True)
+    _default_close_gh_issue("o/r", "7", broken)  # type: ignore[arg-type]
+    assert broken.closed == []
+    default = _Client(None)
+    _default_close_gh_issue("o/r", "7", default)  # type: ignore[arg-type]
+    assert default.closed == [7]

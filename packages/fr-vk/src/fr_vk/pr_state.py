@@ -87,7 +87,19 @@ Closer = Callable[[str, str, "GhClient"], None]
 def _default_close_gh_issue(repo: str, issue_number: str, client: GhClient) -> None:
     """`edit_issue_state(..., state="CLOSED")` on the resolved *client*.
     Non-fatal on failure: the forge's own close-on-merge already ran, so a
-    failure here is a missed backstop, not a broken merge."""
+    failure here is a missed backstop, not a broken merge. A repo whose forge policy
+    turns tracker issues off (R9: its `.fr/settings.yaml` at the default branch, read
+    through *client*), or whose policy cannot be read, is closed by nothing here."""
+    from fr.settings import SettingsError
+    from fr.settings.remote import client_policy
+
+    try:
+        why = client_policy(client, repo).block("issues")
+    except SettingsError as e:
+        why = str(e)
+    if why is not None:
+        logger.info("pr_state: not closing %s#%s: %s", repo, issue_number, why)
+        return
     try:
         client.edit_issue_state(repo, int(issue_number), state="CLOSED")
     except Exception as e:  # noqa: BLE001 — non-fatal, mirrors the old subprocess posture
