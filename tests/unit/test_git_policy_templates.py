@@ -88,9 +88,12 @@ def test_subject_matches_accepts_a_rendered_subject_and_rejects_others() -> None
     template = DEFAULTS.git.commit.without_issue
     assert subject_matches(template, "feat(run): record the issue")
     assert not subject_matches(template, "record the issue")
-    assert not subject_matches(template, "feat: no scope")
+    assert subject_matches(template, "feat: no scope")  # p4-deliver-r1: scope is optional
     assert subject_matches(CUSTOM.git.commit.without_issue, "[fr] hello")
-    assert not subject_matches(CUSTOM.git.commit.without_issue, "chore(fr): hello")
+    # Its scope is optional (p4-deliver-r1), so any subject is a bare summary.
+    assert parse_subject(CUSTOM.git.commit.without_issue, "chore(fr): hello") == {
+        "summary": "chore(fr): hello"
+    }
 
 
 def test_a_template_with_regex_metacharacters_matches_literally() -> None:
@@ -102,6 +105,79 @@ def test_parse_subject_returns_the_placeholder_values() -> None:
     parsed = parse_subject(DEFAULTS.git.commit.with_issue, "chore(fr): run r1 — x (#9)")
     assert parsed == {"type": "chore", "scope": "fr", "summary": "run r1 — x", "issue": "9"}
     assert parse_subject(DEFAULTS.git.commit.with_issue, "chore(fr): no issue") is None
+
+
+# --- an optional scope (p4-deliver-r1) -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "subject", ["test: x", "chore: close out fix/y (#1373)", "feat(api): x", "fix(a/b): x"]
+)
+def test_the_default_template_matches_conventional_commits_with_or_without_a_scope(
+    subject: str,
+) -> None:
+    assert subject_matches(DEFAULTS.git.commit.without_issue, subject)
+
+
+@pytest.mark.parametrize("subject", ["Fix typo", "wip", "test x", ": x", "test(): x"])
+def test_a_non_conventional_subject_still_refuses(subject: str) -> None:
+    assert not subject_matches(DEFAULTS.git.commit.without_issue, subject)
+    assert not subject_ok(DEFAULTS, subject, parents=1, issue=None)
+
+
+def test_a_scope_less_subject_parses_to_no_scope() -> None:
+    assert parse_subject(DEFAULTS.git.commit.without_issue, "test: x") == {
+        "type": "test",
+        "summary": "x",
+    }
+    assert parse_subject(DEFAULTS.git.commit.with_issue, "fix: y (#4)") == {
+        "type": "fix",
+        "summary": "y",
+        "issue": "4",
+    }
+
+
+def test_rendering_without_a_scope_drops_its_delimiters() -> None:
+    assert render_subject(DEFAULTS, "test", "", "x", None) == "test: x"
+    assert render_subject(DEFAULTS, "fix", "", "y", 4) == "fix: y (#4)"
+    assert render_subject(CUSTOM, "feat", "", "x", None) == "x"
+    assert render_subject(CUSTOM, "feat", "", "x", 3) == "x #3"
+
+
+def test_a_bracketed_scope_token_is_optional_with_its_trailing_space() -> None:
+    template = CUSTOM.git.commit.without_issue  # "[{scope}] {summary}"
+    assert parse_subject(template, "x") == {"summary": "x"}
+    assert parse_subject(template, "[fr] x") == {"scope": "fr", "summary": "x"}
+    # `{summary}` reads anything, so a stray bracket is summary text, not a scope.
+    assert parse_subject(template, "[] x") == {"summary": "[] x"}
+
+
+def test_a_scope_without_brackets_is_optional_alone() -> None:
+    template = "{type}/{scope}: {summary}"
+    assert parse_subject(template, "feat/api: x") == {
+        "type": "feat",
+        "scope": "api",
+        "summary": "x",
+    }
+    assert parse_subject(template, "feat/: x") == {"type": "feat", "summary": "x"}
+
+
+def test_a_repeated_scope_must_repeat_or_be_absent_everywhere() -> None:
+    template = "{type}({scope}): {summary} [{scope}]"
+    assert subject_matches(template, "a(b): c [b]")
+    assert subject_matches(template, "a: c")
+    assert not subject_matches(template, "a(b): c")
+    assert not subject_matches(template, "a(b): c [d]")
+    assert (
+        render_subject(
+            parse_settings({"git": {"commit": {"without_issue": template}}}, source="t"),
+            "a",
+            "",
+            "c",
+            None,
+        )
+        == "a: c"
+    )
 
 
 def test_merge_commits_are_exempt_by_parent_count() -> None:

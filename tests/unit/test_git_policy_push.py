@@ -90,6 +90,35 @@ def test_with_defaults_fr_push_is_git_push_u(tmp_path: Path, argv: list[list[str
     assert git(repo, "rev-parse", f"origin/{BRANCH}").strip() == head
 
 
+def test_a_scope_less_conventional_commit_pushes_under_the_defaults(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    """p4-deliver-r1: `{type}({scope}): {summary}` reads the scope as optional."""
+    repo = _feature(make_repo(tmp_path))
+    _commit(repo, "a", "test: follow the agents kind")
+    head = _commit(repo, "b", "chore: close out fix/y (#1373)")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert git(repo, "rev-parse", f"origin/{BRANCH}").strip() == head
+
+
+def test_squash_composes_a_scope_less_subject_from_a_scope_less_first_commit(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    repo = make_repo(tmp_path)
+    land_on_main(repo, SQUASH)
+    _feature(repo)
+    _commit(repo, "a", "test: x")
+    _commit(repo, "b", "fix(api): b")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert _remote_log(repo) == ["test: x"]
+
+
 def test_an_unpushed_commit_whose_subject_does_not_match_refuses_naming_it(
     tmp_path: Path, argv: list[list[str]]
 ) -> None:

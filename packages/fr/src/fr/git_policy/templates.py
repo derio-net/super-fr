@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import string
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -29,38 +30,159 @@ def template_for(settings: Settings, issue: int | None) -> str:
     return commit.with_issue if issue is not None else commit.without_issue
 
 
+@dataclass(frozen=True)
+class _Lit:
+    text: str
+
+
+@dataclass(frozen=True)
+class _Field:
+    name: str
+
+
+@dataclass(frozen=True)
+class _Scope:
+    """`{scope}` with the delimiters that vanish with it (see `segments`)."""
+
+    left: str
+    right: str
+
+
+_Segment = _Lit | _Field | _Scope
+
+_OPENERS = re.compile(r"[(\[{<]*$")
+_CLOSERS = re.compile(r"[)\]}>]*")
+
+
+def segments(template: str) -> list[_Segment]:
+    """*template* split into literals, placeholders and optional scopes.
+
+    The scope is optional, as in Conventional Commits (p4-deliver-r1). Each
+    `{scope}` takes with it, as one optional unit:
+
+    - the run of opening brackets `( [ { <` immediately before it, and
+    - the run of closing brackets `) ] } >` immediately after it, and
+    - when that unit is a whole whitespace-separated token (at the template's
+      start or after whitespace, and followed by whitespace or the template's
+      end), one whitespace character beside it: the one after it, else (the
+      token ends the template) the one before it.
+
+    So `{type}({scope}): {summary}` drops `({scope})` and `[{scope}] {summary}`
+    drops `[{scope}] `; a scope with no brackets (`{type}/{scope}: …`) is
+    optional alone. `{type}`, `{summary}` and `{issue}` are always required, and
+    a placeholder directly before a bracketed scope never contains its opening
+    bracket (`subject_regex`), so `test(): x` is not read as type `test()`.
+    """
+    raw: list[_Lit | _Field] = []
+    for literal, field, _spec, _conv in string.Formatter().parse(template):
+        if literal:
+            raw.append(_Lit(literal))
+        if field is not None:
+            raw.append(_Field(field))
+    out: list[_Segment] = []
+    pending = ""  # leading text of the next literal still to emit
+    for i, seg in enumerate(raw):
+        if isinstance(seg, _Lit):
+            out.append(_Lit(seg.text[len(pending) :]) if pending else seg)
+            pending = ""
+            continue
+        if seg.name != "scope":
+            out.append(seg)
+            continue
+        left = ""
+        prev = out[-1] if out else None
+        if isinstance(prev, _Lit):
+            out.pop()
+            m = _OPENERS.search(prev.text)
+            left = m.group() if m else ""
+            rest = prev.text[: len(prev.text) - len(left)]
+            if rest:
+                out.append(_Lit(rest))
+        nxt = raw[i + 1] if i + 1 < len(raw) else None
+        right, after = "", ""
+        if isinstance(nxt, _Lit):
+            m = _CLOSERS.match(nxt.text)
+            right = m.group() if m else ""
+            after = nxt.text[len(right) :]
+        last = out[-1] if out else None
+        before = last.text if isinstance(last, _Lit) else None
+        token_start = not out or (before is not None and before[-1:].isspace())
+        if token_start and after[:1].isspace():
+            right += after[0]
+        elif token_start and not after and i + 2 >= len(raw) and before:  # ends the template
+            out[-1] = _Lit(before[:-1])
+            left = before[-1] + left
+        if isinstance(nxt, _Lit):
+            pending = right
+        out.append(_Scope(left, right))
+    return [s for s in out if not (isinstance(s, _Lit) and not s.text)]
+
+
+def render(template: str, values: dict[str, str]) -> str:
+    """*template* with *values*; an empty or missing scope drops its delimiters."""
+    parts: list[str] = []
+    for seg in segments(template):
+        if isinstance(seg, _Lit):
+            parts.append(seg.text)
+        elif isinstance(seg, _Field):
+            parts.append(values[seg.name])
+        elif values.get("scope"):
+            parts.append(f"{seg.left}{values['scope']}{seg.right}")
+    return "".join(parts)
+
+
 def render_subject(
     settings: Settings, type_: str, scope: str, summary: str, issue: int | None
 ) -> str:
-    """The subject for these values: `with_issue` iff *issue* is not None."""
+    """The subject for these values: `with_issue` iff *issue* is not None. An
+    empty *scope* renders without its delimiters (`test: x`, never `test(): x`)."""
     values = {"type": type_, "scope": scope, "summary": summary}
     if issue is not None:
         values["issue"] = str(issue)
-    return template_for(settings, issue).format(**values)
+    return render(template_for(settings, issue), values)
 
 
 def subject_regex(template: str) -> re.Pattern[str]:
     """*template* as an anchored regex: literal text escaped, each placeholder a
-    named non-greedy group (a repeated placeholder must repeat its value)."""
+    named non-greedy group (a repeated placeholder must repeat its value), and
+    each scope optional with its delimiters (`segments`): absent at its first
+    occurrence, it is absent at every later one."""
     parts: list[str] = ["^"]
     seen: set[str] = set()
-    for literal, field, _spec, _conv in string.Formatter().parse(template):
-        parts.append(re.escape(literal))
-        if field is None:
+    segs = segments(template)
+    for i, seg in enumerate(segs):
+        if isinstance(seg, _Lit):
+            parts.append(re.escape(seg.text))
             continue
-        if field in seen:
-            parts.append(f"(?P={field})")
+        name = seg.name if isinstance(seg, _Field) else "scope"
+        pattern = _GROUPS.get(name, ".+?")
+        nxt = segs[i + 1] if i + 1 < len(segs) else None
+        opener = nxt.left.lstrip()[:1] if isinstance(nxt, _Scope) else ""
+        if opener and name not in _GROUPS:
+            # `{type}({scope})`: the type stops at the scope's bracket, so an
+            # absent scope never lets it swallow one (`test(): x` is no subject).
+            pattern = f"[^{re.escape(opener)}]+?"
+        if name in seen:
+            group = f"(?P={name})"
         else:
-            seen.add(field)
-            parts.append(f"(?P<{field}>{_GROUPS.get(field, '.+?')})")
+            seen.add(name)
+            group = f"(?P<{name}>{pattern})"
+        if isinstance(seg, _Field):
+            parts.append(group)
+            continue
+        inner = f"{re.escape(seg.left)}{group}{re.escape(seg.right)}"
+        parts.append(f"(?({name}){inner})" if group.startswith("(?P=") else f"(?:{inner})?")
     parts.append("$")
     return re.compile("".join(parts))
 
 
 def parse_subject(template: str, subject: str) -> dict[str, str] | None:
-    """The placeholder values *subject* was rendered from, or None if it was not."""
+    """The placeholder values *subject* was rendered from, or None if it was not.
+    An absent scope has no key."""
     m = subject_regex(template).match(subject)
-    return m.groupdict() if m else None
+    if m is None:
+        return None
+    return {k: v for k, v in m.groupdict().items() if v is not None}
 
 
 def subject_matches(template: str, subject: str) -> bool:
