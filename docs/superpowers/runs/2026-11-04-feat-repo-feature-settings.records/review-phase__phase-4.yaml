@@ -1,0 +1,23 @@
+schema_version: 10
+run: 2026-11-04-feat-repo-feature-settings
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+  - {kind: review, id: p4-review-1, phase: 4, title: "Phase 4 code review: 6 findings, all in scope, all fixed; R11 amended", body: "An independent reviewer read phase 4 (a07a53ce3..6db507e61) against R11-R14 and the artifact-versioning rule. The no-force invariant, the CAS update-ref, the run 10->11 and agents 3->4 hops, the explainer and the forge-write tripwire were found sound. Fixes ad19defc5..3f9950f2f; full suite 14364 passed. Two automated security reviews of the in-flight p4-r3 fix tightened the approval twice: from a refusal denylist to the exact `Approve <request-id>` answer to the question naming the id, read as structural question/answer pairs. R11 was amended to match."}
+  - {kind: decision, id: p4-approval-in-runs-own-journal, phase: 4, title: "An ask approval is recorded in the run's own journal: the spec journal, or the branch's one debug journal", body: "A debugging session has no run cursor, so its journal is the one debug journal the branch added since the merge-base with the remote default ref; zero or several refuse, naming them. R11 amended (a3f65d890, 3f9950f2f)."}
+  - {kind: decision, id: p4-fr-commit-trailer, phase: 4, title: "fr marks its own commits with an Fr-Commit body trailer", body: "fr_message adds `Fr-Commit: migrate|bookkeeping` to every fr-written commit, so the squash recognises them under any template. Subjects are unchanged, so default-template subjects stay byte-identical. The subject parse remains the fallback for commits written before the trailer."}
+  - {kind: finding, id: p4-r1, phase: 4, review_scope: in, title: "squash() one-commit shortcut left the commit in the segment", body: "[code, migration] and [code, merge] always refused; [A, M, B] pushed B under A's subject."}
+  - {kind: finding, id: p4-r2, phase: 4, review_scope: in, title: "Migration and bookkeeping commits went unrecognised under a template without {type}/{scope}", body: "Under `[{scope}] {summary}` migrations were squashed and bookkeeping could name the squash."}
+  - {kind: finding, id: p4-r3, phase: 4, review_scope: in, title: "An ask approval was not tied to the request it approved", body: "Any answered question after the request, even a no, plus an agent-written decision passed."}
+  - {kind: finding, id: p4-r4, phase: 4, review_scope: in, title: "fr pr create ignored the run's recorded PR; the pr-<branch> id could be approved only once", body: "A reused branch could overwrite RunState.pr; journal ids are create-only."}
+  - {kind: finding, id: p4-r5, phase: 4, review_scope: in, title: "push/pr ask required a spec journal, so debugging runs could never push or open a PR", body: "The fr-debugging skill forbids git push, so it was stranded."}
+  - {kind: finding, id: p4-r6, phase: 4, review_scope: in, title: "Staleness diff followed renames", body: "Moving code into docs/superpowers/journals/ kept a stale approval valid."}
+resolves:
+  - {id: p4-r1, state: fixed, body: "ad19defc5: the shortcut clears the segment; tests for [A,M], [A,merge], [A,M,B] assert subjects, trees and parents."}
+  - {id: p4-r2, state: fixed, body: "840fa3e17: the Fr-Commit trailer (decision p4-fr-commit-trailer); tested under the scenario template and for pre-trailer commits."}
+  - {id: p4-r3, state: fixed, body: "ea94dc6b9, ad7330976, ac1cfe6a3: approval is exactly `Approve <request-id>` answering the question that names the id, read from Round.answer_pairs (Claude Code, OpenCode); unpairable answers refuse naming the harness."}
+  - {id: p4-r4, state: fixed, body: "b97e6e842 (+ ea94dc6b9): refuses when state.pr is set, naming OPEN/MERGED/CLOSED; PR request ids are pr-<branch>-<head[:12]>."}
+  - {id: p4-r5, state: fixed, body: "ad7330976: decision p4-approval-in-runs-own-journal; the debugging push and PR paths are tested end to end."}
+  - {id: p4-r6, state: fixed, body: "84918f125: --no-renames, and a failing diff counts as stale."}
+evidence: {review: p4-review-1, reviewer: a792c752c1fe9e2b8}
