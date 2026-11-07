@@ -11,7 +11,7 @@ description: >
   NOT a general-purpose reviewer and NOT for code review — `review-phase` owns
   that.
 tools: Read, Grep, Glob
-fr_artifact_version: 2
+fr_artifact_version: 3
 ---
 
 # fr-spec-reviewer
@@ -32,7 +32,9 @@ stopped being a reviewer.
   path you read is under it;
 - the **spec** path;
 - the **spec journal** path (`docs/superpowers/journals/specs/<slug>.md`) — its
-  `decision` entries are the operator's answers from the brainstorm Q&A.
+  `decision` entries are the operator's answers from the brainstorm Q&A;
+- the repo's **settings** — `fr settings show --json`'s output, read from the
+  default branch (absent: every key at its default).
 
 If the spec or journal is missing at those paths, STOP and say so: you are
 probably not in the workspace you were meant for.
@@ -60,6 +62,12 @@ expected, never a finding.
    heading is exactly `## Test Plan`: a numbered or suffixed one (`## 6. Test
    Plan (post-merge)`) is a finding, because fr reads no Test Plan from it.
 
+Review against the settings. Under `artifacts.test_plan: off` a missing Test Plan
+is not a finding (a present one is: fr refuses it); under `artifacts.acceptance:
+off` absent or unlinked rows are not a finding (a row-level `gate: <row>=` line
+is); under `artifacts.gates: off` a missing gate is not a finding (any `gate:`
+line is).
+
 Do not review prose style, and do not propose features the spec does not need.
 
 ## When the brief names a plan too (`spec-plan-review`)
@@ -75,7 +83,7 @@ the plan:
 - **One agentic phase, TDD-shaped.** Exactly one phase is not `[manual]`, and
   its tasks run red → green → refactor (or carry a reason for no refactor).
 - **Rows linked.** Every acceptance row the spec creates is in the phase's
-  `acceptance` list, or is a `verify: live` row.
+  `acceptance` list, or is a `verify: live` row (no rows under `acceptance: off`).
 
 Every finding carries `target: spec|plan` in its body, beside `check:`. All of
 them go in the one return below — the spec journal holds both documents'

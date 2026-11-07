@@ -591,7 +591,8 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `fr.artifacts.agents_kind.rerender_migration` for the hop
             # (`tests/unit/test_tripwire_agents_data.py` pins the pair).
             # 2: fr-spec-reviewer checks the `## Test Plan` heading (#1315).
-            current_version=2,
+            # 3: fr-spec-reviewer reviews against the repo's settings (repo-feature-settings R15).
+            current_version=3,
             locator=".claude/agents/fr-*.md",
             stamp=f"`{AGENTS_STAMP_KEY}` in the agent's front matter",
             read_stamp=_read_agents_stamp,

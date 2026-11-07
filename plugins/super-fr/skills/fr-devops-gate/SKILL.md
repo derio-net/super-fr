@@ -10,6 +10,9 @@ description: >
 # fr-devops-gate
 
 **Announce at start:** "I'm using fr-devops-gate to run the DevOps stage of run <id>."
+Check the setting first: if `fr settings show --json` reports `artifacts.gates` as `off`,
+no gate is computed, labelled or held, so `gate:devops` never applies and there is no
+DevOps stage to run. Stop there.
 
 A run whose plan carries ops does not end at `deliver`. Its DevOps stage applies the
 pre-merge ops, merges the PR, applies the post-merge ops, records the devops Test Plan
