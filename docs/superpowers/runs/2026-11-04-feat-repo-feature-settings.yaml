@@ -3,7 +3,7 @@ run: 2026-11-04-feat-repo-feature-settings
 workflow: fr-goal@1
 branch: feat/repo-feature-settings
 started: '2026-11-04T13:49:38+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -178,7 +178,10 @@ steps:
           visual: none
           findings: p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-07T16:22:39+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
 driver: standalone
