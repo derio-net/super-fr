@@ -375,3 +375,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-07-repo-settings-core-p3 created=2026-11-07T07:37:27+00:00 -->
 ### phase-split-2026-11-07-repo-settings-core-p3 · decision · ask: forge quiet and pr_body minimal (R9–R10), row repo-settings-forge-quiet
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-07-repo-settings-core-p4 created=2026-11-07T07:37:28+00:00 -->
+### phase-split-2026-11-07-repo-settings-core-p4 · decision · ask: git policy — fr push, fr pr create, squash-unpushed, templates (R11–R14), row repo-settings-git-policy
