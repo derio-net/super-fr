@@ -330,6 +330,13 @@ without-issue template.
 - The briefs and `fr pickup` carry them to the agents.
 - `fr push` refuses an unpushed non-merge commit whose subject does not match.
   Merge commits are exempt.
+- A scope is optional, as in Conventional Commits: each `{scope}` together
+  with the opening brackets right before it and the closing brackets right
+  after it (plus one adjacent space when that unit is a whole word, as in
+  `[{scope}] `) matches an absent scope, and renders as nothing when the scope
+  is empty — so `test: x` matches `{type}({scope}): {summary}` and fr never
+  writes `test(): x`. `{type}`, `{summary}` and `{issue}` stay required, so
+  `Fix typo` still refuses.
 - Under `squash-unpushed`, fr composes the subject itself.
 
 R15. Every shipped skill that writes, nags about or renders a configurable
