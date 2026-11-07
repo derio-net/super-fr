@@ -10730,10 +10730,14 @@ rows:
       combinations
     origin:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: scenario path declared at planning (plan 2026-11-07-repo-settings-core);
-      the phase that builds the row writes it
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settings_load.py#test_a_file_on_the_default_branch_is_read_with_source_repo
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_file
+    status: ci
+    notes: 'settings core built: closed schema, default-ref loader, init/show/check;
+      scenario in CI'
     verify: candidate
     scenario: tests/scenarios/repo-settings-file.sh
   - id: repo-settings-policy-off
