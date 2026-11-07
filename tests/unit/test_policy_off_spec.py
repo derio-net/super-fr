@@ -130,3 +130,16 @@ def test_one_wording_for_a_disabled_feature() -> None:
                 assert hit == DISABLED, (path, hit)
     hook = (root / "plugins" / "super-fr" / "hooks" / "fr-acceptance-nag.sh").read_text()
     assert DISABLED in hook
+
+
+def test_every_problem_is_reported_at_once(repo: Path) -> None:
+    """p2-r4: gates off AND acceptance off with a row-level gate line names both."""
+    land_on_main(repo, "artifacts:\n  test_plan: off\n  gates: off\n  acceptance: off\n")
+    text = PLAN_SPEC + "\n## Verification\n\nstrategy: none\ngate: row-a=tester\n"
+    problems = spec_policy_problems(repo, _spec(repo, text))
+    assert len(problems) == 3, problems
+    assert ["test_plan" in problems[0], "gates" in problems[1], "acceptance" in problems[2]] == [
+        True,
+        True,
+        True,
+    ]

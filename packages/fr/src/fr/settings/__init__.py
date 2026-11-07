@@ -67,7 +67,7 @@ def spec_policy_problems(repo_root: Path, spec_path: Path) -> list[str]:
             problems.append(
                 disabled_because("gates", "the spec's `## Verification` has a `gate:` line")
             )
-        elif section.row_gates and disabled(repo_root, "acceptance"):
+        if section.row_gates and disabled(repo_root, "acceptance"):
             problems.append(
                 disabled_because(
                     "acceptance", "the spec's `## Verification` has a row-level `gate: <row>=` line"
