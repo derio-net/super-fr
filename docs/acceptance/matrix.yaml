@@ -10747,10 +10747,13 @@ rows:
       disabled by repo setting rather than none
     origin:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: scenario path declared at planning (plan 2026-11-07-repo-settings-core);
-      the phase that builds the row writes it
+    levels:
+      unit:
+      - super-fr:tests/unit/test_policy_off_acceptance.py#test_add_set_status_and_init_are_refused_naming_the_setting
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_policy_off
+    status: ci
+    notes: policy off built; scenario in CI
     verify: candidate
     scenario: tests/scenarios/repo-settings-policy-off.sh
   - id: repo-settings-forge-quiet
