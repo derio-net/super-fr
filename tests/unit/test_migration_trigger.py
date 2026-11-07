@@ -156,6 +156,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "debt",
             "gate",
             "release",
+            "settings",
         }
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
@@ -176,6 +177,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "debt",
         "gate",
         "release",
+        "settings",
         "FR_SKIP_MIGRATION=1",
     )
 
