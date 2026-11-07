@@ -7,13 +7,31 @@ them, so the file's documentation cannot drift from the schema.
 from __future__ import annotations
 
 import string
+from collections.abc import Callable
 from typing import Annotated, Any, Final, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+)
 
 from fr.settings import SettingsError
 
 SCHEMA_VERSION: Final = 1
+
+
+PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
+ON_OFF: Final = frozenset({"on", "off"})
+PR_BODIES: Final = frozenset({"full", "minimal"})
+AUTO_ASK: Final = frozenset({"auto", "ask"})
+HISTORIES: Final = frozenset({"keep", "squash-unpushed"})
+PLACEHOLDERS: Final = frozenset({"type", "scope", "summary", "issue"})
+"""The allowed values, stated once: the validators and `fr settings init` both read them."""
 
 
 def _on_off(v: Any) -> Any:
@@ -25,11 +43,29 @@ def _on_off(v: Any) -> Any:
     return v
 
 
-OnOff = Annotated[Literal["on", "off"], BeforeValidator(_on_off)]
+def _member(vocab: frozenset[str]) -> Callable[[Any], str]:
+    def check(v: Any) -> str:
+        if v not in vocab:
+            raise ValueError("must be one of " + ", ".join(sorted(vocab)) + f", got {v!r}")
+        return str(v)
+
+    return check
+
+
+def _choice(default: str, vocab: frozenset[str], description: str) -> Any:
+    """A closed-vocabulary field; the renderer reads `allowed` back from the schema."""
+    return Field(default, description=description, json_schema_extra={"allowed": sorted(vocab)})
+
+
+OnOffType = Annotated[str, BeforeValidator(_on_off), AfterValidator(_member(ON_OFF))]
+AskType = Annotated[str, AfterValidator(_member(AUTO_ASK))]
+BodyType = Annotated[str, AfterValidator(_member(PR_BODIES))]
+HistoryType = Annotated[str, AfterValidator(_member(HISTORIES))]
+PlacementType = Annotated[str, AfterValidator(_member(PLACEMENTS))]
 
 
 def _check_template(v: str, *, allow_issue: bool) -> str:
-    allowed = {"type", "scope", "summary"} | ({"issue"} if allow_issue else set())
+    allowed = PLACEHOLDERS if allow_issue else PLACEHOLDERS - {"issue"}
     try:
         parsed = list(string.Formatter().parse(v))
     except ValueError as e:
@@ -47,24 +83,27 @@ def _check_template(v: str, *, allow_issue: bool) -> str:
 
 
 class _Closed(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=False)
+    model_config = ConfigDict(extra="forbid")
 
 
 class Artifacts(_Closed):
-    acceptance: OnOff = Field(
+    acceptance: OnOffType = _choice(
         "on",
+        ON_OFF,
         description="Default: the acceptance matrix and its rows are written.\n"
         "Off: no matrix rows are written and every surface reports it disabled by repo "
         "setting; a spec's Test Plan no longer feeds an acceptance gate.",
     )
-    test_plan: OnOff = Field(
+    test_plan: OnOffType = _choice(
         "on",
+        ON_OFF,
         description="Default: specs carry a Test Plan.\n"
         "Off: the Test Plan is not required or checked; nothing is lost but the plan's "
         "business-level statement of what proves the feature.",
     )
-    gates: OnOff = Field(
+    gates: OnOffType = _choice(
         "on",
+        ON_OFF,
         description="Default: tester and devops exit gates hold a merged PR's release.\n"
         "Off: no gate labels are applied; manual operations in a live plan are then "
         "refused, as nothing would hold them.",
@@ -96,51 +135,54 @@ class Commit(_Closed):
 
 
 class Forge(_Closed):
-    labels: OnOff = Field(
+    labels: OnOffType = _choice(
         "on",
+        ON_OFF,
         description="Default: fr applies its lifecycle labels on the forge.\n"
         "Off: no labels; whatever reads them (gates, triage claims) goes blind.",
     )
-    comments: OnOff = Field(
+    comments: OnOffType = _choice(
         "on",
+        ON_OFF,
         description="Default: fr posts its marker comments on issues and PRs.\n"
         "Off: no comments; claims and batch markers are not recorded on the forge.",
     )
-    issues: OnOff = Field(
+    issues: OnOffType = _choice(
         "on",
+        ON_OFF,
         description="Default: fr opens and updates tracking issues.\n"
         "Off: no issues are created; work is tracked only in the repo's own files.",
     )
-    pr_body: Literal["full", "minimal"] = Field(
+    pr_body: BodyType = _choice(
         "full",
+        PR_BODIES,
         description="Default: the PR body carries the full rendered record.\n"
         "Minimal: the live PR stays plain and the full render is kept as a file.",
     )
-    report_comment: OnOff = Field(
+    report_comment: OnOffType = _choice(
         "off",
+        ON_OFF,
         description="Default: CI posts no report comment.\n"
         "On: CI keeps one report comment on the PR; needs forge.comments on.",
     )
 
-    @field_validator("report_comment", mode="before")
-    @classmethod
-    def _rc(cls, v: Any) -> Any:
-        return _on_off(v)
-
 
 class Git(_Closed):
-    push: Literal["auto", "ask"] = Field(
+    push: AskType = _choice(
         "auto",
+        AUTO_ASK,
         description="Default: fr pushes without asking.\n"
         "Ask: fr asks before every push; refused for unattended triage drivers.",
     )
-    pr: Literal["auto", "ask"] = Field(
+    pr: AskType = _choice(
         "auto",
+        AUTO_ASK,
         description="Default: fr opens the PR without asking (always a draft).\n"
         "Ask: fr asks first; ready and merge are never fr's either way.",
     )
-    history: Literal["keep", "squash-unpushed"] = Field(
+    history: HistoryType = _choice(
         "keep",
+        HISTORIES,
         description="Default: every commit is kept as made.\n"
         "Squash-unpushed: unpushed commits are squashed before a push; pushed history is "
         "never rewritten.",
@@ -151,13 +193,12 @@ class Git(_Closed):
 
 
 class Settings(_Closed):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
     schema_: Literal[1] = Field(
         1, alias="schema", description="The settings schema version this file is written for."
     )
-    placement: Literal["repo", "quiet", "stealth"] = Field(
+    placement: PlacementType = _choice(
         "repo",
+        PLACEMENTS,
         description="Default: artifacts live on the feature branch.\n"
         "Quiet or stealth keep them elsewhere; this fr cannot yet serve either.",
     )
