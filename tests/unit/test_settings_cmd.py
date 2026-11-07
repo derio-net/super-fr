@@ -124,3 +124,11 @@ def test_settings_is_read_only_for_the_migration_gate() -> None:
     from fr.artifacts import trigger
 
     assert "settings" in trigger.READ_ONLY_COMMANDS
+
+
+def test_show_does_not_truncate_long_values(repo: Path) -> None:
+    long = "{type}(" + "{scope}" * 12 + "): {summary} (#{issue})"
+    land_on_main(repo, f"git:\n  commit:\n    with_issue: '{long}'\n")
+    result = runner.invoke(app, ["settings", "show"])
+    assert result.exit_code == 0, result.output
+    assert long in result.output.replace("\n", "")
