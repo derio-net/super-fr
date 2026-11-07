@@ -120,3 +120,78 @@ each guard is a one-line predicate call at an existing absence branch; nothing t
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 a scenario script, one test registration and a matrix move; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-11-07T11:44:31+00:00 phase=2 -->
+### p2-review-1 · review · Phase 2 code review: 6 reviewer findings plus 1 orchestrator finding, all in scope, all fixed (phase 2)
+
+Independent reviewer read 690740d77..17b27ac3f against R6-R8 and R15. The orchestrator reproduced a CI-checkout breakage separately (p2-o1). Fixes are c005700ae..c1b29e211. Full suite 14185 passed. A depth-1 PR-checkout simulation under CI passes, reading HEAD's committed tree. A security review of load.py tightened the bootstrap case to built-in defaults (spec decision settings-bootstrap-remote-2).
+
+<!-- fr:journal kind=finding scope=plan id=p2-o1 created=2026-11-07T11:44:31+00:00 phase=2 state=open review_scope=in -->
+### p2-o1 · finding [open] (reviewer: in scope) · A depth-1 CI PR checkout made fr acceptance check die with a SettingsError traceback (phase 2)
+
+With no refs/remotes/origin/*, every disabled() call refused, which would turn this repo's acceptance-report job and every consumer's red on upgrade. Reproduced by simulating actions/checkout.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-07T11:44:31+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · SettingsError surfaced as a raw traceback (exit 1) at most new call sites (phase 2)
+
+status/digest, debt, plan_ops, proportionality, pr_body, archive, closeout, check, exit; triage ledger did not catch it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-07T11:44:31+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · A never-fetched remote blocked bootstrap writers (acceptance init/add, debt, archive, deliver) (phase 2)
+
+seed_origin_default across fixtures masked the real state.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-07T11:44:31+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · R15 incomplete: fr-plan, fr-spec-reviewer, fr-progress, fr-devops-gate did not read settings (phase 2)
+
+fr-spec-reviewer would raise a missing Test Plan under test_plan: off.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-07T11:44:31+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · spec_policy_problems elif reported only one problem (phase 2)
+
+Two refuse cycles for a spec breaking both rules.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-07T11:44:31+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Test gaps in policy-off branches (phase 2)
+
+spec-review/gates resolve, closeout_brief, digest/report/backfill/summary, _promote; weak pr_body/debt assertions.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-07T11:44:31+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · acceptance: off surface inconsistencies; nag hook spawned fr in every repo (phase 2)
+
+check/summary said no matrix; staleness guard demanded rows; nag ordering regressed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-o1-resolved created=2026-11-07T11:44:31+00:00 phase=2 state=fixed resolves=p2-o1 -->
+### p2-o1-resolved · finding [fixed] · resolves p2-o1: A depth-1 CI PR checkout made fr acceptance check die with a SettingsError traceback (phase 2)
+
+c005700ae, a8c242b44: R2 resolution order. In CI with no default ref, fr reads HEAD's committed tree and prints one notice, and EffectiveSettings.source is shown. Spec R2 amended (decision settings-ci-policy-source).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-07T11:44:31+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: SettingsError surfaced as a raw traceback (exit 1) at most new call sites (phase 2)
+
+de04e4703, 4096fb5f1: the root _FrGroup maps SettingsError to 'fr: settings: <msg>' and exit 2. The triage ledger turns it into TriageError. A subprocess test confirms there is no traceback.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-07T11:44:31+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: A never-fetched remote blocked bootstrap writers (acceptance init/add, debt, archive, deliver) (phase 2)
+
+a8c242b44, ef45816bd, e0b695b79: a remote with no tracking refs uses built-in defaults (never a local branch). acceptance init/add work. The seed_origin_default helper is removed and the fixtures exercise the real state.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-07T11:44:31+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: R15 incomplete: fr-plan, fr-spec-reviewer, fr-progress, fr-devops-gate did not read settings (phase 2)
+
+5e358e2b2: settings clauses added to fr-plan, fr-progress, fr-devops-gate and fr-spec-reviewer (which takes the settings output as input). Agents kind 2 to 3 with its migration. Mirrors regenerated. test_skills_read_settings guards R15.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-07T11:44:31+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: spec_policy_problems elif reported only one problem (phase 2)
+
+ca4de7bb6: every problem is reported.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-07T11:44:31+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Test gaps in policy-off branches (phase 2)
+
+e237546b0: the listed branches are covered and the assertions strengthened.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-07T11:44:31+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: acceptance: off surface inconsistencies; nag hook spawned fr in every repo (phase 2)
+
+25d51858d: check, summary and status say disabled and exit 0. The staleness guard is silent under acceptance: off. The nag checks matrix.yaml first, and the OpenCode nag.ts port matches.
