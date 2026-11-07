@@ -11,7 +11,7 @@ description: >
   NOT a general-purpose reviewer and NOT for code review — `review-phase` owns
   that.
 tools: Read, Grep, Glob
-fr_artifact_version: 3
+fr_artifact_version: 4
 ---
 
 # fr-spec-reviewer
