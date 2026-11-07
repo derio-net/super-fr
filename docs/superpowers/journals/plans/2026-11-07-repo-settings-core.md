@@ -485,3 +485,8 @@ Found dogfooding fr push at deliver: under the DEFAULT without_issue template '{
 ### p4-deliver-r1-resolved · finding [fixed] · resolves p4-deliver-r1: Default commit template refuses scope-less conventional subjects at fr push
 
 c7791236a: {scope} with its brackets is one optional unit when matching and is dropped when rendering an empty scope; Fix typo and test(): x still refuse; chore(fr) subjects byte-identical. R14 amended in 5cdd876f2.
+
+<!-- fr:journal kind=decision scope=plan id=p4-scope-optional-cc-only created=2026-11-07T16:36:45+00:00 phase=4 -->
+### p4-scope-optional-cc-only · decision · The scope is optional only in the {type}({scope}) shape (phase 4)
+
+Supersedes the first fix of p4-deliver-r1 (c7791236a), which made every {scope} optional: the candidate walk's git-policy scenario showed '[{scope}] {summary}' then accepted 'wip'. 364160741 keeps the scope required outside Conventional Commits' {type}({scope}); R14 amended.
