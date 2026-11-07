@@ -89,4 +89,4 @@ journal:
       often with no checkout to read a policy from, so gating them needs a decision on where
       the policy is read; left for review.
 resolves: []
-evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/8b56d9b2-ef08-4390-b0b3-f0296e3ac2b9/scratchpad/p3-full-suite.log}
+evidence: {}
