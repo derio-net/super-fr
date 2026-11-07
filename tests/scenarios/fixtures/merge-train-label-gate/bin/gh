@@ -104,6 +104,13 @@ def answer(world: dict, method: str, route: str, fields: dict[str, str]) -> obje
     path, query = unquote(parts.path), parse_qs(parts.query)
     page = int(query.get("page", ["1"])[0])
     open_pr = not world["pr"]["merged"]
+    if method == "GET" and path == f"{REPO}/contents/.fr/settings.yaml":
+        # No `.fr/settings.yaml` on the default branch: the contents API's captured 404
+        # for a missing path (R9: absent means the defaults).
+        err = json.loads((CAPS / "repo_contents_docs_no-such-path.error.json").read_text())
+        sys.stdout.write(err["stdout"])
+        sys.stderr.write(err["stderr"])
+        sys.exit(err["exit"])
     if method == "GET":
         if path == "user":
             return cap("user.json")
