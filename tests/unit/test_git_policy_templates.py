@@ -90,10 +90,9 @@ def test_subject_matches_accepts_a_rendered_subject_and_rejects_others() -> None
     assert not subject_matches(template, "record the issue")
     assert subject_matches(template, "feat: no scope")  # p4-deliver-r1: scope is optional
     assert subject_matches(CUSTOM.git.commit.without_issue, "[fr] hello")
-    # Its scope is optional (p4-deliver-r1), so any subject is a bare summary.
-    assert parse_subject(CUSTOM.git.commit.without_issue, "chore(fr): hello") == {
-        "summary": "chore(fr): hello"
-    }
+    # Outside `{type}({scope})` the scope stays required (p4-deliver-r1).
+    assert not subject_matches(CUSTOM.git.commit.without_issue, "chore(fr): hello")
+    assert not subject_matches(CUSTOM.git.commit.without_issue, "wip")
 
 
 def test_a_template_with_regex_metacharacters_matches_literally() -> None:
@@ -140,44 +139,33 @@ def test_a_scope_less_subject_parses_to_no_scope() -> None:
 def test_rendering_without_a_scope_drops_its_delimiters() -> None:
     assert render_subject(DEFAULTS, "test", "", "x", None) == "test: x"
     assert render_subject(DEFAULTS, "fix", "", "y", 4) == "fix: y (#4)"
-    assert render_subject(CUSTOM, "feat", "", "x", None) == "x"
-    assert render_subject(CUSTOM, "feat", "", "x", 3) == "x #3"
+    # A custom template's scope is required, so a composed subject always has one.
+    assert render_subject(CUSTOM, "feat", "api", "x", None) == "[api] x"
 
 
-def test_a_bracketed_scope_token_is_optional_with_its_trailing_space() -> None:
+def test_a_scope_outside_the_conventional_commits_shape_is_required() -> None:
     template = CUSTOM.git.commit.without_issue  # "[{scope}] {summary}"
-    assert parse_subject(template, "x") == {"summary": "x"}
     assert parse_subject(template, "[fr] x") == {"scope": "fr", "summary": "x"}
-    # `{summary}` reads anything, so a stray bracket is summary text, not a scope.
-    assert parse_subject(template, "[] x") == {"summary": "[] x"}
+    assert parse_subject(template, "x") is None
+    assert parse_subject(template, "wip") is None
 
 
-def test_a_scope_without_brackets_is_optional_alone() -> None:
+def test_a_scope_without_brackets_is_required() -> None:
     template = "{type}/{scope}: {summary}"
     assert parse_subject(template, "feat/api: x") == {
         "type": "feat",
         "scope": "api",
         "summary": "x",
     }
-    assert parse_subject(template, "feat/: x") == {"type": "feat", "summary": "x"}
+    assert not subject_matches(template, "feat: x")
 
 
-def test_a_repeated_scope_must_repeat_or_be_absent_everywhere() -> None:
+def test_a_scope_repeated_outside_the_conventional_commits_shape_is_required() -> None:
     template = "{type}({scope}): {summary} [{scope}]"
     assert subject_matches(template, "a(b): c [b]")
-    assert subject_matches(template, "a: c")
+    assert not subject_matches(template, "a: c")
     assert not subject_matches(template, "a(b): c")
     assert not subject_matches(template, "a(b): c [d]")
-    assert (
-        render_subject(
-            parse_settings({"git": {"commit": {"without_issue": template}}}, source="t"),
-            "a",
-            "",
-            "c",
-            None,
-        )
-        == "a: c"
-    )
 
 
 def test_merge_commits_are_exempt_by_parent_count() -> None:

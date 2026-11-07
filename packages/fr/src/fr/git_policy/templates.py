@@ -52,13 +52,30 @@ _Segment = _Lit | _Field | _Scope
 
 _OPENERS = re.compile(r"[(\[{<]*$")
 _CLOSERS = re.compile(r"[)\]}>]*")
+_ONLY_OPENERS = re.compile(r"[(\[{<]+")
+
+
+def _follows_type(raw: list[_Lit | _Field], i: int) -> bool:
+    """True when the `{scope}` at *i* is Conventional Commits' `{type}(<scope>)`.
+
+    Only that shape makes the scope optional: `{type}`, then nothing but
+    opening brackets, then `{scope}`. Anywhere else (`[{scope}] {summary}`) the
+    template's author asked for a scope, and an optional one would let any
+    subject through as a bare summary.
+    """
+    if i >= 2 and isinstance(raw[i - 1], _Lit) and isinstance(raw[i - 2], _Field):
+        lit, field = raw[i - 1], raw[i - 2]
+        return field.name == "type" and bool(_ONLY_OPENERS.fullmatch(lit.text))  # type: ignore[union-attr]
+    return False
 
 
 def segments(template: str) -> list[_Segment]:
     """*template* split into literals, placeholders and optional scopes.
 
-    The scope is optional, as in Conventional Commits (p4-deliver-r1). Each
-    `{scope}` takes with it, as one optional unit:
+    The scope is optional, as in Conventional Commits (p4-deliver-r1), but only
+    in that shape: `{type}` followed by opening brackets and `{scope}`
+    (`_follows_type`). Anywhere else `{scope}` is a required placeholder. An
+    optional `{scope}` takes with it, as one optional unit:
 
     - the run of opening brackets `( [ { <` immediately before it, and
     - the run of closing brackets `) ] } >` immediately after it, and
@@ -67,9 +84,9 @@ def segments(template: str) -> list[_Segment]:
       end), one whitespace character beside it: the one after it, else (the
       token ends the template) the one before it.
 
-    So `{type}({scope}): {summary}` drops `({scope})` and `[{scope}] {summary}`
-    drops `[{scope}] `; a scope with no brackets (`{type}/{scope}: …`) is
-    optional alone. `{type}`, `{summary}` and `{issue}` are always required, and
+    So `{type}({scope}): {summary}` drops `({scope})`, while `[{scope}] {summary}`
+    and `{type}/{scope}: …` keep their scope required. `{type}`, `{summary}`
+    and `{issue}` are always required, and
     a placeholder directly before a bracketed scope never contains its opening
     bracket (`subject_regex`), so `test(): x` is not read as type `test()`.
     """
@@ -79,6 +96,13 @@ def segments(template: str) -> list[_Segment]:
             raw.append(_Lit(literal))
         if field is not None:
             raw.append(_Field(field))
+    # Every `{scope}` must sit in the Conventional Commits position for any to
+    # be optional: a scope repeated elsewhere is required everywhere.
+    optional_scope = all(
+        _follows_type(raw, j)
+        for j, s in enumerate(raw)
+        if isinstance(s, _Field) and s.name == "scope"
+    )
     out: list[_Segment] = []
     pending = ""  # leading text of the next literal still to emit
     for i, seg in enumerate(raw):
@@ -86,7 +110,7 @@ def segments(template: str) -> list[_Segment]:
             out.append(_Lit(seg.text[len(pending) :]) if pending else seg)
             pending = ""
             continue
-        if seg.name != "scope":
+        if seg.name != "scope" or not optional_scope:
             out.append(seg)
             continue
         left = ""
