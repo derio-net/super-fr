@@ -55,6 +55,18 @@ def test_tracking_none_forbids_every_kind_with_the_settings_on(tmp_path: Path, k
     assert why is not None and "tracking: none" in why
 
 
+@pytest.mark.parametrize("kind", ["labels", "comments"])
+def test_the_gate_ledger_ignores_tracking_none_but_not_the_setting(
+    tmp_path: Path, kind: str
+) -> None:
+    """`tracker=False`: a PR's gate label or gate-pass comment is no tracker write."""
+    root = make_repo(tmp_path)
+    _declare_tracking_none(root)
+    assert forge_allows(root, kind, tracker=False) is True
+    land_on_main(root, f"forge:\n  {kind}: 'off'\n")
+    assert forge_allows(root, kind, tracker=False) is False
+
+
 def test_the_setting_off_wins_over_a_tracker(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
     land_on_main(root, "forge:\n  issues: 'off'\n")

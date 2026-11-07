@@ -201,10 +201,11 @@ def _forge_policy(repo: str) -> tuple[bool, str | None]:
     if root is None or origin is None or origin.lower() != repo.lower():
         return True, None
     try:
-        off = forge_block(root, "labels")
+        # The gate ledger is the PR's, not the tracker's: only the settings decide it.
+        off = forge_block(root, "labels", tracker=False)
         if off is not None:
             _refuse(f"nothing to pass: a pass swaps the PR's gate label, and {off}")
-        comment = forge_allows(root, "comments")
+        comment = forge_allows(root, "comments", tracker=False)
         trackers_off = forge_block(root, "issues")
     except ServicesError as exc:
         _refuse(f"the services declaration cannot be read, nothing was written: {exc}")
@@ -419,11 +420,11 @@ def backfill_command(
         try:
             # The PR's gate label is what a backfill writes: with labels off there is
             # nothing to backfill (R9: `tracking: none` turns labels off too).
-            off = forge_block(root, "labels")
+            off = forge_block(root, "labels", tracker=False)
             if off is not None:
                 refuse(f"nothing was written: a backfill labels PRs, and {off}")
             issues = forge_allows(root, "issues")
-            comments = forge_allows(root, "comments")
+            comments = issues and forge_allows(root, "comments")
         except ServicesError as exc:
             refuse(f"the services declaration cannot be read, nothing was written: {exc}")
     _, forge_host = resolve_target(identity, host, root)

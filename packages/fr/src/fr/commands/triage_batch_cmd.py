@@ -3859,13 +3859,13 @@ class _Driver:
     def path_of(self, repo: str) -> Path | None:
         return self.checkout_paths.get(repo.lower())
 
-    def forge_off(self, repo: str, kind: str) -> str | None:
+    def forge_off(self, repo: str, kind: str, *, tracker: bool = True) -> str | None:
         """The setting under which *repo* takes no forge write of *kind* (R9), read from
         its checkout; None with no checkout to read a policy from."""
         from fr.settings import forge_block
 
         path = self.path_of(repo)
-        return None if path is None else forge_block(path, kind, lenient=True)
+        return None if path is None else forge_block(path, kind, lenient=True, tracker=tracker)
 
     def checkout(self, repo: str) -> Checkout:
         if repo not in self._checkouts:
@@ -5488,10 +5488,10 @@ class _Driver:
         """R14's rows-walked route: swap the merged PR's gate label and comment why."""
         assert action.pr is not None
         why = action.detail.partition(": ")[2] or action.detail
-        off = self.forge_off(repo, "labels")
+        off = self.forge_off(repo, "labels", tracker=False)  # the PR's gate ledger
         if off is not None:
             return f"PR #{action.pr}: gate:{action.gate} not passed: {off}", True
-        comments_off = self.forge_off(repo, "comments")
+        comments_off = self.forge_off(repo, "comments", tracker=False)
         try:
             pass_gate(
                 self.client(facts, repo), repo, action.pr, action.gate, why=why,

@@ -84,7 +84,9 @@ TRACKING_NONE: Final = (
 """Why a forge write is off when the services declaration, not a setting, turns it off."""
 
 
-def forge_block(repo_root: Path, kind: str, *, lenient: bool = False) -> str | None:
+def forge_block(
+    repo_root: Path, kind: str, *, lenient: bool = False, tracker: bool = True
+) -> str | None:
     """None when fr may write *kind* (`labels`, `comments`, `issues`) to the forge; else
     the setting that forbids it: `forge.<kind>: off`, or `tracking: none`, which keeps
     meaning all three are off (R9).
@@ -92,11 +94,17 @@ def forge_block(repo_root: Path, kind: str, *, lenient: bool = False) -> str | N
     The settings are read strictly (`SettingsError` propagates: an unreadable policy
     refuses, it never reads as the defaults). The tracking declaration is strict too
     (`ServicesError`), unless *lenient*: then an unreadable one counts as a tracker,
-    the posture of the sites that must never raise."""
+    the posture of the sites that must never raise.
+
+    *tracker* False asks for a write on a PR that is not a tracker write — the gate
+    ledger (`gate:*` labels and the gate-pass comment) — which `tracking: none` never
+    governed: only the setting decides it."""
     if kind not in FORGE_KINDS:
         raise ValueError(f"{kind!r} is not a forge write kind; kinds are {FORGE_KINDS}")
     if getattr(load_settings(repo_root).settings.forge, kind) != "on":
         return f"forge.{kind}: off ({DISABLED})"
+    if not tracker:
+        return None
     from fr.services.model import ServicesError
     from fr.services.resolve import resolve_tracking
 
@@ -109,9 +117,11 @@ def forge_block(repo_root: Path, kind: str, *, lenient: bool = False) -> str | N
     return TRACKING_NONE if none else None
 
 
-def forge_allows(repo_root: Path, kind: str, *, lenient: bool = False) -> bool:
+def forge_allows(
+    repo_root: Path, kind: str, *, lenient: bool = False, tracker: bool = True
+) -> bool:
     """Whether fr may write *kind* (`labels`, `comments`, `issues`) to the forge."""
-    return forge_block(repo_root, kind, lenient=lenient) is None
+    return forge_block(repo_root, kind, lenient=lenient, tracker=tracker) is None
 
 
 class ForgeQuietError(TrackerRequiredError):
