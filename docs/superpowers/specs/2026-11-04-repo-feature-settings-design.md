@@ -632,6 +632,7 @@ gate: repo-settings-quiet-repo-live=tester
 - acceptance-reports-derived-published: none — built by plan 2 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 2, which sets this row back to candidate with its scenario
 - placement-quiet: none — built by plan 3 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 3, which sets this row back to candidate with its scenario
 - placement-stealth: none — built by plan 3 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 3, which sets this row back to candidate with its scenario
+- placement-move-and-drift: none — built by plan 3 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 3, which sets this row back to candidate with its scenario
 
 ## Test Plan
 
