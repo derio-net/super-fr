@@ -195,3 +195,48 @@ e237546b0: the listed branches are covered and the assertions strengthened.
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: acceptance: off surface inconsistencies; nag hook spawned fr in every repo (phase 2)
 
 25d51858d: check, summary and status say disabled and exit 0. The staleness guard is silent under acceptance: off. The nag checks matrix.yaml first, and the OpenCode nag.ts port matches.
+
+<!-- fr:journal kind=decision scope=plan id=p3-gate-ledger-is-not-a-tracker-write created=2026-11-07T12:58:56+00:00 phase=3 -->
+### p3-gate-ledger-is-not-a-tracker-write · decision · tracking none turns tracker writes off; the PR's gate ledger answers only to forge.labels/comments (phase 3)
+
+forge_allows folds tracking none into all three kinds, as R9 and the plan's predicate test ask. But the gate lane (the PR's gate:* labels and the gate-pass comment, written by `fr gate pass`, `fr gate backfill` and the triage driver's pass) always ran under tracking none, and the DevOps stage depends on it: the first full suite failed test_fr_ops_gate_stage when gate pass refused under tracking none. So forge_block takes `tracker=False` for those PR writes: only `forge.labels` / `forge.comments` decide them. Under labels off a backfill or pass refuses before any write, naming the setting (test_yes_under_forge_labels_off_refuses_before_any_write). Tracker closes after a pass still follow tracking none. Flagged for review as a reading of R9.
+
+<!-- fr:journal kind=decision scope=plan id=p3-filing-needs-issues-and-labels created=2026-11-07T12:58:56+00:00 phase=3 -->
+### p3-filing-needs-issues-and-labels · decision · filing a leftover needs forge issues AND labels; deliver's leftover rule follows (phase 3)
+
+`fr journal file` and fr archive's open-ends/owed filing create issues carrying follow-up / fr:owed labels, so they require both kinds (require_forge(root, "issues", "labels")). record/pr_body._has_tracker (deliver's unaccounted-leftover rule) asks the same two kinds, so a repo that cannot file is never asked to: the leftover stays recorded in the journal and deliver accepts it. fr apply requires issues and labels (the runner reads its queue from labels); triage batch dispatch/cancel require labels and comments (a claim is a label plus a marker comment).
+
+<!-- fr:journal kind=decision scope=plan id=p3-gate-pass-reads-the-checkouts-policy created=2026-11-07T12:58:56+00:00 phase=3 -->
+### p3-gate-pass-reads-the-checkouts-policy · decision · gate pass reads the forge policy only from a checkout whose origin is the PR's repo (phase 3)
+
+`fr gate pass --repo X` may run from another repo's checkout or none; another repo's settings are not readable there, so the defaults hold. From the repo's own checkout: labels off refuses, comments off swaps the label with no gate-pass comment (and skips the retry's fr:gate-pass comment check, which cannot exist), and no tracker is closed under issues off or comments off (a close carries a comment). The triage driver's pass and awaiting-live label read the policy from the batch repo's checkout the same way.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-inventory-scope created=2026-11-07T12:58:56+00:00 phase=3 -->
+### p3-inventory-scope · discovery · five of the plan's listed modules carry no tracking-none check (phase 3)
+
+isolation/local.py (remote-tracking refs), run/ci_evidence.py and acceptance/ci.py (`ci.type == "none"`, the CI service), init_cmd.py and services_cmd.py (declare/report tracking itself) and archive_followups.py (a comment) were left as they are. The inventory test (test_forge_quiet_predicate.py) greps for resolve_tracking(, require_tracker(, TrackerRequiredError and `tracking... == "none"` outside fr/services and fr/settings, so the CI-service checks do not trip it.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-record-engine-swallows-stdout created=2026-11-07T12:58:56+00:00 phase=3 -->
+### p3-record-engine-swallows-stdout · discovery · a deliver notice must go to stderr; the record engine condenses stdout to one line (phase 3)
+
+The first GREEN attempt printed the minimal-mode review path with typer.echo and the end-to-end test (through `fr run resolve --record`) never saw it. It is printed with err_console like deliver's other notices.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-explainer-owed created=2026-11-07T12:58:56+00:00 phase=3 -->
+### p3-explainer-owed · discovery · fr-goal's deliver surface changed; the explainer update is phase 4's (phase 3)
+
+Under forge.pr_body minimal the live PR is a plain summary and the review surface is docs/superpowers/runs/<run-id>.pr-body.md; under forge issues/labels off no leftover is filed. docs/explainers/01-fr-goal.md describes deliver's PR body and is not updated here.
+
+<!-- fr:journal kind=finding scope=plan id=p3-residual-triage-forge-writes created=2026-11-07T12:58:56+00:00 phase=3 state=open review_scope=in -->
+### p3-residual-triage-forge-writes · finding [open] (reviewer: in scope) · triage claim/approval/closeout label writes and tracker/github.py are not gated by forge_allows (phase 3)
+
+R9 says no forge write of an off kind anywhere. Gated now: every former tracking-none site, fr apply, undispatch, journal file/close, archive filing, debt issue, gate pass and backfill, the triage dispatch/cancel gate, the driver's gate pass and awaiting-live label, deliver's label sync, the scaffolded CI. Not gated: triage/claim_writes.py (fr:claimed labels, claim comments), triage/approval.py (fr:approved), the batch-merge comment (triage_batch_cmd ~2281) and close-out label removal (~6406), and the fr_dispatch-facing tracker/github.py label lifecycle. These run over scope repos, often with no checkout to read a policy from, so gating them needs a decision on where the policy is read; left for review.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-07T12:58:56+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+forge_block is the one predicate and each site was rewritten onto it directly; the old require_tracker/resolve_tracking call shapes are gone, so nothing was left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-07T12:58:56+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+two skill paragraphs, a scenario script and a matrix row; nothing to clean
