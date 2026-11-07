@@ -35,6 +35,33 @@ def _default_branch(repo_root: Path) -> str:
     return "/".join(parts[3:] if ref.startswith("refs/remotes/") else parts[2:])
 
 
+def _refuse_recorded_pr(repo_root: Path, url: str | None) -> None:
+    """A run records one PR (review p4-r4): `fr pr create` never replaces it. OPEN
+    means it exists already; MERGED or CLOSED means this branch is spent."""
+    from fr.git_policy.push import PushRefusedError
+
+    if url is None:
+        return
+    try:
+        status = client_for(repo_root).pr_status_by_url(url)
+    except FORGE_ERRORS as e:
+        raise PushRefusedError(
+            f"this run already records the PR {url}, and fr cannot read its state ({e}); "
+            "fr pr create never replaces a recorded PR"
+        ) from e
+    pr_state = (status or {}).get("state")
+    if pr_state == "OPEN":
+        raise PushRefusedError(f"this run's PR already exists and is open: {url}")
+    if pr_state in ("MERGED", "CLOSED"):
+        raise PushRefusedError(
+            f"this run's PR {url} is {pr_state}: start a fresh branch (and run) for new work"
+        )
+    raise PushRefusedError(
+        f"this run already records the PR {url} (state {pr_state or 'unknown'}); "
+        "fr pr create never replaces a recorded PR"
+    )
+
+
 @pr_app.command("create")
 def create_cmd(
     title: str = typer.Option(..., "--title", help="The PR title."),
@@ -62,6 +89,7 @@ def create_cmd(
                 "branch's one run"
             )
         state = runs[0]
+        _refuse_recorded_pr(repo_root, state.pr)
         try:
             body = body_file.read_text()
         except (OSError, UnicodeDecodeError) as e:

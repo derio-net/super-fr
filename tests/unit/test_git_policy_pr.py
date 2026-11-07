@@ -20,7 +20,7 @@ from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
 from tests.unit.settings_repo import git, land_on_main, make_repo
-from tests.unit.test_git_policy_push import _approve, _seed_run
+from tests.unit.test_git_policy_push import _answered, _approve, _commit, _seed_run
 
 runner = CliRunner()
 SLUG = "derio-net/demo"
@@ -42,6 +42,13 @@ def _repo(tmp_path: Path, settings: str | None = None) -> Path:
     _seed_run(repo)
     (tmp_path / "body.md").write_text("Summary.\n")
     return repo
+
+
+def _pr_request_id(output: str) -> str:
+    for word in output.replace("`", " ").split():
+        if word.startswith("pr-"):
+            return word.rstrip(".,:;")
+    raise AssertionError(output)
 
 
 def _create(repo: Path, *args: str):
@@ -82,14 +89,16 @@ def test_pr_ask_refuses_until_an_operator_decision_is_verified(
     tmp_path: Path, forge: FakeGhClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _repo(tmp_path, "git:\n  pr: ask\n")
-    monkeypatch.setattr(ask_mod, "operator_answered_since", lambda env, since: True)
+    _answered(monkeypatch, True)
 
     first = _create(repo)
     assert first.exit_code == 2, first.output
-    assert "pr-feat-x" in first.output and "--answered-by operator" in first.output
+    rid = _pr_request_id(first.output)
+    head = git(repo, "rev-parse", "HEAD").strip()
+    assert rid == f"pr-feat-x-{head[:12]}" and "--answered-by operator" in first.output
     assert not forge.calls
 
-    _approve(repo, "pr-feat-x")
+    _approve(repo, rid)
     second = _create(repo)
     assert second.exit_code == 0, second.output
     assert [c[0] for c in forge.calls] == ["create_pr"]
@@ -99,9 +108,8 @@ def test_pr_ask_refuses_on_an_unobservable_transcript(
     tmp_path: Path, forge: FakeGhClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _repo(tmp_path, "git:\n  pr: ask\n")
-    monkeypatch.setattr(ask_mod, "operator_answered_since", lambda env, since: None)
-    _create(repo)
-    _approve(repo, "pr-feat-x")
+    _answered(monkeypatch, None)
+    _approve(repo, _pr_request_id(_create(repo).output))
 
     result = runner.invoke(
         app,
@@ -132,3 +140,59 @@ def test_deliver_under_pr_ask_refuses_a_pr_fr_pr_create_did_not_open(tmp_path: P
 def test_deliver_under_pr_auto_accepts_any_pr(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     _deliver_pr_ask_gate(repo, load_run_state(repo, "r1"), "https://example.com/o/r/pull/3")
+
+
+# --- review p4-r4: one recorded PR per run; a request id per request -----------
+
+
+def _record_pr(repo: Path, url: str) -> None:
+    cursor = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    cursor.write_text(cursor.read_text() + f"pr: {url}\n")
+    git(repo, "commit", "-qam", "chore(fr): run r1 — pr create")
+
+
+@pytest.mark.parametrize(
+    ("pr_state", "says"),
+    [("OPEN", "already exists and is open"), ("MERGED", "start a fresh branch"),
+     ("CLOSED", "start a fresh branch")],
+)  # fmt: skip
+def test_pr_create_never_replaces_the_runs_recorded_pr(
+    tmp_path: Path, forge: FakeGhClient, monkeypatch: pytest.MonkeyPatch, pr_state: str, says: str
+) -> None:
+    url = f"https://github.com/{SLUG}/pull/7"
+    monkeypatch.setattr(
+        forge,
+        "pr_status_by_url",
+        lambda u: {"state": pr_state} if u == url else None,
+        raising=False,
+    )
+    repo = _repo(tmp_path)
+    _record_pr(repo, url)
+
+    result = _create(repo)
+
+    assert result.exit_code == 2, result.output
+    flat = " ".join(result.output.split())
+    assert url in flat and says in flat
+    assert not [c for c in forge.calls if c[0] == "create_pr"]
+    assert load_run_state(repo, "r1").pr == url
+
+
+def test_a_new_pr_request_after_an_approved_one_gets_a_new_id(
+    tmp_path: Path, forge: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A journal id is create-only: the second request (a new head) must not reuse
+    the first one's id, or it could never be approved."""
+    repo = _repo(tmp_path, "git:\n  pr: ask\n")
+    _answered(monkeypatch, True)
+    first = _pr_request_id(_create(repo).output)
+    _approve(repo, first)
+    # The first request is set aside (as a consumed one is) and new work lands.
+    ask_mod.consume(Path(git(repo, "rev-parse", "--absolute-git-dir").strip()), "pr", "feat/x")
+    _commit(repo, "late", "feat(x): late")
+
+    second = _pr_request_id(_create(repo).output)
+
+    assert second != first
+    _approve(repo, second)
+    assert _create(repo).exit_code == 0
