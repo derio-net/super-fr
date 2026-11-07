@@ -78,6 +78,7 @@ def show_cmd(
     typer.echo(f"{'key'.ljust(width)}  {'value'.ljust(8)}  source")
     for key, value in values.items():
         typer.echo(f"{key.ljust(width)}  {str(value).ljust(8)}  {eff.sources[key]}")
+    typer.echo(f"policy source: {eff.source} ({eff.ref or 'none'})")
     typer.echo(f"({eff.ref_note})")
     if eff.pending_edit:
         typer.echo(f"note: {eff.pending_edit}")

@@ -167,12 +167,117 @@ def test_a_non_main_remote_default_is_read(tmp_path: Path) -> None:
     assert eff.ref == "refs/remotes/origin/trunk"
 
 
-def test_a_remote_that_was_never_fetched_refuses(tmp_path: Path) -> None:
+def test_a_remote_with_tracking_refs_but_no_default_refuses(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
+    _git(repo, "push", "-q", "origin", "main:feature")
+    _git(repo, "fetch", "-q", "origin")
     _git(repo, "remote", "set-head", "origin", "-d")
     _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
     with pytest.raises(SettingsError, match="git fetch origin"):
         load_settings(repo)
+
+
+def test_a_remote_that_was_never_fetched_reads_the_local_default_branch(tmp_path: Path) -> None:
+    """The bootstrap state (`git init; git remote add origin <url>`) holds no remote policy."""
+    repo = tmp_path / "boot"
+    _git(tmp_path, "init", "-q", "-b", "main", str(repo))
+    _git(repo, "remote", "add", "origin", "https://example.invalid/r")
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: off\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "s")
+    eff = load_settings(repo)
+    assert eff.settings.artifacts.gates == "off"
+    assert eff.ref == "refs/heads/main"
+    assert eff.source == "local"
+
+
+def test_a_never_fetched_remote_with_no_commits_is_defaults(tmp_path: Path) -> None:
+    repo = tmp_path / "boot"
+    _git(tmp_path, "init", "-q", "-b", "main", str(repo))
+    _git(repo, "remote", "add", "origin", "https://example.invalid/r")
+    eff = load_settings(repo)
+    assert eff.ref is None
+    assert eff.source == "defaults"
+
+
+def _pr_checkout(tmp_path: Path, committed: str | None) -> Path:
+    """actions/checkout's depth-1 PR shape: a remote, and ONLY refs/remotes/pull/1/merge."""
+    src = tmp_path / "src"
+    _git(tmp_path, "init", "-q", "-b", "main", str(src))
+    (src / "README.md").write_text("x\n")
+    if committed is not None:
+        (src / ".fr").mkdir()
+        (src / ".fr" / "settings.yaml").write_text(committed)
+    _git(src, "add", "-A")
+    _git(src, "commit", "-qm", "merge")
+    pr = tmp_path / "pr"
+    _git(tmp_path, "init", "-q", str(pr))
+    _git(pr, "remote", "add", "origin", "https://example.invalid/r")
+    _git(pr, "fetch", "-q", "--depth=1", f"file://{src}", "+HEAD:refs/remotes/pull/1/merge")
+    _git(pr, "checkout", "-q", "refs/remotes/pull/1/merge")
+    return pr
+
+
+def test_ci_with_no_default_ref_reads_heads_committed_file_and_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pr = _pr_checkout(tmp_path, "artifacts:\n  gates: off\n")
+    monkeypatch.setenv("CI", "true")
+    eff = load_settings(pr)
+    load_settings(pr)
+    assert eff.settings.artifacts.gates == "off"
+    assert eff.source == "head"
+    assert eff.ref == "HEAD"
+    assert "HEAD" in eff.ref_note
+    err = capsys.readouterr().err
+    assert err.count("HEAD's committed tree") == 1, err
+
+
+def test_ci_head_source_never_reads_the_working_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pr = _pr_checkout(tmp_path, None)
+    (pr / ".fr").mkdir()
+    (pr / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: off\n")
+    monkeypatch.setenv("CI", "true")
+    eff = load_settings(pr)
+    assert eff.source == "head"
+    assert eff.settings.artifacts.gates == "on"
+    assert eff.pending_edit is not None
+
+
+def test_the_pr_checkout_outside_ci_is_defaults_not_head(tmp_path: Path) -> None:
+    """Without CI the PR shape is R2 step 2 with no local default: defaults and a note,
+    never HEAD (a branch must not supply its own policy)."""
+    pr = _pr_checkout(tmp_path, "artifacts:\n  gates: off\n")
+    eff = load_settings(pr)
+    assert eff.source == "defaults"
+    assert eff.settings.artifacts.gates == "on"
+
+
+def test_ci_with_tracking_refs_but_no_default_reads_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _land_on_main(repo, "artifacts:\n  gates: off\n")
+    _git(repo, "push", "-q", "origin", "main:feature")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "remote", "set-head", "origin", "-d")
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    monkeypatch.setenv("CI", "true")
+    eff = load_settings(repo)
+    assert eff.source == "head"
+    assert eff.settings.artifacts.gates == "off"
+
+
+def test_ci_with_a_default_ref_still_reads_the_default_ref(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CI", "true")
+    eff = load_settings(repo)
+    assert eff.source == "remote"
+    assert eff.ref == "refs/remotes/origin/main"
 
 
 def test_an_unpushed_local_main_is_not_read_when_origin_exists(repo: Path) -> None:

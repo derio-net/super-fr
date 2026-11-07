@@ -224,6 +224,12 @@ def _truthy(environ: Mapping[str, str], name: str) -> bool:
     return (environ.get(name) or "").strip().lower() not in _FALSY
 
 
+def in_ci(env: Mapping[str, str] | None = None) -> bool:
+    """Whether any `CI_ENV_VARS` marker is truthy: the one "is this CI?" answer."""
+    environ = os.environ if env is None else env
+    return any(_truthy(environ, name) for name in CI_ENV_VARS)
+
+
 def is_exempt(
     *,
     argv: Sequence[str] | None = None,
@@ -333,7 +339,7 @@ def is_interactive(
     predicate rather than inventing a second answer to the same question.
     """
     environ = os.environ if env is None else env
-    if any(_truthy(environ, name) for name in CI_ENV_VARS):
+    if in_ci(environ):
         return False
     if _truthy(environ, NON_INTERACTIVE_ENV_VAR):
         return False
@@ -367,7 +373,7 @@ def classify(
     `is_interactive` stays the one answer to "is this an operator's terminal?".
     """
     environ = os.environ if env is None else env
-    if any(_truthy(environ, name) for name in CI_ENV_VARS):
+    if in_ci(environ):
         return "ci"
     if _truthy(environ, NON_INTERACTIVE_ENV_VAR):
         return "opt-out"

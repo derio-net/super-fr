@@ -132,3 +132,9 @@ def test_show_does_not_truncate_long_values(repo: Path) -> None:
     result = runner.invoke(app, ["settings", "show"])
     assert result.exit_code == 0, result.output
     assert long in result.output.replace("\n", "")
+
+
+def test_show_names_the_policy_source(repo: Path) -> None:
+    result = runner.invoke(app, ["settings", "show"])
+    assert result.exit_code == 0, result.output
+    assert "policy source: remote (refs/remotes/origin/main)" in result.output
