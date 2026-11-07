@@ -40,6 +40,8 @@ def test_yaml_booleans_read_as_on_off() -> None:
         ({"git": {"push": "never"}}, "git.push"),
         ({"artifacts": {"gates": "maybe"}}, "artifacts.gates"),
         ({"schema": 2}, "schema"),
+        ({"schema": True}, "schema"),
+        ({"schema": "1"}, "schema"),
         ({"artifacts": {"spec": "off"}}, "artifacts.spec"),
         ({"artifacts": {"plan": "off"}}, "artifacts.plan"),
         ({"artifacts": {"journals": "off"}}, "artifacts.journals"),

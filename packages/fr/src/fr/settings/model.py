@@ -62,6 +62,12 @@ def _choice(default: str, vocab: frozenset[str], description: str) -> Any:
     )
 
 
+def _strict_int(v: Any) -> Any:
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise ValueError(f"must be the integer 1, got {v!r}")
+    return v
+
+
 OnOffType = Annotated[str, BeforeValidator(_on_off), AfterValidator(_member(ON_OFF))]
 AskType = Annotated[str, AfterValidator(_member(AUTO_ASK))]
 BodyType = Annotated[str, AfterValidator(_member(PR_BODIES))]
@@ -199,7 +205,7 @@ class Git(_Closed):
 
 
 class Settings(_Closed):
-    schema_: Literal[1] = Field(
+    schema_: Annotated[Literal[1], BeforeValidator(_strict_int)] = Field(
         1, alias="schema", description="The settings schema version this file is written for."
     )
     placement: PlacementType = _choice(
