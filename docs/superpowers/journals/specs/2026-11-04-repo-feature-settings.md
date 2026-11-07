@@ -85,3 +85,8 @@ The operator chose the whole-repo unit and stated that in-flight features landin
 ### d16-three-plans · decision · Delivery is three plans, three PRs: settings core; acceptance model and derived reports; resolver, quiet, stealth and moves; supersedes d9
 
 Chosen over four plans and matrix-first. Recorded by the agent from the operator's question-round answers of 2026-11-05; those answers predate d11, so fr's one-answer-per-entry check cannot bind them here. Operator confirmation is entry d17.
+
+<!-- fr:journal kind=decision scope=spec id=d17-confirm-round-2 created=2026-11-07T07:08:36+00:00 decided_by=operator -->
+### d17-confirm-round-2 · decision · Operator confirms d12–d16 and the eleven redesigned acceptance rows
+
+Confirmed in one answered question after the revised spec was presented. decider operator.
