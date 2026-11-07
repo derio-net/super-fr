@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# A recording forge double for tests/scenarios/repo-settings-forge-quiet.sh. It records
+# every call, one argv per line, to $FAKE_GH_LOG, answers the reads `fr` may make
+# before it decides (`gh api user`, `gh issue list`) with empty results, and refuses
+# every other call — under `forge: {labels: off, comments: off, issues: off}` there must
+# be no write, so the scenario also greps the log for one.
+log="${FAKE_GH_LOG:?FAKE_GH_LOG is required}"
+printf '%s\n' "$*" >> "$log"
+case "$1 ${2:-}" in
+  "api user") echo scenario-bot ;;
+  "issue list") echo '[]' ;;
+  *) echo "fake gh: unexpected call: gh $*" >&2; exit 1 ;;
+esac
