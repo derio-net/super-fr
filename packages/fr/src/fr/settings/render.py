@@ -63,5 +63,5 @@ def render_init() -> str:
         "## Every key is commented out at its default; to change one, drop the single leading",
         "## `#` of its line (lines starting `##` are prose).",
     ]
-    _emit(Settings, Settings(), 0, out)
+    _emit(Settings, Settings.model_validate({}), 0, out)
     return "\n".join(out) + "\n"

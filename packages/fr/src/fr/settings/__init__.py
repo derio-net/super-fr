@@ -29,14 +29,14 @@ def disabled(repo_root: Path, feature: str) -> bool:
     """Whether the repo turned *feature* (`acceptance`, `test_plan`, `gates`) off."""
     if feature not in POLICY_FEATURES:
         raise ValueError(f"{feature!r} has no setting; policy features are {POLICY_FEATURES}")
-    return getattr(load_settings(repo_root).settings.artifacts, feature) == "off"
+    return bool(getattr(load_settings(repo_root).settings.artifacts, feature) == "off")
 
 
 def forge_allows(repo_root: Path, kind: str) -> bool:
     """Whether fr may write *kind* (`labels`, `comments`, `issues`) to the forge."""
     if kind not in FORGE_KINDS:
         raise ValueError(f"{kind!r} is not a forge write kind; kinds are {FORGE_KINDS}")
-    return getattr(load_settings(repo_root).settings.forge, kind) == "on"
+    return bool(getattr(load_settings(repo_root).settings.forge, kind) == "on")
 
 
 __all__ = ["SettingsError", "disabled", "forge_allows", "load_settings"]

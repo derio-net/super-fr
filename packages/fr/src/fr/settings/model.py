@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import string
 from collections.abc import Callable
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, Final, Literal, cast
 
 from pydantic import (
     AfterValidator,
@@ -19,6 +19,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
+from pydantic.config import JsonDict
 
 from fr.settings import SettingsError
 
@@ -54,7 +55,11 @@ def _member(vocab: frozenset[str]) -> Callable[[Any], str]:
 
 def _choice(default: str, vocab: frozenset[str], description: str) -> Any:
     """A closed-vocabulary field; the renderer reads `allowed` back from the schema."""
-    return Field(default, description=description, json_schema_extra={"allowed": sorted(vocab)})
+    return Field(
+        default,
+        description=description,
+        json_schema_extra=cast("JsonDict", {"allowed": sorted(vocab)}),
+    )
 
 
 OnOffType = Annotated[str, BeforeValidator(_on_off), AfterValidator(_member(ON_OFF))]
@@ -188,7 +193,8 @@ class Git(_Closed):
         "never rewritten.",
     )
     commit: Commit = Field(
-        default_factory=Commit, description="Commit subject templates (the defaults are today's)."
+        default_factory=lambda: Commit.model_validate({}),
+        description="Commit subject templates (the defaults are today's).",
     )
 
 
