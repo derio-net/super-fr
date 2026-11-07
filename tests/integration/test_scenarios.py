@@ -199,6 +199,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "awaiting-live-triage",
         "matrix-status-split",
         "debt-report",
+        "repo-settings-file",
         "opencode-store-v2",
         "opencode-plugin-v2",
         "closeout-owed",
