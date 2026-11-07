@@ -240,3 +240,88 @@ forge_block is the one predicate and each site was rewritten onto it directly; t
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 two skill paragraphs, a scenario script and a matrix row; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-11-07T14:13:34+00:00 phase=3 -->
+### p3-review-1 · review · Phase 3 code review: 7 findings, all in scope, all fixed; R9 amended (phase 3)
+
+An independent reviewer read 4298c93ab..a4781c998 against R9/R10 and inventoried every forge write. R10's minimal/full PR-body paths were found sound. The fixes are 4b2fbf944..66e935b46. Full suite: 14261 passed. R9 was amended (spec decision forge-gate-ledger-rule): the PR gate ledger answers only to forge.labels/comments, reads are never gated, a repo with no checkout has its policy read via the forge, and a tripwire covers every forge write. The amended R9 supersedes plan decision p3-gate-ledger-is-not-a-tracker-write; its tracker=False flag is replaced by ledger_block.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-remote-policy-scope created=2026-11-07T14:13:34+00:00 phase=3 -->
+### p3-remote-policy-scope · discovery · The remote policy read sees .fr/settings.yaml only, not a remote repo's tracking: none (phase 3)
+
+tracking: none lives in .devcontainer/fr-profiles.yaml, which the forge read does not fetch. For a repo with no checkout, forge.* in .fr/settings.yaml is honoured; tracking: none is not. That is unchanged from before phase 3, where those paths read no policy at all. Behaviour change: under labels or comments off, a driven batch's claim is refused, so drive --once exits 1 until the setting or the batch changes.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-07T14:13:34+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Gate ledger exempted from tracking: none in gate pass but not in deliver's label sync (phase 3)
+
+One ledger under two rules; contradicted R9 as written.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-07T14:13:34+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Ungated forge writes remained; no-checkout gates failed open to defaults (phase 3)
+
+claim_writes, approval, the close-out awaiting-live removal, the fr_dispatch stamp, tracker/github.py; _Driver.forge_off and gate_cmd._forge_policy.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-07T14:13:34+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · No tripwire for a new ungated forge write (phase 3)
+
+The inventory test only grepped the old tracking-none spellings.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-07T14:13:34+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · fr-goal §8 filing wording contradicted the code (phase 3)
+
+comments: off alone does not stop filing; PR labels still sync under issues: off.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-07T14:13:34+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · New quiet write paths untested (phase 3)
+
+gate pass, the driver's forge_off, _tracking_gate, undispatch/close-owed, sync_exit_labels under off.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-07T14:13:34+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · fr debt issue's zero-debt close commented under comments: off (phase 3)
+
+debt_cmd.py close_issue posted gh issue close --comment.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-07T14:13:34+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · forge.issues: off skipped fr debt's forge reads (phase 3)
+
+R9 limits writes, not reads.
+
+<!-- fr:journal kind=finding scope=plan id=p3-residual-triage-forge-writes-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-residual-triage-forge-writes -->
+### p3-residual-triage-forge-writes-resolved · finding [fixed] · resolves p3-residual-triage-forge-writes: triage claim/approval/closeout label writes and tracker/github.py are not gated by forge_allows (phase 3)
+
+Closed by 4b2fbf944, 0751196e9, 3285547f3, d35db3d2f and 66e935b46. Tripwire 4906df9e5 keeps them gated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Gate ledger exempted from tracking: none in gate pass but not in deliver's label sync (phase 3)
+
+4b2fbf944: ledger_block/ledger_allows is the one predicate, used by sync_exit_labels, gate pass, gate backfill and the driver's _pass_gate. forge_block covers tracker writes only.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Ungated forge writes remained; no-checkout gates failed open to defaults (phase 3)
+
+4b2fbf944, 0751196e9, 3285547f3, d35db3d2f: settings/remote.py reads the policy via GhClient.read_file (404 means defaults, any other failure refuses). Every listed write is gated, plus the fr_vk close backstop.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: No tripwire for a new ungated forge write (phase 3)
+
+4906df9e5: an AST tripwire over packages/*/src with a file::function allowlist naming each guard, proven on a synthetic ungated module.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: fr-goal §8 filing wording contradicted the code (phase 3)
+
+f8d734567: §8 corrected and pinned by a test. Mirrors regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: New quiet write paths untested (phase 3)
+
+e63833f52: the listed paths are covered.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: fr debt issue's zero-debt close commented under comments: off (phase 3)
+
+cd5959df0: closed without a comment via edit_issue_state.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-07T14:13:34+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: forge.issues: off skipped fr debt's forge reads (phase 3)
+
+8e7523b5c: fr debt keeps its forge reads; only tracking: none leaves it git-only.

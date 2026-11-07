@@ -134,12 +134,19 @@ steps:
         evidence:
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-07T12:58:57+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 8b56d9b2-ef08-4390-b0b3-f0296e3ac2b9
+          returned: '2026-11-07T14:13:34+00:00'
+          outcome: done
+        evidence:
+          review: p3-review-1
+          reviewer: a4206c77828d09a06
+          visual: none
+          findings: p3-residual-triage-forge-writes,p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7
   journal-check:
     state: pending
   deliver:
