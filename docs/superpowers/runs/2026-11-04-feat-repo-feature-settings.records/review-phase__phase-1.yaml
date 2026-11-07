@@ -1,0 +1,19 @@
+schema_version: 10
+run: 2026-11-04-feat-repo-feature-settings
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - {kind: review, id: p1-review-1, phase: 1, title: "Phase 1 code review: 5 low findings, all in scope, all fixed", body: "Independent reviewer read the phase 1 diff (279d6c93..f769569f) against spec R2-R5. Policy source, closed model, coherence rules, init round-trip, trigger exemption, run-start refusal and conventions checked sound. Five low findings, fixed in 1442ec4fe..ca83576fd; full suite 14128 passed."}
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "load.py _show treats any git show failure as file absent", body: "A corrupt object or git error on an existing .fr/settings.yaml silently yielded defaults."}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "push-ask driven-triage check read the working tree and passed on parse error", body: "A branch could edit .fr/triage.yaml to dodge the refusal; a malformed file passed."}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "origin present but default unresolved fell back to a local branch", body: "Unpushed local settings edits could act as policy; non-main origin/HEAD untested."}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "schema: true passed Literal[1]", body: "True == 1; closed model must refuse non-int."}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: in, title: "settings show truncated values to 40 chars", body: "A long commit template was silently cut in the authoritative view."}
+resolves:
+  - {id: p1-r1, state: fixed, body: "1442ec4fe: ls-tree distinguishes absent (None) from a read failure (SettingsError)."}
+  - {id: p1-r2, state: fixed, body: "e16758a77: .fr/triage.yaml read at the default-ref SHA via load.read_at_default; malformed file refuses; DRIVEN_TRIAGE_KEYS stated as the definition."}
+  - {id: p1-r3, state: fixed, body: "1442ec4fe: with a remote, only origin/HEAD then origin/<default> are read, else SettingsError with fetch/set-head hints; local fallback only with no remote. ca83576fd seeds origin/main in the cloud-triage scenario fixture."}
+  - {id: p1-r4, state: fixed, body: "d4e2dd9bd: strict-int BeforeValidator refuses true and '1'."}
+  - {id: p1-r5, state: fixed, body: "25ccf734e: show prints full values."}
+evidence: {review: p1-review-1, reviewer: afa276ce976b9a796}
