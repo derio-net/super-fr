@@ -8,9 +8,13 @@ given after its request was printed:
    never committed: a committed request would move HEAD and so its own id.
 2. The approval is a spec-journal decision with the request's id and
    `answered_by: operator` (`decided_by=operator`), created after the request.
-3. fr reads the session transcript (`operator_answered_since`) for an operator
-   answer since the request. Not observable is a refusal naming the harness; there
-   is no `--no-questions` bypass.
+3. fr reads the session transcript (`answered_rounds_since`) for an ANSWERED
+   question round since the request whose question text names the request id
+   (review p4-r3: any answer, to any question, was accepted before). Where the
+   harness exposes the answer text (Claude Code), an answer that reads as a refusal
+   (`REFUSAL`) refuses; where it does not (OpenCode records no answer text in the
+   round), the id match alone is checked. Not observable is a refusal naming the
+   harness; there is no `--no-questions` bypass.
 
 A push request goes stale when a commit other than journal bookkeeping lands
 after it: the operator approved pushing what was there, not what came later.
@@ -26,7 +30,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-from fr.run.telemetry import operator_answered_since
+from fr.run.telemetry import Round, answered_rounds_since
 
 RequestKind = Literal["push", "pr"]
 
@@ -70,7 +74,8 @@ class RemoteWriteRequest:
         return "\n".join(
             [
                 f"fr asks before it writes to the remote ({setting}: ask): request {self.id}.",
-                f"  Ask the operator, with your harness's question tool, whether fr may {what}.",
+                f"  Ask the operator, with your harness's question tool, whether fr may {what},",
+                f"  and put the request id {self.id} in the question text: fr looks for it.",
                 "  When the operator approves, record it, then run this command again:",
                 f"    {self.journal_command()}",
             ]
@@ -86,8 +91,10 @@ def _safe(branch: str) -> str:
 
 
 def request_id(kind: RequestKind, branch: str, head: str) -> str:
-    """`push-<branch>-<head sha[:12]>` / `pr-<branch>`: a journal id, so one token."""
-    return f"push-{_safe(branch)}-{head[:12]}" if kind == "push" else f"pr-{_safe(branch)}"
+    """`<kind>-<branch>-<head sha[:12]>`: a journal id, so one token. The head makes
+    each request's id new (journal ids are create-only, so a `pr-<branch>` id could
+    only ever be approved once, review p4-r4)."""
+    return f"{kind}-{_safe(branch)}-{head[:12]}"
 
 
 def _store(git_dir: Path, kind: RequestKind, branch: str) -> Path:
@@ -131,6 +138,24 @@ def _approved(repo_root: Path, request: RemoteWriteRequest) -> bool:
     )
 
 
+REFUSAL = re.compile(
+    r"^\s*(no|nope|deny|denied|decline|declined|reject|rejected|refuse|refused|"
+    r"cancel|stop|abort|don'?t|do not|not now|never)\b",
+    re.IGNORECASE,
+)
+"""An answer that reads as a refusal: it STARTS with one of these words. Kept simple
+on purpose: the question tool's answers are the option labels the agent offered
+(`Yes, push` / `No`) or the operator's own words, and a leading negative is how
+both say no. Anything else counts as an answer to the question that was asked."""
+
+
+def refusals(round_: Round) -> list[str]:
+    """The answers of *round_* that read as refusals. `answer_texts` holds the
+    answers map's keys (the questions) and values; the questions are skipped."""
+    questions = set(round_.question_texts)
+    return [a for a in round_.answer_texts if a not in questions and REFUSAL.match(a)]
+
+
 def require_approval(
     repo_root: Path,
     *,
@@ -169,15 +194,23 @@ def require_approval(
         raise AskRefusedError(request.text())
     if not _approved(repo_root, request):
         raise AskRefusedError(request.text())
-    observed = operator_answered_since(env, journal_stamp_as_utc(request.at))
-    if observed is True:
+    rounds = answered_rounds_since(env, journal_stamp_as_utc(request.at))
+    if rounds is not None:
+        asked = [r for r in rounds if any(request.id in q for q in r.question_texts)]
+        if not asked:
+            raise AskRefusedError(
+                f"request {request.id}: no answered question naming {request.id} in this "
+                f"session's transcript since {request.at}. The decision says the operator "
+                "approved; fr can read the transcript here and it does not show it. Ask the "
+                "operator, with the request id in the question, then run this again."
+            )
+        declined = [a for r in asked for a in refusals(r)]
+        if declined:
+            raise AskRefusedError(
+                f"request {request.id}: the operator answered {declined[0]!r}, which is not "
+                f"an approval. fr will not {request.kind} on it."
+            )
         return request
-    if observed is False:
-        raise AskRefusedError(
-            f"request {request.id}: no answered question in this session's transcript since "
-            f"{request.at}. The decision says the operator approved; fr can read the "
-            "transcript here and it does not show it. Ask the operator, then run this again."
-        )
     from fr.harness.detect import detect_harness
     from fr.harness.model import HarnessError
 

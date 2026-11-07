@@ -7,6 +7,7 @@ unpushed commits, so a plain push always fast-forwards.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from collections.abc import Iterator, Sequence
@@ -294,8 +295,27 @@ def _approve(repo: Path, request_id: str) -> None:
     assert result.exit_code == 0, result.output
 
 
-def _answered(monkeypatch: pytest.MonkeyPatch, value: bool | None) -> None:
-    monkeypatch.setattr(ask_mod, "operator_answered_since", lambda env, since: value)
+def _answered(
+    monkeypatch: pytest.MonkeyPatch,
+    value: bool | None,
+    *,
+    answer: str = "Yes",
+    names_request: bool = True,
+) -> None:
+    """The transcript fr reads: True is one answered round whose question names
+    every stored request's id (unless *names_request* is False) and whose answer is
+    *answer*; False is no answered round; None is a transcript fr cannot read."""
+    from fr.run.telemetry import Round
+
+    def rounds(env: dict[str, str], since: str) -> list[Round] | None:
+        if value is not True:
+            return None if value is None else []
+        requests = Path(env["VK_REPO_ROOT"]) / ".git" / "fr" / "requests"
+        ids = [json.loads(p.read_text())["id"] for p in requests.glob("*.json")]
+        question = "May fr do this? " + (" ".join(ids) if names_request else "(no id)")
+        return [Round(question_texts=(question,), answer_texts=(question, answer))]
+
+    monkeypatch.setattr(ask_mod, "answered_rounds_since", rounds)
 
 
 def test_push_ask_without_a_decision_prints_the_request_and_refuses(
@@ -600,3 +620,46 @@ def test_moving_code_into_the_journals_tree_makes_the_request_stale(
     assert result.exit_code == 2, result.output
     assert _request_id(result.output) != rid
     assert not [c for c in argv if c[0] == "push"]
+
+
+def test_push_ask_refuses_an_answer_to_a_question_that_does_not_name_the_request(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p4-r3: an unrelated answered question is no approval of this push."""
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True, names_request=False)
+    rid = _request_id(_push(repo).output)
+    _approve(repo, rid)
+
+    result = _push(repo)
+
+    assert result.exit_code == 2, result.output
+    assert f"no answered question naming {rid}" in result.output
+    assert not [c for c in argv if c[0] == "push"]
+
+
+def test_push_ask_refuses_when_the_operator_answered_no(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True, answer="No, not yet")
+    rid = _request_id(_push(repo).output)
+    _approve(repo, rid)
+
+    result = _push(repo)
+
+    assert result.exit_code == 2, result.output
+    assert "not an approval" in result.output
+    assert not [c for c in argv if c[0] == "push"]
+
+
+def test_the_request_text_tells_the_agent_to_name_the_request_in_the_question(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True)
+
+    result = _push(repo)
+
+    rid = _request_id(result.output)
+    assert f"put the request id {rid} in the question text" in " ".join(result.output.split())
