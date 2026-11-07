@@ -42,6 +42,7 @@ from fr.commands.repair_cmd import repair_command
 from fr.commands.repos_cmd import repos_app
 from fr.commands.run_cmd import run_app
 from fr.commands.services_cmd import services_command
+from fr.commands.settings_cmd import settings_app
 from fr.commands.skills_cmd import skills as skills_command
 from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
@@ -92,6 +93,7 @@ app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
 app.add_typer(debt_app, name="debt")
+app.add_typer(settings_app, name="settings")
 app.add_typer(gate_app, name="gate")
 app.add_typer(ops_app, name="ops")
 app.add_typer(release_app, name="release")
