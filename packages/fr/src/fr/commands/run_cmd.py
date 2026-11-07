@@ -6343,6 +6343,8 @@ def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id
         raise refuse(outcome.warning or "the exit cannot be read")
     if outcome.warning:
         err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
+    if outcome.off:
+        err_console.print(f"PR labels not synced: {outcome.off}", markup=False, soft_wrap=True)
 
 
 def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
@@ -6350,6 +6352,12 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     carries every required section (spec 2026-09-25 §5.C.4). The render is
     the one file a refusal leaves behind: it is what the agent opens the PR
     with. On success the render is removed — it goes with the delivered step.
+
+    Under `forge.pr_body: minimal` (spec 2026-11-04-repo-feature-settings R10) the
+    live PR stays a plain summary: the render is kept durable at
+    `runs/<run-id>.pr-body.md` (committed with this resolve, never removed), the live
+    body is not asked for fr's sections but is refused any fr marker, and the
+    closing-keyword checks hold either way.
     """
     from fr.artifacts.atomic import write_text_atomic
     from fr.hostclient import FORGE_ERRORS, client_for, pr_command
@@ -6357,12 +6365,19 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.record.pr_body import (
         PR_BODY_NAME,
         REQUIRED_SECTIONS,
+        durable_pr_body_path,
+        fr_markers,
         missing_sections,
         render_pr_body,
         shared_closing_keywords,
     )
+    from fr.settings import load_settings
 
-    body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
+    minimal = load_settings(repo_root).settings.forge.pr_body == "minimal"
+    if minimal:
+        body_path = durable_pr_body_path(repo_root, state.run)
+    else:
+        body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
     write_text_atomic(body_path, render_pr_body(repo_root, state))
     rel = body_path.relative_to(repo_root).as_posix()
@@ -6381,14 +6396,30 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    required = (
-        (*REQUIRED_SECTIONS, HISTORICAL_HEADING) if historical_reviews(state) else REQUIRED_SECTIONS
-    )
-    missing = missing_sections(live, required=required)
-    # Review p2-r1: the heading alone is not the control — the operator's ok
-    # is given against the LIST, so every historical review must be named.
-    live_lines = {line.strip() for line in live.splitlines()}
-    missing += [line for line in historical_review_lines(state) if line not in live_lines]
+    if minimal:
+        markers = fr_markers(live)
+        if markers:
+            edit = pr_command(repo_root, "edit", ref=ref, body="<plain summary file>")
+            err_console.print(
+                "refused: under `forge.pr_body: minimal` the live PR carries no fr marker, "
+                f"and it has: {'; '.join(markers)}. Replace the body with a plain summary "
+                f"(`{edit}`); the full render stays at {rel} — and resolve again",
+                markup=False,
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        missing: list[str] = []
+    else:
+        required = (
+            (*REQUIRED_SECTIONS, HISTORICAL_HEADING)
+            if historical_reviews(state)
+            else REQUIRED_SECTIONS
+        )
+        missing = missing_sections(live, required=required)
+        # Review p2-r1: the heading alone is not the control — the operator's ok
+        # is given against the LIST, so every historical review must be named.
+        live_lines = {line.strip() for line in live.splitlines()}
+        missing += [line for line in historical_review_lines(state) if line not in live_lines]
     if missing:
         edit = pr_command(repo_root, "edit", ref=ref, body=rel)
         err_console.print(
@@ -6416,6 +6447,16 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         )
         raise typer.Exit(2)
     _refuse_premature_closes(repo_root, state, live)
+    if minimal:
+        # Kept, and committed with this resolve: it is what the operator reviews.
+        _note_record_write(repo_root, body_path)
+        err_console.print(
+            f"PR body (forge.pr_body: minimal): review the full render at {rel} — its "
+            "findings, owed rows and historical-review list; the live PR stays plain",
+            markup=False,
+            soft_wrap=True,
+        )
+        return
     from fr.record.apply import _is_tracked
 
     tracked = _is_tracked(repo_root, body_path)

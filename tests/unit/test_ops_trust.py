@@ -623,10 +623,12 @@ def test_exclusion_is_the_exact_file_shapes_fr_writes() -> None:
         "docs/superpowers/runs/2026-10-22-feat-x.yaml",
         "docs/superpowers/runs/2026-10-22-feat-x.records/implement-phase__phase-2.yaml",
         "docs/superpowers/runs/2026-10-22-feat-x.records/pr-body.md",
+        "docs/superpowers/runs/2026-10-22-feat-x.pr-body.md",  # pr_body: minimal (R10)
     ):
         assert is_trust_excluded(path), path
     for path in (
         "docs/superpowers/runs/evil.sh",
+        "docs/superpowers/runs/notes.md",
         "docs/superpowers/runs/x/y.yaml",
         "docs/superpowers/runs/r.records/x.sh",
         "docs/superpowers/runs/r.records/sub/a.yaml",

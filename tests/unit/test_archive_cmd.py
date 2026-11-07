@@ -343,6 +343,10 @@ def test_archive_moves_run_state_file_alongside_its_plan(tmp_path, monkeypatch):
         "    emitted: {plan: docs/superpowers/plans/2026-08-20-goal-output}\n"
         "  plan-review: {state: pending}\n"
     )
+    # spec 2026-11-04-repo-feature-settings R10: the durable `forge.pr_body: minimal`
+    # render travels with its cursor.
+    body = runs_dir / f"{run_id}.pr-body.md"
+    body.write_text("## Findings\n\nNone.\n")
     _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
@@ -352,6 +356,9 @@ def test_archive_moves_run_state_file_alongside_its_plan(tmp_path, monkeypatch):
     moved = repo / "docs" / "superpowers" / "implemented" / "runs" / f"{run_id}.yaml"
     assert moved.is_file()
     assert "plan: docs/superpowers/plans/2026-08-20-goal-output" in moved.read_text()
+    assert not body.exists()
+    kept = moved.with_name(f"{run_id}.pr-body.md")
+    assert kept.read_text() == "## Findings\n\nNone.\n"
 
 
 def test_archive_does_not_move_an_unrelated_run_file_of_the_same_name(tmp_path, monkeypatch):
