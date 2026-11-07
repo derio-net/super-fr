@@ -100,6 +100,7 @@ def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
     from fr.acceptance.model import AcceptanceError, archive_twin
     from fr.requirements import run_spec
     from fr.run.model import RunStateError, parse_run_state
+    from fr.settings import SettingsError
     from fr.verification.exit import run_exit
     from fr.verification.rows import spec_section_at
     from fr.verification.spec_section import SectionError
@@ -118,7 +119,14 @@ def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
             checkout.snapshot_paths(ref, paths, root)
             exit_ = run_exit(root, state)
             section = spec_section_at(root, spec)
-    except (RunStateError, SectionError, AcceptanceError, OSError, ValueError) as exc:
+    except (
+        RunStateError,
+        SectionError,
+        AcceptanceError,
+        SettingsError,
+        OSError,
+        ValueError,
+    ) as exc:
         raise TriageError(f"the exit of run {run} cannot be read: {exc}") from exc
     if exit_.remap_problem:
         raise TriageError(f"the gate remap is unreadable: {exit_.remap_problem}")

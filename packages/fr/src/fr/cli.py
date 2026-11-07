@@ -8,13 +8,21 @@ Exit code conventions (uniform across every subcommand):
   4 = gh / network failure during `fr apply`
   5 = plan parse error (`PlanSchemaError`)
 
+A `SettingsError` from any command is caught once, here, at the root group:
+`fr: settings: <message>` on stderr and exit 2, never a traceback (spec
+2026-11-04-repo-feature-settings R2).
+
 Mutating commands (`fr apply`, `fr migrate v1-to-v2`) default to a
 dry-run. Pass `--yes` to actually write changes.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
+import click
 import typer
+from typer.core import TyperGroup
 
 from fr import __version__
 from fr.artifacts.trigger import ensure_artifacts_current
@@ -53,7 +61,21 @@ from fr.commands.validate_cmd import validate_app
 from fr.commands.verification_cmd import verification_app
 from fr.commands.workflow_cmd import workflow_app
 
+class _FrGroup(TyperGroup):
+    """The root group: maps a settings refusal from any subcommand to a clean exit 2."""
+
+    def invoke(self, ctx: click.Context) -> Any:
+        from fr.settings import SettingsError
+
+        try:
+            return super().invoke(ctx)
+        except SettingsError as e:
+            typer.echo(f"fr: settings: {e}", err=True)
+            raise typer.Exit(2) from e
+
+
 app = typer.Typer(
+    cls=_FrGroup,
     name="fr",
     help="super-fr: plan-as-folder superpowers toolchain, render → observe → diff → apply.",
     no_args_is_help=True,

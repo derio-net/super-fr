@@ -620,3 +620,21 @@ def test_p3_r2_a_devops_gate_with_no_ops_still_passes_by_walked_rows() -> None:
                                run_gate="developer")}  # fmt: skip
     (passing,) = [a for a in drive_pass(_landed(ledgers=ledger)).actions if a.kind == "gate-pass"]
     assert passing.gate == "devops"
+
+
+def test_p2_r1_a_settings_refusal_in_the_exit_read_is_a_triage_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.settings import SettingsError
+    from fr.triage.errors import TriageError
+    from fr.triage.ledger import gated_rows_at
+    from fr.verification import exit as exit_mod
+
+    checkout = _ledger_repo(tmp_path, walked=False)
+
+    def _refuse(*_a: object, **_k: object) -> None:
+        raise SettingsError("cannot find the default branch")
+
+    monkeypatch.setattr(exit_mod, "run_exit", _refuse)
+    with pytest.raises(TriageError, match="cannot be read: cannot find the default branch"):
+        gated_rows_at(checkout, "origin/main", "feat/batch-b1")
