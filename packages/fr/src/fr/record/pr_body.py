@@ -124,7 +124,8 @@ def durable_pr_body_path(repo_root: Path, run_id: str) -> Path:
 
 def fr_markers(body: str) -> list[str]:
     """The lines of *body* that carry an fr marker, stripped, in order."""
-    return [line.strip() for line in body.splitlines() if any(p in line for p in FR_MARKER_PREFIXES)]
+    lines = body.splitlines()
+    return [line.strip() for line in lines if any(p in line for p in FR_MARKER_PREFIXES)]
 
 
 def _one_ref_per_link(match: re.Match[str]) -> str:

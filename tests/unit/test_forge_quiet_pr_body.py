@@ -73,7 +73,11 @@ def test_minimal_a_plain_live_body_delivers_and_keeps_the_render_durable(
 
 @pytest.mark.parametrize(
     "marker",
-    ["<!-- fr-technical-debt -->", "<!-- fr:gate-pass tester -->", "<!-- rendered by fr for run r1"],
+    [
+        "<!-- fr-technical-debt -->",
+        "<!-- fr:gate-pass tester -->",
+        "<!-- rendered by fr for run r1",
+    ],
 )
 def test_minimal_refuses_any_fr_marker_in_the_live_body(
     minimal: Path, live: dict[str, str], marker: str
