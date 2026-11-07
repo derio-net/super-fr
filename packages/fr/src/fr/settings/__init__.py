@@ -53,8 +53,8 @@ def spec_policy_problems(repo_root: Path, spec_path: Path) -> list[str]:
 
     try:
         text = spec_path.read_text()
-    except OSError:
-        return []
+    except (OSError, UnicodeDecodeError):
+        return []  # an unreadable spec is the other validators' to report
     problems: list[str] = []
     if find_test_plan_heading(text) is not None and disabled(repo_root, "test_plan"):
         problems.append(disabled_because("test_plan", "the spec carries a `## Test Plan`"))

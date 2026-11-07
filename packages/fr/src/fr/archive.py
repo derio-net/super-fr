@@ -786,8 +786,11 @@ def missing_outcomes(repo_root: Path, spec_path: Path) -> list[Step]:
     """The spec's Test Plan steps with no recorded outcome (R19), in order.
     `fr.spec.TestPlanHeadingError` when the spec's heading is a near-miss."""
     from fr.journal.model import resolve_journal_read_path
+    from fr.settings import disabled
     from fr.spec import test_plan_steps
 
+    if disabled(repo_root, "test_plan"):
+        return []  # R7: the repo owes no Test Plan outcomes
     try:
         text = spec_path.read_text()
     except OSError:

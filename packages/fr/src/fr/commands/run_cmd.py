@@ -4719,6 +4719,32 @@ def _bind_session(workspace: Path, branch: str, session: str | None, harness: st
         )
 
 
+def _refuse_spec_policy(
+    repo_root: Path, state: RunState, step_id: str, emitted_map: dict[str, str]
+) -> None:
+    """R7, R8: the step that accepts the spec (`brainstorm`, `spec-review`) refuses one the
+    repo's policy forbids (a Test Plan under `test_plan: off`, a `gate:` line under
+    `gates: off`), naming the setting, before anything is written."""
+    if step_id not in ("brainstorm", *_spec_review_ids(repo_root, state)):
+        return
+    from fr.requirements import run_spec
+    from fr.settings import SettingsError, spec_policy_problems
+
+    spec_rel = emitted_map.get("spec") or run_spec(state)
+    if not spec_rel:
+        return
+    try:
+        problems = spec_policy_problems(repo_root, repo_root / spec_rel)
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    if problems:
+        err_console.print(f"[red]{step_id}: {escape(spec_rel)} breaks the repo's settings:[/red]")
+        for problem in problems:
+            err_console.print(f"  {escape(problem)}", soft_wrap=True)
+        raise typer.Exit(2)
+
+
 def _refuse_incoherent_settings(repo_root: Path) -> None:
     """Spec 2026-11-04-repo-feature-settings R5: a run never starts over settings that
     are invalid or contradict each other, named one per line, before anything is written."""
@@ -6651,6 +6677,9 @@ def _resolve_body(
             f"{state.workflow!r} changed after `fr run start`[/red]"
         )
         raise typer.Exit(2)
+
+    if state_value == "done":
+        _refuse_spec_policy(repo_root, state, step_id, emitted_map)
 
     cursor_record = state.steps.get(state.cursor)
     finished = (

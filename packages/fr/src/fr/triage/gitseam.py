@@ -748,6 +748,20 @@ class Checkout:
             target.write_bytes(content)
             if meta.split(b" ")[0] == b"100755":
                 target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        # Make the copy a coherent repo whose default branch IS the snapshot: the settings
+        # loader reads policy from the default ref's commit and refuses a remote whose
+        # default it cannot resolve (spec 2026-11-04-repo-feature-settings R2).
+        git(["add", "-A", "--force"], dest)
+        git(
+            [
+                "-c", "user.name=fr", "-c", "user.email=fr@fr.invalid",
+                "-c", "commit.gpgsign=false",
+                "commit", "--quiet", "--allow-empty", "--no-verify", "-m", f"snapshot of {ref}",
+            ],
+            dest,
+        )  # fmt: skip
+        git(["update-ref", "refs/remotes/origin/main", "HEAD"], dest)
+        git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], dest)
 
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).

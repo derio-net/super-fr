@@ -48,6 +48,9 @@ def _repo_on_branch(tmp_path: Path, *, gitignore: str | None = None) -> Path:
         (root / ".gitignore").write_text(gitignore)
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "init")
+    from tests.unit.settings_repo import seed_origin_default
+
+    seed_origin_default(root)
     _git(root, "checkout", "-q", "-b", "feat/x")
     return root
 

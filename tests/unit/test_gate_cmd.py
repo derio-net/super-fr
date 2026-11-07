@@ -199,6 +199,9 @@ def _backfill_repo(tmp_path: Path) -> Path:
         ["remote", "add", "origin", f"https://github.com/{BACKFILL_REPO}.git"],
     ):
         subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    from tests.unit.settings_repo import seed_origin_default
+
+    seed_origin_default(root)
     matrix = root / "docs" / "acceptance" / "matrix.yaml"
     matrix.parent.mkdir(parents=True)
     org, name = BACKFILL_REPO.split("/")

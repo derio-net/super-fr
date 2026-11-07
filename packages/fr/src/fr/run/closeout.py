@@ -469,6 +469,10 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
             has_test_plan = find_test_plan_heading(spec_file.read_text()) is not None
         except OSError:
             has_test_plan = False
+        from fr.settings import disabled as _disabled
+
+        if has_test_plan and _disabled(repo_root, "test_plan"):
+            has_test_plan = False  # R7: the repo owes no Test Plan outcomes
         if has_test_plan:
             from fr.archive import missing_outcomes
 

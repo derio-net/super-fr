@@ -576,7 +576,25 @@ def validate_spec(path: Path) -> list[str]:
     heading = find_test_plan_heading(path.read_text())
     if heading is not None and not heading.exact:
         problems.append(near_miss_message(heading))
+
+    # Spec 2026-11-04-repo-feature-settings R7, R8: a spec the repo's policy forbids.
+    root = _checkout_of(path)
+    if root is not None:
+        from fr.settings import SettingsError, spec_policy_problems
+
+        try:
+            problems.extend(spec_policy_problems(root, path))
+        except SettingsError as e:
+            problems.append(str(e))
     return problems
+
+
+def _checkout_of(path: Path) -> Path | None:
+    """The checkout holding *path* (the nearest ancestor with a `.git`), or None."""
+    for parent in path.resolve().parents:
+        if (parent / ".git").exists():
+            return parent
+    return None
 
 
 # --- profiles ------------------------------------------------------------

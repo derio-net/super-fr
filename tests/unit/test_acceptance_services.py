@@ -30,6 +30,9 @@ def _repo(tmp_path: Path, services: str, remote: str = GITHUB) -> Path:
     (root / ".devcontainer" / "fr-profiles.yaml").write_text(
         PROFILES + "schema_version: 2\n" + services
     )
+    from tests.unit.settings_repo import seed_origin_default
+
+    seed_origin_default(root)
     return root
 
 
@@ -263,6 +266,9 @@ class TestFrOnlyScaffoldIsNotCi:
         wf = root / ".github" / "workflows"
         wf.mkdir(parents=True)
         (wf / "acceptance-report.yml").write_text("on: push\n")
+        from tests.unit.settings_repo import seed_origin_default
+
+        seed_origin_default(root)
         return root
 
     def test_reason_says_only_the_scaffold_was_found(self, tmp_path: Path) -> None:

@@ -35,6 +35,9 @@ def _repo(tmp_path: Path, remote: str = "https://gitlab.com/example-org/demo.git
     root.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     subprocess.run(["git", "remote", "add", "origin", remote], cwd=root, check=True)
+    from tests.unit.settings_repo import seed_origin_default
+
+    seed_origin_default(root)
     return root
 
 

@@ -33,7 +33,11 @@ def spec_test_plan(root: Path, spec: Path) -> tuple[bool, str | None]:
     A live spec whose heading is a near-miss of `## Test Plan` is a problem (the
     line and the fix), and counts as having one. An archived spec is frozen and
     never judged: only its exact heading counts, a near-miss there is ignored."""
+    from fr.settings import disabled
     from fr.spec import find_test_plan_heading, near_miss_message
+
+    if disabled(root, "test_plan"):
+        return False, None  # R7: no row is required to cite a Test Plan
 
     heading = find_test_plan_heading(spec.read_text())
     if heading is None:
