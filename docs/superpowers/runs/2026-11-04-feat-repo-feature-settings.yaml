@@ -3,7 +3,7 @@ run: 2026-11-04-feat-repo-feature-settings
 workflow: fr-goal@1
 branch: feat/repo-feature-settings
 started: '2026-11-04T13:49:38+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,39 +46,11 @@ steps:
           returned: '2026-11-07T07:37:38+00:00'
           outcome: done
   plan-review:
-    state: failed
-    at: '2026-11-07T07:37:39+00:00'
-    exit: 1
-    stdout: "[error] spec ## Verification: row `repo-settings-file` is walked by an\
-      \ agent \nbefore merge (`candidate`) but names no `scenario` — set one with\
-      \ `fr acceptance\nset-status --id repo-settings-file ... --scenario <path>`\n\
-      [error] spec ## Verification: row `repo-settings-policy-off` is walked by an\
-      \ \nagent before merge (`candidate`) but names no `scenario` — set one with\
-      \ `fr \nacceptance set-status --id repo-settings-policy-off ... --scenario <path>`\n\
-      [error] spec ## Verification: row `repo-settings-forge-quiet` is walked by an\
-      \ \nagent before merge (`candidate`) but names no `scenario` — set one with\
-      \ `fr \nacceptance set-status --id repo-settings-forge-quiet ... --scenario\
-      \ <path>`\n[error] spec ## Verification: row `repo-settings-git-policy` is walked\
-      \ by an \nagent before merge (`candidate`) but names no `scenario` — set one\
-      \ with `fr \nacceptance set-status --id repo-settings-git-policy ... --scenario\
-      \ <path>`\n[error] spec ## Verification: row `acceptance-fragments-amendments`\
-      \ is walked by\nan agent before merge (`candidate`) but names no `scenario`\
-      \ — set one with `fr \nacceptance set-status --id acceptance-fragments-amendments\
-      \ ... --scenario \n<path>`\n[error] spec ## Verification: row `acceptance-matrix-migration`\
-      \ is walked by an \nagent before merge (`candidate`) but names no `scenario`\
-      \ — set one with `fr \nacceptance set-status --id acceptance-matrix-migration\
-      \ ... --scenario <path>`\n[error] spec ## Verification: row `acceptance-reports-derived-published`\
-      \ is \nwalked by an agent before merge (`candidate`) but names no `scenario`\
-      \ — set one \nwith `fr acceptance set-status --id acceptance-reports-derived-published\
-      \ ... \n--scenario <path>`\n[error] spec ## Verification: row `placement-quiet`\
-      \ is walked by an agent before\nmerge (`candidate`) but names no `scenario`\
-      \ — set one with `fr acceptance \nset-status --id placement-quiet ... --scenario\
-      \ <path>`\n[error] spec ## Verification: row `placement-stealth` is walked by\
-      \ an agent \nbefore merge (`candidate`) but names no `scenario` — set one with\
-      \ `fr acceptance\nset-status --id placement-stealth ... --scenario <path>`\n\
-      [error] spec ## Verification: row `placement-move-and-drift` is walked by an\
-      \ \nagent before merge (`candidate`) but names no `scenario` — set one with\
-      \ `fr \nacceptance set-status --id placement-move-and-drift ... --scenario <path>`\n"
+    state: done
+    at: '2026-11-07T07:39:59+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
