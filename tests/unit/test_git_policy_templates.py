@@ -201,6 +201,7 @@ def test_an_unreadable_policy_refuses_the_commit(tmp_path: Path) -> None:
 _NOT_A_PRODUCER = {
     "git_policy/templates.py": "the seam itself",
     "artifacts/trigger.py": "prints the subject commit_paths returned; its literal is a label",
+    "git_policy/push.py": "recognises today's migration subject; writes no subject of its own",
 }
 
 

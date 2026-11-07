@@ -367,7 +367,7 @@ def test_every_shipped_review_phase_brief_carries_the_review_findings_rule() -> 
         manifest = parse_manifest((shipped / f"{name}.yaml").read_text())
         group = next(s for s in manifest.steps if any(m.id == "review-phase" for m in s.steps))
         member = next(m for m in group.steps if m.id == "review-phase")
-        state = SimpleNamespace(run="r1", workflow=name)
+        state = SimpleNamespace(run="r1", workflow=name, issue=None)
 
         brief = _build_member_brief(member, group, "phase/3", state, None)  # type: ignore[arg-type]
 
