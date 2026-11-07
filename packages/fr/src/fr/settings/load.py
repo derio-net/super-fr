@@ -211,6 +211,31 @@ def _pending(root: Path, committed: str | None) -> str | None:
     )
 
 
+def _yaml_of(text: str | None, source: str) -> object:
+    if text is None:
+        return None
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise SettingsError(f"{source}: not valid YAML: {e}") from e
+
+
+def _servable(settings: Settings, source: str) -> Settings:
+    if settings.placement not in SERVABLE_PLACEMENTS:
+        assert settings.placement in PLACEMENTS
+        raise SettingsError(
+            f"{source}: placement: {settings.placement} is not yet available "
+            "in this fr (only `repo` is served)"
+        )
+    return settings
+
+
+def parse_settings_text(text: str | None, *, source: str) -> Settings:
+    """A settings file's text (None: absent, the defaults) as `Settings`, by the same
+    closed, strict model and placement check the checkout reader applies."""
+    return _servable(parse_settings(_yaml_of(text, source), source=source), source)
+
+
 def load_settings(repo_root: Path) -> EffectiveSettings:
     """The effective settings of *repo_root*, with per-key provenance.
 
@@ -239,19 +264,8 @@ def load_settings(repo_root: Path) -> EffectiveSettings:
     key = (str(root), sha)
     cached = _CACHE.get(key)
     if cached is None:
-        data: object = None
-        if text is not None:
-            try:
-                data = yaml.safe_load(text)
-            except yaml.YAMLError as e:
-                raise SettingsError(f"{SETTINGS_PATH}: not valid YAML: {e}") from e
-        settings = parse_settings(data, source=SETTINGS_PATH)
-        if settings.placement not in SERVABLE_PLACEMENTS:
-            assert settings.placement in PLACEMENTS
-            raise SettingsError(
-                f"{SETTINGS_PATH}: placement: {settings.placement} is not yet available "
-                "in this fr (only `repo` is served)"
-            )
+        data = _yaml_of(text, SETTINGS_PATH)
+        settings = _servable(parse_settings(data, source=SETTINGS_PATH), SETTINGS_PATH)
         sources = {k: ("repo" if _present(data, k) else "default") for k in _leaf_keys(settings)}
         cached = (settings, sources)
         _CACHE[key] = cached

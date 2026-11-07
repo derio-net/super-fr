@@ -71,7 +71,7 @@ class SyncOutcome:
     unknown: bool = False
     """The run's exit could not be read, so its labels are not known (`warning` says why)."""
     off: str | None = None
-    """The setting that turned PR labels off (`fr.settings.forge_block`), when it did."""
+    """The setting that turned PR labels off (`fr.settings.ledger_block`), when it did."""
 
 
 def desired_labels(kinds: frozenset[str], gates: frozenset[str]) -> list[LabelDef]:
@@ -109,8 +109,9 @@ def sync_exit_labels(
 ) -> SyncOutcome:
     """Bring the PR's `verification:*` / `gate:*` labels to the run's exit.
 
-    A no-op when forge labels are off (`forge.labels: off`, or `tracking: none`):
-    `SyncOutcome.off` names the setting. `SyncOutcome.warning` carries a forge that cannot
+    These labels are the PR gate ledger, so `fr.settings.ledger_block` decides: a no-op
+    under `forge.labels: off` (`SyncOutcome.off` names it); `tracking: none` does not
+    stop them (R9). `SyncOutcome.warning` carries a forge that cannot
     label a PR (`UnsupportedForgeOperation`); `SyncOutcome.unknown` an exit that cannot
     be read (the section or matrix is `fr plan self-review`'s to report), which a caller
     that needs the labels treats as a failure. `ForgeUndeterminable` / `PrNotFound` say
@@ -118,11 +119,11 @@ def sync_exit_labels(
     remap, raises `LabelSyncError`.
     """
     from fr.acceptance.model import AcceptanceError
-    from fr.settings import forge_block
+    from fr.settings import ledger_block
     from fr.verification.exit import run_exit
     from fr.verification.spec_section import SectionError
 
-    off = forge_block(repo_root, "labels", lenient=True)
+    off = ledger_block(repo_root, "labels")
     if off is not None:
         return SyncOutcome(synced=False, off=off)
     try:

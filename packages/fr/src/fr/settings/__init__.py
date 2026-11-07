@@ -84,44 +84,69 @@ TRACKING_NONE: Final = (
 """Why a forge write is off when the services declaration, not a setting, turns it off."""
 
 
-def forge_block(
-    repo_root: Path, kind: str, *, lenient: bool = False, tracker: bool = True
-) -> str | None:
-    """None when fr may write *kind* (`labels`, `comments`, `issues`) to the forge; else
-    the setting that forbids it: `forge.<kind>: off`, or `tracking: none`, which keeps
-    meaning all three are off (R9).
+LEDGER_KINDS: Final = ("labels", "comments")
+"""The kinds of the PR gate ledger: the `gate:*` / `gate:*-passed` labels and the
+gate-pass comments a pull request carries (R9)."""
+
+
+def setting_block(forge: object, kind: str) -> str | None:
+    """`forge.<kind>: off (...)` when the `forge` settings section turns *kind* off."""
+    if kind not in FORGE_KINDS:
+        raise ValueError(f"{kind!r} is not a forge write kind; kinds are {FORGE_KINDS}")
+    if getattr(forge, kind) != "on":
+        return f"forge.{kind}: off ({DISABLED})"
+    return None
+
+
+def forge_block(repo_root: Path, kind: str, *, lenient: bool = False) -> str | None:
+    """None when fr may make a TRACKER write of *kind* (`labels`, `comments`, `issues`)
+    to the forge; else the setting that forbids it: `forge.<kind>: off`, or
+    `tracking: none`, which keeps meaning all three are off for tracker work (R9).
 
     The settings are read strictly (`SettingsError` propagates: an unreadable policy
     refuses, it never reads as the defaults). The tracking declaration is strict too
     (`ServicesError`), unless *lenient*: then an unreadable one counts as a tracker,
-    the posture of the sites that must never raise.
+    the posture of the sites that must never raise. The PR gate ledger is not a tracker
+    write: it asks `ledger_block`."""
+    why = setting_block(load_settings(repo_root).settings.forge, kind)
+    if why is not None:
+        return why
+    return TRACKING_NONE if tracking_none(repo_root, lenient=lenient) else None
 
-    *tracker* False asks for a write on a PR that is not a tracker write — the gate
-    ledger (`gate:*` labels and the gate-pass comment) — which `tracking: none` never
-    governed: only the setting decides it."""
-    if kind not in FORGE_KINDS:
-        raise ValueError(f"{kind!r} is not a forge write kind; kinds are {FORGE_KINDS}")
-    if getattr(load_settings(repo_root).settings.forge, kind) != "on":
-        return f"forge.{kind}: off ({DISABLED})"
-    if not tracker:
-        return None
+
+def tracking_none(repo_root: Path, *, lenient: bool = False) -> bool:
+    """Whether *repo_root* declares `tracking: {type: none}` (lenient: unreadable is no)."""
     from fr.services.model import ServicesError
     from fr.services.resolve import resolve_tracking
 
     try:
-        none = resolve_tracking(repo_root, lenient=lenient).type == "none"
+        return resolve_tracking(repo_root, lenient=lenient).type == "none"
     except ServicesError:
         if not lenient:
             raise
-        none = False
-    return TRACKING_NONE if none else None
+        return False
 
 
-def forge_allows(
-    repo_root: Path, kind: str, *, lenient: bool = False, tracker: bool = True
-) -> bool:
-    """Whether fr may write *kind* (`labels`, `comments`, `issues`) to the forge."""
-    return forge_block(repo_root, kind, lenient=lenient, tracker=tracker) is None
+def forge_allows(repo_root: Path, kind: str, *, lenient: bool = False) -> bool:
+    """Whether fr may make a tracker write of *kind* (`labels`, `comments`, `issues`)."""
+    return forge_block(repo_root, kind, lenient=lenient) is None
+
+
+def ledger_block(repo_root: Path, kind: str) -> str | None:
+    """The one rule of the PR gate ledger (R9): None when fr may write a PR's `gate:*`
+    labels (*kind* `labels`) or its gate-pass comment (`comments`); else the setting
+    that forbids it. Only `forge.labels` / `forge.comments` decide: `tracking: none`
+    never governed the ledger, which the release gate and the DevOps stage read.
+    `deliver`'s label sync, `fr gate pass`, `fr gate backfill` and the driver's pass all
+    ask this."""
+    if kind not in LEDGER_KINDS:
+        raise ValueError(f"{kind!r} is not a gate-ledger kind; kinds are {LEDGER_KINDS}")
+    return setting_block(load_settings(repo_root).settings.forge, kind)
+
+
+def ledger_allows(repo_root: Path, kind: str) -> bool:
+    """Whether fr may write the PR gate ledger's *kind* (`labels`, `comments`)."""
+    return ledger_block(repo_root, kind) is None
 
 
 class ForgeQuietError(TrackerRequiredError):
@@ -140,6 +165,7 @@ def require_forge(repo_root: Path, *kinds: str) -> None:
 
 __all__ = [
     "DISABLED",
+    "LEDGER_KINDS",
     "TRACKING_NONE",
     "ForgeQuietError",
     "SettingsError",
@@ -147,7 +173,11 @@ __all__ = [
     "disabled_because",
     "forge_allows",
     "forge_block",
+    "ledger_allows",
+    "ledger_block",
     "load_settings",
     "require_forge",
+    "setting_block",
     "spec_policy_problems",
+    "tracking_none",
 ]

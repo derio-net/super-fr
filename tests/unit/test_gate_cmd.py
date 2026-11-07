@@ -585,3 +585,91 @@ def test_a_forge_without_pr_comment_reads_refuses_the_retry(forge: Any) -> None:
     fake.list_issue_comments = nope  # type: ignore[method-assign]
     result = _pass("--gate", "tester", "--yes")
     assert result.exit_code == 2 and "cannot read the comments" in result.output
+
+
+# --- R9 (amended): the PR gate ledger, read from the PR's repo (p3-r1, p3-r2, p3-r5) -------
+
+SETTINGS = ".fr/settings.yaml"
+
+
+def test_p3_r2_with_no_checkout_of_the_repo_the_policy_is_read_through_the_forge(
+    forge: Any,
+) -> None:
+    fake = forge(["gate:tester"])
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 0, result.output
+    assert ("read_file", {"repo": REPO, "path": SETTINGS}) in fake.calls
+    assert _writes(fake) == ["comment_pr", "ensure_labels", "edit_pr_labels"]
+
+
+def test_p3_r5_labels_off_on_the_remote_repo_refuses_before_any_write(forge: Any) -> None:
+    fake = forge(["gate:tester"])
+    fake.remote_tree[(REPO, SETTINGS)] = "forge:\n  labels: 'off'\n"
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 2, result.output
+    assert "forge.labels: off" in result.output
+    assert fake.attempted_mutations == 0
+
+
+def test_p3_r2_an_unreadable_remote_policy_refuses_before_any_write(forge: Any) -> None:
+    from tests.unit.fakes import FakeGhError
+
+    fake = forge(["gate:tester"])
+
+    def broken(repo: str, path: str) -> str:
+        raise FakeGhError("HTTP 502: bad gateway")
+
+    fake.read_file = broken  # type: ignore[method-assign]
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 2, result.output
+    assert SETTINGS in result.output and "nothing was written" in result.output
+    assert fake.attempted_mutations == 0
+
+
+def test_p3_r5_comments_off_swaps_the_label_with_no_comment_and_closes_no_tracker(
+    forge: Any,
+) -> None:
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+    fake.remote_tree[(REPO, SETTINGS)] = "forge:\n  comments: 'off'\n"
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 0, result.output
+    assert _writes(fake) == ["ensure_labels", "edit_pr_labels"]  # pass_gate(comment=False)
+    assert "comment: none (forge.comments: off)" in result.output
+    assert "trackers not closed" in result.output
+    assert not [c for c in fake.calls if c[0] == "close_issue"]
+
+
+def test_p3_r5_comments_off_retries_with_no_fr_gate_pass_comment_check(forge: Any) -> None:
+    """Under comments off no pass leaves a comment, so a retry does not ask for one
+    (`_require_fr_pass` is skipped) and closes no tracker (a close carries a comment)."""
+    fake = forge(["gate:tester-passed"])
+    _with_tracker(fake)
+    fake.remote_tree[(REPO, SETTINGS)] = "forge:\n  comments: 'off'\n"
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 0, result.output
+    assert "gate tester already passed on #5" in result.output
+    assert not [c for c in fake.calls if c[0] in ("list_issue_comments", "close_issue")]
+
+
+def test_p3_r1_tracking_none_in_the_checkout_still_writes_the_ledger(
+    forge: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """From the repo's own checkout under `tracking: none`: the pass swaps the label and
+    comments (the ledger), and closes no tracker (there is none)."""
+    from tests.unit.settings_repo import make_repo
+
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+    root = make_repo(tmp_path)
+    (root / ".devcontainer").mkdir()
+    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+        "schema_version: 2\ntracking: {type: none}\n"
+    )
+    monkeypatch.chdir(root)
+    monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: REPO)
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 0, result.output
+    assert _writes(fake) == ["comment_pr", "ensure_labels", "edit_pr_labels"]
+    assert not [c for c in fake.calls if c[0] == "read_file"]  # the checkout answered
+    assert "trackers not closed: tracking: none" in result.output

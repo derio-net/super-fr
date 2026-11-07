@@ -187,30 +187,37 @@ def _require_fr_pass(client: Any, repo: str, pr: int, gate: str, passed: str) ->
     )
 
 
-def _forge_policy(repo: str) -> tuple[bool, str | None]:
-    """`(comment, trackers_off)` for a pass on *repo* (R9), read from this checkout's
-    settings when its origin IS *repo* (another repo's policy is not readable here, so it
-    keeps the defaults). Refuses (exit 2) when fr may not write labels: a pass IS a label
-    swap. *trackers_off* names the setting under which no tracker is closed."""
+def _forge_policy(repo: str, client: Any) -> tuple[bool, str | None]:
+    """`(comment, trackers_off)` for a pass on *repo* (R9). The policy is this checkout's
+    when its origin IS *repo*; otherwise *repo*'s `.fr/settings.yaml` read at its default
+    branch through *client* (absent: the defaults; a failed read refuses). A pass is the
+    PR gate ledger, so `ledger_block` decides it: refused (exit 2) when fr may not write
+    labels, no gate-pass comment under `forge.comments: off`, and `tracking: none` stops
+    neither. *trackers_off* names the setting under which no tracker is closed (a tracker
+    write: `tracking: none` counts, and a close carries a comment)."""
     from fr import _hosts
     from fr.services import ServicesError
-    from fr.settings import forge_allows, forge_block
+    from fr.settings import SettingsError
+    from fr.settings.remote import local_policy, remote_policy
 
     root = _repo_root()
     origin = _hosts.origin_slug(root) if root is not None else None
-    if root is None or origin is None or origin.lower() != repo.lower():
-        return True, None
     try:
-        # The gate ledger is the PR's, not the tracker's: only the settings decide it.
-        off = forge_block(root, "labels", tracker=False)
-        if off is not None:
-            _refuse(f"nothing to pass: a pass swaps the PR's gate label, and {off}")
-        comment = forge_allows(root, "comments", tracker=False)
-        trackers_off = forge_block(root, "issues")
+        if root is not None and origin is not None and origin.lower() == repo.lower():
+            policy = local_policy(root, lenient=False)
+        else:
+            policy = remote_policy(client, repo)
     except ServicesError as exc:
         _refuse(f"the services declaration cannot be read, nothing was written: {exc}")
-    if trackers_off is None and not comment:
-        trackers_off = "forge.comments: off (a tracker closes with a comment)"
+    except SettingsError as exc:
+        _refuse(str(exc))
+    off = policy.ledger_block("labels")
+    if off is not None:
+        _refuse(f"nothing to pass: a pass swaps the PR's gate label, and {off}")
+    comment = policy.ledger_block("comments") is None
+    trackers_off = policy.block("issues")
+    if trackers_off is None and (why := policy.block("comments")) is not None:
+        trackers_off = f"{why} (a tracker closes with a comment)"
     return comment, trackers_off
 
 
@@ -283,7 +290,6 @@ def pass_command(
             "hold a merge, so only they pass"
         )
     repo, forge_host = resolve_target(repo, host, Path.cwd())
-    comment, trackers_off = _forge_policy(repo)
 
     def close(dry_run: bool) -> CloseReport:
         if trackers_off is not None:
@@ -300,6 +306,7 @@ def pass_command(
     except _FORGE_FAILURES as exc:
         _refuse(f"cannot read PR #{pr} of {repo} on {forge_host}: {exc}")
         return
+    comment, trackers_off = _forge_policy(repo, client)
     state = str(view.get("state") or "UNKNOWN")
     if state != "MERGED":
         _refuse(f"PR #{pr} of {repo} is {state}, not merged: a post-merge gate passes on a merge")
@@ -415,12 +422,12 @@ def backfill_command(
     issues = comments = False
     if yes:
         from fr.services import ServicesError
-        from fr.settings import forge_allows, forge_block
+        from fr.settings import forge_allows, ledger_block
 
         try:
-            # The PR's gate label is what a backfill writes: with labels off there is
-            # nothing to backfill (R9: `tracking: none` turns labels off too).
-            off = forge_block(root, "labels", tracker=False)
+            # The PR's gate label is what a backfill writes, and it is the gate ledger:
+            # only `forge.labels` decides it (R9). Its trackers are tracker writes.
+            off = ledger_block(root, "labels")
             if off is not None:
                 refuse(f"nothing was written: a backfill labels PRs, and {off}")
             issues = forge_allows(root, "issues")

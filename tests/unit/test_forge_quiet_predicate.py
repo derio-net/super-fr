@@ -8,7 +8,15 @@ import re
 from pathlib import Path
 
 import pytest
-from fr.settings import FORGE_KINDS, ForgeQuietError, forge_allows, forge_block, require_forge
+from fr.settings import (
+    FORGE_KINDS,
+    ForgeQuietError,
+    forge_allows,
+    forge_block,
+    ledger_allows,
+    ledger_block,
+    require_forge,
+)
 
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
@@ -59,12 +67,22 @@ def test_tracking_none_forbids_every_kind_with_the_settings_on(tmp_path: Path, k
 def test_the_gate_ledger_ignores_tracking_none_but_not_the_setting(
     tmp_path: Path, kind: str
 ) -> None:
-    """`tracker=False`: a PR's gate label or gate-pass comment is no tracker write."""
+    """p3-r1: the PR gate ledger (a `gate:*` label, a gate-pass comment) answers only to
+    `forge.labels` / `forge.comments`: `tracking: none` never turns it off."""
     root = make_repo(tmp_path)
     _declare_tracking_none(root)
-    assert forge_allows(root, kind, tracker=False) is True
+    assert forge_allows(root, kind) is False  # a tracker write
+    assert ledger_allows(root, kind) is True
+    assert ledger_block(root, kind) is None
     land_on_main(root, f"forge:\n  {kind}: 'off'\n")
-    assert forge_allows(root, kind, tracker=False) is False
+    assert ledger_allows(root, kind) is False
+    assert f"forge.{kind}: off" in (ledger_block(root, kind) or "")
+
+
+def test_the_ledger_has_no_issues_kind(tmp_path: Path) -> None:
+    """The ledger is a PR's labels and comments; `issues` is never a ledger kind."""
+    with pytest.raises(ValueError):
+        ledger_allows(make_repo(tmp_path), "issues")
 
 
 def test_the_setting_off_wins_over_a_tracker(tmp_path: Path) -> None:

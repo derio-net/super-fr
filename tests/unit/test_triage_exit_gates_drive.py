@@ -638,3 +638,61 @@ def test_p2_r1_a_settings_refusal_in_the_exit_read_is_a_triage_error(
     monkeypatch.setattr(exit_mod, "run_exit", _refuse)
     with pytest.raises(TriageError, match="cannot be read: cannot find the default branch"):
         gated_rows_at(checkout, "origin/main", "feat/batch-b1")
+
+
+# --- R9 (amended): the driver reads the batch repo's policy through the forge (p3-r2, p3-r5)
+
+SETTINGS = ".fr/settings.yaml"
+
+
+def test_p3_r5_labels_off_on_the_repo_writes_neither_the_awaiting_label_nor_the_gate(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", True, (ISSUE,)),))
+    gworld.files[SETTINGS] = "forge:\n  labels: 'off'\n"
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    # the batch's claim is refused too (a claim is a label and a comment): reported, exit 1
+    assert code == 1, out
+    assert "no claim is written — forge.labels: off" in out
+    assert not [c for c in gworld.calls if c.startswith(("pr labels", "issue labels"))]
+    assert not [c for c in gworld.calls if c.startswith("pr comment")]
+    assert f"not labelled {ISSUE}: forge.labels: off" in out
+    assert "gate:tester not passed: forge.labels: off" in out
+
+
+def test_p3_r5_comments_off_passes_the_gate_with_no_comment_and_closes_no_tracker(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gatebackfill.trackers import tracker_body
+
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", True, (ISSUE,)),))
+    gworld.trackers[40] = tracker_body("row:row-a", "t", "tester", 101)
+    gworld.files[SETTINGS] = "forge:\n  comments: 'off'\n"
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 1, out  # the batch's claim is refused (its marker is a comment)
+    assert "no claim is written — forge.comments: off" in out
+    assert "pr labels 101 +['gate:tester-passed'] -['gate:tester']" in gworld.calls
+    assert not [c for c in gworld.calls if c.startswith(("pr comment", "issue close"))]
+    assert "trackers not closed: forge.comments: off" in out
+
+
+def test_p3_r2_an_unreadable_policy_refuses_the_drivers_writes(
+    tmp_path: Path, gworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gh import GhError
+
+    _gated(gworld, tmp_path, monkeypatch, (GatedRow("row-a", "tester", True, (ISSUE,)),))
+
+    def broken(repo: str, path: str) -> str:
+        raise GhError("HTTP 502", stderr="HTTP 502")
+
+    gworld.read_file = broken  # type: ignore[method-assign]
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert not [c for c in gworld.calls if c.startswith(("pr labels", "issue labels", "pr comm"))]
+    assert "its forge policy is unknown, so nothing was written" in out

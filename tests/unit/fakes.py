@@ -172,7 +172,7 @@ class FakeGhClient:
         try:
             return self.remote_tree[(repo, path)]
         except KeyError as e:
-            raise FakeGhError(f"no such remote file: {repo}:{path}") from e
+            raise FakeGhError(f"Not Found (HTTP 404): no such remote file: {repo}:{path}") from e
 
     # ---- mutation methods ----
 
