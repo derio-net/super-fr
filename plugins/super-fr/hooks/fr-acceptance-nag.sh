@@ -18,6 +18,8 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 [ -n "$cwd" ] && [ -d "$cwd" ] || exit 0
 
 repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
+# The cheap early exit, before any `fr` process: no matrix, nothing to nag about.
+[ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
 command -v fr >/dev/null 2>&1 || exit 0
 
 # Repo setting `artifacts.acceptance: off` (spec 2026-11-04-repo-feature-settings R6): say
@@ -38,7 +40,6 @@ if settings=$(cd "$repo_root" && fr settings show --json 2>/dev/null); then
     exit 0
   fi
 fi
-[ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
 
 # Capture stderr separately: `fr acceptance status` is exempt from the
 # artifact-migration gate, but `fr` still refuses when it cannot establish the

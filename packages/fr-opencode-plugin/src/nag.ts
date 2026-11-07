@@ -102,7 +102,9 @@ export function createNagHandler(options: NagHandlerOptions) {
         }
       } else {
         const out = answer.stdout.replace(/\n+$/, "");
-        if (out !== "" && !out.includes("no acceptance debt")) {
+        if (out.includes("disabled by repo setting")) {
+          text = "acceptance disabled by repo setting\n"; // R6, as the bash hook says it
+        } else if (out !== "" && !out.includes("no acceptance debt")) {
           text = `Acceptance debt in this repo (backfill owed — details: fr acceptance status):\n${out}\n`;
         }
       }

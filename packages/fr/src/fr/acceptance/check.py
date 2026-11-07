@@ -291,12 +291,16 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
             twin = archive_twin(path)
             if twin:
                 referenced.add(twin)
+    from fr.settings import disabled
+
+    # R6: under `acceptance: off` there is no matrix to cite a Test Plan from.
+    rows_off = disabled(root, "acceptance")
     for spec_dir in SPEC_DIRS:
         for spec in sorted((root / spec_dir).glob("*.md")):
             has_plan, problem = spec_test_plan(root, spec)
             if problem:
                 result.errors.append(f"test-plan heading: {problem}")
-            if not has_plan:
+            if not has_plan or rows_off:
                 continue
             rel = str(spec.relative_to(root))
             if rel not in referenced:

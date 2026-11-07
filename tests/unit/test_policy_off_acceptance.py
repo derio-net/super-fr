@@ -127,3 +127,37 @@ def test_self_review_and_proportionality_say_disabled(repo: Path) -> None:
     assert DISABLED in issues[0].message
     lines = proportionality._phases(repo, plan, [])
     assert any(DISABLED in ln for ln in lines)
+
+
+def _with_matrix(root: Path) -> None:
+    (root / "docs" / "acceptance").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "acceptance" / "matrix.yaml").write_text(
+        "org: derio-net\nrepo: own\nrows: []\n"
+    )
+
+
+@pytest.mark.parametrize("with_matrix", [False, True], ids=["no-matrix", "matrix"])
+@pytest.mark.parametrize("command", ["check", "summary"])
+def test_p2_r6_check_and_summary_say_disabled_and_exit_0(
+    repo: Path, command: str, with_matrix: bool
+) -> None:
+    if with_matrix:
+        _with_matrix(repo)
+    result = runner.invoke(app, ["acceptance", command])
+    assert result.exit_code == 0, result.output
+    assert DISABLED in result.output
+    assert "no docs/acceptance/matrix.yaml" not in result.output
+    assert "debt" not in result.output.lower()
+
+
+def test_p2_r6_the_staleness_guard_demands_no_rows_under_acceptance_off(repo: Path) -> None:
+    """acceptance: off with test_plan: on: a Test Plan spec cited by no row is not stale."""
+    from fr.acceptance.check import check
+    from fr.acceptance.model import load_matrix
+
+    _with_matrix(repo)
+    spec = repo / "docs" / "superpowers" / "specs" / "2026-11-07-x-design.md"
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_text("# S\n\n## Test Plan\n\n1. x\n")
+    result = check(load_matrix(repo / "docs" / "acceptance" / "matrix.yaml"), repo)
+    assert not [e for e in result.errors if e.startswith("staleness")], result.errors

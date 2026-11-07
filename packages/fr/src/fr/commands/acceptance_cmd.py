@@ -40,6 +40,16 @@ def _refuse_if_off(root: Path, what: str) -> None:
         raise typer.Exit(2)
 
 
+def _say_if_off(root: Path) -> bool:
+    """R6: under `artifacts.acceptance: off` a read-only surface says so, exit 0."""
+    from fr.settings import DISABLED, disabled
+
+    if disabled(root, "acceptance"):
+        typer.echo(f"acceptance: {DISABLED} (artifacts.acceptance: off)")
+        return True
+    return False
+
+
 def _load(root: Path) -> Matrix:
     matrix_path = root / MATRIX_REL
     if not matrix_path.exists():
@@ -99,6 +109,8 @@ def check_cmd(
     from fr.acceptance.check import check
 
     root = resolve_repo_root()
+    if _say_if_off(root):
+        return
     matrix = _load(root)
     try:
         result = check(matrix, root, sibling_root)
@@ -269,10 +281,7 @@ def status_cmd(
     from fr.acceptance.check import open_rows
 
     root = resolve_repo_root()
-    from fr.settings import DISABLED, disabled
-
-    if disabled(root, "acceptance"):
-        typer.echo(f"acceptance: {DISABLED}")
+    if _say_if_off(root):
         return
     matrix = _load(root)
     counts = Counter(r.status for r in matrix.rows)
@@ -298,6 +307,8 @@ def summary_cmd() -> None:
     from fr.acceptance.check import open_rows
 
     root = resolve_repo_root()
+    if _say_if_off(root):
+        return
     matrix = _load(root)
     counts = Counter(r.status for r in matrix.rows)
     lines = [
