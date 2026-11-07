@@ -29,4 +29,4 @@ journal:
     body: "test_exit_label_sync_points feeds a non-UTF-8 spec; the helper reads it, so UnicodeDecodeError is caught alongside OSError and left to the other validators to report."
     phase: 2
 resolves: []
-evidence: {}
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/8b56d9b2-ef08-4390-b0b3-f0296e3ac2b9/scratchpad/p2-full-suite.log}
