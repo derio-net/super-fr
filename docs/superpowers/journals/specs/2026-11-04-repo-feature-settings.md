@@ -591,3 +591,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-15 created=2026-11-07T20:12:55+00:00 -->
+### exit-change-15 · decision · exit change: row acceptance-reports-derived-published -> strategy none
+
+built by plan 2 of this spec (R29, #1379), not by this run's plan 1; that plan's run sets it back to candidate with its scenario
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
