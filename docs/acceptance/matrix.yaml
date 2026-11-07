@@ -10806,8 +10806,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R20
     levels: {}
     status: not-implemented
-    notes: ''
-    verify: candidate
+    notes: built by a later plan of this spec (R29); that plan's run sets verify candidate
+      with its scenario (spec Verification line, exit-change journal entries)
+    verify: none
   - id: placement-quiet
     capability: repo-feature-settings
     acceptance: In a quiet repo no fr file or commit reaches the default or feature
