@@ -10842,8 +10842,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R27
     levels: {}
     status: not-implemented
-    notes: ''
-    verify: candidate
+    notes: built by a later plan of this spec (R29); that plan's run sets verify candidate
+      with its scenario (spec Verification line, exit-change journal entries)
+    verify: none
   - id: repo-settings-quiet-repo-live
     capability: repo-feature-settings
     acceptance: On a real forge, quiet and stealth fr-goal runs leave no fr trace in
