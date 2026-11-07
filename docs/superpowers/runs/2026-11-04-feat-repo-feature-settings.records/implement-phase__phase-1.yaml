@@ -29,4 +29,4 @@ journal:
     phase: 1
     title: "init prose uses ## so key lines uncomment by dropping one #"
     body: "Prose lines start with ##, key lines with a single # followed by their indent, so removing one # from a key line yields valid YAML and prose stays a comment."
-evidence: {}
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/8b56d9b2-ef08-4390-b0b3-f0296e3ac2b9/scratchpad/p1-full-suite.log}
