@@ -1116,9 +1116,9 @@ chose, not of the machine that happens to run it.
 
 ## Configuration
 
-There is still no `fr-goal` settings screen or per-command configuration. It
-takes the feature-specific intent from your request and gets the rest from the
-project: its isolated development environment, specification folder, plan
+There is still no `fr-goal` settings screen or per-command flag. It takes the
+feature-specific intent from your request and gets the rest from the project,
+including one optional repo settings file (below): its isolated development environment, specification folder, plan
 folder, and acceptance criteria. The sequence is one of those project-supplied
 inputs too: a repository that wants a different pipeline writes a shape, rather
 than looking for a flag that bends this one.
@@ -1137,6 +1137,52 @@ than looking for a flag that bends this one.
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
+| Repo settings | `.fr/settings.yaml`, read from the default branch | Turns policy features off, quiets the forge, and sets the git policy. |
+
+### Repo settings
+
+A repository can change what fr does on its behalf with one committed file,
+`.fr/settings.yaml`. `fr settings init` writes it with every key commented out at
+its default and a line saying what the other value trades away; `fr settings show`
+prints what is in effect and where each value came from. Every default is today's
+behaviour, so a repository without the file sees no change.
+
+fr reads the file from the default branch, never from your working tree or the
+feature branch. That is deliberate: a branch could otherwise relax the very
+controls that review it. An edit to the settings takes effect once it lands on the
+default branch, and a file fr cannot read stops the command with a message rather
+than quietly falling back to the defaults.
+
+- **Policy off.** `artifacts.acceptance`, `artifacts.test_plan` and `artifacts.gates`
+  each take `on` or `off`. Off means fr neither writes nor asks for that kind of
+  record, and every place that would have mentioned it says "disabled by repo
+  setting" instead of going silent.
+- **A quiet forge.** `forge.labels`, `forge.comments` and `forge.issues` stop fr
+  writing that kind of thing to the forge; a leftover it would have filed stays in
+  the journal. `forge.pr_body: minimal` keeps the live pull request to a plain
+  summary, while the full body fr renders stays in the run's directory as
+  `<run-id>.pr-body.md`, which is what you review.
+- **Asking before a push or a pull request.** The skills push with `fr push` and
+  open the draft with `fr pr create`, never with `git push` or the forge's own
+  command. Under `git.push: ask` or `git.pr: ask` each of them stops once, prints a
+  request, and waits for you: the agent asks you, records your answer as a decision
+  in the spec's journal, and fr checks the session's transcript for that answer
+  before it writes anything. Where it cannot read the transcript, it refuses rather
+  than trusting the claim. Marking the pull request ready and merging it stay yours
+  either way.
+- **Squashing what was never pushed.** Under `git.history: squash-unpushed`, `fr
+  push` folds the commits the remote does not have yet into one per stretch of
+  work, keeping merge commits and fr's own migration commits as they are. It never
+  rewrites a commit that was already pushed and never force-pushes, and the code it
+  pushes is exactly the code you had.
+- **Commit subjects.** `git.commit.with_issue` and `git.commit.without_issue` are
+  templates over `{type}`, `{scope}`, `{summary}` and `{issue}`. fr's own commits
+  use them, the agents are told them, and `fr push` refuses a commit whose subject
+  does not match. The issue comes from the run (`fr run start --issue <n>`).
+
+Today the settings file lives in the repository itself. Keeping fr's records off
+the feature branch altogether, on a separate branch or in a separate tracking
+repository, comes later.
 
 The workflow is not one large program. The shape supplies the sequence, the
 skill supplies the judgment each step needs, and smaller commands and safety
