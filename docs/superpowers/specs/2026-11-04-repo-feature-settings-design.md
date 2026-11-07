@@ -245,7 +245,22 @@ existing `tracking: none` check and covers the sites that check misses.
 Under `off`, fr makes no forge write of that kind anywhere, including from the
 CI it scaffolds, such as the "Acceptance debt" issue step. A leftover that would
 have been filed stays recorded in the journal, and `deliver` accepts it as
-recorded. `tracking: none` keeps meaning all three are off.
+recorded. `tracking: none` keeps meaning all three are off for tracker work
+(issues, and their labels and comments).
+
+The PR gate ledger is the one exception. It covers the `gate:*` and
+`gate:*-passed` labels and the gate-pass comments on a pull request, which the
+release gate and the DevOps stage read. That ledger answers only to
+`forge.labels` and `forge.comments`, and `deliver`'s label sync, `fr gate
+pass`, `fr gate backfill` and the driver's pass all apply this one rule.
+
+Reads are never gated. A command acting on a repo it has no checkout of
+(`--repo`, a triage scope) reads that repo's `.fr/settings.yaml` at its default
+branch through the forge's contents API. If the file is absent, the defaults
+apply. If the read fails, the write is refused. Policy is never assumed.
+
+A tripwire lists every forge write call site in `packages/*/src` and fails on
+one that consults no `forge_allows`.
 
 R10. `forge.pr_body` is `full` (the default) or `minimal`. Under `minimal`:
 
