@@ -627,6 +627,7 @@ amendments:
 strategy: candidate
 gate: repo-settings-quiet-repo-live=tester
 - repo-settings-quiet-repo-live: live — only a real forge and real fr-goal runs in quiet and stealth placements show that no fr trace reaches the product repo or its forge; walked after release
+- acceptance-fragments-amendments: none — built by plan 2 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 2, which sets this row back to candidate with its scenario
 
 ## Test Plan
 
