@@ -6357,6 +6357,40 @@ def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id
         err_console.print(f"PR labels not synced: {outcome.off}", markup=False, soft_wrap=True)
 
 
+def _same_pr(recorded: str, pr: str) -> bool:
+    """*pr* (a url, `#n` or `n`) names the PR whose url the cursor recorded."""
+    if pr == recorded:
+        return True
+    number = pr.removeprefix("#")
+    return number.isdigit() and recorded.rstrip("/").rsplit("/", 1)[-1] == number
+
+
+def _deliver_pr_ask_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
+    """Under `git.pr: ask` (spec 2026-11-04-repo-feature-settings R12), `deliver`
+    accepts only the PR `fr pr create` opened: the one the cursor recorded."""
+    from fr.settings import load_settings
+
+    if load_settings(repo_root).settings.git.pr != "ask":
+        return
+    if state.pr is None:
+        err_console.print(
+            "refused: under `git.pr: ask` deliver accepts only a PR `fr pr create` opened, "
+            "and this run's cursor records none. Open it with `fr pr create --title <t> "
+            "--body-file <f>` (it asks the operator first), then resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if pr is not None and not _same_pr(state.pr, pr):
+        err_console.print(
+            f"refused: under `git.pr: ask` deliver accepts only the PR `fr pr create` opened "
+            f"({state.pr}), not {pr}",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
 def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     """Render the PR body fr owns, then refuse `deliver` until the LIVE PR
     carries every required section (spec 2026-09-25 §5.C.4). The render is
@@ -6383,6 +6417,8 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     )
     from fr.settings import load_settings
 
+    _deliver_pr_ask_gate(repo_root, state, pr)
+    pr = pr or state.pr
     minimal = load_settings(repo_root).settings.forge.pr_body == "minimal"
     if minimal:
         body_path = durable_pr_body_path(repo_root, state.run)

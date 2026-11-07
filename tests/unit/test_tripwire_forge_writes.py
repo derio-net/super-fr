@@ -23,8 +23,10 @@ WRITE_METHODS = frozenset({
     "comment_issue", "comment_pr", "edit_issue_comment", "edit_issue_labels", "edit_pr_labels",
     "swap_issue_labels", "ensure_labels", "ensure_label", "delete_label", "create_issue",
     "close_issue", "comment_close_issue", "edit_issue_state", "edit_issue_body", "edit_issue",
+    "create_pr", "pr_create",
 })  # fmt: skip
-"""The adapters' issue/PR comment, label and issue writes (the `forge.*` kinds)."""
+"""The adapters' issue/PR comment, label and issue writes (the `forge.*` kinds), and PR
+creation (`git.pr`, R11/R12: `fr pr create` for the skills, the internal openers listed)."""
 
 ADAPTERS = frozenset({
     "fr/src/fr/gh.py", "fr/src/fr/glab.py", "fr/src/fr/tea.py", "fr/src/fr/ghclient.py",
@@ -106,6 +108,19 @@ GATED: dict[str, str] = {
     "fr-dispatch/src/fr_dispatch/__init__.py::tick":
         "_forge_block(labels) for the dispatch stamp (client_policy)",
     "fr-vk/src/fr_vk/pr_state.py::_default_close_gh_issue": "client_policy(issues)",
+    # -- PR creation: git.pr (R11, R12) -----------------------------------------------------
+    "fr/src/fr/commands/pr_cmd.py::create_cmd":
+        "fr pr create: require_approval under git.pr: ask; always a draft",
+    "fr/src/fr/commands/triage_batch_cmd.py::_Driver._export":
+        "the triage driver's state export: R12's internal pusher, refused under push: ask by R5",
+    "fr/src/fr/commands/triage_batch_cmd.py::adopt_batch._create":
+        "batch adopt's supersede: the triage driver's own PR (R5 refuses push: ask there)",
+    "fr/src/fr/triage/batch_closeout.py::execute":
+        "the batch close-out PR: the triage driver's, R5 refuses push: ask for a driven scope",
+    "fr/src/fr/ops/gate.py::stage_8":
+        "the DevOps gate at the operator's terminal: R12's named internal opener",
+    "fr/src/fr/commands/debt_cmd.py::_open_or_refresh":
+        "the debt sweep's bot-owned branch PR, opened at the operator's command",
     # -- not a forge write ------------------------------------------------------------------
     "fr-vk/src/fr_vk/dispatch.py::dispatch_phase":
         "not a forge write: `mcp.create_issue` makes a VibeKanban card",

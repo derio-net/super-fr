@@ -44,6 +44,8 @@ from fr.commands.models_cmd import models_app
 from fr.commands.ops_cmd import ops_app
 from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
+from fr.commands.pr_cmd import pr_app
+from fr.commands.push_cmd import push_cmd
 from fr.commands.release_cmd import release_app
 from fr.commands.repair_cmd import repair_command
 from fr.commands.repos_cmd import repos_app
@@ -120,6 +122,10 @@ app.add_typer(gate_app, name="gate")
 app.add_typer(ops_app, name="ops")
 app.add_typer(release_app, name="release")
 app.add_typer(closeout_app, name="closeout")
+app.add_typer(pr_app, name="pr")
+app.command(name="push", help="Push this run's feature branch under the repo's git policy.")(
+    push_cmd
+)
 app.command(name="skills")(skills_command)
 app.command(name="services", help="Read-only: the resolved forge / ci / tracking services.")(
     services_command
