@@ -144,8 +144,9 @@ suite a second time. `tests_log: none` only when the phase is `failed` or
 **CI evidence.** When your brief says the phase's test evidence is CI
 (`tests: ci`, for a repo whose suite is too slow to run where you are), do not
 run the full suite: run the test files you touched and their neighbours, then
-commit, push the branch, put `evidence: {tests: ci}` in the record, commit and
-push the record too, and return `tests_log: ci` instead of running the full
+commit, push the branch with `fr push` (`uv run fr push` in a worktree, never `git
+push`: it applies the repo's git policy), put `evidence: {tests: ci}` in the record,
+commit and push the record too, and return `tests_log: ci` instead of running the full
 suite. fr then accepts the phase only once the repo's gate checks are green on
 the pushed head (or on an ancestor with the same code tree), so leave no code
 change uncommitted or unpushed. Never open the PR yourself, even then: the
