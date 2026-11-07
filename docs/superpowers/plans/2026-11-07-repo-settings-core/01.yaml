@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Settings core: closed schema, default-ref loader, fr settings init/show/check'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - repo-settings-file
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/settings/*
+  - packages/fr/src/fr/commands/settings_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_settings_*.py
+  - tests/unit/test_migration_trigger.py
+  - tests/scenarios/repo-settings-file.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  - .changes/feat-repo-feature-settings.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — the package exists, is wired into the CLI and the candidate install
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_settings_smoke.py asserting `from fr.settings import load_settings` imports and that `fr settings --help` (typer CliRunner over `fr.cli.app`) exits 0 and lists init, show and check. Run `uv run pytest tests/unit/test_settings_smoke.py -q --no-cov`; confirm it fails (no module).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/settings/__init__.py (re-exporting load_settings, disabled, forge_allows, SettingsError — stubs returning today's defaults) and packages/fr/src/fr/commands/settings_cmd.py with a `settings_app` typer group holding empty init/show/check commands; register it in packages/fr/src/fr/cli.py beside `debt_app` (`app.add_typer(settings_app, name="settings")`). Re-run the smoke test; it passes. Smoke evidence is the local suite: CI here runs only on pull_request and fr-goal opens the PR at deliver.
+- number: 2
+  title: The closed model (R4)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_settings_model.py — parse_settings({}) yields every documented default (placement repo; artifacts acceptance/test_plan/gates on; forge labels/comments/issues on, pr_body full, report_comment off; git push/pr auto, history keep, commit.with_issue "{type}({scope}): {summary} (#{issue})", commit.without_issue "{type}({scope}): {summary}"); an unknown top-level or nested key, an unknown enum value, `schema: 2`, an `artifacts.spec` / `plan` / `journals` / `runs` key, an unknown template placeholder, and `{issue}` in without_issue each raise SettingsError whose message names the dotted key. Confirm red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/settings/model.py — pydantic models with `extra="forbid"` (Settings, Artifacts, Forge, Git, Commit), `schema: Literal[1] = 1`, `placement: Literal["repo","quiet","stealth"] = "repo"`, Literal on/off and auto/ask enums, a template validator over the closed placeholder set {type, scope, summary, issue}; `parse_settings(data, *, source)` converts ValidationError into SettingsError naming file and dotted key. Every field carries a `description=` (the init comments are generated from it in T4). Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep the vocabularies (placements, on/off, placeholders) as module-level frozensets the validators and the renderer share, so the allowed values are stated once.
+- number: 3
+  title: Loader from the default ref, coherence and the not-yet-available placements
+    (R2, R4, R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_settings_load.py over a tmp git repo with a bare origin: no file → defaults with every source `default`; a `.fr/settings.yaml` committed on origin's default branch → its keys with source `repo`; the same file edited only on the working tree or on the feature branch → ignored (still the default-ref values) and `fr settings show` notes the pending edit; no origin → read HEAD's committed file and say so; a file with `placement: quiet` or `stealth` → SettingsError "not yet available in this fr" from load_settings itself (not only check); unparseable YAML → SettingsError naming the file. Confirm red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/settings/load.py — `load_settings(repo_root) -> EffectiveSettings` reads `git show <default-ref>:.fr/settings.yaml` (default ref via fr.git.remote_default_ref; fall back to HEAD when no origin), returns values plus per-key provenance, caches per process keyed by (repo_root, ref sha); `disabled(root, feature)` and `forge_allows(root, kind)` predicates in settings/__init__.py read it. Refuse unservable placements here. Tests pass.
+  - id: P1.T3.S3
+    text: |-
+      RED then GREEN: tests/unit/test_settings_check.py + packages/fr/src/fr/settings/check.py — coherence rules as data (a tuple of (id, predicate, message)): `gates: off` while any live plan under docs/superpowers/plans/ carries ops (use fr.ops.load.plan_has_ops) is refused naming the plan; `push: ask` refused when the repo has a `.fr/triage.yaml` declaring a driven scope (read fr.triage.model.parse_triage_config); `report_comment: on` with `comments: off` refused. `check_settings(root) -> list[Problem]`.
+  - id: P1.T3.S4
+    text: |-
+      REFACTOR: wire check_settings into `fr run start` (packages/fr/src/fr/commands/run_cmd.py, before the run file is written): any problem exits 2 printing each one; add a test in tests/unit/test_settings_check.py driving run start over a repo with an incoherent file.
+- number: 4
+  title: The CLI — init, show, check (R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_settings_cmd.py — `fr settings init` writes .fr/settings.yaml where every key is present but commented out at its default, each preceded by a comment with allowed values, what the default does and what the non-default trades away; the written file parses to exactly the defaults; init refuses to overwrite an existing file without --force; `fr settings show` prints key, value and source columns and `--json` prints {key: {value, source}}; `fr settings check` exits 0 on a coherent file and 2 listing problems otherwise. Confirm red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/settings/render.py generates init's text from the model's field descriptions (one comment block per key, nested by section); settings_cmd.py implements init (writes, never commits — the operator commits it), show and check. Tests pass.
+  - id: P1.T4.S3
+    text: |-
+      GREEN: add "settings" to READ_ONLY_COMMANDS in packages/fr/src/fr/artifacts/trigger.py (it never mutates a registered artifact) and update the literal in tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things; extend the tuple's docstring with the one-line reason.
+- number: 5
+  title: Acceptance scenario, row, fragment
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      GREEN: tests/scenarios/repo-settings-file.sh (sourcing _common.sh, a fresh git init with a bare local origin) drives the INSTALLED fr: settings init → file present and commented; commit and push it to origin's main; show reports source repo; an unknown key on main makes check and show refuse naming it; placement: quiet is refused as not yet available. Add test_repo_settings_file to tests/integration/test_scenarios.py calling _scenario("repo-settings-file", ...). Run that test.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: `uv run fr acceptance set-status --id repo-settings-file --status ci --scenario tests/scenarios/repo-settings-file.sh --level unit=super-fr:tests/unit/test_settings_load.py#test_<name> --level integration=super-fr:tests/integration/test_scenarios.py#test_repo_settings_file --notes "settings core built: closed schema, default-ref loader, init/show/check; scenario in CI"` (name a real test in place of <name>). Add .changes/feat-repo-feature-settings.yaml: `bump: minor`, summary "fr settings: per-repo feature settings (policy off, forge quiet, push/PR ask, squash-unpushed, commit templates)".
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

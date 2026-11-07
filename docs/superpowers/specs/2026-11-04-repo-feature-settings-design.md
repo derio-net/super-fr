@@ -652,3 +652,4 @@ _(post-merge, operator-driven)_
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-11-07-repo-settings-core | `derio-net/super-fr` | `2026-11-07-repo-settings-core` | — |

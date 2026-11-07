@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'Forge quiet: one forge_allows predicate, pr_body minimal kept durable'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - repo-settings-forge-quiet
+  tier: hard
+  files:
+  - packages/fr/src/fr/settings/*
+  - packages/fr/src/fr/services/*
+  - packages/fr/src/fr/archive_followups.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/gatebackfill/apply.py
+  - packages/fr/src/fr/debt/*
+  - packages/fr/src/fr/verification/labels.py
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/commands/*.py
+  - packages/fr/src/fr/run/ci_evidence.py
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/acceptance/scaffold.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-devops-gate/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - tests/unit/test_forge_quiet_*.py
+  - tests/scenarios/repo-settings-forge-quiet.sh
+  - tests/scenarios/fixtures/repo-settings-forge-quiet/**
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  estimate_lines: 750
+tasks:
+- number: 1
+  title: forge_allows replaces every tracking-none check (R9)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_forge_quiet_predicate.py — forge_allows(root, k) for k in labels/comments/issues is False when the setting is off OR `tracking: {type: none}` is declared (both directions), True otherwise; and an inventory test that greps packages/fr/src for `resolve_tracking(` / `require_tracker(` / `.type == "none"` outside fr/services/ and fr/settings/ and fails listing any hit (the 18 modules found in the spec's survey must all move to forge_allows). Confirm red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: move each site to forge_allows with the right kind — labels: verification/labels.py, run/closeout.py awaiting-live, triage_batch_cmd labels; issues: archive_followups.py, commands/journal_cmd.py file, archive_cmd.py, debt_cmd.py issue, gatebackfill/apply.py, acceptance_cmd.py digest, undispatch_cmd.py, apply_cmd.py, record/pr_body.py owed filing text, isolation/local.py, run/ci_evidence.py, init_cmd.py, services_cmd.py (keep its report of tracking itself); comments: gate_cmd.py pass comment and the triage driver's pass comment. Every refusal or skip message names which setting caused it. Tests pass; run the existing suites of each touched module.
+  - id: P3.T1.S3
+    text: |-
+      GREEN: tests/unit/test_forge_quiet_scaffold.py + fr/acceptance/scaffold.py — under forge.issues off the scaffolded acceptance CI omits its "Acceptance debt" issue step and its archive-sweep PR step; under comments off it carries no comment step.
+- number: 2
+  title: pr_body minimal — live body quiet, full render durable (R10)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_forge_quiet_pr_body.py driving `_deliver_pr_gate` (packages/fr/src/fr/commands/run_cmd.py) with a fake client: under pr_body minimal a live body with no fr sections passes, the render is written to docs/superpowers/runs/<run-id>.pr-body.md (NOT under .records/) and kept after success and committed with the deliver resolve, the success output names that path as what the operator reviews; a live body containing any fr marker (`<!-- fr-` prefix) is refused; a live body sharing one closing keyword across issues is still refused; under full the existing behaviour is byte-for-byte unchanged (existing deliver tests stay green). Confirm red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: branch `_deliver_pr_gate` on load_settings(root).forge.pr_body: minimal → write the durable render, skip missing_sections and historical-line checks against the live body, refuse fr markers, keep shared_closing_keywords and _refuse_premature_closes; register the durable render path with the deliver resolve's commit (the same _note_record_write path the records use). Tests pass.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: name the marker prefix and the durable path as constants in fr/record/pr_body.py; the archive's run move (fr/archive.py) carries `<run-id>.pr-body.md` with the cursor — add that to the existing archive test.
+- number: 3
+  title: Skills, scenario and row
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      GREEN: fr-goal/SKILL.md §8 — under pr_body minimal open the draft with a plain summary and review the durable render; under forge comments/labels/issues off no `fr journal file` filing (leftovers stay journalled). fr-devops-gate/SKILL.md — no gate-pass comment under comments off. Run sync-opencode.py and sync-hermes.py; commit mirrors.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: tests/scenarios/repo-settings-forge-quiet.sh with a recording `gh` under tests/scenarios/fixtures/repo-settings-forge-quiet/bin/gh (pattern: tests/scenarios/fixtures/closeout-owed/bin/gh): settings `forge: {labels: off, comments: off, issues: off}`; run `fr journal file` on a seeded out-of-scope finding and `fr debt issue --yes`; assert both refuse/skip naming the setting and the gh log records no issue, label or comment call. Wire test_repo_settings_forge_quiet; run it. Then `fr acceptance set-status --id repo-settings-forge-quiet --status ci --scenario tests/scenarios/repo-settings-forge-quiet.sh --level unit=super-fr:tests/unit/test_forge_quiet_pr_body.py#test_<name> --level integration=super-fr:tests/integration/test_scenarios.py#test_repo_settings_forge_quiet --notes "forge quiet built; scenario in CI"`.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
