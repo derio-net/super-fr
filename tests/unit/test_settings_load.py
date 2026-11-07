@@ -137,3 +137,49 @@ def test_unknown_feature_names_are_a_programming_error(repo: Path) -> None:
         disabled(repo, "spec")
     with pytest.raises(ValueError, match="pr_body"):
         forge_allows(repo, "pr_body")
+
+
+def test_a_git_read_failure_is_a_refusal_not_absent(repo: Path) -> None:
+    """Absent (path not in the tree) is defaults; a failing git read is never defaults."""
+    from fr.settings import load as load_mod
+
+    _land_on_main(repo, "artifacts:\n  gates: off\n")
+    load_mod._CACHE.clear()
+    sha = _git(repo, "rev-parse", "refs/remotes/origin/main").strip()
+    assert load_mod._show(repo, sha) is not None
+    assert load_mod._show(repo, sha, ".fr/nope.yaml") is None
+    with pytest.raises(SettingsError, match="cannot read"):
+        load_mod._show(repo, "0" * 40)
+
+
+def test_a_non_main_remote_default_is_read(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "branch", "-m", "trunk")
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: off\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "s")
+    _git(repo, "push", "-q", "origin", "trunk")
+    _git(repo, "remote", "set-head", "origin", "trunk")
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    eff = load_settings(repo)
+    assert eff.settings.artifacts.gates == "off"
+    assert eff.ref == "refs/remotes/origin/trunk"
+
+
+def test_a_remote_that_was_never_fetched_refuses(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "remote", "set-head", "origin", "-d")
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    with pytest.raises(SettingsError, match="git fetch origin"):
+        load_settings(repo)
+
+
+def test_an_unpushed_local_main_is_not_read_when_origin_exists(repo: Path) -> None:
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: off\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "unpushed")
+    eff = load_settings(repo)
+    assert eff.settings.artifacts.gates == "on"
+    assert eff.pending_edit is not None

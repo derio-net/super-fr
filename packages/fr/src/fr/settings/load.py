@@ -15,7 +15,7 @@ from typing import Any, Final
 import yaml
 from pydantic import BaseModel
 
-from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref
+from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref, remote_name
 from fr.settings import SettingsError
 from fr.settings.model import PLACEMENTS, Settings, parse_settings
 
@@ -58,9 +58,25 @@ def _present(data: object, dotted: str) -> bool:
     return True
 
 
-def _show(root: Path, sha: str) -> str | None:
-    done = git_answer(root, "show", f"{sha}:{SETTINGS_PATH}")
-    return done.stdout if done.returncode == 0 else None
+def _show(root: Path, sha: str, path: str = SETTINGS_PATH) -> str | None:
+    """*path* at commit *sha*: None only when the commit's tree has no such path.
+
+    Any other git failure is a read failure and raises: it must never read as "absent"
+    (which means defaults).
+    """
+    listed = git_answer(root, "ls-tree", "--name-only", sha, "--", path)
+    if listed.returncode != 0:
+        raise SettingsError(
+            f"cannot read {path} at {sha[:12]}: git ls-tree failed: {listed.stderr.strip()}"
+        )
+    if not listed.stdout.strip():
+        return None
+    done = git_answer(root, "show", f"{sha}:{path}")
+    if done.returncode != 0:
+        raise SettingsError(
+            f"cannot read {path} at {sha[:12]}: git show failed: {done.stderr.strip()}"
+        )
+    return done.stdout
 
 
 def _commit_of(root: Path, qualified_ref: str) -> str | None:
@@ -72,14 +88,33 @@ def _commit_of(root: Path, qualified_ref: str) -> str | None:
 
 def _resolve_source(root: Path) -> tuple[str | None, str | None, str]:
     """(qualified ref, commit sha, note) of the policy source; never HEAD or the tree."""
-    named = remote_default_ref(root)
-    if isinstance(named, GitRefusal):
-        raise SettingsError(f"cannot establish the default branch: {named.reason}")
-    if named is not None:
+    remote = remote_name(root)
+    if isinstance(remote, GitRefusal):
+        raise SettingsError(f"cannot establish the default branch: {remote.reason}")
+    if remote is not None:
+        # A remote exists: the policy source is the remote default, never a local branch
+        # (an unpushed local edit would be a branch relaxing its own controls).
+        named = remote_default_ref(root)
+        if isinstance(named, GitRefusal):
+            raise SettingsError(f"cannot establish the default branch: {named.reason}")
+        if named is None:
+            configured = git_answer(root, "config", "init.defaultBranch").stdout.strip()
+            if configured:
+                qualified = f"refs/remotes/{remote}/{configured}"
+                if _commit_of(root, qualified) is not None:
+                    named = f"{remote}/{configured}"
+        if named is None:
+            raise SettingsError(
+                f"cannot find the default branch of remote `{remote}`: no "
+                f"refs/remotes/{remote}/HEAD and no {remote}/main or {remote}/master. "
+                f"Run `git fetch {remote}` and "
+                f"`git remote set-head {remote} -a`"
+            )
         qualified = f"refs/remotes/{named}"
         sha = _commit_of(root, qualified)
-        if sha is not None:
-            return qualified, sha, f"read from {named}"
+        if sha is None:
+            raise SettingsError(f"{qualified} does not name a commit; run `git fetch {remote}`")
+        return qualified, sha, f"read from {named}"
     configured = git_answer(root, "config", "init.defaultBranch").stdout.strip()
     for name in dict.fromkeys(n for n in (configured, "main", "master") if n):
         qualified = f"refs/heads/{name}"
@@ -87,6 +122,22 @@ def _resolve_source(root: Path) -> tuple[str | None, str | None, str]:
         if sha is not None:
             return qualified, sha, f"no origin default branch: read local {name}"
     return None, None, "no default branch found: defaults"
+
+
+def read_at_default(repo_root: Path, path: str) -> str | None:
+    """*path* as the default ref's commit has it (None: absent, or no default ref).
+
+    The one reader of a policy-adjacent file: same SHA the settings come from, never
+    the working tree. Raises `SettingsError` on a read failure or an unresolvable remote.
+    """
+    root = Path(repo_root)
+    try:
+        if git_answer(root, "rev-parse", "--git-dir").returncode != 0:
+            return None
+        _, sha, _ = _resolve_source(root)
+    except GitUnavailableError:
+        return None
+    return None if sha is None else _show(root, sha, path)
 
 
 def _pending(root: Path, committed: str | None) -> str | None:
