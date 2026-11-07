@@ -510,7 +510,8 @@ def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     from fr import archive_followups as af
     from fr.artifacts import trigger
     from fr.run.closeout import services_invalid_text
-    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+    from fr.services import ServicesError
+    from fr.settings import ForgeQuietError, require_forge
 
     listed = af.open_ends(repo_root, af.journals_from_log(log.moves))
     if listed:
@@ -520,9 +521,9 @@ def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     elif opts.issues is None:
         return
     try:
-        require_tracker(repo_root)
-    except TrackerRequiredError:
-        typer.echo("  no tracker configured — left in the journal")
+        require_forge(repo_root, "issues", "labels")  # a filed issue carries its labels
+    except ForgeQuietError as exc:
+        typer.echo(f"  no tracker configured — left in the journal ({exc})")
         return
     except ServicesError as exc:
         err_console.print(
@@ -606,12 +607,13 @@ def _write_manual_owed(repo_root: Path, plan: Any, blockers: tuple[str, ...]) ->
 def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     """R21: file every open `owed` entry of the moved (or held-and-owing)
     journals as one `fr:owed` issue — whatever `--issues`/`--no-issues` say —
-    and record where it went. Nothing is filed under `tracking: none`."""
+    and record where it went. Nothing is filed under `forge.issues: off` or `tracking: none`."""
     import subprocess
 
     from fr import archive_followups as af
     from fr.run.closeout import services_invalid_text
-    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+    from fr.services import ServicesError
+    from fr.settings import ForgeQuietError, require_forge
 
     journals = af.journals_from_log(log.moves)
     journals += [j for j in log.owed_journals if j not in journals]
@@ -622,9 +624,9 @@ def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     for end in ends:
         typer.echo(f"    - {end.key}: {end.title}")
     try:
-        require_tracker(repo_root)
-    except TrackerRequiredError:
-        typer.echo("  no tracker configured — owed actions stay in the journal")
+        require_forge(repo_root, "issues", "labels")  # a filed issue carries its labels
+    except ForgeQuietError as exc:
+        typer.echo(f"  no tracker configured — owed actions stay in the journal ({exc})")
         return
     except ServicesError as exc:
         err_console.print(

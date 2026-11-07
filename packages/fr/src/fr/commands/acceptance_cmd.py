@@ -451,15 +451,16 @@ def _walk_from_flags(
 
 def _print_close_commands(root: Path, before: Row) -> None:
     """R16: the issues this walk freed, each with the forge's close and
-    unlabel commands — nothing under `tracking: none`. fr never closes them."""
+    unlabel commands — nothing when forge issues are off (`forge.issues: off` or
+    `tracking: none`). fr never closes them."""
     from fr.acceptance.walks import AWAITING_LIVE_LABEL, issues_now_closable
     from fr.hostclient import issue_command
-    from fr.services.resolve import resolve_tracking
+    from fr.settings import forge_allows
 
     matrix = _load(root)
     after = next(r for r in matrix.rows if r.id == before.id)
     freed = issues_now_closable(matrix, before, after, root)
-    if not freed or resolve_tracking(root, lenient=True).type == "none":
+    if not freed or not forge_allows(root, "issues", lenient=True):
         return
     w = after.walks[-1]
     comment = f"Walk-verified ({w.strategy}, {w.harness}, {w.model}): {w.evidence}"
@@ -907,8 +908,8 @@ def init_cmd(
 def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
     """`init --refresh-ci`: exit 0 rewritten/current, 1 refused (foreign file,
     nothing to refresh, or GitLab's shared file with the job to paste)."""
-    from fr.acceptance.ci import DEBT_PLATFORM, SCAFFOLD_PATHS
-    from fr.acceptance.scaffold import refresh_ci
+    from fr.acceptance.ci import SCAFFOLD_PATHS
+    from fr.acceptance.scaffold import debt_steps, refresh_ci
     from fr.records_commit import commit_records
 
     if with_ci:
@@ -920,7 +921,9 @@ def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
             f"[red]error:[/red] this repo's ci service is {ci_type!r}: nothing to refresh"
         )
         raise typer.Exit(1)
-    debt = services.tracking.type == DEBT_PLATFORM[ci_type]
+    debt, debt_off = debt_steps(root, ci_type, services.tracking.type)
+    if debt_off is not None:
+        typer.echo(f"no debt  {debt_off}; see `fr settings show`")
     out = refresh_ci(root, ci_type, debt=debt)
     if out.status == "missing":
         err_console.print(f"[red]error:[/red] {out.path} does not exist; run `fr acceptance init`")

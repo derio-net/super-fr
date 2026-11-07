@@ -145,13 +145,13 @@ def test_a_cross_repo_plan_is_gated_by_the_plan_repos_tracking(
     assert "target_repo: derio-net/superpowers-for-vk" in meta  # not this repo
     _profiles(tmp_path, NONE)
     seen: list[Path] = []
-    real = apply_cmd.require_tracker
+    real = apply_cmd.require_forge
 
-    def _spy(root: Path) -> None:
+    def _spy(root: Path, kind: str) -> None:
         seen.append(root)
-        real(root)
+        real(root, kind)
 
-    monkeypatch.setattr(apply_cmd, "require_tracker", _spy)
+    monkeypatch.setattr(apply_cmd, "require_forge", _spy)
     gh = FakeGhClient()
     rc, text, _ = apply_cmd._apply_one(plan_dir, gh, yes=True, force=True)
     assert seen == [tmp_path.resolve()]

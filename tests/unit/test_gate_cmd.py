@@ -376,17 +376,23 @@ def test_yes_applies_the_plan_once_and_a_second_run_writes_nothing(
     assert fake.attempted_mutations == before
 
 
-def test_yes_under_tracking_none_labels_the_pr_only(backfill_env: Any, tmp_path: Path) -> None:
+def test_yes_under_tracking_none_refuses_before_any_write(
+    backfill_env: Any, tmp_path: Path
+) -> None:
+    """spec 2026-11-04-repo-feature-settings R9: `tracking: none` means forge labels are
+    off too, and a backfill's one write is the PR's gate label, so it writes nothing."""
     root, fake, manifest = _applied_env(backfill_env, tmp_path)
     (root / ".devcontainer").mkdir()
     (root / ".devcontainer" / "fr-profiles.yaml").write_text(
         "schema_version: 2\ntracking: {type: none}\n"
     )
+    before = fake.attempted_mutations
 
     result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), "--yes"])
 
-    assert result.exit_code == 0, result.output
-    assert fake.pr_labels[(BACKFILL_REPO, 12)] == {"gate:devops"} and not fake.issues
+    assert result.exit_code == 2, result.output
+    assert "tracking: none" in result.output and "nothing was written" in result.output
+    assert fake.attempted_mutations == before and not fake.issues
 
 
 def test_yes_refuses_an_unreadable_services_declaration_before_any_write(

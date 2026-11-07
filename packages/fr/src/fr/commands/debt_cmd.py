@@ -40,15 +40,18 @@ def _now() -> datetime:
 
 
 def _forge(root: Path) -> tuple[DebtForge | None, str]:
-    """The repo's forge adapter and, when there is none, the reason why."""
+    """The repo's forge adapter and, when there is none, the reason why. An
+    unreadable settings file refuses (`SettingsError`), never reads as a forge."""
+    from fr.settings import forge_block
+
+    off = forge_block(root, "issues", lenient=True)
+    if off is not None:
+        return None, off
     try:
         from fr import _hosts
         from fr.commands.archive_cmd import _make_gh_client
         from fr.debt.forge import ClientDebtForge
-        from fr.services.resolve import resolve_tracking
 
-        if resolve_tracking(root, lenient=True).type == "none":
-            return None, "tracking: none"
         slug = _hosts.origin_slug(root)
         if not slug:
             return None, "no origin remote to name the repository"
@@ -141,8 +144,19 @@ def issue_cmd(
     from fr.debt.engine import DebtConfigError
     from fr.ghclient import ListingCapped, UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS
+    from fr.services import ServicesError
+    from fr.settings import forge_block
 
     root = resolve_repo_root()
+    try:
+        off = forge_block(root, "issues")
+    except ServicesError as e:
+        typer.echo(f"error: nothing written — {_clean(e, 300)}", err=True)
+        raise typer.Exit(2) from e
+    if off is not None:
+        # R9: the leftover debt stays in the repo's own files; `fr debt` still reports it.
+        typer.echo(f"skipped: no debt issue is written — {off}")
+        return
     slug = _identity(root)
     title = _title(slug)
     try:

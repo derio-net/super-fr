@@ -187,6 +187,32 @@ def _require_fr_pass(client: Any, repo: str, pr: int, gate: str, passed: str) ->
     )
 
 
+def _forge_policy(repo: str) -> tuple[bool, str | None]:
+    """`(comment, trackers_off)` for a pass on *repo* (R9), read from this checkout's
+    settings when its origin IS *repo* (another repo's policy is not readable here, so it
+    keeps the defaults). Refuses (exit 2) when fr may not write labels: a pass IS a label
+    swap. *trackers_off* names the setting under which no tracker is closed."""
+    from fr import _hosts
+    from fr.services import ServicesError
+    from fr.settings import forge_allows, forge_block
+
+    root = _repo_root()
+    origin = _hosts.origin_slug(root) if root is not None else None
+    if root is None or origin is None or origin.lower() != repo.lower():
+        return True, None
+    try:
+        off = forge_block(root, "labels")
+        if off is not None:
+            _refuse(f"nothing to pass: a pass swaps the PR's gate label, and {off}")
+        comment = forge_allows(root, "comments")
+        trackers_off = forge_block(root, "issues")
+    except ServicesError as exc:
+        _refuse(f"the services declaration cannot be read, nothing was written: {exc}")
+    if trackers_off is None and not comment:
+        trackers_off = "forge.comments: off (a tracker closes with a comment)"
+    return comment, trackers_off
+
+
 def _echo_close(report: CloseReport) -> None:
     """Print what a pass closed (or would), the discharge commands, and any tracker error."""
     for line in report.lines():
@@ -256,6 +282,16 @@ def pass_command(
             "hold a merge, so only they pass"
         )
     repo, forge_host = resolve_target(repo, host, Path.cwd())
+    comment, trackers_off = _forge_policy(repo)
+
+    def close(dry_run: bool) -> CloseReport:
+        if trackers_off is not None:
+            typer.echo(f"trackers not closed: {trackers_off}")
+            return CloseReport(dry_run=dry_run)
+        return close_gate_trackers(
+            client, repo, pr, gate, notes, root=_repo_root(), dry_run=dry_run
+        )
+
     held, passed = gate_label(gate).name, gate_label(gate, passed=True).name
     try:
         client = client_for_url(f"https://{forge_host}/{repo}")
@@ -270,11 +306,11 @@ def pass_command(
     if held not in labels and passed in labels:
         # R12's retry: the gate already passed, so only the tracker close is owed. But only
         # when fr passed it (p3-r3): a label set by hand proves nothing was recorded.
-        _require_fr_pass(client, repo, pr, gate, passed)
+        # Under forge.comments off no pass leaves a comment, so there is none to ask for.
+        if comment:
+            _require_fr_pass(client, repo, pr, gate, passed)
         typer.echo(f"gate {gate} already passed on #{pr}; closing its trackers")
-        report = close_gate_trackers(
-            client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes
-        )
+        report = close(not yes)
         _echo_close(report)
         if not yes:
             typer.echo("nothing done; re-run with --yes to act")
@@ -290,15 +326,18 @@ def pass_command(
             notes = f"{notes} (passed with {NO_RUN_EVIDENCE}: no run's op evidence was folded)"
     left = sorted(held_gates((labels - {held}) | {passed}))
     typer.echo(f"PR #{pr} ({repo}): {held} -> {passed}")
-    typer.echo(f"comment: {gate_pass_comment(gate, notes)}")
+    if comment:
+        typer.echo(f"comment: {gate_pass_comment(gate, notes)}")
+    else:
+        typer.echo("comment: none (forge.comments: off)")
     if yes:
         try:
-            pass_gate(client, repo, pr, gate, why=notes)
+            pass_gate(client, repo, pr, gate, why=notes, comment=comment)
         except _FORGE_FAILURES as exc:
             typer.echo(f"fr gate pass: the forge refused: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         typer.echo(f"passed: PR #{pr} now carries {passed}")
-    report = close_gate_trackers(client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes)
+    report = close(not yes)
     _echo_close(report)
     if yes and report.errors:
         again = f"fr gate pass --pr {pr} --gate {gate} --notes {shlex.quote(notes)}"
@@ -372,13 +411,19 @@ def backfill_command(
         refuse(f"cannot name this repo: {why}")
     if repo is not None and repo.lower() != identity.lower():
         refuse(f"--repo {repo} disagrees with this checkout's origin {identity}")
-    tracking = ""
+    issues = comments = False
     if yes:
         from fr.services import ServicesError
-        from fr.services.resolve import resolve_tracking
+        from fr.settings import forge_allows, forge_block
 
         try:
-            tracking = resolve_tracking(root).type
+            # The PR's gate label is what a backfill writes: with labels off there is
+            # nothing to backfill (R9: `tracking: none` turns labels off too).
+            off = forge_block(root, "labels")
+            if off is not None:
+                refuse(f"nothing was written: a backfill labels PRs, and {off}")
+            issues = forge_allows(root, "issues")
+            comments = forge_allows(root, "comments")
         except ServicesError as exc:
             refuse(f"the services declaration cannot be read, nothing was written: {exc}")
     _, forge_host = resolve_target(identity, host, root)
@@ -413,10 +458,13 @@ def backfill_command(
         from fr.gatebackfill.apply import ApplyRefusedError, apply_plan
 
         try:
-            report = apply_plan(root, previous, fresh, client, repo=identity, tracking=tracking)
+            report = apply_plan(
+                root, previous, fresh, client, repo=identity, issues=issues, comments=comments
+            )
         except ApplyRefusedError as exc:
             refuse(str(exc))
-        typer.echo(f"Applied {path} to {identity} (tracking: {tracking})")
+        trackers = "trackers" if issues else "no trackers (forge.issues off)"
+        typer.echo(f"Applied {path} to {identity} ({trackers})")
         for line in report.lines():
             typer.echo(line)
         typer.echo(f"{report.writes} change(s), {report.failed} failed")

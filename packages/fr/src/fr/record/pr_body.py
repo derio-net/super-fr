@@ -39,12 +39,16 @@ if TYPE_CHECKING:
 
 __all__ = [
     "OWED_ROW_STATUSES",
+    "DURABLE_PR_BODY_SUFFIX",
+    "FR_MARKER_PREFIXES",
     "PR_BODY_NAME",
     "REQUIRED_SECTIONS",
     "Leftover",
     "PrematureClose",
     "UnreadableJournalError",
     "closing_refs",
+    "durable_pr_body_path",
+    "fr_markers",
     "holds_open_for_run",
     "issue_refs",
     "missing_sections",
@@ -103,6 +107,24 @@ _LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]*)[^)]*\)")
 # A fence may sit inside a blockquote or a list item (CommonMark).
 _FENCE = re.compile(r"^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])\s+)?(`{3,}|~{3,})(.*)$")
 _RENDER_MARKER = "<!-- rendered by fr for run "
+FR_MARKER_PREFIXES = ("<!-- fr-", "<!-- fr:", _RENDER_MARKER)
+"""How every fr marker comment begins (`<!-- fr-technical-debt -->`, `<!-- fr:gate-pass`,
+the render's own stamp): under `forge.pr_body: minimal` the live PR carries none (R10)."""
+DURABLE_PR_BODY_SUFFIX = ".pr-body.md"
+"""`docs/superpowers/runs/<run-id>.pr-body.md`: the full render kept under
+`forge.pr_body: minimal`, beside the cursor and archived with it (R10)."""
+
+
+def durable_pr_body_path(repo_root: Path, run_id: str) -> Path:
+    """Where the full PR body render is kept when the live PR stays minimal."""
+    from fr.run.model import run_path
+
+    return run_path(repo_root, run_id).with_name(f"{run_id}{DURABLE_PR_BODY_SUFFIX}")
+
+
+def fr_markers(body: str) -> list[str]:
+    """The lines of *body* that carry an fr marker, stripped, in order."""
+    return [line.strip() for line in body.splitlines() if any(p in line for p in FR_MARKER_PREFIXES)]
 
 
 def _one_ref_per_link(match: re.Match[str]) -> str:
@@ -410,17 +432,14 @@ def run_narrowings(repo_root: Path, state: RunState) -> list[JournalEntry]:
 
 
 def _has_tracker(repo_root: Path) -> bool:
-    """`False` only when the repo declares `tracking: none`; an unreadable
-    declaration counts as a tracker (fail closed: more is asked, not less)."""
-    from fr.services import TrackerRequiredError, require_tracker
+    """`False` only when fr files no issue here (`forge.issues` or `forge.labels`
+    off — a filed issue carries its labels — or `tracking: none`): `fr journal file`
+    would refuse, so the leftover stays recorded. An unreadable services declaration
+    counts as a tracker (fail closed: more is asked, not less). An unreadable settings
+    file refuses."""
+    from fr.settings import forge_allows
 
-    try:
-        require_tracker(repo_root)
-    except TrackerRequiredError:
-        return False
-    except Exception:  # noqa: BLE001 — ServicesError and friends
-        return True
-    return True
+    return all(forge_allows(repo_root, k, lenient=True) for k in ("issues", "labels"))
 
 
 def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Leftover]:
@@ -435,8 +454,9 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
 
     Raises `UnreadableJournalError` when either journal does not parse.
 
-    Under `tracking: none` only the gate route applies: the journal kinds stay
-    recorded in the journal and the PR body, and a row's only fix is its gate.
+    Under `forge.issues: off` (or `tracking: none`) only the gate route applies: the
+    journal kinds stay recorded in the journal and the PR body, and a row's only fix is
+    its gate.
     `exit` is `None` when it cannot be read; no row is then judged here (the
     label sync refuses an unreadable exit)."""
     from fr.gates import POST_MERGE_GATES

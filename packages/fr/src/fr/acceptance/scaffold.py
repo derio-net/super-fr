@@ -409,6 +409,23 @@ def render_workflow(ci_type: str, *, debt: bool) -> str:
     )
 
 
+def debt_steps(root: Path, ci_type: str, tracking_type: str | None) -> tuple[bool, str | None]:
+    """`(debt, off)`: whether the scaffolded `ci_type` pipeline carries the weekly
+    technical-debt job, and, when the repo's settings dropped it, why. The job files
+    through the ci platform's own tracker CLI, so it needs that tracker (#774 §3.E), and
+    it writes an issue and a PR, so it needs forge issues on (spec
+    2026-11-04-repo-feature-settings R9: no forge write of an off kind, including from
+    the CI fr scaffolds). An unreadable policy refuses (`SettingsError`)."""
+    from fr.acceptance.ci import DEBT_PLATFORM
+    from fr.settings import load_settings
+
+    if tracking_type != DEBT_PLATFORM[ci_type]:
+        return False, None
+    if load_settings(root).settings.forge.issues != "on":
+        return False, "forge.issues: off — the weekly technical-debt steps are omitted"
+    return True, None
+
+
 @dataclass(frozen=True)
 class RefreshOutcome:
     """What `fr acceptance init --refresh-ci` did, or why it did not."""
@@ -553,8 +570,9 @@ def init(
         tracking_type = backend if tracking_type is None else tracking_type
     has_ci = ci_type != "none"
     # The weekly debt issue is filed through the ci platform's own tracker CLI,
-    # so it is kept only when the tracker is that platform (#774 §3.E).
-    debt = has_ci and tracking_type == DEBT_PLATFORM[ci_type]
+    # so it is kept only when the tracker is that platform (#774 §3.E), and only
+    # while forge issues are on (R9).
+    debt, debt_off = debt_steps(root, ci_type, tracking_type) if has_ci else (False, None)
     if has_ci:
         scaffold_path = SCAFFOLD_PATHS[ci_type]
         ci_gate = _CI_GATE.format(path=scaffold_path)
@@ -573,7 +591,9 @@ def init(
     )
     if has_ci:
         write_if_missing(scaffold_path, render_workflow(ci_type, debt=debt))
-        if not debt:
+        if debt_off is not None:
+            notices.append(f"no debt  {debt_off} from {scaffold_path}; see `fr settings show`")
+        elif not debt:
             notices.append(
                 f'no debt  the weekly "Technical debt" steps are omitted from '
                 f"{scaffold_path} — tracking is {tracking_type!r}, not the {ci_type} platform's "

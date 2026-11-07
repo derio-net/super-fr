@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
+from fr.services.require import TrackerRequiredError
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -76,19 +78,66 @@ def spec_policy_problems(repo_root: Path, spec_path: Path) -> list[str]:
     return problems
 
 
-def forge_allows(repo_root: Path, kind: str) -> bool:
-    """Whether fr may write *kind* (`labels`, `comments`, `issues`) to the forge."""
+TRACKING_NONE: Final = (
+    "tracking: none (.devcontainer/fr-profiles.yaml declares `tracking: {type: none}`)"
+)
+"""Why a forge write is off when the services declaration, not a setting, turns it off."""
+
+
+def forge_block(repo_root: Path, kind: str, *, lenient: bool = False) -> str | None:
+    """None when fr may write *kind* (`labels`, `comments`, `issues`) to the forge; else
+    the setting that forbids it: `forge.<kind>: off`, or `tracking: none`, which keeps
+    meaning all three are off (R9).
+
+    The settings are read strictly (`SettingsError` propagates: an unreadable policy
+    refuses, it never reads as the defaults). The tracking declaration is strict too
+    (`ServicesError`), unless *lenient*: then an unreadable one counts as a tracker,
+    the posture of the sites that must never raise."""
     if kind not in FORGE_KINDS:
         raise ValueError(f"{kind!r} is not a forge write kind; kinds are {FORGE_KINDS}")
-    return bool(getattr(load_settings(repo_root).settings.forge, kind) == "on")
+    if getattr(load_settings(repo_root).settings.forge, kind) != "on":
+        return f"forge.{kind}: off ({DISABLED})"
+    from fr.services.model import ServicesError
+    from fr.services.resolve import resolve_tracking
+
+    try:
+        none = resolve_tracking(repo_root, lenient=lenient).type == "none"
+    except ServicesError:
+        if not lenient:
+            raise
+        none = False
+    return TRACKING_NONE if none else None
+
+
+def forge_allows(repo_root: Path, kind: str, *, lenient: bool = False) -> bool:
+    """Whether fr may write *kind* (`labels`, `comments`, `issues`) to the forge."""
+    return forge_block(repo_root, kind, lenient=lenient) is None
+
+
+class ForgeQuietError(TrackerRequiredError):
+    """A forge write of a kind the repo turned off; a `TrackerRequiredError`, so every
+    caller that refused `tracking: none` refuses this the same way."""
+
+
+def require_forge(repo_root: Path, *kinds: str) -> None:
+    """Raise `ForgeQuietError` naming the setting when fr may not write each of *kinds*
+    (a filed issue carries labels, so filing asks for both)."""
+    for kind in kinds:
+        why = forge_block(repo_root, kind)
+        if why is not None:
+            raise ForgeQuietError(f"no forge {kind} are written here — {why}.")
 
 
 __all__ = [
     "DISABLED",
+    "TRACKING_NONE",
+    "ForgeQuietError",
     "SettingsError",
     "disabled",
     "disabled_because",
     "forge_allows",
+    "forge_block",
     "load_settings",
+    "require_forge",
     "spec_policy_problems",
 ]

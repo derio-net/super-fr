@@ -83,7 +83,7 @@ def test_tracking_none_means_git_only_and_says_why(
         "fr.services.resolve.resolve_tracking", lambda *_a, **_k: types.SimpleNamespace(type="none")
     )
     forge, why = debt_cmd._forge(repo)
-    assert forge is None and why == "tracking: none"
+    assert forge is None and why.startswith("tracking: none")
     r = runner.invoke(app, ["debt", "--json"])
     assert r.exit_code == 0, r.output
     report = DebtReport.model_validate(json.loads(r.output))
