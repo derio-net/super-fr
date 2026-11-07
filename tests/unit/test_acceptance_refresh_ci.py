@@ -90,9 +90,6 @@ def test_the_cli_flag_rewrites_and_exits_zero(
         ["git", "-C", str(tmp_path), "remote", "add", "origin", "https://github.com/o/r.git"],
         check=True,
     )
-    from tests.unit.settings_repo import seed_origin_default
-
-    seed_origin_default(tmp_path)
     rel = ".github/workflows/acceptance-report.yml"
     _put(tmp_path, rel, LEGACY_GITHUB)
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
@@ -115,9 +112,6 @@ def test_the_cli_flag_refuses_a_foreign_file_with_exit_one(
         ["git", "-C", str(tmp_path), "remote", "add", "origin", "https://github.com/o/r.git"],
         check=True,
     )
-    from tests.unit.settings_repo import seed_origin_default
-
-    seed_origin_default(tmp_path)
     _put(tmp_path, ".github/workflows/acceptance-report.yml", "name: mine\n")
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")

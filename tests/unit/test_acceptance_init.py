@@ -24,9 +24,6 @@ def _repo(tmp_path: Path) -> Path:
         cwd=root,
         check=True,
     )
-    from tests.unit.settings_repo import seed_origin_default
-
-    seed_origin_default(root)
     return root
 
 

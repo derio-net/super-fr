@@ -47,16 +47,3 @@ def land_on_main(repo: Path, text: str) -> None:
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "settings")
     git(repo, "push", "-q", "origin", "main")
-
-
-def seed_origin_default(root: Path, branch: str = "main") -> None:
-    """Give a repo whose `origin` is unreachable a resolvable default ref (the loader refuses
-    a remote whose default it cannot name). Points at HEAD, or at an empty-tree commit made
-    without moving HEAD when the repo has none."""
-    try:
-        target = git(root, "rev-parse", "-q", "--verify", "HEAD").strip()
-    except subprocess.CalledProcessError:
-        tree = git(root, "hash-object", "-t", "tree", "-w", "--stdin").strip()
-        target = git(root, "commit-tree", tree, "-m", "seed").strip()
-    git(root, "update-ref", f"refs/remotes/origin/{branch}", target)
-    git(root, "symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{branch}")

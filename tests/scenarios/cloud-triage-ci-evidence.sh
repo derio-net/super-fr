@@ -23,8 +23,6 @@ echo seed > seed.md && git add -A && git commit -qm seed || fail "seed commit"
 git remote add origin ../derio-net/super-fr.git
 git worktree add -q -b "$branch" "$world/ws" || fail "worktree"
 cd "$world/ws" || fail "cd ws"
-# The settings loader reads the default ref and refuses a remote it cannot resolve.
-git push -q "$world/derio-net/super-fr.git" HEAD:refs/heads/main && git fetch -q origin && git remote set-head origin main >/dev/null || fail "seed origin"
 mkdir -p src .github/workflows .fr docs/superpowers/workflows
 echo "x = 1" > src/x.py
 echo "on: pull_request" > .github/workflows/ci.yml
