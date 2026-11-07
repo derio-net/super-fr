@@ -500,3 +500,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: agent
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-8 created=2026-11-07T20:12:06+00:00 -->
+### exit-change-8 · decision · exit change: row acceptance-matrix-migration -> strategy candidate
+
+restore the spec-review baseline so the operator's approved lowering is recorded as its own change
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: agent
+lowered: []
+```
