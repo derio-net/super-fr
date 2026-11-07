@@ -506,3 +506,78 @@ def test_squash_a_single_commit_a_migration_and_another_keeps_each_subject(
     assert _parents(repo, "HEAD") == [m] and _parents(repo, m) == [a]
     assert _tree(repo, "HEAD") == tree
     assert "Squashed by fr push" not in git(repo, "log", "-1", "--format=%B", "HEAD")
+
+
+# --- review p4-r2: fr's own commits are recognised under any template ----------
+
+SCENARIO = 'git:\n  history: squash-unpushed\n  commit:\n    without_issue: "[{scope}] {summary}"\n'
+
+
+def _fr_commit(repo: Path, name: str, message: str) -> str:
+    """A commit through fr's one committer, as fr writes its own."""
+    from fr.artifacts.commit import commit_paths
+
+    (repo / name).write_text(f"{name}\n")
+    outcome = commit_paths(repo, [Path(name)], message)
+    assert outcome.committed, outcome.reason
+    return git(repo, "rev-parse", "HEAD").strip()
+
+
+def test_under_the_scenario_template_a_migration_commit_is_kept(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    repo = make_repo(tmp_path)
+    land_on_main(repo, SCENARIO)
+    _feature(repo)
+    _commit(repo, "a1", "[api] a1")
+    _commit(repo, "a2", "[api] a2")
+    migrate = _fr_commit(repo, "m", "chore(fr): migrate 1 artifact to fr 6.1.0\n\n- m\n")
+    _commit(repo, "b1", "[api] b1")
+    _commit(repo, "b2", "[api] b2")
+    tree = _tree(repo, "HEAD")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert _remote_log(repo) == ["[api] a1", "[fr] migrate 1 artifact to fr 6.1.0", "[api] b1"]
+    assert _tree(repo, "HEAD~1") == _tree(repo, migrate)
+    assert _tree(repo, "HEAD") == tree
+
+
+def test_under_the_scenario_template_fr_bookkeeping_never_names_the_squash(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    repo = make_repo(tmp_path)
+    land_on_main(repo, SCENARIO)
+    _feature(repo)
+    _fr_commit(repo, "r", "chore(fr): run r1 — start")
+    _commit(repo, "a", "[api] add a")
+    _commit(repo, "b", "[api] add b")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert _remote_log(repo) == ["[api] add a"]
+
+
+def test_a_migration_commit_written_before_the_trailer_is_still_recognised(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    """The subject parse stays the fallback for commits that carry no trailer."""
+    from fr.git_policy.push import Commit, is_migration
+    from fr.settings.model import parse_settings
+
+    settings = parse_settings({}, source="test")
+    old = Commit("s", ("p",), "t", "chore(fr): migrate 2 artifacts to fr 6.0.0", "", {})
+    assert is_migration(settings, old)
+    marked = Commit("s", ("p",), "t", "[fr] x", "[fr] x\n\nFr-Commit: migrate\n", {})
+    assert is_migration(settings, marked)
+    bookkeeping = Commit(
+        "s",
+        ("p",),
+        "t",
+        "chore(fr): migrate-ish",
+        "chore(fr): migrate x\n\nFr-Commit: bookkeeping\n",
+        {},
+    )
+    assert not is_migration(settings, bookkeeping)

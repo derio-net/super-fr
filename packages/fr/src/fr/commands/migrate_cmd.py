@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from fr.commands.common import require_migrated_layout
+from fr.git_policy.templates import FR_COMMIT_TRAILER
 from fr.migrate import MigrationError, migrate_repo
 
 console = Console()
@@ -207,7 +208,10 @@ def artifacts_cmd(
             typer.echo("Commit them yourself when you are ready:")
             rels = " ".join(_rel(p, repo_root) for p in report.changed_paths)
             typer.echo(f"  git add -- {rels}")
-            typer.echo(f"  git commit -m {shlex.quote(_migrate_subject(repo_root))}")
+            typer.echo(
+                f"  git commit -m {shlex.quote(_migrate_subject(repo_root))}"
+                f" -m {shlex.quote(f'{FR_COMMIT_TRAILER}: migrate')}"
+            )
     _offer_adoption(repo_root, adopt=adopt, yes=yes)
 
     if report.failed:
@@ -275,6 +279,7 @@ def _migrate_subject(repo_root: Path) -> str:
     from fr.settings import SettingsError
 
     try:
-        return fr_message(repo_root, "chore(fr): migrate artifacts")
+        # The subject line only: the hint adds the `Fr-Commit` trailer itself.
+        return fr_message(repo_root, "chore(fr): migrate artifacts").splitlines()[0]
     except SettingsError:
         return "chore(fr): migrate artifacts"

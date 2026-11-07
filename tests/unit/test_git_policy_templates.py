@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from fr.artifacts.commit import commit_paths, migration_commit_message
 from fr.git_policy.templates import (
+    fr_commit_kind,
     fr_message,
     parse_subject,
     render_subject,
@@ -117,9 +118,13 @@ def test_merge_commits_are_exempt_by_parent_count() -> None:
 def test_default_templates_keep_every_fr_subject_byte_identical(
     tmp_path: Path, subject: str
 ) -> None:
+    """The subject and body are kept byte for byte; the body only gains fr's
+    `Fr-Commit` trailer (review p4-r2), which no subject reader sees."""
     repo = _feature(make_repo(tmp_path))
     message = f"{subject}\n\nbody line\n"
-    assert fr_message(repo, message) == message
+    kind = "migrate" if subject.startswith("chore(fr): migrate ") else "bookkeeping"
+    assert fr_message(repo, message) == f"{message}\nFr-Commit: {kind}\n"
+    assert fr_message(repo, message).splitlines()[0] == subject
 
 
 def test_the_migration_message_is_unchanged_by_the_seam(tmp_path: Path) -> None:
@@ -127,7 +132,8 @@ def test_the_migration_message_is_unchanged_by_the_seam(tmp_path: Path) -> None:
 
     repo = _feature(make_repo(tmp_path))
     message = migration_commit_message(MigrationReport(dry_run=False), fr_version="6.1.0")
-    assert fr_message(repo, message) == message
+    assert fr_message(repo, message) == message.rstrip("\n") + "\n\nFr-Commit: migrate\n"
+    assert fr_commit_kind(fr_message(repo, message)) == "migrate"
 
 
 def test_commit_records_writes_todays_subject_with_defaults(tmp_path: Path) -> None:
@@ -151,7 +157,7 @@ def test_a_custom_template_changes_frs_subjects_through_the_one_seam(tmp_path: P
     assert outcome.committed, outcome.reason
     assert (
         git(repo, "log", "-1", "--format=%B").strip()
-        == "[fr] journal plan/p — discovery d1\n\nbody"
+        == "[fr] journal plan/p — discovery d1\n\nbody\n\nFr-Commit: bookkeeping"
     )
 
 
@@ -171,7 +177,9 @@ def test_the_runs_issue_selects_the_with_issue_template(tmp_path: Path) -> None:
         "started: '2026-11-07T00:00:00Z'\ncursor: a\nsteps:\n  a:\n    state: pending\n"
         "issue: 42\n"
     )
-    assert fr_message(repo, "chore(fr): run r1 — start") == "chore(fr): run r1 — start (#42)"
+    assert fr_message(repo, "chore(fr): run r1 — start").splitlines()[0] == (
+        "chore(fr): run r1 — start (#42)"
+    )
 
 
 def test_another_branchs_run_issue_is_not_used(tmp_path: Path) -> None:
@@ -183,7 +191,9 @@ def test_another_branchs_run_issue_is_not_used(tmp_path: Path) -> None:
         "started: '2026-11-07T00:00:00Z'\ncursor: a\nsteps:\n  a:\n    state: pending\n"
         "issue: 42\n"
     )
-    assert fr_message(repo, "chore(fr): run r1 — start") == "chore(fr): run r1 — start"
+    assert fr_message(repo, "chore(fr): run r1 — start").splitlines()[0] == (
+        "chore(fr): run r1 — start"
+    )
 
 
 def test_an_unreadable_policy_refuses_the_commit(tmp_path: Path) -> None:
@@ -221,3 +231,14 @@ def test_every_chore_fr_producer_goes_through_the_seam(repo_root: Path) -> None:
         if not any(seam in text for seam in seams):
             offenders.append(rel)
     assert offenders == [], offenders
+
+
+def test_the_trailer_is_added_once_and_read_from_the_last_paragraph(tmp_path: Path) -> None:
+    repo = _feature(make_repo(tmp_path))
+    once = fr_message(repo, "chore(fr): run r1 — start")
+    assert once == "chore(fr): run r1 — start\n\nFr-Commit: bookkeeping\n"
+    assert fr_message(repo, once) == once
+    assert fr_commit_kind(once) == "bookkeeping"
+    assert fr_commit_kind("feat(x): y\n\nFr-Commit: migrate\n") == "migrate"
+    assert fr_commit_kind("Fr-Commit: migrate") is None, "a subject alone is no trailer"
+    assert fr_commit_kind("feat(x): y\n\nFr-Commit: migrate\n\nmore body\n") is None

@@ -7,7 +7,8 @@ since the merge-base with the default ref. Nothing outside that range is ever
 rewritten, so the push is always a fast-forward: no force flag exists here.
 
 Under `git.history: squash-unpushed` the range is split into segments at every
-merge commit and every `chore(fr): migrate …` commit. Those are replayed as they
+merge commit and every `chore(fr): migrate …` commit (known by its `Fr-Commit:
+migrate` trailer, or by its subject when it predates the trailer). Those are replayed as they
 are (`git commit-tree` with their own tree and parents, so each keeps its tree),
 and each segment between them becomes one commit carrying the segment's last tree,
 with a subject fr composes through the templates. The final tree never changes.
@@ -21,7 +22,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from fr.git_policy.templates import parse_subject, render_subject, subject_ok, template_for
+from fr.git_policy.templates import (
+    fr_commit_kind,
+    parse_subject,
+    render_subject,
+    subject_ok,
+    template_for,
+)
 from fr.settings.model import Settings
 
 FORCE_FLAGS = ("-f", "--force", "--force-with-lease", "--force-if-includes", "--mirror")
@@ -128,7 +135,12 @@ def unpushed(root: Path, remote: str, branch: str) -> Range:
 
 
 def is_migration(settings: Settings, commit: Commit) -> bool:
-    """A `chore(fr): migrate …` commit, as written today or through a template."""
+    """A `chore(fr): migrate …` commit: by its `Fr-Commit` trailer, which every
+    template keeps (p4-r2); else, for a commit written before the trailer existed,
+    by its subject, as written then or through a template naming type and scope."""
+    kind = fr_commit_kind(commit.message)
+    if kind is not None:
+        return kind == "migrate"
     if commit.subject.startswith("chore(fr): migrate "):
         return True
     commit_t = settings.git.commit
@@ -162,11 +174,19 @@ def check_subjects(settings: Settings, commits: Sequence[Commit], issue: int | N
         )
 
 
+def _is_fr_own(commit: Commit, values: Mapping[str, str]) -> bool:
+    """fr's own commit: its `Fr-Commit` trailer, else (older commits) a parsed
+    `chore`/`fr` type and scope."""
+    if fr_commit_kind(commit.message) is not None:
+        return True
+    return (values.get("type"), values.get("scope")) == ("chore", "fr")
+
+
 def _composed(settings: Settings, segment: Sequence[Commit], issue: int | None) -> str:
     """The subject of a squashed segment: the values of its first commit that is not
     fr's own bookkeeping (else its first commit), rendered through the templates."""
     commit_t = settings.git.commit
-    parsed: list[dict[str, str]] = []
+    parsed: list[tuple[Commit, dict[str, str]]] = []
     for c in segment:
         for template in (
             template_for(settings, issue),
@@ -175,13 +195,11 @@ def _composed(settings: Settings, segment: Sequence[Commit], issue: int | None) 
         ):
             values = parse_subject(template, c.subject)
             if values is not None:
-                parsed.append(values)
+                parsed.append((c, values))
                 break
     if not parsed:  # unreachable after check_subjects; never invent values
         raise PushRefusedError("no commit in a squash segment has a subject the template reads")
-    chosen = next(
-        (v for v in parsed if (v.get("type"), v.get("scope")) != ("chore", "fr")), parsed[0]
-    )
+    chosen = next((v for c, v in parsed if not _is_fr_own(c, v)), parsed[0][1])
     # A template need not name every placeholder (`[{scope}] {summary}` has no type).
     subject = render_subject(
         settings,

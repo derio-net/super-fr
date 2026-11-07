@@ -2,8 +2,9 @@
 
 `git.commit.with_issue` applies when the run records an issue, `without_issue`
 otherwise. fr's own commits pass through `fr_message`, the one seam: a
-`chore(fr): <summary>` subject is re-rendered with type `chore`, scope `fr`. With
-the default templates and no issue the result is byte-identical to today's.
+`chore(fr): <summary>` subject is re-rendered with type `chore`, scope `fr`, and
+the body gains an `Fr-Commit` trailer. With the default templates and no issue the
+subject is byte-identical to today's.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 import re
 import string
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from fr.settings.model import Settings
@@ -101,8 +102,40 @@ def run_issue(repo_root: Path) -> int | None:
     return issues.pop() if len(issues) == 1 else None
 
 
+FR_COMMIT_TRAILER = "Fr-Commit"
+"""The body trailer that marks a commit as fr's own (review p4-r2): `migrate` on a
+`chore(fr): migrate …` commit, `bookkeeping` on every other. A subject rendered
+through a template need not keep `{type}` or `{scope}`, so `fr push` cannot tell
+fr's commits from the subject alone; the trailer survives every template, and a
+trailer lives in the body, so a subject stays byte-identical."""
+
+FrCommitKind = Literal["migrate", "bookkeeping"]
+
+_TRAILER_LINE = re.compile(rf"^{FR_COMMIT_TRAILER}: (migrate|bookkeeping)$")
+
+
+def fr_commit_kind(message: str) -> FrCommitKind | None:
+    """The `Fr-Commit` trailer of *message* (its last paragraph), or None."""
+    paragraphs = message.strip().split("\n\n")
+    if len(paragraphs) < 2:  # a subject alone carries no trailer
+        return None
+    for line in paragraphs[-1].splitlines():
+        m = _TRAILER_LINE.match(line.strip())
+        if m is not None:
+            return "migrate" if m.group(1) == "migrate" else "bookkeeping"
+    return None
+
+
+def _with_trailer(message: str, kind: FrCommitKind) -> str:
+    if fr_commit_kind(message) is not None:
+        return message
+    body = message.rstrip("\n")
+    return f"{body}\n\n{FR_COMMIT_TRAILER}: {kind}\n"
+
+
 def fr_message(repo_root: Path, message: str) -> str:
-    """*message* with an fr-written subject re-rendered through the templates.
+    """*message* with an fr-written subject re-rendered through the templates,
+    and the `Fr-Commit` trailer added to its body.
 
     Only a first line `chore(fr): <summary>` is touched; the body is kept. Raises
     `SettingsError` when the policy cannot be read: the caller refuses the commit.
@@ -115,4 +148,5 @@ def fr_message(repo_root: Path, message: str) -> str:
 
     settings = load_settings(repo_root).settings
     subject = render_subject(settings, "chore", "fr", m.group(1), run_issue(repo_root))
-    return subject + sep + rest
+    kind: FrCommitKind = "migrate" if m.group(1).startswith("migrate ") else "bookkeeping"
+    return _with_trailer(subject + sep + rest, kind)
