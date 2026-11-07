@@ -10779,10 +10779,15 @@ rows:
       subjects follow the repo's with-issue or without-issue template
     origin:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R11
-    levels: {}
-    status: not-implemented
-    notes: scenario path declared at planning (plan 2026-11-07-repo-settings-core);
-      the phase that builds the row writes it
+    levels:
+      unit:
+      - super-fr:tests/unit/test_git_policy_push.py#test_squash_keeps_migration_and_merge_commits_and_squashes_the_segments_between
+      - super-fr:tests/unit/test_git_policy_push.py#test_push_ask_refuses_naming_the_harness_when_the_transcript_is_unobservable
+      - super-fr:tests/unit/test_git_policy_templates.py#test_default_templates_keep_every_fr_subject_byte_identical
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_git_policy
+    status: ci
+    notes: git policy built; scenario in CI
     verify: candidate
     scenario: tests/scenarios/repo-settings-git-policy.sh
   - id: acceptance-fragments-amendments
