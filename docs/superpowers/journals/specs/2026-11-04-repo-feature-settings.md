@@ -381,3 +381,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-07-repo-settings-core-p3 created=2026-11-07T07:37:29+00:00 -->
 ### tier-2026-11-07-repo-settings-core-p3 · decision · hard: changes deliver's PR-body gate and every tracking-none call site that callers rely on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-07-repo-settings-core-p4 created=2026-11-07T07:37:30+00:00 -->
+### tier-2026-11-07-repo-settings-core-p4 · decision · hard: a run-kind shape change with migration, and the only command that rewrites commits (squash-unpushed), which must never touch pushed history
