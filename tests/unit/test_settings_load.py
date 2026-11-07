@@ -177,19 +177,35 @@ def test_a_remote_with_tracking_refs_but_no_default_refuses(tmp_path: Path) -> N
         load_settings(repo)
 
 
-def test_a_remote_that_was_never_fetched_reads_the_local_default_branch(tmp_path: Path) -> None:
-    """The bootstrap state (`git init; git remote add origin <url>`) holds no remote policy."""
+def test_a_remote_that_was_never_fetched_is_defaults_never_the_local_branch(
+    tmp_path: Path,
+) -> None:
+    """The bootstrap state (`git init; git remote add origin <url>`): a local main carrying
+    a policy is NOT applied — deleting tracking refs must not hand policy to a local branch."""
     repo = tmp_path / "boot"
     _git(tmp_path, "init", "-q", "-b", "main", str(repo))
     _git(repo, "remote", "add", "origin", "https://example.invalid/r")
     (repo / ".fr").mkdir()
-    (repo / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: off\n")
+    (repo / ".fr" / "settings.yaml").write_text("artifacts:\n  acceptance: off\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "s")
     eff = load_settings(repo)
-    assert eff.settings.artifacts.gates == "off"
-    assert eff.ref == "refs/heads/main"
-    assert eff.source == "local"
+    assert eff.settings.artifacts.acceptance == "on"
+    assert eff.ref is None
+    assert eff.source == "defaults"
+    assert "remote `origin` has no tracking refs yet" in eff.ref_note
+
+
+def test_deleting_tracking_refs_does_not_hand_policy_to_a_local_branch(repo: Path) -> None:
+    _git(repo, "remote", "set-head", "origin", "-d")
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: off\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "local relax")
+    eff = load_settings(repo)
+    assert eff.settings.artifacts.gates == "on"
+    assert eff.source == "defaults"
 
 
 def test_a_never_fetched_remote_with_no_commits_is_defaults(tmp_path: Path) -> None:

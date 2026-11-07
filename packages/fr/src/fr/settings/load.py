@@ -6,9 +6,10 @@ there, so a branch can never relax its own controls. An edit that has not landed
 reported (`pending_edit`), not applied.
 
 R2's resolution order: (1) a remote WITH tracking refs reads its default (refusing
-when none resolves); (2) no remote, or one never fetched, reads the local default
-branch (defaults when there is none); (3) a CI context where neither found a ref reads
-HEAD's committed tree, with one stderr notice.
+when none resolves); (2a) no remote reads the local default branch (defaults when there
+is none); (2b) a remote never fetched is built-in defaults with a note, never a local
+branch; (3) a CI context where none of these found a ref reads HEAD's committed tree,
+with one stderr notice.
 """
 
 from __future__ import annotations
@@ -158,15 +159,25 @@ def _resolve_source(root: Path) -> tuple[str | None, str | None, str, Source]:
             f"Run `git fetch {remote}` and "
             f"`git remote set-head {remote} -a`"
         )
-    # Step 2: no remote, or one with no tracking refs (the bootstrap state) — no remote
-    # policy exists for a local edit to override.
+    if remote is not None:
+        # Step 2b: a remote with no tracking refs yet (the bootstrap state). Never a local
+        # branch: deleting tracking refs locally must not hand the policy to one.
+        if in_ci():
+            return _head_source(root)
+        return (
+            None,
+            None,
+            f"remote `{remote}` has no tracking refs yet; using built-in defaults "
+            "until it is fetched",
+            "defaults",
+        )
+    # Step 2a: no remote at all reads the local default branch.
     configured = git_answer(root, "config", "init.defaultBranch").stdout.strip()
     for name in dict.fromkeys(n for n in (configured, "main", "master") if n):
         qualified = f"refs/heads/{name}"
         sha = _commit_of(root, qualified)
         if sha is not None:
-            why = "no origin default branch" if remote is None else f"`{remote}` never fetched"
-            return qualified, sha, f"{why}: read local {name}", "local"
+            return qualified, sha, f"no origin default branch: read local {name}", "local"
     if in_ci():
         return _head_source(root)
     return None, None, "no default branch found: defaults", "defaults"
