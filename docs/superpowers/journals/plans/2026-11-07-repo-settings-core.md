@@ -480,3 +480,8 @@ ad7330976: decision p4-approval-in-runs-own-journal; the debugging push and PR p
 ### p4-deliver-r1 · finding [open] (reviewer: in scope) · Default commit template refuses scope-less conventional subjects at fr push (phase 4)
 
 Found dogfooding fr push at deliver: under the DEFAULT without_issue template '{type}({scope}): {summary}', fr push refused 'test: follow the agents kind to 4 …'. 62 of origin/main's last 300 subjects have no scope (fr's own 'chore: close out …' among them), so the default would refuse ordinary history in every consumer repo, which is not today's behaviour. Fix: a scope is optional when matching (Conventional Commits), and a composed subject with no scope renders without the parentheses; R14 amended.
+
+<!-- fr:journal kind=finding scope=plan id=p4-deliver-r1-resolved created=2026-11-07T16:31:30+00:00 state=fixed resolves=p4-deliver-r1 -->
+### p4-deliver-r1-resolved · finding [fixed] · resolves p4-deliver-r1: Default commit template refuses scope-less conventional subjects at fr push
+
+c7791236a: {scope} with its brackets is one optional unit when matching and is dropped when rendering an empty scope; Fix typo and test(): x still refuse; chore(fr) subjects byte-identical. R14 amended in 5cdd876f2.
