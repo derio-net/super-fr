@@ -372,3 +372,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-07-repo-settings-core-p2 created=2026-11-07T07:37:26+00:00 -->
 ### phase-split-2026-11-07-repo-settings-core-p2 · decision · ask: policy off for acceptance, test_plan and gates (R6–R8), row repo-settings-policy-off
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-07-repo-settings-core-p3 created=2026-11-07T07:37:27+00:00 -->
+### phase-split-2026-11-07-repo-settings-core-p3 · decision · ask: forge quiet and pr_body minimal (R9–R10), row repo-settings-forge-quiet
