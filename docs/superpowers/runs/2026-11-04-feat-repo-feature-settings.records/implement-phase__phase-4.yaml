@@ -121,4 +121,4 @@ journal:
       empty (the template does not use them); pinned by
       test_squash_composes_through_a_template_that_names_no_type.
 resolves: []
-evidence: {}
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/8b56d9b2-ef08-4390-b0b3-f0296e3ac2b9/scratchpad/p4-full-suite.log}
