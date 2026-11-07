@@ -2,56 +2,19 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
 from fr.settings import SettingsError, disabled, forge_allows, load_settings
 
-_ENV = {
-    "GIT_AUTHOR_NAME": "t",
-    "GIT_AUTHOR_EMAIL": "t@example.invalid",
-    "GIT_COMMITTER_NAME": "t",
-    "GIT_COMMITTER_EMAIL": "t@example.invalid",
-}
-
-
-def _git(cwd: Path, *args: str) -> str:
-    import os
-
-    done = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        env={**os.environ, **_ENV},
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return done.stdout
+from tests.unit.settings_repo import git as _git
+from tests.unit.settings_repo import land_on_main as _land_on_main
+from tests.unit.settings_repo import make_repo
 
 
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
-    """A clone of a bare origin with one commit on main, HEAD on main."""
-    origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
-    work = tmp_path / "work"
-    _git(tmp_path, "init", "-q", "-b", "main", str(work))
-    _git(work, "remote", "add", "origin", str(origin))
-    (work / "README.md").write_text("x\n")
-    _git(work, "add", "-A")
-    _git(work, "commit", "-qm", "seed")
-    _git(work, "push", "-q", "-u", "origin", "main")
-    _git(work, "remote", "set-head", "origin", "main")
-    return work
-
-
-def _land_on_main(repo: Path, text: str) -> None:
-    (repo / ".fr").mkdir(exist_ok=True)
-    (repo / ".fr" / "settings.yaml").write_text(text)
-    _git(repo, "add", "-A")
-    _git(repo, "commit", "-qm", "settings")
-    _git(repo, "push", "-q", "origin", "main")
+    return make_repo(tmp_path)
 
 
 def test_no_file_is_every_default_with_source_default(repo: Path) -> None:
@@ -94,16 +57,53 @@ def test_a_new_uncommitted_file_is_a_pending_edit_not_a_setting(repo: Path) -> N
     assert eff.pending_edit is not None
 
 
-def test_no_origin_reads_the_committed_file_at_head_and_says_so(tmp_path: Path) -> None:
+def test_no_origin_reads_the_local_default_branch_and_says_so(tmp_path: Path) -> None:
     work = tmp_path / "w"
     _git(tmp_path, "init", "-q", "-b", "main", str(work))
-    (work / ".fr").mkdir()
-    (work / ".fr" / "settings.yaml").write_text("git:\n  push: ask\n")
-    _git(work, "add", "-A")
-    _git(work, "commit", "-qm", "s")
+    _land_on_main_local(work, "git:\n  push: ask\n")
     eff = load_settings(work)
     assert eff.settings.git.push == "ask"
     assert "no origin" in eff.ref_note
+
+
+def _land_on_main_local(work: Path, text: str) -> None:
+    (work / ".fr").mkdir(exist_ok=True)
+    (work / ".fr" / "settings.yaml").write_text(text)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "s")
+
+
+def test_no_origin_never_reads_head_as_policy(tmp_path: Path) -> None:
+    work = tmp_path / "w"
+    _git(tmp_path, "init", "-q", "-b", "main", str(work))
+    (work / "a").write_text("x")
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "seed")
+    _git(work, "checkout", "-q", "-b", "feat/x")
+    _land_on_main_local(work, "artifacts:\n  acceptance: off\n")
+    eff = load_settings(work)
+    assert eff.settings.artifacts.acceptance == "on"
+    assert eff.pending_edit is not None
+
+
+def test_no_origin_and_no_default_branch_is_defaults_with_a_note(tmp_path: Path) -> None:
+    work = tmp_path / "w"
+    _git(tmp_path, "init", "-q", "-b", "trunkish", str(work))
+    _land_on_main_local(work, "artifacts:\n  acceptance: off\n")
+    eff = load_settings(work)
+    assert eff.settings.artifacts.acceptance == "on"
+    assert set(eff.sources.values()) == {"default"}
+    assert "no default branch" in eff.ref_note
+
+
+def test_a_local_branch_named_like_the_remote_ref_cannot_supply_policy(repo: Path) -> None:
+    _land_on_main(repo, "artifacts:\n  gates: off\n")
+    _git(repo, "branch", "origin/main")
+    _git(repo, "checkout", "-q", "origin/main")
+    (repo / ".fr" / "settings.yaml").write_text("artifacts:\n  gates: on\n")
+    _git(repo, "commit", "-qam", "relax")
+    assert _git(repo, "rev-parse", "--verify", "refs/heads/origin/main").strip()
+    assert load_settings(repo).settings.artifacts.gates == "off"
 
 
 @pytest.mark.parametrize("placement", ["quiet", "stealth"])

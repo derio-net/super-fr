@@ -58,19 +58,35 @@ def _present(data: object, dotted: str) -> bool:
     return True
 
 
-def _show(root: Path, ref: str) -> str | None:
-    done = git_answer(root, "show", f"{ref}:{SETTINGS_PATH}")
+def _show(root: Path, sha: str) -> str | None:
+    done = git_answer(root, "show", f"{sha}:{SETTINGS_PATH}")
     return done.stdout if done.returncode == 0 else None
 
 
-def _resolve_ref(root: Path) -> tuple[str | None, str]:
-    """(ref to read, note). `None` when there is nothing to read from."""
+def _commit_of(root: Path, qualified_ref: str) -> str | None:
+    """The commit a FULLY QUALIFIED ref names, or None. Never a short name: a local
+    branch called `origin/main` would shadow the remote-tracking ref in git's DWIM order."""
+    done = git_answer(root, "rev-parse", "--verify", "--quiet", f"{qualified_ref}^{{commit}}")
+    return done.stdout.strip() if done.returncode == 0 and done.stdout.strip() else None
+
+
+def _resolve_source(root: Path) -> tuple[str | None, str | None, str]:
+    """(qualified ref, commit sha, note) of the policy source; never HEAD or the tree."""
     named = remote_default_ref(root)
     if isinstance(named, GitRefusal):
         raise SettingsError(f"cannot establish the default branch: {named.reason}")
     if named is not None:
-        return named, f"read from {named}"
-    return "HEAD", "no origin default branch: read the committed file at HEAD"
+        qualified = f"refs/remotes/{named}"
+        sha = _commit_of(root, qualified)
+        if sha is not None:
+            return qualified, sha, f"read from {named}"
+    configured = git_answer(root, "config", "init.defaultBranch").stdout.strip()
+    for name in dict.fromkeys(n for n in (configured, "main", "master") if n):
+        qualified = f"refs/heads/{name}"
+        sha = _commit_of(root, qualified)
+        if sha is not None:
+            return qualified, sha, f"no origin default branch: read local {name}"
+    return None, None, "no default branch found: defaults"
 
 
 def _pending(root: Path, committed: str | None) -> str | None:
@@ -96,24 +112,19 @@ def load_settings(repo_root: Path) -> EffectiveSettings:
     root = Path(repo_root)
     try:
         in_repo = git_answer(root, "rev-parse", "--git-dir").returncode == 0
-        ref, note = _resolve_ref(root) if in_repo else (None, "")
-        sha = None
-        if ref is not None:
-            done = git_answer(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
-            sha = done.stdout.strip() if done.returncode == 0 else None
+        ref, sha, note = _resolve_source(root) if in_repo else (None, None, "not a git repo")
     except GitUnavailableError:
-        ref, note, sha = None, "git unavailable: defaults", None
+        ref, sha, note = None, None, "git unavailable: defaults"
     if ref is None or sha is None:
-        # Not a repo, or no commit yet: nothing is committed, so nothing is set.
         defaults = parse_settings({}, source="defaults")
         return EffectiveSettings(
             defaults,
             dict.fromkeys(_leaf_keys(defaults), "default"),
             None,
-            "no commit to read settings from: defaults",
+            note,
             _pending(root, None),
         )
-    text = _show(root, ref)
+    text = _show(root, sha)
     pending = _pending(root, text)
     key = (str(root), sha)
     cached = _CACHE.get(key)

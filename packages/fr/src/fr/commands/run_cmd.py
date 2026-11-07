@@ -4719,6 +4719,24 @@ def _bind_session(workspace: Path, branch: str, session: str | None, harness: st
         )
 
 
+def _refuse_incoherent_settings(repo_root: Path) -> None:
+    """Spec 2026-11-04-repo-feature-settings R5: a run never starts over settings that
+    are invalid or contradict each other, named one per line, before anything is written."""
+    from fr.settings import SettingsError
+    from fr.settings.check import check_settings
+
+    try:
+        problems = check_settings(repo_root)
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    if problems:
+        err_console.print("[red]fr settings are incoherent:[/red]")
+        for problem in problems:
+            err_console.print(f"  {escape(problem.message)}", soft_wrap=True)
+        raise typer.Exit(2)
+
+
 @run_app.command("start")
 @_commits_run_writes("start")
 def start_cmd(
@@ -4778,6 +4796,8 @@ def start_cmd(
         for err in shape_errors:
             err_console.print(f"  {err}", soft_wrap=True)
         raise typer.Exit(2)
+
+    _refuse_incoherent_settings(repo_root)
 
     try:
         workspace = ensure_run_workspace(repo_root, branch)
