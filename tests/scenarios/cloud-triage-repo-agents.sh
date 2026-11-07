@@ -8,7 +8,7 @@
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 
-AGENTS_VERSION=2  # the `agents` kind's current_version (2 since super-fr#1315)
+AGENTS_VERSION=3  # the `agents` kind's current_version (3 since repo-feature-settings R15)
 run_fr out init agents
 require_exit 0 "$out"
 for name in fr-spec-reviewer fr-phase-executor; do
