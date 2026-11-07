@@ -400,3 +400,78 @@ pr_cmd reuses push_cmd's branch/run/spec helpers and ask.py's RemoteWriteRequest
 ### no-refactor-p4-t5 · discovery · no-refactor-because P4.T5 (phase 4)
 
 skill prose, an explainer section, a scenario and a matrix move: nothing to refactor
+
+<!-- fr:journal kind=review scope=plan id=p4-review-1 created=2026-11-07T16:22:38+00:00 phase=4 -->
+### p4-review-1 · review · Phase 4 code review: 6 findings, all in scope, all fixed; R11 amended (phase 4)
+
+An independent reviewer read phase 4 (a07a53ce3..6db507e61) against R11-R14 and the artifact-versioning rule. The no-force invariant, the CAS update-ref, the run 10->11 and agents 3->4 hops, the explainer and the forge-write tripwire were found sound. Fixes ad19defc5..3f9950f2f; full suite 14364 passed. Two automated security reviews of the in-flight p4-r3 fix tightened the approval twice: from a refusal denylist to the exact `Approve <request-id>` answer to the question naming the id, read as structural question/answer pairs. R11 was amended to match.
+
+<!-- fr:journal kind=decision scope=plan id=p4-approval-in-runs-own-journal created=2026-11-07T16:22:38+00:00 phase=4 -->
+### p4-approval-in-runs-own-journal · decision · An ask approval is recorded in the run's own journal: the spec journal, or the branch's one debug journal (phase 4)
+
+A debugging session has no run cursor, so its journal is the one debug journal the branch added since the merge-base with the remote default ref; zero or several refuse, naming them. R11 amended (a3f65d890, 3f9950f2f).
+
+<!-- fr:journal kind=decision scope=plan id=p4-fr-commit-trailer created=2026-11-07T16:22:38+00:00 phase=4 -->
+### p4-fr-commit-trailer · decision · fr marks its own commits with an Fr-Commit body trailer (phase 4)
+
+fr_message adds `Fr-Commit: migrate|bookkeeping` to every fr-written commit, so the squash recognises them under any template. Subjects are unchanged, so default-template subjects stay byte-identical. The subject parse remains the fallback for commits written before the trailer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-07T16:22:38+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · squash() one-commit shortcut left the commit in the segment (phase 4)
+
+[code, migration] and [code, merge] always refused; [A, M, B] pushed B under A's subject.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-07T16:22:38+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · Migration and bookkeeping commits went unrecognised under a template without {type}/{scope} (phase 4)
+
+Under `[{scope}] {summary}` migrations were squashed and bookkeeping could name the squash.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-07T16:22:38+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · An ask approval was not tied to the request it approved (phase 4)
+
+Any answered question after the request, even a no, plus an agent-written decision passed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-07T16:22:38+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · fr pr create ignored the run's recorded PR; the pr-<branch> id could be approved only once (phase 4)
+
+A reused branch could overwrite RunState.pr; journal ids are create-only.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-07T16:22:38+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · push/pr ask required a spec journal, so debugging runs could never push or open a PR (phase 4)
+
+The fr-debugging skill forbids git push, so it was stranded.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-07T16:22:38+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · Staleness diff followed renames (phase 4)
+
+Moving code into docs/superpowers/journals/ kept a stale approval valid.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-07T16:22:38+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: squash() one-commit shortcut left the commit in the segment (phase 4)
+
+ad19defc5: the shortcut clears the segment; tests for [A,M], [A,merge], [A,M,B] assert subjects, trees and parents.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-07T16:22:38+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: Migration and bookkeeping commits went unrecognised under a template without {type}/{scope} (phase 4)
+
+840fa3e17: the Fr-Commit trailer (decision p4-fr-commit-trailer); tested under the scenario template and for pre-trailer commits.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-07T16:22:38+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: An ask approval was not tied to the request it approved (phase 4)
+
+ea94dc6b9, ad7330976, ac1cfe6a3: approval is exactly `Approve <request-id>` answering the question that names the id, read from Round.answer_pairs (Claude Code, OpenCode); unpairable answers refuse naming the harness.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-07T16:22:38+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: fr pr create ignored the run's recorded PR; the pr-<branch> id could be approved only once (phase 4)
+
+b97e6e842 (+ ea94dc6b9): refuses when state.pr is set, naming OPEN/MERGED/CLOSED; PR request ids are pr-<branch>-<head[:12]>.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-07T16:22:38+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: push/pr ask required a spec journal, so debugging runs could never push or open a PR (phase 4)
+
+ad7330976: decision p4-approval-in-runs-own-journal; the debugging push and PR paths are tested end to end.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-07T16:22:38+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: Staleness diff followed renames (phase 4)
+
+84918f125: --no-renames, and a failing diff counts as stale.
