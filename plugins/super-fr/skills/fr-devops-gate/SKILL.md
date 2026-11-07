@@ -13,6 +13,9 @@ description: >
 Check the setting first: if `fr settings show --json` reports `artifacts.gates` as `off`,
 no gate is computed, labelled or held, so `gate:devops` never applies and there is no
 DevOps stage to run. Stop there.
+Under `forge.comments: off` a pass writes no gate-pass comment: `fr gate pass` swaps the
+label alone and closes no tracker (a close is a comment), so record what passed the gate
+in the run's journal instead. Under `forge.labels: off` there is no gate label to pass.
 
 A run whose plan carries ops does not end at `deliver`. Its DevOps stage applies the
 pre-merge ops, merges the PR, applies the post-merge ops, records the devops Test Plan
