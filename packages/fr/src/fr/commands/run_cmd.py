@@ -4783,6 +4783,12 @@ def start_cmd(
         help="`standalone` when standalone fr-brainstorming starts the run: its operator "
         "gate is not held to fr-goal's two-round cap (gh#761). Omit under /fr-goal.",
     ),
+    issue: int | None = typer.Option(
+        None,
+        "--issue",
+        help="The forge issue this run works on: fr's commit subjects then use the "
+        "`git.commit.with_issue` template (repo settings R14).",
+    ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
 
@@ -4800,6 +4806,9 @@ def start_cmd(
             "/fr-goal drives the run)[/red]",
             soft_wrap=True,
         )
+        raise typer.Exit(2)
+    if issue is not None and issue < 1:
+        err_console.print(f"[red]--issue {issue}: an issue number is positive[/red]")
         raise typer.Exit(2)
     repo_root = resolve_repo_root()
     try:
@@ -4922,6 +4931,7 @@ def start_cmd(
         steps=steps,
         driver="standalone" if driver == "standalone" else None,
         fr_version=_fr_version(),
+        issue=issue,
     )
     _save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")

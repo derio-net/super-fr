@@ -51,6 +51,7 @@ from fr.artifacts import run_usage_split as _run_usage_split  # noqa: F401  (iso
 from fr.artifacts import run_driver as _run_driver  # noqa: F401  (isort: skip)
 from fr.artifacts import run_bound_model as _run_bound_model  # noqa: F401  (isort: skip)
 from fr.artifacts import run_fr_version as _run_fr_version  # noqa: F401  (isort: skip)
+from fr.artifacts import run_issue as _run_issue  # noqa: F401  (isort: skip)
 from fr.artifacts import usage_split_v2 as _usage_split_v2  # noqa: F401  (isort: skip)
 from fr.artifacts import record_questions as _record_questions  # noqa: F401  (isort: skip)
 from fr.artifacts import record_input_unconfirmed as _record_input_unconfirmed  # noqa: F401  (isort: skip)

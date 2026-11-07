@@ -48,13 +48,13 @@ def _seed(root: Path, text: str) -> Path:
     return path
 
 
-def test_the_run_kind_is_at_version_ten() -> None:
-    assert ARTIFACT_KINDS["run"].current_version == 10
+def test_the_run_kind_reached_version_ten_and_beyond() -> None:
+    assert ARTIFACT_KINDS["run"].current_version >= 10
 
 
 def test_the_hop_is_registered_and_moves_nine_to_ten() -> None:
     chain = MIGRATIONS.chain("run", 9)
-    assert [(m.from_version, m.to_version) for m in chain] == [(9, 10)]
+    assert [(m.from_version, m.to_version) for m in chain] == [(9, 10), (10, 11)]
 
 
 def test_a_v9_cursor_is_stamped_ten_and_its_body_is_untouched(tmp_path: Path) -> None:
@@ -64,8 +64,8 @@ def test_a_v9_cursor_is_stamped_ten_and_its_body_is_untouched(tmp_path: Path) ->
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.failed == (), report.failed
-    assert read_version("run", cursor) == 10
-    assert cursor.read_text() == V9.replace("schema_version: 9", "schema_version: 10")
+    assert read_version("run", cursor) == 11
+    assert cursor.read_text() == V9.replace("schema_version: 9", "schema_version: 11")
     assert parse_run_state(cursor.read_text()).fr_version is None, "an old run records none"
 
 
@@ -88,7 +88,7 @@ def test_a_body_already_wholly_v10_lets_the_runner_finish_the_stamp(tmp_path: Pa
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.failed == (), report.failed
-    assert read_version("run", cursor) == 10
+    assert read_version("run", cursor) == 11
     assert parse_run_state(cursor.read_text()).fr_version == "5.17.1"
 
 
@@ -109,4 +109,4 @@ def test_fr_run_start_records_the_running_frs_version(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
     assert state.fr_version == fr.__version__
-    assert state.schema_version == 10
+    assert state.schema_version == 11

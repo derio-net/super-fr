@@ -463,7 +463,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 10: `RunState.fr_version` — the fr a run started under (spec
             # `2026-10-07-cloud-triage-design` §G, R16), migration
             # `fr.artifacts.run_fr_version`. Additive, so stamp-only.
-            current_version=10,
+            # 11: `RunState.issue` and `RunState.pr` — the run's issue and the
+            # PR `fr pr create` opened (spec 2026-11-04-repo-feature-settings
+            # R12, R14), migration `fr.artifacts.run_issue`. Additive, so stamp-only.
+            current_version=11,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,

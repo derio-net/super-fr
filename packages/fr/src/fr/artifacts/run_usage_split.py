@@ -100,6 +100,17 @@ def _already_v9(text: str, data: object) -> bool:
     return _already_v7(text, data)
 
 
+def _already_v10(text: str, data: object) -> bool:
+    """Does `text` read as a v10 cursor? Asked by the 10 -> 11 migration
+    (`fr.artifacts.run_issue`).
+
+    The same live-model question again, correct for v10 only while 10 -> 11
+    stays additive (it adds `RunState.issue` and `RunState.pr` and removes
+    nothing). A body already carrying either is wholly v11 (the crash window)
+    and reads here too, so the runner finishes the stamp."""
+    return _already_v7(text, data)
+
+
 def split_usage(data: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
     """`(v7 body, usage session entries)` — pure: no I/O, no clock.
 

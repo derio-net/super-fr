@@ -1219,3 +1219,15 @@ def test_a_dispatch_preview_checks_no_label(
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out
     assert gh.label_checks == [] and "created label" not in out
+
+
+def test_a_one_issue_batch_brief_starts_the_run_with_its_issue() -> None:
+    """Repo settings R14: triage batch dispatch records the batch's issue on the run
+    when the batch has exactly one member, so fr's commits use `with_issue`."""
+    single = JUDGEMENTS.replace('ids: ["super-fr#577", "super-fr#575"]', 'ids: ["super-fr#577"]')
+    brief = _brief(judgements=single)
+    assert "`fr run start` with `--issue 577`" in brief
+
+
+def test_a_multi_issue_batch_brief_names_no_run_issue() -> None:
+    assert "--issue" not in _brief()

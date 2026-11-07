@@ -179,6 +179,13 @@ def render_brief(
         "lines, one per member, so every member closes when it merges:",
         *(f"  {ref}" for ref in closing_refs),
     ]
+    number = _single_issue_number(batch)
+    if number is not None:
+        # Repo settings R14: the run records its issue, so fr's commit subjects
+        # take the `git.commit.with_issue` template. Only a one-issue batch has one.
+        lines.append(
+            f"- Start the run (`fr run start` with `--issue {number}`) so it records its issue."
+        )
     if reserved_version is not None:
         lines.append(
             # Provisional (super-fr#646): `live_reservations` sees only this
@@ -204,6 +211,14 @@ def render_brief(
         ]
     lines += ["", NO_APPROVAL_LINE]
     return "\n".join(lines) + "\n"
+
+
+def _single_issue_number(batch: Batch) -> int | None:
+    """The issue number of a batch with exactly one member, else `None`."""
+    if len(batch.ids) != 1:
+        return None
+    _, _, number = batch.ids[0].rpartition("#")
+    return int(number) if number.isdigit() else None
 
 
 def red_brief(batch: Batch, *, pr_url: str, head: str, checks: Sequence[str]) -> str:
