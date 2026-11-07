@@ -472,3 +472,8 @@ Found at phase 2: a depth-1 actions/checkout PR checkout (refs/remotes/pull/N/me
 ### settings-bootstrap-remote · decision · A remote with no tracking refs reads the local default branch
 
 Phase 2 review p2-r2: git init + git remote add origin (never fetched) made fr acceptance init/add, debt, archive and deliver refuse. A remote with zero refs/remotes/<remote>/* refs holds no policy for a local edit to override, so p1-r3's hazard (unpushed local edits shadowing the remote's policy) cannot arise. Treat it as no remote. The refusal stays for a remote that has tracking refs but no resolvable default. The CI exception (settings-ci-policy-source) applies after both steps. R2 amended.
+
+<!-- fr:journal kind=decision scope=spec id=settings-bootstrap-remote-2 created=2026-11-07T10:36:37+00:00 decided_by=agent -->
+### settings-bootstrap-remote-2 · decision · Supersedes settings-bootstrap-remote: a remote with no tracking refs uses built-in defaults, not a local branch
+
+Security review of load.py: deleting tracking refs locally would otherwise hand the policy to a local branch chosen by init.defaultBranch. Tracking refs are locally forgeable anyway, so this is hardening, not a new bypass class. It is still free, because the bootstrap case works on defaults. The local branch is read only with no remote at all. R2 amended.
