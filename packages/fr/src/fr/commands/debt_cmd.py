@@ -150,6 +150,7 @@ def issue_cmd(
     root = resolve_repo_root()
     try:
         off = forge_block(root, "issues")
+        comments_off = forge_block(root, "comments")
     except ServicesError as e:
         typer.echo(f"error: nothing written — {_clean(e, 300)}", err=True)
         raise typer.Exit(2) from e
@@ -197,6 +198,9 @@ def issue_cmd(
             typer.echo(
                 _clean(client.create_issue(slug, title=title, body=body, labels=frozenset()), 300)
             )
+        elif zero and comments_off is not None:
+            # R9: no comment under `forge.comments: off`; the close is a bare state change
+            client.edit_issue_state(slug, number, state="CLOSED", reason="completed")
         elif zero:
             client.close_issue(
                 slug, number, "No technical debt as of this run; closing. `fr debt` has the report."
