@@ -384,3 +384,16 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-07-repo-settings-core-p4 created=2026-11-07T07:37:30+00:00 -->
 ### tier-2026-11-07-repo-settings-core-p4 · decision · hard: a run-kind shape change with migration, and the only command that rewrites commits (squash-unpushed), which must never touch pushed history
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-1 created=2026-11-07T07:38:37+00:00 -->
+### exit-change-1 · decision · exit change: row acceptance-fragments-amendments -> strategy none
+
+built by plan 2 of this spec (R29), not by this run's plan 1; verified by the candidate walk of the run that implements plan 2, which sets this row back to candidate with its scenario
+
+before: kinds ['candidate', 'live'], gates ['tester']
+after: kinds ['candidate', 'live'], gates ['tester']
+
+```yaml
+answered_by: agent
+lowered: []
+```
