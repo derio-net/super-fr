@@ -462,3 +462,8 @@ after: kinds ['candidate', 'live'], gates ['tester']
 answered_by: agent
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=settings-ci-policy-source created=2026-11-07T10:25:18+00:00 decided_by=agent -->
+### settings-ci-policy-source · decision · CI with no default ref reads HEAD's committed settings, with a notice; elsewhere refuse
+
+Found at phase 2: a depth-1 actions/checkout PR checkout (refs/remotes/pull/N/merge only) made `fr acceptance check` die with a SettingsError traceback, because phase 1's p1-r3 refusal reached every disabled() call. That would turn this repo's acceptance-report job and every consumer's scaffolded workflow red on upgrade. Rejected: fetching the default ref (network side effect; fails with persist-credentials: false) and editing CI templates (breaks consumers until they update). Chosen: in a CI context only, read HEAD's committed tree and print a notice naming that source. The checkout is the candidate merge, so a settings edit is visible in the PR diff. Outside CI the refusal stands. R2 amended. Every SettingsError surfaces as a clean exit 2.
