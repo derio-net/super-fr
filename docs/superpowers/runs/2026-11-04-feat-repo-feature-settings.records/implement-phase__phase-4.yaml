@@ -1,0 +1,124 @@
+schema_version: 10
+run: 2026-11-04-feat-repo-feature-settings
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T2.S1, P4.T2.S2, P4.T3.S1, P4.T3.S2, P4.T3.S3, P4.T4.S1, P4.T4.S2, P4.T5.S1, P4.T5.S2, P4.T5.S3]
+refactor:
+  P4.T1: "a stamp-only migration copied from run_fr_version's shape, one model field pair and one option: nothing to clean"
+  P4.T2: "templates.py was written as the one seam from the start (render, regex, parse, fr_message); the producers only call it"
+  P4.T4: "pr_cmd reuses push_cmd's branch/run/spec helpers and ask.py's RemoteWriteRequest; nothing duplicated to fold"
+  P4.T5: "skill prose, an explainer section, a scenario and a matrix move: nothing to refactor"
+journal:
+  - kind: decision
+    id: p4-run-pr-field
+    phase: 4
+    title: "RunState gains `pr` beside `issue` in the same 10 -> 11 hop"
+    body: >-
+      The plan said to reuse the cursor's existing PR field; RunState has none (the PR
+      was only deliver's `emitted.pr`, written when deliver resolves, after the PR
+      exists). `fr pr create` runs before that, so the cursor needs its own optional
+      `pr`. Added in the same stamp-only migration (fr.artifacts.run_issue); under
+      `git.pr: ask` deliver accepts only that PR (`_deliver_pr_ask_gate`), and with no
+      `pr` emitted it reads the cursor's.
+  - kind: decision
+    id: p4-ask-request-in-git-dir
+    phase: 4
+    title: "A push/PR request is kept in the git dir, not as a committed run-journal discovery"
+    body: >-
+      The plan recorded the request time as a run-journal discovery. A committed entry
+      moves HEAD, and the push request id is `push-<branch>-<head[:12]>`, so the record
+      would invalidate its own id. The request (id, head, time, spec slug) lives in
+      `<git-dir>/fr/requests/<kind>-<branch>.json` (per worktree, never committed).
+      Approval is still R11's spec-journal decision with `decided_by=operator`, created
+      after the request, plus `operator_answered_since(request time)`: True pushes, False
+      refuses, None refuses naming the harness (no --no-questions option exists). A push
+      request stays current while only `docs/superpowers/journals/` commits follow it
+      (the approval itself); any other commit makes it stale and a new request prints.
+  - kind: decision
+    id: p4-subjects-checked-before-squash
+    phase: 4
+    title: "fr push checks subjects before it squashes, and composes the squashed subject from the first non-fr commit"
+    body: >-
+      §3.C lists squash before the subject check. Checking first means a bad subject
+      refuses before anything is rewritten; after the squash every subject is one fr
+      rendered. A squashed segment takes the type/scope/summary of its first commit that
+      is not fr's own `chore(fr)` bookkeeping (else its first), rendered through the
+      template the run's issue selects, with the folded subjects listed in the body.
+  - kind: decision
+    id: p4-template-seam
+    phase: 4
+    title: "fr_message is the one template seam; every chore(fr) producer reaches it"
+    body: >-
+      `fr.git_policy.templates.fr_message` re-renders a first line `chore(fr): <summary>`
+      (type chore, scope fr, issue from the branch's run); commit_paths applies it (so
+      commit_records, the record engine and migrations do), and the committers that run
+      git themselves (isolation scaffold and rename, the debt sweep, migrate's printed
+      hint) call it. A policy fr cannot read refuses the commit. With the default
+      templates and no issue every subject is byte-identical
+      (test_default_templates_keep_every_fr_subject_byte_identical lists one per
+      producer); test_every_chore_fr_producer_goes_through_the_seam guards new producers.
+      Migration commits are recognised by literal or by parsed (chore, fr, `migrate …`).
+  - kind: discovery
+    id: p4-global-fr-cannot-read-v11
+    phase: 4
+    title: "After the run kind moved to 11, a released fr (6.1.2 on PATH, the hooks' fr) cannot read this run's cursor"
+    body: >-
+      `RunState` is extra="forbid"; the migrated cursor carries schema_version 11, which
+      released fr refuses. Drive this run with `uv run fr` from the worktree (AGENTS.md's
+      rule); a hook that calls the PATH fr (the idle guard) fails closed on it until the
+      release ships.
+  - kind: discovery
+    id: p4-brief-reads-settings
+    phase: 4
+    title: "The dispatch briefs now read the settings, so the no-execution tests let git through"
+    body: >-
+      Both briefs carry `commit_templates`, read from the default ref through git. The
+      advance tests that replace subprocess.run to prove nothing is executed for an agent
+      step now pass `git` calls through (`_boom_but_git`) and still fail on anything else.
+  - kind: discovery
+    id: p4-pr-creation-in-forge-tripwire
+    phase: 4
+    title: "PR creation is now a listed forge write"
+    body: >-
+      test_tripwire_forge_writes gains create_pr/pr_create. Listed: `fr pr create`
+      (git.pr ask) and R12's internal openers (triage driver export, batch adopt
+      supersede, batch close-out, the DevOps gate's stage 8, the debt sweep's PR).
+      deliver's "cannot read the PR" hint now names `fr pr create` on every forge.
+  - kind: discovery
+    id: p4-explainer-render-cwd
+    phase: 4
+    title: "The explainer renderer ran from / via `uv run --directory /`"
+    body: >-
+      The pipeline guard refuses `cd /` from this session, so the render ran as
+      `uv run --isolated --no-project --directory / …`. The unmodified .md rendered
+      byte-identical to the committed .html first; then the Repo settings section was
+      rendered. This closes p3-explainer-owed (pr_body minimal is in that section).
+  - kind: discovery
+    id: p4-merged-pr-guard-in-fr-push
+    phase: 4
+    title: "The merged-PR push guard moved inside fr push for a recorded PR"
+    body: >-
+      fr-merged-pr-push-guard.sh matches `git push` only, so a skill calling `fr push`
+      would slip past it. `fr push` now refuses itself when the PR `fr pr create`
+      recorded on the cursor is MERGED or CLOSED (fails open when the PR cannot be read,
+      like the hook). A branch whose PR was opened some other way is not checked there.
+  - kind: discovery
+    id: p4-ask-needs-a-spec
+    phase: 4
+    title: "push/pr ask need the run's spec journal; a run with no spec (fr-debugging) refuses"
+    body: >-
+      R11 records the approval as a spec-journal decision, so `fr push` / `fr pr create`
+      under ask refuse, naming it, on a branch whose run emitted no spec (a debugging
+      run journals under scope debug). Under auto nothing changes.
+  - kind: discovery
+    id: p4-template-without-type
+    phase: 4
+    title: "A template may omit placeholders; the squash renders with what it parsed"
+    body: >-
+      The scenario's `[{scope}] {summary}` template has no `{type}`; composing a squashed
+      subject read `type` from the parse and raised KeyError. Missing values now render
+      empty (the template does not use them); pinned by
+      test_squash_composes_through_a_template_that_names_no_type.
+resolves: []
+evidence: {}
