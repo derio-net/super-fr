@@ -96,3 +96,30 @@ def test_run_start_refuses_an_invalid_file(
     result = CliRunner().invoke(app, ["run", "start", "fr-goal", "--branch", "feat/x"])
     assert result.exit_code == 2
     assert "nope" in result.output
+
+
+def test_a_branch_only_triage_edit_neither_triggers_nor_dodges(repo: Path) -> None:
+    from tests.unit.settings_repo import git
+
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "triage.yaml").write_text("post_merge: [make, release]\n")
+    _land_on_main(repo, "git:\n  push: ask\n")
+    git(repo, "checkout", "-q", "-b", "feat/x")
+    (repo / ".fr" / "triage.yaml").write_text("{}\n")
+    assert [p.id for p in check_settings(repo)] == ["push-ask-with-driven-triage"]
+    (repo / ".fr" / "triage.yaml").write_text("post_merge: [make, release]\n")
+    git(repo, "checkout", "-q", "main")
+    (repo / ".fr" / "triage.yaml").write_text("{}\n")
+    git(repo, "commit", "-qam", "clear triage")
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "-b", "feat/y")
+    (repo / ".fr" / "triage.yaml").write_text("post_merge: [make]\n")
+    assert check_settings(repo) == []
+
+
+def test_a_malformed_default_ref_triage_file_refuses(repo: Path) -> None:
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "triage.yaml").write_text("post_merge: [unclosed\n")
+    _land_on_main(repo, "git:\n  push: ask\n")
+    with pytest.raises(SettingsError, match=r"triage\.yaml"):
+        check_settings(repo)

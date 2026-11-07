@@ -14,8 +14,11 @@ from typing import Final
 
 import yaml
 
-from fr.settings import load_settings
+from fr.settings import SettingsError, load_settings
+from fr.settings.load import read_at_default
 from fr.settings.model import Settings
+
+TRIAGE_PATH: Final = ".fr/triage.yaml"
 
 Predicate = Callable[[Path, Settings], tuple[str, ...]]
 
@@ -37,19 +40,24 @@ def _live_plans_with_ops(root: Path, settings: Settings) -> tuple[str, ...]:
     return tuple(sorted(d.name for d in plans.iterdir() if d.is_dir() and plan_has_ops(root, d)))
 
 
+DRIVEN_TRIAGE_KEYS: Final = ("post_merge", "export", "version", "post_merge_restart")
+"""The definition of "driven triage scope": the `.fr/triage.yaml` keys the unattended
+`fr triage batch drive` acts on. Any of them set (on the default ref) is driven scope."""
+
+
 def _driven_triage(root: Path, settings: Settings) -> tuple[str, ...]:
-    """The `.fr/triage.yaml` keys the unattended driver acts on, when any is set."""
+    """The driven-scope keys `.fr/triage.yaml` sets, read from the default ref's commit."""
     if settings.git.push != "ask":
         return ()
-    path = root / ".fr" / "triage.yaml"
-    if not path.is_file():
+    text = read_at_default(root, TRIAGE_PATH)
+    if text is None:
         return ()
     from fr.triage.model import parse_triage_config
 
     try:
-        config, _ = parse_triage_config(yaml.safe_load(path.read_text()) or {})
-    except (OSError, yaml.YAMLError, ValueError):
-        return ()
+        config, _ = parse_triage_config(yaml.safe_load(text) or {})
+    except (yaml.YAMLError, ValueError) as e:
+        raise SettingsError(f"{TRIAGE_PATH}: cannot be parsed on the default branch: {e}") from e
     return tuple(
         key
         for key, on in (
@@ -79,8 +87,9 @@ RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
     (
         "push-ask-with-driven-triage",
         _driven_triage,
-        "git.push: ask while .fr/triage.yaml sets {detail}: `fr triage batch drive` is "
-        "unattended by design and cannot answer",
+        "git.push: ask while .fr/triage.yaml (default branch) sets {detail}: driven triage "
+        "scope is any of post_merge, export, version, post_merge_restart, and "
+        "`fr triage batch drive` is unattended by design and cannot answer",
     ),
     (
         "report-comment-needs-comments",
