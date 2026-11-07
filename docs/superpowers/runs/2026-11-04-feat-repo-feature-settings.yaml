@@ -32,7 +32,15 @@ steps:
           reviewer: abf1312bb67e8adcc
           findings: sr1-1,sr1-2,sr1-3,sr1-4,sr1-5,sr1-6,sr1-7,sr1-8,sr1-9,sr1-10,sr1-11,sr1-12,sr1-13,sr1-14,sr1-15,sr1-16,sr1-17,sr1-18,sr1-19,sr1-20,sr1-21,sr1-22,sr1-24,sr1-23
   plan:
-    state: pending
+    state: running
+    at: '2026-11-07T07:18:43+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-07T07:18:43+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 8b56d9b2-ef08-4390-b0b3-f0296e3ac2b9
   plan-review:
     state: pending
   implement:
