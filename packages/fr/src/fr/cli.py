@@ -61,6 +61,7 @@ from fr.commands.validate_cmd import validate_app
 from fr.commands.verification_cmd import verification_app
 from fr.commands.workflow_cmd import workflow_app
 
+
 class _FrGroup(TyperGroup):
     """The root group: maps a settings refusal from any subcommand to a clean exit 2."""
 

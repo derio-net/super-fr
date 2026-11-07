@@ -147,9 +147,7 @@ def _resolve_source(root: Path) -> tuple[str | None, str | None, str, Source]:
             qualified = f"refs/remotes/{named}"
             sha = _commit_of(root, qualified)
             if sha is None:
-                raise SettingsError(
-                    f"{qualified} does not name a commit; run `git fetch {remote}`"
-                )
+                raise SettingsError(f"{qualified} does not name a commit; run `git fetch {remote}`")
             return qualified, sha, f"read from {named}", "remote"
         if in_ci():
             return _head_source(root)
