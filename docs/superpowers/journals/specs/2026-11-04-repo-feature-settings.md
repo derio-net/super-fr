@@ -630,3 +630,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-18 created=2026-11-07T20:13:14+00:00 -->
+### exit-change-18 · decision · exit change: row placement-move-and-drift -> strategy none
+
+built by plan 3 of this spec (R29, #1380), not by this run's plan 1; that plan's run sets it back to candidate with its scenario
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: operator
+lowered: []
+```
