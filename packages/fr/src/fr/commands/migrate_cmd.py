@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 import typer
@@ -206,7 +207,7 @@ def artifacts_cmd(
             typer.echo("Commit them yourself when you are ready:")
             rels = " ".join(_rel(p, repo_root) for p in report.changed_paths)
             typer.echo(f"  git add -- {rels}")
-            typer.echo("  git commit -m 'chore(fr): migrate artifacts'")
+            typer.echo(f"  git commit -m {shlex.quote(_migrate_subject(repo_root))}")
     _offer_adoption(repo_root, adopt=adopt, yes=yes)
 
     if report.failed:
@@ -265,3 +266,15 @@ def _rel(path: Path, repo_root: Path) -> str:
         return str(path.relative_to(repo_root))
     except ValueError:  # pragma: no cover — every artifact is under the root
         return str(path)
+
+
+def _migrate_subject(repo_root: Path) -> str:
+    """The subject to suggest, through the repo's commit templates (R14); today's
+    `chore(fr): migrate artifacts` when the policy cannot be read (a hint, not a write)."""
+    from fr.git_policy.templates import fr_message
+    from fr.settings import SettingsError
+
+    try:
+        return fr_message(repo_root, "chore(fr): migrate artifacts")
+    except SettingsError:
+        return "chore(fr): migrate artifacts"

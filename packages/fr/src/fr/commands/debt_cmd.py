@@ -482,7 +482,10 @@ def _commit(root: Path) -> None:
     ident: list[str] = []
     if not _git(root, "config", "user.email", check=False):
         ident = ["-c", "user.name=fr-debt", "-c", "user.email=fr-debt@users.noreply.invalid"]
-    _git(root, *ident, "commit", "-q", "-m", "chore(fr): archive merged plans (debt sweep)")
+    from fr.git_policy.templates import fr_message
+
+    message = fr_message(root, "chore(fr): archive merged plans (debt sweep)")
+    _git(root, *ident, "commit", "-q", "-m", message)
 
 
 def _push(root: Path) -> None:

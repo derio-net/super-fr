@@ -210,13 +210,15 @@ def rename_branch(
 
 def _commit_cursor(wt: Path, rel: Path, new: str) -> None:
     """Commit the cursor *rel* alone: staged work elsewhere stays staged."""
+    from fr.git_policy.templates import fr_message
+
     run_id = rel.stem
     _git(
         wt,
         "commit",
         "-q",
         "-m",
-        f"chore(fr): run {run_id} — branch renamed to {new} by batch adopt",
+        fr_message(wt, f"chore(fr): run {run_id} — branch renamed to {new} by batch adopt"),
         "--",
         str(rel),
     )
