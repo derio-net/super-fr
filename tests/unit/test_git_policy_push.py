@@ -392,3 +392,46 @@ def test_a_code_commit_after_the_request_makes_it_stale(
 def test_the_git_runner_is_the_real_one_by_default() -> None:
     done = push_mod.run_git(Path(os.getcwd()), ["--version"])
     assert isinstance(done, subprocess.CompletedProcess) and done.returncode == 0
+
+
+def test_a_push_to_a_branch_whose_recorded_pr_merged_is_refused(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The merged-PR push guard (#320) lives in `fr push` too: the shell hook only
+    matches `git push`."""
+
+    class Forge:
+        def pr_status_by_url(self, url: str) -> dict[str, object]:
+            assert url == "https://example.com/o/r/pull/7"
+            return {"state": "MERGED", "draft": False}
+
+    monkeypatch.setattr("fr.hostclient.client_for", lambda root: Forge())
+    repo = _feature(make_repo(tmp_path))
+    _seed_run(repo)
+    cursor = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    cursor.write_text(cursor.read_text() + "pr: https://example.com/o/r/pull/7\n")
+    git(repo, "commit", "-qam", "chore(fr): run r1 — pr create")
+
+    result = _push(repo)
+
+    assert result.exit_code == 2, result.output
+    assert "MERGED" in result.output
+    assert not [c for c in argv if c[0] == "push"]
+
+
+def test_squash_composes_through_a_template_that_names_no_type(
+    tmp_path: Path, argv: list[list[str]]
+) -> None:
+    repo = make_repo(tmp_path)
+    land_on_main(
+        repo,
+        'git:\n  history: squash-unpushed\n  commit:\n    without_issue: "[{scope}] {summary}"\n',
+    )
+    _feature(repo)
+    _commit(repo, "a", "[api] add a")
+    _commit(repo, "b", "[api] add b")
+
+    result = _push(repo)
+
+    assert result.exit_code == 0, result.output
+    assert _remote_log(repo) == ["[api] add a"]

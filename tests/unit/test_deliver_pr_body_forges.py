@@ -117,7 +117,7 @@ def test_deliver_resolves_on_a_gitea_checkout(
     assert load_run_state(root, RUN).steps["deliver"].state == "done"
 
 
-def test_an_unreadable_mr_names_the_forges_own_create_command(
+def test_an_unreadable_mr_names_fr_pr_create(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import fr.glab
@@ -133,5 +133,7 @@ def test_an_unreadable_mr_names_the_forges_own_create_command(
 
     assert out.exit_code == 2, out.output
     assert "no merge request found" in out.output
-    assert "glab mr create" in out.output
+    # R12: the skills open every PR through `fr pr create`, which reaches GitLab
+    # through the forge adapter; never a GitHub command on a GitLab remote.
+    assert "fr pr create" in out.output
     assert "gh pr create" not in out.output

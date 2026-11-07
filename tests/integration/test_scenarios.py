@@ -202,6 +202,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "repo-settings-file",
         "repo-settings-policy-off",
         "repo-settings-forge-quiet",
+        "repo-settings-git-policy",
         "opencode-store-v2",
         "opencode-plugin-v2",
         "closeout-owed",
@@ -297,6 +298,10 @@ def test_repo_settings_policy_off(installed: Path, tmp_path: Path) -> None:
 
 def test_repo_settings_forge_quiet(installed: Path, tmp_path: Path) -> None:
     _scenario("repo-settings-forge-quiet", installed, tmp_path)
+
+
+def test_repo_settings_git_policy(installed: Path, tmp_path: Path) -> None:
+    _scenario("repo-settings-git-policy", installed, tmp_path)
 
 
 def test_gate_backfill_dry_run(installed: Path, tmp_path: Path) -> None:

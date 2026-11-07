@@ -182,7 +182,14 @@ def _composed(settings: Settings, segment: Sequence[Commit], issue: int | None) 
     chosen = next(
         (v for v in parsed if (v.get("type"), v.get("scope")) != ("chore", "fr")), parsed[0]
     )
-    subject = render_subject(settings, chosen["type"], chosen["scope"], chosen["summary"], issue)
+    # A template need not name every placeholder (`[{scope}] {summary}` has no type).
+    subject = render_subject(
+        settings,
+        chosen.get("type", ""),
+        chosen.get("scope", ""),
+        chosen.get("summary", ""),
+        issue,
+    )
     folded = "\n".join(f"- {c.subject}" for c in segment)
     return f"{subject}\n\nSquashed by fr push (git.history: squash-unpushed) from:\n{folded}\n"
 

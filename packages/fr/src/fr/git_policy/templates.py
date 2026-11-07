@@ -90,7 +90,10 @@ def run_issue(repo_root: Path) -> int | None:
     issues: set[int] = set()
     for path in sorted(runs.glob("*.yaml")):
         try:
-            state = parse_run_state(path.read_text())
+            text = path.read_text()
+            if "issue:" not in text:  # most cursors record none: skip the full parse
+                continue
+            state = parse_run_state(text)
         except (RunStateError, OSError, UnicodeDecodeError):
             continue
         if state.branch == branch and state.issue is not None:

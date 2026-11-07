@@ -91,6 +91,29 @@ def push_still_current(repo_root: Path, git_dir: Path, branch: str, head: str) -
     return all(p.startswith(JOURNALS_PREFIX) for p in changed)
 
 
+def refuse_closed_pr(repo_root: Path) -> None:
+    """The merged-PR push guard, inside `fr push` (#320): a push to a branch whose PR
+    (the one `fr pr create` recorded) is MERGED or CLOSED orphans the commit from the
+    default branch. The shell hook matches `git push` only, so `fr push` asks itself.
+    Fails open, like the hook, when the PR cannot be read."""
+    from fr.git_policy.push import PushRefusedError
+    from fr.hostclient import FORGE_ERRORS, client_for
+
+    for state in branch_runs(repo_root):
+        if state.pr is None:
+            continue
+        try:
+            status = client_for(repo_root).pr_status_by_url(state.pr)
+        except FORGE_ERRORS:
+            continue
+        pr_state = (status or {}).get("state")
+        if pr_state in ("MERGED", "CLOSED"):
+            raise PushRefusedError(
+                f"this branch's PR {state.pr} is {pr_state}: pushing here orphans the commit "
+                "from the default branch (#320). Cherry-pick it onto a fresh branch and PR"
+            )
+
+
 def push_cmd() -> None:
     """Push this run's feature branch, under the repo's git policy (`git.*`)."""
     from fr.artifacts.commit import on_default_branch
@@ -106,6 +129,7 @@ def push_cmd() -> None:
         if on_default_branch(repo_root) is not None:
             raise PushRefusedError(f"{branch!r} is the default branch: fr pushes a feature branch")
         remote = remote_of(repo_root)
+        refuse_closed_pr(repo_root)
         issue = run_issue(repo_root)
         if settings.git.push == "ask":
             require_approval(

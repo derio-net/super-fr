@@ -413,7 +413,7 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
     except GitUnavailableError:
         sha = None
     if sha:
-        return [f"cursor committed as {sha} — push it (git push) so the PR carries it", *closeout]
+        return [f"cursor committed as {sha} — push it (fr push) so the PR carries it", *closeout]
     return closeout
 
 
@@ -3446,8 +3446,24 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
         # step; a fan-out group's record is per member, in the member brief.
         "record": None if step.steps else _record_brief(state, step),
+        "commit_templates": commit_templates_brief(resolve_repo_root(), state.issue),
         "unbound_tiers": _unbound_tiers(resolve_repo_root()),
         **_gated_binding_keys(step),
+    }
+
+
+def commit_templates_brief(repo_root: Path, issue: int | None) -> dict[str, Any]:
+    """The repo's commit subject templates and the run's issue (spec
+    2026-11-04-repo-feature-settings R14): what an agent's commit subjects must
+    match, `with_issue` when the run records an issue. `fr push` checks them."""
+    from fr.settings import load_settings
+
+    commit = load_settings(repo_root).settings.git.commit
+    return {
+        "use": "with_issue" if issue is not None else "without_issue",
+        "with_issue": commit.with_issue,
+        "without_issue": commit.without_issue,
+        "issue": issue,
     }
 
 
@@ -4232,6 +4248,7 @@ def _build_member_brief(
         "for_each": group.for_each,
         "steps": [],
         "record": _record_brief(state, member, group, item),
+        "commit_templates": commit_templates_brief(resolve_repo_root(), state.issue),
         # R6: every agent-step brief carries them; a member is never
         # `gate: operator`, so there is nobody here to answer them.
         "dead_bindings": None,
@@ -6433,7 +6450,8 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     try:
         live = client_for(repo_root).pr_body(ref, cwd=repo_root)
     except FORGE_ERRORS as e:
-        create = pr_command(repo_root, "create", body=rel)
+        # R12: fr's skills open every PR through `fr pr create` (always a draft).
+        create = f"fr pr create --title <title> --body-file {rel}"
         err_console.print(
             f"refused: cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open "
             f"the PR with `{create}`, record its url (`emitted: "

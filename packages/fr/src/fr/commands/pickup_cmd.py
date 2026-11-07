@@ -136,6 +136,7 @@ def pickup_command(
         f"Phase {matched.phase.number}/{total} · {matched.phase.title}`"
     )
     lines.append("")
+    lines.extend(_commit_template_lines(resolve_repo_root()))
     lines.append("## Tasks and steps")
     lines.append("")
     for task in matched.tasks:
@@ -159,6 +160,29 @@ def pickup_command(
     # Disable Rich markup parsing — the PR title contains literal "[repo]"
     # which Rich would otherwise interpret as a tag and strip.
     typer.echo("\n".join(lines))
+
+
+def _commit_template_lines(repo_root: Path) -> list[str]:
+    """The repo's commit subject templates (spec 2026-11-04-repo-feature-settings R14):
+    `fr push` refuses an unpushed commit whose subject does not match."""
+    from fr.git_policy.templates import run_issue
+    from fr.settings import load_settings
+
+    commit = load_settings(repo_root).settings.git.commit
+    issue = run_issue(repo_root)
+    use = (
+        f"`{commit.with_issue}` (this run records issue #{issue})"
+        if issue is not None
+        else f"`{commit.without_issue}`"
+    )
+    return [
+        "## Commit subjects (`git.commit`)",
+        "",
+        f"Every commit subject matches {use}; merge commits are exempt. "
+        f"Without an issue: `{commit.without_issue}`; with one: `{commit.with_issue}`. "
+        "Push with `fr push` (`uv run fr push` in a worktree), never `git push`.",
+        "",
+    ]
 
 
 def _missing_run_exit(repo_root: Path, run_id: str, path: Path) -> NoReturn:
