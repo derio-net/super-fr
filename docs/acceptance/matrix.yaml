@@ -10571,9 +10571,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R10
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R11
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gate_close_trackers.py#test_r10_keep_converts_a_tracker_comment_first_then_body_and_never_closes
+      - super-fr:tests/unit/test_gate_cmd.py#test_p4_r4_a_checkout_of_another_repo_is_no_checkout
+    status: ci
+    notes: Pinned by unit tests in CI over the fake client.
     verify: none
   - id: gate-backfill-closes-discharged
     capability: gate-backfill
