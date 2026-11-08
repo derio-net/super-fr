@@ -385,3 +385,72 @@ Pre-existing exit code on the first pass route, not caused by this change; to be
 ### p4-manifest-only-unknowable-without-from-resolved · finding [refuted] · resolves p4-manifest-only-unknowable-without-from: A manifest-only key cannot be recognised on a dry run that omits --from (phase 4)
 
 Not a code defect: a key naming a real row, phase or step has real evidence, shown in the dry run. R14 and the Risks line now state this, and docs/gate-backfill.md follows them. The `claimed` guard stays for --from.
+
+<!-- fr:journal kind=decision scope=plan id=p5-noop-line-on-its-own created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-noop-line-on-its-own · decision · R16's line is printed on its own, beside the reason, not inside "nothing to release" (phase 5)
+
+`Plan` gains `noop`, and `prepare` and `dry_run` print it as a line of its own, so the
+Test Plan's walk can look for the exact text. `Plan.why` keeps the gate reason and is printed
+on the line before it: without that, a run that could not read the gate state ("HTTP 502")
+would show only the no-op, and the reason an RC or final was not cut would be lost.
+
+<!-- fr:journal kind=decision scope=plan id=p5-failed-diff-refuses created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-failed-diff-refuses · decision · A failing git diff refuses the run (phase 5)
+
+`installable_changed` raises `CalledProcessError`, and `release._installable_changed` turns
+that (or a missing git) into `ReleaseError`, exit 1. Choosing to cut an RC instead would also
+fail towards releasing, but a tree git cannot diff is not one to stage a release on, and a
+red job is seen. A real failure is tested: an RC tag listed with no ref behind it.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-env-keyword-on-installable-changed created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-env-keyword-on-installable-changed · discovery · installable_changed takes an env keyword the spec's signature does not show (phase 5)
+
+AGENTS.md says every git command but the two pushes runs credential-free, and `_git` is how
+release.py keeps that. The new module runs its own git, so it takes `env`, and release.py
+passes `_credential_free_env()`. A test records the env the diff really ran with. The list of
+credentials stays in one place.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-refs-tags-and-bytes created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-refs-tags-and-bytes · discovery · The diff names refs/tags/<tag> and decodes bytes itself (phase 5)
+
+A branch named like a tag would otherwise win or be ambiguous, which a test pins. The output
+is read as bytes and decoded with `os.fsdecode`, because `text=True` raises on a path the
+runner's locale cannot decode, and a decoding crash is not a `ReleaseError`.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-dry-run-mixes-tree-and-commits created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-dry-run-mixes-tree-and-commits · discovery · --dry-run reads fragments from the working tree but the diff from commits (phase 5)
+
+An uncommitted fragment still counts as pending, while uncommitted code does not count as an
+installable change, because `installable_changed` compares the tag with HEAD. That is the
+right comparison for the real run, which resets to origin/main first. It is why
+`test_dry_run_says_it_would_cut_an_rc` now commits a code path as its fixture.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-untagged-rc-reaches-the-recovery-by-the-version-line created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-untagged-rc-reaches-the-recovery-by-the-version-line · discovery · An untagged RC reaches its recovery because its version line differs from every tag (phase 5)
+
+With the RC's tag missing, the compared tag is an older one, and the release commit's own
+version surfaces (`pyproject.toml`, `uv.lock`) are installable paths. So the diff is always
+true, `_not_backwards` returns nothing new and `finish` tags HEAD. Tests pin this with a docs
+merge above the RC and with an older RC tag below it.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-fixtures-changed created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-fixtures-changed · discovery · Seventeen existing tests changed their fixtures, none their assertions (phase 5)
+
+Fifteen moved from `world.fragment` to the new `world.change`, which lands code and then the
+fragment. `test_dry_run_says_it_would_cut_an_rc` and
+`test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_final` land a code
+path directly. `test_release_py_reads_the_forge_and_hands_fr_the_facts` lands only a fragment
+and still passes, because it asserts the read and the facts, which come before this check.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-gate-backfill-doc-sentence created=2026-11-08T21:21:16+00:00 phase=5 -->
+### p5-gate-backfill-doc-sentence · discovery · docs/gate-backfill.md never described when an RC is cut, so it gained one parenthesis (phase 5)
+
+The spec lists this page as updated, while the plan's steps name only `compute` and
+`AGENTS.md`. The page's one mention of a held release now says a housekeeping merge cuts no RC.
+The acceptance row `release-skips-rc-nothing-installable` is not moved here: this step's
+record carries no acceptance section.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-08T21:21:16+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+A new module of two short functions, written once; there was nothing to tidy.
