@@ -280,3 +280,8 @@ run_kind: candidate
 ### phase-split-2026-11-08-sweep-fixes-p2 · decision · ask: #1334 is its own ask
 
 Operator confirmed five phases, one per ask.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-08-sweep-fixes-p3 created=2026-11-08T16:20:43+00:00 -->
+### phase-split-2026-11-08-sweep-fixes-p3 · decision · ask: #1325 is its own ask
+
+Operator confirmed five phases, one per ask.
