@@ -305,3 +305,8 @@ R14 and R15 are what stop a wrong close; a false positive closes real tracking.
 ### tier-2026-11-08-sweep-fixes-p5 · decision · hard: changes the release gate; a wrong no-op silently stops releases
 
 Every release passes through compute.
+
+<!-- fr:journal kind=finding scope=spec id=s18-resolved-2 created=2026-11-08T21:44:02+00:00 state=open resolves=s18 tracked_by=https://github.com/derio-net/super-fr/issues/1388 -->
+### s18-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1388] · resolves s18: `fr gate pass --repo <other>` computes discharge commands from the current checkout
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1388.
