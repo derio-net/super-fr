@@ -10586,9 +10586,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R13
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R14
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_closes.py#test_a_dry_run_lists_a_discharged_tracked_only_tracker_and_records_it
+      - super-fr:tests/unit/test_gatebackfill_discharged.py#test_a_row_in_a_debt_status_is_not
+    status: ci
+    notes: Pinned by unit tests in CI over real git and the fake client.
     verify: none
   - id: ops-gap-advisory
     capability: fr ops gap
