@@ -95,3 +95,18 @@ A manifest that names an issue by number always makes it a look-alike, so a dige
 ### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 reread _lookalikes after the reorder: no dead branch remains; the reorder itself is the only change, the manifest match stays a nested if so the always-hit intent reads on its own line
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-08T18:29:48+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · The legacy digest marker was tested only under the viewer's author (phase 2)
+
+R7 says whatever the author. The code has no author check, so behaviour is correct; the test coverage was the gap.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-08T18:29:48+00:00 phase=2 -->
+### review-phase-2 · review · Phase 2 review: 1 finding, in scope and fixed (phase 2)
+
+A dispatched reviewer read the commit against R7 and 3.B and checked the routes back to a suggestion, the marker forms and import direction. Verdict: ready. Its one test-strength finding was fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-08T18:29:48+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: The legacy digest marker was tested only under the viewer's author (phase 2)
+
+The legacy-marker issue in the test is now stranger-authored.
