@@ -275,3 +275,8 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-08-sweep-fixes-p2 created=2026-11-08T16:20:31+00:00 -->
+### phase-split-2026-11-08-sweep-fixes-p2 · decision · ask: #1334 is its own ask
+
+Operator confirmed five phases, one per ask.
