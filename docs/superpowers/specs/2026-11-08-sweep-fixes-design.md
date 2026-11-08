@@ -222,3 +222,4 @@ gate: release-noop-first-real-use=tester
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-11-08-sweep-fixes | `derio-net/super-fr` | `2026-11-08-sweep-fixes` | — |

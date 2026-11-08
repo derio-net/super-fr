@@ -1,0 +1,119 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Printed commands run as printed (#1327)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - printed-commands-run
+  skeleton: true
+  tier: standard
+  files:
+  - .changes/fix-sweep-fixes.yaml
+  - .claude/rules/acceptance-matrix.md
+  - .opencode/instructions/*
+  - .hermes/SOUL.d/*
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/gatebackfill/render.py
+  - packages/fr/src/fr/gatebackfill/trackers.py
+  - tests/unit/test_printed_commands_run.py
+  - tests/unit/test_acceptance*.py
+  - tests/unit/test_gatebackfill_*.py
+  - tests/unit/test_gate_close_trackers.py
+  - tests/scenarios/printed-commands-run.sh
+  - tests/scenarios/fixtures/printed-commands-run/*
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: 'Smoke: the branch reaches green CI'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `tests/unit/test_printed_commands_run.py` with one trivial test that imports `fr.gatebackfill.render`, add `.changes/fix-sweep-fixes.yaml` (`bump: minor`, one-line summary covering the six fixes), run the file through the coordinator's test-slot wrapper, commit and push, and confirm the draft PR's CI starts on it.
+- number: 2
+  title: Link-only set-status (R1, R2)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests that `set-status --id X --issue o/r#1` keeps status and note; that `--notes y` appends with `; `; that an empty-note row links with no `--notes`; that `--id X --notes y` alone and `--issue` with `--level`, `--walk`, `--verify`, `--scenario`, `--drop-level` or `--walk-outcome` and no `--status` exit 2 changing nothing; that `--status s` with no `--notes` still exits 2 and replaces the note when given. Run them and see them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: make `--status` and `--notes` optional in `set_status_cmd`, default `--walk-outcome` to `None` (read as `pass` by a walk), validate in the body per R2, and narrow the empty-notes refusal in `record/apply.py` to `item.status != existing.status`. Run the tests and see them pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: tidy the validation into one helper, and teach `.claude/rules/acceptance-matrix.md` the link-only form, regenerating the mirrors with `scripts/sync-opencode.py` and `scripts/sync-hermes.py`.
+- number: 3
+  title: Fix the printed commands (R3, R4, R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: update the render and tracker tests to expect `tracked_rows` printing `fr acceptance set-status --id <row> --issue <ref>`, `_journal_resolve` printing `--note`, and the `row:` discharge line carrying `--harness`, `--model` and `--strategy` placeholders. See them fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: change `render.tracked_rows`, `trackers._journal_resolve` and `trackers.discharge_command` to match. See the tests pass.
+- number: 4
+  title: Execute every printed command (R6)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in `test_printed_commands_run.py`, build a fixture repo holding a row, plan phase, spec step and journal owed key; write the extractor for whole lines, backtick spans, and the inline `: fr …; fr …` and `record it ran: fr …` forms; fill every `<placeholder>` with a value valid for its flag; run each command through the CLI runner asserting exit 0, over the backfill dry-run block and refusal hints, the `--yes` report, `fr gate pass` output with its retry line (`--yes` stripped), and tracker bodies and adopt comments, using `FakeGhClient` and `FakeForge`. Confirm it fails against a deliberately reverted R5 line.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: fix whatever else the test finds a printed command cannot do, recording each as a discovery in the step record.
+  - id: P1.T4.S3
+    text: |-
+      Add the source scan over `gatebackfill/render.py`, `gatebackfill/trackers.py`, `gatebackfill/close.py` and `commands/gate_cmd.py`: a table of the `fr <verb>` literals they contain, failing on one not in the table.
+- number: 5
+  title: Installed-CLI scenario
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write `tests/scenarios/printed-commands-run.sh` following `gate-backfill-apply.sh`: with a recording `gh`, run the printed link and discharge commands through the installed `fr` against a fixture repo, assert each exits 0, and assert a linked row kept its status and note. Run it through `tests/integration/test_scenarios.py`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

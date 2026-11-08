@@ -1,0 +1,99 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'Trackers close on proof, and a partial pass keeps them (#1323, #1328)'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - gate-pass-keep
+  - gate-backfill-closes-discharged
+  tier: hard
+  files:
+  - packages/fr/src/fr/gatebackfill/close.py
+  - packages/fr/src/fr/gatebackfill/trackers.py
+  - packages/fr/src/fr/gatebackfill/model.py
+  - packages/fr/src/fr/gatebackfill/forge.py
+  - packages/fr/src/fr/gatebackfill/apply.py
+  - packages/fr/src/fr/gatebackfill/candidates.py
+  - packages/fr/src/fr/gatebackfill/render.py
+  - packages/fr/src/fr/commands/gate_cmd.py
+  - docs/gate-backfill.md
+  - tests/unit/gatebackfill_fixtures.py
+  - tests/unit/test_gate_close_trackers.py
+  - tests/unit/test_gatebackfill_*.py
+  - tests/unit/test_printed_commands_run.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Positive evidence of discharge (R14)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests for `discharged_evidence(root, key)`: a row with non-debt status passes and one with debt status or missing fails; a phase with all steps ticked or n/a passes, and zero-step, part-ticked or unreadable fails; a spec step with a ran or n/a outcome passes, and an `owed` one or a superseded-to-owed one fails; a journal owed entry resolved fixed passes; an `issue:` key and an unreadable matrix give `None`. See them fail.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: implement it in `gatebackfill/close.py` over `load_matrix`, `DEBT_STATUSES`, `_phase_facts`, `find_spec`, `fr.ops.holds.fold_step_outcomes` and `journal_owed`'s discharged set, returning the evidence as one line. See the tests pass.
+- number: 2
+  title: fr gate pass --keep (R10, R11, R12)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests against `FakeGhClient`: `--keep` converts an owned tracker (comment then body rewrite, marker reads tracked-only, not closed, not closed by a later pass); an adopted issue gets the adopt-passed comment once, with no close command on this pass or a later one; a key no tracker holds is refused before `pass_gate` writes anything, on both routes; a key already tracked-only passes on retry and writes nothing; the retry line carries every `--keep`; `--keep` with no checkout is refused; the closing comment names the evidence when discharged, the command when not, and neither with no root; the driver call site still works unchanged. See them fail.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: add `keep` to `close_gate_trackers` with an empty default, `kept` to `CloseReport`, `title` to the listing's fields, the adopt-passed override in `_one`, and the `--keep` option, pre-check and retry line in `gate_cmd.py`. See the tests pass, and add any new printed command to the printed-commands table.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: tidy `_one`, which now has three outcomes per tracker, into small named branches.
+- number: 3
+  title: The backfill closes discharged trackers (R13, R15)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: tests that a dry run lists a discharged tracked-only tracker under `Trackers to close` and records `{key, ref, adopted, evidence}` in `closes`; that the key leaves `entries` and a recorded `park` or `adopt` is dropped with a note; that `--yes` re-checks and closes with the evidence in the comment; that a key discharged after the dry run waits; that a second `--yes` writes nothing; that an adopted issue gets one evidence comment and a printed close command and is never closed; that a foreign account's marker is ignored; that a `fr-gate:` held tracker, a manifest-only key and an `issue:` key are untouched; that HEAD behind the default ref, a dirty `docs/acceptance/` or `docs/superpowers/`, or no default ref closes nothing with a note; that `tracking: none` closes nothing; and that one forge error leaves the rest going on. See them fail.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: add `issue_comments` to `BackfillForge` and its adapter, the `fr-gate-adopt-discharged:` marker, `closes` on `PlanFile`, the listing built from open owned issues and foreign `fr:owed` issues, the summary block, the drop from `merge_plan`, and the re-check and writes in `apply_plan`. See the tests pass.
+  - id: P4.T3.S3
+    text: |-
+      Update the tracked-only tracker text, which tells the operator to close the issue by hand, and `docs/gate-backfill.md` for `--keep` and automatic close, then extend the printed-commands test to cover the new printed close command.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

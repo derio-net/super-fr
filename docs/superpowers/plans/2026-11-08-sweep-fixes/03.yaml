@@ -1,0 +1,74 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Test Plan repair covers every refused form (#1325)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - test-plan-repair-covers-refused
+  tier: standard
+  files:
+  - packages/fr/src/fr/artifacts/spec_test_plan_heading.py
+  - tests/unit/test_test_plan_heading.py
+  - tests/scenarios/test-plan-repair-covers-refused.sh
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: Same set refused and repaired (R8)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: parametrize one fixture per form: levels `#`, `##`, `###`; prefixes `6.`, `6)`, `§6`, `6.1`; a trailing parenthetical; another case. Each runs the repair, then `find_test_plan_heading` reads exact and the spec validates clean. Add a test that any heading read as a near-miss makes `_applies` true, and flip the existing test that pins `###` as not repaired. See them fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: drop the `## ` limit from `_renamable`. See the rename-only cases pass, with the neighbour cases still red.
+- number: 2
+  title: Neighbouring headings move (R9)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: fixtures for `### Test Plan` followed by `### Coverage` with list items (Coverage's items are not steps, step count unchanged); `# Test Plan` followed by `## Notes` and `## Verification` (`### Notes`, `## Verification` stays and still parses, section ends there); the same for `## Implementation Plans` and `## Requirements`; a `######` staying at level six; a heading inside a fence untouched; CRLF endings; and a second migrate writing nothing. See them fail.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: shift the region in `_fn` per R9 with fences tracked, then rename as today. See the tests pass.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: update the module docstring, which says `###` is left for a human, and the repair's description to say neighbouring headings move.
+- number: 3
+  title: Installed-CLI scenario
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Write `tests/scenarios/test-plan-repair-covers-refused.sh`: a fixture repo with one spec per near-miss level, run `fr migrate artifacts --yes` and `fr validate artifacts` through the installed CLI, and assert a clean validate and each spec's step count. Run it through `tests/integration/test_scenarios.py`.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
