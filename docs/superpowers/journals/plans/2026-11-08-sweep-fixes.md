@@ -80,3 +80,18 @@ The scan globs the whole gatebackfill package plus gate_cmd.py, and a comment sa
 ### p1-r4-resolved · finding [out-of-scope] · resolves p1-r4: `fr gate pass --yes` exits 0 when a tracker close fails (phase 1)
 
 Pre-existing exit code, not caused by this change; to be filed at deliver.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-guards-pass-before-change created=2026-11-08T18:26:06+00:00 phase=2 -->
+### p2-guards-pass-before-change · discovery · The mid-line marker and manifest-named tests pass on the pre-change code (phase 2)
+
+Only the whole-line digest test went red at RED. The mid-line and manifest-named cases already matched under the old OR-ing; they are kept as guards on the reorder, not as red-first proof.
+
+<!-- fr:journal kind=decision scope=plan id=p2-manifest-before-marker created=2026-11-08T18:26:06+00:00 phase=2 -->
+### p2-manifest-before-marker · decision · The manifest match is taken before the marker skip (phase 2)
+
+A manifest that names an issue by number always makes it a look-alike, so a digest-marked issue the operator named stays a suggestion. The owned and own-ref exclusions still run first, as before.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-08T18:26:06+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+reread _lookalikes after the reorder: no dead branch remains; the reorder itself is the only change, the manifest match stays a nested if so the always-hit intent reads on its own line
