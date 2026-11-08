@@ -6799,8 +6799,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R13
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1382
     verify: live
+    issues:
+    - derio-net/super-fr#1382
   - id: run-cost-positive-attribution
     capability: usage
     acceptance: fr run cost --recompute and fr archive's capture attribute a session
