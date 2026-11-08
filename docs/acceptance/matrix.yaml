@@ -6799,8 +6799,10 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-10-02-opencode-observe-2-design.md#R13
     levels: {}
     status: walk-owed
-    notes: post-merge walk owed (gate backfill)
+    notes: tracked by derio-net/super-fr#1382
     verify: live
+    issues:
+    - derio-net/super-fr#1382
   - id: run-cost-positive-attribution
     capability: usage
     acceptance: fr run cost --recompute and fr archive's capture attribute a session
@@ -9456,9 +9458,10 @@ rows:
       unit:
       - super-fr:tests/unit/test_debt_issue.py#test_creates_the_titled_issue
     status: walk-owed
-    notes: 'Shipped in #1139: fr debt issue unit-tested in CI; the live rename of #363
-      on main is the post-merge Test Plan step 1.'
+    notes: tracked by derio-net/super-fr#1381
     verify: live
+    issues:
+    - derio-net/super-fr#1381
   - id: debt-archive-pr-weekly
     capability: debt
     acceptance: The weekly job opens or refreshes one draft archive PR for plans merged
