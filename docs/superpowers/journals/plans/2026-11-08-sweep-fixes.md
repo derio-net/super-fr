@@ -454,3 +454,38 @@ record carries no acceptance section.
 ### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
 
 A new module of two short functions, written once; there was nothing to tidy.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-11-08T21:38:19+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · AGENTS.md said an unknown gate state is never a refusal, but a failing git diff refuses there (phase 5)
+
+The clause needed scoping to the gate state.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-11-08T21:38:19+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · The release.yml header and release_status.py still stated the old RC rule (phase 5)
+
+Those comments are read first when a Release run does nothing.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-11-08T21:38:19+00:00 phase=5 state=open review_scope=out -->
+### p5-r3 · finding [open] (reviewer: out of scope) · An RC tag above HEAD's line that HEAD does not contain makes every run cut another RC (phase 5)
+
+Reproduced with a hand-pushed tag on a sibling commit. The comparison tag stays on the higher tag, whose tree always differs. By reading, the old `_merged_since` looped the same way (the reviewer did not run the base commit). It needs a hand-pushed tag; the normal flow cannot produce it.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-5 created=2026-11-08T21:38:19+00:00 phase=5 -->
+### review-phase-5 · review · Phase 5 review: 3 findings, 2 in scope and fixed (phase 5)
+
+A dispatched reviewer drove nine fixture histories through compute, trying to make releases stop silently. It could not: a no-op fires only when HEAD's installable tree equals the tag's, so that tag already carries the code, and a wrong comparison tag costs a spare RC. It also checked the denylist's lookalike paths, the tripwire by reading, the workflow's cut=false guard, and that the 17 changed fixtures moved no assertion.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-11-08T21:38:19+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: AGENTS.md said an unknown gate state is never a refusal, but a failing git diff refuses there (phase 5)
+
+AGENTS.md scopes the clause to the gate state and names the failing diff.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-11-08T21:38:19+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: The release.yml header and release_status.py still stated the old RC rule (phase 5)
+
+The release.yml header and the release_status.py docstring state the rule.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-11-08T21:38:19+00:00 phase=5 state=open resolves=p5-r3 out_of_scope=true -->
+### p5-r3-resolved · finding [out-of-scope] · resolves p5-r3: An RC tag above HEAD's line that HEAD does not contain makes every run cut another RC (phase 5)
+
+Same exposure before this change by reading, and needs a hand-pushed tag; to be filed at deliver.
