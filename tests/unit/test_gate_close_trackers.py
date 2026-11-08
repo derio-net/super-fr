@@ -6,11 +6,21 @@ import shlex
 from pathlib import Path
 
 from fr.gatebackfill import trackers as t
-from fr.gatebackfill.close import CloseReport, held_keys
+from fr.gatebackfill.close import CloseReport, held_keys, read_trackers
 from fr.verification.labels import close_gate_trackers
 
 from tests.unit.fakes import FakeGhClient, FakeGhError
-from tests.unit.gatebackfill_fixtures import ME, REPO, STRANGER, row, write_matrix
+from tests.unit.gatebackfill_fixtures import (
+    ME,
+    REPO,
+    STRANGER,
+    commit_at,
+    git,
+    make_repo,
+    publish,
+    row,
+    write_matrix,
+)
 
 KEY = "row:r-live"
 
@@ -152,10 +162,19 @@ def test_r12_the_comment_names_the_command_when_the_key_is_still_owed(tmp_path: 
     assert rep.discharge
 
 
+def _on_default_ref(tmp_path: Path, status: str = "walked") -> Path:
+    """A real checkout at its fetched default ref, so R15's condition holds."""
+    root = make_repo(tmp_path)
+    write_matrix(root, [row("r-live", status)])
+    commit_at(root, "matrix", "2026-10-30T00:00:00+00:00")
+    publish(root)
+    return root
+
+
 def test_r12_the_comment_names_the_evidence_when_the_key_is_discharged(tmp_path: Path) -> None:
     fake = _fake()
     _tracker(fake, 1)
-    rep = close_gate_trackers(fake, REPO, 41, "tester", "ok", root=_checkout(tmp_path, "walked"))
+    rep = close_gate_trackers(fake, REPO, 41, "tester", "ok", root=_on_default_ref(tmp_path))
     text = _comment_of_close(fake)
     assert "`row:r-live` is already discharged: row r-live is walked" in text
     assert "still owed" not in text and "set-status" not in text
@@ -358,7 +377,7 @@ def test_r11_held_keys_counts_held_and_tracked_only_for_this_pr_and_gate(tmp_pat
     )
     fake.issue_authors[(REPO, 7)] = STRANGER  # a marker on a foreign issue is only text
 
-    assert held_keys(fake, REPO, 41, "tester") == {
+    assert held_keys(read_trackers(fake, REPO), 41, "tester") == {
         KEY, "row:tracked", "row:adopted", "row:adopted-kept",
     }  # fmt: skip
 
@@ -369,3 +388,135 @@ def test_the_driver_call_shape_still_closes() -> None:
     _tracker(fake, 1)
     rep = close_gate_trackers(fake, REPO, 41, "tester", "rows walked", root=Path("/nonexistent"))
     assert rep.closed == [1] and rep.kept == []
+
+
+# --- the phase 4 review -----------------------------------------------------------------------
+
+
+def _same_account_adopted(fake: FakeGhClient, n: int, key: str = KEY) -> None:
+    """An issue fr's own account wrote by hand and adopted: `fr:owed`, no owed marker."""
+    fake.add_issue(REPO, n, labels={"fr:owed"}, body="the operator's own issue")
+    fake.comment_issue(REPO, n, t.adopt_comment(key, "tester", 41))
+
+
+def test_p4_r3_a_plain_pass_lists_a_same_account_adopted_issue(tmp_path: Path) -> None:
+    fake = _fake()
+    _same_account_adopted(fake, 9)
+    rep = close_gate_trackers(fake, REPO, 41, "tester", "ok", root=_checkout(tmp_path))
+    assert _closes(fake) == [] and len(rep.adopt_commands) == 1
+
+
+def test_p4_r3_keep_converts_a_same_account_adopted_issue(tmp_path: Path) -> None:
+    fake = _fake()
+    _same_account_adopted(fake, 9)
+    assert held_keys(read_trackers(fake, REPO), 41, "tester") == {KEY}
+    rep = _keep(fake, _checkout(tmp_path), KEY)
+    assert rep.kept == [9] and rep.adopt_commands == [] and _closes(fake) == []
+    assert t.fr_adopt_passed_marker(fake.issue_comments[(REPO, 9)][-1]["body"]) == (
+        KEY, "tester", 41,
+    )  # fmt: skip
+
+
+def test_p4_r3_a_markerless_comment_by_someone_else_on_a_same_account_issue_is_only_text(
+    tmp_path: Path,
+) -> None:
+    fake = _fake()
+    fake.add_issue(REPO, 9, labels={"fr:owed"}, body="the operator's own issue")
+    fake.issue_comments[(REPO, 9)] = [
+        {"author": STRANGER, "body": t.adopt_comment(KEY, "tester", 41)}
+    ]
+    rep = close_gate_trackers(fake, REPO, 41, "tester", "ok", root=_checkout(tmp_path))
+    assert rep.adopt_commands == [] and held_keys(read_trackers(fake, REPO), 41, "tester") == set()
+
+
+def test_p4_r5_keep_on_a_discharged_key_converts_and_says_the_backfill_closes_it(
+    tmp_path: Path,
+) -> None:
+    fake = _fake()
+    _tracker(fake, 1)
+    rep = _keep(fake, _on_default_ref(tmp_path), KEY)
+    assert rep.kept == [1] and _closes(fake) == []
+    assert t.fr_passed_marker(fake.issues[(REPO, 1)].body) == ("tester", 41)
+    (comment,) = fake.issue_comments[(REPO, 1)]
+    text = comment["body"]
+    assert "already reads as discharged: row r-live is walked" in text
+    assert "next gate backfill closes it unless that changes" in text
+    assert "still owed" not in text
+    assert any(
+        "already reads as discharged" in ln and "closes it unless that changes" in ln
+        for ln in rep.lines()
+    )
+    assert rep.discharge == []
+
+
+def test_p4_r5_keep_on_a_discharged_adopted_key_says_so_and_never_promises_a_close(
+    tmp_path: Path,
+) -> None:
+    fake = _fake()
+    _adopted(fake, 9)
+    rep = _keep(fake, _on_default_ref(tmp_path), KEY)
+    text = fake.issue_comments[(REPO, 9)][-1]["body"]
+    assert "already reads as discharged: row r-live is walked" in text
+    assert t.fr_adopt_passed_marker(text) == (KEY, "tester", 41)
+    assert "fr never closes" in text
+    assert any("already reads as discharged" in ln for ln in rep.lines())
+
+
+def test_p4_r5_keep_dry_run_says_so_too_and_writes_nothing(tmp_path: Path) -> None:
+    fake = _fake()
+    _tracker(fake, 1)
+    root = _on_default_ref(tmp_path)
+    before = fake.attempted_mutations
+    rep = _keep(fake, root, KEY, dry_run=True)
+    assert fake.attempted_mutations == before
+    assert any("already reads as discharged" in ln for ln in rep.lines())
+
+
+def _dirty(root: Path) -> None:
+    (root / "docs/acceptance/scratch.txt").write_text("x\n")
+
+
+def _behind(root: Path) -> None:
+    (root / "later.txt").write_text("x\n")
+    commit_at(root, "later", "2026-10-30T00:00:00+00:00")
+    publish(root)
+    git(root, "reset", "-q", "--hard", "HEAD~1")
+
+
+def test_p4_r12_evidence_is_stated_only_when_r15_holds(tmp_path: Path) -> None:
+    for name, spoil in (("dirty", _dirty), ("behind", _behind)):
+        fake = _fake()
+        _tracker(fake, 1)
+        d = tmp_path / name
+        d.mkdir()
+        root = _on_default_ref(d)
+        spoil(root)
+        rep = close_gate_trackers(fake, REPO, 41, "tester", "ok", root=root)
+        text = _comment_of_close(fake)
+        assert "already discharged" not in text, name
+        assert "set-status --id r-live" in text and rep.discharge, name
+
+
+def test_p4_r12_keep_on_a_spoiled_checkout_says_still_owed(tmp_path: Path) -> None:
+    fake = _fake()
+    _tracker(fake, 1)
+    root = _on_default_ref(tmp_path)
+    _dirty(root)
+    _keep(fake, root, KEY)
+    (comment,) = fake.issue_comments[(REPO, 1)]
+    assert "still owed" in comment["body"] and "discharged:" not in comment["body"]
+
+
+def test_p4_r11_a_keep_pass_reuses_its_listing_and_comment_reads(tmp_path: Path) -> None:
+    fake = _fake()
+    _tracker(fake, 1)
+    _adopted(fake, 9, "row:r-nine")
+    read = read_trackers(fake, REPO)
+    assert held_keys(read, 41, "tester") == {KEY, "row:r-nine"}
+    close_gate_trackers(
+        fake, REPO, 41, "tester", "ok", root=_checkout(tmp_path),
+        keep=frozenset({KEY}), dry_run=True, read=read,
+    )  # fmt: skip
+    assert len([c for c in fake.calls if c[0] == "list_issues"]) == 1
+    assert len([c for c in fake.calls if c[0] == "list_issue_comments"]) == 1
+    assert len([c for c in fake.calls if c[0] == "viewer_login"]) <= 1

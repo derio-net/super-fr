@@ -12,7 +12,7 @@ import yaml
 from fr.cli import app
 from fr.commands import gate_cmd
 from fr.gatebackfill import trackers as t
-from fr.gatebackfill.close import list_closes
+from fr.gatebackfill.close import holders_by_key, list_closes
 from fr.gatebackfill.model import PlanEntry, PlanFile, PrHit, dropped_decisions, merge_plan
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, owed_body
 from typer.testing import CliRunner
@@ -378,6 +378,12 @@ def _dirty_superpowers(env: Env) -> None:
     (d / "scratch.txt").write_text("x\n")
 
 
+def _hidden_untracked(env: Env) -> None:
+    """p4-r9: the operator's config must not hide uncommitted evidence."""
+    git(env.root, "config", "status.showUntrackedFiles", "no")
+    (env.root / "docs/acceptance/scratch.txt").write_text("x\n")
+
+
 def _no_default_ref(env: Env) -> None:
     git(env.root, "remote", "remove", "origin")
     git(env.root, "remote", "add", "origin", f"https://github.com/{REPO}.git")
@@ -388,6 +394,7 @@ BLOCKERS = {
     "ahead": (_head_ahead, "HEAD is not"),
     "acceptance": (_dirty_acceptance, "uncommitted"),
     "superpowers": (_dirty_superpowers, "uncommitted"),
+    "hidden-untracked": (_hidden_untracked, "uncommitted"),
     "no-ref": (_no_default_ref, "no default ref"),
 }
 
@@ -499,7 +506,10 @@ def test_the_listing_reads_comments_once_per_foreign_owed_issue_only(env: Env) -
         issue(4, body="foreign owed", author=STRANGER),
     ]
     listing = list_closes(env.root, forge, evidence=merge_evidence(env.root, fetch=False))
-    assert [c for c in forge.calls if c[0] == "issue_comments"] == [("issue_comments", 4)]
+    assert [c for c in forge.calls if c[0] == "issue_comments"] == [
+        ("issue_comments", 2),
+        ("issue_comments", 4),
+    ]
     assert [c.ref for c in listing.closes] == [f"{REPO}#1"]
 
 
@@ -514,3 +524,120 @@ def test_a_failed_read_lists_nothing_and_says_so(env: Env) -> None:
     forge.open_issues = boom  # type: ignore[method-assign]
     listing = list_closes(env.root, forge, evidence=merge_evidence(env.root, fetch=False))
     assert listing.closes == [] and "rate limited" in listing.notes[0]
+
+
+# --- the phase 4 review -----------------------------------------------------------------------
+
+
+def _same_account_adopted(env: Env, n: int, key: str = DONE) -> None:
+    env.fake.add_issue(REPO, n, labels={"fr:owed"}, body="the operator's own issue")
+    text = t.adopt_passed_comment(key, "tester", 41, repo_root=env.root)
+    env.fake.issue_comments.setdefault((REPO, n), []).append({"author": ME, "body": text})
+
+
+def test_p4_r3_a_same_account_adopted_issue_gets_the_evidence_comment_never_a_close(
+    env: Env,
+) -> None:
+    _same_account_adopted(env, 8)
+    out = env.dry()
+    assert f"{REPO}#8 (adopted" in out
+    assert env.plan()["closes"][0]["adopted"] is True
+    result = env.yes()
+    assert result.exit_code == 0, result.output
+    assert env.closes() == [] and f"gh issue close 8 --repo {REPO}" in result.output
+    (comment,) = [c[1] for c in env.fake.calls if c[0] == "comment_issue"]
+    assert t.fr_adopt_discharged_marker(comment["body"]) == (DONE, 41)
+    before = env.fake.attempted_mutations
+    assert env.yes().exit_code == 0 and env.fake.attempted_mutations == before
+
+
+def test_p4_r3_a_same_account_adopted_issue_is_no_candidate_of_its_own(env: Env) -> None:
+    _same_account_adopted(env, 8, OWED)  # not yet discharged
+    env.dry(ok=False)
+    keys = [e["key"] for e in env.plan()["entries"]]
+    assert f"issue:{REPO}#8" not in keys
+    _same_account_adopted(env, 9)  # discharged
+    env.dry(ok=False)
+    env.yes()
+    env.dry(ok=False)
+    keys = [e["key"] for e in env.plan()["entries"]]
+    assert f"issue:{REPO}#8" not in keys and f"issue:{REPO}#9" not in keys
+
+
+def test_p4_r3_a_stray_marker_comment_on_a_same_account_issue_is_only_text(env: Env) -> None:
+    _same_account_adopted(env, 8)
+    env.fake.issue_comments[(REPO, 8)][0]["author"] = STRANGER
+    env.dry(ok=False)
+    assert env.plan()["closes"] == []
+
+
+def test_p4_r7_yes_from_a_manifest_honours_its_claim_on_a_recorded_close(
+    env: Env, tmp_path: Path
+) -> None:
+    env.tracked_only(5)
+    env.dry()
+    assert env.plan()["closes"]
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(yaml.safe_dump({"schema": 1, "items": [
+        {"key": DONE, "kind": "walk", "title": "a walk", "pr": 41, "gate": "tester"},
+    ]}))  # fmt: skip
+    result = env.yes("--from", str(manifest))
+    assert result.exit_code == 0, result.output
+    assert env.closes() == []
+    assert f"{DONE}: the manifest names it as owed, so its recorded close was dropped" in (
+        result.output
+    )
+
+
+def test_p4_r8_a_key_held_by_a_strangers_marker_is_refused_with_the_working_route(
+    env: Env,
+) -> None:
+    env.fake.add_issue(REPO, 6, labels={"fr:owed"}, body=f"text\n<!-- fr-owed:{OWED} -->")
+    env.fake.issue_authors[(REPO, 6)] = STRANGER
+    write_matrix(env.root, [row("r-done", "walked"), row("r-owed", "manual")])
+    env.publish()
+    out = env.dry(ok=False)
+    assert f"{OWED}: owed refused" in out and f"decision: adopt {REPO}#6" in out
+
+
+def test_p4_r8_a_key_held_by_frs_own_tracker_is_not_refused(env: Env) -> None:
+    env.tracked_only(5, "row:r-gone")  # no row: the fold holds it through this tracker alone
+    env.dry()
+    assert "row:r-gone" in [e["key"] for e in env.plan()["entries"]]
+
+
+def test_p4_r10_two_tracked_only_comments_for_one_key_list_one_close(env: Env) -> None:
+    env.adopted(8)
+    env.fake.issue_comments[(REPO, 8)].append(
+        {"author": ME, "body": t.adopt_passed_comment(DONE, "devops", 41, repo_root=env.root)}
+    )
+    env.fake.issue_comments[(REPO, 8)].append(
+        {"author": ME, "body": t.adopt_passed_comment(DONE, "tester", 42, repo_root=env.root)}
+    )
+    assert "Trackers to close (1)" in env.dry()
+    assert len(env.plan()["closes"]) == 1
+    assert env.yes().exit_code == 0
+    assert len([c for c in env.fake.calls if c[0] == "comment_issue"]) == 1
+    before = env.fake.attempted_mutations
+    assert env.yes().exit_code == 0 and env.fake.attempted_mutations == before
+    env.dry()
+    assert env.plan()["closes"] == []
+
+
+def test_p4_r11_the_holder_index_names_only_foreign_owed_markers() -> None:
+    marker = f"x\n<!-- fr-owed:{DONE} -->"
+    issues = [
+        issue(1, body=marker),  # fr's own tracker: not another holder
+        issue(2, body=marker, author=STRANGER),
+        issue(3, body=marker, labels=(), author=STRANGER),  # no owed label: the fold ignores it
+        issue(4, body=marker, labels=("fr:awaiting-live",), author=STRANGER),
+        issue(5, body="no marker", author=STRANGER),
+    ]
+    assert holders_by_key(issues, ME) == {DONE: {2, 4}}
+
+
+def test_p4_r11_an_adopted_issues_own_marker_does_not_block_itself(env: Env) -> None:
+    env.adopted(8)
+    env.fake.issues[(REPO, 8)].body = f"x\n<!-- fr-owed:{DONE} -->"
+    env.dry()
+    assert env.plan()["closes"][0]["ref"] == f"{REPO}#8"

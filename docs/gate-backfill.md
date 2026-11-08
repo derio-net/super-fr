@@ -27,7 +27,9 @@ where the gate ledger and the triage board look: a `gate:<g>` label on the merge
 then closes every open `fr:owed` tracker fr filed whose gate marker names that PR and gate, with the
 comment "Gate <g> passed on #<pr>: <notes>". The comment then states the key's real position: the
 evidence when the key is already discharged, the command still owed when it is not, and neither when
-the pass ran with no checkout to read it from. It never closes an issue fr did not file: an adopted
+the pass ran with no checkout of the PR's repo to read it from (a checkout of another repo counts as
+none). Evidence is stated only when HEAD is the default ref and the evidence trees are clean, the
+condition closes below need; otherwise the comment names the command. It never closes an issue fr did not file: an adopted
 issue is listed with a `gh issue close` line for you to run. For each tracker whose key is still
 owed it also prints the command that discharges the key itself (the same one the backfill printed).
 Without `--yes` it lists what it would close. A failure to list or close is reported and never reverses the pass; if a
@@ -47,8 +49,9 @@ once; that comment overrides the older adopt comment for the same gate and PR, s
 line is printed, then or on any later pass. A `--keep` key that no tracker of this PR and gate holds
 is refused before any write, on the first pass and on the retry alike. One already in the
 tracked-only form counts as holding it, so a retry succeeds and writes nothing for that key, and the
-printed retry line carries every `--keep`. `--keep` is refused with no checkout, because the
-tracked-only form names the key's discharge command. The driver's rows-walked pass never keeps: its
+printed retry line carries every `--keep`. `--keep` is refused with no checkout of the PR's repo, because the
+tracked-only form names the key's discharge command. A kept key that already reads as discharged is
+still converted, and the comment and output say the next backfill will close it unless that changes. The driver's rows-walked pass never keeps: its
 rows are walked.
 
 The repo-file commands the dry run prints (`fr plan edit --tick`, `fr closeout outcome`,
@@ -145,11 +148,16 @@ evidence, with no source but its own tracker holding it:
 |---|---|
 | `row:` | the row exists, with a status outside the debt statuses |
 | `plan:` | the phase exists, with at least one step, and every step is ticked or n/a |
-| `spec:` | the step's effective outcome is recorded and is not `owed` |
-| any but `issue:` | its journal `owed` entry was resolved fixed |
+| `spec:` | the step's effective outcome is a recorded `discovery` (what `--ran` and `--na` write) |
+| any but `issue:` | its journal `owed` entry was resolved fixed, unless a `row:` is in a debt status, which the journal never overrides |
 
-An `issue:` key, a key a manifest names as a new item, and anything unreadable (one unreadable journal
-or matrix is enough) are never discharged. An open `owed` journal entry still holds its key: a step
+An `issue:` key, a manifest-only key (one with no row, phase or outcome behind it) and anything
+unreadable (one unreadable journal or matrix is enough) are never discharged. With `--from`, a dry run
+and `--yes` both honour the manifest's claim on a key it names as a new item: that key does not close,
+and a close the plan had recorded for it is dropped with a note. Without `--from`, nothing marks a key
+as a manifest's, so one naming a real row, phase or step closes on that evidence, which the dry run
+shows; if the registry wrongly says done, correct the registry (`set-status walk-owed`, which the fold
+then holds). An open `owed` journal entry still holds its key: a step
 recorded `--ran --supersede` over an open owed entry stays owed until that entry is resolved.
 
 `--yes` re-checks each close against the forge and the checkout, and the plan file only names what to
@@ -160,7 +168,7 @@ tree; otherwise, or when no default ref resolves, a note says so and nothing clo
 none` nothing closes. A second `--yes` writes nothing.
 
 An adopted issue is still never closed by fr. When it carries this account's `fr-gate-adopt-passed:`
-comment and its key is discharged, `--yes` posts one comment naming the evidence and prints a
+comment (an issue this account wrote by hand counts as adopted too) and its key is discharged, `--yes` posts one comment naming the evidence and prints a
 `gh issue close` line for you to run; a re-run prints the line again and writes nothing.
 
 Older `fr` versions refuse a plan file carrying `closes:`, on the dry run as well as on `--yes`. It is

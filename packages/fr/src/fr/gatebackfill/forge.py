@@ -159,6 +159,12 @@ class Git:
         out = (self._out("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}") or "").strip()
         return out or None
 
+    def dirty(self, *paths: str) -> bool | None:
+        """Uncommitted changes under *paths*, untracked files included whatever the operator's
+        `status.showUntrackedFiles` says; `None` when git cannot say."""
+        out = self._out("status", "--porcelain", "--untracked-files=normal", "--", *paths)
+        return None if out is None else bool(out.strip())
+
     def subject(self, sha: str) -> str:
         return (self._out("log", "-1", "--format=%s", sha) or "").strip()
 

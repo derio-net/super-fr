@@ -37,6 +37,7 @@ from fr.verification.labels import (
 )
 
 if TYPE_CHECKING:
+    from fr.gatebackfill.close import TrackerRead
     from fr.run.model import RunState
 
 gate_app = typer.Typer(
@@ -193,24 +194,41 @@ def _echo_close(report: CloseReport) -> None:
         typer.echo(line, err=line.startswith("tracker error"))
 
 
-def _check_keep(client: Any, repo: str, pr: int, gate: str, keep: list[str]) -> None:
+def _evidence_root(repo: str) -> Path | None:
+    """This checkout, when it is a checkout of *repo*: another repo's matrix and journals say
+    nothing about this PR's keys, so a checkout of it counts as none (R10, R12)."""
+    from fr.archive_followups import owed_identity
+
+    root = _repo_root()
+    if root is None:
+        return None
+    # the configured origin, as every owed forge write reads it: `origin_slug` follows a local
+    # `insteadOf` mirror, and that must not turn a checkout of this repo into none
+    origin, _ = owed_identity(root, allow_nested=True)
+    return root if origin is not None and origin.lower() == repo.lower() else None
+
+
+def _check_keep(client: Any, repo: str, pr: int, gate: str, keep: list[str]) -> TrackerRead | None:
     """R11: refuse a `--keep` key no tracker of this PR and gate holds, before any write. A tracker
-    already in the tracked-only form holds its key, so a retry passes this."""
-    from fr.gatebackfill.close import held_keys
+    already in the tracked-only form holds its key, so a retry passes this. Returns what it read,
+    for the pass to reuse."""
+    from fr.gatebackfill.close import held_keys, read_trackers
 
     if not keep:
-        return
+        return None
     try:
-        held = held_keys(client, repo, pr, gate)
+        read = read_trackers(client, repo)
+        held = held_keys(read, pr, gate)
     except _FORGE_FAILURES as exc:
         _refuse(f"cannot read the trackers of PR #{pr} to check --keep: {exc}")
-        return
+        return None
     missing = [k for k in keep if k not in held]
     if missing:
         _refuse(
             f"--keep {', '.join(missing)}: no tracker of PR #{pr} and gate {gate} holds it, so "
             "nothing was written"
         )
+    return read
 
 
 def release_command(repo: str) -> str:
@@ -277,8 +295,6 @@ def pass_command(
 ) -> None:
     """Comment why PR <n>'s gate <g> passed, then swap gate:<g> for gate:<g>-passed (R14)."""
     kept = list(dict.fromkeys(keep or []))
-    if kept and _repo_root() is None:
-        _refuse("--keep needs a checkout: the tracked-only form names the key's discharge command")
     if gate not in GATES:
         _refuse(f"unknown gate {gate!r}: one of {', '.join(sorted(GATES))}")
     if gate not in POST_MERGE_GATES:
@@ -287,6 +303,12 @@ def pass_command(
             "hold a merge, so only they pass"
         )
     repo, forge_host = resolve_target(repo, host, Path.cwd())
+    root = _evidence_root(repo)
+    if kept and root is None:
+        _refuse(
+            f"--keep needs a checkout of {repo}: the tracked-only form names the key's discharge "
+            "command"
+        )
     held, passed = gate_label(gate).name, gate_label(gate, passed=True).name
     try:
         client = client_for_url(f"https://{forge_host}/{repo}")
@@ -302,11 +324,12 @@ def pass_command(
         # R12's retry: the gate already passed, so only the tracker close is owed. But only
         # when fr passed it (p3-r3): a label set by hand proves nothing was recorded.
         _require_fr_pass(client, repo, pr, gate, passed)
-        _check_keep(client, repo, pr, gate, kept)
+        read = _check_keep(client, repo, pr, gate, kept)
         typer.echo(f"gate {gate} already passed on #{pr}; closing its trackers")
         report = close_gate_trackers(
-            client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes, keep=frozenset(kept)
-        )
+            client, repo, pr, gate, notes,
+            root=root, dry_run=not yes, keep=frozenset(kept), read=read,
+        )  # fmt: skip
         _echo_close(report)
         if not yes:
             typer.echo("nothing done; re-run with --yes to act")
@@ -320,7 +343,7 @@ def pass_command(
         head_ref = str(view.get("head_ref") or "")
         if _devops_evidence(run, head_ref, no_run_evidence=no_run_evidence):
             notes = f"{notes} (passed with {NO_RUN_EVIDENCE}: no run's op evidence was folded)"
-    _check_keep(client, repo, pr, gate, kept)
+    read = _check_keep(client, repo, pr, gate, kept)
     left = sorted(held_gates((labels - {held}) | {passed}))
     typer.echo(f"PR #{pr} ({repo}): {held} -> {passed}")
     typer.echo(f"comment: {gate_pass_comment(gate, notes)}")
@@ -332,8 +355,9 @@ def pass_command(
             raise typer.Exit(code=1) from exc
         typer.echo(f"passed: PR #{pr} now carries {passed}")
     report = close_gate_trackers(
-        client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes, keep=frozenset(kept)
-    )
+        client, repo, pr, gate, notes,
+        root=root, dry_run=not yes, keep=frozenset(kept), read=read,
+    )  # fmt: skip
     _echo_close(report)
     if yes and report.errors:
         again = f"fr gate pass --pr {pr} --gate {gate} --notes {shlex.quote(notes)}"
@@ -395,6 +419,7 @@ def backfill_command(
         merge_plan,
         parse_manifest,
         plan_path,
+        without_claimed_closes,
         write_plan,
     )
 
@@ -454,6 +479,9 @@ def backfill_command(
     if yes:
         from fr.gatebackfill.apply import ApplyRefusedError, apply_plan
 
+        previous, claimed_notes = without_claimed_closes(previous, manifest)
+        for note in claimed_notes:
+            typer.echo(note)
         try:
             report = apply_plan(root, previous, fresh, client, repo=identity, tracking=tracking)
         except ApplyRefusedError as exc:
@@ -483,7 +511,7 @@ def backfill_command(
     text, refusals = render.summary(
         entries, plan_file=path, notes=notes, root=root, closes=listing.closes
     )
-    refusals += render.open_issue_refusals(entries, {c.key: c.source for c in cands})
+    refusals += render.open_issue_refusals(entries, cands)
     typer.echo(text)
     if refusals:
         for r in refusals:

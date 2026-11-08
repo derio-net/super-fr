@@ -317,8 +317,12 @@ def link_comment(key: str, tracker: str) -> str:
     )
 
 
-def adopt_passed_comment(key: str, gate: str, pr: int, *, repo_root: Path) -> str:
-    """The tracked-only adopt comment (gh#1322): no pass command, the key's discharge instead."""
+def adopt_passed_comment(
+    key: str, gate: str, pr: int, *, repo_root: Path, discharged: str | None = None
+) -> str:
+    """The tracked-only adopt comment (gh#1322): no pass command, the key's discharge instead.
+    *discharged*: the evidence, when a `--keep` names a key that already reads as discharged."""
+    reads_as = [f"It already reads as discharged: {discharged}.", ""] if discharged else []
     return "\n".join(
         [
             f"fr is tracking `{key}` here. PR #{pr}'s gate:{gate} already passed, so the PR is "
@@ -326,6 +330,7 @@ def adopt_passed_comment(key: str, gate: str, pr: int, *, repo_root: Path) -> st
             "",
             *_discharge_block(key, repo_root),
             "",
+            *reads_as,
             _ADOPTED_CLOSE_LINE,
             "",
             adopt_passed_marker(key, gate, pr),

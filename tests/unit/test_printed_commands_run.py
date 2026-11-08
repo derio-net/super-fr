@@ -20,6 +20,13 @@ from tests.unit.fakes import FakeGhClient, FakeGhError
 from tests.unit.gatebackfill_fixtures import ME, STRANGER, commit_at, git, row, write_matrix
 from tests.unit.test_merge_evidence import _write_plan
 
+
+def t_marker(body: str) -> tuple[str, str, int] | None:
+    from fr.gatebackfill.trackers import fr_adopt_marker
+
+    return fr_adopt_marker(body)
+
+
 REPO = "example-org/widgets"
 PLAN = "2026-10-20-ops"
 SPEC = "2026-10-20-widget"
@@ -323,6 +330,32 @@ def test_every_command_the_keep_and_close_flows_print_runs(world: World) -> None
 
     failures = w.run_all()
     assert not failures, "\n".join(f[:400] for f in failures)
+
+
+def test_the_route_a_strangers_marker_refusal_prints_runs(world: World) -> None:
+    """p4-r8: the refusal names `adopt <the issue's ref>`, and that decision applies."""
+    w = world
+    w.fake.add_pr(REPO, 12, state="MERGED", head_ref="feat/x", labels=[])
+    w.fake.add_issue(REPO, 7, labels={"fr:owed"}, body="by hand\n<!-- fr-owed:row:r-stray -->")
+    w.fake.issue_authors[(REPO, 7)] = STRANGER
+    manifest = w.tmp / "m.yaml"
+    manifest.write_text(yaml.safe_dump({"schema": 1, "items": [{"key": "row:r-stray", "pr": 12}]}))
+    backfill = ["gate", "backfill", "--from", str(manifest)]
+
+    refused = w.invoke(*backfill)
+    assert refused.exit_code == 2, refused.output
+    decision = re.search(r"decision: (adopt [^)]+)\)", refused.output)
+    assert decision is not None and decision.group(1) == f"adopt {REPO}#7", refused.output
+
+    data = yaml.safe_load(w.plan_file.read_text())
+    for e in data["entries"]:
+        if e["key"] == "row:r-stray":
+            e["decision"] = decision.group(1)
+    w.plan_file.write_text(yaml.safe_dump(data))
+    applied = w.invoke(*backfill, "--yes")
+    assert applied.exit_code == 0, applied.output
+    assert t_marker(w.fake.issue_comments[(REPO, 7)][-1]["body"]) == ("row:r-stray", "tester", 12)
+    assert (REPO, 8) not in w.fake.issues  # adopted, so no tracker was filed beside it
 
 
 # --- the guard against a new emitter ------------------------------------------------------

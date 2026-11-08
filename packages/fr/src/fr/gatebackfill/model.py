@@ -236,6 +236,24 @@ def dropped_decisions(old: PlanFile | None, closing: frozenset[str]) -> list[str
     ]
 
 
+def without_claimed_closes(
+    plan: PlanFile | None, manifest: Manifest | None
+) -> tuple[PlanFile | None, list[str]]:
+    """*plan* without the closes of keys *manifest* names as new items: `--from` honours the
+    manifest's claim on `--yes` as on a dry run. One note per close dropped."""
+    claimed = {m.key for m in (manifest.items if manifest else []) if m.kind is not None}
+    if plan is None or not claimed:
+        return plan, []
+    dropped = sorted({c.key for c in plan.closes if c.key in claimed})
+    if not dropped:
+        return plan, []
+    keep = [c for c in plan.closes if c.key not in claimed]
+    notes = [
+        f"{k}: the manifest names it as owed, so its recorded close was dropped" for k in dropped
+    ]
+    return plan.model_copy(update={"closes": keep}), notes
+
+
 def plan_path(repo: str, override: Path | None) -> Path:
     """`--plan`, else `$HOME/.cache/fr/gate-backfill/<owner--repo>/plan.yaml`."""
     if override is not None:

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fr.archive_followups import is_owned_issue, owned_owed_key
+from fr.archive_followups import owned_owed_key
 from fr.gatebackfill import trackers
 from fr.gatebackfill.candidates import MANIFEST_HINT
 from fr.gatebackfill.close import (
@@ -22,6 +22,7 @@ from fr.gatebackfill.close import (
     closes_blocked,
     discharged_evidence,
     gh_close_for,
+    holders_by_key,
     other_holder,
 )
 from fr.gatebackfill.model import BackfillError, PlanClose, PlanEntry, PlanFile
@@ -369,15 +370,22 @@ class _Apply:
             self.report.notes.append(f"  no tracker closes: {blocked}")
             return
         reader = EvidenceReader(self.root, evidence=evidence)
+        holders = holders_by_key(self.open, self.me)
         for c in closes:
             res = EntryResult(c.key)
             try:
-                self._close(c, reader, res)
+                self._close(c, reader, holders, res)
             except _FAILURES as exc:
                 res.error = str(exc)
             self.report.results.append(res)
 
-    def _close(self, c: PlanClose, reader: EvidenceReader, res: EntryResult) -> None:
+    def _close(
+        self,
+        c: PlanClose,
+        reader: EvidenceReader,
+        holders: dict[str, set[int]],
+        res: EntryResult,
+    ) -> None:
         m = _REF.match(c.ref)
         if m is None or m.group("repo").lower() != self.repo.lower():
             res.skipped = f"close target {c.ref} is not in {self.repo}"
@@ -391,7 +399,7 @@ class _Apply:
         if evidence is None:
             res.skipped = f"{c.key} is no longer discharged; the next dry run decides it"
             return
-        holder = other_holder(self.open, self.me, c.key, n)
+        holder = other_holder(holders, c.key, n)
         if holder is not None:
             res.skipped = f"{holder} also carries the key's marker"
             return
@@ -408,7 +416,7 @@ class _Apply:
     def _close_adopted(
         self, c: PlanClose, n: int, issue: dict[str, Any], evidence: str, res: EntryResult
     ) -> None:
-        if is_owned_issue(issue, self.me):
+        if owned_owed_key(issue, self.me) is not None:
             res.skipped = f"{c.ref} is not an adopted issue"
             return
         comments = self.client.list_issue_comments(self.repo, n)

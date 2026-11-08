@@ -9,7 +9,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
-from fr.gatebackfill.candidates import PLANS_REL, find_spec, split_key
+from fr.gatebackfill.candidates import PLANS_REL, Candidate, find_spec, split_key
 from fr.gatebackfill.model import PlanClose, PlanEntry
 
 ACCEPTED = {
@@ -86,22 +86,27 @@ def decision_commands(entry: PlanEntry, root: Path) -> tuple[list[str], str | No
     return [], f"{entry.key}: {kind} refused: no command for this kind{hint}{accepted}"
 
 
-def open_issue_refusals(entries: list[PlanEntry], sources: dict[str, str]) -> list[str]:
-    """A bare `owed` on an `issue:` key that is itself an OPEN issue (*sources*: key -> where the
-    fold found it) files no tracker and leaves no marker for the closed-issue link: the only
-    route is adopting it, or a manifest entry carrying its own `issue:` (p2-r2)."""
+def open_issue_refusals(entries: list[PlanEntry], candidates: list[Candidate]) -> list[str]:
+    """A bare `owed` on a key the fold holds only through an open issue fr did not write. An
+    `issue:` key files no tracker and leaves no marker for the closed-issue link (p2-r2); any other
+    key is there on a stranger's marker. Adopting that issue is the route. A key held by fr's own
+    tracker is the tracker's, and nothing to refuse."""
+    by_key = {c.key: c for c in candidates}
     out = []
     for e in entries:
-        # an `issue:` key only: a `row:` or `plan:` key held by its tracker alone has no such route
-        if (
-            e.decision_kind == "owed"
-            and e.key.startswith("issue:")
-            and sources.get(e.key) == "issue"
-        ):
+        c = by_key.get(e.key)
+        if e.decision_kind != "owed" or c is None or c.source != "issue" or c.tracker_ref:
+            continue
+        if e.key.startswith("issue:"):
             ref = e.key.removeprefix("issue:")
             out.append(
                 f"{e.key}: owed refused: it is itself an open issue; adopt it "
                 f"(decision: adopt {ref}) or give the manifest entry an issue:"
+            )
+        else:
+            out.append(
+                f"{e.key}: owed refused: only the open issue {c.ref} holds it; adopt it "
+                f"(decision: adopt {c.ref})"
             )
     return out
 

@@ -6,10 +6,18 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fr.gatebackfill.close import discharged_evidence
+from fr.gatebackfill.close import EvidenceReader, discharged_evidence
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, owed_body
 
-from tests.unit.gatebackfill_fixtures import SP, commit_at, make_repo, publish, row, write_matrix
+from tests.unit.gatebackfill_fixtures import (
+    SP,
+    commit_at,
+    git,
+    make_repo,
+    publish,
+    row,
+    write_matrix,
+)
 from tests.unit.test_merge_evidence import _write_plan
 
 PLAN = "2026-10-20-ops"
@@ -248,3 +256,86 @@ def test_a_malformed_key_is_never_discharged(repo: Path, key: str) -> None:
 def test_a_missing_checkout_discharges_nothing_and_never_raises() -> None:
     assert discharged_evidence(Path("/nonexistent"), "row:r1") is None
     assert discharged_evidence(Path("/nonexistent"), "plan:p#p1") is None
+
+
+# --- the phase 4 review -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("status", ["failing", "not-implemented", "unwired", "walk-owed"])
+def test_p4_r1_a_row_in_a_debt_status_is_never_discharged_by_its_journal(
+    repo: Path, status: str
+) -> None:
+    write_matrix(repo, [row("r1", status)])
+    owed(repo, "row:r1")
+    resolve(repo)
+    assert discharged_evidence(repo, "row:r1") is None
+
+
+def test_p4_r1_a_non_debt_row_with_a_resolved_entry_stays_discharged(repo: Path) -> None:
+    write_matrix(repo, [row("r1", "walked")])
+    owed(repo, "row:r1")
+    resolve(repo)
+    assert discharged_evidence(repo, "row:r1") is not None
+
+
+@pytest.mark.parametrize("kind", ["decision", "finding"])
+def test_p4_r2_an_entry_of_another_kind_named_like_a_step_is_not_an_outcome(
+    repo: Path, kind: str
+) -> None:
+    entry = JournalEntry(
+        kind=kind, scope="spec", id="test-plan-step-1", created=CREATED,  # type: ignore[arg-type]
+        title="not an outcome", state="open" if kind == "finding" else None,
+    )  # fmt: skip
+    append_journal_entry(journal_path(repo, "spec", SLUG), SLUG, entry)
+    assert discharged_evidence(repo, f"spec:{SLUG}#step1") is None
+
+
+@pytest.mark.parametrize(
+    "flags", [["--ran", "--evidence", "it ran"], ["--na", "--reason", "does not apply"]]
+)
+def test_p4_r2_what_closeout_outcome_writes_reads_as_discharged(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, flags: list[str]
+) -> None:
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    monkeypatch.chdir(repo)
+    git(repo, "checkout", "-q", "-b", "work")
+    args = ["closeout", "outcome", "--spec", SPEC, "--step", "1", *flags]
+    result = CliRunner().invoke(app, args, env={"FR_SKIP_MIGRATION": "1"})
+    assert result.exit_code == 0, result.output
+    assert discharged_evidence(repo, f"spec:{SLUG}#step1") is not None
+
+
+def test_p4_r2_an_owed_step_resolved_fixed_reads_as_discharged(repo: Path) -> None:
+    from fr.journal.model import JournalEntry as Entry
+
+    outcome(repo, "test-plan-step-1", "owed", key=f"spec:{SLUG}#step1")
+    record = Entry(
+        kind="finding", scope="spec", id="r", created=CREATED, title="r",
+        resolves="test-plan-step-1", state="fixed",
+    )  # fmt: skip
+    append_journal_entry(journal_path(repo, "spec", SLUG), SLUG, record)
+    assert discharged_evidence(repo, f"spec:{SLUG}#step1") is not None
+
+
+def test_p4_r11_one_reader_parses_each_journal_once(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.journal.model as journal_model
+
+    outcome(repo, "test-plan-step-1")
+    outcome(repo, "test-plan-step-2")
+    owed(repo, "row:not-a-row")
+    resolve(repo)
+    real, parsed = journal_model.parse_journal, []
+
+    def counting(text: str) -> list[JournalEntry]:
+        parsed.append(text)
+        return real(text)
+
+    monkeypatch.setattr(journal_model, "parse_journal", counting)
+    reader = EvidenceReader(repo)
+    for key in (f"spec:{SLUG}#step1", f"spec:{SLUG}#step2", "row:not-a-row"):
+        assert discharged_evidence(repo, key, reader=reader) is not None
+    assert len(parsed) == len(set(parsed)) == 2, "a journal was parsed more than once"
