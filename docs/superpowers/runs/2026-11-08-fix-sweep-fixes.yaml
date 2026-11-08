@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-08-sweep-fixes-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-08T16:07:21+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-08T16:07:21+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: opus
+          session: 7042fd56-90bc-46b2-9dcc-dde1c32308b2
   plan:
     state: pending
   plan-review:
