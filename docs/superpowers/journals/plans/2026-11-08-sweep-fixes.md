@@ -489,3 +489,8 @@ The release.yml header and the release_status.py docstring state the rule.
 ### p5-r3-resolved · finding [out-of-scope] · resolves p5-r3: An RC tag above HEAD's line that HEAD does not contain makes every run cut another RC (phase 5)
 
 Same exposure before this change by reading, and needs a hand-pushed tag; to be filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved-2 created=2026-11-08T21:44:15+00:00 phase=1 state=open resolves=p1-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1389 -->
+### p1-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1389] · resolves p1-r4: `fr gate pass --yes` exits 0 when a tracker close fails (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1389.
