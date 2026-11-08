@@ -655,9 +655,7 @@ def set_status_cmd(
         raise typer.Exit(2)
     link_only = status is None
     new_status = target.status if status is None else status
-    new_notes = (
-        "; ".join(n for n in (target.notes, notes) if n) if link_only else (notes or "")
-    )
+    new_notes = "; ".join(n for n in (target.notes, notes) if n) if link_only else (notes or "")
 
     additions = _parse_levels(level)
     drops = _parse_levels(drop_level, flag="--drop-level")

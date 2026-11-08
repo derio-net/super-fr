@@ -878,7 +878,7 @@ def _acceptance_writes(
                         {k: list(v) for k, v in item.levels.items()},
                     ),
                     status=item.status,  # type: ignore[arg-type]
-                    notes=item.notes,
+                    notes=item.notes or "",
                     # A status move keeps the row's `verify` unless it names one.
                     verify=item.verify if item.verify is not None else existing.verify,
                     # `visual` is create-only — set-status never touches it (spec
