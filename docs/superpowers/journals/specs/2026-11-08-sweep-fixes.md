@@ -290,3 +290,8 @@ Operator confirmed five phases, one per ask.
 ### phase-split-2026-11-08-sweep-fixes-p4 · decision · ask: #1323 and #1328 are one ask on the same close path
 
 Operator confirmed five phases, one per ask.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-08-sweep-fixes-p5 created=2026-11-08T16:20:54+00:00 -->
+### phase-split-2026-11-08-sweep-fixes-p5 · decision · ask: #1321 is its own ask
+
+Operator confirmed five phases, one per ask.
