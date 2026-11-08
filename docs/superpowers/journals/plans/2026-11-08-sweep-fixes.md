@@ -509,3 +509,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1391.
 ### p4-r13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1392] · resolves p4-r13: A failed tracker write on the first gate pass route exits 0 (phase 4)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1392.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved-2 created=2026-11-08T21:45:10+00:00 phase=5 state=open resolves=p5-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1393 -->
+### p5-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1393] · resolves p5-r3: An RC tag above HEAD's line that HEAD does not contain makes every run cut another RC (phase 5)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1393.
