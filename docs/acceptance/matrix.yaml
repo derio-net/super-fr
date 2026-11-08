@@ -10557,9 +10557,11 @@ rows:
       tracker, whatever its title
     origin:
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_candidates.py#test_r7_an_open_digest_naming_a_row_is_never_a_look_alike
+    status: ci
+    notes: Pinned by unit tests in CI, both markers under any author.
     verify: none
   - id: gate-pass-keep
     capability: gate-backfill
