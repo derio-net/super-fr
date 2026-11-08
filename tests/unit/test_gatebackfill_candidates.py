@@ -364,3 +364,56 @@ def test_gh1369_an_override_needs_pr_or_gate_and_a_new_key_needs_kind_and_title(
     new = parse_manifest("schema: 1\nitems:\n  - {key: 'row:gap', pr: 4}\n")
     with pytest.raises(BackfillError, match="row:gap.*kind"):
         _collect(repo, manifest=new)
+
+
+DIGEST = "<!-- fr-technical-debt -->"
+ACCEPTANCE_DIGEST = "<!-- fr-acceptance-digest -->"
+
+
+def test_r7_an_open_digest_naming_a_row_is_never_a_look_alike(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [
+        issue(
+            70,
+            "Technical debt: r1 walk owed",
+            f"Owed rows:\n- r1\n\n{DIGEST}\n",
+            author=STRANGER,
+            labels=(),
+        ),  # fmt: skip
+        issue(71, "acceptance digest", f"r1 is still owed\n{ACCEPTANCE_DIGEST}\n", labels=()),
+    ]
+
+    cands, _ = _collect(repo, forge)
+
+    assert cands["row:r1"].tracker_candidates == ()
+
+
+def test_r7_a_marker_mid_line_does_not_exclude_an_issue(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [issue(72, "r1 walk", f"see {DIGEST} above for r1", labels=())]
+
+    cands, _ = _collect(repo, forge)
+
+    assert cands["row:r1"].tracker_candidates == (f"{REPO}#72",)
+
+
+def test_r7_a_manifest_named_issue_still_matches_when_it_carries_a_marker(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    write_matrix(repo, [row("r1", "walk-owed")])
+    _publish_at(repo, "2026-10-30T00:00:00+00:00")
+    forge = FakeForge()
+    forge.issues = [issue(73, "unrelated title", f"{DIGEST}", labels=())]
+    manifest = parse_manifest(
+        "schema: 1\nitems:\n"
+        "  - {key: 'row:gap', kind: audit-gap, title: u, gate: devops, issue: 73}\n"
+    )
+
+    cands, _ = _collect(repo, forge, manifest=manifest)
+
+    assert cands["row:gap"].tracker_candidates == (f"{REPO}#73",)

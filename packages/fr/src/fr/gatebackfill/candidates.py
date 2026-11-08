@@ -19,6 +19,7 @@ from fr.archive_followups import owned_owed_key
 from fr.gatebackfill.forge import OPEN_ISSUE_LIMIT, BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
 from fr.gatebackfill.trackers import fr_gate_marker, fr_passed_marker, is_ours
+from fr.triage.debt import has_marker
 
 if TYPE_CHECKING:
     from fr.archive import MergeEvidence
@@ -237,14 +238,18 @@ def _lookalikes(
         ref = str(i.get("ref"))
         if ref == c.ref or ref == c.tracker_ref or ref in owned:
             continue
+        if manifest is not None and manifest.issue is not None:
+            if str(i.get("number")) == str(manifest.issue):  # the manifest names it: always a hit
+                found.append(ref)
+                continue
+        if has_marker(str(i.get("body") or "")):
+            continue  # R7: a debt digest is never a tracker look-alike, whoever wrote it
         text = f"{i.get('title', '')}\n{i.get('body', '')}"
         hit = False
         if kind == "plan" and name in text and n is not None:
             hit = re.search(rf"(?i)\bphase {n}\b|\bp{n}\b", text) is not None
         elif kind == "row":
             hit = re.search(rf"(?<![\w.-]){re.escape(name)}(?![\w.-])", text) is not None
-        if manifest is not None and manifest.issue is not None:
-            hit = hit or str(i.get("number")) == str(manifest.issue)
         if hit:
             found.append(ref)
     return found
