@@ -43,6 +43,10 @@ class BackfillForge(Protocol):
 
     def prs_for_commit(self, sha: str) -> list[dict[str, Any]]: ...
 
+    def issue_comments(self, number: int) -> list[dict[str, Any]]:
+        """Issue *number*'s comments, oldest first: read once per foreign `fr:owed` issue."""
+        ...
+
 
 def pr_number_of(record: dict[str, Any]) -> int | None:
     """A PR record's number: its `number`, else the tail of its `url`."""
@@ -91,6 +95,9 @@ class ClientBackfillForge(ClientDebtForge):
 
     def prs_for_commit(self, sha: str) -> list[dict[str, Any]]:
         return self._client.prs_for_commit(self._repo, sha)
+
+    def issue_comments(self, number: int) -> list[dict[str, Any]]:
+        return self._client.list_issue_comments(self._repo, number)
 
 
 class Git:
@@ -146,6 +153,11 @@ class Git:
     def _contains(self, commit: str, sha: str) -> bool:
         done = self._run("merge-base", "--is-ancestor", sha, commit)
         return done is not None and done.returncode == 0
+
+    def rev(self, ref: str) -> str | None:
+        """The full sha *ref* names, as a commit."""
+        out = (self._out("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}") or "").strip()
+        return out or None
 
     def subject(self, sha: str) -> str:
         return (self._out("log", "-1", "--format=%s", sha) or "").strip()

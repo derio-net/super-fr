@@ -16,8 +16,8 @@ from fr.cli import app
 from fr.commands import gate_cmd
 from typer.testing import CliRunner
 
-from tests.unit.fakes import FakeGhClient
-from tests.unit.gatebackfill_fixtures import ME, STRANGER, commit_at, row, write_matrix
+from tests.unit.fakes import FakeGhClient, FakeGhError
+from tests.unit.gatebackfill_fixtures import ME, STRANGER, commit_at, git, row, write_matrix
 from tests.unit.test_merge_evidence import _write_plan
 
 REPO = "example-org/widgets"
@@ -234,6 +234,93 @@ def test_every_command_the_gate_and_backfill_flows_print_runs(world: World) -> N
     w.collect("gate pass after retry", retried.output)
 
     assert len(w.seen) >= 8, sorted(w.seen)
+    failures = w.run_all()
+    assert not failures, "\n".join(f[:400] for f in failures)
+
+
+def _gh_close_at(text: str) -> list[str]:
+    """argv of the `gh issue close` printed in *text*: never fr's to execute, so shape-checked."""
+    (line,) = [ln for ln in text.splitlines() if "gh issue close" in ln]
+    return shlex.split(line[line.index("gh issue close") :])
+
+
+def test_every_command_the_keep_and_close_flows_print_runs(world: World) -> None:
+    """R10-R13: `--keep`, its retry line, the kept comments and bodies, and the backfill's close."""
+    from fr.gatebackfill import trackers as t
+
+    w = world
+
+    def publish() -> None:  # the default ref "as last fetched", with origin's URL left as it is
+        commit_at(w.root, "work", "2026-10-30T00:00:00+00:00")
+        git(w.root, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    publish()
+    w.fake.add_pr(REPO, 12, state="MERGED", head_ref="feat/x", labels=[])
+    w.fake.prs[(REPO, 12)]["labels"] = ["gate:tester"]
+    w.fake.add_issue(REPO, 5, labels={"fr:owed"}, body="filed by hand")
+    w.fake.issue_authors[(REPO, 5)] = STRANGER
+    w.fake.comment_issue(REPO, 5, t.adopt_comment("row:r-adopt", "tester", 12))
+    w.fake.add_issue(
+        REPO, 6, labels={"fr:owed"}, body=t.tracker_body("row:r-live", "t", "tester", 12)
+    )
+    pass_args = ["gate", "pass", "--repo", REPO, "--pr", "12", "--gate", "tester", "--notes", "ok"]
+    keeps = ["--keep", "row:r-live", "--keep", "row:r-adopt"]
+
+    dry = w.invoke(*pass_args, *keeps)
+    assert dry.exit_code == 0, dry.output
+    w.collect("gate pass --keep", dry.output)
+
+    # a rewrite that fails: the pass stands, and the retry line must carry every --keep
+    real_edit = w.fake.edit_issue_body
+
+    def boom(repo: str, number: int, body: str) -> None:
+        raise FakeGhError("rate limited")
+
+    w.fake.edit_issue_body = boom  # type: ignore[method-assign]
+    failed = w.invoke(*pass_args, *keeps, "--yes")
+    (hint,) = [ln for ln in failed.output.splitlines() if "to retry the close" in ln]
+    assert hint.count("--keep") == 2
+    w.collect("gate pass --keep retry line", failed.output)
+    w.fake.edit_issue_body = real_edit  # type: ignore[method-assign]
+    retried = w.invoke(*shlex.split(hint.split("`")[1])[1:])
+    assert retried.exit_code == 0, retried.output
+    w.collect("gate pass --keep retry", retried.output)
+
+    # the tracked-only body and every comment the keep posted
+    for (_, number), issue in w.fake.issues.items():
+        w.collect(f"kept tracker #{number} body", issue.body)
+    for (_, number), comments in w.fake.issue_comments.items():
+        for c in comments:
+            w.collect(f"comment on #{number}", c["body"])
+    kept_comment = w.fake.issue_comments[(REPO, 6)][-1]["body"]
+    assert "fr acceptance set-status --id r-live" in kept_comment
+    assert extract_commands(kept_comment), kept_comment
+    # run now: once the tracker closes below, the retry line's --keep is rightly refused
+    failures = w.run_all()
+    assert not failures, "\n".join(f[:400] for f in failures)
+    w.seen.clear()
+
+    # both keys discharged: the backfill lists them, closes the tracker, prints the adopted close
+    write_matrix(
+        w.root,
+        [row(i, "walked") for i in ("r-live", "r-adopt")]
+        + [row(i, "walk-owed") for i in ("r-journal", "r-na")]
+        + [row("r-later", "not-implemented", verify="live")],
+    )
+    publish()
+    listed = w.invoke("gate", "backfill")
+    assert "Trackers to close (2)" in listed.output, listed.output
+    w.collect("backfill close dry run", listed.output)
+    applied = w.invoke("gate", "backfill", "--yes")
+    assert w.fake.issues[(REPO, 6)].state == "CLOSED", applied.output
+    assert w.fake.issues[(REPO, 5)].state == "OPEN"
+    w.collect("backfill close --yes", applied.output)
+    close_argv = _gh_close_at(applied.output)
+    assert close_argv[:6] == ["gh", "issue", "close", "5", "--repo", REPO]
+    assert close_argv[6] == "--comment" and len(close_argv) == 8
+    for c in w.fake.issue_comments[(REPO, 5)]:
+        w.collect("comment on #5", c["body"])
+
     failures = w.run_all()
     assert not failures, "\n".join(f[:400] for f in failures)
 

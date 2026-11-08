@@ -10,7 +10,7 @@ import shlex
 from pathlib import Path
 
 from fr.gatebackfill.candidates import PLANS_REL, find_spec, split_key
-from fr.gatebackfill.model import PlanEntry
+from fr.gatebackfill.model import PlanClose, PlanEntry
 
 ACCEPTED = {
     "plan": "owed, adopt, tick, na, park, review (tick/na only on a live plan)",
@@ -92,7 +92,12 @@ def open_issue_refusals(entries: list[PlanEntry], sources: dict[str, str]) -> li
     route is adopting it, or a manifest entry carrying its own `issue:` (p2-r2)."""
     out = []
     for e in entries:
-        if e.decision_kind == "owed" and sources.get(e.key) == "issue":
+        # an `issue:` key only: a `row:` or `plan:` key held by its tracker alone has no such route
+        if (
+            e.decision_kind == "owed"
+            and e.key.startswith("issue:")
+            and sources.get(e.key) == "issue"
+        ):
             ref = e.key.removeprefix("issue:")
             out.append(
                 f"{e.key}: owed refused: it is itself an open issue; adopt it "
@@ -161,11 +166,22 @@ def _line(e: PlanEntry) -> str:
     return f"  {e.key}  gate={e.gate or '-'}  {pr}  -> {e.decision}{tail}"
 
 
+def _close_line(c: PlanClose) -> str:
+    how = "adopted: fr comments the evidence and prints the close command" if c.adopted else ""
+    return f"  {c.key}  {c.ref}{f' ({how})' if how else ''}: {c.evidence}"
+
+
 def summary(
-    entries: list[PlanEntry], *, plan_file: Path, notes: list[str], root: Path
+    entries: list[PlanEntry],
+    *,
+    plan_file: Path,
+    notes: list[str],
+    root: Path,
+    closes: list[PlanClose] | None = None,
 ) -> tuple[str, list[str]]:
     """`(text, refusals)`: the dry run's summary. Every candidate is one line; parked ones sit
-    under their own heading; refusals are the decisions whose command does not exist."""
+    under their own heading, as do the trackers `--yes` will close; refusals are the decisions
+    whose command does not exist."""
     live = [e for e in entries if e.decision_kind != "park"]
     parked = [e for e in entries if e.decision_kind == "park"]
     lines = [f"Candidates ({len(live)})"]
@@ -176,6 +192,8 @@ def summary(
         lines += [f"  {e.key}" for e in unresolved]
     if parked:
         lines += ["", f"Parked ({len(parked)})"] + [_line(e) for e in parked]
+    if closes:
+        lines += ["", f"Trackers to close ({len(closes)})"] + [_close_line(c) for c in closes]
     commands: list[str] = []
     refusals: list[str] = []
     for e in entries:

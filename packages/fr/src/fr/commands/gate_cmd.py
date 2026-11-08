@@ -193,6 +193,26 @@ def _echo_close(report: CloseReport) -> None:
         typer.echo(line, err=line.startswith("tracker error"))
 
 
+def _check_keep(client: Any, repo: str, pr: int, gate: str, keep: list[str]) -> None:
+    """R11: refuse a `--keep` key no tracker of this PR and gate holds, before any write. A tracker
+    already in the tracked-only form holds its key, so a retry passes this."""
+    from fr.gatebackfill.close import held_keys
+
+    if not keep:
+        return
+    try:
+        held = held_keys(client, repo, pr, gate)
+    except _FORGE_FAILURES as exc:
+        _refuse(f"cannot read the trackers of PR #{pr} to check --keep: {exc}")
+        return
+    missing = [k for k in keep if k not in held]
+    if missing:
+        _refuse(
+            f"--keep {', '.join(missing)}: no tracker of PR #{pr} and gate {gate} holds it, so "
+            "nothing was written"
+        )
+
+
 def release_command(repo: str) -> str:
     """The dispatch that cuts the final once the last gate passed (R20)."""
     return f"gh workflow run {RELEASE_WORKFLOW} --repo {repo}"
@@ -245,9 +265,20 @@ def pass_command(
             help="devops: pass a row-only gate on a repo with no run (recorded in the comment).",
         ),
     ] = False,
+    keep: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--keep",
+            help="An owed key this pass does not finish (repeatable): its tracker stays open in "
+            "the tracked-only form, closed by a later gate backfill once the key is discharged.",
+        ),
+    ] = None,
     yes: Annotated[bool, typer.Option("--yes", help="Write to the forge.")] = False,
 ) -> None:
     """Comment why PR <n>'s gate <g> passed, then swap gate:<g> for gate:<g>-passed (R14)."""
+    kept = list(dict.fromkeys(keep or []))
+    if kept and _repo_root() is None:
+        _refuse("--keep needs a checkout: the tracked-only form names the key's discharge command")
     if gate not in GATES:
         _refuse(f"unknown gate {gate!r}: one of {', '.join(sorted(GATES))}")
     if gate not in POST_MERGE_GATES:
@@ -271,9 +302,10 @@ def pass_command(
         # R12's retry: the gate already passed, so only the tracker close is owed. But only
         # when fr passed it (p3-r3): a label set by hand proves nothing was recorded.
         _require_fr_pass(client, repo, pr, gate, passed)
+        _check_keep(client, repo, pr, gate, kept)
         typer.echo(f"gate {gate} already passed on #{pr}; closing its trackers")
         report = close_gate_trackers(
-            client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes
+            client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes, keep=frozenset(kept)
         )
         _echo_close(report)
         if not yes:
@@ -288,6 +320,7 @@ def pass_command(
         head_ref = str(view.get("head_ref") or "")
         if _devops_evidence(run, head_ref, no_run_evidence=no_run_evidence):
             notes = f"{notes} (passed with {NO_RUN_EVIDENCE}: no run's op evidence was folded)"
+    _check_keep(client, repo, pr, gate, kept)
     left = sorted(held_gates((labels - {held}) | {passed}))
     typer.echo(f"PR #{pr} ({repo}): {held} -> {passed}")
     typer.echo(f"comment: {gate_pass_comment(gate, notes)}")
@@ -298,13 +331,16 @@ def pass_command(
             typer.echo(f"fr gate pass: the forge refused: {exc}", err=True)
             raise typer.Exit(code=1) from exc
         typer.echo(f"passed: PR #{pr} now carries {passed}")
-    report = close_gate_trackers(client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes)
+    report = close_gate_trackers(
+        client, repo, pr, gate, notes, root=_repo_root(), dry_run=not yes, keep=frozenset(kept)
+    )
     _echo_close(report)
     if yes and report.errors:
         again = f"fr gate pass --pr {pr} --gate {gate} --notes {shlex.quote(notes)}"
         again += f" --repo {shlex.quote(repo)}"
         if forge_host != "github.com":
             again += f" --host {shlex.quote(forge_host)}"
+        again += "".join(f" --keep {shlex.quote(k)}" for k in kept)
         typer.echo(f"re-run `{again} --yes` to retry the close")
     if left:  # p4-r9: no final while a post-merge gate still holds this PR
         typer.echo(f"{', '.join(f'gate:{g}' for g in left)} still holds PR #{pr}: no release yet")
@@ -349,10 +385,12 @@ def backfill_command(
     from fr.archive_followups import owed_identity
     from fr.gatebackfill import delivery, render
     from fr.gatebackfill.candidates import collect_candidates
+    from fr.gatebackfill.close import list_closes
     from fr.gatebackfill.forge import ClientBackfillForge, Git
     from fr.gatebackfill.model import (
         BackfillError,
         PlanFile,
+        dropped_decisions,
         load_plan,
         merge_plan,
         parse_manifest,
@@ -400,6 +438,10 @@ def backfill_command(
         )  # fmt: skip
     except (BackfillError, OSError, *_FORGE_FAILURES) as exc:  # type: ignore[misc]
         refuse(str(exc))
+    listing = list_closes(root, forge, evidence=evidence, manifest=manifest)
+    trackers_here = {c.key for c in cands if c.key.removeprefix("issue:") in listing.adopted_refs}
+    cands = [c for c in cands if c.key not in trackers_here]
+    notes += [f"{key}: a tracker, not a candidate" for key in sorted(trackers_here)]
     ref = evidence.ref.ref if evidence.ref else None
     git = Git(root)
     fresh = []
@@ -423,17 +465,24 @@ def backfill_command(
         if report.failed:
             raise typer.Exit(code=1)
         return
-    entries = delivery.mark_gate_passed(merge_plan(previous, fresh), cache)
+    closing = frozenset(c.key for c in listing.closes)
+    notes += [*listing.notes, *dropped_decisions(previous, closing)]
+    entries = delivery.mark_gate_passed(merge_plan(previous, fresh, closing=closing), cache)
     try:
         write_plan(
             path,
             PlanFile(
-                repo=identity, generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), entries=entries
+                repo=identity,
+                generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                entries=entries,
+                closes=listing.closes,
             ),
         )
     except OSError as exc:
         refuse(f"plan file {path} cannot be written: {exc}")
-    text, refusals = render.summary(entries, plan_file=path, notes=notes, root=root)
+    text, refusals = render.summary(
+        entries, plan_file=path, notes=notes, root=root, closes=listing.closes
+    )
     refusals += render.open_issue_refusals(entries, {c.key: c.source for c in cands})
     typer.echo(text)
     if refusals:
