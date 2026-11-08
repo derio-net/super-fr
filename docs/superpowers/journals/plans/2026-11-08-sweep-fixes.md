@@ -175,3 +175,63 @@ Pre-existing through read_text and fails loud; not caused by this change.
 ### p3-r4-resolved · finding [out-of-scope] · resolves p3-r4: The reader folds heading lines inside the Test Plan into the previous step's text (phase 3)
 
 A reader quirk that holds for an exact heading too; not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p4-manifest-only-unknowable-without-from created=2026-11-08T19:24:31+00:00 phase=4 state=open review_scope=in -->
+### p4-manifest-only-unknowable-without-from · finding [open] (reviewer: in scope) · A manifest-only key cannot be recognised on a dry run that omits --from (phase 4)
+
+R14 says a manifest-only key is never discharged, but nothing outside the manifest says a key came from one: its tracker reads like any other. Safe reading implemented: with `--from`, a manifest NEW item (`kind:` set) never closes, even with evidence; an override stays closable, because the fold holds that key. Without `--from`, the key still needs positive evidence, so a key with no row, phase or outcome is never discharged. The gap left: a manifest item whose key names a real row, phase or step that has genuinely reached a done state closes on that evidence when `--from` is omitted. Tests: test_a_manifest_only_key_is_untouched and test_a_manifest_new_item_with_evidence_stays_the_manifests_claim. Closing the gap would need a marker on the tracker body; the spec does not ask for one, so this is for the orchestrator to judge.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-open-issue-refusal-scope created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-open-issue-refusal-scope · discovery · The dry run refused any owed key held by its tracker alone, not only an issue key (phase 4)
+
+`render.open_issue_refusals` tested the fold source only, so a `row:` or `plan:` key held by its own tracker exited 2 with "adopt row:x", a command that cannot exist. Its docstring says `issue:` keys. It surfaced because a tracked-only tracker on a checkout R15 refuses stays in the entries. Narrowed to `issue:` keys, since an exit 2 there would have hidden R15's note.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-superseded-owed-stays-held created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-superseded-owed-stays-held · discovery · A step recorded ran over an open owed entry is still held by the journal (phase 4)
+
+`fr closeout outcome --ran --supersede` leaves the owed entry open, so the effective outcome reads ran while the fold's journal source still holds the key. R14 requires both, so this is not discharged until the entry is resolved. `discharge_command` already prints `fr journal resolve` first for such a key, so the printed route gets there. Pinned by test_an_open_owed_entry_superseded_to_ran_is_still_held_by_the_journal and stated in docs/gate-backfill.md.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-discharged-set-is-not-only-fixed created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-discharged-set-is-not-only-fixed · discovery · journal_owed's discharged set holds every entry no longer open, not only fixed ones (phase 4)
+
+`open_owed_ids` reads anything but `open` as closed, so a hand-written refuted or deferred record lands in the set the plan said to reuse. `fr journal resolve` refuses those states on an owed entry, so only a hand edit or `journal add --resolves` reaches it. R14 says resolved fixed, so `EvidenceReader.fixed_keys` intersects the set with the effective state `fixed`.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-adopted-issue-comes-back-as-candidate created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-adopted-issue-comes-back-as-candidate · discovery · Dropping an adopt decision would make the adopted issue a refused candidate (phase 4)
+
+R15 drops a recorded `adopt` on a discharged key. `collect_candidates` learns adopted issues from that decision, so the next dry run would offer `issue:<ref>` as a bare owed candidate and exit 2 until the operator closed it. `list_closes` therefore returns every foreign issue carrying this account's tracked-only comment, and the command removes those from the candidates with "a tracker, not a candidate". The comments are read on `--yes` as well, or that run would report a new candidate.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-closing-comment-is-one-line created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-closing-comment-is-one-line · discovery · The closing comment stays on one line because the adopted close command carries it (phase 4)
+
+The printed `gh issue close --comment` is read one line per command, and a plan phase's discharge has several `--tick` lines. `position` joins them with `; `, which the printed-commands extractor reads as separate commands inside the backtick span.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-no-new-printed-verb created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-no-new-printed-verb · discovery · No new fr verb is printed, and tracker text avoids naming the backfill as a command (phase 4)
+
+COVERED_VERBS is unchanged. The tracked-only closing lines and the close comment say "the next gate backfill" in prose, since a literal command in a body would be executed by the printed-commands test against whatever decisions that plan file holds. The new `gh issue close` line is shape-checked in test_every_command_the_keep_and_close_flows_print_runs.
+
+<!-- fr:journal kind=decision scope=plan id=p4-another-holders-marker-blocks-the-close created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-another-holders-marker-blocks-the-close · decision · A foreign owed issue carrying the key's marker keeps the tracker open (phase 4)
+
+R14 allows no source but the key's own tracker, and the debt fold reads a marker on any owed-labelled issue, whoever wrote it. So such an issue blocks the close, with a note. A stranger can delay a close this way and cannot cause one, which is the safe direction. Two fr-owned trackers of one key do not block each other.
+
+<!-- fr:journal kind=decision scope=plan id=p4-keep-on-a-discharged-key created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-keep-on-a-discharged-key · decision · --keep on an already discharged key still says the key is owed (phase 4)
+
+R10 words the comment that way and R12 speaks of closing comments, so the operator's explicit --keep wins; the next backfill closes that tracker on its evidence. Nothing is lost either way, and the alternative would overrule an explicit flag.
+
+<!-- fr:journal kind=decision scope=plan id=p4-close-command-reprinted created=2026-11-08T19:24:31+00:00 phase=4 -->
+### p4-close-command-reprinted · decision · An adopted issue's close command is printed again on later runs (phase 4)
+
+R13 asks that a second run writes nothing, not that it goes quiet. The issue is the operator's to close and fr holds no other reminder, so a later dry run (as a note) and `--yes` print the line again with no write.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-08T19:24:31+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+discharged_evidence was written as small per-kind readers over one cached EvidenceReader; nothing was left to tidy.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-08T19:24:31+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+The listing and apply's re-check were written once in their final shape; the task ends with text and doc edits, nothing to clean.
