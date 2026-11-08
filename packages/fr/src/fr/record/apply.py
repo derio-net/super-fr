@@ -863,7 +863,7 @@ def _acceptance_writes(
                 )
             else:
                 assert existing is not None  # refused above when absent
-                if not item.notes:
+                if not item.notes and item.status != existing.status:
                     raise RecordRefusedError(
                         f"acceptance {item.id}: moving a row's status needs `notes` — "
                         "a status that moved for no recorded reason is a silent change"
