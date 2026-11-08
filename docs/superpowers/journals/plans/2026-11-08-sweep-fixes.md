@@ -35,3 +35,48 @@ Three one-line string changes in emitters; nothing to tidy.
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 The change is a new test file; the extractor and runner were written once and are the tidy form.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-08T18:15:06+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · A same-status record with no notes wiped the row's note (phase 1)
+
+The narrowed check in record/apply.py let any non-CLI record entry that names a row at its current status and no notes write an empty note. Verified at the `notes=item.notes or ""` line.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-08T18:15:06+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · A repeated link-only --notes was appended again (phase 1)
+
+Issues are de-duplicated but notes were not, so a re-run gave `n; y; y`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-08T18:15:06+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · The source scan named four modules, so a new emitter elsewhere was not caught (phase 1)
+
+EMITTERS listed render, trackers, close and gate_cmd only.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-08T18:15:06+00:00 phase=1 state=open review_scope=out -->
+### p1-r4 · finding [open] (reviewer: out of scope) · `fr gate pass --yes` exits 0 when a tracker close fails (phase 1)
+
+It prints the retry line and exits 0. Pre-existing, in gate_cmd.py, and not touched by this change.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-11-08T18:15:06+00:00 phase=1 -->
+### review-phase-1 · review · Phase 1 review: 4 findings, 3 in scope and fixed (phase 1)
+
+A dispatched reviewer read the diff against R1-R6. Findings p1-r1 to p1-r3 were verified against the code and fixed test-first, the tests seen failing before and passing after; p1-r4 is out of scope. Reviewer verdict: with fixes.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-08T18:15:06+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: A same-status record with no notes wiped the row's note (phase 1)
+
+An item that moves nothing and names no note keeps the row's note; test_a_same_status_item_with_no_notes_keeps_the_rows_note.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-08T18:15:06+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: A repeated link-only --notes was appended again (phase 1)
+
+A note already present as a segment is not appended; test_a_repeated_link_only_note_is_not_appended_twice.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-08T18:15:06+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: The source scan named four modules, so a new emitter elsewhere was not caught (phase 1)
+
+The scan globs the whole gatebackfill package plus gate_cmd.py, and a comment says it is a guard, not a proof. It found one more literal, `fr debt`, which is prose.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-08T18:15:06+00:00 phase=1 state=open resolves=p1-r4 out_of_scope=true -->
+### p1-r4-resolved · finding [out-of-scope] · resolves p1-r4: `fr gate pass --yes` exits 0 when a tracker close fails (phase 1)
+
+Pre-existing exit code, not caused by this change; to be filed at deliver.
