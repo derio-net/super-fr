@@ -235,3 +235,153 @@ discharged_evidence was written as small per-kind readers over one cached Eviden
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 The listing and apply's re-check were written once in their final shape; the task ends with text and doc edits, nothing to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · A row in a debt status closed through a journal owed entry resolved fixed (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. test_p4_r1_a_row_in_a_debt_status_is_never_discharged_by_its_journal
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · Any entry kind but owed read as a recorded outcome (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. Only `discovery` counts, which is what --ran and --na both write; test_p4_r2_an_entry_of_another_kind_named_like_a_step_is_not_an_outcome
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · An adopted issue authored by fr's own account was treated as owned and skipped (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. Comments are read for any fr:owed issue owned_owed_key does not accept, in all four places; the test_p4_r3 tests with same-account fixtures
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · A checkout of another repo was read as this PR's evidence (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. _evidence_root requires the checkout's identity to equal --repo, using owed_identity because origin_slug follows insteadOf and a mirrored checkout would lose its evidence; test_p4_r4_a_checkout_of_another_repo_is_no_checkout
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · --keep on a discharged key said still owed, then the next backfill closed it (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. It still converts, and says it reads as discharged and that the next backfill closes it; test_p4_r5_keep_on_a_discharged_key_converts_and_says_the_backfill_closes_it
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · R14 and the doc said a manifest item never closes, which is untrue without --from (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. Spec R14 and Risks, and docs/gate-backfill.md, now state it; no code change
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · --yes --from ignored the manifest's claim on a recorded close (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. test_p4_r7_yes_from_a_manifest_honours_its_claim_on_a_recorded_close
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · Narrowed open_issue_refusals silenced a key held only by a stranger's marker (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. It refuses with the working adopt route; test_p4_r8_a_key_held_by_a_strangers_marker_is_refused_with_the_working_route
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · R15's clean check missed untracked evidence under status.showUntrackedFiles=no (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. --untracked-files=normal; the hidden-untracked case of the R15 tests
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r10 · finding [open] (reviewer: in scope) · An adopted key passed on two gates was listed twice (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. test_p4_r10_two_tracked_only_comments_for_one_key_list_one_close
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r11 · finding [open] (reviewer: in scope) · Repeated scans and reads (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. One per-run holder index, one journal parse per reader, a --keep pass reuses its reads; the test_p4_r11 tests. debt/engine.py gained an optional journals= for this, with default behaviour unchanged
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=in -->
+### p4-r12 · finding [open] (reviewer: in scope) · R12's claim was not guarded by R15's conditions (phase 4)
+
+Reproduced by the reviewer unless noted in the review entry. test_p4_r12_evidence_is_stated_only_when_r15_holds
+
+<!-- fr:journal kind=finding scope=plan id=p4-r13 created=2026-11-08T20:56:47+00:00 phase=4 state=open review_scope=out -->
+### p4-r13 · finding [open] (reviewer: out of scope) · A failed tracker write on the first gate pass route exits 0 (phase 4)
+
+Predates this phase, and is the same defect as p1-r4. --keep makes it easier to miss, and the retry line is still printed.
+
+<!-- fr:journal kind=decision scope=plan id=p4-yes-beside-a-strangers-marker created=2026-11-08T20:56:47+00:00 phase=4 -->
+### p4-yes-beside-a-strangers-marker · decision · --yes on a plan still at owed files fr's own tracker beside a stranger's marker (phase 4)
+
+The dry run refuses the key (p4-r8), but a plan left at `owed` still files a tracker at --yes. That is the old behaviour for non-issue keys, and the tracker then holds the key, so nothing is lost. Left as is.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-entries-superseded-by-review created=2026-11-08T20:56:47+00:00 phase=4 -->
+### p4-entries-superseded-by-review · discovery · Two earlier phase 4 entries are superseded by the review fixes (phase 4)
+
+p4-keep-on-a-discharged-key: --keep now says the key reads as discharged (p4-r5). p4-another-holders-marker-blocks-the-close: the behaviour stands, and its scan is now the per-run holder index (p4-r11).
+
+<!-- fr:journal kind=review scope=plan id=review-phase-4 created=2026-11-08T20:56:47+00:00 phase=4 -->
+### review-phase-4 · review · Phase 4 review: 13 findings, 12 in scope and fixed (phase 4)
+
+A dispatched reviewer ran probe scenarios over real git and the fake client, trying to make fr close what it should not. It could not close a stranger's issue or act on a forged marker. It did close a tracker on a failing row (p4-r1) and wrote false evidence from another repo's checkout (p4-r4). p4-r8's --yes note and p4-r12 were by reading. The executor checked and fixed all twelve test-first; a few tests were not seen failing on the old code, as its return says. Diff size judged justified: about 1270 of 2047 inserted lines at review were tests.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: A row in a debt status closed through a journal owed entry resolved fixed (phase 4)
+
+test_p4_r1_a_row_in_a_debt_status_is_never_discharged_by_its_journal
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: Any entry kind but owed read as a recorded outcome (phase 4)
+
+Only `discovery` counts, which is what --ran and --na both write; test_p4_r2_an_entry_of_another_kind_named_like_a_step_is_not_an_outcome
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: An adopted issue authored by fr's own account was treated as owned and skipped (phase 4)
+
+Comments are read for any fr:owed issue owned_owed_key does not accept, in all four places; the test_p4_r3 tests with same-account fixtures
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: A checkout of another repo was read as this PR's evidence (phase 4)
+
+_evidence_root requires the checkout's identity to equal --repo, using owed_identity because origin_slug follows insteadOf and a mirrored checkout would lose its evidence; test_p4_r4_a_checkout_of_another_repo_is_no_checkout
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: --keep on a discharged key said still owed, then the next backfill closed it (phase 4)
+
+It still converts, and says it reads as discharged and that the next backfill closes it; test_p4_r5_keep_on_a_discharged_key_converts_and_says_the_backfill_closes_it
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: R14 and the doc said a manifest item never closes, which is untrue without --from (phase 4)
+
+Spec R14 and Risks, and docs/gate-backfill.md, now state it; no code change
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: --yes --from ignored the manifest's claim on a recorded close (phase 4)
+
+test_p4_r7_yes_from_a_manifest_honours_its_claim_on_a_recorded_close
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: Narrowed open_issue_refusals silenced a key held only by a stranger's marker (phase 4)
+
+It refuses with the working adopt route; test_p4_r8_a_key_held_by_a_strangers_marker_is_refused_with_the_working_route
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: R15's clean check missed untracked evidence under status.showUntrackedFiles=no (phase 4)
+
+--untracked-files=normal; the hidden-untracked case of the R15 tests
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r10 -->
+### p4-r10-resolved · finding [fixed] · resolves p4-r10: An adopted key passed on two gates was listed twice (phase 4)
+
+test_p4_r10_two_tracked_only_comments_for_one_key_list_one_close
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r11 -->
+### p4-r11-resolved · finding [fixed] · resolves p4-r11: Repeated scans and reads (phase 4)
+
+One per-run holder index, one journal parse per reader, a --keep pass reuses its reads; the test_p4_r11 tests. debt/engine.py gained an optional journals= for this, with default behaviour unchanged
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=fixed resolves=p4-r12 -->
+### p4-r12-resolved · finding [fixed] · resolves p4-r12: R12's claim was not guarded by R15's conditions (phase 4)
+
+test_p4_r12_evidence_is_stated_only_when_r15_holds
+
+<!-- fr:journal kind=finding scope=plan id=p4-r13-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=open resolves=p4-r13 out_of_scope=true -->
+### p4-r13-resolved · finding [out-of-scope] · resolves p4-r13: A failed tracker write on the first gate pass route exits 0 (phase 4)
+
+Pre-existing exit code on the first pass route, not caused by this change; to be filed at deliver with p1-r4.
+
+<!-- fr:journal kind=finding scope=plan id=p4-manifest-only-unknowable-without-from-resolved created=2026-11-08T20:56:47+00:00 phase=4 state=refuted resolves=p4-manifest-only-unknowable-without-from -->
+### p4-manifest-only-unknowable-without-from-resolved · finding [refuted] · resolves p4-manifest-only-unknowable-without-from: A manifest-only key cannot be recognised on a dry run that omits --from (phase 4)
+
+Not a code defect: a key naming a real row, phase or step has real evidence, shown in the dry run. R14 and the Risks line now state this, and docs/gate-backfill.md follows them. The `claimed` guard stays for --from.
