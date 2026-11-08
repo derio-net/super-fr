@@ -9800,9 +9800,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R17
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op
+      - super-fr:tests/unit/test_installable.py#test_every_tracked_path_that_requires_a_bump_is_installable
+    status: ci
+    notes: Pinned by release.py unit tests over fixture git histories in CI.
     verify: none
   - id: release-noop-first-real-use
     capability: release
