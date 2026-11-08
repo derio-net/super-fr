@@ -494,3 +494,8 @@ Same exposure before this change by reading, and needs a hand-pushed tag; to be 
 ### p1-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1389] · resolves p1-r4: `fr gate pass --yes` exits 0 when a tracker close fails (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1389.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved-2 created=2026-11-08T21:44:29+00:00 phase=3 state=open resolves=p3-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1390 -->
+### p3-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1390] · resolves p3-r3: Non-UTF-8 spec bytes raise UnicodeDecodeError in the repair (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1390.
