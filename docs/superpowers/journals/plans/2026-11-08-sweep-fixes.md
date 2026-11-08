@@ -499,3 +499,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1389.
 ### p3-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1390] · resolves p3-r3: Non-UTF-8 spec bytes raise UnicodeDecodeError in the repair (phase 3)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1390.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved-2 created=2026-11-08T21:44:43+00:00 phase=3 state=open resolves=p3-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1391 -->
+### p3-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1391] · resolves p3-r4: The reader folds heading lines inside the Test Plan into the previous step's text (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1391.
