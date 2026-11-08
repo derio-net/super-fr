@@ -9819,6 +9819,8 @@ rows:
     notes: 'Post-merge walk owed: the next archive PR merge cuts no tag, then the gate
       pass promotes the RC. Walked on first real use, held by gate tester.'
     verify: live
+    issues:
+    - derio-net/super-fr#1321
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
