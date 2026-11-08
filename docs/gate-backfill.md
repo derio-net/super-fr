@@ -122,7 +122,10 @@ re-run.
 tracked only, never re-gated") and records `gate_passed: true` in the plan file. The decision stays
 `owed`, because the item really is still owed. `--yes` re-reads the PR's labels itself, so a stale
 plan file cannot re-gate it. It never adds `gate:<g>` to that PR, because doing so would re-hold the
-release and reverse the pass. It still files, reuses or adopts the item's tracker, in a "tracked
+release and reverse the pass. (While a gate does hold the release, a run cuts a release candidate only
+when something installable changed since the newest RC tag or, with no RC, the last final; a
+housekeeping merge prints `nothing installable changed since <tag>: no release`. So landing this
+page's repo-file commands cuts no RC.) It still files, reuses or adopts the item's tracker, in a "tracked
 only" form. Its body ends with `<!-- fr-gate-passed:<g> pr:<n> -->` instead of the gate marker (an
 adopt comment ends with `fr-gate-adopt-passed:`), and it shows the command that discharges the owed
 key itself, never `fr gate pass`: `set-status --walk` for a row, `closeout outcome --ran` for a spec

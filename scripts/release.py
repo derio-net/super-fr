@@ -16,7 +16,8 @@ Release gating (`compute`): while a PR merged since the last FINAL tag
 (`vX.Y.Z` exactly) still waits on a post-merge gate (`waiting_prs`: a `gh` read here,
 then `fr release status --from-json`, credential-free),
 a run cuts a release candidate `vX.Y.Z-rc.N` (no fragment consumed, a GitHub
-pre-release), or nothing when nothing merged since the newest RC tag; once nothing
+pre-release), or nothing when nothing installable changed since the newest RC tag or,
+with no RC above it, the last final (spec 2026-11-08-sweep-fixes R16); once nothing
 waits, the final `X.Y.Z` consumes the fragments. Versions parse through
 `versions.Version`: an RC is `X.Y.ZrcN` on the Python surfaces, `X.Y.Z-rc.N` elsewhere.
 
@@ -90,6 +91,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import changes  # noqa: E402
 import floors  # noqa: E402
+import installable  # noqa: E402
 import version_surfaces as vs  # noqa: E402
 from versions import FINAL_RE, FINAL_TAG_RE, RC_TAG_RE, Version  # noqa: E402
 
@@ -486,6 +488,7 @@ class Plan:
     rc: bool = False
     pending: list[changes.Fragment] = field(default_factory=list)  # every pending one
     why: str = ""  # why there is nothing to release, or why an RC
+    noop: str = ""  # R16's line, printed on its own: nothing installable changed
 
 
 def _tags(repo: Path, *extra: str) -> list[str]:
@@ -506,9 +509,21 @@ def _rcs_above(repo: Path, base: Version | None) -> list[tuple[Version, str]]:
     return sorted((v, t) for v, t in rcs if base is None or v > base)
 
 
-def _merged_since(repo: Path, tag: str) -> bool:
-    """Whether HEAD carries any commit *tag* does not."""
-    return _out(repo, "rev-list", "--count", f"refs/tags/{tag}..HEAD").strip() != "0"
+def _installable_changed(repo: Path, tag: str) -> bool:
+    """Whether HEAD differs from *tag* in an installable path, credential-free.
+
+    A failed diff refuses the run: read as "nothing changed" it would stop releases
+    with every job green."""
+    try:
+        return installable.installable_changed(repo, tag, env=_credential_free_env())
+    except (subprocess.CalledProcessError, OSError) as exc:
+        detail = getattr(exc, "stderr", None) or str(exc)
+        if isinstance(detail, bytes):
+            detail = detail.decode(errors="replace")
+        raise ReleaseError(
+            f"cannot tell what changed since {tag}, and that is not the same as nothing: "
+            f"{detail.strip()}"
+        ) from None
 
 
 _PR_SUBJECT_RE = re.compile(r"\(#(\d+)\)\s*$|^Merge pull request #(\d+)\b")
@@ -595,11 +610,15 @@ def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> P
     """The release the working tree asks for (exit-gates R20); raises on an invalid
     fragment or override, or when what waits cannot be read.
 
-    1. Some PR merged since the last final tag still waits on a post-merge gate
-       (`waiting_prs`): an RC `X.Y.Z-rc.N` that consumes no fragment, unless nothing
-       merged since the newest RC tag; then nothing.
+    1. Some PR merged since the last final tag still waits on a post-merge gate, or
+       what waits is unknown (`waiting_prs`): an RC `X.Y.Z-rc.N` that consumes no
+       fragment, unless nothing installable (`installable.is_installable`) changed since
+       the newest RC tag above the last final or, with no RC, the last final. Then
+       nothing, and `Plan.noop` says so: a housekeeping merge, or one landing only a
+       fragment, even a major bump, cuts no RC (sweep-fixes R16, amending exit-gates
+       R20). With no tag to compare against, the RC is cut. A failed diff refuses.
     2. Nothing waits, and HEAD is an RC or fragments are pending: the final `X.Y.Z`,
-       consuming the fragments.
+       consuming the fragments, whether or not anything installable changed (R18).
     3. Otherwise nothing. `--version` releases exactly that final, ungated.
 
     `X.Y.Z` is the last final plus the highest pending bump; `N` is one past the
@@ -620,6 +639,7 @@ def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> P
         plan.why = "no pending fragments"
         return plan
     base = last_final(repo)
+    final_tag = base.tag if base is not None else None
     if base is None:
         if head.is_rc:
             raise ReleaseError(
@@ -643,8 +663,9 @@ def compute(repo: Path, override: str | None, cmds: Commands | None = None) -> P
         plan.new, plan.fragments = target.semver, fragments
         return _not_backwards(plan, head)
     rcs = _rcs_above(repo, base)
-    if rcs and not _merged_since(repo, rcs[-1][1]):
-        plan.why = f"{reason}, and nothing merged since {rcs[-1][1]}"
+    since = rcs[-1][1] if rcs else final_tag
+    if since is not None and not _installable_changed(repo, since):
+        plan.why, plan.noop = reason, f"nothing installable changed since {since}: no release"
         return plan
     n = 1 + max((v.rc or 0 for v, _ in rcs if v.final == target), default=0)
     plan.new, plan.rc, plan.why = target.with_rc(n).semver, True, reason
@@ -921,7 +942,10 @@ def prepare(
     base = _rev(repo, "HEAD")
     plan = compute(repo, override, cmds)
     if plan.new is None:
-        if plan.why:
+        if plan.noop:
+            print(plan.why)
+            print(plan.noop)
+        elif plan.why:
             print(f"nothing to release: {plan.why}")
         return None
     if plan.rc:
@@ -1120,6 +1144,9 @@ def dry_run(repo: Path, override: str | None, cmds: Commands) -> int:
     plan = compute(repo, override, cmds)
     if plan.new is None:
         tagged = "tagged" if tag_exists(repo, plan.current) else "untagged — would tag it"
+        if plan.noop:
+            print(f"{plan.why}\n{plan.noop}\n{plan.current} is {tagged}")
+            return EXIT_OK
         print(
             f"nothing to release ({plan.why or 'no pending fragments'}); {plan.current} is {tagged}"
         )

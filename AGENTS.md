@@ -620,9 +620,17 @@ in its environment, which of those PRs merged since the last **final** tag
 (`vX.Y.Z` exactly; an RC tag never counts) still carry `gate:tester` or
 `gate:devops` without the `-passed` label. While any do, a run cuts a release
 candidate instead: `release: vX.Y.Z-rc.N`, tagged and published as a GitHub
-pre-release, **consuming no fragment**, or nothing at all when nothing has
-merged since the newest RC tag. Once nothing waits, the final `X.Y.Z` consumes
-the fragments. `release.yml` also runs daily, because a gate passes with no push to main.
+pre-release, **consuming no fragment**, or nothing at all when nothing
+**installable** changed since the newest RC tag (the last final when no RC is above
+it; with neither tag, it cuts the RC). The run then prints `nothing installable
+changed since <tag>: no release`. `scripts/installable.py` is the one definition:
+every path except `docs/`, `tests/`, `.github/`, `.changes/`, root-level `*.md` and
+`.test_durations`, both sides of a move counted, so a merge landing only a fragment
+cuts no RC either, even a major bump. A failing `git diff` refuses the run, never
+reads as no change. Once nothing waits, the final `X.Y.Z` consumes
+the fragments, with or without an installable change since the RC (spec
+`2026-11-08-sweep-fixes` R16-R18 amends exit-gates R20 here). `release.yml` also runs
+daily, because a gate passes with no push to main.
 The read is cross-checked against the code: every PR `git log --first-parent <last final>..HEAD`
 names (`(#N)` or `Merge pull request #N`, the release bot's own commits skipped)
 must be in it. First parent only: a commit inside a merge-committed branch is no
@@ -630,7 +638,8 @@ landing, and its `(#N)` is usually an issue ref (gh#1333). A rebase merge puts
 the branch's own subjects on that line, so an issue ref there still reads as a
 missed PR: land PRs by merge commit or squash. A failed read, a read at its 1000 cap, a PR the read misses, or a
 failed `fr` decision makes the gate state **unknown**, which cuts an RC, never a
-final and never a refusal (nothing when nothing merged since the newest RC). So a
+final and never a refusal (nothing when nothing installable changed, the same no-op
+as above). So a
 token that cannot read labels means **RCs only** until it is fixed; `--version`
 stays the explicit override for a final. A computed version at or below HEAD's
 releases nothing (a removed fragment never moves the version backwards), and an
