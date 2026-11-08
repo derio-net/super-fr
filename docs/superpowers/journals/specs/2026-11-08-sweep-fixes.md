@@ -300,3 +300,8 @@ Operator confirmed five phases, one per ask.
 ### tier-2026-11-08-sweep-fixes-p4 · decision · hard: changes the tracker close path that every gate pass route relies on
 
 R14 and R15 are what stop a wrong close; a false positive closes real tracking.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-08-sweep-fixes-p5 created=2026-11-08T16:21:04+00:00 -->
+### tier-2026-11-08-sweep-fixes-p5 · decision · hard: changes the release gate; a wrong no-op silently stops releases
+
+Every release passes through compute.
