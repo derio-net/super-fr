@@ -130,3 +130,48 @@ the change was deleting one predicate clause; nothing to clean
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 a new scenario script and its registration; nothing existing to tidy
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-08T18:44:58+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · The demotion keyword set had no pin against fr's section readers (phase 3)
+
+A new keyword reader added later would be swallowed by demotion with no red test.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-08T18:44:58+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · The near-miss form list omitted multi-digit and multi-level prefixes (phase 3)
+
+The list is hand-written. The repair has no separate predicate, so the risk is small.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-08T18:44:58+00:00 phase=3 state=open review_scope=out -->
+### p3-r3 · finding [open] (reviewer: out of scope) · Non-UTF-8 spec bytes raise UnicodeDecodeError in the repair (phase 3)
+
+`_applies` already raised through read_text, so this is not new. It fails loud and corrupts nothing. How the gate reports a raising `applies` was not examined.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-08T18:44:58+00:00 phase=3 state=open review_scope=out -->
+### p3-r4 · finding [open] (reviewer: out of scope) · The reader folds heading lines inside the Test Plan into the previous step's text (phase 3)
+
+Lazy continuation in the reader, and the same for an exact `## Test Plan` with children. Not caused by this change.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-08T18:44:58+00:00 phase=3 -->
+### review-phase-3 · review · Phase 3 review: 4 findings, 2 in scope and fixed (phase 3)
+
+A dispatched reviewer ran real shapes through the repair (siblings, children, fences, CRLF, sole h1, level six) and found the behaviour correct. It judged the demoted `###` sibling to be the writer's own hierarchy, not a false-step defect: those items were children of the Test Plan before and after, as with an exact heading. Findings p3-r1 and p3-r2 were hardening and are fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-08T18:44:58+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: The demotion keyword set had no pin against fr's section readers (phase 3)
+
+test_the_demotion_keywords_are_exactly_the_sections_fr_reads_by_keyword scans the package's keyword readers and compares them with the repair's set.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-08T18:44:58+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: The near-miss form list omitted multi-digit and multi-level prefixes (phase 3)
+
+The form list now includes `12.` and `6.1.2`.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-08T18:44:58+00:00 phase=3 state=open resolves=p3-r3 out_of_scope=true -->
+### p3-r3-resolved · finding [out-of-scope] · resolves p3-r3: Non-UTF-8 spec bytes raise UnicodeDecodeError in the repair (phase 3)
+
+Pre-existing through read_text and fails loud; not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-08T18:44:58+00:00 phase=3 state=open resolves=p3-r4 out_of_scope=true -->
+### p3-r4-resolved · finding [out-of-scope] · resolves p3-r4: The reader folds heading lines inside the Test Plan into the previous step's text (phase 3)
+
+A reader quirk that holds for an exact heading too; not caused by this change.
