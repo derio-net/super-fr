@@ -220,5 +220,5 @@ gate: release-noop-first-real-use=tester
 
 ## Implementation Plans
 
-| Plan | Status |
-|------|--------|
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
