@@ -11,13 +11,15 @@ name: Release
 # the last final tag still carries an unpassed post-merge gate label
 # (`fr release status --from-json`), a run cuts a release candidate instead,
 # `release: vX.Y.Z-rc.N`, tagged and published as a GitHub pre-release and
-# consuming no fragment; the final follows once nothing waits. A gate passes
+# consuming no fragment; the final follows once nothing waits. An RC needs an
+# installable change since the newest tag (`scripts/installable.py`, spec
+# 2026-11-08-sweep-fixes R16): otherwise the run prints that and releases nothing. A gate passes
 # with no push to main, so the workflow also runs daily (and `fr gate pass`
 # prints the dispatch). release.py reads the merged PRs and their labels with
 # `gh` and the workflow token (`pull-requests: read`), never the app's, and fr
 # decides from those facts with no credential in its environment. When what
 # waits is unknown (a failed or capped read, or a PR the git log names that the
-# read misses), the run cuts an RC, never a final.
+# read misses), the run cuts an RC under the same rule, never a final.
 # FR_RELEASE_STATUS_TOKEN is the workflow's github.token, so it also carries
 # the prepare job's contents and issues write. It reaches only that one gh read, never
 # fr or repo code: the bump, the lock check, the migration, the staged suite and
