@@ -185,7 +185,7 @@ def test_the_repair_leaves_the_exact_heading_alone(tmp_path) -> None:  # noqa: A
 _FORMS = [
     f"{hashes} {prefix}{name}{tail}"
     for hashes in ("#", "##", "###")
-    for prefix in ("", "6. ", "6) ", "§6 ", "6.1 ")
+    for prefix in ("", "6. ", "6) ", "§6 ", "6.1 ", "12. ", "6.1.2 ")
     for name, tail in (
         ("Test Plan", ""),
         ("Test Plan", " (post-merge, operator-driven)"),
@@ -436,3 +436,28 @@ def test_no_reader_outside_fr_spec_spells_the_heading() -> None:
         if spelled.search(line) and "rename it to" not in line
     ]
     assert offenders == []
+
+
+# Keyword headings fr reads in a file that is not a spec, or that the repair itself rewrites.
+_NOT_A_DEMOTION_KEYWORD = {"Test Plan", "Origin", "Phase", "Historical reviews"}
+
+
+def test_the_demotion_keywords_are_exactly_the_sections_fr_reads_by_keyword() -> None:
+    """Review p3-r1: a new `## <Keyword>` reader that demotion does not stop at would stop
+    reading silently once the repair moved its heading, so the two sets are pinned together."""
+    import re
+    from pathlib import Path
+
+    from fr.artifacts.spec_test_plan_heading import _KEYWORD_RE
+
+    src = Path(__file__).resolve().parents[2] / "packages/fr/src/fr"
+    readers = re.compile(
+        r"""\^\#\#(?:\\s\+|\s)([A-Z][A-Za-z ]+)|_?[A-Z_]*HEADING\s*=\s*"\#\#\s([A-Z][A-Za-z ]+)\"""",
+    )
+    found = {
+        (m.group(1) or m.group(2)).strip()
+        for path in src.rglob("*.py")
+        for m in readers.finditer(path.read_text())
+    }
+    keywords = set(_KEYWORD_RE.pattern.split("(")[1].split(")")[0].split("|"))
+    assert found - _NOT_A_DEMOTION_KEYWORD == keywords
