@@ -10814,8 +10814,12 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R8
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_plan_heading.py#test_every_refused_form_is_repaired_and_validates_clean
+      - super-fr:tests/unit/test_test_plan_heading.py#test_the_demotion_keywords_are_exactly_the_sections_fr_reads_by_keyword
+    status: ci
+    notes: Every refused form is repaired in CI; the installed-CLI scenario runs at
+      the walk and in test_scenarios.
     verify: candidate
     scenario: tests/scenarios/test-plan-repair-covers-refused.sh
