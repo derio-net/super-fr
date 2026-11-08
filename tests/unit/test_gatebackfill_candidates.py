@@ -383,7 +383,13 @@ def test_r7_an_open_digest_naming_a_row_is_never_a_look_alike(tmp_path: Path) ->
             author=STRANGER,
             labels=(),
         ),  # fmt: skip
-        issue(71, "acceptance digest", f"r1 is still owed\n{ACCEPTANCE_DIGEST}\n", labels=()),
+        issue(
+            71,
+            "acceptance digest",
+            f"r1 is still owed\n{ACCEPTANCE_DIGEST}\n",
+            author=STRANGER,
+            labels=(),
+        ),
     ]
 
     cands, _ = _collect(repo, forge)
