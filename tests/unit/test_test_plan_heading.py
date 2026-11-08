@@ -174,14 +174,106 @@ def test_the_repair_renames_a_level_two_near_miss_and_keeps_its_suffix(tmp_path)
     )
 
 
-def test_the_repair_leaves_other_levels_for_a_human(tmp_path) -> None:  # noqa: ANN001
+def test_the_repair_leaves_the_exact_heading_alone(tmp_path) -> None:  # noqa: ANN001
     from fr.artifacts.spec_test_plan_heading import SPEC_TEST_PLAN_HEADING_REPAIR
 
     spec = tmp_path / "s.md"
-    spec.write_text(_spec("### Test Plan"))
-    assert not SPEC_TEST_PLAN_HEADING_REPAIR.applies(spec)
     spec.write_text(_spec("## Test Plan"))
     assert not SPEC_TEST_PLAN_HEADING_REPAIR.applies(spec)
+
+
+_FORMS = [
+    f"{hashes} {prefix}{name}{tail}"
+    for hashes in ("#", "##", "###")
+    for prefix in ("", "6. ", "6) ", "§6 ", "6.1 ")
+    for name, tail in (
+        ("Test Plan", ""),
+        ("Test Plan", " (post-merge, operator-driven)"),
+        ("test plan", ""),
+    )
+]
+
+
+@pytest.mark.parametrize("heading", _FORMS)
+def test_every_refused_form_is_repaired_and_validates_clean(heading: str, tmp_path) -> None:  # noqa: ANN001
+    from fr.artifacts.spec_test_plan_heading import (
+        SPEC_TEST_PLAN_HEADING_REPAIR as repair,  # noqa: N811
+    )
+    from fr.artifacts.structure import validate_spec
+
+    if heading == "## Test Plan":
+        pytest.skip("the exact heading")
+    spec = tmp_path / "s.md"
+    spec.write_text(_spec(heading))
+    assert find_test_plan_heading(spec.read_text()) is not None
+    assert not find_test_plan_heading(spec.read_text()).exact
+    assert repair.applies(spec), "a heading read as a near-miss is repaired"
+    repair.fn(spec)
+    assert find_test_plan_heading(spec.read_text()).exact
+    assert validate_spec(spec) == []
+    assert [s.text for s in test_plan_steps(spec.read_text())] == ["Run it.", "Watch it."]
+    assert not repair.applies(spec)
+
+
+def _repaired(tmp_path, text: str) -> str:  # noqa: ANN001
+    from fr.artifacts.spec_test_plan_heading import (
+        SPEC_TEST_PLAN_HEADING_REPAIR as repair,  # noqa: N811
+    )
+
+    spec = tmp_path / "s.md"
+    spec.write_bytes(text.encode())
+    repair.fn(spec)
+    out = spec.read_bytes().decode()
+    before = out
+    assert not repair.applies(spec)
+    repair.fn(spec)
+    assert spec.read_bytes().decode() == before, "a second migrate writes nothing"
+    return out
+
+
+def test_promoting_h3_moves_its_siblings_so_coverage_items_are_not_steps(tmp_path) -> None:  # noqa: ANN001
+    text = (
+        "# W\n\n## Testing\n\n### Test Plan\n\n1. Run it.\n\n#### Detail\n\n"
+        "### Coverage\n\n- covered a\n- covered b\n\n## Next\n- n\n"
+    )
+    out = _repaired(tmp_path, text)
+    assert "## Test Plan\n" in out and "\n## Coverage\n" in out and "\n### Detail\n" in out
+    assert [s.text for s in test_plan_steps(out)] == ["Run it."]
+    assert "## Next\n" in out and "### Next" not in out
+
+
+def test_demoting_h1_moves_its_siblings_and_keeps_keyword_sections(tmp_path) -> None:  # noqa: ANN001
+    text = (
+        "# W\n\n# Test Plan\n\n1. Run it.\n\n## Notes\n\njust a note\n\n"
+        "## Verification\n\nv\n\n# After\n\n## Sub\n"
+    )
+    out = _repaired(tmp_path, text)
+    assert "\n## Test Plan\n" in out and "\n### Notes\n" in out
+    assert "\n## Verification\n" in out and "\n# After\n" in out and "\n## Sub\n" in out
+    assert [s.text for s in test_plan_steps(out)] == ["Run it."]
+
+
+@pytest.mark.parametrize("kw", ["Implementation Plans", "Requirements", "Verification"])
+def test_demotion_stops_at_each_keyword_section(kw: str, tmp_path) -> None:  # noqa: ANN001
+    out = _repaired(tmp_path, f"# Test Plan\n\n1. Run it.\n\n## Notes\n\n## {kw}\n\n## Tail\n")
+    assert f"\n## {kw}\n" in out and "\n## Tail\n" in out and "\n### Notes\n" in out
+    assert [s.text for s in test_plan_steps(out)] == ["Run it."]
+
+
+def test_a_level_six_heading_stays_at_six_and_fences_are_untouched(tmp_path) -> None:  # noqa: ANN001
+    text = (
+        "# Test Plan\n\n1. Run it.\n\n###### Deep\n\n```\n## in fence\n# also\n```\n\n##### Five\n"
+    )
+    out = _repaired(tmp_path, text)
+    assert "\n###### Deep\n" in out and "\n###### Five\n" in out
+    assert "## in fence\n# also\n" in out and "### in fence" not in out
+
+
+def test_crlf_endings_survive_the_repair(tmp_path) -> None:  # noqa: ANN001
+    text = "### Test Plan (x)\r\n\r\n1. Run it.\r\n\r\n### Cov\r\n\r\n- c\r\n"
+    out = _repaired(tmp_path, text)
+    assert out.startswith("## Test Plan\r\n\r\n_(x)_\r\n")
+    assert "\r\n## Cov\r\n" in out and "\n" not in out.replace("\r\n", "")
 
 
 def test_archive_holds_a_plan_whose_spec_heading_is_a_near_miss(tmp_path, monkeypatch) -> None:  # noqa: ANN001

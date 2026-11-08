@@ -238,6 +238,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "gate-backfill-dry-run",
         "gate-backfill-apply",
         "printed-commands-run",
+        "test-plan-repair-covers-refused",
         "fr-ops-gate-probes",
         "auto-migrate-workspace",
         "auto-migrate-ci-in-place",
@@ -295,6 +296,10 @@ def test_gate_backfill_apply(installed: Path, tmp_path: Path) -> None:
 
 def test_printed_commands_run(installed: Path, tmp_path: Path) -> None:
     _scenario("printed-commands-run", installed, tmp_path)
+
+
+def test_test_plan_repair_covers_refused(installed: Path, tmp_path: Path) -> None:
+    _scenario("test-plan-repair-covers-refused", installed, tmp_path)
 
 
 def test_closeout_owed(installed: Path, tmp_path: Path) -> None:

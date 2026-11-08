@@ -1,0 +1,14 @@
+schema_version: 10
+run: 2026-11-08-fix-sweep-fixes
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T2.S3, P3.T3.S1]
+refactor:
+  P3.T1: "the change was deleting one predicate clause; nothing to clean"
+  P3.T3: "a new scenario script and its registration; nothing existing to tidy"
+journal:
+  - {kind: discovery, id: p3-demoted-siblings-stay-in-section, title: "A demoted # Test Plan keeps its ### siblings inside the section", body: "After demoting, `### Notes` sits under `## Test Plan`, so list items there read as steps (the section ends only at the next # or ## heading). That is the spec's own example and R9; the tests use prose under Notes. A writer with a list under such a sibling gets those items as steps.", phase: 3}
+  - {kind: discovery, id: p3-repair-read-bytes-for-crlf, title: "The repair reads bytes, not read_text, to keep CRLF", body: "Path.read_text translates CRLF to LF, and write_text_atomic writes newline='' so the old _fn silently normalised a CRLF spec. _fn now decodes read_bytes; _applies still uses read_text, which is fine for a predicate.", phase: 3}
+resolves: []
+evidence: {tests: ci}
