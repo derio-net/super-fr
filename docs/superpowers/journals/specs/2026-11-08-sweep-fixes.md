@@ -295,3 +295,8 @@ Operator confirmed five phases, one per ask.
 ### phase-split-2026-11-08-sweep-fixes-p5 · decision · ask: #1321 is its own ask
 
 Operator confirmed five phases, one per ask.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-08-sweep-fixes-p4 created=2026-11-08T16:20:59+00:00 -->
+### tier-2026-11-08-sweep-fixes-p4 · decision · hard: changes the tracker close path that every gate pass route relies on
+
+R14 and R15 are what stop a wrong close; a false positive closes real tracking.
