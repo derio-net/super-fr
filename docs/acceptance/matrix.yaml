@@ -9792,6 +9792,29 @@ rows:
     verify: live
     issues:
     - derio-net/super-fr#1360
+  - id: release-skips-rc-nothing-installable
+    capability: release
+    acceptance: A merge that changes nothing installable cuts no release candidate,
+      while promotion and fragment releases behave as before
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: release-noop-first-real-use
+    capability: release
+    acceptance: On the real Release workflow, a housekeeping merge cuts no tag or pre-release,
+      and a later gate pass still promotes the RC to a final
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
@@ -10507,6 +10530,57 @@ rows:
         (#19) and left PR #1''s (#15-#17) open. Sweep findings filed: #1322/#1324 (passed-PR
         re-gate), #1327 (row-link commands lack --status); a row reconcile can create
         a new candidate, so the order is reconcile then backfill.'
+  - id: printed-commands-run
+    capability: gate-backfill
+    acceptance: Every fr command the gate backfill and gate pass flows print runs as
+      printed once its placeholders are filled, and linking a row to its tracker keeps
+      the row's status and note
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/printed-commands-run.sh
+  - id: gate-backfill-digest-not-lookalike
+    capability: gate-backfill
+    acceptance: The repo's debt digest issue is never suggested as a row's look-alike
+      tracker, whatever its title
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-pass-keep
+    capability: gate-backfill
+    acceptance: A deliberate partial gate pass keeps tracking the items still owed,
+      and a closing comment never reads as if the item were done
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gate-backfill-closes-discharged
+    capability: gate-backfill
+    acceptance: A tracked-only tracker is closed once its item is proven discharged,
+      and never without that proof
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R15
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
   - id: ops-gap-advisory
     capability: fr ops gap
     acceptance: A devops-gated run with no ops and Test Plan steps containing commands
@@ -10727,3 +10801,15 @@ rows:
     status: ci
     notes: the hook and nag.ts are pinned by their shell and bun tests in CI
     verify: none
+  - id: test-plan-repair-covers-refused
+    capability: artifact-migration
+    acceptance: Every Test Plan heading fr refuses as a near-miss is repaired by migration,
+      keeping the steps as written, so a migrated spec validates clean
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/test-plan-repair-covers-refused.sh
