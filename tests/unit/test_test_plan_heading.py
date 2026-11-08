@@ -452,7 +452,8 @@ def test_the_demotion_keywords_are_exactly_the_sections_fr_reads_by_keyword() ->
 
     src = Path(__file__).resolve().parents[2] / "packages/fr/src/fr"
     readers = re.compile(
-        r"""\^\#\#(?:\\s\+|\s)([A-Z][A-Za-z ]+)|_?[A-Z_]*HEADING\s*=\s*"\#\#\s([A-Z][A-Za-z ]+)\"""",
+        r"""\^\#\#(?:\\s\+|\s)([A-Z][A-Za-z ]+)"""
+        r"""|_?[A-Z_]*HEADING\s*=\s*"\#\#\s([A-Z][A-Za-z ]+)\"""",
     )
     found = {
         (m.group(1) or m.group(2)).strip()
