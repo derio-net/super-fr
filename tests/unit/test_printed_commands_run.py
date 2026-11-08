@@ -240,10 +240,15 @@ def test_every_command_the_gate_and_backfill_flows_print_runs(world: World) -> N
 
 # --- the guard against a new emitter ------------------------------------------------------
 
+# A guard, not a proof: it notices a new `fr <verb>` literal in these modules, and cannot see one
+# printed from anywhere else. Every module of the package counts, so a new one is covered too.
 EMITTERS = (
-    "packages/fr/src/fr/gatebackfill/render.py",
-    "packages/fr/src/fr/gatebackfill/trackers.py",
-    "packages/fr/src/fr/gatebackfill/close.py",
+    *sorted(
+        p.relative_to(Path(__file__).resolve().parents[2]).as_posix()
+        for p in (Path(__file__).resolve().parents[2] / "packages/fr/src/fr/gatebackfill").glob(
+            "*.py"
+        )
+    ),
     "packages/fr/src/fr/commands/gate_cmd.py",
 )
 # Every `fr <verb>` these modules mention. The executing test above covers the ones that print
@@ -251,6 +256,7 @@ EMITTERS = (
 COVERED_VERBS = {
     "fr acceptance set-status",
     "fr closeout outcome",
+    "fr debt",  # prose: named in manifest refusals, never printed as a command to run
     "fr gate",  # prose: `fr gate backfill` / `fr gate pass` are named below
     "fr gate backfill",
     "fr gate pass",

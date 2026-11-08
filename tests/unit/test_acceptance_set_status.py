@@ -638,6 +638,16 @@ def test_link_only_notes_are_appended(tmp_path: Path, monkeypatch: pytest.Monkey
     assert (got.status, got.notes) == ("walk-owed", "n; y")
 
 
+def test_a_repeated_link_only_note_is_not_appended_twice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, LINK_ROWS)
+    args = ("set-status", "--id", "linked", "--issue", "o/r#1", "--notes", "y")
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    assert _row(root, "linked").notes == "n; y"
+
+
 def test_link_only_on_an_empty_note_needs_no_notes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -655,7 +655,12 @@ def set_status_cmd(
         raise typer.Exit(2)
     link_only = status is None
     new_status = target.status if status is None else status
-    new_notes = "; ".join(n for n in (target.notes, notes) if n) if link_only else (notes or "")
+    if not link_only:
+        new_notes = notes or ""
+    elif notes and notes not in target.notes.split("; "):  # a re-run adds nothing
+        new_notes = "; ".join(n for n in (target.notes, notes) if n)
+    else:
+        new_notes = target.notes
 
     additions = _parse_levels(level)
     drops = _parse_levels(drop_level, flag="--drop-level")
