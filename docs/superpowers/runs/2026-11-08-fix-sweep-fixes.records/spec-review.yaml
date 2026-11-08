@@ -1,0 +1,158 @@
+schema_version: 10
+run: 2026-11-08-fix-sweep-fixes
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s1
+  review_scope: in
+  title: --keep lost or refused on the retry route
+  body: 'Independent spec review, target: spec. R11 accepts the tracked-only form and the printed retry line carries every --keep.'
+- kind: finding
+  id: s2
+  review_scope: in
+  title: record/apply.py requires notes on every non-create item
+  body: 'Independent spec review, target: spec. Section 3.A narrows the check to a status move, with an empty-note test; verified at record/apply.py:866.'
+- kind: finding
+  id: s3
+  review_scope: in
+  title: R14 reads the working tree, so ancestry does not protect a close
+  body: 'Independent spec review, target: spec. R15 now requires HEAD equal to the default ref and clean evidence trees; Risks corrected.'
+- kind: finding
+  id: s4
+  review_scope: in
+  title: recorded_outcomes counts owed outcomes; a zero-step phase passes
+  body: 'Independent spec review, target: spec. R14 and 3.D use fold_step_outcomes and require at least one step.'
+- kind: finding
+  id: s5
+  review_scope: in
+  title: A journal-discharged key can never satisfy R13/R14
+  body: 'Independent spec review, target: spec. R14 adds resolved journal entries as evidence, and the close list is built from open owned issues.'
+- kind: finding
+  id: s6
+  review_scope: in
+  title: R13's adopted branch unreachable as written
+  body: 'Independent spec review, target: spec. 3.D defines the comment read port, the new discharged marker, and closes records the issue.'
+- kind: finding
+  id: s7
+  review_scope: in
+  title: A kept adopted issue still reads as held
+  body: 'Independent spec review, target: spec. R10 and 3.D make an adopt-passed comment override the adopt one, posted once.'
+- kind: finding
+  id: s8
+  review_scope: in
+  title: Demotion rewrites keyword headings
+  body: 'Independent spec review, target: spec. R9 ends the region at a keyword ## heading and caps at level six, with an example.'
+- kind: finding
+  id: s9
+  review_scope: in
+  title: --name-only hides the installable side of a rename
+  body: 'Independent spec review, target: spec. 3.E uses --no-renames -z; reproduced before the fix in a scratch repo.'
+- kind: finding
+  id: s10
+  review_scope: in
+  title: R16 flips existing RC tests and a behaviour left unstated
+  body: 'Independent spec review, target: spec. 3.E states the fragment-only behaviour and the test change; R16 names it.'
+- kind: finding
+  id: s11
+  review_scope: in
+  title: R12 claims a discharge owed when already discharged
+  body: 'Independent spec review, target: spec. R12 picks its wording from the evidence; keep defaults empty so the driver site is not edited.'
+- kind: finding
+  id: s12
+  review_scope: in
+  title: R10 lacks title, root and writer on the close path
+  body: 'Independent spec review, target: spec. 3.D lists title locally, calls edit_issue_body, refuses --keep with no checkout and sets the write order.'
+- kind: finding
+  id: s13
+  review_scope: in
+  title: A key in closes is still an owed entry
+  body: 'Independent spec review, target: spec. R15 and 3.D drop a discharged key from entries, with a note for a recorded decision.'
+- kind: finding
+  id: s14
+  review_scope: in
+  title: A fresh dry run does not clear an older fr's refusal
+  body: 'Independent spec review, target: spec. 3.D now states that load_plan runs on both paths and the recovery is deleting the plan file.'
+- kind: finding
+  id: s15
+  review_scope: in
+  title: R6's mechanism does not match the code
+  body: 'Independent spec review, target: spec. R6 and 3.A name FakeGhClient, extract inline and backtick forms, scan gate_cmd.py and strip --yes.'
+- kind: finding
+  id: s16
+  review_scope: in
+  title: R2 edge cases open
+  body: 'Independent spec review, target: spec. R2 refuses --notes alone; --walk-outcome defaults to None; the refusal wording is stated; the rule file and mirrors are in scope.'
+- kind: finding
+  id: s17
+  review_scope: in
+  title: Brief requirements missing from the spec
+  body: 'Independent spec review, target: spec. A Delivery section states the fragment, draft PR, tests: ci, batch exclusion and the dead-workaround note.'
+- kind: finding
+  id: s18
+  review_scope: out
+  title: '`fr gate pass --repo <other>` computes discharge commands from the current checkout'
+  body: commands/gate_cmd.py passes root=_repo_root() independent of --repo, so the discharge text is resolved against the wrong repo. Pre-existing; R12 posts that text on the forge, which makes it more visible.
+- kind: review
+  id: spec-review
+  title: 'Independent spec review: 18 findings, 17 in scope and fixed in the spec'
+  body: Reviewer checked the spec against the operator's decisions, the code and itself, by reading. No operator decision was contradicted. Design-changing claims were verified against the code by the orchestrator, and s9 was reproduced.
+resolves:
+- id: s1
+  state: fixed
+  body: R11 accepts the tracked-only form and the printed retry line carries every --keep.
+- id: s2
+  state: fixed
+  body: Section 3.A narrows the check to a status move, with an empty-note test; verified at record/apply.py:866.
+- id: s3
+  state: fixed
+  body: R15 now requires HEAD equal to the default ref and clean evidence trees; Risks corrected.
+- id: s4
+  state: fixed
+  body: R14 and 3.D use fold_step_outcomes and require at least one step.
+- id: s5
+  state: fixed
+  body: R14 adds resolved journal entries as evidence, and the close list is built from open owned issues.
+- id: s6
+  state: fixed
+  body: 3.D defines the comment read port, the new discharged marker, and closes records the issue.
+- id: s7
+  state: fixed
+  body: R10 and 3.D make an adopt-passed comment override the adopt one, posted once.
+- id: s8
+  state: fixed
+  body: 'R9 ends the region at a keyword ## heading and caps at level six, with an example.'
+- id: s9
+  state: fixed
+  body: 3.E uses --no-renames -z; reproduced before the fix in a scratch repo.
+- id: s10
+  state: fixed
+  body: 3.E states the fragment-only behaviour and the test change; R16 names it.
+- id: s11
+  state: fixed
+  body: R12 picks its wording from the evidence; keep defaults empty so the driver site is not edited.
+- id: s12
+  state: fixed
+  body: 3.D lists title locally, calls edit_issue_body, refuses --keep with no checkout and sets the write order.
+- id: s13
+  state: fixed
+  body: R15 and 3.D drop a discharged key from entries, with a note for a recorded decision.
+- id: s14
+  state: fixed
+  body: 3.D now states that load_plan runs on both paths and the recovery is deleting the plan file.
+- id: s15
+  state: fixed
+  body: R6 and 3.A name FakeGhClient, extract inline and backtick forms, scan gate_cmd.py and strip --yes.
+- id: s16
+  state: fixed
+  body: R2 refuses --notes alone; --walk-outcome defaults to None; the refusal wording is stated; the rule file and mirrors are in scope.
+- id: s17
+  state: fixed
+  body: 'A Delivery section states the fragment, draft PR, tests: ci, batch exclusion and the dead-workaround note.'
+- id: s18
+  state: out-of-scope
+  body: Pre-existing behaviour of --repo with a checkout of another repo, not caused by this change; to be filed at deliver.
+acceptance: []
+evidence:
+  review: spec-review
+  reviewer: a98c382f5232a1b3a
