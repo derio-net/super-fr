@@ -9815,8 +9815,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
     - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: 'Post-merge walk owed: the next archive PR merge cuts no tag, then the gate
+      pass promotes the RC. Walked on first real use, held by gate tester.'
     verify: live
   - id: tracker-done-closes-issue
     capability: tracker protocol
