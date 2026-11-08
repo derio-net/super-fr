@@ -58,7 +58,7 @@ tasks:
       GREEN: add `issue_comments` to `BackfillForge` and its adapter, the `fr-gate-adopt-discharged:` marker, `closes` on `PlanFile`, the listing built from open owned issues and foreign `fr:owed` issues, the summary block, the drop from `merge_plan`, and the re-check and writes in `apply_plan`. See the tests pass.
   - id: P4.T3.S3
     text: |-
-      Update the tracked-only tracker text, which tells the operator to close the issue by hand, and `docs/gate-backfill.md` for `--keep` and automatic close, then extend the printed-commands test to cover the new printed close command.
+      Update the tracked-only tracker text, whose closing line says the close is the operator's, and `docs/gate-backfill.md` for `--keep` and automatic close, then extend the printed-commands test to cover the new printed close command.
 state:
   steps:
     P4.T1.S1:
