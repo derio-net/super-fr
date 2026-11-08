@@ -1,0 +1,83 @@
+schema_version: 10
+run: 2026-11-08-fix-sweep-fixes
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T1.S2, P5.T2.S1, P5.T2.S2, P5.T2.S3]
+refactor:
+  P5.T1: "A new module of two short functions, written once; there was nothing to tidy."
+journal:
+  - kind: decision
+    id: p5-noop-line-on-its-own
+    phase: 5
+    title: R16's line is printed on its own, beside the reason, not inside "nothing to release"
+    body: |
+      `Plan` gains `noop`, and `prepare` and `dry_run` print it as a line of its own, so the
+      Test Plan's walk can look for the exact text. `Plan.why` keeps the gate reason and is printed
+      on the line before it: without that, a run that could not read the gate state ("HTTP 502")
+      would show only the no-op, and the reason an RC or final was not cut would be lost.
+  - kind: decision
+    id: p5-failed-diff-refuses
+    phase: 5
+    title: A failing git diff refuses the run
+    body: |
+      `installable_changed` raises `CalledProcessError`, and `release._installable_changed` turns
+      that (or a missing git) into `ReleaseError`, exit 1. Choosing to cut an RC instead would also
+      fail towards releasing, but a tree git cannot diff is not one to stage a release on, and a
+      red job is seen. A real failure is tested: an RC tag listed with no ref behind it.
+  - kind: discovery
+    id: p5-env-keyword-on-installable-changed
+    phase: 5
+    title: installable_changed takes an env keyword the spec's signature does not show
+    body: |
+      AGENTS.md says every git command but the two pushes runs credential-free, and `_git` is how
+      release.py keeps that. The new module runs its own git, so it takes `env`, and release.py
+      passes `_credential_free_env()`. A test records the env the diff really ran with. The list of
+      credentials stays in one place.
+  - kind: discovery
+    id: p5-refs-tags-and-bytes
+    phase: 5
+    title: The diff names refs/tags/<tag> and decodes bytes itself
+    body: |
+      A branch named like a tag would otherwise win or be ambiguous, which a test pins. The output
+      is read as bytes and decoded with `os.fsdecode`, because `text=True` raises on a path the
+      runner's locale cannot decode, and a decoding crash is not a `ReleaseError`.
+  - kind: discovery
+    id: p5-dry-run-mixes-tree-and-commits
+    phase: 5
+    title: --dry-run reads fragments from the working tree but the diff from commits
+    body: |
+      An uncommitted fragment still counts as pending, while uncommitted code does not count as an
+      installable change, because `installable_changed` compares the tag with HEAD. That is the
+      right comparison for the real run, which resets to origin/main first. It is why
+      `test_dry_run_says_it_would_cut_an_rc` now commits a code path as its fixture.
+  - kind: discovery
+    id: p5-untagged-rc-reaches-the-recovery-by-the-version-line
+    phase: 5
+    title: An untagged RC reaches its recovery because its version line differs from every tag
+    body: |
+      With the RC's tag missing, the compared tag is an older one, and the release commit's own
+      version surfaces (`pyproject.toml`, `uv.lock`) are installable paths. So the diff is always
+      true, `_not_backwards` returns nothing new and `finish` tags HEAD. Tests pin this with a docs
+      merge above the RC and with an older RC tag below it.
+  - kind: discovery
+    id: p5-fixtures-changed
+    phase: 5
+    title: Seventeen existing tests changed their fixtures, none their assertions
+    body: |
+      Fifteen moved from `world.fragment` to the new `world.change`, which lands code and then the
+      fragment. `test_dry_run_says_it_would_cut_an_rc` and
+      `test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_final` land a code
+      path directly. `test_release_py_reads_the_forge_and_hands_fr_the_facts` lands only a fragment
+      and still passes, because it asserts the read and the facts, which come before this check.
+  - kind: discovery
+    id: p5-gate-backfill-doc-sentence
+    phase: 5
+    title: docs/gate-backfill.md never described when an RC is cut, so it gained one parenthesis
+    body: |
+      The spec lists this page as updated, while the plan's steps name only `compute` and
+      `AGENTS.md`. The page's one mention of a held release now says a housekeeping merge cuts no RC.
+      The acceptance row `release-skips-rc-nothing-installable` is not moved here: this step's
+      record carries no acceptance section.
+resolves: []
+evidence: {tests: ci}
