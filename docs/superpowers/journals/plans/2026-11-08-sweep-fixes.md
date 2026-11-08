@@ -504,3 +504,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1390.
 ### p3-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1391] · resolves p3-r4: The reader folds heading lines inside the Test Plan into the previous step's text (phase 3)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1391.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r13-resolved-2 created=2026-11-08T21:44:57+00:00 phase=4 state=open resolves=p4-r13 tracked_by=https://github.com/derio-net/super-fr/issues/1392 -->
+### p4-r13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1392] · resolves p4-r13: A failed tracker write on the first gate pass route exits 0 (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1392.
