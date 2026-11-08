@@ -135,10 +135,7 @@ def tracked_rows(entries: list[PlanEntry]) -> list[str]:
         k, name, _ = split_key(e.key)
         if k == "row" and e.tracker.ref and e.decision_kind in ("owed", "adopt"):
             ref = shlex.quote(e.tracker.ref)
-            out.append(
-                f"fr acceptance set-status --id {shlex.quote(name)} --issue {ref} "
-                f'--notes "tracked by {e.tracker.ref}"'
-            )
+            out.append(f"fr acceptance set-status --id {shlex.quote(name)} --issue {ref}")
     return out
 
 

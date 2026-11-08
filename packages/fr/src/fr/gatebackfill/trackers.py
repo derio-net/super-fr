@@ -160,7 +160,7 @@ def _journal_resolve(root: Path, key: str) -> str | None:
                     if e.kind == "owed" and e.id in still and owed_key(e) == key:
                         return (
                             f"fr journal resolve --scope {scope} --slug {shlex.quote(path.stem)} "
-                            f'--id {shlex.quote(e.id)} --state fixed --body "<why it is done>"'
+                            f'--id {shlex.quote(e.id)} --state fixed --note "<why it is done>"'
                         )
     return None
 
@@ -178,7 +178,8 @@ def discharge_command(key: str, *, repo_root: Path) -> str:
     if kind == "row":
         return (
             f"fr acceptance set-status --id {shlex.quote(name)} --status walked "
-            '--walk "<walk log>" --notes "<what passed>"'
+            '--walk "<walk log>" --harness "<harness>" --model "<model>" '
+            '--strategy "<strategy>" --notes "<what passed>"'
         )
     if kind == "spec" and n is not None:
         spec = find_spec(repo_root, name) or "<spec>"
