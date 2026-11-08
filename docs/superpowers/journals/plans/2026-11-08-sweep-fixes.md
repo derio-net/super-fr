@@ -110,3 +110,23 @@ A dispatched reviewer read the commit against R7 and 3.B and checked the routes 
 ### p2-r1-resolved · finding [fixed] · resolves p2-r1: The legacy digest marker was tested only under the viewer's author (phase 2)
 
 The legacy-marker issue in the test is now stranger-authored.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-demoted-siblings-stay-in-section created=2026-11-08T18:41:17+00:00 phase=3 -->
+### p3-demoted-siblings-stay-in-section · discovery · A demoted # Test Plan keeps its ### siblings inside the section (phase 3)
+
+After demoting, `### Notes` sits under `## Test Plan`, so list items there read as steps (the section ends only at the next # or ## heading). That is the spec's own example and R9; the tests use prose under Notes. A writer with a list under such a sibling gets those items as steps.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-repair-read-bytes-for-crlf created=2026-11-08T18:41:17+00:00 phase=3 -->
+### p3-repair-read-bytes-for-crlf · discovery · The repair reads bytes, not read_text, to keep CRLF (phase 3)
+
+Path.read_text translates CRLF to LF, and write_text_atomic writes newline='' so the old _fn silently normalised a CRLF spec. _fn now decodes read_bytes; _applies still uses read_text, which is fine for a predicate.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-08T18:41:17+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the change was deleting one predicate clause; nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-08T18:41:17+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+a new scenario script and its registration; nothing existing to tidy
