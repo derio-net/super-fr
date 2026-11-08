@@ -6396,12 +6396,11 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_still_fails_the_run_after_deploying
       - super-fr:tests/unit/test_pages_workflow.py#test_the_placeholder_says_the_report_was_not_rendered
     status: walk-owed
-    notes: Workflow shape unit-pinned and the placeholder script executed in the unit
-      suite; a live deploy over a gate refusal has not been observed (it needs stale
-      artifacts on main).
+    notes: tracked by derio-net/super-fr#1385
     verify: live
     issues:
     - derio-net/super-fr#924
+    - derio-net/super-fr#1385
   - id: acceptance-ci-built-reports
     capability: acceptance-matrix
     acceptance: In a repo that gitignores the generated acceptance reports, fr's commits
