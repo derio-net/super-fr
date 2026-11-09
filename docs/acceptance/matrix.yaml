@@ -9796,9 +9796,9 @@ rows:
     acceptance: A merge that changes nothing installable cuts no release candidate,
       while promotion and fragment releases behave as before
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R17
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R18
     levels:
       unit:
       - super-fr:tests/unit/test_release_script.py#test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op
@@ -9811,8 +9811,8 @@ rows:
     acceptance: On the real Release workflow, a housekeeping merge cuts no tag or pre-release,
       and a later gate pass still promotes the RC to a final
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R18
     levels: {}
     status: walk-owed
     notes: 'Post-merge walk owed: the next archive PR merge cuts no tag, then the gate
@@ -10541,12 +10541,12 @@ rows:
       printed once its placeholders are filled, and linking a row to its tracker keeps
       the row's status and note
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_printed_commands_run.py#test_every_command_the_gate_and_backfill_flows_print_runs
@@ -10561,7 +10561,7 @@ rows:
     acceptance: The repo's debt digest issue is never suggested as a row's look-alike
       tracker, whatever its title
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R7
     levels:
       unit:
       - super-fr:tests/unit/test_gatebackfill_candidates.py#test_r7_an_open_digest_naming_a_row_is_never_a_look_alike
@@ -10573,9 +10573,9 @@ rows:
     acceptance: A deliberate partial gate pass keeps tracking the items still owed,
       and a closing comment never reads as if the item were done
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R12
     levels:
       unit:
       - super-fr:tests/unit/test_gate_close_trackers.py#test_r10_keep_converts_a_tracker_comment_first_then_body_and_never_closes
@@ -10588,9 +10588,9 @@ rows:
     acceptance: A tracked-only tracker is closed once its item is proven discharged,
       and never without that proof
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R14
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R15
     levels:
       unit:
       - super-fr:tests/unit/test_gatebackfill_closes.py#test_a_dry_run_lists_a_discharged_tracked_only_tracker_and_records_it
@@ -10823,8 +10823,8 @@ rows:
     acceptance: Every Test Plan heading fr refuses as a near-miss is repaired by migration,
       keeping the steps as written, so a migrated spec validates clean
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R8
-    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_test_plan_heading.py#test_every_refused_form_is_repaired_and_validates_clean
