@@ -9814,12 +9814,22 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R16
     - super-fr:docs/superpowers/implemented/specs/2026-11-08-sweep-fixes-design.md#R18
     levels: {}
-    status: walk-owed
-    notes: 'Post-merge walk owed: the next archive PR merge cuts no tag, then the gate
-      pass promotes the RC. Walked on first real use, held by gate tester.'
+    status: walked
+    notes: 'Walked on the first real use: a housekeeping merge cut nothing, and the
+      gate pass promoted the RC to a final with no code change since the RC.'
     verify: live
     issues:
     - derio-net/super-fr#1321
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-09T07:42:25Z'
+      evidence: 'Release 42579256294 on 46f9fe61e (archive PR 1397, docs only): nothing
+        installable changed since v6.2.0-rc.1, no release, no tag. After the gate:tester
+        pass on PR 1387, Release 42580426586 cut final v6.2.0 at b74f323c1; v6.2.0-rc.1..v6.2.0
+        changes only version surfaces and docs/.'
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
