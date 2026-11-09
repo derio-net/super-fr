@@ -318,3 +318,8 @@ what: After this PR's RC is cut, merge the next archive or close-out PR. The Rel
 why: The walk is this archive PR itself: its merge is the housekeeping merge that must cut no tag, and the gate pass and final come after. Row release-noop-first-real-use holds it; gate:tester on PR 1387 holds the final.
 how: fr journal resolve --scope spec --slug 2026-11-08-sweep-fixes --id test-plan-step-1 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-08-sweep-fixes#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-09T07:19:15+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1396 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1396] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1396; still owed until discharged.
