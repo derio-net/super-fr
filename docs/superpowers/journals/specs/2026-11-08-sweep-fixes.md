@@ -310,3 +310,11 @@ Every release passes through compute.
 ### s18-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1388] · resolves s18: `fr gate pass --repo <other>` computes discharge commands from the current checkout
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1388.
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-11-09T07:18:55+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: After this PR's RC is cut, merge the next archive or close-out PR. The Release run prints `nothing installable changed since <tag>: no release`, and no new tag or pre-release appears. Then pass the gate and confirm the next run cuts the final with no code change since the RC.
+why: The walk is this archive PR itself: its merge is the housekeeping merge that must cut no tag, and the gate pass and final come after. Row release-noop-first-real-use holds it; gate:tester on PR 1387 holds the final.
+how: fr journal resolve --scope spec --slug 2026-11-08-sweep-fixes --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-08-sweep-fixes#step1
