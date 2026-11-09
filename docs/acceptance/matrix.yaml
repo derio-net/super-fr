@@ -9791,6 +9791,35 @@ rows:
     verify: live
     issues:
     - derio-net/super-fr#1360
+  - id: release-skips-rc-nothing-installable
+    capability: release
+    acceptance: A merge that changes nothing installable cuts no release candidate,
+      while promotion and fragment releases behave as before
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op
+      - super-fr:tests/unit/test_installable.py#test_every_tracked_path_that_requires_a_bump_is_installable
+    status: ci
+    notes: Pinned by release.py unit tests over fixture git histories in CI.
+    verify: none
+  - id: release-noop-first-real-use
+    capability: release
+    acceptance: On the real Release workflow, a housekeeping merge cuts no tag or pre-release,
+      and a later gate pass still promotes the RC to a final
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R16
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R18
+    levels: {}
+    status: walk-owed
+    notes: 'Post-merge walk owed: the next archive PR merge cuts no tag, then the gate
+      pass promotes the RC. Walked on first real use, held by gate tester.'
+    verify: live
+    issues:
+    - derio-net/super-fr#1321
   - id: tracker-done-closes-issue
     capability: tracker protocol
     acceptance: Moving a tracker item to done on the GitHub tracker closes its Issue
@@ -10506,6 +10535,69 @@ rows:
         (#19) and left PR #1''s (#15-#17) open. Sweep findings filed: #1322/#1324 (passed-PR
         re-gate), #1327 (row-link commands lack --status); a row reconcile can create
         a new candidate, so the order is reconcile then backfill.'
+  - id: printed-commands-run
+    capability: gate-backfill
+    acceptance: Every fr command the gate backfill and gate pass flows print runs as
+      printed once its placeholders are filled, and linking a row to its tracker keeps
+      the row's status and note
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_printed_commands_run.py#test_every_command_the_gate_and_backfill_flows_print_runs
+      - super-fr:tests/unit/test_acceptance_set_status.py#test_link_only_keeps_status_and_note
+    status: ci
+    notes: Link-only set-status and the printed commands run in CI; the installed-CLI
+      scenario runs at the walk and in test_scenarios.
+    verify: candidate
+    scenario: tests/scenarios/printed-commands-run.sh
+  - id: gate-backfill-digest-not-lookalike
+    capability: gate-backfill
+    acceptance: The repo's debt digest issue is never suggested as a row's look-alike
+      tracker, whatever its title
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_candidates.py#test_r7_an_open_digest_naming_a_row_is_never_a_look_alike
+    status: ci
+    notes: Pinned by unit tests in CI, both markers under any author.
+    verify: none
+  - id: gate-pass-keep
+    capability: gate-backfill
+    acceptance: A deliberate partial gate pass keeps tracking the items still owed,
+      and a closing comment never reads as if the item were done
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R11
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gate_close_trackers.py#test_r10_keep_converts_a_tracker_comment_first_then_body_and_never_closes
+      - super-fr:tests/unit/test_gate_cmd.py#test_p4_r4_a_checkout_of_another_repo_is_no_checkout
+    status: ci
+    notes: Pinned by unit tests in CI over the fake client.
+    verify: none
+  - id: gate-backfill-closes-discharged
+    capability: gate-backfill
+    acceptance: A tracked-only tracker is closed once its item is proven discharged,
+      and never without that proof
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R13
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R14
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_closes.py#test_a_dry_run_lists_a_discharged_tracked_only_tracker_and_records_it
+      - super-fr:tests/unit/test_gatebackfill_discharged.py#test_a_row_in_a_debt_status_is_not
+    status: ci
+    notes: Pinned by unit tests in CI over real git and the fake client.
+    verify: none
   - id: ops-gap-advisory
     capability: fr ops gap
     acceptance: A devops-gated run with no ops and Test Plan steps containing commands
@@ -10726,3 +10818,19 @@ rows:
     status: ci
     notes: the hook and nag.ts are pinned by their shell and bun tests in CI
     verify: none
+  - id: test-plan-repair-covers-refused
+    capability: artifact-migration
+    acceptance: Every Test Plan heading fr refuses as a near-miss is repaired by migration,
+      keeping the steps as written, so a migrated spec validates clean
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R8
+    - super-fr:docs/superpowers/specs/2026-11-08-sweep-fixes-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_plan_heading.py#test_every_refused_form_is_repaired_and_validates_clean
+      - super-fr:tests/unit/test_test_plan_heading.py#test_the_demotion_keywords_are_exactly_the_sections_fr_reads_by_keyword
+    status: ci
+    notes: Every refused form is repaired in CI; the installed-CLI scenario runs at
+      the walk and in test_scenarios.
+    verify: candidate
+    scenario: tests/scenarios/test-plan-repair-covers-refused.sh

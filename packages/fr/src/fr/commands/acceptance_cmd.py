@@ -481,19 +481,54 @@ def _apply_rows(
             err_console.print(f"[yellow]{notice}[/yellow]")
 
 
+def _check_set_status_form(
+    status: str | None,
+    notes: str | None,
+    issue: list[str],
+    others: dict[str, object],
+) -> None:
+    """R2: `--status` needs `--notes`; without `--status` the call is the link-only
+    form (`--id`, `--issue`, optional `--notes`), and anything else is refused
+    before any file is read, naming the missing `--status`."""
+    if status is not None:
+        if not notes:
+            err_console.print(
+                "[red]error:[/red] --status needs --notes — a status that moved for no "
+                "recorded reason is a silent change; nothing changed"
+            )
+            raise typer.Exit(2)
+        return
+    given = sorted(f for f, v in others.items() if v)
+    if not issue or given:
+        why = (
+            f"{', '.join(given)} only go with --status"
+            if given
+            else "--notes alone changes nothing"
+            if notes
+            else "nothing to change"
+        )
+        err_console.print(
+            f"[red]error:[/red] missing --status ({why}); the link-only form is "
+            "`--id <row> --issue <ref> [--notes <text>]`; nothing changed"
+        )
+        raise typer.Exit(2)
+
+
 @acceptance_app.command("set-status")
 def set_status_cmd(
     row_id: str = typer.Option(..., "--id", help="Existing row id (never created here)."),
-    status: str = typer.Option(
-        ...,
+    status: str | None = typer.Option(
+        None,
         "--status",
-        help="ci | scheduled | unwired | walk-owed | walked | manual | not-implemented | failing.",
+        help="ci | scheduled | unwired | walk-owed | walked | manual | not-implemented | failing. "
+        "Omit with --issue for a link-only update that keeps the status and note.",
     ),
-    notes: str = typer.Option(
-        ...,
+    notes: str | None = typer.Option(
+        None,
         "--notes",
-        help="Why the status moved (required — a status that moved for no recorded "
-        "reason is the silent change the acceptance-matrix rule forbids).",
+        help="Why the status moved (required with --status — a status that moved for no "
+        "recorded reason is the silent change the acceptance-matrix rule forbids). Without "
+        "--status, appended to the row's note.",
     ),
     level: list[str] = typer.Option(
         [],
@@ -537,7 +572,9 @@ def set_status_cmd(
     strategy: str | None = typer.Option(
         None, "--strategy", help="--walk: the verification strategy the walk ran."
     ),
-    walk_outcome: str = typer.Option("pass", "--walk-outcome", help="--walk: pass | fail."),
+    walk_outcome: str | None = typer.Option(
+        None, "--walk-outcome", help="--walk: pass | fail (default pass)."
+    ),
     walk_at: str | None = typer.Option(
         None,
         "--walk-at",
@@ -578,17 +615,36 @@ def set_status_cmd(
     from fr.acceptance.edit import describe_move, drop_levels, merge_levels
     from fr.acceptance.model import Status
 
+    _check_set_status_form(
+        status,
+        notes,
+        issue,
+        {
+            "--level": level,
+            "--drop-level": drop_level,
+            "--verify": verify,
+            "--scenario": scenario,
+            "--walk": walk,
+            "--harness": harness,
+            "--model": model,
+            "--strategy": strategy,
+            "--walk-outcome": walk_outcome,
+            "--walk-at": walk_at,
+        },
+    )
     root = resolve_repo_root()
     matrix = _load(root)
 
     valid = list(get_args(Status))
-    if status not in valid:
+    if status is not None and status not in valid:
         err_console.print(
             f"[red]error:[/red] unknown status {status!r} (valid: {' | '.join(valid)})"
         )
         raise typer.Exit(2)
     _check_verify(root, verify)
-    new_walk = _walk_from_flags(root, walk, harness, model, strategy, walk_outcome, walk_at)
+    new_walk = _walk_from_flags(
+        root, walk, harness, model, strategy, walk_outcome or "pass", walk_at
+    )
     target = next((r for r in matrix.rows if r.id == row_id), None)
     if target is None:
         known = ", ".join(r.id for r in matrix.rows) or "none"
@@ -597,6 +653,14 @@ def set_status_cmd(
             f"(`fr acceptance add` creates rows; existing ids: {known})"
         )
         raise typer.Exit(2)
+    link_only = status is None
+    new_status = target.status if status is None else status
+    if not link_only:
+        new_notes = notes or ""
+    elif notes and notes not in target.notes.split("; "):  # a re-run adds nothing
+        new_notes = "; ".join(n for n in (target.notes, notes) if n)
+    else:
+        new_notes = target.notes
 
     additions = _parse_levels(level)
     drops = _parse_levels(drop_level, flag="--drop-level")
@@ -622,8 +686,8 @@ def set_status_cmd(
             acceptance=target.acceptance,
             origin=target.origin,
             levels=merged,
-            status=status,  # type: ignore[arg-type]  # pydantic validates the literal
-            notes=notes,
+            status=new_status,  # type: ignore[arg-type]  # pydantic validates the literal
+            notes=new_notes,
             verify=new_verify,
             visual=target.visual,  # set-status never touches `visual` (spec 2026-09-28 §A)
             scenario=scenario if scenario is not None else target.scenario,
@@ -647,8 +711,8 @@ def set_status_cmd(
         root,
         AcceptanceItem(
             id=row_id,
-            status=status,
-            notes=notes,
+            status=new_status,
+            notes=new_notes,
             levels={k: tuple(v) for k, v in additions.items()},
             verify=verify,  # None preserves; apply.py falls back to existing
             issues=tuple(issue),

@@ -157,6 +157,11 @@ class World:
     def fragment(self, name: str, bump: str, summary: str) -> None:
         self.land(f".changes/{name}.yaml", f"bump: {bump}\nsummary: {summary}\n")
 
+    def change(self, name: str, bump: str, summary: str) -> None:
+        """A PR landing code and its fragment: an installable path moves (R16)."""
+        self.land(f"packages/demo/src/demo/{name.replace('-', '_')}.py", f"# {summary}\n")
+        self.fragment(name, bump, summary)
+
     # -- origin state ----------------------------------------------------
     def origin_show(self, path: str, ref: str = "main") -> str | None:
         r = subprocess.run(
@@ -1140,7 +1145,7 @@ def _surface_values(world: World) -> set[str]:
 
 
 def test_something_waits_cuts_an_rc_that_consumes_no_fragment(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
 
     assert world.run() == 0
@@ -1158,7 +1163,7 @@ def test_something_waits_cuts_an_rc_that_consumes_no_fragment(world: World) -> N
 
 
 def test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     assert world.run() == 0
     head = world.origin_log("%H")
@@ -1172,10 +1177,10 @@ def test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op(world: W
 
 
 def test_something_waits_and_a_new_merge_since_the_rc_cuts_the_next_rc(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     assert world.run() == 0
-    world.fragment("fix-a", "patch", "fix the thing")
+    world.change("fix-a", "patch", "fix the thing")
 
     assert world.run() == 0
 
@@ -1184,10 +1189,10 @@ def test_something_waits_and_a_new_merge_since_the_rc_cuts_the_next_rc(world: Wo
 
 
 def test_a_bigger_bump_after_an_rc_starts_that_versions_rcs_at_one(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     assert world.run() == 0
-    world.fragment("break", "major", "a breaking change")
+    world.change("break", "major", "a breaking change")
 
     assert world.run() == 0
 
@@ -1197,7 +1202,7 @@ def test_a_bigger_bump_after_an_rc_starts_that_versions_rcs_at_one(world: World)
 def test_nothing_waits_and_head_is_an_rc_cuts_the_final_consuming_fragments(
     world: World,
 ) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     assert world.run() == 0
     world.waiting = []
@@ -1229,7 +1234,7 @@ def test_no_fragments_on_a_final_head_never_asks_what_waits(world: World) -> Non
 
 
 def test_the_last_final_ignores_rc_tags(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     assert world.run() == 0
     _git(world.clone, "fetch", "-q", "--tags", "origin")
@@ -1240,6 +1245,8 @@ def test_the_last_final_ignores_rc_tags(world: World) -> None:
 
 
 def test_dry_run_says_it_would_cut_an_rc(world: World, capsys: pytest.CaptureFixture[str]) -> None:
+    world.land("packages/demo/src/demo/feat_b.py", "FEAT = 1\n")
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
     (world.clone / ".changes").mkdir(exist_ok=True)
     (world.clone / ".changes" / "feat-b.yaml").write_text("bump: minor\nsummary: add it\n")
     world.waiting = list(WAITS)
@@ -1270,7 +1277,7 @@ def test_release_py_reads_the_forge_and_hands_fr_the_facts(world: World) -> None
 def test_p7_r5_a_truncated_merged_pr_list_cuts_an_rc_never_a_final(
     world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.merged = [{"number": n, "mergedAt": "2030-01-01T00:00:00Z", "labels": []}
                     for n in range(release.MERGED_PR_LIMIT)]  # fmt: skip
     assert world.run() == 0
@@ -1280,7 +1287,7 @@ def test_p7_r5_a_truncated_merged_pr_list_cuts_an_rc_never_a_final(
 
 
 def test_p7_r5_a_failed_forge_read_cuts_an_rc_naming_the_reason(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     cmds = world.commands()
     cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
     assert release.main([], repo=world.clone, commands=cmds) == 0
@@ -1290,7 +1297,7 @@ def test_p7_r5_a_failed_forge_read_cuts_an_rc_naming_the_reason(world: World) ->
 
 
 def test_p7_r5_an_unknown_state_with_nothing_new_since_the_rc_is_a_no_op(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     cmds = world.commands()
     cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
     assert release.main([], repo=world.clone, commands=cmds) == 0
@@ -1300,7 +1307,7 @@ def test_p7_r5_an_unknown_state_with_nothing_new_since_the_rc_is_a_no_op(world: 
 
 
 def test_p7_r5_a_failed_decision_cuts_an_rc(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     cmds = world.commands()
 
     def boom(repo: Path, facts: Path) -> list[dict[str, object]]:
@@ -1312,7 +1319,7 @@ def test_p7_r5_a_failed_decision_cuts_an_rc(world: World) -> None:
 
 
 def test_p7_r1_an_untagged_rc_at_head_is_tagged_with_no_new_commit(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     assert world.run() == 0
     head = world.origin_log("%H")
@@ -1330,8 +1337,8 @@ def test_p7_r1_an_untagged_rc_at_head_is_tagged_with_no_new_commit(world: World)
 def test_p7_r6_a_removed_major_fragment_never_moves_the_version_backwards(
     world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
-    world.fragment("break", "major", "a breaking change")
+    world.change("feat-b", "minor", "add the feature")
+    world.change("break", "major", "a breaking change")
     world.waiting = list(WAITS)
     assert world.run() == 0
     assert world.origin_version() == "5.0.0rc1"
@@ -1352,6 +1359,7 @@ def test_p7_r6_a_removed_major_fragment_never_moves_the_version_backwards(
 def test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_final(
     world: World, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    world.land("packages/demo/src/demo/feat_b.py", "FEAT = 1\n", "feat: b code (#42)")
     world.land(".changes/feat-b.yaml", "bump: minor\nsummary: add\n", "feat: b (#42)")
     world.merged = []  # the search index has not caught up with #42
     world.waiting = []
@@ -1587,7 +1595,7 @@ def test_prepare_with_nothing_to_release_writes_no_plan_and_reports_no_cut(world
 
 
 def test_prepare_tags_an_untagged_rc_at_head_and_reports_no_cut(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     assert world.run() == 0
     _git(world.origin, "tag", "-d", "v4.24.0-rc.1")  # the tag push failed
@@ -2081,7 +2089,7 @@ def test_p3_r5_the_top_level_version_still_reaches_prepare(world: World) -> None
 
 
 def test_p3_r6_a_job_graph_rc_is_published_as_a_prerelease(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     world.waiting = list(WAITS)
     out, plan = _prepare(world)
     assert plan["rc"] is True and plan["version"] == "4.24.0-rc.1"
@@ -2114,7 +2122,7 @@ def test_p3_r6_a_job_graph_floor_mismatch_files_an_issue_and_exits_floor(world: 
 
 
 def test_p3_r6_a_gate_state_unknown_makes_prepare_plan_an_rc(world: World) -> None:
-    world.fragment("feat-b", "minor", "add the feature")
+    world.change("feat-b", "minor", "add the feature")
     cmds = world.commands()
     cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
     out = world.origin.parent / "release-out"
@@ -2130,3 +2138,356 @@ def test_p3_r6_a_gate_state_unknown_makes_prepare_plan_an_rc(world: World) -> No
 def test_the_recompute_loop_is_gone() -> None:
     assert not hasattr(release, "MAX_ATTEMPTS")
     assert not hasattr(release, "EXIT_RACE")
+
+
+# -- no RC when nothing installable changed (spec 2026-11-08-sweep-fixes R16-R18) ---
+
+
+def _noop_line(tag: str) -> str:
+    return f"nothing installable changed since {tag}: no release"
+
+
+def _released_nothing(world: World, head: list[str], tags: list[str], tested: int) -> None:
+    assert world.origin_log("%H") == head
+    assert world.origin_tags() == tags
+    assert len(world.test_calls) == tested
+    assert _release_calls(world) == []
+
+
+def _rc_cut(world: World) -> None:
+    """A waiting PR's code and fragment land and cut v4.24.0-rc.1."""
+    world.change("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    assert world.run() == 0
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+    world.gh_calls.clear()
+
+
+def _fail_the_read(world: World) -> release.Commands:
+    cmds = world.commands()
+    cmds.gh_read = lambda args: subprocess.CompletedProcess(args, 1, "", "HTTP 502")
+    return cmds
+
+
+def _pull(world: World) -> None:
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "docs/archive.md",
+        "tests/unit/test_new.py",
+        ".github/workflows/x.yml",
+        ".changes/README.md",
+        "AGENTS.md",
+        ".test_durations",
+    ],
+)
+def test_r16_a_housekeeping_merge_after_an_rc_cuts_nothing_and_says_so(
+    world: World, capsys: pytest.CaptureFixture[str], rel: str
+) -> None:
+    _rc_cut(world)
+    world.land(rel, "housekeeping\n")
+    head, tags, tested = world.origin_log("%H"), world.origin_tags(), len(world.test_calls)
+    capsys.readouterr()
+
+    assert world.run() == 0
+
+    _released_nothing(world, head, tags, tested)
+    assert _noop_line("v4.24.0-rc.1") in capsys.readouterr().out.splitlines()
+
+
+def test_r16_a_docs_merge_with_no_rc_above_the_final_compares_with_the_final(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.land("docs/archive.md", "housekeeping\n")
+    world.waiting = list(WAITS)
+    head = world.origin_log("%H")
+
+    assert world.run() == 0
+
+    _released_nothing(world, head, [f"v{BASE}"], 0)
+    assert world.bump_calls == []
+    assert _noop_line(f"v{BASE}") in capsys.readouterr().out.splitlines()
+
+
+def test_r16_a_fragment_only_merge_with_no_rc_above_the_final_cuts_nothing(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    head = world.origin_log("%H")
+
+    assert world.run() == 0
+
+    _released_nothing(world, head, [f"v{BASE}"], 0)
+    assert _noop_line(f"v{BASE}") in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.parametrize("bump", ["patch", "minor", "major"])
+def test_r16_a_fragment_only_merge_after_an_rc_cuts_nothing_even_a_major(
+    world: World, capsys: pytest.CaptureFixture[str], bump: str
+) -> None:
+    _rc_cut(world)
+    world.fragment("later", bump, "a later change")
+    head, tags, tested = world.origin_log("%H"), world.origin_tags(), len(world.test_calls)
+    capsys.readouterr()
+
+    assert world.run() == 0
+
+    _released_nothing(world, head, tags, tested)
+    assert _noop_line("v4.24.0-rc.1") in capsys.readouterr().out.splitlines()
+
+
+def test_r16_an_unknown_gate_state_with_nothing_installable_takes_the_same_no_op(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.fragment("feat-b", "minor", "add the feature")
+    head = world.origin_log("%H")
+
+    assert release.main([], repo=world.clone, commands=_fail_the_read(world)) == 0
+
+    _released_nothing(world, head, [f"v{BASE}"], 0)
+    out = capsys.readouterr().out
+    assert _noop_line(f"v{BASE}") in out.splitlines()
+    assert "HTTP 502" in out  # why it could not promote is still on the record
+
+
+def test_r16_an_unknown_gate_state_after_an_rc_takes_the_same_no_op(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _rc_cut(world)
+    world.land("docs/archive.md", "housekeeping\n")
+    head, tags, tested = world.origin_log("%H"), world.origin_tags(), len(world.test_calls)
+    capsys.readouterr()
+
+    assert release.main([], repo=world.clone, commands=_fail_the_read(world)) == 0
+
+    _released_nothing(world, head, tags, tested)
+    assert _noop_line("v4.24.0-rc.1") in capsys.readouterr().out.splitlines()
+
+
+def test_r16_an_unknown_gate_state_with_a_code_merge_still_cuts_an_rc(world: World) -> None:
+    world.change("feat-b", "minor", "add the feature")
+
+    assert release.main([], repo=world.clone, commands=_fail_the_read(world)) == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+
+
+def test_r16_a_code_merge_beside_housekeeping_cuts_the_next_rc(world: World) -> None:
+    _rc_cut(world)
+    world.land("docs/archive.md", "housekeeping\n")
+    world.land("packages/demo/src/demo/later.py", "LATER = 1\n")
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.2"
+    assert "v4.24.0-rc.2" in world.origin_tags()
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "plugins/super-fr/hooks/x.sh",
+        "scripts/install.sh",
+        "uv-extra.lock",
+        "a-brand-new-top-level-file",
+        "plugins/README.md",
+    ],
+)
+def test_r16_any_path_outside_the_denylist_cuts_the_rc(world: World, rel: str) -> None:
+    _rc_cut(world)
+    world.land(rel, "changed\n")
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.2"
+
+
+def test_r16_a_move_out_of_plugins_into_docs_cuts_the_rc(world: World) -> None:
+    world.land("plugins/super-fr/hooks/guard.md", "a line of a real file\n" * 20)
+    _rc_cut(world)
+    _git(world.other, "pull", "-q", "--ff-only", "origin", "main")
+    _git(world.other, "mv", "plugins/super-fr/hooks/guard.md", "docs/guard.md")
+    _git(world.other, "commit", "-q", "-m", "move it out")
+    _git(world.other, "push", "-q", "origin", "HEAD:main")
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.2"
+
+
+def test_r16_with_no_tag_to_compare_against_an_rc_is_cut_as_today(world: World) -> None:
+    _git(world.origin, "tag", "-d", f"v{BASE}")
+    world.fragment("feat-b", "minor", "add the feature")  # fragment-only: nothing to compare
+    world.waiting = list(WAITS)
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0-rc.1"
+    assert "v4.24.0-rc.1" in world.origin_tags()
+
+
+def test_r16_a_failing_git_diff_refuses_and_never_reads_as_nothing_changed(
+    world: World, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    head = world.origin_log("%H")
+    ghost = release.Version.parse("4.24.0-rc.1")  # listed, but no such ref: git really fails
+    monkeypatch.setattr(release, "_rcs_above", lambda repo, base: [(ghost, ghost.tag)])
+
+    assert world.run() == release.EXIT_REFUSED
+
+    _released_nothing(world, head, [f"v{BASE}"], 0)
+    captured = capsys.readouterr()
+    assert ghost.tag in captured.err
+    assert "no release" not in captured.out
+
+
+def test_r16_the_diff_runs_credential_free(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    world.change("feat-b", "minor", "add the feature")
+    world.waiting = list(WAITS)
+    _pull(world)  # a dry run reads the clone as it is
+    monkeypatch.setenv("GH_TOKEN", "secret")
+    envs: list[object] = []
+    real = subprocess.run
+
+    def spy(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        if "--no-renames" in cmd and "-z" in cmd:
+            envs.append(kw.get("env"))
+        return real(cmd, **kw)  # type: ignore[call-overload,no-any-return]
+
+    monkeypatch.setattr(subprocess, "run", spy)
+
+    assert world.run("--dry-run") == 0
+
+    (env,) = envs
+    assert isinstance(env, dict) and "GH_TOKEN" not in env
+
+
+def test_r16_dry_run_prints_the_no_op_line(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _rc_cut(world)
+    world.land("docs/archive.md", "housekeeping\n")
+    _pull(world)
+    capsys.readouterr()
+
+    assert world.run("--dry-run") == 0
+
+    out = capsys.readouterr().out
+    assert _noop_line("v4.24.0-rc.1") in out.splitlines()
+    assert "would cut" not in out
+    assert "#9" in out  # what waits stays on the record
+    assert "is tagged" in out
+
+
+def test_r16_prepare_prints_the_no_op_line_and_reports_no_cut(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _rc_cut(world)
+    world.land("docs/archive.md", "housekeeping\n")
+    head = world.origin_log("%H")
+    gh_out = world.origin.parent / "gh-output"
+    out = world.origin.parent / "release-out"
+    capsys.readouterr()
+
+    assert world.run("prepare", "--out", str(out), "--github-output", str(gh_out)) == 0
+
+    assert _noop_line("v4.24.0-rc.1") in capsys.readouterr().out.splitlines()
+    assert "cut=false" in gh_out.read_text().splitlines()
+    assert not (out / release.PLAN_FILE).exists()
+    assert world.origin_log("%H") == head
+    assert world.gh_calls == []
+
+
+def test_r18_gates_passing_with_identical_code_since_the_rc_cut_the_final(world: World) -> None:
+    _rc_cut(world)
+    world.land("docs/archive.md", "housekeeping\n")
+    assert world.run() == 0  # still waiting: nothing
+    assert world.origin_log()[0] != "release: v4.24.0"
+    world.waiting = []
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0"
+    assert "v4.24.0" in world.origin_tags()
+    assert world.origin_show(".changes/feat-b.yaml") is None
+
+
+def test_r18_a_gate_passing_on_an_rc_head_with_no_fragment_left_still_cuts_the_final(
+    world: World,
+) -> None:
+    _rc_cut(world)
+    _git(world.other, "pull", "-q", "--ff-only", "origin", "main")
+    _git(world.other, "rm", "-q", ".changes/feat-b.yaml")
+    _git(world.other, "commit", "-q", "-m", "drop the fragment")
+    _git(world.other, "push", "-q", "origin", "HEAD:main")
+    world.waiting = []
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.24.0"
+
+
+def test_r18_a_pending_fragment_with_nothing_waiting_and_nothing_installable_releases(
+    world: World,
+) -> None:
+    world.fragment("fix-a", "patch", "fix the thing")
+    world.land("docs/archive.md", "housekeeping\n")
+
+    assert world.run() == 0
+
+    assert world.origin_log()[0] == "release: v4.23.1"
+    assert "v4.23.1" in world.origin_tags()
+    assert world.origin_show(".changes/fix-a.yaml") is None
+
+
+def test_r18_version_releases_while_something_waits_and_nothing_installable_changed(
+    world: World,
+) -> None:
+    world.land("docs/archive.md", "housekeeping\n")
+    world.waiting = list(WAITS)
+
+    assert world.run("--version", "4.30.0") == 0
+
+    assert world.origin_log()[0] == "release: v4.30.0"
+    assert "v4.30.0" in world.origin_tags()
+    assert world.status_calls == 0
+
+
+def test_r18_an_untagged_rc_at_head_is_tagged_with_a_docs_merge_above_it(world: World) -> None:
+    _rc_cut(world)
+    _git(world.origin, "tag", "-d", "v4.24.0-rc.1")  # the tag push failed
+    world.land("docs/archive.md", "housekeeping\n")
+    head = world.origin_log("%H")
+
+    assert world.run() == 0
+
+    assert world.origin_log("%H") == head
+    assert "v4.24.0-rc.1" in world.origin_tags()
+    (call,) = _release_calls(world)
+    assert call[2] == "v4.24.0-rc.1" and "--prerelease" in call
+
+
+def test_r18_a_second_untagged_rc_is_tagged_with_an_older_rc_tag_below_it(world: World) -> None:
+    _rc_cut(world)
+    world.land("packages/demo/src/demo/later.py", "LATER = 1\n")
+    assert world.run() == 0
+    assert world.origin_log()[0] == "release: v4.24.0-rc.2"
+    _git(world.origin, "tag", "-d", "v4.24.0-rc.2")
+    head = world.origin_log("%H")
+    world.gh_calls.clear()
+
+    assert world.run() == 0
+
+    assert world.origin_log("%H") == head
+    assert "v4.24.0-rc.2" in world.origin_tags()
+
+
+def test_the_old_any_commit_check_is_gone() -> None:
+    assert not hasattr(release, "_merged_since")

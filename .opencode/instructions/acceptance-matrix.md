@@ -45,6 +45,11 @@ artifacts --yes` splits it.
   CURRENT state, so this mutates;
   its journal counterpart `fr journal resolve` appends instead, because a
   journal is a log.
+  The **link-only form** records an issue on a row without touching its status
+  or note: `fr acceptance set-status --id ... --issue <owner/repo#n>` (`--notes`
+  optional, and then appended to the note with `; `). Without `--status`, any
+  flag other than `--id`, `--issue` and `--notes` is refused (exit 2, nothing
+  changed); with `--status`, `--notes` stays required and replaces the note.
 - Anchor a Python ref on the test's NAME, never its line:
   `<repo>:tests/x.py#test_y` or `#TestX::test_y` (pytest's node spelling). A
   `#L<n>` slides onto whatever test lands there next, silently — 27 of this

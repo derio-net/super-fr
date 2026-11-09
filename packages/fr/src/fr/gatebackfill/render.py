@@ -9,8 +9,8 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
-from fr.gatebackfill.candidates import PLANS_REL, find_spec, split_key
-from fr.gatebackfill.model import PlanEntry
+from fr.gatebackfill.candidates import PLANS_REL, Candidate, find_spec, split_key
+from fr.gatebackfill.model import PlanClose, PlanEntry
 
 ACCEPTED = {
     "plan": "owed, adopt, tick, na, park, review (tick/na only on a live plan)",
@@ -86,17 +86,27 @@ def decision_commands(entry: PlanEntry, root: Path) -> tuple[list[str], str | No
     return [], f"{entry.key}: {kind} refused: no command for this kind{hint}{accepted}"
 
 
-def open_issue_refusals(entries: list[PlanEntry], sources: dict[str, str]) -> list[str]:
-    """A bare `owed` on an `issue:` key that is itself an OPEN issue (*sources*: key -> where the
-    fold found it) files no tracker and leaves no marker for the closed-issue link: the only
-    route is adopting it, or a manifest entry carrying its own `issue:` (p2-r2)."""
+def open_issue_refusals(entries: list[PlanEntry], candidates: list[Candidate]) -> list[str]:
+    """A bare `owed` on a key the fold holds only through an open issue fr did not write. An
+    `issue:` key files no tracker and leaves no marker for the closed-issue link (p2-r2); any other
+    key is there on a stranger's marker. Adopting that issue is the route. A key held by fr's own
+    tracker is the tracker's, and nothing to refuse."""
+    by_key = {c.key: c for c in candidates}
     out = []
     for e in entries:
-        if e.decision_kind == "owed" and sources.get(e.key) == "issue":
+        c = by_key.get(e.key)
+        if e.decision_kind != "owed" or c is None or c.source != "issue" or c.tracker_ref:
+            continue
+        if e.key.startswith("issue:"):
             ref = e.key.removeprefix("issue:")
             out.append(
                 f"{e.key}: owed refused: it is itself an open issue; adopt it "
                 f"(decision: adopt {ref}) or give the manifest entry an issue:"
+            )
+        else:
+            out.append(
+                f"{e.key}: owed refused: only the open issue {c.ref} holds it; adopt it "
+                f"(decision: adopt {c.ref})"
             )
     return out
 
@@ -135,10 +145,7 @@ def tracked_rows(entries: list[PlanEntry]) -> list[str]:
         k, name, _ = split_key(e.key)
         if k == "row" and e.tracker.ref and e.decision_kind in ("owed", "adopt"):
             ref = shlex.quote(e.tracker.ref)
-            out.append(
-                f"fr acceptance set-status --id {shlex.quote(name)} --issue {ref} "
-                f'--notes "tracked by {e.tracker.ref}"'
-            )
+            out.append(f"fr acceptance set-status --id {shlex.quote(name)} --issue {ref}")
     return out
 
 
@@ -164,11 +171,22 @@ def _line(e: PlanEntry) -> str:
     return f"  {e.key}  gate={e.gate or '-'}  {pr}  -> {e.decision}{tail}"
 
 
+def _close_line(c: PlanClose) -> str:
+    how = "adopted: fr comments the evidence and prints the close command" if c.adopted else ""
+    return f"  {c.key}  {c.ref}{f' ({how})' if how else ''}: {c.evidence}"
+
+
 def summary(
-    entries: list[PlanEntry], *, plan_file: Path, notes: list[str], root: Path
+    entries: list[PlanEntry],
+    *,
+    plan_file: Path,
+    notes: list[str],
+    root: Path,
+    closes: list[PlanClose] | None = None,
 ) -> tuple[str, list[str]]:
     """`(text, refusals)`: the dry run's summary. Every candidate is one line; parked ones sit
-    under their own heading; refusals are the decisions whose command does not exist."""
+    under their own heading, as do the trackers `--yes` will close; refusals are the decisions
+    whose command does not exist."""
     live = [e for e in entries if e.decision_kind != "park"]
     parked = [e for e in entries if e.decision_kind == "park"]
     lines = [f"Candidates ({len(live)})"]
@@ -179,6 +197,8 @@ def summary(
         lines += [f"  {e.key}" for e in unresolved]
     if parked:
         lines += ["", f"Parked ({len(parked)})"] + [_line(e) for e in parked]
+    if closes:
+        lines += ["", f"Trackers to close ({len(closes)})"] + [_close_line(c) for c in closes]
     commands: list[str] = []
     refusals: list[str] = []
     for e in entries:

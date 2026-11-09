@@ -200,13 +200,18 @@ def test_gh1322_passed_removed_later_rewrites_to_held(gate: str) -> None:
     assert "create_issue" not in names(c)[len(before) :]  # reused, not refiled
 
 
-def test_gh1322_tracked_only_texts_tell_the_operator_to_close_the_issue() -> None:
+def test_tracked_only_texts_say_what_closes_them() -> None:
+    """R13: fr closes its own tracker once the key is discharged; an adopted issue stays yours."""
     root = Path("/nonexistent")
     body = t.passed_tracker_body(KEY, "x", "tester", 41, repo_root=root)
     comment = t.adopt_passed_comment(KEY, "tester", 41, repo_root=root)
-    for text in (body, comment):
-        prose = [ln for ln in text.splitlines() if ln and not ln.startswith("<!--")]
-        assert prose[-1] == "Then close this issue."
+    last = {
+        which: [ln for ln in text.splitlines() if ln and not ln.startswith("<!--")][-1]
+        for which, text in (("body", body), ("comment", comment))
+    }
+    assert "the next gate backfill" in last["body"] and "closes this issue" in last["body"]
+    assert "never closes this issue" in last["comment"]
+    assert "Then close this issue." not in body + comment
     # the markers are still where their readers look: passed second-to-last, owed last
     assert t.fr_passed_marker(body) == ("tester", 41)
     assert body.splitlines()[-1] == f"<!-- fr-owed:{KEY} -->"
@@ -214,7 +219,7 @@ def test_gh1322_tracked_only_texts_tell_the_operator_to_close_the_issue() -> Non
 
 
 def _without_close_line(text: str) -> str:
-    return text.replace("\n\nThen close this issue.", "")
+    return "\n".join(ln for ln in text.splitlines() if "gate backfill" not in ln)
 
 
 def test_gh1322_a_tracked_only_text_from_before_the_close_line_is_not_rewritten() -> None:
@@ -232,7 +237,7 @@ def test_gh1322_a_tracked_only_text_from_before_the_close_line_is_not_rewritten(
     issue.body = _without_close_line(issue.body)
     [comment] = c.issue_comments[(REPO, 8)]
     comment["body"] = _without_close_line(comment["body"])
-    assert "close this issue" not in issue.body + comment["body"]
+    assert "gate backfill" not in issue.body + comment["body"]
     before = c.attempted_mutations
     run(c, *entries)
     assert c.attempted_mutations == before  # matched by marker: no rewrite, no second comment

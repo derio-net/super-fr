@@ -9,7 +9,8 @@ A backfill tracker's body ends with two marker lines, the PR marker before the o
 A tracker for a PR whose gate already passed (gh#1322) carries `fr-gate-passed:<g> pr:<n>` in
 the PR marker's place instead. It is "tracked only": the PR is never re-gated, and
 `fr_gate_marker` reads it as `None`, so passing the gate again (§H) never closes it. The item
-itself is discharged by its key's own command.
+itself is discharged by its key's own command, and `fr gate backfill` closes the tracker once its
+key is (spec 2026-11-08-sweep-fixes R13).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 import re
 import shlex
 from pathlib import Path
+from typing import Any, Literal
 
 _GATE_MARKER = re.compile(r"^<!-- fr-gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
 _PASSED_MARKER = re.compile(r"^<!-- fr-gate-passed:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$")
@@ -54,6 +56,9 @@ _ADOPT_MARKER = re.compile(
 _ADOPT_PASSED_MARKER = re.compile(
     r"^<!-- fr-gate-adopt-passed:(?P<key>\S+) gate:(?P<gate>[a-z][a-z0-9-]*) pr:(?P<pr>\d+) -->$"
 )
+_ADOPT_DISCHARGED_MARKER = re.compile(
+    r"^<!-- fr-gate-adopt-discharged:(?P<key>\S+) pr:(?P<pr>\d+) -->$"
+)
 _PLACEHOLDER = "<what you did>"
 
 
@@ -73,6 +78,10 @@ def adopt_passed_marker(key: str, gate: str, pr: int) -> str:
     return f"<!-- fr-gate-adopt-passed:{key} gate:{gate} pr:{pr} -->"
 
 
+def adopt_discharged_marker(key: str, pr: int) -> str:
+    return f"<!-- fr-gate-adopt-discharged:{key} pr:{pr} -->"
+
+
 def link_marker(key: str, tracker: str) -> str:
     return f"<!-- fr-gate-link:{key} tracker:{tracker} -->"
 
@@ -89,6 +98,42 @@ def fr_adopt_passed_marker(body: str) -> tuple[str, str, int] | None:
     lines = [ln.strip() for ln in body.rstrip().splitlines()]
     m = _ADOPT_PASSED_MARKER.match(lines[-1]) if lines else None
     return (m.group("key"), m.group("gate"), int(m.group("pr"))) if m else None
+
+
+def fr_adopt_discharged_marker(body: str) -> tuple[str, int] | None:
+    """`(key, pr)` from the LAST line of an evidence comment, exact match only."""
+    lines = [ln.strip() for ln in body.rstrip().splitlines()]
+    m = _ADOPT_DISCHARGED_MARKER.match(lines[-1]) if lines else None
+    return (m.group("key"), int(m.group("pr"))) if m else None
+
+
+def adopt_states(
+    comments: list[dict[str, Any]], me: str
+) -> dict[tuple[str, str, int], Literal["held", "passed"]]:
+    """`(key, gate, pr)` -> what THIS account's latest adopt comment on it says: `held`
+    (`fr-gate-adopt:`) or `passed` (`fr-gate-adopt-passed:`). Anyone else's comment is only text
+    (R8). *comments* are in the forge's order, oldest first, so a later comment wins."""
+    states: dict[tuple[str, str, int], Literal["held", "passed"]] = {}
+    for c in comments:
+        if not me or c.get("author") != me:
+            continue
+        body = str(c.get("body") or "")
+        held, passed = fr_adopt_marker(body), fr_adopt_passed_marker(body)
+        if held is not None:
+            states[held] = "held"
+        elif passed is not None:
+            states[passed] = "passed"
+    return states
+
+
+def adopt_discharged(comments: list[dict[str, Any]], me: str) -> set[tuple[str, int]]:
+    """`(key, pr)` of this account's evidence comments: a second run writes nothing (R13)."""
+    found = (
+        fr_adopt_discharged_marker(str(c.get("body") or ""))
+        for c in comments
+        if me and c.get("author") == me
+    )
+    return {m for m in found if m is not None}
 
 
 def runs_by_head(root: Path) -> dict[str, list[str]]:
@@ -160,7 +205,7 @@ def _journal_resolve(root: Path, key: str) -> str | None:
                     if e.kind == "owed" and e.id in still and owed_key(e) == key:
                         return (
                             f"fr journal resolve --scope {scope} --slug {shlex.quote(path.stem)} "
-                            f'--id {shlex.quote(e.id)} --state fixed --body "<why it is done>"'
+                            f'--id {shlex.quote(e.id)} --state fixed --note "<why it is done>"'
                         )
     return None
 
@@ -178,7 +223,8 @@ def discharge_command(key: str, *, repo_root: Path) -> str:
     if kind == "row":
         return (
             f"fr acceptance set-status --id {shlex.quote(name)} --status walked "
-            '--walk "<walk log>" --notes "<what passed>"'
+            '--walk "<walk log>" --harness "<harness>" --model "<model>" '
+            '--strategy "<strategy>" --notes "<what passed>"'
         )
     if kind == "spec" and n is not None:
         spec = find_spec(repo_root, name) or "<spec>"
@@ -215,9 +261,15 @@ def tracker_body(key: str, title: str, gate: str, pr: int, *, run_id: str | None
     )
 
 
-# A tracked-only tracker is never closed by fr (no gate pass reaches it), so its text says who
-# closes it (review of #1324, F3; auto-close is a separate issue).
-_CLOSE_LINE = "Then close this issue."
+# No gate pass reaches a tracked-only tracker, so its text says what closes it (gh#1328, R13). The
+# wording names no `fr` command: the backfill's two steps are in the operator doc.
+_OWNED_CLOSE_LINE = (
+    "Once it is discharged, the next gate backfill (dry run, then --yes) closes this issue."
+)
+_ADOPTED_CLOSE_LINE = (
+    "Once it is discharged, the next gate backfill (dry run, then --yes) says so here and prints "
+    "the close command; fr never closes this issue, so closing it is yours."
+)
 
 
 def _discharge_block(key: str, repo_root: Path) -> list[str]:
@@ -239,7 +291,7 @@ def passed_tracker_body(key: str, title: str, gate: str, pr: int, *, repo_root: 
             "",
             *_discharge_block(key, repo_root),
             "",
-            _CLOSE_LINE,
+            _OWNED_CLOSE_LINE,
             "",
             passed_marker(gate, pr),
             owed_marker(key),
@@ -265,8 +317,12 @@ def link_comment(key: str, tracker: str) -> str:
     )
 
 
-def adopt_passed_comment(key: str, gate: str, pr: int, *, repo_root: Path) -> str:
-    """The tracked-only adopt comment (gh#1322): no pass command, the key's discharge instead."""
+def adopt_passed_comment(
+    key: str, gate: str, pr: int, *, repo_root: Path, discharged: str | None = None
+) -> str:
+    """The tracked-only adopt comment (gh#1322): no pass command, the key's discharge instead.
+    *discharged*: the evidence, when a `--keep` names a key that already reads as discharged."""
+    reads_as = [f"It already reads as discharged: {discharged}.", ""] if discharged else []
     return "\n".join(
         [
             f"fr is tracking `{key}` here. PR #{pr}'s gate:{gate} already passed, so the PR is "
@@ -274,8 +330,21 @@ def adopt_passed_comment(key: str, gate: str, pr: int, *, repo_root: Path) -> st
             "",
             *_discharge_block(key, repo_root),
             "",
-            _CLOSE_LINE,
+            *reads_as,
+            _ADOPTED_CLOSE_LINE,
             "",
             adopt_passed_marker(key, gate, pr),
+        ]
+    )
+
+
+def adopt_discharged_comment(key: str, pr: int, evidence: str) -> str:
+    """The one comment an adopted issue gets once its key is discharged (R13)."""
+    return "\n".join(
+        [
+            f"`{key}` is discharged: {evidence}. fr never closes this issue, so closing it is "
+            "yours.",
+            "",
+            adopt_discharged_marker(key, pr),
         ]
     )

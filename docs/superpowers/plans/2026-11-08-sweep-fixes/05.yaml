@@ -1,0 +1,67 @@
+schema_version: 2
+phase:
+  number: 5
+  title: No RC when nothing installable changed (#1321)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - release-skips-rc-nothing-installable
+  - release-noop-first-real-use
+  tier: hard
+  files:
+  - scripts/installable.py
+  - scripts/release.py
+  - AGENTS.md
+  - tests/unit/test_installable.py
+  - tests/unit/test_release_script.py
+  estimate_lines: 400
+tasks:
+- number: 1
+  title: One definition of installable (R17)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: `tests/unit/test_installable.py`: `docs/x`, `tests/x`, `.github/x`, `.changes/README.md`, `README.md`, `AGENTS.md` and `.test_durations` are not installable; `packages/fr/src/x.py`, `plugins/super-fr/hooks/x`, `scripts/install.sh`, `uv.lock`, `pyproject.toml`, `plugins/README.md` and an unknown new path are; and over every path `git ls-files` lists, `requires_bump(p)` implies `is_installable(p)`. Add a `installable_changed` test on a fixture repo: a docs-only diff is false, a code diff true, a revert to the tag's tree false, a move from `plugins/` into `docs/` true, a non-ASCII path read correctly. See them fail.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: add stdlib-only `scripts/installable.py` with `is_installable` and `installable_changed`, using `git diff --no-renames --name-only -z <tag> HEAD`. See the tests pass.
+- number: 2
+  title: The RC branch (R16, R18)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: in `test_release_script.py`, a docs-only merge while a PR waits cuts no RC and prints `nothing installable changed since <tag>: no release`, against the newest RC and, with no RC above the final, against the final; a fragment-only merge likewise, including a major bump after an RC; the same with the gate state unknown; a code merge cuts the next RC. Pin R18: gates passing with identical code since the RC cut the final; a pending fragment with nothing waiting and no installable change still releases; `--version` is unchanged; an untagged RC at HEAD is tagged. See the new ones fail.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: in `compute`, replace `_merged_since(rcs[-1])` with `installable_changed` against the newest RC above the base, or the last final when there is none, cutting an RC as today when no tag exists, and remove `_merged_since`. Change the existing RC tests whose fixtures land only a fragment to land an installable path too. See `test_release_script.py` pass.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR: state the amended rule in `compute`'s docstring and the `AGENTS.md` "Release gating" paragraph, including its "unknown" sentence.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-11-08T21:21:16+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-11-08T21:21:16+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-11-08T21:21:16+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-11-08T21:21:16+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-11-08T21:21:16+00:00'
+      note: null
+  completion:
+    at: '2026-11-08T21:21:16+00:00'
+    note: null
+    observed_prs: []

@@ -863,7 +863,7 @@ def _acceptance_writes(
                 )
             else:
                 assert existing is not None  # refused above when absent
-                if not item.notes:
+                if not item.notes and item.status != existing.status:
                     raise RecordRefusedError(
                         f"acceptance {item.id}: moving a row's status needs `notes` — "
                         "a status that moved for no recorded reason is a silent change"
@@ -878,7 +878,9 @@ def _acceptance_writes(
                         {k: list(v) for k, v in item.levels.items()},
                     ),
                     status=item.status,  # type: ignore[arg-type]
-                    notes=item.notes,
+                    # Only a status move owes a note (refused above), so an item that moves
+                    # nothing and names none keeps the row's own.
+                    notes=item.notes or existing.notes,
                     # A status move keeps the row's `verify` unless it names one.
                     verify=item.verify if item.verify is not None else existing.verify,
                     # `visual` is create-only — set-status never touches it (spec

@@ -50,6 +50,18 @@ def forge(monkeypatch: pytest.MonkeyPatch) -> Any:
     return install
 
 
+@pytest.fixture
+def keep_forge(forge: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """`forge`, with this checkout's origin naming the PR's repo: a checkout `--keep` accepts."""
+
+    def install(labels: list[str]) -> FakeGhClient:
+        fake = forge(labels)
+        monkeypatch.setattr("fr.archive_followups.owed_identity", lambda *a, **k: (REPO, ""))
+        return fake
+
+    return install
+
+
 def _pass(*args: str) -> Any:
     return CliRunner().invoke(
         app, ["gate", "pass", "--repo", REPO, "--pr", "5", "--notes", "walked live", *args]
@@ -437,8 +449,10 @@ def _with_tracker(fake: FakeGhClient, n: int = 12, *, pr: int = 5, gate: str = "
     )
 
 
-def test_yes_closes_the_prs_trackers_after_the_pass_and_prints_the_discharge(forge: Any) -> None:
-    fake = forge(["gate:tester"])
+def test_yes_closes_the_prs_trackers_after_the_pass_and_prints_the_discharge(
+    keep_forge: Any,
+) -> None:
+    fake = keep_forge(["gate:tester"])
     _with_tracker(fake)
 
     result = _pass("--gate", "tester", "--yes")
@@ -447,7 +461,8 @@ def test_yes_closes_the_prs_trackers_after_the_pass_and_prints_the_discharge(for
     names = [c[0] for c in fake.calls]
     assert names.index("edit_pr_labels") < names.index("close_issue")
     (close,) = [c[1] for c in fake.calls if c[0] == "close_issue"]
-    assert close["number"] == 12 and close["comment"] == "Gate tester passed on #5: walked live"
+    assert close["number"] == 12
+    assert close["comment"].startswith("Gate tester passed on #5: walked live; `row:r-live` is")
     assert "closed tracker #12" in result.output
 
 
@@ -641,3 +656,204 @@ def test_gh1369_an_ambiguous_entry_applied_without_its_manifest_says_how_to_reso
     assert result.exit_code == 0, result.output
     assert "ambiguous (#21, #22)" in result.output and "--from" in result.output
     assert fake.attempted_mutations == 0
+
+
+# --- fr gate pass --keep (spec 2026-11-08-sweep-fixes R10, R11) --------------------------------
+
+KEEP = "row:r-live"
+
+
+def _keep_writes(fake: FakeGhClient) -> list[str]:
+    writes = {
+        "edit_pr_labels", "comment_pr", "ensure_labels", "comment_issue", "edit_issue_body",
+        "close_issue",
+    }  # fmt: skip
+    return [c[0] for c in fake.calls if c[0] in writes]
+
+
+def test_keep_converts_the_tracker_after_the_pass(keep_forge: Any) -> None:
+    from fr.gatebackfill import trackers
+
+    fake = keep_forge(["gate:tester"])
+    _with_tracker(fake)
+
+    result = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+
+    assert result.exit_code == 0, result.output
+    assert fake.pr_labels[(REPO, 5)] >= {"gate:tester-passed"}
+    assert not [c for c in fake.calls if c[0] == "close_issue"]
+    assert trackers.fr_passed_marker(fake.issues[(REPO, 12)].body) == ("tester", 5)
+    assert "kept #12 open" in result.output
+
+
+def test_keep_dry_run_writes_nothing(keep_forge: Any) -> None:
+    fake = keep_forge(["gate:tester"])
+    _with_tracker(fake)
+    result = _pass("--gate", "tester", "--keep", KEEP)
+    assert result.exit_code == 0, result.output
+    assert "would keep #12" in result.output and _keep_writes(fake) == []
+
+
+def test_keep_of_a_key_no_tracker_holds_is_refused_before_the_pass_writes(keep_forge: Any) -> None:
+    fake = keep_forge(["gate:tester"])
+    _with_tracker(fake)
+    result = _pass("--gate", "tester", "--keep", "row:typo", "--yes")
+    assert result.exit_code == 2 and "row:typo" in result.output
+    assert _keep_writes(fake) == []
+    assert fake.prs[(REPO, 5)]["labels"] == ["gate:tester"]
+
+
+def test_keep_of_a_key_of_another_pr_or_gate_is_refused(keep_forge: Any) -> None:
+    fake = keep_forge(["gate:tester"])
+    _with_tracker(fake, pr=6)
+    _with_tracker(fake, 13, gate="devops")
+    result = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+    assert result.exit_code == 2 and _keep_writes(fake) == []
+
+
+def test_keep_is_refused_on_the_retry_route_too(keep_forge: Any) -> None:
+    fake = _gate_passed_by_fr(keep_forge)
+    _with_tracker(fake)
+    before = fake.attempted_mutations
+    result = _pass("--gate", "tester", "--keep", "row:typo", "--yes")
+    assert result.exit_code == 2 and "row:typo" in result.output
+    assert fake.attempted_mutations == before
+
+
+def _gate_passed_by_fr(install: Any) -> FakeGhClient:
+    fake = install(["gate:tester-passed"])
+    fake.comment_author = "fr-bot"
+    fake.comment_pr(REPO, 5, gate_pass_comment("tester", "walked"))
+    return fake
+
+
+def test_keep_retry_over_an_already_tracked_only_tracker_passes_and_writes_nothing(
+    keep_forge: Any,
+) -> None:
+    fake = _gate_passed_by_fr(keep_forge)
+    _with_tracker(fake)
+    first = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+    assert first.exit_code == 0, first.output
+    before = fake.attempted_mutations
+
+    again = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+
+    assert again.exit_code == 0, again.output
+    assert fake.attempted_mutations == before
+
+
+def test_keep_retry_over_an_adopted_issue_already_tracked_only_passes_and_writes_nothing(
+    keep_forge: Any, tmp_path: Path
+) -> None:
+    from fr.gatebackfill import trackers
+
+    fake = _gate_passed_by_fr(keep_forge)
+    fake.add_issue(REPO, 9, labels={"fr:owed"}, body="a human's issue")
+    fake.issue_authors[(REPO, 9)] = "someone-else"
+    fake.comment_issue(
+        REPO, 9, trackers.adopt_passed_comment(KEEP, "tester", 5, repo_root=tmp_path)
+    )
+    before = fake.attempted_mutations
+    result = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+    assert result.exit_code == 0, result.output
+    assert fake.attempted_mutations == before and "gh issue close" not in result.output
+
+
+def test_the_retry_line_carries_every_keep(keep_forge: Any) -> None:
+    import shlex
+
+    fake = keep_forge(["gate:tester"])
+    _with_tracker(fake)
+    _with_tracker(fake, 13, pr=5)
+    fake.issues[(REPO, 13)].body = fake.issues[(REPO, 13)].body.replace("row:r-live", "plan:p#p1")
+    from tests.unit.fakes import FakeGhError
+
+    real_edit = fake.edit_issue_body
+
+    def boom(repo: str, number: int, body: str) -> None:
+        raise FakeGhError("rate limited")
+
+    fake.edit_issue_body = boom  # type: ignore[method-assign]
+    result = _pass("--gate", "tester", "--keep", KEEP, "--keep", "plan:p#p1", "--yes")
+    (hint,) = [ln for ln in result.output.splitlines() if "to retry the close" in ln]
+    argv = shlex.split(hint.split("`")[1])
+    kept = [argv[i + 1] for i, a in enumerate(argv) if a == "--keep"]
+    assert kept == [KEEP, "plan:p#p1"]
+    # the retry line runs, and finishes the job
+    fake.edit_issue_body = real_edit  # type: ignore[method-assign]
+    again = CliRunner().invoke(app, argv[1:])
+    assert again.exit_code == 0, again.output
+    assert not [c for c in fake.calls if c[0] == "close_issue"]
+
+
+def test_keep_with_no_checkout_is_refused(keep_forge: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = keep_forge(["gate:tester"])
+    _with_tracker(fake)
+    monkeypatch.setattr(gate_cmd, "_repo_root", lambda: None)
+    result = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+    assert result.exit_code == 2 and "needs a checkout" in result.output
+    assert _keep_writes(fake) == []
+
+
+def test_p4_r4_a_checkout_of_another_repo_is_no_checkout(
+    forge: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R10, R12: its evidence and discharge commands describe some other repo."""
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+    monkeypatch.setattr(
+        "fr.archive_followups.owed_identity", lambda *a, **k: ("other-org/other", "")
+    )
+
+    refused = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+    assert refused.exit_code == 2 and f"checkout of {REPO}" in refused.output
+    assert _keep_writes(fake) == []
+
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 0, result.output
+    (close,) = [c[1] for c in fake.calls if c[0] == "close_issue"]
+    assert close["comment"] == "Gate tester passed on #5: walked live"
+    assert "set-status" not in result.output
+
+
+def test_p4_r4_the_retry_route_reads_no_other_repos_evidence(
+    forge: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _gate_passed_by_fr(forge)
+    _with_tracker(fake)
+    monkeypatch.setattr(
+        "fr.archive_followups.owed_identity", lambda *a, **k: ("other-org/other", "")
+    )
+    result = _pass("--gate", "tester", "--yes")
+    assert result.exit_code == 0, result.output
+    (close,) = [c[1] for c in fake.calls if c[0] == "close_issue"]
+    assert close["comment"] == "Gate tester passed on #5: walked live"
+    refused = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+    assert refused.exit_code == 2
+
+
+def test_p4_r4_the_origin_is_compared_without_case(
+    forge: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+    monkeypatch.setattr("fr.archive_followups.owed_identity", lambda *a, **k: (REPO.upper(), ""))
+    result = _pass("--gate", "tester", "--keep", KEEP)
+    assert result.exit_code == 0, result.output
+
+
+def test_p4_r11_a_keep_pass_lists_the_trackers_once(keep_forge: Any) -> None:
+    fake = keep_forge(["gate:tester"])
+    _with_tracker(fake)
+    result = _pass("--gate", "tester", "--keep", KEEP, "--yes")
+    assert result.exit_code == 0, result.output
+    assert len([c for c in fake.calls if c[0] == "list_issues"]) == 1
+
+
+def test_p4_r4_a_repo_fr_cannot_name_is_no_checkout(
+    forge: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = forge(["gate:tester"])
+    _with_tracker(fake)
+    monkeypatch.setattr("fr.archive_followups.owed_identity", lambda *a, **k: (None, "no origin"))
+    assert _pass("--gate", "tester", "--keep", KEEP).exit_code == 2
