@@ -781,3 +781,18 @@ answered_by: operator
 lowered:
 - placement-quiet:kind
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-29 created=2026-11-09T06:48:20+00:00 -->
+### exit-change-29 · decision · exit change: row placement-stealth -> strategy none
+
+built by plan 3 of this spec (R29, #1380), not by this run's plan 1; that plan's run sets it back to candidate with its scenario
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+lowered with an operator answer: row placement-stealth: kind `candidate` -> `none` waits for less
+
+```yaml
+answered_by: operator
+lowered:
+- placement-stealth:kind
+```
