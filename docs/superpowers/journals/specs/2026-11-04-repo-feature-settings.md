@@ -721,3 +721,18 @@ after: kinds ['candidate', 'live'], gates ['tester']
 answered_by: agent
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-25 created=2026-11-09T06:45:54+00:00 -->
+### exit-change-25 · decision · exit change: row acceptance-fragments-amendments -> strategy none
+
+built by plan 2 of this spec (R29, #1379), not by this run's plan 1; that plan's run sets it back to candidate with its scenario
+
+before: kinds ['candidate', 'live'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+lowered with an operator answer: row acceptance-fragments-amendments: kind `candidate` -> `none` waits for less
+
+```yaml
+answered_by: operator
+lowered:
+- acceptance-fragments-amendments:kind
+```
