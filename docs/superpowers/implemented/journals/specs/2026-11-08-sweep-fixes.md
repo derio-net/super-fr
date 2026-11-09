@@ -323,3 +323,8 @@ owed_key: spec:2026-11-08-sweep-fixes#step1
 ### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1396] · resolves test-plan-step-1: Test Plan step 1 owed
 
 Filed at archive as derio-net/super-fr#1396; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved-2 created=2026-11-09T07:42:36+00:00 state=fixed resolves=test-plan-step-1 -->
+### test-plan-step-1-resolved-2 · finding [fixed] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Walked. Release 42579256294 on the archive PR 1397 merge printed the no-release line and cut no tag; after the gate:tester pass on PR 1387, Release 42580426586 cut final v6.2.0 with only version surfaces and docs changed since v6.2.0-rc.1.
