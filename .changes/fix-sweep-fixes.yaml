@@ -1,2 +1,0 @@
-bump: minor
-summary: "gate/backfill sweep fixes: link-only set-status, printed commands that run, digest look-alikes, Test Plan heading repair, tracker close with --keep, no RC for non-installable merges"
