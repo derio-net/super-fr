@@ -129,3 +129,13 @@ def test_p1_r2_a_spec_tick_is_refused_with_the_command_that_records_it_ran(
         )
         in refusal
     )
+
+
+def test_tracked_rows_print_the_link_only_form() -> None:
+    from fr.gatebackfill.model import TrackerInfo
+    from fr.gatebackfill.render import tracked_rows
+
+    e = PlanEntry(key="row:widget-live", tracker=TrackerInfo(ref="example-org/widgets#7"))
+    assert tracked_rows([e]) == [
+        "fr acceptance set-status --id widget-live --issue 'example-org/widgets#7'"
+    ]

@@ -99,9 +99,15 @@ GATED: dict[str, str] = {
         "backfill_command: apply_plan(issues=forge_allows(issues))",
     "fr/src/fr/gatebackfill/apply.py::_Apply._own":
         "backfill_command: apply_plan(issues=forge_allows(issues))",
-    "fr/src/fr/gatebackfill/close.py::_one":
-        "callers: gate_cmd.pass_command (trackers_off: forge block issues, comments); "
-        "_Driver._pass_gate (_Driver.forge_off issues, comments)",
+    "fr/src/fr/gatebackfill/close.py::_close_owned":
+        "callers: close_gate_trackers <- gate_cmd.pass_command (trackers_off: forge block "
+        "issues, comments); _Driver._pass_gate (_Driver.forge_off issues, comments)",
+    "fr/src/fr/gatebackfill/close.py::_keep_owned":
+        "callers: close_gate_trackers <- gate_cmd.pass_command (trackers_off: forge block "
+        "issues, comments); _Driver._pass_gate (_Driver.forge_off issues, comments)",
+    "fr/src/fr/gatebackfill/close.py::_keep_adopted":
+        "callers: close_gate_trackers <- gate_cmd.pass_command (trackers_off: forge block "
+        "issues, comments); _Driver._pass_gate (_Driver.forge_off issues, comments)",
     # -- a repo fr has no checkout of: fr.settings.remote ----------------------------------
     "fr/src/fr/tracker/github.py::GithubTracker.transition":
         "_require_quiet_ok: client_policy(labels[, issues])",

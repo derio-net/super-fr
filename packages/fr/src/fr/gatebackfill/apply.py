@@ -16,7 +16,16 @@ from typing import Any
 
 from fr.archive_followups import owned_owed_key
 from fr.gatebackfill import trackers
-from fr.gatebackfill.model import BackfillError, PlanEntry, PlanFile
+from fr.gatebackfill.candidates import MANIFEST_HINT
+from fr.gatebackfill.close import (
+    EvidenceReader,
+    closes_blocked,
+    discharged_evidence,
+    gh_close_for,
+    holders_by_key,
+    other_holder,
+)
+from fr.gatebackfill.model import BackfillError, PlanClose, PlanEntry, PlanFile
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, forge_error_kind
 from fr.labels import FR_AWAITING_LIVE, FR_OWED, LabelDef, gate_label
@@ -173,8 +182,13 @@ class _Apply:
             res.skipped = "no delivering PR" if e.pr is None else "no gate: set gate: in the plan"
             return res
         if fresh.pr is None or fresh.pr.number != e.pr.number:
-            now = f"#{fresh.pr.number}" if fresh.pr else "none"
-            res.skipped = f"delivering PR re-resolves to {now}, plan recorded #{e.pr.number}"
+            if fresh.ambiguous:
+                now = f"is ambiguous ({', '.join(f'#{n}' for n in fresh.ambiguous)})"
+            else:
+                now = f"re-resolves to {f'#{fresh.pr.number}' if fresh.pr else 'none'}"
+            res.skipped = (
+                f"delivering PR {now}, plan recorded #{e.pr.number}; set pr: {MANIFEST_HINT}"
+            )
             return res
         if fresh.gate != e.computed_gate:
             res.skipped = f"gate re-resolves to {fresh.gate}, plan recorded {e.computed_gate}"
@@ -350,6 +364,91 @@ class _Apply:
         self.w.comment(e.issue, trackers.link_comment(e.key, ref))
         res.actions.append(f"linked closed issue #{e.issue} to {ref}")
 
+    # --- the closes (spec 2026-11-08-sweep-fixes R13, R15) -------------------------------------
+
+    def closes(self, closes: list[PlanClose]) -> None:
+        """Apply the recorded closes, each re-checked against the forge and the checkout. Nothing
+        but this run's own reads decides: the plan file only names what to look at."""
+        from fr.archive import merge_evidence
+
+        if not closes:
+            return
+        if not (self.issues and self.comments):  # a close carries a comment (R9)
+            self.report.notes.append(
+                "  no tracker closes: tracker writes are off "
+                "(forge.issues or forge.comments off, or tracking none)"
+            )
+            return
+        evidence = merge_evidence(self.root, fetch=False)
+        blocked = closes_blocked(self.root, evidence)
+        if blocked is not None:
+            self.report.notes.append(f"  no tracker closes: {blocked}")
+            return
+        reader = EvidenceReader(self.root, evidence=evidence)
+        holders = holders_by_key(self.open, self.me)
+        for c in closes:
+            res = EntryResult(c.key)
+            try:
+                self._close(c, reader, holders, res)
+            except _FAILURES as exc:
+                res.error = str(exc)
+            self.report.results.append(res)
+
+    def _close(
+        self,
+        c: PlanClose,
+        reader: EvidenceReader,
+        holders: dict[str, set[int]],
+        res: EntryResult,
+    ) -> None:
+        m = _REF.match(c.ref)
+        if m is None or m.group("repo").lower() != self.repo.lower():
+            res.skipped = f"close target {c.ref} is not in {self.repo}"
+            return
+        n = int(m.group("n"))
+        issue = next((i for i in self.open if i.get("number") == n), None)
+        if issue is None:
+            res.notes.append(f"{c.ref} is no longer open")
+            return
+        evidence = discharged_evidence(self.root, c.key, reader=reader)
+        if evidence is None:
+            res.skipped = f"{c.key} is no longer discharged; the next dry run decides it"
+            return
+        holder = other_holder(holders, c.key, n)
+        if holder is not None:
+            res.skipped = f"{holder} also carries the key's marker"
+            return
+        if c.adopted:
+            self._close_adopted(c, n, issue, evidence, res)
+            return
+        body = str(issue.get("body") or "")
+        if owned_owed_key(issue, self.me) != c.key or trackers.fr_passed_marker(body) is None:
+            res.skipped = f"{c.ref} is not an fr-owned tracked-only tracker of this key"
+            return
+        self.w.close(n, f"Discharged, closed by the gate backfill: {evidence}")
+        res.actions.append(f"closed tracker {c.ref}")
+
+    def _close_adopted(
+        self, c: PlanClose, n: int, issue: dict[str, Any], evidence: str, res: EntryResult
+    ) -> None:
+        if owned_owed_key(issue, self.me) is not None:
+            res.skipped = f"{c.ref} is not an adopted issue"
+            return
+        comments = self.client.list_issue_comments(self.repo, n)
+        prs = [
+            pr
+            for (key, _gate, pr), state in trackers.adopt_states(comments, self.me).items()
+            if key == c.key and state == "passed"
+        ]
+        if not prs:
+            res.skipped = f"{c.ref} carries no tracked-only comment of this account for this key"
+            return
+        posted = trackers.adopt_discharged(comments, self.me)
+        if not any((c.key, pr) in posted for pr in prs):
+            self.w.comment(n, trackers.adopt_discharged_comment(c.key, prs[0], evidence))
+            res.actions.append(f"commented the evidence on {c.ref}")
+        res.notes.append(f"close it yourself: {gh_close_for(c.ref, evidence)}")
+
 
 def apply_plan(
     repo_root: Path,
@@ -384,8 +483,10 @@ def apply_plan(
         res = run.entry(e, fresh.get(e.key))
         if res is not None:
             report.results.append(res)
-    for key in sorted(set(fresh) - {e.key for e in plan.entries}):
+    closing = {c.key for c in plan.closes}
+    for key in sorted(set(fresh) - {e.key for e in plan.entries} - closing):
         report.notes.append(
             f"  {key}: a new candidate, not in the plan: dry-run again to decide it"
         )
+    run.closes(plan.closes)
     return report

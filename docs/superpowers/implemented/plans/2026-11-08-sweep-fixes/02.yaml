@@ -1,0 +1,46 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Debt digest is never a look-alike (#1334)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - gate-backfill-digest-not-lookalike
+  tier: mechanical
+  files:
+  - packages/fr/src/fr/gatebackfill/candidates.py
+  - tests/unit/test_gatebackfill_candidates.py
+  estimate_lines: 60
+tasks:
+- number: 1
+  title: Exclude digests by marker (R7)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests that an open issue naming row X with `<!-- fr-technical-debt -->` as its own line gives no look-alike for X, the same with `<!-- fr-acceptance-digest -->`, whatever the title and author; that a marker mid-line does not exclude; and that an issue the manifest names by `issue:` still matches when it carries a marker. See them fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in `_lookalikes`, take the manifest match first and skip an issue for which `fr.triage.debt.has_marker(body)` is true before the text match. See the tests pass.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: reread `_lookalikes` for dead branches after the reorder and simplify any, or give the reason in the step record.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-08T18:26:06+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-08T18:26:06+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-08T18:26:06+00:00'
+      note: null
+  completion:
+    at: '2026-11-08T18:26:06+00:00'
+    note: null
+    observed_prs: []

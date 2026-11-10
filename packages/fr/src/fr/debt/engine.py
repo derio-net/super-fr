@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import yaml
 
@@ -173,7 +173,45 @@ def spec_heading_problems(repo_root: Path) -> list[str]:
     return out
 
 
-def journal_owed(repo_root: Path) -> tuple[list[OwedItem], set[str], list[str]]:
+if TYPE_CHECKING:
+    from fr.journal.model import JournalEntry
+
+
+@dataclass(frozen=True)
+class JournalsRead:
+    """Every journal of a checkout, parsed once: what a caller reading several things from them
+    hands on, so no file is parsed twice in one run."""
+
+    entries: dict[Path, list[JournalEntry]]
+    unreadable: tuple[str, ...]
+
+
+def read_journals(repo_root: Path) -> JournalsRead:
+    """Every journal, live and archived (`implemented/`); one that cannot be parsed is named."""
+    from fr.journal.model import (
+        IMPLEMENTED_JOURNALS_REL,
+        JOURNALS_REL,
+        JournalParseError,
+        parse_journal,
+    )
+
+    entries: dict[Path, list[JournalEntry]] = {}
+    unreadable: list[str] = []
+    for base in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
+        root = repo_root / base
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("**/*.md")):
+            try:
+                entries[path] = parse_journal(path.read_text())
+            except (JournalParseError, OSError, UnicodeDecodeError):
+                unreadable.append(path.relative_to(repo_root).as_posix())
+    return JournalsRead(entries, tuple(unreadable))
+
+
+def journal_owed(
+    repo_root: Path, *, journals: JournalsRead | None = None
+) -> tuple[list[OwedItem], set[str], list[str]]:
     """The journal-entry owed source (R23): every unresolved `owed` entry of
     every journal, live and archived (`implemented/`), one item per key.
 
@@ -182,50 +220,32 @@ def journal_owed(repo_root: Path) -> tuple[list[OwedItem], set[str], list[str]]:
     the fold drops a still-open issue carrying it, so a discharge whose issue
     could not be closed does not linger as debt.
     """
-    from fr.journal.model import (
-        IMPLEMENTED_JOURNALS_REL,
-        JOURNALS_REL,
-        JournalParseError,
-        open_owed_ids,
-        owed_fields,
-        owed_filed_as,
-        owed_key,
-        parse_journal,
-    )
+    from fr.journal.model import open_owed_ids, owed_fields, owed_filed_as, owed_key
 
+    read = journals if journals is not None else read_journals(repo_root)
     items: dict[str, OwedItem] = {}
     discharged: set[str] = set()
-    unreadable: list[str] = []
-    for base in (JOURNALS_REL, IMPLEMENTED_JOURNALS_REL):
-        root = repo_root / base
-        if not root.is_dir():
-            continue
-        for path in sorted(root.glob("**/*.md")):
-            try:
-                entries = parse_journal(path.read_text())
-            except (JournalParseError, OSError, UnicodeDecodeError):
-                unreadable.append(path.relative_to(repo_root).as_posix())
+    for entries in read.entries.values():
+        still = set(open_owed_ids(entries))
+        filed = owed_filed_as(entries)
+        for e in entries:
+            key = owed_key(e) if e.kind == "owed" else None
+            if key is None:
                 continue
-            still = set(open_owed_ids(entries))
-            filed = owed_filed_as(entries)
-            for e in entries:
-                key = owed_key(e) if e.kind == "owed" else None
-                if key is None:
-                    continue
-                if e.id not in still:
-                    discharged.add(key)
-                    continue
-                items.setdefault(
-                    key,
-                    OwedItem(
-                        key=key,
-                        source="journal",
-                        title=e.title,
-                        how=owed_fields(e).get("how", ""),
-                        ref=filed.get(e.id, ""),
-                    ),
-                )
-    return list(items.values()), discharged - set(items), unreadable
+            if e.id not in still:
+                discharged.add(key)
+                continue
+            items.setdefault(
+                key,
+                OwedItem(
+                    key=key,
+                    source="journal",
+                    title=e.title,
+                    how=owed_fields(e).get("how", ""),
+                    ref=filed.get(e.id, ""),
+                ),
+            )
+    return list(items.values()), discharged - set(items), list(read.unreadable)
 
 
 def _issue_owed(issues: Iterable[dict[str, Any]]) -> list[OwedItem]:
@@ -366,9 +386,11 @@ def compute(
     evidence: MergeEvidence | None = None,
     fetch: bool = False,
     forge_why: str = "",
+    journals: JournalsRead | None = None,
 ) -> DebtReport:
     """The repo's debt as one report. *forge* None means no forge was used (R4);
-    *forge_why* says why (offline, tracking none, no remote), else "offline"."""
+    *forge_why* says why (offline, tracking none, no remote), else "offline".
+    *journals*: already read, so a caller reading them too parses each once."""
     days = load_stale_days(repo_root, stale_days)
     ev = evidence if evidence is not None else merge_evidence(repo_root, fetch=fetch)
     sources: dict[str, SourceStatus] = {}
@@ -471,7 +493,7 @@ def compute(
         else SourceStatus(state="read")
     )
 
-    journal_items, discharged, unreadable = journal_owed(repo_root)
+    journal_items, discharged, unreadable = journal_owed(repo_root, journals=journals)
     sources["journals"] = SourceStatus(
         state="read",
         why=f"unreadable, skipped: {', '.join(unreadable)}" if unreadable else "",

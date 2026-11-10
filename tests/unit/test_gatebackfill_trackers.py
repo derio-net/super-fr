@@ -65,9 +65,10 @@ def test_discharge_command_per_key_kind(tmp_path: Path) -> None:
 
     from tests.unit.test_merge_evidence import _write_plan
 
-    assert t.discharge_command("row:ops-walk", repo_root=tmp_path).startswith(
-        "fr acceptance set-status --id ops-walk --status walked --walk "
-    )
+    row_cmd = t.discharge_command("row:ops-walk", repo_root=tmp_path)
+    assert row_cmd.startswith("fr acceptance set-status --id ops-walk --status walked --walk ")
+    for flag in ("--harness", "--model", "--strategy"):
+        assert f'{flag} "<' in row_cmd
     spec = tmp_path / "docs/superpowers/specs" / "2026-10-20-widget-design.md"
     spec.parent.mkdir(parents=True)
     spec.write_text("# Widget\n")
@@ -90,6 +91,7 @@ def test_discharge_command_per_key_kind(tmp_path: Path) -> None:
     assert got.startswith(
         "fr journal resolve --scope spec --slug some-slug --id owed-1 --state fixed"
     )
+    assert '--note "' in got and "--body" not in got
 
 
 def test_p4_r2_resolve_run_omits_both_run_flags_for_devops_only() -> None:

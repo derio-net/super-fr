@@ -606,3 +606,98 @@ def test_set_status_rejects_an_invalid_verify_value(
     )
     assert result.exit_code == 2, result.output
     assert _matrix(root).read_text() == before
+
+
+# --- link-only form (spec 2026-11-08 R1, R2) -------------------------------
+
+LINK_ROWS = row(id="linked", status="walk-owed") + row(id="bare", status="ci")
+
+
+def _empty_note_repo(tmp_path: Path) -> Path:
+    root = make_repo(tmp_path, LINK_ROWS)
+    path = _matrix(root)
+    path.write_text(path.read_text().replace('notes: "n"', 'notes: ""', 1))
+    return root
+
+
+def test_link_only_keeps_status_and_note(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, LINK_ROWS)
+    result = _invoke(root, monkeypatch, "set-status", "--id", "linked", "--issue", "o/r#1")
+    assert result.exit_code == 0, result.output
+    got = _row(root, "linked")
+    assert (got.status, got.notes, got.issues) == ("walk-owed", "n", ("o/r#1",))
+
+
+def test_link_only_notes_are_appended(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, LINK_ROWS)
+    result = _invoke(
+        root, monkeypatch, "set-status", "--id", "linked", "--issue", "o/r#1", "--notes", "y"
+    )
+    assert result.exit_code == 0, result.output
+    got = _row(root, "linked")
+    assert (got.status, got.notes) == ("walk-owed", "n; y")
+
+
+def test_a_repeated_link_only_note_is_not_appended_twice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, LINK_ROWS)
+    args = ("set-status", "--id", "linked", "--issue", "o/r#1", "--notes", "y")
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    assert _invoke(root, monkeypatch, *args).exit_code == 0
+    assert _row(root, "linked").notes == "n; y"
+
+
+def test_link_only_on_an_empty_note_needs_no_notes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _empty_note_repo(tmp_path)
+    result = _invoke(root, monkeypatch, "set-status", "--id", "linked", "--issue", "o/r#1")
+    assert result.exit_code == 0, result.output
+    got = _row(root, "linked")
+    assert (got.status, got.notes, got.issues) == ("walk-owed", "", ("o/r#1",))
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--notes", "y"],
+        ["--issue", "o/r#1", "--level", "unit=own:tests/test_a.py"],
+        ["--issue", "o/r#1", "--drop-level", "unit=own:tests/test_a.py"],
+        ["--issue", "o/r#1", "--walk", "log"],
+        ["--issue", "o/r#1", "--verify", "none"],
+        ["--issue", "o/r#1", "--scenario", "tests/s.sh"],
+        ["--issue", "o/r#1", "--walk-outcome", "fail"],
+    ],
+)
+def test_without_status_anything_but_issue_and_notes_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: list[str]
+) -> None:
+    root = make_repo(tmp_path, LINK_ROWS)
+    before = _matrix(root).read_text()
+    result = _invoke(root, monkeypatch, "set-status", "--id", "linked", *extra)
+    assert result.exit_code == 2, result.output
+    assert "--status" in result.output
+    assert _matrix(root).read_text() == before
+
+
+def test_status_without_notes_is_still_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, LINK_ROWS)
+    before = _matrix(root).read_text()
+    result = _invoke(root, monkeypatch, "set-status", "--id", "linked", "--status", "ci")
+    assert result.exit_code == 2, result.output
+    assert "--notes" in result.output
+    assert _matrix(root).read_text() == before
+
+
+def test_status_with_notes_still_replaces_the_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, LINK_ROWS)
+    result = _invoke(
+        root, monkeypatch, "set-status", "--id", "linked", "--status", "ci", "--notes", "new"
+    )
+    assert result.exit_code == 0, result.output
+    assert _row(root, "linked").notes == "new"

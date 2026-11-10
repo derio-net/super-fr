@@ -90,6 +90,7 @@ class FakeForge:
         self.linked: dict[int, list[int]] = {}
         self.by_commit: dict[str, list[int]] = {}
         self.commit_error: Exception | None = None
+        self.comments: dict[int, list[dict[str, Any]]] = {}
         self.calls: list[tuple[str, Any]] = []
 
     def add_pr(self, number: int, state: str = "MERGED", **kw: Any) -> None:
@@ -125,3 +126,7 @@ class FakeForge:
         if self.commit_error is not None:
             raise self.commit_error
         return [dict(self.prs[n]) for n in self.by_commit.get(sha, [])]
+
+    def issue_comments(self, number: int) -> list[dict[str, Any]]:
+        self.calls.append(("issue_comments", number))
+        return list(self.comments.get(number, []))

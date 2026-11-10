@@ -111,6 +111,16 @@ class PlanEntry(_Strict):
         return split_decision(self.decision)[1]
 
 
+class PlanClose(_Strict):
+    """A tracker the dry run found discharged (spec 2026-11-08-sweep-fixes R13, R15); `--yes`
+    re-checks all of it. An adopted one gets a comment, never a close."""
+
+    key: str
+    ref: str
+    adopted: bool = False
+    evidence: str = ""
+
+
 class PlanFile(_Strict):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -118,12 +128,17 @@ class PlanFile(_Strict):
     repo: str
     generated_at: str = ""
     entries: list[PlanEntry] = Field(default_factory=list)
+    closes: list[PlanClose] = Field(default_factory=list)
 
 
 class ManifestItem(_Strict):
+    """A NEW item fr cannot infer (`kind:` and `title:` set), or an OVERRIDE of a key `fr debt`
+    already holds (no `kind:`; only `pr:`, `gate:`, `walk_only:`), which is how the operator
+    settles an ambiguous or planning delivering PR (spec §C; gh#1369)."""
+
     key: str
-    kind: Literal["closed-issue", "audit-gap", "walk", "op"]
-    title: str
+    kind: Literal["closed-issue", "audit-gap", "walk", "op"] | None = None
+    title: str = ""
     issue: int | None = None
     pr: int | None = None
     gate: str | None = None
@@ -186,13 +201,17 @@ def parse_manifest(text: str) -> Manifest:
     return manifest
 
 
-def merge_plan(old: PlanFile | None, fresh: list[PlanEntry]) -> list[PlanEntry]:
+def merge_plan(
+    old: PlanFile | None, fresh: list[PlanEntry], *, closing: frozenset[str] = frozenset()
+) -> list[PlanEntry]:
     """*fresh* with the operator's decisions carried over (R5): for a key still owed, an existing
     entry's `note`, its `decision` (so its adopt target) and `gate:` when they differ from what
     that entry recorded as computed (`default_decision`, `computed_gate`), i.e. the operator
-    wrote them; a computed default is refreshed. A key no longer owed is dropped."""
+    wrote them; a computed default is refreshed. A key no longer owed is dropped, and so is a key
+    in *closing*: it is discharged, so it is never both owed and closing."""
+    fresh = [e for e in fresh if e.key not in closing]
     if old is None:
-        return list(fresh)
+        return fresh
     before = {e.key: e for e in old.entries}
     merged = []
     for entry in fresh:
@@ -206,6 +225,33 @@ def merge_plan(old: PlanFile | None, fresh: list[PlanEntry]) -> list[PlanEntry]:
             entry.model_copy(update={"decision": decision, "note": prev.note, "gate": gate})
         )
     return merged
+
+
+def dropped_decisions(old: PlanFile | None, closing: frozenset[str]) -> list[str]:
+    """One note per operator decision on a key in *closing*, which `merge_plan` dropped (R15)."""
+    return [
+        f"{e.key}: discharged, so your decision `{e.decision}` was dropped"
+        for e in (old.entries if old else [])
+        if e.key in closing and e.decision != e.default_decision
+    ]
+
+
+def without_claimed_closes(
+    plan: PlanFile | None, manifest: Manifest | None
+) -> tuple[PlanFile | None, list[str]]:
+    """*plan* without the closes of keys *manifest* names as new items: `--from` honours the
+    manifest's claim on `--yes` as on a dry run. One note per close dropped."""
+    claimed = {m.key for m in (manifest.items if manifest else []) if m.kind is not None}
+    if plan is None or not claimed:
+        return plan, []
+    dropped = sorted({c.key for c in plan.closes if c.key in claimed})
+    if not dropped:
+        return plan, []
+    keep = [c for c in plan.closes if c.key not in claimed]
+    notes = [
+        f"{k}: the manifest names it as owed, so its recorded close was dropped" for k in dropped
+    ]
+    return plan.model_copy(update={"closes": keep}), notes
 
 
 def plan_path(repo: str, override: Path | None) -> Path:

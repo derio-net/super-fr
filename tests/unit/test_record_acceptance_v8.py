@@ -211,3 +211,16 @@ def test_a_v7_post_merge_entry_becomes_live(tmp_path: Path) -> None:
     record = load_record(path)
     assert record.schema_version == RECORD_SCHEMA_VERSION
     assert record.acceptance[0].verify == "live"
+
+
+def test_a_same_status_item_with_no_notes_keeps_the_rows_note(tmp_path: Path) -> None:
+    """Review p1-r1: only a status move owes a note, so an item that moves nothing must not
+    erase the note the row already holds."""
+    from fr.record.apply import RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    before = _row(root)
+    record = _move(status=before.status, notes=None, issues=["o/r#1"])
+    apply_record(root, None, record, target=RecordTarget(message="m"))
+    got = _row(root)
+    assert (got.status, got.notes, got.issues) == (before.status, before.notes, ("o/r#1",))
