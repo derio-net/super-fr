@@ -9,6 +9,7 @@ phase:
   acceptance:
   - site-builds-from-sources
   - site-published-from-sources
+  - docs-currency-every-flow
   tier: standard
   files:
   - .fr/docs.yaml
