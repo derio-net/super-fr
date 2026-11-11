@@ -643,3 +643,8 @@ covers widened on hermes, dispatch-lifecycle, plan-model, components and cli; fr
 ### p5a-r10-resolved-2 · finding [fixed] · resolves p5a-r10: Skill descriptions are trigger-optimised (phase 5)
 
 The consequence the reviewer raised (descriptions make poor table cells) is removed in this change: the README table takes its line from scripts/readme-skill-summaries.yaml. The descriptions themselves are written for skill selection on purpose and nothing is owed on them.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved-2 created=2026-11-11T16:28:14+00:00 phase=2 state=open resolves=p2-r2 tracked_by=https://github.com/derio-net/super-fr/issues/1402 -->
+### p2-r2-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1402] · resolves p2-r2: install.sh delivers no rules to OpenCode consumers (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1402.
