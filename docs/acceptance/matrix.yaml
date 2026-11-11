@@ -10959,9 +10959,20 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R14
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R15
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R23
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_routes
+      - super-fr:tests/unit/test_build_site.py#test_a_page_source_becomes_its_route_relative_to_the_linking_page
+      - super-fr:tests/unit/test_build_site.py#test_the_pages_marker_becomes_a_list_grouped_by_section
+      - super-fr:tests/unit/test_build_site.py#test_a_rendered_page_without_embedded_fonts_fails
+      - super-fr:tests/unit/test_pages_workflow.py#test_the_pin_is_one_full_sha_and_no_workflow_names_it
+      - super-fr:tests/unit/test_pages_workflow.py#test_ci_builds_the_site_on_every_pull_request
+      - super-fr:tests/unit/test_pages_workflow.py#test_triggers_cover_every_input_of_the_site
+    status: ci
+    notes: 'Built by scripts/build-site.py with the renderer pinned in .github/blog-craft.ref:
+      routes, link rewrite and index list are unit-tested over fixtures, the workflow
+      pins and the site-build CI job inside ci-ok are pinned, and the real build of
+      all pages was run locally against the pinned renderer checkout.'
     verify: none
   - id: site-published-from-sources
     capability: published docs
