@@ -138,3 +138,33 @@ Phase 3 now lists docs-currency-every-flow in its acceptance, so the phase that 
 ### p2-r2-resolved · finding [out-of-scope] · resolves p2-r2: install.sh delivers no rules to OpenCode consumers (phase 2)
 
 Not caused by this change: install.sh has never delivered an instruction file to OpenCode, for any shipped rule. The new rule is delivered exactly as the existing ones are.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-blog-craft-visibility created=2026-11-11T15:25:26+00:00 phase=3 -->
+### p3-blog-craft-visibility · discovery · Pinned renderer checkout assumes blog-craft is readable by the workflow token (phase 3)
+
+pages.yml and the site-build job check derio-net/blog-craft out with the default token, as the spec says. That works only if the repository is readable by it (public, or internal with access granted). It could not be checked from this session (no access to the repo via gh). The first CI run of site-build is the evidence; if it fails on checkout the fix is a token input, not a script change.
+
+<!-- fr:journal kind=decision scope=plan id=p3-drop-leading-h1 created=2026-11-11T15:25:26+00:00 phase=3 -->
+### p3-drop-leading-h1 · decision · The build drops a body's leading H1 (phase 3)
+
+Guides in docs/*.md open with an H1 that repeats the title front matter, and the renderer prints the title itself, so the page showed it twice. build-site.py removes a leading H1 from the body at build time (drop_leading_h1, tested); the source files keep it so they read well on GitHub.
+
+<!-- fr:journal kind=decision scope=plan id=p3-index-list-links created=2026-11-11T15:25:26+00:00 phase=3 -->
+### p3-index-list-links · decision · The index list is filled with source-relative links before the rewrite (phase 3)
+
+fill_pages emits links to each page's source path relative to the index, and the single link rewrite then turns them into routes, so the list and hand-written links share one rule and one failure mode.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-fr-isolation-drift created=2026-11-11T15:25:26+00:00 phase=3 -->
+### p3-fr-isolation-drift · discovery · fr-isolation page corrected against the rule (phase 3)
+
+The hand-authored page described a three-step staircase with mode exactly worktree. The rule now has worktree and external modes (container evidence), the HEAD-drift check and a host-worktree mode; fr-isolation.md states those. Page claims otherwise kept.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-11T15:25:26+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+Content-only task (page sources and front matter); no code to clean.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-11T15:25:26+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+Workflow YAML and its pinning test were written once to the target shape; nothing to clean.

@@ -119,15 +119,21 @@ steps:
           visual: none
           findings: p2-r1,p2-r2
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-11T15:12:11+00:00'
           agent: acb273603fcbf7445
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
+          model: claude-sonnet-5-5
           tier: standard
           bound: sonnet
           session: afbb2801-be83-5cf8-903a-b5a859749fab
+          returned: '2026-11-11T15:25:30+00:00'
+          outcome: done
+        evidence:
+          tests: ci:f65d6ed6ade658c124528ab7daf9cf5ad6b99b85+27371d564b6ca6d6edf795a8477404d9ee70bd0d;tree=38b9d3133b905ecbb23a6217469b86b48814fdb04d728554ffb6bfe8eea17190
+          visual: none
   journal-check:
     state: pending
   deliver:
