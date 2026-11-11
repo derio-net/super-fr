@@ -71,7 +71,7 @@ driver's order for what is next, and the backlog by tier. When several judged is
 subsystem, propose them as a batch:
 
 ```bash
-fr triage batch create merged-trust --title "Stop trusting merged state" \
+fr triage batch create merged-trust --repo example-org/example-repo --title "Stop trusting merged state" \
     --issue "example-repo#435" --issue "example-repo#469"
 ```
 
