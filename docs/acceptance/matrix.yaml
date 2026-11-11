@@ -10971,11 +10971,12 @@ rows:
       - super-fr:tests/unit/test_pages_workflow.py#test_the_pin_is_one_full_sha_and_no_workflow_names_it
       - super-fr:tests/unit/test_pages_workflow.py#test_ci_builds_the_site_on_every_pull_request
       - super-fr:tests/unit/test_pages_workflow.py#test_triggers_cover_every_input_of_the_site
+      int:
+      - super-fr:.github/workflows/ci.yml
     status: ci
-    notes: 'Built by scripts/build-site.py with the renderer pinned in .github/blog-craft.ref:
-      routes, link rewrite and index list are unit-tested over fixtures, the workflow
-      pins and the site-build CI job inside ci-ok are pinned, and the real build of
-      all pages was run locally against the pinned renderer checkout.'
+    notes: Unit tests prove the build's pure parts; the real build of every configured
+      page is the CI job site-build (inside ci-ok), which runs scripts/build-site.py
+      against the pinned blog-craft on every PR and passed on this branch.
     verify: none
   - id: site-published-from-sources
     capability: published docs
