@@ -10897,6 +10897,19 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+  - id: docs-check-default-base-readonly
+    capability: docs currency
+    acceptance: fr docs check with no base compares a feature branch against the repository's
+      default branch and runs only structural checks on the default branch itself; it
+      runs on a repository with stale artifacts and changes no file
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R6
+    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/docs-check-default-base-readonly.sh
   - id: site-builds-from-sources
     capability: published docs
     acceptance: The site is built from Markdown sources with a pinned renderer - every
