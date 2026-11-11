@@ -167,6 +167,7 @@ WT_HOOKS_STRIP='
 # Authoritative list of Claude rules to install to ~/.claude/rules/.
 # Used for both install copy operations and --uninstall removal.
 CLAUDE_RULES=(
+  docs-currency.md
   fr-plan-override.md
   fr-isolation-required.md
   no-claude-p-batch.md

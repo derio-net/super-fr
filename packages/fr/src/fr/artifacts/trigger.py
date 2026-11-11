@@ -102,6 +102,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "gate",
     "release",
     "settings",
+    "docs",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
 not mutate them on their behalf.
@@ -166,7 +167,10 @@ the gate ledger; it touches no registered artifact.
 merged PRs a post-merge gate still holds, and `release.py` runs it on the default branch.
 `fr settings` (spec 2026-11-04-repo-feature-settings, R3) never mutates a registered artifact:
 `show` and `check` read `.fr/settings.yaml` from the default ref, and `init` writes that file,
-which is no artifact kind, and commits nothing."""
+which is no artifact kind, and commits nothing.
+`fr docs` (2026-11-11 docs-currency, R8) writes nothing: it reads `.fr/docs.yaml` (not a registered
+artifact kind, like `.fr/debt.yaml`), page files and read-only git, and must run in CI on a tree
+the gate would refuse."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by

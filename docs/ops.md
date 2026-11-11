@@ -1,3 +1,14 @@
+---
+title: "fr ops: manual operations you can check and run"
+tldr: |
+  A plan's manual operations become typed records with a probe that says whether each is done, an apply that does it, and evidence that survives the session.
+standalone_style: broadsheet
+covers:
+  - packages/fr/src/fr/ops/**
+  - packages/fr/src/fr/commands/ops_cmd.py
+reviewed: 2026-11-11 docs-currency phase 3
+---
+
 # fr ops — manual operations you can check and run
 
 A plan's manual operations used to be prose: "create the deploy key", "rotate the

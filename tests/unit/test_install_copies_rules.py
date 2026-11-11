@@ -31,3 +31,12 @@ def test_install_copies_every_shipped_rule() -> None:
     shipped_names = {r.name for r in rules}
     missing = shipped_names - installed_names
     assert not missing, f"install.sh's CLAUDE_RULES does not include these rules: {missing}"
+
+
+def test_install_ships_the_docs_currency_rule() -> None:
+    """2026-11-11-docs-currency R10: the obligation is stated for every harness."""
+    install = (REPO_ROOT / "scripts" / "install.sh").read_text()
+    match = re.search(r"CLAUDE_RULES=\(([^)]+)\)", install, re.DOTALL)
+    assert match and "docs-currency.md" in match.group(1)
+    assert (REPO_ROOT / "plugins" / "super-fr" / "rules" / "docs-currency.md").is_file()
+    assert (REPO_ROOT / ".opencode" / "instructions" / "docs-currency.md").is_file()

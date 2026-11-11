@@ -1,8 +1,8 @@
 """CI tripwire: .hermes/SOUL.d/super-fr-rules.md must mirror the shipped rules.
 
 Hermes has no OpenCode-style `instructions` array; its only always-on global
-surface is `~/.hermes/SOUL.md`. `scripts/sync-hermes.py` assembles the four
-*shipped* plugin rules (fr-isolation-required, fr-plan-override,
+surface is `~/.hermes/SOUL.md`. `scripts/sync-hermes.py` assembles the five
+*shipped* plugin rules (docs-currency, fr-isolation-required, fr-plan-override,
 fr-worktree-override, no-claude-p-batch) into a delimited managed block written to
 `.hermes/SOUL.d/super-fr-rules.md`; `fr hermes install` later applies that block
 to the user's `~/.hermes/SOUL.md`. The repo-local `acceptance-matrix` rule is a
@@ -28,6 +28,7 @@ sync_hermes = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sync_hermes)
 
 SHIPPED_RULES = {
+    "docs-currency",
     "fr-isolation-required",
     "fr-plan-override",
     "fr-worktree-override",
@@ -58,3 +59,10 @@ def test_block_is_delimited_by_managed_markers() -> None:
     assert block.rstrip().endswith(sync_hermes.SOUL_BLOCK_END), (
         f"block must end with {sync_hermes.SOUL_BLOCK_END!r}"
     )
+
+
+def test_the_soul_block_carries_the_docs_currency_rule() -> None:
+    """2026-11-11-docs-currency R10: Hermes mirrors only SHIPPED_RULE_NAMES."""
+    assert "docs-currency" in sync_hermes.SHIPPED_RULE_NAMES
+    block = (REPO_ROOT / ".hermes" / "SOUL.d" / "super-fr-rules.md").read_text()
+    assert "fr docs check" in block

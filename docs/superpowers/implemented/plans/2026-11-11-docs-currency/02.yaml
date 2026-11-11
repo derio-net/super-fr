@@ -1,0 +1,97 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'Every flow: deliver, skills, shipped rule, CI (R9-R11)'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - docs-deliver-refuses-stale-docs
+  - docs-currency-every-flow
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/workflow/artifacts.py
+  - packages/fr/src/fr/workflows/*
+  - plugins/super-fr/workflows/*
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-debugging/SKILL.md
+  - plugins/super-fr/rules/docs-currency.md
+  - scripts/install.sh
+  - scripts/sync-hermes.py
+  - .opencode/*
+  - .hermes/*
+  - .github/workflows/ci.yml
+  - tests/unit/test_run_*.py
+  - tests/unit/test_tripwire_*.py
+  - tests/unit/test_install_*.py
+  - tests/integration/test_install_*.py
+  - tests/unit/test_docs_*.py
+  - docs/acceptance/*
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: deliver derives `docs` evidence (R9)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests beside the existing proportionality-witness tests: a run whose repo has `.fr/docs.yaml` and a stale page cannot resolve `deliver` done (exit 2, the check's findings printed); after the page is touched it resolves and the stored witness is not `none`; a repo with no `.fr/docs.yaml` resolves with witness `none`; an explicit `--evidence docs=` flag is refused like other derived keys. Update the pinned evidence tuples in `tests/unit/test_tripwire_shipped_workflows.py` to include `docs` for `deliver` in both shapes. See them fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `docs` to `DERIVED_EVIDENCE` (`fr/workflow/artifacts.py`), to `_VERIFIABLE_EVIDENCE` and `_DERIVED_FROM` (`commands/run_cmd.py`), add `derive("docs", ...)` beside proportionality's using a `_docs_witness` that runs `fr.docs` in process against `_proportionality_base`'s commit, and list `docs` in `deliver.evidence` in `fr-goal.yaml` and `fr-goal-light.yaml` in BOTH `plugins/super-fr/workflows/` and `packages/fr/src/fr/workflows/`. See them pass, and `fr workflow check` on both shapes.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: share the base-commit lookup between the two witnesses without changing proportionality's behaviour; run the run_cmd test files.
+- number: 2
+  title: Skills and the shipped rule (R10)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: extend `tests/unit/test_install_copies_rules.py`'s expectations and the Hermes/OpenCode mirror tripwires so a `docs-currency` rule is expected in `install.sh`'s `CLAUDE_RULES`, `sync-hermes.py`'s `SHIPPED_RULE_NAMES`, `.opencode/instructions/` and `.hermes/SOUL.d/super-fr-rules.md`; add a test that fr-goal's and fr-debugging's SKILL.md each name `fr docs check`. See them fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: write `plugins/super-fr/rules/docs-currency.md` (under 25 lines, harness-neutral: in a repo with `.fr/docs.yaml`, a PR that changes behaviour a page covers updates the page or its `reviewed` stamp; `fr docs check` tells you; `fr docs status` lists pages). Add one sentence to fr-goal section 8 (deliver refuses while `fr docs check` fails; fix by editing the page or its stamp) and one to fr-debugging section 4 (run `fr docs check` before opening the PR). Wire the rule into `install.sh` and `SHIPPED_RULE_NAMES`; run `scripts/sync-opencode.py` AND `scripts/sync-hermes.py`; run the skill-validation, neutrality and mirror tripwires. See them pass.
+- number: 3
+  title: This repo's CI job (R11)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: a test over `.github/workflows/ci.yml` asserting a `docs-check` job exists, checks out with `fetch-depth: 0`, runs `uv run fr docs check --base "origin/${{ github.base_ref }}"` on pull_request and `uv run fr docs check` otherwise, and is in `ci-ok`'s `needs`. See it fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: add the job (same checkout and setup-uv pins as `change-fragment`) and add it to `ci-ok`. See the test pass, then move rows `docs-deliver-refuses-stale-docs` and `docs-currency-every-flow` with `fr acceptance set-status` and name-anchored refs.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-11T14:59:39+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-11T14:59:39+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-11T14:59:39+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-11T14:59:39+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-11T14:59:39+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-11T14:59:39+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-11T14:59:39+00:00'
+      note: null
+  completion:
+    at: '2026-11-11T14:59:39+00:00'
+    note: null
+    observed_prs: []

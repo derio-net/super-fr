@@ -1614,12 +1614,17 @@ _VERIFIABLE_EVIDENCE = (
     "findings",
     "tests",
     "proportionality",
+    "docs",
     "visual",
     "single-phase",
     "walk",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
+# `docs` (2026-11-11-docs-currency R9) is its sibling: fr runs the `fr docs
+# check` gate in process against the same base, refuses on findings, and
+# stores `<merge-base>:<sha256>` of the pages it found current (`none` in a
+# repo with no `.fr/docs.yaml`).
 _DERIVED_EVIDENCE = DERIVED_EVIDENCE
 # `single-phase` (2026-09-29-fr-goal-light-path §A, R2) is the light shape's
 # `plan` witness: the emitted plan has exactly one phase that is not `[manual]`.
@@ -1649,6 +1654,8 @@ _DERIVED_FROM = {
     "out of scope",
     "proportionality": "by running `fr plan proportionality` on the run's plan and "
     "hashing the report at its merge-base",
+    "docs": "by running `fr docs check` against the same base as `proportionality`: every "
+    "page covering a path the branch changed must change too",
     "visual": "from the step record's `visual:` section — every owed row's screenshots "
     "cover its named states and interactions, and the witness transcript shows each "
     "one opened since the unit opened",
@@ -2009,6 +2016,11 @@ def _verified_evidence(
 
     if state_value == "done" and "proportionality" in step.evidence:
         derive("proportionality", lambda: _proportionality_witness(key, repo_root, state))
+    if state_value == "done" and "docs" in step.evidence:
+        derive(
+            "docs",
+            lambda: _docs_witness(key, repo_root, announce="proportionality" not in step.evidence),
+        )
     if state_value == "done" and "single-phase" in step.evidence:
         derive(
             "single-phase",
@@ -2263,21 +2275,7 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    base, label = _proportionality_base(repo_root)
-    if base is None:
-        err_console.print(
-            f"{key}: cannot derive proportionality evidence — no base: {label}. Fetch the "
-            "remote so its default branch resolves, or create the local default branch.",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if label is not None:
-        err_console.print(
-            f"{key}: proportionality: no remote default branch; using base {label}",
-            markup=False,
-            soft_wrap=True,
-        )
+    base = _witness_base(key, repo_root, "proportionality", announce=True)
     report = run_report(repo_root, plan, base)
     if report.merge_base is None:
         err_console.print(
@@ -2287,6 +2285,66 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
         )
         raise typer.Exit(2)
     return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
+
+
+def _docs_witness(key: str, repo_root: Path, *, announce: bool) -> str:
+    """`<merge-base-sha>:<sha256>` of the current pages, `none` with no
+    `.fr/docs.yaml` — or exit 2 with the check's own findings (R9).
+
+    The base is `_witness_base`'s, so both derived witnesses diff
+    against the same commit, the isolation start commit included; a fallback
+    base is named once, by proportionality when the step declares both.
+    """
+    import hashlib
+
+    from fr.docs import render
+    from fr.docs.gate import evaluate
+    from fr.docs.load import DocsEnvError, load_config, merge_base_of
+
+    try:
+        config = load_config(repo_root)
+        if config is None:
+            return "none"
+        base = _witness_base(key, repo_root, "docs", announce=announce)
+        outcome = evaluate(repo_root, config, base)
+        merge_base = merge_base_of(repo_root, base)
+    except DocsEnvError as e:
+        _derived_refusal(key, [f"cannot derive docs evidence — fr docs: {e}"])
+    if outcome.findings:
+        _derived_refusal(
+            key,
+            [
+                f"refused — `fr docs check` fails ({len(outcome.findings)} finding(s)):",
+                *render.findings_text(outcome.findings).splitlines(),
+            ],
+        )
+    current = render.status_json(outcome.pages, [])
+    return f"{merge_base}:{hashlib.sha256(current.encode()).hexdigest()}"
+
+
+def _witness_base(key: str, repo_root: Path, name: str, *, announce: bool) -> str:
+    """The base a derived delivery witness diffs against, or exit 2 naming why.
+
+    `proportionality` and `docs` share it, so both diff against one commit.
+    `announce` prints the fallback used when the remote default branch did not
+    resolve.
+    """
+    base, label = _proportionality_base(repo_root)
+    if base is None:
+        err_console.print(
+            f"{key}: cannot derive {name} evidence — no base: {label}. Fetch the "
+            "remote so its default branch resolves, or create the local default branch.",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if announce and label is not None:
+        err_console.print(
+            f"{key}: {name}: no remote default branch; using base {label}",
+            markup=False,
+            soft_wrap=True,
+        )
+    return base
 
 
 def _proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:

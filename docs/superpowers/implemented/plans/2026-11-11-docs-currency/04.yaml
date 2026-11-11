@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 4
+  title: A page for every skill (R18, R19)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - docs-every-skill-has-page
+  tier: standard
+  files:
+  - docs/explainers/*.md
+  - docs/docs-currency.md
+  - .fr/docs.yaml
+  - docs/acceptance/*
+  estimate_lines: 2600
+tasks:
+- number: 1
+  title: must_cover goes red, then the pages make it green
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: add `must_cover: [plugins/*/skills/*/SKILL.md]` to `.fr/docs.yaml`; `uv run fr docs check` fails naming every skill with no page.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: write the nine concise explainers (150 to 300 lines each, second person, the voice of `01-fr-goal.md`: what it is for, when it fires, the steps, the commands, one worked example), each written from the SKILL.md and command modules it covers and naming only commands and flags that exist (check each with `uv run fr <cmd> --help`): `fr-brainstorming-and-plan.md` (fr-brainstorming, fr-plan, fr-execute), `fr-debugging.md`, `fr-triage.md` (fr-triage, fr-origins), `fr-acceptance.md`, `fr-dispatch.md` (fr-dispatch, fr-runner), `fr-devops-gate.md`, `fr-audit.md`, `fr-init.md`, `fr-progress.md`; and `docs/docs-currency.md` (the guide: config, front matter, the stamp, wiring `fr docs check` into a consumer's CI, how this repo builds its site). Third-party names are redacted per `.claude/rules/third-party-privacy.md`. `fr docs check` passes; the site builds.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: read each page back against its sources for claims the code does not support and remove them; make cross-links between pages relative `.md` links; move row `docs-every-skill-has-page` with `fr acceptance set-status`.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-11-11T15:44:10+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-11-11T15:44:10+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-11-11T15:44:10+00:00'
+      note: null
+  completion:
+    at: '2026-11-11T15:44:10+00:00'
+    note: null
+    observed_prs: []

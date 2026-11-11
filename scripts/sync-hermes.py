@@ -43,6 +43,7 @@ RULES_CANONICAL_DIR = REPO_ROOT / "plugins" / "super-fr" / "rules"
 # repo-local acceptance-matrix rule (no plugin equivalent) is maintainer-only
 # and must never ship into a consumer's SOUL.md.
 SHIPPED_RULE_NAMES = (
+    "docs-currency",
     "fr-isolation-required",
     "fr-plan-override",
     "fr-worktree-override",

@@ -246,6 +246,9 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "fr-ops-gate-probes",
         "auto-migrate-workspace",
         "auto-migrate-ci-in-place",
+        "docs-check-flags-uncovered-change",
+        "docs-check-structure",
+        "docs-check-default-base-readonly",
     }
     assert on_disk == here
 
@@ -460,3 +463,15 @@ def test_opencode_store_v2(installed: Path, tmp_path: Path) -> None:
 
 def test_opencode_plugin_v2(installed: Path, tmp_path: Path) -> None:
     _scenario("opencode-plugin-v2", installed, tmp_path)
+
+
+def test_docs_check_flags_uncovered_change(installed: Path, tmp_path: Path) -> None:
+    _scenario("docs-check-flags-uncovered-change", installed, tmp_path)
+
+
+def test_docs_check_structure(installed: Path, tmp_path: Path) -> None:
+    _scenario("docs-check-structure", installed, tmp_path)
+
+
+def test_docs_check_default_base_readonly(installed: Path, tmp_path: Path) -> None:
+    _scenario("docs-check-default-base-readonly", installed, tmp_path)

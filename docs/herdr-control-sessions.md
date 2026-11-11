@@ -1,3 +1,15 @@
+---
+title: "Herdr control sessions"
+tldr: |
+  Configure a batch's launch harness, run dispatch and drive inside herdr, and keep the control session in the stable primary checkout.
+standalone_style: broadsheet
+covers:
+  - packages/fr-herdr/src/**
+  - packages/fr/src/fr/triage/batch*.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+reviewed: 2026-11-11 docs-currency phase 3
+---
+
 # Herdr control sessions
 
 Configure a batch's `launch.harness` as `claude` or `opencode`; OpenCode's
