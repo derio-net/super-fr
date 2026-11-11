@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-11-claude-tender-darwin-bj3d7j
+captures:
+- host: h-99766be9
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-11T12:17:43+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: afbb2801-be83-5cf8-903a-b5a859749fab
+    role: main
+    models:
+      claude-fable-5-2:
+        input: 47
+        cache_write: 242741
+        cache_read: 4017922
+        output: 30084
+        usd: 1.6979212
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 0.04017125011746667
+        turns: 1
+      other:
+        usd: 0.8770187914666587
+        turns: 13
+      paperwork:
+        usd: 0.7807311584158749
+        turns: 12
+    steps:
+      (outside run):
+        usd: 0.9375405625940652
+        turns: 10
+        input: 19
+        cache_write: 197021
+        cache_read: 1367732
+        output: 8435
+      brainstorm:
+        usd: 0.7603806374059352
+        turns: 14
+        input: 28
+        cache_write: 45720
+        cache_read: 2650190
+        output: 21649
+    steps_by_role:
+      main:
+        (outside run):
+          usd: 0.9375405625940648
+          turns: 10
+          input: 19
+          cache_write: 197021
+          cache_read: 1367732
+          output: 8435
+        brainstorm:
+          usd: 0.7603806374059351
+          turns: 14
+          input: 28
+          cache_write: 45720
+          cache_read: 2650190
+          output: 21649
