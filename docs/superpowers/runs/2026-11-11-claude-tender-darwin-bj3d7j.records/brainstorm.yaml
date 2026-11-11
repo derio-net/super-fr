@@ -1,0 +1,107 @@
+schema_version: 10
+run: 2026-11-11-claude-tender-darwin-bj3d7j
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: The operator's brief, as typed
+    body: |
+      there is documentation for this project, in Readme and in https://derio-net.github.io/super-fr/. I want to substantially improve both the repo documentation and the published pages. I think one of the published pages is raw html, these pages should be generated and stay up to date with all PRs (I think this is already the case, via an installed skill or a fr verb - which? are there blind spots e.g. only via fr-goal but not fr-debugging, what about future flows?).
+  - kind: decision
+    id: d-generator
+    title: Pages are rendered at deploy from Markdown with pinned blog-craft
+    body: "Operator chose 'Render at deploy' (asked before the gate opened, restated in the spec): committed .html deleted; the two hand-authored pages become Markdown and lose their bespoke layout. decider: operator."
+  - kind: decision
+    id: d-enforcement
+    title: Currency is enforced by a shipped fr verb for all repos
+    body: "Operator chose 'Shipped fr verb for all repos' over a repo-local CI gate. decider: operator."
+  - kind: decision
+    id: d-scope
+    title: Pipeline, gate, README and every new page in one PR
+    body: "Operator chose 'Everything in one PR'. decider: operator."
+  - kind: decision
+    id: d-verification
+    title: Verification strategy is candidate
+    body: "Round 1 question 1: 'candidate'. The published site is a post-merge Test Plan row gated tester. decider: operator."
+  - kind: decision
+    id: d-waiver
+    title: A PR waives a page with a reviewed stamp in its front matter
+    body: "Round 1 question 2: 'Reviewed stamp in the page'. decider: operator."
+  - kind: decision
+    id: d-readme
+    title: The README becomes a short front door
+    body: "Round 1 question 3: 'Short front door'; reference sections move to published pages. decider: operator."
+  - kind: decision
+    id: d-depth
+    title: New explainers are concise
+    body: "Round 1 question 4: 150 to 300 lines each. decider: operator."
+  - kind: decision
+    id: d-model-mechanical
+    title: mechanical tier runs on haiku
+    body: "Round 1 question 5. old: unbound, new: haiku, reason: unbound tier, decider: operator, rule: brief unbound_tiers. Applied with fr models set."
+  - kind: decision
+    id: d-model-standard
+    title: standard tier runs on sonnet
+    body: "Round 1 question 6. old: unbound, new: sonnet, reason: unbound tier, decider: operator, rule: brief unbound_tiers. Applied with fr models set."
+  - kind: decision
+    id: d-model-hard
+    title: hard tier runs on opus
+    body: "Round 1 question 7. old: unbound, new: opus, reason: unbound tier, decider: operator, rule: brief unbound_tiers. Applied with fr models set."
+resolves: []
+acceptance:
+  - id: docs-check-flags-uncovered-change
+    capability: docs currency
+    acceptance: A pull request that changes a path a page covers without changing that page fails fr docs check, which names the page, the changed paths and both fixes; touching the page or its reviewed stamp passes
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R3", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R6"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/docs-check-flags-uncovered-change.sh
+  - id: docs-check-structure
+    capability: docs currency
+    acceptance: fr docs check fails a page with no stamp or a coverage glob matching nothing, and a must-cover file no page covers; a repo with no docs config passes; fr docs status lists pages with coverage and stamps
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R1", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R2", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R4", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R5", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R7", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R8"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/docs-check-structure.sh
+  - id: docs-deliver-refuses-stale-docs
+    capability: docs currency
+    acceptance: An fr-goal run cannot deliver its PR while fr docs check fails for its branch; a repo with no docs config delivers as before
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R9"]
+    status: not-implemented
+    verify: none
+  - id: docs-currency-every-flow
+    capability: docs currency
+    acceptance: The docs obligation reaches every flow and harness - this repo's CI runs fr docs check on every PR, and a shipped rule plus the fr-goal and fr-debugging skills state it on Claude Code, OpenCode and Hermes
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R10", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R11", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R24"]
+    status: not-implemented
+    verify: none
+  - id: site-builds-from-sources
+    capability: published docs
+    acceptance: The site is built from Markdown sources with a pinned renderer - every configured page renders, links between pages resolve, the index lists every page, and CI fails a pull request whose page does not render
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R12", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R13", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R14", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R15", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R23"]
+    status: not-implemented
+    verify: none
+  - id: site-published-from-sources
+    capability: published docs
+    acceptance: The published site serves pages rendered from sources at the existing URLs (/, /01-fr-goal.html, /fr-isolation.html, /acceptance/) plus the guides and reference pages
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R16", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R17", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R18", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R22"]
+    status: not-implemented
+    verify: live
+  - id: docs-every-skill-has-page
+    capability: published docs
+    acceptance: Every shipped skill is covered by a published page; adding a skill with no page fails the docs check
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R19"]
+    status: not-implemented
+    verify: none
+  - id: readme-generated-tables
+    capability: repo documentation
+    acceptance: The README is a short front door whose skills and CLI tables are generated from the skills and the fr command tree, and a stale table fails CI
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R20", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R21"]
+    status: not-implemented
+    verify: none
+emitted:
+  spec: docs/superpowers/specs/2026-11-11-docs-currency-design.md
+evidence: {}
