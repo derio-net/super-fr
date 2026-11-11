@@ -240,3 +240,10 @@ Own ask; also about 2,600 lines of prose, too much to review with the pipeline.
 ### phase-split-2026-11-11-docs-currency-p5 · decision · ask: R20-R22 the README front door and generated tables
 
 Own ask.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-11T18:05:30+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: After merge, wait for the "Deploy explainers to Pages" run on `main`. Open `https://derio-net.github.io/super-fr/`, `/01-fr-goal.html`, `/fr-isolation.html`, one guide and one reference page from the index, and `/acceptance/`: each loads, links between pages resolve, and the index lists every page.
+
+Evidence: Deploy explainers to Pages run 43064185117 on main succeeded. Fetched over HTTPS by the delivering agent (a scripted crawl, not a person in a browser): /, /01-fr-goal.html, /fr-isolation.html, /guides/docs-currency.html, /reference/cli.html, /reference/install.html, /fr-triage.html and /acceptance/ all returned 200; a crawl from the index reached 28 pages plus /acceptance/ with every internal link returning 200; the index links to all 27 other pages and shows no raw page-list marker.

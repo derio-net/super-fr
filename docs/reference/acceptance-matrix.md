@@ -6,7 +6,6 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-  - docs/acceptance/matrix.yaml
 reviewed: 2026-11-11 docs-currency phase 5
 ---
 
