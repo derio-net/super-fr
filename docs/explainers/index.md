@@ -32,8 +32,8 @@ Trust is not a vibe. It is assembled, one guarantee at a time.
 ## The flow: /fr-goal
 
 The same sequence runs every time, in an isolated workspace, and it only pauses
-at the four moments where a human's judgment actually changes the outcome. In the
-diagram, the agent works alone except at the steps marked as yours.
+at the four moments where a human's judgment actually changes the outcome. The
+diagram shows the order; the list under it says which steps are yours.
 
 ```mermaid
 flowchart TD
@@ -48,7 +48,8 @@ flowchart TD
 
 1. **Isolate (precondition).** Before a single line is written, the run moves into
    a private workspace: a throwaway copy of the repo, with its commands running in a
-   sealed container. If the repo has never been set up, the run stops and interviews
+   sealed container by default (on a host without Docker, or in a container someone
+   already prepared, the throwaway copy alone is the workspace). If the repo has never been set up, the run stops and interviews
    you once. There is no "run it directly" fallback.
 2. **Brainstorm and one question round (you decide).** The agent designs the feature
    and asks one question round sized to the feature, rarely two, and only when
@@ -59,7 +60,7 @@ flowchart TD
    is caught while it is still cheap.
 4. **Build, test-first, phase by phase (agent).** Each slice is written the disciplined
    way: the test first, then the code that satisfies it. Every command runs inside the
-   sealed container, never against your machine.
+   workspace, never against your own checkout.
 5. **Adversarial review at every stage (agent).** The spec, the plan and every
    implementation slice face an independent review whose job is to find what is wrong.
    Every finding is fixed before the work moves on, not deferred to a human's patience
@@ -83,10 +84,12 @@ step is buying one of these properties for the code it produces.
 
 ### 1. Secure: the agent cannot touch what it should not
 
-Every run happens in two nested boundaries. A private worktree means your actual
+By default every run happens in two nested boundaries. A private worktree means your actual
 checkout is never touched: no stray branches, no half-finished state, nothing to clean
 up if the run goes wrong. A sealed container means the agent only ever holds the
-credentials that workspace was explicitly granted.
+credentials that workspace was explicitly granted. The two docker-less modes keep
+the worktree and drop the container, so there the agent holds what the host process
+holds; [fr-isolation](fr-isolation.md) explains all three.
 
 - The default workspace is least-privileged: it carries no tokens at all, and a
   privileged profile is a deliberate opt-in.

@@ -158,7 +158,14 @@ def rewrite_markdown(
     ref: str,
     repo_url: str = DEFAULT_REPO_URL,
 ) -> str:
-    """`text` with every Markdown link outside code rewritten; fenced code is skipped."""
+    """`text` with every inline Markdown link outside code rewritten.
+
+    Fenced code and backtick spans are skipped. Three shapes the rewrite cannot
+    carry are refused when they are relative, so none ships broken: a
+    reference-style definition (`[x]: path`), an image (`![alt](path)`) and a raw
+    HTML `href=`/`src=`. Use an inline link, or an absolute URL. An indented
+    (four-space) code block is NOT recognised: fence code that holds a link.
+    """
 
     def line(raw: str) -> str:
         out: list[str] = []
@@ -172,9 +179,11 @@ def rewrite_markdown(
 
     def _links(chunk: str) -> str:
         return _LINK.sub(
-            lambda m: m.group(1)
-            + rewrite_href(m.group(2), page, patterns, tracked, ref, repo_url)
-            + m.group(3),
+            lambda m: (
+                m.group(1)
+                + rewrite_href(m.group(2), page, patterns, tracked, ref, repo_url)
+                + m.group(3)
+            ),
             chunk,
         )
 
@@ -185,8 +194,39 @@ def rewrite_markdown(
             fenced = not fenced
             result.append(raw)
         else:
+            if not fenced:
+                _refuse_unsupported(raw, page)
             result.append(raw if fenced else line(raw))
     return "".join(result)
+
+
+_REF_DEF = re.compile(r"^ {0,3}\[[^\]]+\]:\s+<?([^\s>]+)")
+_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
+_RAW_ATTR = re.compile(r"""\b(?:href|src)\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+
+
+def _relative(href: str) -> bool:
+    return bool(href) and not (
+        href.startswith("#") or _SCHEME.match(href) or _SITE_ROUTE.match(href)
+    )
+
+
+def _refuse_unsupported(raw: str, page: str) -> None:
+    """Refuse a relative link in a shape `rewrite_markdown` does not rewrite."""
+    bare = _CODE_SPAN.sub("", raw)
+    found = _REF_DEF.match(bare)
+    shapes = [
+        ("reference-style link definition", [found.group(1)] if found else []),
+        ("image", _IMAGE.findall(bare)),
+        ("raw HTML link", _RAW_ATTR.findall(bare)),
+    ]
+    for shape, hrefs in shapes:
+        for href in hrefs:
+            if _relative(href):
+                raise BuildError(
+                    f"{page}: relative {shape} {href!r} is not rewritten by the build; "
+                    "use an inline Markdown link or an absolute URL"
+                )
 
 
 def first_sentence(tldr: str) -> str:

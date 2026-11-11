@@ -144,6 +144,30 @@ def test_links_in_code_are_not_rewritten() -> None:
     assert "[z](nope.md)" in out
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        "[x]: fr-isolation.md\n",
+        "![shot](img/shot.png)\n",
+        '<a href="fr-isolation.md">x</a>\n',
+        '<img src="img/shot.png">\n',
+    ],
+)
+def test_a_relative_link_in_a_shape_the_build_does_not_rewrite_is_refused(line: str) -> None:
+    with pytest.raises(bs.BuildError, match="not rewritten"):
+        bs.rewrite_markdown(line, "docs/explainers/index.md", PATTERNS, TRACKED, REF)
+
+
+def test_absolute_links_in_those_shapes_and_code_samples_pass() -> None:
+    text = (
+        "[x]: https://example.org/a\n"
+        "![shot](https://example.org/s.png)\n"
+        '<a href="#top">x</a> and `<a href="nope.md">`\n'
+        '```html\n<a href="nope.md">x</a>\n```\n'
+    )
+    assert bs.rewrite_markdown(text, "docs/explainers/index.md", PATTERNS, TRACKED, REF) == text
+
+
 def test_a_leading_h1_repeating_the_title_is_dropped() -> None:
     page = "---\ntitle: T\n---\n\n# T\n\nBody\n\n# Later\n"
     out = bs.drop_leading_h1(page)

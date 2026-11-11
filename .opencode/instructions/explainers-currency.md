@@ -12,8 +12,8 @@ the `derio-net/blog-craft` renderer pinned in `.github/blog-craft.ref`.
 or bumps its `reviewed` stamp with a note saying it is still true. The gate is
 `fr docs check` (CI job `docs-check`; `fr docs status` shows what is covered): each
 page's front matter names the paths it `covers`, and the PR fails when a covered path
-changed and the page did not. Triggers are the shipped rule `docs-currency`; a skill's pipeline, a CLI verb an explainer names, a shipped
-default and a minor or major bump are the usual ones.
+changed and the page did not. The shipped rule `docs-currency` lists the triggers; a skill's pipeline, a CLI verb an
+explainer names, a shipped default and a minor or major bump are the usual ones.
 
 Internal refactors, test-only changes and anything invisible to a reader who does not
 work on this repo are not triggers. The test is whether a newcomer reading the page
