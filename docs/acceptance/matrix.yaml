@@ -10998,9 +10998,12 @@ rows:
       no page fails the docs check
     origin:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R19
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_every_skill_page.py#test_every_shipped_skill_has_a_page
+    status: ci
+    notes: must_cover requires a page for every skill; the repo's own docs-check CI
+      job and a unit test enforce it
     verify: none
   - id: readme-generated-tables
     capability: repo documentation
