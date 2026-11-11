@@ -10896,9 +10896,16 @@ rows:
       branch; a repo with no docs config delivers as before
     origin:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py#test_deliver_refuses_while_a_covered_page_is_stale
+      - super-fr:tests/unit/test_run_evidence.py#test_deliver_resolves_once_the_stale_page_is_touched
+      - super-fr:tests/unit/test_run_evidence.py#test_deliver_in_a_repo_without_docs_config_stores_none
+      - super-fr:tests/unit/test_run_evidence.py#test_a_caller_supplied_docs_witness_is_refused_as_derived
+    status: ci
+    notes: 'deliver derives docs evidence: refused on a stale page with the check''s
+      findings, resolves once the page changes, none with no .fr/docs.yaml, refused
+      when passed'
     verify: none
   - id: docs-currency-every-flow
     capability: docs currency
