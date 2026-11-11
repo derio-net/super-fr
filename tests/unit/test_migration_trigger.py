@@ -138,6 +138,9 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
 
     `release` was added by 2026-10-14 exit-gates phase 7 (R21): `fr release status` reads
     tags and the forge and writes nothing; `release.py` runs it on the default branch.
+
+    `docs` was added by 2026-11-11 docs-currency phase 1 (R8): `fr docs` reads
+    `.fr/docs.yaml`, page files and read-only git and writes nothing.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
@@ -156,6 +159,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "debt",
             "gate",
             "release",
+            "docs",
         }
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
@@ -176,6 +180,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "debt",
         "gate",
         "release",
+        "docs",
         "FR_SKIP_MIGRATION=1",
     )
 
