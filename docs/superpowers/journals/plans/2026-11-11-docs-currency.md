@@ -65,3 +65,51 @@ Added test_a_rename_into_a_covered_path_counts_the_new_side and test_a_deleted_c
 ### p1-r3-resolved · finding [fixed] · resolves p1-r3: A config selecting no page passed silently (phase 1)
 
 fr docs check exits 2 when the config selects no page; test_a_config_that_selects_no_page_exits_2. Spec R1 states it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-docs-gate-module created=2026-11-11T14:59:39+00:00 phase=2 -->
+### p2-docs-gate-module · decision · fr.docs.gate.evaluate is the one evaluation shared by the command and the deliver witness (phase 2)
+
+`fr docs check` and `deliver`'s `docs` witness differ only in how they pick the base, so the
+selection (tracked files, pages, the no-page refusal, changed paths, check) moved into
+`fr/docs/gate.py`'s `evaluate(root, config, base)`, base None meaning structure only.
+`load.merge_base_of` was split out of `changed_paths` so the witness can name its merge base.
+The witness stores `<merge-base>:<sha256>` of `status_json` over the current pages, `none`
+with no `.fr/docs.yaml`.
+
+<!-- fr:journal kind=decision scope=plan id=p2-witness-base-helper created=2026-11-11T14:59:39+00:00 phase=2 -->
+### p2-witness-base-helper · decision · _witness_base shares the base lookup and its refusal between proportionality and docs (phase 2)
+
+P2.T1.S3: `_witness_base(key, repo_root, name, *, announce)` wraps `_proportionality_base`
+with the no-base refusal and the fallback notice, worded with the witness's name, so
+proportionality's output is unchanged. `docs` announces a fallback base only when the step
+does not also declare `proportionality`, so the notice prints once.
+
+<!-- fr:journal kind=decision scope=plan id=p2-docs-evidence-position created=2026-11-11T14:59:39+00:00 phase=2 -->
+### p2-docs-evidence-position · decision · docs sits after proportionality in deliver.evidence (phase 2)
+
+Both shapes now read `[tests, proportionality, docs, visual, walk]`; the tripwire's
+`evidence[-2] == "visual"` pin and the drift test's replacement string were updated.
+Drift compares ids only, so in-flight runs are unaffected.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fr-debugging-line-cap created=2026-11-11T14:59:39+00:00 phase=2 -->
+### p2-fr-debugging-line-cap · discovery · fr-debugging's SKILL.md sits at the 120-line cap (phase 2)
+
+test_skill_validation caps a SKILL.md at 120 lines and fr-debugging was at 118; the R10
+sentence was folded into existing lines to land at exactly 120. The next addition there
+has to shorten something.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-every-flow-row-r24 created=2026-11-11T14:59:39+00:00 phase=2 -->
+### p2-every-flow-row-r24 · discovery · docs-currency-every-flow moved to ci while its R24 origin is still owed (phase 2)
+
+The row also cites R24 (the explainers-currency rule rewrite and tripwires), which is a
+later phase's. Its note says so; that phase should add its refs to the row.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-11T14:59:39+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+prose and wiring only: one new rule file, one sentence per skill, one list entry in install.sh and sync-hermes.py; nothing duplicated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-11T14:59:39+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+one CI job copied from change-fragment's pins, which a test now pins equal; nothing to clean
