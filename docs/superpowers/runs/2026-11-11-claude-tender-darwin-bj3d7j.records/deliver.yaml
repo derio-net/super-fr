@@ -1,7 +1,0 @@
-schema_version: 10
-run: 2026-11-11-claude-tender-darwin-bj3d7j
-step: deliver
-outcome: done
-acceptance: []
-emitted: {pr: "https://github.com/derio-net/super-fr/pull/1401"}
-evidence: {tests: ci, walk: /root/.cache/fr/walks/2026-11-11-claude-tender-darwin-bj3d7j/20261111T161706Z.log}
