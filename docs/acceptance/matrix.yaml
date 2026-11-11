@@ -11012,7 +11012,11 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R20
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R21
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_readme_sync.py#test_the_repo_is_in_sync
+      - super-fr:tests/unit/test_tripwire_readme_sync.py#test_the_readme_is_a_front_door
+    status: ci
+    notes: scripts/sync-readme.py generates the skills and CLI tables; test_tripwire_readme_sync.py
+      fails a stale block and a README over 200 lines; runs in the CI test job
     verify: none
