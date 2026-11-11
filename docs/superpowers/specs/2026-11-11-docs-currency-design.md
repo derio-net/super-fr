@@ -38,7 +38,8 @@ existing operator guides published as pages, and a page for every shipped skill.
   (`templates/content-type-explainers/shared/fonts/broadsheet/`).
 - Currency is enforced by `.claude/rules/explainers-currency.md` (repo-local; mirrored to
   OpenCode by `scripts/sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`; not mirrored to Hermes,
-  because `scripts/sync-hermes.py` mirrors only `plugins/super-fr/rules/`) and by
+  because `scripts/sync-hermes.py` mirrors only the plugin rules named in its
+  `SHIPPED_RULE_NAMES`) and by
   `tests/unit/test_tripwire_explainers_fresh.py`, which compares title and headings only.
   No skill, workflow manifest or `fr` command names an explainer.
 - `tests/unit/test_tripwire_fr_goal_question_rounds.py` reads `01-fr-goal.html` and
@@ -76,17 +77,17 @@ R9. `deliver` refuses to resolve `done` while `fr docs check` fails for the run'
 R10. The fr-goal and fr-debugging skills tell the agent to run `fr docs check` before the PR is delivered, and a shipped rule states the obligation for every harness, Hermes included.
 R11. This repo's CI runs `fr docs check` on every pull request as part of `ci-ok`.
 R12. Every published page of this repo is rendered from a Markdown source when the site is deployed; no rendered explainer HTML is committed.
-R13. The renderer is `derio-net/blog-craft` at one pinned commit, named in one place.
+R13. The renderer is `derio-net/blog-craft` at one pinned commit, named in one file that every workflow reads; a test fails a workflow that names a blog-craft commit itself.
 R14. The site build renders every page the config names, rewrites links between pages from `.md` to `.html`, and fills the index page's list of pages from their front matter.
 R15. CI builds the site on every pull request, so a page that does not render fails before merge.
 R16. The existing published URLs keep working: `/`, `/01-fr-goal.html`, `/fr-isolation.html` and `/acceptance/`.
-R17. `index` and `fr-isolation` have Markdown sources that carry the content of today's hand-authored pages.
+R17. `index` and `fr-isolation` have Markdown sources that carry the content of today's hand-authored pages; the index keeps its link to `./acceptance/`.
 R18. The seven operator guides in `docs/` are published pages, each with `covers` and `reviewed`.
 R19. Every shipped skill is covered by a published page, enforced by `must_cover`.
-R20. The README is a front door of at most 200 lines: what super-fr is, install, a first goal, the skills table, the CLI table and links to the pages.
+R20. The README is a front door of at most 200 lines: the badges it carries today (the Acceptance badge among them), what super-fr is, install, a first goal, the skills table, the CLI table and links to the pages; a test fails a longer README.
 R21. The README's skills table and CLI table are generated from the skills' front matter and the `fr` command tree, and a test fails when either is stale.
 R22. The reference material removed from the README (plan model, workflow shapes, label lifecycle, per-repo profile, acceptance matrix, Hermes, components, isolation, requirements) is published as pages.
-R23. The pages deploy runs when any page source, the docs config or the site build changes.
+R23. The pages deploy runs when a page source, the docs config, the site build, the renderer pin or the acceptance report's inputs change, and not on other changes under `docs/`.
 R24. `.claude/rules/explainers-currency.md` and its mirrors describe the new model, and the tripwires that read rendered HTML read the Markdown sources.
 
 ## 3. Design
@@ -101,6 +102,7 @@ A new package `packages/fr/src/fr/docs/` and `commands/docs_cmd.py`, registered 
 pages:            # globs, relative to the repo root; each match is a page
   - docs/explainers/*.md
   - docs/*.md
+  - docs/reference/*.md
 must_cover:       # optional; every tracked file matching must be covered by a page
   - plugins/*/skills/*/SKILL.md
 ```
@@ -116,8 +118,14 @@ reviewed: 2026-11-11 written with the page
 
 `reviewed` is a string: an ISO date, a space, a non-empty note. A page whose `covers` is the
 empty list is legal (an index page), and R4's "matches no tracked file" applies per glob.
-Globs use the `.fr-isolation-allow` semantics (`*` spans `/`), matched against
-`git ls-files`.
+Every glob in the config and in `covers` is segment-aware and matched against
+`git ls-files`: `*` and `?` stay inside one path segment, and `**` spans segments. So
+`docs/*.md` is the seven guides and the new `docs-currency.md` only, never
+`docs/superpowers/**`. (`fnmatch`, where `*` crosses `/`, is not used.) The matcher is one
+small function, `fr.docs.globs.match`, and `scripts/build-site.py` carries a copy of it
+because it runs without `fr`; a test asserts the build's page set equals
+`fr docs status --json`'s on this repo, so the gate and the site cannot disagree about what
+a page is.
 
 Modules: `model.py` (config and page front matter), `load.py` (config, pages, tracked
 files; a git seam the tests replace), `check.py` (pure: pages, tracked files and changed
@@ -126,10 +134,11 @@ paths in, findings out) and `render.py` (text and JSON). The changed paths are
 "changed" when its own path is in that list, so an edit to the body and an edit to `reviewed`
 both count, and the gate never reads the stamp's date.
 
-`--base` resolution (R6): the given ref; else `origin/HEAD`'s branch, asked for with
-`git remote set-head origin --auto` when unset (the idiom `fr isolation verify-merge` uses).
+`--base` resolution (R6): the given ref; else `fr.git.remote_default_ref`, which only
+reads (`origin/HEAD`, then `origin/{main,master,trunk,develop}`) and makes no network call.
 When HEAD is that branch or the merge base equals HEAD, the diff is empty and only R4 and
-R5 run. An unresolvable base is exit 2, never a pass.
+R5 run. An unresolvable base is exit 2, never a pass. `fr docs` runs no git command that
+writes, `set-head` included (R8).
 
 Exit codes: 0 clean, 1 findings, 2 usage or environment error (bad config, no git, no base).
 
@@ -141,18 +150,27 @@ them a registered artifact, and must be able to run in CI on a tree the gate wou
 
 - **CI** is the gate that no flow can skip: a human PR, a triage batch, fr-debugging and any
   future flow all end in a PR. This repo adds a `docs-check` job to `ci.yml`, inside
-  `ci-ok`. A consumer repo adds the one command to its own CI; `docs/docs-currency.md` (a
+  `ci-ok`: `actions/checkout` with `fetch-depth: 0`, then `uv run fr docs check --base
+  "origin/${{ github.base_ref }}"` on `pull_request`, and `uv run fr docs check` with no
+  base on `push` to `main` and on `merge_group` (structural checks only on `main`; on a
+  merge group the diff against the default branch). A consumer repo adds the one command to its own CI; `docs/docs-currency.md` (a
   new guide, itself a page) says how.
 - **`deliver`** gains a derived evidence key, `docs`, beside `proportionality`: on `done`
   fr runs the check in process against the default branch and refuses on findings. With no
-  `.fr/docs.yaml` the witness is `none`. Both shipped shapes (`fr-goal`, `fr-goal-light`)
-  list it. Adding an evidence key to a step is the change `journal-check`'s arrival made;
-  whether it drifts in-flight runs is settled by reading `_check_step_drift` in the plan,
-  and if it does, the key is derived unconditionally at `deliver` instead of being listed
-  in the manifests.
+  `.fr/docs.yaml` the witness is `none`. The base is `_proportionality_base`'s,
+  so both derived witnesses diff against the same commit, the isolation start commit
+  included. Both shipped shapes (`fr-goal`, `fr-goal-light`) list `docs` in
+  `deliver.evidence`, in both copies (`plugins/super-fr/workflows/` and
+  `packages/fr/src/fr/workflows/`). `_check_step_drift` compares step and member ids only,
+  so this drifts no run: an in-flight run gains the obligation at its next `deliver`, and
+  only in a repo with `.fr/docs.yaml`. The edits: `docs` in `DERIVED_EVIDENCE`
+  (`fr/workflow/artifacts.py`), in `_VERIFIABLE_EVIDENCE` and `_DERIVED_FROM`
+  (`commands/run_cmd.py`), a `derive("docs", ...)` beside proportionality's, and the pinned
+  evidence tuples in `tests/unit/test_tripwire_shipped_workflows.py`.
 - **Skills**: fr-goal §8 and fr-debugging's delivery paragraph each gain one sentence.
-- **Rule**: `plugins/super-fr/rules/docs-currency.md`, under 25 lines, shipped by
-  `install.sh` and mirrored to OpenCode and Hermes by the two sync scripts. It states: in a
+- **Rule**: `plugins/super-fr/rules/docs-currency.md`, under 25 lines, added to
+  `install.sh`'s `CLAUDE_RULES` and to `sync-hermes.py`'s `SHIPPED_RULE_NAMES` (Hermes
+  mirrors only the names on that list), and mirrored by running both sync scripts. It states: in a
   repo with `.fr/docs.yaml`, a PR that changes covered behaviour updates the page or its
   `reviewed` stamp, and `fr docs check` is how to know.
 
@@ -168,18 +186,27 @@ them a registered artifact, and must be able to run in CI on a tree the gate wou
    `docs/explainers/` keeps its basename at the site root (so `01-fr-goal.html`,
    `fr-isolation.html` and `index.html` are unchanged); any other page goes to
    `guides/<basename>.html` or `reference/<basename>.html` by its directory;
-3. rewrites `href`s that point at another page's `.md` to that page's route, relative to
-   the linking page, and fails on a link to a page source that is not a page;
+3. rewrites relative `href`s by one rule: a link to another page's source becomes that
+   page's route, relative to the linking page; a link to any other tracked file or
+   directory becomes a `github.com` blob (or tree) URL at the commit being built
+   (`--ref`, default `HEAD`'s SHA); a relative link to a path git does not track fails the
+   build. Absolute URLs, fragments and links that already point at a site route such as
+   `./acceptance/` are left alone;
 4. replaces the marker `<!-- site:pages -->` in the index source with a list of every
    page, grouped by section, each with its title and the first sentence of its `tldr`;
-5. exits non-zero when any page fails to render, or renders to the renderer's fallback page.
+5. passes `--fonts-dir` explicitly, after checking the directory exists in the blog-craft
+   checkout, and exits non-zero when the renderer exits non-zero or a rendered page carries
+   no embedded `@font-face` data URI (the renderer continues without fonts, exit 0, when it
+   cannot find them).
 
 The pinned commit lives in `.github/blog-craft.ref` (one line, a full SHA). `pages.yml`
 and the new CI job both check blog-craft out at that ref with `actions/checkout`
 (`repository: derio-net/blog-craft`, `path: .blog-craft`). `pages.yml` replaces
 `cp -R docs/explainers/. _site/` with the build, keeps the acceptance steps, and its
-`paths` become `docs/**`, `.fr/docs.yaml`, `scripts/build-site.py`, `.github/blog-craft.ref`
-and `packages/fr/src/fr/acceptance/**`. CI gains a `site-build` job in `ci.yml`, inside
+`paths` become `docs/explainers/**`, `docs/*.md`, `docs/reference/**`, `docs/acceptance/**`,
+`.fr/docs.yaml`, `scripts/build-site.py`, `.github/blog-craft.ref` and
+`packages/fr/src/fr/acceptance/**`. Both workflows read the SHA from the file
+(`ref: ${{ steps.pin.outputs.sha }}` after a step that cats it); neither names it. CI gains a `site-build` job in `ci.yml`, inside
 `ci-ok`.
 
 `docs/explainers/*.html` are deleted and ignored. `index.md` and `fr-isolation.md` are
@@ -197,16 +224,18 @@ tables and Mermaid diagrams, which the renderer supports.
 - `docs/*.md` guides gain front matter (`title`, `tldr`, `covers`, `reviewed`,
   `standalone_style: broadsheet`) and stay where they are, since code and AGENTS.md name
   those paths. `docs/docs-currency.md` is new.
-- `docs/reference/`: `cli.md` (the full command tree, generated), `plan-model.md`,
+- `docs/reference/`: `cli.md` (the full command tree, in a generated block), `plan-model.md`,
   `workflow-shapes.md`, `dispatch-lifecycle.md` (label lifecycle, per-repo profile),
   `acceptance-matrix.md`, `hermes.md`, `components.md` (components, requirements). The text
   comes from today's README, corrected against the code.
 - `README.md`: the front door of R20.
 - `scripts/sync-readme.py` (`--check` verifies, no flag writes) fills
-  `<!-- generated:skills -->` and `<!-- generated:cli -->` blocks in `README.md` and the
-  whole of `docs/reference/cli.md`. The skills table is name, plugin and the first sentence
+  `<!-- generated:skills -->` and `<!-- generated:cli -->` blocks in `README.md` and a
+  `<!-- generated:cli-tree -->` block in `docs/reference/cli.md`. It writes only between
+  the markers, so `cli.md`'s front matter (its `reviewed` stamp, and `covers:
+  [packages/fr/src/fr/cli.py]`) stays hand-owned. The skills table is name, plugin and the first sentence
   of the `description` front matter; the CLI table is each top-level command and its help
-  line, read from the typer app. Guard: `tests/unit/test_tripwire_readme_sync.py`.
+  line, read from the typer app. Guard: `tests/unit/test_tripwire_readme_sync.py`, which also fails a README over 200 lines.
 
 ### E. Rules and tripwires (R24)
 
@@ -214,8 +243,15 @@ tables and Mermaid diagrams, which the renderer supports.
   locally, the pinned renderer, `fr docs check`. `REPO_LOCAL_ONLY_RULES` keeps it.
 - `tests/unit/test_tripwire_explainers_fresh.py` becomes: no `.html` is tracked under
   `docs/explainers/`; every page parses.
-- `tests/unit/test_tripwire_fr_goal_question_rounds.py` reads `index.md` and drops the
-  rendered page; `tests/unit/test_pages_workflow.py` pins the new triggers and the build.
+- `tests/unit/test_tripwire_fr_goal_question_rounds.py` reads `01-fr-goal.md` and
+  `index.md` and drops both rendered pages.
+- `tests/unit/test_pages_workflow.py` pins the new triggers and the build step in place of
+  the `cp`; reads `docs/explainers/index.md` for the `./acceptance/` link; keeps the README
+  Acceptance-badge pin; and asserts no workflow contains a 40-hex blog-craft SHA while both
+  read `.github/blog-craft.ref`.
+- `tests/unit/test_build_site.py` runs the build's pure parts (page set, routes, link
+  rewrite, index list) over a fixture and asserts this repo's routes include `index.html`,
+  `01-fr-goal.html` and `fr-isolation.html` at the root (R16).
 - AGENTS.md gains the `fr/docs` entry, the `sync-readme.py` generator and the new rule.
 
 ### F. Release and matrix
@@ -255,6 +291,7 @@ strategy: candidate
 gate: site-published-from-sources=tester
 - docs-check-flags-uncovered-change: candidate — scenario drives the installed `fr docs check` over a fixture repo: a covered change with and without the page touched
 - docs-check-structure: candidate — scenario: a dead glob, a missing stamp, an uncovered `must_cover` file, and a repo with no config
+- docs-check-default-base-readonly: candidate — scenario: no `--base` on a feature branch and on the default branch, over a tree holding a stale artifact, with `git status` unchanged afterwards
 - docs-deliver-refuses-stale-docs: none — unit tests drive `deliver`'s resolve over a fixture run in CI
 - docs-currency-every-flow: none — the CI job, the shipped rule and its three mirrors are pinned by tripwires in CI
 - site-builds-from-sources: none — the `site-build` CI job renders every page on each PR

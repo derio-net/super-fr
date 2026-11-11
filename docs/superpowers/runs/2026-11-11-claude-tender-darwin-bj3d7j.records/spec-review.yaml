@@ -1,0 +1,97 @@
+schema_version: 10
+run: 2026-11-11-claude-tender-darwin-bj3d7j
+step: spec-review
+outcome: done
+journal:
+  - kind: review
+    id: spec-review-1
+    title: "independent spec review: 12 findings (all in scope)"
+    body: |
+      Checked against the spec journal's decisions (d-generator, d-enforcement, d-scope, d-waiver,
+      d-readme, d-depth, d-verification, d-model-*): each is honoured and none contradicted. Checked
+      against the code (run_cmd.py drift and derived evidence, trigger.py READ_ONLY_COMMANDS, cli.py,
+      sync-opencode.py, sync-hermes.py, install.sh, pages.yml, ci.yml, the three tripwires, the 15
+      skills, the seven guides, fr-debugging's delivery, the matrix rows) and the pinned renderer,
+      and against itself. Findings raised: sr-f1 to sr-f12.
+  - kind: finding
+    id: sr-f1
+    review_scope: in
+    title: "`docs/*.md` with `*` spanning `/` makes every Markdown file under docs/ a page; reference pages missing from the config"
+    body: "Under fnmatch semantics (proportionality.py:25) `docs/*.md` matches docs/superpowers/**, so R4 fails on day one and the site would publish specs. Config lists no docs/reference/*.md. Fix: segment-aware globs, add the reference glob, same matcher in build-site.py with an equality test."
+  - kind: finding
+    id: sr-f2
+    review_scope: in
+    title: "The `deliver` drift question is left to the plan, but the code already answers it"
+    body: "`_check_step_drift` (run_cmd.py:845-889) compares ids only, so an evidence key never drifts a run; journal-check drifted because it was a new step. Decide on listing the key; name DERIVED_EVIDENCE, _VERIFIABLE_EVIDENCE, _DERIVED_FROM, the derive call, both manifest copies and the pinned tuples."
+  - kind: finding
+    id: sr-f3
+    review_scope: in
+    title: "Base resolution via `git remote set-head origin --auto` breaks R8 and needs the network"
+    body: "set-head writes refs/remotes/origin/HEAD and asks the remote. Use fr.git.remote_default_ref (git.py:179-206), exit 2 on None; deliver reuses _proportionality_base."
+  - kind: finding
+    id: sr-f4
+    review_scope: in
+    title: "The `docs-check` CI job leaves out fetch depth, base and events"
+    body: "ci.yml runs on push, pull_request and merge_group; change-fragment (ci.yml:297-306) shows fetch-depth 0 and origin/base_ref are needed. Spec each event and how the job gets fr."
+  - kind: finding
+    id: sr-f5
+    review_scope: in
+    title: "`docs/reference/cli.md` is both wholly generated and a page with a hand-maintained stamp"
+    body: "A stamp edit would make sync --check report the file stale. Generate only a marked block; keep front matter hand-owned; define its covers."
+  - kind: finding
+    id: sr-f6
+    review_scope: in
+    title: "The new rule does not reach Hermes unless `SHIPPED_RULE_NAMES` is edited"
+    body: "sync-hermes.py:45-50 mirrors only allowlisted names; install.sh:169-174 CLAUDE_RULES likewise. Name both edits; correct the Background line."
+  - kind: finding
+    id: sr-f7
+    review_scope: in
+    title: "The link rewrite does not say what happens to links to repo files that are not pages"
+    body: "docs/herdr-control-sessions.md:23 links ../packages/fr-herdr/README.md. Pick one rule: tracked non-page file becomes a github.com blob URL at the built SHA; untracked path fails."
+  - kind: finding
+    id: sr-f8
+    review_scope: in
+    title: "Fallback-page detection misses the renderer's silent degradations"
+    body: "render_explainer.py:252-260 continues without fonts, exit 0. Pass --fonts-dir explicitly and fail when the output has no embedded @font-face data URI."
+  - kind: finding
+    id: sr-f9
+    review_scope: in
+    title: "Tests the change breaks are not named"
+    body: "test_pages_workflow.py:53-54, :87-89, :92-95 and test_tripwire_fr_goal_question_rounds.py:42-44 read the cp step, index.html, the README badge and 01-fr-goal.html. Add the badge to R20, the acceptance link to R17, and list the tests with new targets."
+  - kind: finding
+    id: sr-f10
+    review_scope: in
+    title: "R20's 200-line bound, R13's single pin and R16's URLs have no automated check"
+    body: "Add assertions to the readme sync tripwire, test_pages_workflow.py and a build-site unit test."
+  - kind: finding
+    id: sr-f11
+    review_scope: in
+    title: "Two acceptance rows cite R6/R8 but their text and scenarios do not exercise them"
+    body: "matrix.yaml rows docs-check-flags-uncovered-change and docs-check-structure. Extend them or give R6/R8 their own row."
+  - kind: finding
+    id: sr-f12
+    review_scope: in
+    title: "The `pages.yml` trigger `docs/**` is broader than R23"
+    body: "Nearly every fr-goal PR touches docs/superpowers/**. Use the page globs plus the config, build script, pin and acceptance inputs."
+resolves:
+  - {id: sr-f1, state: fixed, body: "§3.A: segment-aware globs via fr.docs.globs.match, docs/reference/*.md added, build-site.py copy with a page-set equality test."}
+  - {id: sr-f2, state: fixed, body: "§3.B decides: `docs` listed in deliver.evidence in both shapes and both copies; the four code edits and the pinned tuples are named."}
+  - {id: sr-f3, state: fixed, body: "§3.A: base from fr.git.remote_default_ref, no writing git command; deliver reuses _proportionality_base."}
+  - {id: sr-f4, state: fixed, body: "§3.B: fetch-depth 0, --base origin/base_ref on pull_request, no base on push and merge_group, uv run fr."}
+  - {id: sr-f5, state: fixed, body: "§3.D: cli.md gets a generated block only; front matter hand-owned; covers packages/fr/src/fr/cli.py."}
+  - {id: sr-f6, state: fixed, body: "§2 corrected; §3.B names CLAUDE_RULES and SHIPPED_RULE_NAMES."}
+  - {id: sr-f7, state: fixed, body: "§3.C step 3: one rule for page links, tracked non-page links (blob URL at the built SHA), untracked links (fail) and site routes (left alone)."}
+  - {id: sr-f8, state: fixed, body: "§3.C step 5: explicit --fonts-dir, and failure when a page has no embedded @font-face data URI."}
+  - {id: sr-f9, state: fixed, body: "R17 keeps the acceptance link, R20 keeps the badges; §3.E lists each test with its new target."}
+  - {id: sr-f10, state: fixed, body: "R13 and R20 now state their tests; §3.E adds the SHA assertion, the 200-line check and test_build_site.py's route assertion."}
+  - {id: sr-f11, state: fixed, body: "New row docs-check-default-base-readonly cites R6 and R8 with its own scenario; `## Verification` lists it."}
+  - {id: sr-f12, state: fixed, body: "R23 and §3.C narrow the trigger to page globs, config, build script, pin and acceptance inputs."}
+acceptance:
+  - id: docs-check-default-base-readonly
+    capability: docs currency
+    acceptance: fr docs check with no base compares a feature branch against the repository's default branch and runs only structural checks on the default branch itself; it runs on a repository with stale artifacts and changes no file
+    origin: ["super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R6", "super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R8"]
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/docs-check-default-base-readonly.sh
+evidence: {review: spec-review-1, reviewer: ab7719fd6245204b6}
