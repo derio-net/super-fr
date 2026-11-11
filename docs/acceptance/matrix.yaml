@@ -10852,9 +10852,16 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R3
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_cmd.py#test_a_stale_page_exits_1_with_both_fixes
+      - super-fr:tests/unit/test_docs_cmd.py#test_touching_the_page_passes
+      - super-fr:tests/unit/test_docs_check.py#test_a_covered_change_without_the_page_is_stale
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_docs_check_flags_uncovered_change
+    status: ci
+    notes: Unit tests drive the check and the CLI in CI; the installed-CLI scenario
+      runs in test_scenarios.
     verify: candidate
     scenario: tests/scenarios/docs-check-flags-uncovered-change.sh
   - id: docs-check-structure
