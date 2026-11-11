@@ -65,12 +65,12 @@ existing operator guides published as pages, and a page for every shipped skill.
 
 ## Requirements
 
-R1. `fr docs check` reads `.fr/docs.yaml` and exits 0, saying there is nothing to check, in a repo that has none.
+R1. `fr docs check` reads `.fr/docs.yaml` and exits 0, saying there is nothing to check, in a repo that has none. A config whose `pages` globs select no tracked file is a usage error (exit 2), never a clean pass.
 R2. A page is a Markdown file matched by the config's `pages` globs; its front matter declares `covers` (a list of path globs) and `reviewed` (a date and a one-line note).
 R3. `fr docs check --base <ref>` fails, exit 1, when the diff from the merge base to HEAD changes a path a page covers and does not change that page, naming the page, the changed paths and the two ways to satisfy it (edit the page, or update its `reviewed` stamp).
 R4. `fr docs check` fails a page whose front matter is missing or unreadable, lacks `covers` or `reviewed`, or has a `covers` glob that matches no tracked file.
 R5. The config's `must_cover` globs name files that some page must cover; `fr docs check` fails naming every such file that no page covers.
-R6. `fr docs check` with no `--base` uses the repository's default branch on the remote, and on that default branch itself runs only the structural checks (R4, R5).
+R6. `fr docs check` with no `--base` uses the repository's default branch on the remote, and on that default branch itself (pushed or not) runs only the structural checks (R4, R5).
 R7. `fr docs status` lists every page with its covered globs and its `reviewed` stamp; `--json` gives the same as data.
 R8. `fr docs` writes nothing, and runs on a repository whose artifacts are stale.
 R9. `deliver` refuses to resolve `done` while `fr docs check` fails for the run's branch, printing the check's own output; a repo with no `.fr/docs.yaml` is unaffected.

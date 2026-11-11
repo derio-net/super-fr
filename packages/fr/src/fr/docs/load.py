@@ -87,6 +87,21 @@ def resolve_base(root: Path, base: str | None) -> str:
     return found
 
 
+def on_default_branch(root: Path, default_ref: str) -> bool:
+    """Whether HEAD is the local branch of `default_ref` (`origin/main` -> `main`).
+
+    True there even with commits the remote does not have yet: R6 runs only the
+    structural checks on the default branch itself, pushed or not. A detached
+    HEAD is on no branch.
+    """
+    try:
+        done = fr_git.git_answer(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    except fr_git.GitUnavailableError as e:
+        raise DocsEnvError(str(e)) from e
+    branch = done.stdout.strip() if done.returncode == 0 else ""
+    return bool(branch) and branch == default_ref.partition("/")[2]
+
+
 def changed_paths(root: Path, base: str) -> list[str] | None:
     """Paths changed from the merge base of `base` and HEAD to HEAD, both sides of a rename.
 

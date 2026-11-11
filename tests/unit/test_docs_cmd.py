@@ -101,6 +101,44 @@ def test_a_rename_counts_both_sides(repo: Path) -> None:
     assert "src/x.py" in r.output
 
 
+def test_a_rename_into_a_covered_path_counts_the_new_side(repo: Path) -> None:
+    (repo / "other.txt").write_text("o\n")
+    commit(repo)
+    git(repo, "branch", "mid")
+    git(repo, "mv", "other.txt", "src/new.py")
+    commit(repo)
+    r = runner.invoke(app, ["docs", "check", "--base", "mid"])
+    assert r.exit_code == 1, r.output
+    assert "src/new.py" in r.output
+
+
+def test_a_deleted_covered_file_makes_its_page_stale(repo: Path) -> None:
+    git(repo, "rm", "-q", "src/x.py")
+    commit(repo)
+    r = runner.invoke(app, ["docs", "check"])
+    assert r.exit_code == 1, r.output
+    assert "src/x.py" in r.output
+
+
+def test_a_config_that_selects_no_page_exits_2(repo: Path) -> None:
+    (repo / ".fr" / "docs.yaml").write_text("pages:\n  - dcos/*.md\n")
+    commit(repo)
+    r = runner.invoke(app, ["docs", "check"])
+    assert r.exit_code == 2, r.output
+    assert "selects no page" in r.output
+
+
+def test_unpushed_commits_on_the_default_branch_are_structure_only(repo: Path) -> None:
+    git(repo, "checkout", "-q", "main")
+    (repo / "src" / "x.py").write_text("x = 2\n")
+    commit(repo)
+    r = runner.invoke(app, ["docs", "check"])
+    assert r.exit_code == 0, r.output
+    assert "structure only" in r.output
+    r = runner.invoke(app, ["docs", "check", "--base", "origin/main"])
+    assert r.exit_code == 1, r.output
+
+
 def test_base_is_honoured(repo: Path) -> None:
     (repo / "src" / "x.py").write_text("x = 2\n")
     commit(repo)

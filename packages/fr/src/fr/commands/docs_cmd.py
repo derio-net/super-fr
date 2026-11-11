@@ -18,6 +18,7 @@ from fr.docs.load import (
     changed_paths,
     load_config,
     load_pages,
+    on_default_branch,
     resolve_base,
     tracked_files,
 )
@@ -49,7 +50,16 @@ def check_cmd(
             return
         tracked = tracked_files(root)
         pages, errors = load_pages(root, config, tracked)
-        changed = changed_paths(root, resolve_base(root, base))
+        if not pages and not errors:
+            # A config that selects no page is a typo, never "nothing owed".
+            raise DocsEnvError(
+                f".fr/docs.yaml selects no page: `pages` {config.pages!r} matches no tracked file"
+            )
+        base_ref = resolve_base(root, base)
+        if base is None and on_default_branch(root, base_ref):
+            changed = None
+        else:
+            changed = changed_paths(root, base_ref)
     except DocsEnvError as e:
         raise _die(str(e)) from e
     findings = check(pages, errors, tracked, changed, config.must_cover)
