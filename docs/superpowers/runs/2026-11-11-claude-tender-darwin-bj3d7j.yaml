@@ -75,12 +75,19 @@ steps:
           tests: ci:79914c8157e28bea660d7128e1f377a619f21da5+unknown;tree=fb061f1c4413afecc9d6f8ebb6a9cd2a8588478911f6aa607eefd432b20289c6
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-11T14:40:20+00:00'
           harness: claude-code
           model: claude-fable-5-2
           session: afbb2801-be83-5cf8-903a-b5a859749fab
+          returned: '2026-11-11T14:42:29+00:00'
+          outcome: done
+        evidence:
+          review: p1-review-1
+          reviewer: a4111fd28d4064b75
+          visual: none
+          findings: p1-r1,p1-r2,p1-r3
   journal-check:
     state: pending
   deliver:
