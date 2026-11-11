@@ -53,13 +53,33 @@ branch and your checkout stays untouched. From inside it you brainstorm: the age
 the code, asks what it cannot decide for you, proposes approaches, and writes the result
 to `docs/superpowers/specs/<date>-webhook-rate-limit-design.md`.
 
-With the spec committed, the plan comes next:
+With the spec committed, the plan comes next. You describe the phases in a scratch file
+outside the repository (a draft inside it would be committed with the plan). A one-phase
+plan is enough to start:
+
+```yaml
+# $TMPDIR/phases.yaml
+- number: 1
+  title: Rate-limit the webhook endpoint
+  tag: agentic
+  depends_on: []
+  tier: standard
+  tasks:
+    - number: 1
+      title: Token bucket per sender
+      steps:
+        - {id: P1.T1.S1, text: "RED: a test that the 11th request in a second gets HTTP 429."}
+        - {id: P1.T1.S2, text: "GREEN: add the bucket and return 429 when it is empty."}
+        - {id: P1.T1.S3, text: "REFACTOR: move the limits into config."}
+```
+
+`--prose-file` is the plan's narrative in Markdown; leave it out and a stub is generated.
 
 ```bash
 fr plan create --slug 2026-11-11-webhook-rate-limit \
     --target-repo example-org/example-repo \
     --spec docs/superpowers/specs/2026-11-11-webhook-rate-limit-design.md \
-    --phases-file "$TMPDIR/phases.yaml" --prose-file "$TMPDIR/prose.md"
+    --phases-file "$TMPDIR/phases.yaml"
 fr plan self-review docs/superpowers/plans/2026-11-11-webhook-rate-limit
 ```
 
@@ -92,7 +112,8 @@ skill offers the [fr-init](fr-init.md) interview); a docker-less host skips that
 Four things it adds to a plain brainstorm:
 
 - **The brief, recorded.** The operator's request is saved verbatim as a spec-journal
-  entry (`fr journal add --scope spec --kind discovery --input`), after redacting any
+  entry (`fr journal add --scope spec --slug <spec-slug> --kind discovery --input
+  --title "..." --body "..."`), after redacting any
   third-party names. Nothing downstream reads it. The spec is the contract, and a
   requirement the spec does not state is not built.
 - **A `## Requirements` section** before `## Design`: one line each, `R1. ...`, `R2. ...`.
@@ -101,7 +122,8 @@ Four things it adds to a plain brainstorm:
   proven before merge. `fr verification list` shows the available strategies; the
   answer goes in the spec's `## Verification` section. See
   [verification strategies](../verification-strategies.md).
-- **Acceptance rows, presented.** Each requirement gets a row in the acceptance matrix
+- **Acceptance rows, presented.** Each requirement, or closely related group of
+  requirements, gets a row in the acceptance matrix saying what the product does
   (see [fr-acceptance](fr-acceptance.md)), and the brainstorm ends by showing you those
   rows with a one-line defense each. Silently creating them is not you accepting the
   scope; seeing them is.
@@ -141,7 +163,8 @@ The rules the skill applies when it writes a plan:
   plan at delivery.
 
 After a plan ships, surfaced-but-unbuilt items go into a sibling rework plan rather than
-reopening the parent: `fr plan rework <parent-plan-dir>`, then `fr plan rework-add` to
+reopening the parent: `fr plan rework <parent-plan-dir>` (the parent must be complete and
+archived; a live plan is refused), then `fr plan rework-add` to
 record each item and `fr plan rework-list` to see what is open.
 
 ## fr-execute: one phase, then stop

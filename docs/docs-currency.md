@@ -30,6 +30,16 @@ to say you looked. Either way the page appears in the diff, so a reviewer sees i
 
 A repo with no `.fr/docs.yaml` owes nothing, and `fr docs check` says so and exits 0.
 
+## Adopting it in your repo
+
+1. Create `.fr/docs.yaml` with a `pages` list (next section).
+2. Give one page front matter with `covers` and `reviewed` (the section after).
+3. `git add` both. The check reads tracked files only, so a new page or a new covered file
+   does not exist for it until it is added.
+4. Run `fr docs check`. On a feature branch it compares with the default branch; fix what it
+   names.
+5. Add the CI job from "Where it runs", so the check runs on every pull request.
+
 ## The config
 
 `.fr/docs.yaml` takes two keys, both lists of path globs relative to the repo root:
@@ -38,6 +48,7 @@ A repo with no `.fr/docs.yaml` owes nothing, and `fr docs check` says so and exi
 pages:
   - docs/explainers/*.md
   - docs/*.md
+  - docs/reference/*.md
 must_cover:
   - plugins/*/skills/*/SKILL.md
 ```
@@ -93,8 +104,8 @@ Exit 0 is clean, 1 is findings, 2 is a usage or environment error. It never writ
 | `uncovered` | a `must_cover` file that no page covers |
 
 The diff is from the merge base to HEAD. With no `--base`, the base is the remote's default branch,
-read from the local `origin/HEAD` without any network call. When you are on the default branch
-itself there is no diff to judge, so only the structural checks (`bad-page`, `dead-glob`,
+read from the local `origin/HEAD` without any network call. With no `--base` on the default branch
+itself, or whenever HEAD is the merge base, there is no diff to judge, so only the structural checks (`bad-page`, `dead-glob`,
 `uncovered`) run.
 
 ## The stamp: when the page is still true
@@ -134,7 +145,7 @@ defeat this gate, and no tool can stop it.
         run: fr docs check
   ```
 
-  Pin the checkout's full history: a shallow clone cannot compute the merge base and the check will
+  Fetch the checkout's full history (`fetch-depth: 0`): a shallow clone cannot compute the merge base and the check will
   say so rather than pass. Add the job to whatever aggregate check your repo requires.
 
 `fr docs` never writes and runs even when the repo's artifacts are stale, so it works as the very

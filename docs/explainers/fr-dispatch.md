@@ -46,7 +46,9 @@ fr apply  docs/superpowers/plans/2026-11-11-webhook-limiter
 `fr status` is the read-only audit. A locally complete plan shows "would refuse create": it is
 done, so archive it instead of dispatching. `fr apply` with no flag is a **dry run** and lists
 what it would do: ensure labels, create an issue, edit labels, edit a body, set a state. Read the
-preview, then act:
+preview, then act. The plan and its spec must already be merged to the default branch, because
+the runner works from its own checkout of it; otherwise this exits 2 (see "Before you dispatch"
+below):
 
 ```bash
 fr apply docs/superpowers/plans/2026-11-11-webhook-limiter --to vk --yes

@@ -90,7 +90,8 @@ testing one hypothesis at a time, writing the failing test, the fix, the milesto
 ## The debug journal
 
 The investigation is recorded in a `debug`-scope journal,
-`docs/superpowers/journals/debug/<date>-<slug>.md`, appended **as you go** and not written up at
+`docs/superpowers/journals/debug/<slug>.md` (date the slug yourself if you want one in
+the name), appended **as you go** and not written up at
 the end. That continuous flush is the point: the trail of rejected hypotheses is the most
 compaction-vulnerable artifact in the whole session, so each verdict is persisted the moment you
 reach it. Each `fr journal add` is one validated step, one commit, one line back.

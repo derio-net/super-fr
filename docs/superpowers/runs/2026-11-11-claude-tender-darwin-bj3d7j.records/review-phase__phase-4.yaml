@@ -1,0 +1,33 @@
+schema_version: 10
+run: 2026-11-11-claude-tender-darwin-bj3d7j
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+  - {kind: review, id: p4-review-1, title: "Phase 4 review: a page per skill", body: "Two separate reviewers fact-checked the ten new pages claim by claim against the skills, the code and the CLI's --help, five pages each, plus must_cover, its test, the matrix row and the fr-runner env var fix. No false command, flag, exit code or status was found. Twelve findings, all in scope, all fixed: one wrong path, two examples that could not be run as written, and wording and newcomer gaps.", phase: 4}
+  - {kind: finding, id: p4a-r1, review_scope: in, title: "fr plan create example shows no phases file", body: "fr-brainstorming-and-plan.md passed --phases-file with no content shown.", phase: 4}
+  - {kind: finding, id: p4a-r2, review_scope: in, title: "Debug journal path carries a date the code does not add", body: "fr-debugging.md said debug/<date>-<slug>.md; the code writes debug/<slug>.md.", phase: 4}
+  - {kind: finding, id: p4a-r3, review_scope: in, title: "fr journal add shown without its required flags", body: "--slug and --title were omitted.", phase: 4}
+  - {kind: finding, id: p4a-r4, review_scope: in, title: "fr-triage example leaves the file location and terms undefined", body: "Where judgements.yaml lives, severity, cx, wave, merge train and intent anchor.", phase: 4}
+  - {kind: finding, id: p4a-r5, review_scope: in, title: "Each requirement gets a row overstates", body: "The skill says one row per requirement or closely related group.", phase: 4}
+  - {kind: finding, id: p4a-r6, review_scope: in, title: "fr plan rework precondition omitted", body: "The parent must be complete and archived.", phase: 4}
+  - {kind: finding, id: p4a-r7, review_scope: in, title: "docs-currency guide has no adoption path", body: "No step-by-step sequence, and no statement that only tracked files are read.", phase: 4}
+  - {kind: finding, id: p4a-r8, review_scope: in, title: "Pin the checkout's full history", body: "Should say fetch (fetch-depth: 0).", phase: 4}
+  - {kind: finding, id: p4a-r9, review_scope: in, title: "Structure-only stated unconditionally", body: "It holds with no --base on the default branch, or when HEAD is the merge base.", phase: 4}
+  - {kind: finding, id: p4a-r10, review_scope: in, title: "Config sample omits docs/reference/*.md", body: "The repo's own config lists it and the page describes that route.", phase: 4}
+  - {kind: finding, id: p4b-r1, review_scope: in, title: "fr-audit says report writes only under the cache", body: "report -o writes where it is pointed.", phase: 4}
+  - {kind: finding, id: p4b-r2, review_scope: in, title: "fr-dispatch example hits the reachability refusal", body: "fr apply --to vk --yes was shown before the precondition that plan and spec are merged.", phase: 4}
+resolves:
+  - {id: p4a-r1, state: fixed, body: "The page shows a one-phase phases.yaml; fr plan create and self-review were run on exactly that file in a scratch repo and passed."}
+  - {id: p4a-r2, state: fixed, body: "Path is debug/<slug>.md."}
+  - {id: p4a-r3, state: fixed, body: "The command carries --slug, --title and --body."}
+  - {id: p4a-r4, state: fixed, body: "The example says where the file lives, sets severity, and defines tier, severity, cx, wave, merge train and intent anchor."}
+  - {id: p4a-r5, state: fixed, body: "Says each requirement or closely related group, and that a row states what the product does."}
+  - {id: p4a-r6, state: fixed, body: "States the precondition."}
+  - {id: p4a-r7, state: fixed, body: "New section 'Adopting it in your repo', five steps, including that only tracked files are read."}
+  - {id: p4a-r8, state: fixed, body: "Reworded."}
+  - {id: p4a-r9, state: fixed, body: "Reworded to the exact condition."}
+  - {id: p4a-r10, state: fixed, body: "Sample lists the third glob."}
+  - {id: p4b-r1, state: fixed, body: "Names report -o as the exception."}
+  - {id: p4b-r2, state: fixed, body: "The example states the precondition and points at the section."}
+evidence: {review: p4-review-1, reviewer: ac51cafbe74a812bf}

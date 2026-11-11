@@ -44,7 +44,9 @@ fr triage check   --repo example-org/example-repo
 
 `collect` reads the forge and writes `facts.json`. `check` prints the sets you act on. The
 important one is **unranked**: open issues with no judgement yet. You read each one and the
-code it names, then add an entry to `judgements.yaml`:
+code it names, then add an entry to `judgements.yaml`. It sits beside `facts.json` in the
+scope's state directory (`.fr/triage-state/example-org--example-repo/` in a clone; `collect`
+prints the path), and you create it on the first run:
 
 ```yaml
 schema: 12
@@ -55,10 +57,14 @@ issues:
   "example-repo#435":
     tier: 1
     theme: isolation
+    severity: high
     cx: S
     verified: true
     detail: "`gc()` trusts the merged state and tears down locally. Still live on main."
 ```
+
+`tier` is the priority group, `severity` is `low`, `med` or `high` (`check` lists a judged
+issue that has none), and `cx` is your size estimate of the fix: `XS`, `S`, `S-M`, `M` or `L`.
 
 Then draw the page:
 
@@ -106,8 +112,8 @@ It always exits 0 and prints sets, not verdicts:
   that went quiet, issues waiting on a post-merge walk, issues in no batch, and pairs the
   engine proposes as duplicates. A proposal is not a verdict: you judge every group.
 
-Open pull requests are triaged in the same loop. Each carries an intent anchor (the issue it
-closes, a spec, a debug journal, or none) and you mark it `delivers`, `partial`, `drift` or
+Open pull requests are triaged in the same loop. Each carries an intent anchor, the thing
+that says what the PR is for (the issue it closes, a spec, a debug journal, or none), and you mark it `delivers`, `partial`, `drift` or
 `unanchored` with one line. It is shallow by design: never a code review.
 
 ## How to judge
@@ -135,8 +141,10 @@ one pull request. The `fr triage batch` verbs are `list`, `create`, `edit`, `can
 `closeout`, `drive`, `replace` and `focus`. `dispatch`, `merge` and `cancel` write to the
 forge only with `--yes`; without it they print the plan.
 
-`fr triage batch drive` runs batches to completion in waves: it merges ready pull requests
-as a train, closes out what has landed, and dispatches what may start. Merging a batch
+`fr triage batch drive` runs batches to completion in waves. A wave is a set of batches that
+may run at the same time; a batch names the wave it belongs to, or the batch it must come
+`after`. The driver merges ready pull requests one after another in a fixed order (a merge
+train), closes out what has landed, and dispatches what may start. Merging a batch
 pull request needs the operator's `approved-fr` label. The driver never approves its own
 work. `fr triage board` draws `board.html`, a Kanban of every batch by lifecycle column, with
 four "Needs you" lanes (developer, reviewer, tester, devops) decided from the run's cursor

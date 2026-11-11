@@ -72,7 +72,8 @@ prints as `—`, never as zero.
 | `fr usage compare --before X --after Y` | two sets of runs, side by side |
 | `fr usage backfill` | writes the committed usage file for archived runs that have none |
 
-`collect` and `report` write only under the cache. `compare` reads committed files and writes
+`collect` and `report` write only under the cache, except the page `report -o <file>` writes
+where you point it. `compare` reads committed files and writes
 nothing. Pass `--repo <path>` when the cursors live in another checkout. These commands run on the
 harness host: `fr isolation exec` refuses them inside a devcontainer.
 
