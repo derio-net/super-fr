@@ -215,5 +215,13 @@ steps:
     stdout: |
       2 out-of-scope finding(s): p2-r2, p5a-r10
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-11T16:16:24+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-11T16:16:24+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: afbb2801-be83-5cf8-903a-b5a859749fab
 fr_version: 6.2.0
