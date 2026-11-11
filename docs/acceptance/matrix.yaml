@@ -10921,9 +10921,16 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R6
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_cmd.py#test_on_the_default_branch_only_structure_is_checked
+      - super-fr:tests/unit/test_docs_cmd.py#test_the_commands_write_nothing
+      - super-fr:tests/unit/test_docs_cmd.py#test_an_unresolvable_base_exits_2
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_docs_check_default_base_readonly
+    status: ci
+    notes: Unit tests cover base resolution, the default branch and read-only runs;
+      the installed-CLI scenario also runs it over a stale artifact with the gate live.
     verify: candidate
     scenario: tests/scenarios/docs-check-default-base-readonly.sh
   - id: site-builds-from-sources
