@@ -638,3 +638,8 @@ Defined or linked.
 ### p5b-r11-resolved · finding [fixed] · resolves p5b-r11: covers globs miss the code the reference pages describe (phase 5)
 
 covers widened on hermes, dispatch-lifecycle, plan-model, components and cli; fr docs check finds no dead glob.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r10-resolved-2 created=2026-11-11T16:28:08+00:00 phase=5 state=fixed resolves=p5a-r10 -->
+### p5a-r10-resolved-2 · finding [fixed] · resolves p5a-r10: Skill descriptions are trigger-optimised (phase 5)
+
+The consequence the reviewer raised (descriptions make poor table cells) is removed in this change: the README table takes its line from scripts/readme-skill-summaries.yaml. The descriptions themselves are written for skill selection on purpose and nothing is owed on them.
