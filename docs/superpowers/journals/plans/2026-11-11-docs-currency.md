@@ -113,3 +113,28 @@ prose and wiring only: one new rule file, one sentence per skill, one list entry
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 one CI job copied from change-fragment's pins, which a test now pins equal; nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-11-11T15:12:11+00:00 phase=2 -->
+### p2-review-1 · review · Phase 2 review: docs witness at deliver, shipped rule, skills, CI job (phase 2)
+
+A separate reviewer read the phase 2 diff against R9-R11. No bypass of the deliver gate was found: a caller-passed docs witness is refused, every git, base or config failure exits 2, `none` is stored only without .fr/docs.yaml, and fr docs check and the gate share one evaluation. No artifact shape moved. Two findings: one in scope (fixed), one out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-11T15:12:11+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · docs-currency-every-flow at ci while its R24 origin is unbuilt (phase 2)
+
+The row cites R24, which phase 3 implements, but phase 3 did not list the row, so no phase would attach R24 evidence to it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-11T15:12:11+00:00 phase=2 state=open review_scope=out -->
+### p2-r2 · finding [open] (reviewer: out of scope) · install.sh delivers no rules to OpenCode consumers (phase 2)
+
+scripts/install.sh installs skills, commands, agents and the plugin for OpenCode, and no instructions. A shipped rule therefore loads under OpenCode only in this repo's own checkout. True of every shipped rule, fr-isolation-required included.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-11T15:12:11+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: docs-currency-every-flow at ci while its R24 origin is unbuilt (phase 2)
+
+Phase 3 now lists docs-currency-every-flow in its acceptance, so the phase that builds R24 adds its evidence to the row.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-11T15:12:11+00:00 phase=2 state=open resolves=p2-r2 out_of_scope=true -->
+### p2-r2-resolved · finding [out-of-scope] · resolves p2-r2: install.sh delivers no rules to OpenCode consumers (phase 2)
+
+Not caused by this change: install.sh has never delivered an instruction file to OpenCode, for any shipped rule. The new rule is delivered exactly as the existing ones are.
