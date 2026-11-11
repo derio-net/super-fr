@@ -1,0 +1,104 @@
+schema_version: 2
+phase:
+  number: 3
+  title: The site is built from sources (R12-R17, R23, R24)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - site-builds-from-sources
+  - site-published-from-sources
+  tier: standard
+  files:
+  - .fr/docs.yaml
+  - .github/blog-craft.ref
+  - .github/workflows/pages.yml
+  - .github/workflows/ci.yml
+  - .gitignore
+  - scripts/build-site.py
+  - docs/explainers/*
+  - docs/*.md
+  - .claude/rules/explainers-currency.md
+  - .opencode/instructions/*
+  - tests/unit/test_build_site.py
+  - tests/unit/test_pages_workflow.py
+  - tests/unit/test_tripwire_explainers_fresh.py
+  - tests/unit/test_tripwire_fr_goal_question_rounds.py
+  - docs/acceptance/*
+  estimate_lines: 5500
+tasks:
+- number: 1
+  title: The build script (R14, R16)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: `tests/unit/test_build_site.py` loading `scripts/build-site.py` by path and testing its pure parts over fixture inputs: the page set from a config and a tracked-file list (the same segment-aware matcher as `fr.docs.globs`, with a test that both agree on a table of patterns); routes (`docs/explainers/x.md` to `x.html`, `docs/x.md` to `guides/x.html`, `docs/reference/x.md` to `reference/x.html`); the link rewrite (page source to relative route; tracked non-page path to a github.com blob or tree URL at the given ref; untracked relative path raises; absolute URLs, fragments and `./acceptance/` untouched); the `<!-- site:pages -->` marker replaced by a list grouped by section with title and the first sentence of `tldr`. See them fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: write `scripts/build-site.py <out-dir> [--ref SHA] [--blog-craft DIR]` (stdlib plus `yaml`; renders each page by running the renderer at `<blog-craft>/tools/render_explainer.py` with `--style broadsheet --embed-fonts --fonts-dir <checked dir>`; fails on a non-zero renderer exit or a page with no embedded `@font-face` data URI). See the tests pass.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: keep rendering (subprocess) apart from the pure functions so the tests need no renderer; add the usage docstring.
+- number: 2
+  title: Sources for every existing page (R12, R17, R18 front matter)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Write `docs/explainers/index.md` and `docs/explainers/fr-isolation.md` from the text of today's `index.html` and `fr-isolation.html` (extract the visible text with a script that strips tags and skips the embedded fonts; never read the whole files into context). Keep every claim the pages make, corrected against `plugins/super-fr/rules/fr-isolation-required.md` and the fr-isolation skill where they have drifted; turn the hero and schematics into prose, tables and Mermaid. `index.md` carries `<!-- site:pages -->`, the `./acceptance/` link and the fr-goal question-round wording `tests/unit/test_tripwire_fr_goal_question_rounds.py` pins. Front matter: `title`, `date`, `tldr`, `standalone: true`, `standalone_style: broadsheet`, `covers`, `reviewed`.
+  - id: P3.T2.S2
+    text: |-
+      Add `covers` and `reviewed` to `01-fr-goal.md`, and front matter (`title`, `tldr`, `standalone_style: broadsheet`, `covers`, `reviewed`) to the seven guides in `docs/*.md`, each `covers` narrow (the skill or command modules the guide describes; check each glob matches a tracked file). Write `.fr/docs.yaml` with `pages: [docs/explainers/*.md, docs/*.md, docs/reference/*.md]` and no `must_cover` yet. `git rm docs/explainers/*.html` and ignore `docs/explainers/*.html` in `.gitignore`. Run `uv run fr docs check` and see it pass.
+- number: 3
+  title: Pin, workflows and CI (R13, R15, R23)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: rewrite `tests/unit/test_pages_workflow.py` to the new model: triggers are exactly `docs/explainers/**`, `docs/*.md`, `docs/reference/**`, `docs/acceptance/**`, `.fr/docs.yaml`, `scripts/build-site.py`, `.github/blog-craft.ref`, `packages/fr/src/fr/acceptance/**`; the build step replaces the `cp`; blog-craft is checked out at a ref read from `.github/blog-craft.ref`; no workflow file contains the pinned 40-hex SHA; `docs/explainers/index.md` carries `./acceptance/`; the README badge pin is kept; `ci.yml` has a `site-build` job inside `ci-ok`. See it fail.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: write `.github/blog-craft.ref` (`cdff7a66b4dc383b66aa8e5465d0d978117dd3c0`), change `pages.yml` (a step reading the pin, `actions/checkout` of `derio-net/blog-craft` into `.blog-craft` at that ref with the same action pin as the existing checkout, then `uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py _site --ref "$GITHUB_SHA" --blog-craft .blog-craft`; acceptance steps unchanged), and add `site-build` to `ci.yml` and `ci-ok`. Build the site locally against `/home/user/derio-net/blog-craft` into a scratch dir outside the repo and confirm `index.html`, `01-fr-goal.html`, `fr-isolation.html` and `guides/ops.html` exist. See the tests pass.
+- number: 4
+  title: Rule and tripwires (R24)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Rewrite `tests/unit/test_tripwire_explainers_fresh.py` (no `.html` tracked under `docs/explainers/`; every configured page parses with `fr.docs`) and point `tests/unit/test_tripwire_fr_goal_question_rounds.py` at `01-fr-goal.md` and `index.md` only. Rewrite `.claude/rules/explainers-currency.md` for the new model (sources only; the gate is `fr docs check`; how to preview a page locally with the pinned renderer from `/` with `--isolated`; the pin file; no hand-authored pages remain) and regenerate its mirror with `scripts/sync-opencode.py`. Run the tripwires, then move row `site-builds-from-sources` with `fr acceptance set-status`; `site-published-from-sources` stays owed (live, post-merge).
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

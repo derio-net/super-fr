@@ -302,3 +302,9 @@ gate: site-published-from-sources=tester
 ## Test Plan
 
 1. [tester] After merge, wait for the "Deploy explainers to Pages" run on `main`. Open `https://derio-net.github.io/super-fr/`, `/01-fr-goal.html`, `/fr-isolation.html`, one guide and one reference page from the index, and `/acceptance/`: each loads, links between pages resolve, and the index lists every page.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-11-docs-currency | `derio-net/super-fr` | `2026-11-11-docs-currency` | — |

@@ -1,0 +1,128 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'fr docs: check and status (R1-R8)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - docs-check-flags-uncovered-change
+  - docs-check-structure
+  - docs-check-default-base-readonly
+  skeleton: true
+  tier: standard
+  files:
+  - .changes/claude-tender-darwin-bj3d7j.yaml
+  - packages/fr/src/fr/docs/*
+  - packages/fr/src/fr/commands/docs_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - packages/fr/src/fr/commands/skills_cmd.py
+  - .claude/rules/artifact-versioning.md
+  - .opencode/instructions/*
+  - tests/unit/test_docs_*.py
+  - tests/unit/test_migration_trigger.py
+  - tests/scenarios/docs-check-*.sh
+  - tests/scenarios/fixtures/docs-check/*
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: 'Smoke: the branch reaches green CI'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `tests/unit/test_docs_globs.py` with one trivial test importing `fr.docs` (create the empty package `packages/fr/src/fr/docs/__init__.py`), and add `.changes/claude-tender-darwin-bj3d7j.yaml` (`bump: minor`, summary: "fr docs check: a docs-currency gate for every repo; super-fr's site is rendered from Markdown at deploy"). Run that test file, commit and push.
+- number: 2
+  title: Segment-aware globs and the models (R2, spec 3.A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_docs_globs.py`, tests for `fr.docs.globs.match(pattern, path)`: `docs/*.md` matches `docs/ops.md` and not `docs/superpowers/x.md` or `docs/explainers/a.md`; `**` spans segments (`plugins/**/SKILL.md`, `docs/**`); `?` stays in a segment; a literal path matches itself. In `tests/unit/test_docs_model.py`: `DocsConfig` (`pages`, optional `must_cover`, extra keys refused) and `parse_page(path, text)` returning covers and the `reviewed` stamp, with errors for no front matter, unreadable YAML, missing `covers`, missing `reviewed`, a `reviewed` that is not `<ISO date> <note>`; `covers: []` is legal; unknown front-matter keys are ignored. See them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: write `fr/docs/globs.py` (translate the pattern to a regex, segment by segment) and `fr/docs/model.py` (pydantic `DocsConfig` with `extra="forbid"`; a frozen `Page` dataclass; `PageError`). See them pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: one compiled-regex cache in `globs.py`; docstrings naming spec 2026-11-11-docs-currency R2.
+- number: 3
+  title: The pure check (R3, R4, R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: `tests/unit/test_docs_check.py` over `fr.docs.check.check(pages, page_errors, tracked, changed, must_cover)` returning findings: a changed covered path with the page unchanged gives one `stale` finding naming the page and the changed paths; the page in `changed` gives none; a page's own path never counts as a covered change against itself; a `covers` glob matching no tracked file gives `dead-glob`; a page error gives `bad-page`; a tracked file matching `must_cover` and no page's `covers` gives `uncovered`; `changed=None` runs only the structural checks. See them fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement `fr/docs/check.py` (pure, no git, no filesystem) with a frozen `Finding(kind, page, paths, message)`. See them pass.
+- number: 4
+  title: Loading, base resolution and the CLI (R1, R6, R7, R8)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: `tests/unit/test_docs_cmd.py` driving `fr docs check` / `fr docs status` through typer's CliRunner in tmp git repos: no `.fr/docs.yaml` prints a nothing-to-check line and exits 0; a bad config exits 2; a stale page exits 1 and prints the page, the changed paths, and both fixes (edit the page; update its `reviewed` stamp); touching the page exits 0; a rename counts both sides; `--base <ref>` is honoured; with no `--base` the base is `fr.git.remote_default_ref` and an unresolvable one exits 2; on the default branch only structural checks run; `fr docs status` lists each page with covers and stamp and `--json` gives the same as data; no test leaves the repo's `git status --porcelain` changed. See them fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: write `fr/docs/load.py` (config, pages from `git ls-files` matched against `pages`, changed paths from `git diff --name-only -M <merge-base>...HEAD` with both rename sides, base resolution; read-only git only, never `set-head`), `fr/docs/render.py` (text and JSON) and `fr/commands/docs_cmd.py` (`docs_app` with `check` and `status`; exit 0/1/2), and register it in `fr/cli.py`. See them pass.
+  - id: P1.T4.S3
+    text: |-
+      GREEN: add `docs` to `READ_ONLY_COMMANDS` in `fr/artifacts/trigger.py` with its reason in the docstring, update the literal pin in `tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things`, add the sentence to the exempt-commands paragraph of `.claude/rules/artifact-versioning.md` and regenerate its OpenCode mirror with `scripts/sync-opencode.py`. Add a `fr docs` line where `fr skills` lists command groups if that list is hand-kept. Run the affected tests.
+- number: 5
+  title: Installed-CLI scenarios
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Write `tests/scenarios/docs-check-flags-uncovered-change.sh`, `docs-check-structure.sh` and `docs-check-default-base-readonly.sh` in the style of the existing scenarios (source `_common.sh`; a fresh fixture repo with a bare local origin). The first: a covered change fails naming the page and both fixes, then passes after the page body changes, and passes after only the stamp changes. The second: a dead glob, a missing stamp and an uncovered `must_cover` file each fail by name; a repo with no config passes; `fr docs status` lists the pages. The third: no `--base` on a feature branch finds the stale page; on the default branch only structure is checked; with a stale-stamped artifact in the tree the command still runs; `git status --porcelain` is identical before and after. Run them through `tests/integration/test_scenarios.py` and see them pass.
+  - id: P1.T5.S2
+    text: |-
+      Move the three rows to the status the evidence supports with `fr acceptance set-status --id <row> --status <s> --notes "<why>" --level unit=super-fr:tests/unit/<file>#<test>` (name-anchored refs), and commit the regenerated reports.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
