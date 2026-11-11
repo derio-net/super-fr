@@ -10989,9 +10989,22 @@ rows:
     - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R18
     - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R22
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walked
+    notes: 'Walked after merge: the Pages deploy from main serves every configured page
+      at its route, and all internal links resolve.'
     verify: live
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-11T22:29:06Z'
+      evidence: 'Pages deploy ''Deploy explainers to Pages'' succeeded on main at d427d789d
+        (2026-11-11). Fetched over HTTP from the published site: /, /01-fr-goal.html,
+        /fr-isolation.html and /acceptance/ return 200; a crawl of every internal link
+        from the index reached 30 URLs with no non-200; the index links all 28 pages
+        .fr/docs.yaml configures; a guide, a reference page and 01-fr-goal carry their
+        source front-matter titles. Checked by HTTP fetch, not viewed in a browser.'
   - id: docs-every-skill-has-page
     capability: published docs
     acceptance: Every shipped skill is covered by a published page; adding a skill with
