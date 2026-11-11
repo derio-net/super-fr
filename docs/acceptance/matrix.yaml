@@ -10876,9 +10876,18 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R5
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R7
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_model.py#test_a_bad_page_is_a_page_error
+      - super-fr:tests/unit/test_docs_check.py#test_an_uncovered_must_cover_file_is_named
+      - super-fr:tests/unit/test_docs_check.py#test_a_glob_matching_no_tracked_file_is_dead
+      - super-fr:tests/unit/test_docs_cmd.py#test_no_config_is_nothing_to_check
+      - super-fr:tests/unit/test_docs_cmd.py#test_status_lists_pages_and_json_matches
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_docs_check_structure
+    status: ci
+    notes: Unit tests cover config, page parsing, dead globs, must_cover and status;
+      the installed-CLI scenario runs in test_scenarios.
     verify: candidate
     scenario: tests/scenarios/docs-check-structure.sh
   - id: docs-deliver-refuses-stale-docs
