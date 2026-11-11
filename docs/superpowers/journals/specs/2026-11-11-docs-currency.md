@@ -215,3 +215,8 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-11-docs-currency-p2 created=2026-11-11T12:29:22+00:00 -->
+### phase-split-2026-11-11-docs-currency-p2 · decision · ask: R9-R11 put the gate into deliver, the skills, a shipped rule and CI
+
+Phase 2 serves its own ask (R9-R11), reviewable apart from the engine.
