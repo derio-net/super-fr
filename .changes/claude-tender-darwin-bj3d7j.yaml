@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr docs check: a docs-currency gate for every repo; super-fr's site is rendered from Markdown at deploy"
