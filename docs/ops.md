@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-12 repo-feature-settings, trust follows the pr_body render path; ops behaviour unchanged
 ---
 
 # fr ops — manual operations you can check and run

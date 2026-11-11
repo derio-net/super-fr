@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 repo-feature-settings, acceptance off is disabled, not debt
 ---
 
 ## Overview: claims, not tests
@@ -154,6 +154,10 @@ a weekly "Acceptance debt" issue up to date from `fr acceptance digest`.
 - A row is a claim you wrote. The matrix makes it hard to overstate one, not impossible.
 - It records business behaviour. A process directive ("delivered in one phase") is not a row.
 - Sibling-repo references are verified only where a checkout exists (`--sibling-root`).
+- A repo can turn the matrix off with `artifacts.acceptance: off` in `.fr/settings.yaml`
+  (`fr settings show`). Every acceptance surface then reports "disabled by repo setting",
+  and `fr acceptance add`, `set-status` and `init` refuse. This is not the same as having no
+  matrix yet, which is debt to backfill.
 
 ## Where to go next
 

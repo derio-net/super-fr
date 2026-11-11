@@ -15,7 +15,7 @@ covers:
   - packages/fr/src/fr/commands/undispatch_cmd.py
   - packages/fr-dispatch/src/**
   - packages/fr-vk/src/**
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 repo-feature-settings, forge.labels/issues opt-out
 ---
 
 ## Overview: the plan stays the source of truth
@@ -72,6 +72,10 @@ The issue then moves through labels derived from what GitHub shows: `fr:ready` w
 and no open PR; `fr:in-progress` with an assignee or a draft PR; `fr:pr-ready` with an open,
 non-draft PR; closed once the plan records completion *and* a merged PR is observed. That is why
 `fr apply` is safe to run before a PR merges: it can only set `pr-ready` then.
+
+A repo can opt out of these writes. Under `forge.labels: off` or `forge.issues: off` in its
+`.fr/settings.yaml`, `fr apply`, `fr undispatch` and the bridge skip that kind of write for the
+repo. See [the dispatch lifecycle reference](../reference/dispatch-lifecycle.md).
 
 ## Before you dispatch
 

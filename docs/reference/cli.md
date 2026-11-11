@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-12 repo-feature-settings, fr settings, push and pr create in the generated tree
 ---
 
 # The fr command line

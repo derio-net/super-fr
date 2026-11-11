@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 repo-feature-settings, batch dispatch records the run's issue, state pushes route through fr push; nothing a reader sees changed
 ---
 
 ## Overview: judgement in a file, engine around it

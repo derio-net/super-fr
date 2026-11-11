@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 repo-feature-settings, gates off and forge settings in Limits
 ---
 
 ## Overview: why a delivered PR can still be unfinished
@@ -132,6 +132,11 @@ owns keep `gate:tester` on the PR and are not this stage's to walk.
 - On a forge fr cannot merge through, stage 2 stops and names the manual merge; do it at
   that head, then re-run.
 - `gate:tester` and `gate:devops` are separate. Passing one does not pass the other.
+- The repo's settings (`fr settings show`) can remove the stage entirely. Under
+  `artifacts.gates: off` no gate is computed, labelled or held, so there is no DevOps stage.
+  Under `forge.labels: off` there is no gate label to pass. Under `forge.comments: off`,
+  `fr gate pass` swaps the label without commenting and closes no tracker, so record what
+  passed the gate in the run's journal.
 
 ## Where to go next
 

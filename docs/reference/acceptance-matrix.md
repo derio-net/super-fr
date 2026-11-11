@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-12 repo-feature-settings, acceptance off
 ---
 
 # The acceptance matrix
@@ -15,6 +15,11 @@ Passing unit tests do not tell you whether the product does what you promised. T
 acceptance matrix, `docs/acceptance/matrix.yaml`, does: one row per business-level promise
 ("an operator can X"), the tests at each level that verify it, and a status that says how
 much you can trust it. The skill that drives it is [fr-acceptance](../explainers/fr-acceptance.md).
+
+A repo can turn the matrix off with `artifacts.acceptance: off` in `.fr/settings.yaml`
+(`fr settings show`). fr then writes no rows, reports or matrix CI. `fr acceptance add` and
+`set-status` refuse, naming the setting. `check`, `status`, `fr debt` and the session-start
+nag say "disabled by repo setting" instead of reporting debt.
 
 ## Statuses
 
