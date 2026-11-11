@@ -418,3 +418,223 @@ The generated CLI table prints each group's own help line, so thin ones (`plan`,
 ### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
 
 Generator and tripwire written once to the target shape; nothing to clean.
+
+<!-- fr:journal kind=review scope=plan id=p5-review-1 created=2026-11-11T16:16:22+00:00 phase=5 -->
+### p5-review-1 · review · Phase 5 review: README front door, reference pages, generated tables (phase 5)
+
+Two separate reviewers: one walked the old README section by section to confirm nothing true was lost and checked the new README, sync-readme.py and its tripwire; the other fact-checked the eight reference pages against install.sh, the code and the CLI help and built the site. The section map held. Twenty-one findings: twenty in scope, all fixed; one out of scope.
+
+<!-- fr:journal kind=decision scope=plan id=p5-skill-summaries-file created=2026-11-11T16:16:22+00:00 phase=5 -->
+### p5-skill-summaries-file · decision · The skills table takes its line from a summaries file (phase 5)
+
+A skill's description tells an agent when to load it and reads badly as a table cell. scripts/readme-skill-summaries.yaml holds one line per skill; the sync fails when a skill has none or a line names no skill, and each name links to the explainer that covers it. Spec R21 says so.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r1 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r1 · finding [open] (reviewer: in scope) · README says every merge publishes all of docs/ (phase 5)
+
+pages.yml publishes only the page sources and only when a merge touches them.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r2 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r2 · finding [open] (reviewer: in scope) · sync-readme.py depends on the locale (phase 5)
+
+read_text/write_text with no encoding crash under a C locale.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r3 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r3 · finding [open] (reviewer: in scope) · Skill cells read as trigger language (phase 5)
+
+Rows began 'Use when asked...' or were cut mid-clause.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r4 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r4 · finding [open] (reviewer: in scope) · CLI rows expose internal wording (phase 5)
+
+A spec id and 'v2 ...' in the Typer help strings.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r5 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r5 · finding [open] (reviewer: in scope) · sync-readme.py tracebacks on an unusable skill file (phase 5)
+
+Missing description or front matter raised KeyError/IndexError; split('---') was brittle.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r6 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r6 · finding [open] (reviewer: in scope) · README promises a page per skill under Read more (phase 5)
+
+fr-origins, fr-execute and fr-runner are covered inside other pages.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r7 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r7 · finding [open] (reviewer: in scope) · README prerequisites omit git, jq, rsync (phase 5)
+
+The installer preflights them.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r8 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r8 · finding [open] (reviewer: in scope) · First-run and close-out sentences imprecise (phase 5)
+
+The interview applies only to devcontainer mode without a profile; close-out is a separate session.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r9 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5a-r9 · finding [open] (reviewer: in scope) · Small facts dropped with the old README (phase 5)
+
+fr migrate's preview default and flags, fr validate artifacts --kind, two issue pointers.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r10 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=out -->
+### p5a-r10 · finding [open] (reviewer: out of scope) · Skill descriptions are trigger-optimised (phase 5)
+
+A design tension in the skills themselves, not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r1 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r1 · finding [open] (reviewer: in scope) · fr-isolation.md contradicts itself on profiles (phase 5)
+
+'No devcontainer profile is a stop' beside two modes that need none.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r2 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r2 · finding [open] (reviewer: in scope) · Weekly issue misnamed (phase 5)
+
+The workflow runs fr debt issue and files 'Technical debt'.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r3 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r3 · finding [open] (reviewer: in scope) · cli.md says file-changing commands preview by default (phase 5)
+
+plan create/edit, acceptance add/set-status and isolation up act at once.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r4 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r4 · finding [open] (reviewer: in scope) · unit attributed to each step (phase 5)
+
+It is one field of the manifest.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r5 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r5 · finding [open] (reviewer: in scope) · install.md says fr refuses a 1.x OpenCode session (phase 5)
+
+It reports the session as unreadable and says to upgrade.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r6 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r6 · finding [open] (reviewer: in scope) · install.md claims MCP config is installed (phase 5)
+
+Only with the optional VibeKanban MCP binary present.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r7 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r7 · finding [open] (reviewer: in scope) · Generated CLI tree carries internal ids and cut lines (phase 5)
+
+19 issue/spec references and 10 truncated help lines.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r8 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r8 · finding [open] (reviewer: in scope) · Requirements omit git, jq, rsync and the devcontainer CLI (phase 5)
+
+components.md.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r9 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r9 · finding [open] (reviewer: in scope) · No uninstall route without a checkout (phase 5)
+
+install.md.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r10 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r10 · finding [open] (reviewer: in scope) · Undefined terms (phase 5)
+
+fr-cncd, herdr, tick, runner.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r11 created=2026-11-11T16:16:22+00:00 phase=5 state=open review_scope=in -->
+### p5b-r11 · finding [open] (reviewer: in scope) · covers globs miss the code the reference pages describe (phase 5)
+
+hermes.py, labels.py, item_state.py, apply_cmd.py, plan/**, the OpenCode plugin's package.json, the command modules.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r1-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r1 -->
+### p5a-r1-resolved · finding [fixed] · resolves p5a-r1: README says every merge publishes all of docs/ (phase 5)
+
+Says the site is rebuilt from the three source locations when a merge changes them.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r2-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r2 -->
+### p5a-r2-resolved · finding [fixed] · resolves p5a-r2: sync-readme.py depends on the locale (phase 5)
+
+UTF-8 everywhere; test_the_script_does_not_depend_on_the_locale runs --check under LC_ALL=C.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r3-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r3 -->
+### p5a-r3-resolved · finding [fixed] · resolves p5a-r3: Skill cells read as trigger language (phase 5)
+
+Decision p5-skill-summaries-file; tests cover a missing and an unknown entry.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r4-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r4 -->
+### p5a-r4-resolved · finding [fixed] · resolves p5a-r4: CLI rows expose internal wording (phase 5)
+
+Reworded the help of fr plan, spec, migrate, skills and ops.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r5-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r5 -->
+### p5a-r5-resolved · finding [fixed] · resolves p5a-r5: sync-readme.py tracebacks on an unusable skill file (phase 5)
+
+SourceError names the file; front matter read by one anchored regex; test_an_unusable_skill_file_is_named_not_a_traceback.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r6-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r6 -->
+### p5a-r6-resolved · finding [fixed] · resolves p5a-r6: README promises a page per skill under Read more (phase 5)
+
+Each skill name in the table links to the explainer that covers it; test_every_shipped_skill_row_links_to_a_page.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r7-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r7 -->
+### p5a-r7-resolved · finding [fixed] · resolves p5a-r7: README prerequisites omit git, jq, rsync (phase 5)
+
+Listed.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r8-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r8 -->
+### p5a-r8-resolved · finding [fixed] · resolves p5a-r8: First-run and close-out sentences imprecise (phase 5)
+
+Reworded both sentences.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r9-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5a-r9 -->
+### p5a-r9-resolved · finding [fixed] · resolves p5a-r9: Small facts dropped with the old README (phase 5)
+
+cli.md states migrate's preview default, --yes, --adopt and validate artifacts --kind. The two issue pointers stay out: the behaviour is documented and a ticket number explains nothing to a reader.
+
+<!-- fr:journal kind=finding scope=plan id=p5a-r10-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=open resolves=p5a-r10 out_of_scope=true -->
+### p5a-r10-resolved · finding [out-of-scope] · resolves p5a-r10: Skill descriptions are trigger-optimised (phase 5)
+
+Not caused by this change: descriptions are written for skill selection. The table no longer depends on them.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r1-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r1 -->
+### p5b-r1-resolved · finding [fixed] · resolves p5b-r1: fr-isolation.md contradicts itself on profiles (phase 5)
+
+Scoped to the default devcontainer mode.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r2-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r2 -->
+### p5b-r2-resolved · finding [fixed] · resolves p5b-r2: Weekly issue misnamed (phase 5)
+
+Names fr debt issue and the Technical debt issue.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r3-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r3 -->
+### p5b-r3-resolved · finding [fixed] · resolves p5b-r3: cli.md says file-changing commands preview by default (phase 5)
+
+Lists which commands preview and which act at once.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r4-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r4 -->
+### p5b-r4-resolved · finding [fixed] · resolves p5b-r4: unit attributed to each step (phase 5)
+
+Says the unit belongs to the shape.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r5-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r5 -->
+### p5b-r5-resolved · finding [fixed] · resolves p5b-r5: install.md says fr refuses a 1.x OpenCode session (phase 5)
+
+Reworded.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r6-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r6 -->
+### p5b-r6-resolved · finding [fixed] · resolves p5b-r6: install.md claims MCP config is installed (phase 5)
+
+Claim removed.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r7-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r7 -->
+### p5b-r7-resolved · finding [fixed] · resolves p5b-r7: Generated CLI tree carries internal ids and cut lines (phase 5)
+
+The generator drops parentheticals and trailing clauses that only point at an issue, spec or requirement, and the tree is no longer truncated; two tests pin it on a fixture and on the repo.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r8-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r8 -->
+### p5b-r8-resolved · finding [fixed] · resolves p5b-r8: Requirements omit git, jq, rsync and the devcontainer CLI (phase 5)
+
+Listed.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r9-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r9 -->
+### p5b-r9-resolved · finding [fixed] · resolves p5b-r9: No uninstall route without a checkout (phase 5)
+
+Gives the managed clone's path.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r10-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r10 -->
+### p5b-r10-resolved · finding [fixed] · resolves p5b-r10: Undefined terms (phase 5)
+
+Defined or linked.
+
+<!-- fr:journal kind=finding scope=plan id=p5b-r11-resolved created=2026-11-11T16:16:22+00:00 phase=5 state=fixed resolves=p5b-r11 -->
+### p5b-r11-resolved · finding [fixed] · resolves p5b-r11: covers globs miss the code the reference pages describe (phase 5)
+
+covers widened on hermes, dispatch-lifecycle, plan-model, components and cli; fr docs check finds no dead glob.
