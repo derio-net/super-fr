@@ -230,3 +230,8 @@ A wrong derive refuses every deliver (run_cmd.py _VERIFIABLE_EVIDENCE).
 ### phase-split-2026-11-11-docs-currency-p3 · decision · ask: R12-R17, R23, R24 make the site a build product
 
 Own ask.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-11-docs-currency-p4 created=2026-11-11T12:29:27+00:00 -->
+### phase-split-2026-11-11-docs-currency-p4 · decision · ask: R18-R19 a page for every skill
+
+Own ask; also about 2,600 lines of prose, too much to review with the pipeline.
