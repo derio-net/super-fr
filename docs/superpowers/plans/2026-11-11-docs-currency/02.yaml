@@ -36,7 +36,7 @@ tasks:
   steps:
   - id: P2.T1.S1
     text: |-
-      RED: tests beside the existing proportionality-witness tests: a run whose repo has `.fr/docs.yaml` and a stale page cannot resolve `deliver` done (exit 2, the check's findings printed); after the page is touched it resolves and the stored witness is not `none`; a repo with no `.fr/docs.yaml` resolves with witness `none`; passing `--evidence docs=` by hand is refused like other derived keys. Update the pinned evidence tuples in `tests/unit/test_tripwire_shipped_workflows.py` to include `docs` for `deliver` in both shapes. See them fail.
+      RED: tests beside the existing proportionality-witness tests: a run whose repo has `.fr/docs.yaml` and a stale page cannot resolve `deliver` done (exit 2, the check's findings printed); after the page is touched it resolves and the stored witness is not `none`; a repo with no `.fr/docs.yaml` resolves with witness `none`; an explicit `--evidence docs=` flag is refused like other derived keys. Update the pinned evidence tuples in `tests/unit/test_tripwire_shipped_workflows.py` to include `docs` for `deliver` in both shapes. See them fail.
   - id: P2.T1.S2
     text: |-
       GREEN: add `docs` to `DERIVED_EVIDENCE` (`fr/workflow/artifacts.py`), to `_VERIFIABLE_EVIDENCE` and `_DERIVED_FROM` (`commands/run_cmd.py`), add `derive("docs", ...)` beside proportionality's using a `_docs_witness` that runs `fr.docs` in process against `_proportionality_base`'s commit, and list `docs` in `deliver.evidence` in `fr-goal.yaml` and `fr-goal-light.yaml` in BOTH `plugins/super-fr/workflows/` and `packages/fr/src/fr/workflows/`. See them pass, and `fr workflow check` on both shapes.
