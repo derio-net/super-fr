@@ -1,3 +1,14 @@
+---
+title: "fr gate backfill: bringing old owed work into the gate lanes"
+tldr: |
+  Work that merged before the post-merge gates existed left its asks scattered. fr gate backfill finds each one and puts it where the gate ledger and the triage board look.
+standalone_style: broadsheet
+covers:
+  - packages/fr/src/fr/gatebackfill/**
+  - packages/fr/src/fr/commands/gate_cmd.py
+reviewed: 2026-11-11 docs-currency phase 3
+---
+
 # `fr gate backfill` — bringing old owed work into the gate lanes
 
 Work that merged before the post-merge gates existed (v6) left its asks scattered: a row that

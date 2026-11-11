@@ -26,6 +26,10 @@ tags: ["fr-goal", "agent-workflows", "automation", "pull-requests"]
 target: "."
 standalone: true
 standalone_style: broadsheet
+covers:
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/workflows/fr-goal.yaml
+reviewed: 2026-11-11 docs-currency phase 3
 ---
 
 ## Overview

@@ -1,3 +1,14 @@
+---
+title: "fr in a Claude Code cloud session"
+tldr: |
+  A Claude Code cloud session runs in a container prepared by its environment's setup script. This page says what fr relies on that script and the repo for, and how to check it.
+standalone_style: broadsheet
+covers:
+  - packages/fr/src/fr/cloud.py
+  - packages/fr/src/fr/commands/cloud_cmd.py
+reviewed: 2026-11-11 docs-currency phase 3
+---
+
 # fr in a Claude Code cloud session
 
 A Claude Code cloud session runs in a container prepared by its **environment's setup

@@ -1,3 +1,13 @@
+---
+title: "Verification strategies"
+tldr: |
+  A verification strategy says how a change is proven before or after it merges. This page is for the person who writes a strategy, or makes a repo usable by one.
+standalone_style: broadsheet
+covers:
+  - packages/fr/src/fr/verification/**
+reviewed: 2026-11-11 docs-currency phase 3
+---
+
 # Verification strategies
 
 A verification strategy says how a change is proven before (or after) it merges.

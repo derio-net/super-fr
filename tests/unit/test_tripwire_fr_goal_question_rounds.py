@@ -6,8 +6,9 @@ replaces fr-goal's old promise — "one batched Q&A of at most four questions"
 second is announced up front or the operator asks for it". §3.A.1 lists every
 surface that stated the old contract and must be rewritten in this PR: the
 canonical `fr-goal` and `fr-brainstorming` skills, their OpenCode and Hermes
-mirrors, the OpenCode `/fr-goal` command, the fr-goal explainer (source and
-rendered page), the explainers index page, and the top-level README.
+mirrors, the OpenCode `/fr-goal` command, the fr-goal explainer and the
+explainers index page (Markdown sources; the rendered pages are built at
+deploy time, spec 2026-11-11-docs-currency R24), and the top-level README.
 
 This is a prose-only guard (the record-declaration mechanism and the
 transcript-verifying gate shipped in phases 1-2) — nothing here exercises
@@ -19,8 +20,6 @@ the middle of an old phrase cannot hide it (review p3-r2).
 
 from __future__ import annotations
 
-import html
-import re
 from pathlib import Path
 
 import pytest
@@ -40,8 +39,7 @@ FR_BRAINSTORMING_COPIES = (
 )
 
 EXPLAINER_MD = REPO_ROOT / "docs" / "explainers" / "01-fr-goal.md"
-EXPLAINER_HTML = REPO_ROOT / "docs" / "explainers" / "01-fr-goal.html"
-INDEX_HTML = REPO_ROOT / "docs" / "explainers" / "index.html"
+INDEX_MD = REPO_ROOT / "docs" / "explainers" / "index.md"
 README = REPO_ROOT / "README.md"
 OPENCODE_COMMAND = REPO_ROOT / ".opencode" / "commands" / "fr-goal.md"
 
@@ -52,8 +50,7 @@ ALL_SURFACES = (
     *FR_GOAL_COPIES,
     *FR_BRAINSTORMING_COPIES,
     EXPLAINER_MD,
-    EXPLAINER_HTML,
-    INDEX_HTML,
+    INDEX_MD,
     README,
     OPENCODE_COMMAND,
 )
@@ -166,10 +163,8 @@ MINIMAL_MARKER_SURFACES = (
     *FR_BRAINSTORMING_COPIES,
     EXPLAINER_MD,
     README,
-    INDEX_HTML,
+    INDEX_MD,
 )
-
-_TAG = re.compile(r"<[^>]+>")
 
 
 def _normalise(text: str) -> str:
@@ -177,19 +172,8 @@ def _normalise(text: str) -> str:
 
 
 def _surface_text(path: Path) -> str:
-    """The normalised prose of `path`. HTML pages are megabytes of embedded
-    fonts, so they are streamed line by line: base64 font lines are skipped,
-    tags stripped and entities unescaped, so `Q&amp;A` reads as `Q&A` and a
-    `<span>` inside a phrase cannot hide it."""
-    if path.suffix != ".html":
-        return _normalise(path.read_text(encoding="utf-8"))
-    parts: list[str] = []
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            if "base64," in line:
-                continue
-            parts.append(html.unescape(_TAG.sub(" ", line)))
-    return _normalise(" ".join(parts))
+    """The normalised prose of `path` (every surface is Markdown)."""
+    return _normalise(path.read_text(encoding="utf-8"))
 
 
 def _rel(path: Path) -> str:

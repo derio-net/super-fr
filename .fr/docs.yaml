@@ -1,0 +1,4 @@
+pages:
+  - docs/explainers/*.md
+  - docs/*.md
+  - docs/reference/*.md

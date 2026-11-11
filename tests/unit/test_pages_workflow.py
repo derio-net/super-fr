@@ -1,8 +1,10 @@
-"""Pins the shape of the combined Pages workflow (spec 2026-10-03 §A, §B, §D)."""
+"""Pins the shape of the combined Pages workflow (spec 2026-10-03 §A, §B, §D;
+spec 2026-11-11-docs-currency §C: the site is built from sources, renderer pinned)."""
 
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -16,6 +18,9 @@ sys.modules.setdefault("ci_budget", ci_budget)
 _spec.loader.exec_module(ci_budget)
 
 WORKFLOW = REPO / ".github" / "workflows" / "pages.yml"
+CI = REPO / ".github" / "workflows" / "ci.yml"
+PIN = REPO / ".github" / "blog-craft.ref"
+CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 
 
 def _doc() -> dict:
@@ -30,12 +35,17 @@ def _runs() -> list[str]:
     return [s["run"] for s in _steps() if "run" in s]
 
 
-def test_triggers_cover_explainers_and_acceptance() -> None:
+def test_triggers_cover_every_input_of_the_site() -> None:
     on = ci_budget.workflow_on(_doc())
     assert on["push"]["branches"] == ["main"]
     assert set(on["push"]["paths"]) == {
         "docs/explainers/**",
+        "docs/*.md",
+        "docs/reference/**",
         "docs/acceptance/**",
+        ".fr/docs.yaml",
+        "scripts/build-site.py",
+        ".github/blog-craft.ref",
         "packages/fr/src/fr/acceptance/**",
     }
     assert "workflow_dispatch" in on
@@ -50,11 +60,64 @@ def test_render_step_is_sha_pinned_into_the_site() -> None:
     assert "--out _site/acceptance/index.html" in run
 
 
-def test_site_is_explainers_plus_report_in_one_artifact() -> None:
-    assert any("docs/explainers/." in r and "_site" in r for r in _runs())
+def test_site_is_built_from_sources_plus_report_in_one_artifact() -> None:
+    builds = [r for r in _runs() if "scripts/build-site.py" in r]
+    assert len(builds) == 1
+    build = builds[0]
+    assert "uv run --isolated --no-project --with markdown --with pyyaml python" in build
+    assert "_site" in build
+    assert '--ref "$GITHUB_SHA"' in build
+    assert "--blog-craft .blog-craft" in build
+    assert not any("cp -R docs/explainers" in r for r in _runs())
     uploads = [s for s in _steps() if "actions/upload-pages-artifact" in s.get("uses", "")]
     assert len(uploads) == 1
     assert uploads[0]["with"]["path"] == "_site"
+
+
+def _pin_wiring(steps: list[dict]) -> None:
+    pins = [i for i, s in enumerate(steps) if ".github/blog-craft.ref" in s.get("run", "")]
+    assert len(pins) == 1
+    pin = steps[pins[0]]
+    assert pin.get("id")
+    checks = [
+        i
+        for i, s in enumerate(steps)
+        if s.get("uses", "").startswith("actions/checkout")
+        and s.get("with", {}).get("repository") == "derio-net/blog-craft"
+    ]
+    assert len(checks) == 1 and checks[0] > pins[0]
+    check = steps[checks[0]]
+    assert check["uses"].startswith(CHECKOUT)
+    assert check["with"]["ref"] == f"${{{{ steps.{pin['id']}.outputs.sha }}}}"
+    assert check["with"]["path"] == ".blog-craft"
+
+
+def test_blog_craft_is_checked_out_at_the_pinned_ref() -> None:
+    _pin_wiring(_steps())
+    own = [s for s in _steps() if s.get("uses", "").startswith("actions/checkout")]
+    assert own[0]["uses"].startswith(CHECKOUT)
+
+
+def test_the_pin_is_one_full_sha_and_no_workflow_names_it() -> None:
+    sha = PIN.read_text().strip()
+    assert re.fullmatch(r"[0-9a-f]{40}", sha), sha
+    assert len(PIN.read_text().splitlines()) == 1
+    for wf in (REPO / ".github" / "workflows").glob("*.y*ml"):
+        text = wf.read_text()
+        assert sha not in text, f"{wf.name} names the renderer pin itself"
+        # a workflow checking blog-craft out must read the pin from the file
+        if "derio-net/blog-craft" in text:
+            assert ".github/blog-craft.ref" in text, wf.name
+
+
+def test_ci_builds_the_site_on_every_pull_request() -> None:
+    ci = yaml.safe_load(CI.read_text())
+    job = ci["jobs"]["site-build"]
+    assert "if" not in job
+    _pin_wiring(job["steps"])
+    runs = [s["run"] for s in job["steps"] if "run" in s]
+    assert any("scripts/build-site.py" in r and "--blog-craft .blog-craft" in r for r in runs)
+    assert "site-build" in ci["jobs"]["ci-ok"]["needs"]
 
 
 def test_report_is_never_gated_on_acceptance_check() -> None:
@@ -85,8 +148,8 @@ def test_workflow_name_unchanged() -> None:
 
 
 def test_index_links_to_acceptance_report() -> None:
-    html = (REPO / "docs" / "explainers" / "index.html").read_text()
-    assert 'href="./acceptance/"' in html
+    md = (REPO / "docs" / "explainers" / "index.md").read_text()
+    assert "](./acceptance/)" in md
 
 
 def test_readme_has_acceptance_badge() -> None:

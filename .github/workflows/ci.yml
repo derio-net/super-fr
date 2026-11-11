@@ -323,12 +323,30 @@ jobs:
         if: github.event_name != 'pull_request'
         run: uv run fr docs check
 
+  # A page that does not render (or links to a path git does not track) fails
+  # here, before merge, not on the deploy after it (docs-currency R15).
+  site-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read the renderer pin
+        id: pin
+        run: echo "sha=$(tr -d '[:space:]' < .github/blog-craft.ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: derio-net/blog-craft
+          ref: ${{ steps.pin.outputs.sha }}
+          path: .blog-craft
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Build the site
+        run: uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py _site --ref "$GITHUB_SHA" --blog-craft .blog-craft
+
   # One stable check name for a future required-check rule (#706).
   ci-ok:
     if: always()
     needs: [lint, typecheck, plan, collect, test, split-check, coverage,
             validate-artifacts, opencode-plugin-test, version-sync,
-            change-fragment, docs-check]
+            change-fragment, docs-check, site-build]
     runs-on: ubuntu-latest
     steps:
       - name: Every CI job succeeded or was skipped by its own condition
