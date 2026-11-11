@@ -194,6 +194,9 @@ or links to nothing, fails before merge.
   diff; judging the prose is still a human's job.
 - Coverage is only as good as the `covers` globs. A page that covers too little goes stale quietly;
   one that covers too much trains people to stamp without reading.
+- Cover the code and the schema a page describes, never a data file that changes in routine work
+  (a registry, a ledger, a lockfile). Such a file makes the page stale in every pull request that
+  touches it, whatever the page says.
 - Renaming or moving a covered file is a `stale` finding on every page that covered it (and a
   `dead-glob` if the glob named the old path), which is the point.
 
