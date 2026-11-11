@@ -235,3 +235,8 @@ Own ask.
 ### phase-split-2026-11-11-docs-currency-p4 · decision · ask: R18-R19 a page for every skill
 
 Own ask; also about 2,600 lines of prose, too much to review with the pipeline.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-11-docs-currency-p5 created=2026-11-11T12:29:29+00:00 -->
+### phase-split-2026-11-11-docs-currency-p5 · decision · ask: R20-R22 the README front door and generated tables
+
+Own ask.
