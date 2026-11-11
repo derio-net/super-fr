@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-11 docs-currency phase 5
 ---
 
 ## Overview: two boundaries and a bridge
@@ -66,6 +66,29 @@ flowchart LR
 The marker closes the loop. On `up`, fr writes `.fr-isolation` into the worktree root and
 adds it to the repo's exclude list: gitignored, never committed, backed by a CI tripwire.
 Every edit the agent attempts is checked against it.
+
+## Who creates worktrees
+
+Four things can create a worktree. fr owns or routes all of them, and knows which agent
+session holds each workspace.
+
+| Creator | Location | State and session link |
+|---|---|---|
+| `fr isolation up` | `~/.cache/fr/worktrees/<main-checkout>/<branch-slug>`, keyed on the main checkout even when run from inside another worktree | `<common-dir>/fr/isolation/<slug>.json`, plus a per-session index at `~/.cache/fr/sessions/<session-id>.json` |
+| Claude Code's own worktree commands (`claude --worktree <name>`, `EnterWorktree`) | the same fr location, on branch `wt/<name>`, because the plugin's `WorktreeCreate` hook calls `fr isolation up` | fr state, with the session bound in the same call |
+| A subagent started with `isolation: "worktree"` (`agent-*` names) | `~/.cache/fr/agent-worktrees/<main-checkout>/agent-<id>`, a detached worktree outside the repo | none; `fr isolation gc` removes the finished, clean ones |
+| superpowers' `using-git-worktrees` | routed to `fr isolation up` by the shipped rule `fr-worktree-override.md`; `<repo>/.worktrees/` is never created | fr state |
+
+`fr isolation status` lists the sessions holding each workspace. The shipped script
+`plugins/super-fr/scripts/fr-statusline-segment.sh` prints the branch a session works on and
+its worktree, green when it is an fr workspace and purple when not, and
+`fr-statusline-claude.sh` is a ready-made Claude Code status line built on it.
+
+A repo with no devcontainer profile is a stop, not a degraded mode: the `fr-init` skill scans
+the repo, interviews you about tools, credentials and working patterns, and scaffolds the
+profiles with `fr init scaffold`. You pay that once per repo. And `fr isolation down` refuses
+while the branch's PR is still open unless you pass `--force`, so cleanup cannot race your
+final pushes.
 
 ## Enforcement: a staircase a faked marker can't climb
 
