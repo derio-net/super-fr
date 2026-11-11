@@ -608,10 +608,27 @@ def _git(root: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _at_deliver(tmp_path: Path, *, with_origin: bool = True) -> tuple[Path, Path]:
+def _at_deliver(
+    tmp_path: Path,
+    *,
+    with_origin: bool = True,
+    shape: str = _DELIVER_SHAPE,
+    on_main: dict[str, str] | None = None,
+) -> tuple[Path, Path]:
     """`step/deliver` opened on a run whose workspace has a bare `origin`
-    carrying `main`, and one commit of work on the branch."""
+    carrying `main`, and one commit of work on the branch.
+
+    `on_main` files are committed on `main` (in the base clone) and merged
+    into the branch first, so they are part of the base, not of the change."""
     repo = _repo(tmp_path)
+    if on_main:
+        base = tmp_path / "base"
+        for rel, text in on_main.items():
+            (base / rel).parent.mkdir(parents=True, exist_ok=True)
+            (base / rel).write_text(text)
+        _git(base, "add", "-A")
+        _git(base, "commit", "-qm", "on main")
+        _git(repo, "merge", "-q", "--ff-only", "main")
     if with_origin:
         bare = tmp_path / "origin.git"
         _git(tmp_path, "init", "-q", "--bare", str(bare))
@@ -621,7 +638,7 @@ def _at_deliver(tmp_path: Path, *, with_origin: bool = True) -> tuple[Path, Path
     _git(repo, "add", "feature.py")
     _git(repo, "commit", "-qm", "work")
     shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _DELIVER_SHAPE)
+    _write_shape(shipped, "grouped", shape)
     _started_grouped_with_plan(repo, shipped)
     # The report reads the plan at HEAD (review p3-f4), as delivery commits it.
     _git(repo, "add", "docs/superpowers/plans")
@@ -749,6 +766,70 @@ def test_deliver_without_a_remote_prefers_the_isolation_start_commit(tmp_path: P
     assert f"base {start[:12]} (isolation start commit)" in _squash(result.output)
     stored = units.evidence_of(load_run_state(repo, "r1").steps["deliver"], "step/deliver")
     assert stored["proportionality"].startswith(start + ":")
+
+
+# --- `docs`: derived delivery evidence (2026-11-11-docs-currency R9) ---------
+
+_DOCS_SHAPE = _DELIVER_SHAPE.replace(
+    "evidence: [tests, proportionality]", "evidence: [tests, proportionality, docs]"
+)
+_DOCS_ON_MAIN = {
+    ".fr/docs.yaml": "pages:\n  - docs/*.md\n",
+    "docs/guide.md": "---\ncovers:\n  - feature.py\nreviewed: 2026-11-11 first\n---\n# Guide\n",
+}
+
+
+def test_deliver_refuses_while_a_covered_page_is_stale(tmp_path: Path) -> None:
+    """The branch touched `feature.py`, which `docs/guide.md` covers, and left
+    the page alone: `deliver` cannot resolve done, and says why in the
+    check's own words."""
+    repo, shipped = _at_deliver(tmp_path, shape=_DOCS_SHAPE, on_main=_DOCS_ON_MAIN)
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "fr docs check" in out
+    assert "stale: docs/guide.md covers paths this change touched: feature.py" in out
+    assert "reviewed" in out
+    assert load_run_state(repo, "r1").steps["deliver"].state != "done"
+
+
+def test_deliver_resolves_once_the_stale_page_is_touched(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path, shape=_DOCS_SHAPE, on_main=_DOCS_ON_MAIN)
+    page = repo / "docs" / "guide.md"
+    page.write_text(page.read_text().replace("2026-11-11 first", "2026-11-12 still true"))
+    _git(repo, "commit", "-qam", "stamp")
+    (repo / "suite.log").write_text("1 passed\n")
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 0, result.output
+    stored = units.evidence_of(load_run_state(repo, "r1").steps["deliver"], "step/deliver")
+    merge_base = _git(repo, "merge-base", "HEAD", "origin/main")
+    assert stored["docs"] != "none"
+    assert stored["docs"].startswith(merge_base + ":")
+
+
+def test_deliver_in_a_repo_without_docs_config_stores_none(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path, shape=_DOCS_SHAPE)
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 0, result.output
+    stored = units.evidence_of(load_run_state(repo, "r1").steps["deliver"], "step/deliver")
+    assert stored["docs"] == "none"
+
+
+def test_a_caller_supplied_docs_witness_is_refused_as_derived(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path, shape=_DOCS_SHAPE)
+
+    result = _deliver(repo, shipped, "tests=suite.log", "docs=none")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "not yours to pass" in out
+    assert "docs" in out
 
 
 _TWO_DERIVED_SHAPE = """

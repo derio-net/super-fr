@@ -1,3 +1,14 @@
+---
+title: "Exit-gates release verification"
+tldr: |
+  The release mechanism must not need its own final release before its Tester gate can be verified. This page separates the two evidence stages.
+standalone_style: broadsheet
+covers:
+  - scripts/release.py
+  - packages/fr/src/fr/release_status.py
+reviewed: 2026-11-11 docs-currency phase 3
+---
+
 # Exit-gates release verification
 
 The release mechanism must not need its own final release before its Tester gate

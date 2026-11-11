@@ -14,7 +14,10 @@ from fr.migrate import MigrationError, migrate_repo
 console = Console()
 err_console = Console(stderr=True)
 
-migrate_app = typer.Typer(help="v2 migration tools.", no_args_is_help=True)
+migrate_app = typer.Typer(
+    help="Migrations: bring plans, layouts and artifacts up to this fr (preview by default).",
+    no_args_is_help=True,
+)
 
 
 @migrate_app.command("v1-to-v2")

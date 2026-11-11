@@ -100,8 +100,8 @@ searchable:
 
 ## 4. Deliver
 
-Verify first (`superpowers:verification-before-completion`: failing test now
-passes, no others broken). Open ONE PR via
+Verify first (`superpowers:verification-before-completion`: failing test now passes, no others broken). In a repo with `.fr/docs.yaml`, run `fr docs check` before opening the PR: a page covering a path the fix changed needs an edit, or its `reviewed` stamp updated when it is still true.
+Open ONE PR via
 `superpowers:finishing-a-development-branch`; the body is derived from
 `fr journal render --scope debug` (root cause + fix + the failing-test-first narrative).
 Record the review — `fr journal add --scope debug --slug <s> --kind review` naming the findings raised, or that none were. There is no cursor here to enforce it as fr-goal's `journal-check` does, so nothing fails if you skip it; that is precisely why it is written down rather than assumed.

@@ -1,12 +1,19 @@
 # One workflow owns the one Pages site: every deploy replaces the whole site, so
-# the explainers and the acceptance report must be assembled and published together.
+# the pages and the acceptance report must be assembled and published together.
+# The pages are built from their Markdown sources by scripts/build-site.py with the
+# blog-craft renderer pinned in .github/blog-craft.ref (spec 2026-11-11-docs-currency).
 name: Deploy explainers to Pages
 on:
   push:
     branches: [main]
     paths:
       - 'docs/explainers/**'
+      - 'docs/*.md'
+      - 'docs/reference/**'
       - 'docs/acceptance/**'
+      - '.fr/docs.yaml'
+      - 'scripts/build-site.py'
+      - '.github/blog-craft.ref'
       - 'packages/fr/src/fr/acceptance/**'
   workflow_dispatch:
 permissions:
@@ -28,11 +35,19 @@ jobs:
       report: ${{ steps.report.outcome }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read the renderer pin
+        id: pin
+        run: echo "sha=$(tr -d '[:space:]' < .github/blog-craft.ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: derio-net/blog-craft
+          ref: ${{ steps.pin.outputs.sha }}
+          path: .blog-craft
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Install fr
         run: uv tool install ./packages/fr
-      - name: Assemble site
-        run: mkdir -p _site && cp -R docs/explainers/. _site/
+      - name: Build site from sources
+        run: uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py _site --ref "$GITHUB_SHA" --blog-craft .blog-craft
       # The migration gate refuses this render while any artifact on main is stale,
       # and that refusal is wanted: a report over unmigrated artifacts would describe
       # a matrix the shipped fr cannot read. It must not take the explainers with it,

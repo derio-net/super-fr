@@ -47,7 +47,7 @@ library on its pod.
   Issues and nulls the tracking fields; the runner's reaper archives
   the orphan workspaces on its next pass.
 - **Card exists, workspace missing:** set
-  `VK_BRIDGE_RECOVER_ORPHAN_CARDS=1` for one tick (opt-in recovery).
+  `FR_BRIDGE_RECOVER_ORPHAN_CARDS=1` for one tick (opt-in recovery).
 
 ## Boundaries
 

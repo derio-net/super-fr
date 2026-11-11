@@ -115,7 +115,7 @@ def _commands(app: typer.Typer) -> list[tuple[str, str]]:
 
 
 def skills() -> None:
-    """Show the v2 CLI surface + skill summaries."""
+    """Show the CLI surface and a summary of each skill."""
     # Late import — avoids cycle: cli.py imports skills_cmd, and we need cli.app here.
     from fr.cli import app
 

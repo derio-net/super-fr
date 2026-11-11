@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from fr.ops.load import LoadedOp, OpsConfig, OpSet
 
 ops_app = typer.Typer(
-    help="Manual operations: check, apply, attest (spec 2026-10-22-fr-ops).",
+    help="Manual operations of a plan: check, apply, attest.",
     no_args_is_help=True,
 )
 

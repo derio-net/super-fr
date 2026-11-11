@@ -281,6 +281,18 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `fr journal add/resolve`, `fr plan edit --tick/--complete-phase` and
     `fr acceptance add/set-status` build one-entry records through the same
     engine.
+  - **`fr/docs`** (2026-11-11 spec, `docs-currency`) — pages must keep up with the code
+    they cover. `.fr/docs.yaml` names the page globs (`pages:`, incl. `docs/explainers/*.md`,
+    `docs/*.md`, `docs/reference/*.md`) and `must_cover:` (every skill needs a page);
+    each page's front matter carries `covers:` globs and `reviewed: <ISO date> <note>`.
+    `load.py` (config, tracked files, base resolution), `model.py` (`parse_page`),
+    `globs.py`, `check.py` (a covered path changed and its page did not), `gate.py`
+    (`evaluate`, the one evaluation shared by `fr docs check|status`
+    (`commands/docs_cmd.py`, read-only, so `docs` is in `READ_ONLY_COMMANDS`) and
+    `deliver`'s derived `docs` witness) and `render.py`. Pages are Markdown sources only;
+    `scripts/build-site.py` renders them to the site with the pinned blog-craft renderer
+    (`.github/blog-craft.ref`; CI `site-build`, deploy `pages.yml`). Author doc:
+    `docs/docs-currency.md`; the rule consumer repos get: `plugins/super-fr/rules/docs-currency.md`.
   - **Cloud triage** (2026-10-07 spec, `cloud-triage`) — the wave driver and its
     workers in Claude Code cloud sessions. `fr.forgeapi` resolves the one host
     setting `forge.api: rest | graphql` (`FR_FORGE_API`, else `~/.config/fr/forge.yaml`,
@@ -446,8 +458,8 @@ Never hand-edit a generated file — the sync scripts overwrite it and a CI
 tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
-  `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
-  `fr-plan-override.md`, `no-claude-p-batch.md`), plus the FOUR
+  `plugins/super-fr/rules/*.md` (currently `docs-currency.md`,
+  `fr-isolation-required.md`, `fr-plan-override.md`, `no-claude-p-batch.md`), plus the FOUR
   repo-local-only rules with no plugin counterpart —
   `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`,
   `.claude/rules/explainers-currency.md` and
@@ -463,6 +475,11 @@ tripwire will catch drift anyway:
   `test_tripwire_opencode_instructions_sync.py` and
   `test_opencode_agent_mirror.py`: the skills tripwire does NOT cover the agent
   files, so an agent-only edit can leave a green skills guard and a red mirror.
+- Generated: the skills and CLI tables in `README.md` and the command tree in
+  `docs/reference/cli.md`, between `<!-- generated:NAME -->` markers —
+  `scripts/sync-readme.py` (no flag writes, `--check` verifies; guard:
+  `test_tripwire_readme_sync.py`, which also fails a README over 200 lines). Skill
+  descriptions and `fr` help lines are the source; edit those, never the table.
 - Generated: `packages/fr/src/fr/agents/*.md` (the `fr` wheel's copy) **and** this
   repo's `.claude/agents/fr-*.md` (its own `agents` artifact, spec
   `2026-10-07-cloud-triage-design` §H). After editing

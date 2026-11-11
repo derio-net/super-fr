@@ -1,3 +1,14 @@
+---
+title: "Merge protection for main"
+tldr: |
+  Main can require the ci-ok check and an up-to-date branch. The release workflow still pushes the release commit, as a GitHub App the ruleset lets bypass.
+standalone_style: broadsheet
+covers:
+  - scripts/configure-main-protection.sh
+  - .github/workflows/release.yml
+reviewed: 2026-11-11 docs-currency phase 3
+---
+
 # Merge protection for `main`
 
 This repo's `main` can require the `ci-ok` check and an up-to-date branch. The

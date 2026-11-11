@@ -21,7 +21,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HERMES_MD = REPO_ROOT / "HERMES.md"
-README = REPO_ROOT / "README.md"
+# The README is a front door since the docs-currency change: the Hermes install
+# detail it used to carry is published from this reference page.
+README = REPO_ROOT / "docs" / "reference" / "hermes.md"
 
 
 def test_hermes_md_exists() -> None:

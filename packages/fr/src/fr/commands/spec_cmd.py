@@ -17,7 +17,9 @@ if TYPE_CHECKING:
 console = Console()
 err_console = Console(stderr=True)
 
-spec_app = typer.Typer(help="v2 spec status commands.", no_args_is_help=True)
+spec_app = typer.Typer(
+    help="Spec status: which specs are planned, in progress or shipped.", no_args_is_help=True
+)
 
 
 def _make_gh_client() -> GhClient:

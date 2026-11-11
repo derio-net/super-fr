@@ -123,7 +123,7 @@ artifacts` (preview), `fr migrate artifacts --yes` (apply) and
 
 **Exempt commands** are `migrate` plus the read-only commands in
 `fr.artifacts.trigger.READ_ONLY_COMMANDS` — `status`, `skills`, `isolation`, `init`,
-`validate`, `harness`, `triage`, `usage`, `services`, `cloud`, `debt`, `gate` and `release` at the time of writing, but the tuple is the source of
+`validate`, `harness`, `triage`, `usage`, `services`, `cloud`, `debt`, `gate`, `release` and `docs` at the time of writing, but the tuple is the source of
 truth; this sentence used to say "the read-only five" and was two short before anyone
 noticed — along with `--help`, `--version` and `FR_SKIP_MIGRATION=1`. The criterion for
 membership is the tuple's own docstring: the command never mutates a registered artifact.
@@ -135,7 +135,8 @@ unmigrated repo. `cloud` writes nothing (`doctor` reads, `setup-script` prints) 
 diagnose an environment not yet fit for fr. `debt` writes nothing (`issue` writes only to the
 forge, with `--yes`; `archive-pr` only through a nested `fr archive`, which the gate checks on its
 own). `gate` writes only to the forge, with `--yes` (a merged PR's labels are the gate ledger). `release`
-writes nothing (`status` reads tags and the forge, and `release.py` runs it on the default branch).
+writes nothing (`status` reads tags and the forge, and `release.py` runs it on the default branch). `docs`
+writes nothing (it reads `.fr/docs.yaml`, page files and read-only git, none a registered artifact) and runs in CI on a tree the gate would refuse.
 Two of those
 matter beyond tidiness: `fr status` is
 registered as never mutating and must not mutate by proxy, and `fr validate

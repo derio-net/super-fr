@@ -45,3 +45,6 @@ docs/acceptance/report.html
 # fr deliver suite logs (gh#606)
 .fr-deliver/
 .fr/scratch/
+
+# Rendered explainer pages are built by scripts/build-site.py, never committed
+docs/explainers/*.html

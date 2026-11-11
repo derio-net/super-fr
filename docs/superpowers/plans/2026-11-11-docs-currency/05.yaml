@@ -1,0 +1,69 @@
+schema_version: 2
+phase:
+  number: 5
+  title: README front door, reference pages, generated tables (R20-R22)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - readme-generated-tables
+  tier: standard
+  files:
+  - README.md
+  - AGENTS.md
+  - docs/reference/*
+  - docs/explainers/fr-isolation.md
+  - scripts/sync-readme.py
+  - tests/unit/test_tripwire_readme_sync.py
+  - tests/unit/test_tripwire_fr_goal_question_rounds.py
+  - docs/acceptance/*
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: The generator (R21)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: `tests/unit/test_tripwire_readme_sync.py`: `scripts/sync-readme.py --check` exits 0 on the repo; its pure functions build a skills table (name, plugin, first sentence of `description`) from fixture SKILL.md front matter and a CLI table from a small typer app; it rewrites only between `<!-- generated:NAME -->` and `<!-- /generated:NAME -->` markers; a README over 200 lines fails. See it fail.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: write `scripts/sync-readme.py` (no flag writes, `--check` verifies; blocks `skills` and `cli` in `README.md`, `cli-tree` in `docs/reference/cli.md` listing every command and subcommand with its help line from `fr.cli:app`).
+- number: 2
+  title: Reference pages and the README (R20, R22)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Move the README's reference sections into `docs/reference/` pages with front matter (`title`, `tldr`, `standalone_style: broadsheet`, `covers`, `reviewed`): `cli.md`, `plan-model.md`, `workflow-shapes.md`, `dispatch-lifecycle.md`, `acceptance-matrix.md`, `hermes.md`, `components.md`; isolation detail goes to `docs/explainers/fr-isolation.md` where it is not already there. Correct each against the code as it moves (run the commands it names with `--help`).
+  - id: P5.T2.S2
+    text: |-
+      Rewrite `README.md` as the front door: the four badges, what super-fr is, install, a first goal, the generated skills and CLI tables, and links to the site, the guides and the reference pages; keep the wording `tests/unit/test_tripwire_fr_goal_question_rounds.py` pins. Run `scripts/sync-readme.py`, the tripwires, `uv run fr docs check` and the site build. See the test from T1 pass.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR: update AGENTS.md (the `fr/docs` entry under `packages/fr`, `sync-readme.py` among the generators, `docs-currency.md` in the canonical rules list, `docs` in the read-only list sentence), and move row `readme-generated-tables` with `fr acceptance set-status`.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-11-11T16:07:30+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-11-11T16:07:30+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-11-11T16:07:30+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-11-11T16:07:30+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-11-11T16:07:30+00:00'
+      note: null
+  completion:
+    at: '2026-11-11T16:07:30+00:00'
+    note: null
+    observed_prs: []

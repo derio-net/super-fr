@@ -101,6 +101,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "debt",
     "gate",
     "release",
+    "docs",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
 not mutate them on their behalf.
@@ -162,7 +163,10 @@ runs when the environment is not yet fit for fr, stale artifacts included.
 PR's `gate:<g>` label for `gate:<g>-passed` and comments, because the merged PR's labels are
 the gate ledger; it touches no registered artifact.
 `fr release` (same spec, R21) reads tags and the forge and writes nothing: `status` lists the
-merged PRs a post-merge gate still holds, and `release.py` runs it on the default branch."""
+merged PRs a post-merge gate still holds, and `release.py` runs it on the default branch.
+`fr docs` (2026-11-11 docs-currency, R8) writes nothing: it reads `.fr/docs.yaml` (not a registered
+artifact kind, like `.fr/debt.yaml`), page files and read-only git, and must run in CI on a tree
+the gate would refuse."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by
