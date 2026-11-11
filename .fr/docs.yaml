@@ -2,3 +2,5 @@ pages:
   - docs/explainers/*.md
   - docs/*.md
   - docs/reference/*.md
+must_cover:
+  - plugins/*/skills/*/SKILL.md

@@ -1,0 +1,144 @@
+---
+title: "fr-dispatch and fr-runner: Handing Phases to a Machine That Works Alone"
+date: 2026-11-11
+draft: false
+tldr: |
+  Dispatch turns a plan's phases into GitHub issues a runner can pick up, and keeps
+  those issues in step with the plan as it changes. fr-runner is the other half: the
+  checks for when a queued phase is not being picked up.
+standalone: true
+standalone_style: broadsheet
+covers:
+  - plugins/super-fr-dispatch/skills/fr-dispatch/SKILL.md
+  - plugins/super-fr-dispatch/skills/fr-runner/SKILL.md
+  - packages/fr/src/fr/commands/apply_cmd.py
+  - packages/fr/src/fr/commands/undispatch_cmd.py
+  - packages/fr-dispatch/src/**
+  - packages/fr-vk/src/**
+reviewed: 2026-11-11 docs-currency phase 4
+---
+
+## Overview: the plan stays the source of truth
+
+You wrote a plan. Now you want something else, a runner on another machine, to work on its
+phases while you do something different. fr's answer is the GitHub issue. Each phase of a plan
+becomes one issue whose body embeds the spec link, the plan's prose and the phase's own YAML,
+and whose labels say where it stands. A runner watches for issues labelled as queued for it.
+
+Nothing is stored twice. The plan files are the truth; the issue body and labels are computed
+from them on demand and compared against what GitHub actually shows. One command,
+`fr apply`, does the render, the observe, the diff and the mutations, and the same command
+handles first creation, incremental updates and ongoing reconciliation. There is no separate
+"first dispatch" verb.
+
+You reach for it when you want a plan's phases tracked as issues, queued to a runner, or
+brought back in line after you edited the plan. This is a different path from
+[fr-goal](01-fr-goal.md), which runs a whole feature to one pull request in one workspace.
+Dispatch is for phase-sized work handed to someone or something else.
+
+## A worked example
+
+```bash
+fr status docs/superpowers/plans/2026-11-11-webhook-limiter
+fr apply  docs/superpowers/plans/2026-11-11-webhook-limiter
+```
+
+`fr status` is the read-only audit. A locally complete plan shows "would refuse create": it is
+done, so archive it instead of dispatching. `fr apply` with no flag is a **dry run** and lists
+what it would do: ensure labels, create an issue, edit labels, edit a body, set a state. Read the
+preview, then act:
+
+```bash
+fr apply docs/superpowers/plans/2026-11-11-webhook-limiter --to vk --yes
+```
+
+`--to vk` queues the phases: it adds `fr:ready` and `runner:vk` labels, checks the runner name
+against the registered runners, and enforces the reachability gate. `--yes` applies. Afterwards
+the created issue URLs are printed and the `tracking_issue` line is staged into each affected
+phase file. Commit and push it, naming the issue URLs in the commit body, so the runner's
+checkout can see them and so you have a trail if a dispatch turns out to be wrong.
+
+## Tracking versus queueing
+
+Plain `fr apply` is **tracking only**: it records attribute labels so GitHub mirrors the plan,
+and queues nothing. Queueing is explicit, with `--to <runner>`. The runner choice lives on the
+issue as a label, never in the plan files, and mixing runners per phase is legal. To take a phase
+back, `fr undispatch <plan-dir> --yes` closes the issues (reason: not planned) and nulls the
+tracking fields; it previews without `--yes`.
+
+The issue then moves through labels derived from what GitHub shows: `fr:ready` with no assignee
+and no open PR; `fr:in-progress` with an assignee or a draft PR; `fr:pr-ready` with an open,
+non-draft PR; closed once the plan records completion *and* a merged PR is observed. That is why
+`fr apply` is safe to run before a PR merges: it can only set `pr-ready` then.
+
+## Before you dispatch
+
+1. **Audit** with `fr status <plan-dir>`. Spec rows marked Unreachable for plans that exist
+   locally are stale references; `fr repair --yes` normalises them.
+2. **For a plan never dispatched, look for work that already landed.** Search the target repo
+   for merged pull requests matching the plan's slug and read the file at each deliverable path.
+   If the work is there, stop and reconcile with the operator. This check exists because a plan
+   with nothing ticked once had fifteen merged PRs behind it.
+3. **Merge the plan and its spec first.** A remote runner pulls the repo, so `fr apply --yes
+   --to` refuses (exit 2, listing the unreachable paths) unless both are on the default branch.
+   Open a PR for spec and plan, merge it, and make the dispatch writeback a second, small PR. If
+   you have never run `git remote set-head origin --auto`, `apply` tells you to.
+
+## When it refuses
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| 0 | success, or nothing to change | relay any issue URLs |
+| 2 | usage error, completion-guard refusal, or legacy layout | read the message; `fr archive` a finished plan, `--force` to override, `fr migrate dirs --yes` for the layout |
+| 4 | forge CLI or network failure | check the forge CLI's auth and retry |
+| 5 | the plan failed to parse | inspect the plan files |
+
+`fr apply --format json` gives the machine-readable form, and an empty diff means in sync.
+
+## fr-runner: when a queued phase sits still
+
+The runner is the autonomous consumer of queued phases. The framework half is the
+`fr_dispatch` package: it discovers plans and ticks them against a `Runner` protocol, and
+runners register through the `fr.runners` entry-point group, so adding one edits no existing
+package. The VibeKanban adapter, `fr_vk`, is the one the skill operates. Its daemon runs on its
+own pod and uses those packages as a library; neither is wired into the `fr` command line.
+
+Work through these, in order:
+
+1. **Is the daemon ticking?** Its heartbeat gauge,
+   `willikins_heartbeat_last_success_timestamp`, must be recent. Failure counters carry a
+   `reason`: `project_id_missing`, `unknown_repo`, `unit_mismatch`, `mcp_error`, `gh_error`.
+   `unit_mismatch` means an issue is labelled for a runner that never takes that unit, which
+   `fr apply --to` now refuses up front, so look for labels set by hand or by an older `fr`.
+2. **Is the phase eligible?** `fr status <plan-dir>`. A phase dispatches only when its rendered
+   labels say ready-but-not-synced, it has a `tracking_issue`, and plan and spec are on the
+   default branch.
+3. **Does the runner know the repo?** The adapter refuses a repo its board does not list
+   (`unknown_repo`). Add the repo there first.
+
+The usual faults: *queued forever with no failures* means the pod's checkout is stale (pull it)
+or every workspace slot is in use (it retries next tick, no action). `project_id_missing` means
+the pod lost its project id environment variable. *Dispatched in error* is `fr undispatch`; the
+runner's reaper archives the orphan workspaces on its next pass. *Card exists, workspace missing*
+is recovered by setting `FR_BRIDGE_RECOVER_ORPHAN_CARDS=1` for one tick.
+
+## Other runners
+
+Besides `vk`, the repo ships adapters registered as `cncd`, `herdr` and `claude-cloud`. The last
+two are what the triage batch driver uses to start whole-run sessions; see
+[fr-triage](fr-triage.md), the [herdr guide](../herdr-control-sessions.md) and the
+[cloud guide](../cloud-setup.md).
+
+## Limits
+
+- The daemon never creates issues (only `fr apply --yes` does, at an operator's command) and
+  never implements work itself.
+- Dispatch needs the plan and spec merged first. That is a feature: the runner works from its
+  own checkout.
+- Operating a runner is not queueing to it, and neither is implementing the phase. See
+  [fr-brainstorming-and-plan](fr-brainstorming-and-plan.md) for what the executor does.
+
+## Where to go next
+
+- [fr-progress](fr-progress.md) for the read-only audit commands.
+- [fr-brainstorming-and-plan](fr-brainstorming-and-plan.md) for authoring the plan you dispatch.
