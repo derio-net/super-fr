@@ -10916,9 +10916,17 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R10
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R11
     - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R24
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_currency_flows.py#test_the_delivering_skills_name_fr_docs_check
+      - super-fr:tests/unit/test_docs_currency_flows.py#test_ci_runs_fr_docs_check_on_every_pull_request_inside_ci_ok
+      - super-fr:tests/unit/test_install_copies_rules.py#test_install_ships_the_docs_currency_rule
+      - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py#test_the_soul_block_carries_the_docs_currency_rule
+    status: ci
+    notes: 'R10/R11: the shipped docs-currency rule reaches install.sh, OpenCode and
+      the Hermes SOUL block, fr-goal and fr-debugging name fr docs check, and ci.yml''s
+      docs-check job sits in ci-ok; R24''s rule rewrite lands in a later phase of the
+      same plan'
     verify: none
   - id: docs-check-default-base-readonly
     capability: docs currency
