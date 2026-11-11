@@ -1,0 +1,16 @@
+schema_version: 10
+run: 2026-11-11-claude-tender-darwin-bj3d7j
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2, P3.T4.S1]
+refactor:
+  P3.T2: "Content-only task (page sources and front matter); no code to clean."
+  P3.T3: "Workflow YAML and its pinning test were written once to the target shape; nothing to clean."
+journal:
+  - {kind: discovery, id: p3-blog-craft-visibility, phase: 3, title: "Pinned renderer checkout assumes blog-craft is readable by the workflow token", body: "pages.yml and the site-build job check derio-net/blog-craft out with the default token, as the spec says. That works only if the repository is readable by it (public, or internal with access granted). It could not be checked from this session (no access to the repo via gh). The first CI run of site-build is the evidence; if it fails on checkout the fix is a token input, not a script change."}
+  - {kind: decision, id: p3-drop-leading-h1, phase: 3, title: "The build drops a body's leading H1", body: "Guides in docs/*.md open with an H1 that repeats the title front matter, and the renderer prints the title itself, so the page showed it twice. build-site.py removes a leading H1 from the body at build time (drop_leading_h1, tested); the source files keep it so they read well on GitHub."}
+  - {kind: decision, id: p3-index-list-links, phase: 3, title: "The index list is filled with source-relative links before the rewrite", body: "fill_pages emits links to each page's source path relative to the index, and the single link rewrite then turns them into routes, so the list and hand-written links share one rule and one failure mode."}
+  - {kind: discovery, id: p3-fr-isolation-drift, phase: 3, title: "fr-isolation page corrected against the rule", body: "The hand-authored page described a three-step staircase with mode exactly worktree. The rule now has worktree and external modes (container evidence), the HEAD-drift check and a host-worktree mode; fr-isolation.md states those. Page claims otherwise kept."}
+resolves: []
+evidence: {tests: ci}
