@@ -3,7 +3,7 @@ run: 2026-11-11-claude-tender-darwin-bj3d7j
 workflow: fr-goal@1
 branch: claude/tender-darwin-bj3d7j
 started: '2026-11-11T12:10:15+00:00'
-cursor: plan
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -32,8 +32,10 @@ steps:
           reviewer: ab7719fd6245204b6
           findings: sr-f1,sr-f2,sr-f3,sr-f4,sr-f5,sr-f6,sr-f7,sr-f8,sr-f9,sr-f10,sr-f11,sr-f12
   plan:
-    state: running
-    at: '2026-11-11T12:26:12+00:00'
+    state: done
+    at: '2026-11-11T12:29:42+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-11-docs-currency
     units:
       step/plan:
         attempts:
@@ -41,6 +43,8 @@ steps:
           harness: claude-code
           model: claude-fable-5-2
           session: afbb2801-be83-5cf8-903a-b5a859749fab
+          returned: '2026-11-11T12:29:42+00:00'
+          outcome: done
   plan-review:
     state: pending
   implement:
