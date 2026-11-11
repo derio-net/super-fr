@@ -5,6 +5,8 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/commands/hermes_cmd.py
+  - packages/fr/src/fr/hermes.py
+  - .hermes/config.snippet.yaml
   - plugins/super-fr/hooks/hermes/**
   - HERMES.md
 reviewed: 2026-11-11 docs-currency phase 5

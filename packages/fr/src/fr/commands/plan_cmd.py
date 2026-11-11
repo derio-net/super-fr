@@ -67,7 +67,7 @@ def _admits_pre_4(constraint: str) -> bool:
     return admits_below(constraint, "4.0.0", PRE_4_PROBES)
 
 
-plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
+plan_app = typer.Typer(help="Create, edit, review and rework plans.", no_args_is_help=True)
 
 
 @plan_app.callback()

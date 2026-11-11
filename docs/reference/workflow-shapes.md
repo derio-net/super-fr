@@ -14,8 +14,8 @@ reviewed: 2026-11-11 docs-currency phase 5
 # Workflow shapes and the run cursor
 
 `/fr-goal` is not a long prompt. It is a **workflow shape**: a YAML manifest that lists
-an ordered set of steps, the unit each step works on (`run`, `phase` or `spec`) and the
-runner capabilities it needs. `/fr-goal` with no argument uses the shape named `fr-goal`;
+an ordered set of steps, the unit the shape works on as a whole (`run`, `phase` or `spec`)
+and the runner capabilities it needs. `/fr-goal` with no argument uses the shape named `fr-goal`;
 `/fr-goal fr-goal-light` picks another. The shapes super-fr ships are in
 [plugins/super-fr/workflows/](https://github.com/derio-net/super-fr/tree/main/plugins/super-fr/workflows).
 

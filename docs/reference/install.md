@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/boo
 ```
 
 This installs the `fr` CLI, registers and enables the Claude Code plugins, installs the
-rules and MCP config and, when OpenCode or Hermes Agent is present, their skills and slash
+rules and, when OpenCode or Hermes Agent is present, their skills and slash
 commands too. It keeps a managed clone of this repo under `~/.cache/fr/src/super-fr`
 (`FR_SRC_DIR` moves it), and running it again updates that clone. To read the script first,
 download it with `-o bootstrap.sh` and run `bash bootstrap.sh`.
@@ -54,8 +54,8 @@ directory, `~/.config/opencode/plugins/fr-opencode-plugin/`, and lists it in `cl
 base-repo shell command (judged on the whole command line) while a pipeline is live, refuses
 a push from a branch whose PR already merged, pins the `fr` binary for the shell, nags once
 per session about open acceptance debt, nudges an idle run forward, and draws an fr status
-line in the TUI. OpenCode 1.x is not supported; `fr` refuses a 1.x session by name and asks
-you to upgrade.
+line in the TUI. OpenCode 1.x is not supported: `fr` reports a 1.x session as one it cannot read and
+tells you to upgrade.
 
 Both gates find their own `git` from `FR_GIT_CANDIDATES` instead of trusting the `PATH` the
 OpenCode server inherited. If git cannot be found, the edit gate allows, since it cannot name
@@ -80,5 +80,11 @@ acceptance matrix, but not to run `/fr-goal`.
 
 ## Uninstall
 
-`scripts/install.sh --uninstall` removes what the installer added for each harness.
+`scripts/install.sh --uninstall` removes what the installer added for each harness. If you
+installed with the one-liner and have no checkout, the script is in the managed clone:
+
+```bash
+bash ~/.cache/fr/src/super-fr/scripts/install.sh --uninstall
+```
+
 Requirements are listed on [Components and requirements](components.md).

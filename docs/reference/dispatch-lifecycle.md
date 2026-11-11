@@ -6,6 +6,10 @@ standalone_style: broadsheet
 covers:
   - packages/fr-dispatch/src/**
   - packages/fr/src/fr/commands/repos_cmd.py
+  - packages/fr/src/fr/repos.py
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/item_state.py
+  - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
 reviewed: 2026-11-11 docs-currency phase 5
 ---
@@ -19,8 +23,9 @@ labels mean.
 
 ## The label lifecycle
 
-A queued phase carries exactly one lifecycle label, derived from the issue and its PRs on
-every tick:
+A runner is the program that picks up queued phases and works them (VibeKanban's `vk`
+adapter, for one). It wakes on a timer; each wake is a tick. A queued phase carries exactly
+one lifecycle label, derived from the issue and its PRs on every tick:
 
 ```
 fr:ready ──→ fr:in-progress ──→ fr:pr-ready ──→ (issue closed)

@@ -1,0 +1,52 @@
+schema_version: 10
+run: 2026-11-11-claude-tender-darwin-bj3d7j
+step: review-phase
+item: phase/5
+outcome: done
+journal:
+  - {kind: review, id: p5-review-1, title: "Phase 5 review: README front door, reference pages, generated tables", body: "Two separate reviewers: one walked the old README section by section to confirm nothing true was lost and checked the new README, sync-readme.py and its tripwire; the other fact-checked the eight reference pages against install.sh, the code and the CLI help and built the site. The section map held. Twenty-one findings: twenty in scope, all fixed; one out of scope.", phase: 5}
+  - {kind: decision, id: p5-skill-summaries-file, title: "The skills table takes its line from a summaries file", body: "A skill's description tells an agent when to load it and reads badly as a table cell. scripts/readme-skill-summaries.yaml holds one line per skill; the sync fails when a skill has none or a line names no skill, and each name links to the explainer that covers it. Spec R21 says so.", phase: 5}
+  - {kind: finding, id: p5a-r1, review_scope: in, title: "README says every merge publishes all of docs/", body: "pages.yml publishes only the page sources and only when a merge touches them.", phase: 5}
+  - {kind: finding, id: p5a-r2, review_scope: in, title: "sync-readme.py depends on the locale", body: "read_text/write_text with no encoding crash under a C locale.", phase: 5}
+  - {kind: finding, id: p5a-r3, review_scope: in, title: "Skill cells read as trigger language", body: "Rows began 'Use when asked...' or were cut mid-clause.", phase: 5}
+  - {kind: finding, id: p5a-r4, review_scope: in, title: "CLI rows expose internal wording", body: "A spec id and 'v2 ...' in the Typer help strings.", phase: 5}
+  - {kind: finding, id: p5a-r5, review_scope: in, title: "sync-readme.py tracebacks on an unusable skill file", body: "Missing description or front matter raised KeyError/IndexError; split('---') was brittle.", phase: 5}
+  - {kind: finding, id: p5a-r6, review_scope: in, title: "README promises a page per skill under Read more", body: "fr-origins, fr-execute and fr-runner are covered inside other pages.", phase: 5}
+  - {kind: finding, id: p5a-r7, review_scope: in, title: "README prerequisites omit git, jq, rsync", body: "The installer preflights them.", phase: 5}
+  - {kind: finding, id: p5a-r8, review_scope: in, title: "First-run and close-out sentences imprecise", body: "The interview applies only to devcontainer mode without a profile; close-out is a separate session.", phase: 5}
+  - {kind: finding, id: p5a-r9, review_scope: in, title: "Small facts dropped with the old README", body: "fr migrate's preview default and flags, fr validate artifacts --kind, two issue pointers.", phase: 5}
+  - {kind: finding, id: p5a-r10, review_scope: out, title: "Skill descriptions are trigger-optimised", body: "A design tension in the skills themselves, not caused by this change.", phase: 5}
+  - {kind: finding, id: p5b-r1, review_scope: in, title: "fr-isolation.md contradicts itself on profiles", body: "'No devcontainer profile is a stop' beside two modes that need none.", phase: 5}
+  - {kind: finding, id: p5b-r2, review_scope: in, title: "Weekly issue misnamed", body: "The workflow runs fr debt issue and files 'Technical debt'.", phase: 5}
+  - {kind: finding, id: p5b-r3, review_scope: in, title: "cli.md says file-changing commands preview by default", body: "plan create/edit, acceptance add/set-status and isolation up act at once.", phase: 5}
+  - {kind: finding, id: p5b-r4, review_scope: in, title: "unit attributed to each step", body: "It is one field of the manifest.", phase: 5}
+  - {kind: finding, id: p5b-r5, review_scope: in, title: "install.md says fr refuses a 1.x OpenCode session", body: "It reports the session as unreadable and says to upgrade.", phase: 5}
+  - {kind: finding, id: p5b-r6, review_scope: in, title: "install.md claims MCP config is installed", body: "Only with the optional VibeKanban MCP binary present.", phase: 5}
+  - {kind: finding, id: p5b-r7, review_scope: in, title: "Generated CLI tree carries internal ids and cut lines", body: "19 issue/spec references and 10 truncated help lines.", phase: 5}
+  - {kind: finding, id: p5b-r8, review_scope: in, title: "Requirements omit git, jq, rsync and the devcontainer CLI", body: "components.md.", phase: 5}
+  - {kind: finding, id: p5b-r9, review_scope: in, title: "No uninstall route without a checkout", body: "install.md.", phase: 5}
+  - {kind: finding, id: p5b-r10, review_scope: in, title: "Undefined terms", body: "fr-cncd, herdr, tick, runner.", phase: 5}
+  - {kind: finding, id: p5b-r11, review_scope: in, title: "covers globs miss the code the reference pages describe", body: "hermes.py, labels.py, item_state.py, apply_cmd.py, plan/**, the OpenCode plugin's package.json, the command modules.", phase: 5}
+resolves:
+  - {id: p5a-r1, state: fixed, body: "Says the site is rebuilt from the three source locations when a merge changes them."}
+  - {id: p5a-r2, state: fixed, body: "UTF-8 everywhere; test_the_script_does_not_depend_on_the_locale runs --check under LC_ALL=C."}
+  - {id: p5a-r3, state: fixed, body: "Decision p5-skill-summaries-file; tests cover a missing and an unknown entry."}
+  - {id: p5a-r4, state: fixed, body: "Reworded the help of fr plan, spec, migrate, skills and ops."}
+  - {id: p5a-r5, state: fixed, body: "SourceError names the file; front matter read by one anchored regex; test_an_unusable_skill_file_is_named_not_a_traceback."}
+  - {id: p5a-r6, state: fixed, body: "Each skill name in the table links to the explainer that covers it; test_every_shipped_skill_row_links_to_a_page."}
+  - {id: p5a-r7, state: fixed, body: "Listed."}
+  - {id: p5a-r8, state: fixed, body: "Reworded both sentences."}
+  - {id: p5a-r9, state: fixed, body: "cli.md states migrate's preview default, --yes, --adopt and validate artifacts --kind. The two issue pointers stay out: the behaviour is documented and a ticket number explains nothing to a reader."}
+  - {id: p5a-r10, state: out-of-scope, body: "Not caused by this change: descriptions are written for skill selection. The table no longer depends on them."}
+  - {id: p5b-r1, state: fixed, body: "Scoped to the default devcontainer mode."}
+  - {id: p5b-r2, state: fixed, body: "Names fr debt issue and the Technical debt issue."}
+  - {id: p5b-r3, state: fixed, body: "Lists which commands preview and which act at once."}
+  - {id: p5b-r4, state: fixed, body: "Says the unit belongs to the shape."}
+  - {id: p5b-r5, state: fixed, body: "Reworded."}
+  - {id: p5b-r6, state: fixed, body: "Claim removed."}
+  - {id: p5b-r7, state: fixed, body: "The generator drops parentheticals and trailing clauses that only point at an issue, spec or requirement, and the tree is no longer truncated; two tests pin it on a fixture and on the repo."}
+  - {id: p5b-r8, state: fixed, body: "Listed."}
+  - {id: p5b-r9, state: fixed, body: "Gives the managed clone's path."}
+  - {id: p5b-r10, state: fixed, body: "Defined or linked."}
+  - {id: p5b-r11, state: fixed, body: "covers widened on hermes, dispatch-lifecycle, plan-model, components and cli; fr docs check finds no dead glob."}
+evidence: {review: p5-review-1, reviewer: aebf741e42597ab7f}

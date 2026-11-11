@@ -5,6 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/*/pyproject.toml
+  - packages/fr-opencode-plugin/package.json
   - plugins/*/.claude-plugin/plugin.json
 reviewed: 2026-11-11 docs-currency phase 5
 ---
@@ -18,8 +19,8 @@ reviewed: 2026-11-11 docs-currency phase 5
 | `fr` | The CLI: the plan-as-folder engine, tracking on GitHub, GitLab and Gitea, isolation, the run cursor, the acceptance matrix, triage, and `fr hermes` |
 | `fr-dispatch` | The runner protocol and tick framework, a library that knows no particular runner |
 | `fr-vk` | The VibeKanban runner: an MCP client, card and workspace dispatch, and the bridge daemon |
-| `fr-cncd` | The CNC daemon runner |
-| `fr-herdr` | The herdr runner: starts `fr triage batch dispatch` runs in a herdr tab |
+| `fr-cncd` | The `cncd` runner: a thin HTTP adapter that hands a plan's phases to a cncd daemon's ledger |
+| `fr-herdr` | The herdr runner ([herdr control sessions](../herdr-control-sessions.md)): starts `fr triage batch dispatch` runs in a herdr tab |
 | `fr-claude-cloud` | The claude-cloud runner: the mailbox the cloud wave driver's agent uses to create, message and archive Claude Code cloud sessions |
 | `fr-opencode-plugin` | The OpenCode 2.x plugin: edit and shell gates, push guard, acceptance nag, idle nudge, `fr` pin and a status line |
 
@@ -39,6 +40,9 @@ does not mean editing `fr-dispatch`.
 - Docker, for the default devcontainer isolation. A host without Docker can isolate with
   a worktree alone (`FR_ISOLATION_TARGET=worktree`).
 - [uv](https://docs.astral.sh/uv/), for the `fr` CLI.
+- `git`, `jq` and `rsync`: the installer checks for them first and names any that is missing.
+- The `devcontainer` CLI, for the default isolation. The installer tries to install it with
+  `npm` when it is absent.
 - The [VibeKanban](https://github.com/BloopAI/vibe-kanban) MCP server, only if you dispatch
   to the `vk` runner (`npx vibe-kanban@latest --mcp`).
 

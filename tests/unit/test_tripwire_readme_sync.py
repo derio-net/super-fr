@@ -32,7 +32,7 @@ def _skill(root: Path, plugin: str, name: str, description: str) -> None:
     d = root / "plugins" / plugin / "skills" / name
     d.mkdir(parents=True)
     (d / "SKILL.md").write_text(
-        f"---\nname: {name}\ndescription: >\n  {description}\n---\n\nbody\n"
+        f"---\nname: {name}\ndescription: >\n  {description}\n---\n\nbody\n", encoding="utf-8"
     )
 
 
@@ -150,3 +150,98 @@ def test_no_flag_writes_and_check_does_not(tmp_path: Path) -> None:
     assert "`fr-a`" in readme.read_text()
     assert "- `fr status`" in cli.read_text()
     assert sync_readme.find_drift(tmp_path, _app()) == []
+
+
+def test_the_summaries_file_supplies_the_line_and_must_match_the_skills(tmp_path: Path) -> None:
+    _skill(tmp_path, "super-fr", "fr-a", "Use when asked about A.")
+    summaries = tmp_path / "scripts" / "readme-skill-summaries.yaml"
+    summaries.parent.mkdir()
+    summaries.write_text("fr-a: Does A, plainly.\n", encoding="utf-8")
+    assert sync_readme.skill_rows(tmp_path) == [("fr-a", "super-fr", "Does A, plainly.")]
+    _skill(tmp_path, "super-fr", "fr-b", "Use when asked about B.")
+    with pytest.raises(sync_readme.SourceError, match="no line for skill 'fr-b'"):
+        sync_readme.skill_rows(tmp_path)
+    summaries.write_text("fr-a: A.\nfr-b: B.\nfr-gone: G.\n", encoding="utf-8")
+    with pytest.raises(sync_readme.SourceError, match="fr-gone"):
+        sync_readme.skill_rows(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["no front matter\n", "---\nname: fr-a\n---\nbody\n", "---\n- a list\n---\nbody\n"],
+)
+def test_an_unusable_skill_file_is_named_not_a_traceback(tmp_path: Path, text: str) -> None:
+    d = tmp_path / "plugins" / "super-fr" / "skills" / "fr-a"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(text, encoding="utf-8")
+    with pytest.raises(sync_readme.SourceError, match="plugins/super-fr/skills/fr-a/SKILL.md"):
+        sync_readme.skill_rows(tmp_path)
+    assert sync_readme.find_drift(tmp_path, _app())
+
+
+def test_a_skill_links_to_the_explainer_that_covers_it(tmp_path: Path) -> None:
+    _skill(tmp_path, "super-fr", "fr-a", "Does A.")
+    _skill(tmp_path, "super-fr", "fr-b", "Does B.")
+    _skill(tmp_path, "super-fr", "fr-c", "Does C.")
+    pages = tmp_path / "docs" / "explainers"
+    pages.mkdir(parents=True)
+    front = "---\ntitle: T\ncovers:\n  - {}\nreviewed: 2026-11-11 x\n---\n"
+    (pages / "fr-a.md").write_text(front.format("plugins/super-fr/skills/fr-a/**"))
+    (pages / "both.md").write_text(front.format("plugins/super-fr/skills/fr-[ab]/SKILL.md"))
+    (pages / "zz.md").write_text(front.format("plugins/super-fr/skills/fr-b/SKILL.md"))
+    links = sync_readme.skill_pages(tmp_path)
+    assert links == {
+        "fr-a": f"{sync_readme.SITE}/fr-a.html",
+        "fr-b": f"{sync_readme.SITE}/zz.html",
+    }
+    table = sync_readme.skills_table(sync_readme.skill_rows(tmp_path), links)
+    assert f"| [`fr-a`]({sync_readme.SITE}/fr-a.html) | super-fr | Does A. |" in table
+    assert "| `fr-c` | super-fr | Does C. |" in table
+
+
+def test_every_shipped_skill_row_links_to_a_page() -> None:
+    names = {p.parent.name for p in REPO_ROOT.glob("plugins/*/skills/*/SKILL.md")}
+    assert set(sync_readme.skill_pages(REPO_ROOT)) == names
+
+
+def test_the_script_does_not_depend_on_the_locale() -> None:
+    done = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "sync-readme.py"), "--check"],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        env={**__import__("os").environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0"},
+    )
+    assert done.returncode == 0, done.stderr
+
+
+def test_internal_references_are_left_out_of_the_published_help() -> None:
+    app = typer.Typer(help="root")
+
+    @app.command("a")
+    def a() -> None:
+        """Do the thing (gh#123) for real (spec 2026-01-01-x R4)."""
+
+    @app.command("b")
+    def b() -> None:
+        """Print a cost (per step) — spec `2026-01-01-x-design.md` §5.B."""
+
+    @app.command("c")
+    def c() -> None:
+        """Keep this (a plain aside)."""
+
+    tree = sync_readme.cli_tree(app)
+    assert "- `fr a`: Do the thing for real." in tree
+    assert "- `fr b`: Print a cost (per step)." in tree
+    assert "- `fr c`: Keep this (a plain aside)." in tree
+
+
+def test_the_published_tables_carry_no_internal_reference_or_cut_line() -> None:
+    import re
+
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    page = (REPO_ROOT / "docs" / "reference" / "cli.md").read_text(encoding="utf-8")
+    block = page.split("<!-- generated:cli-tree -->")[1].split("<!-- /generated:cli-tree -->")[0]
+    for text in (readme, block):
+        assert not re.search(r"gh#\d|\(#\d{2,}\)|\bspec \d{4}-|§", text)
+    assert "…" not in block

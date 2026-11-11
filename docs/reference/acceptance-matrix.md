@@ -54,6 +54,7 @@ three committed reports (two HTML, one Markdown). Test references are anchored o
 name, for example `repo:tests/unit/test_x.py#test_y`, never a line number, because a line
 number slides onto whatever test lands there next.
 
-The per-PR gate is `.github/workflows/acceptance-report.yml`, which also keeps a weekly
-"Acceptance debt" issue up to date. Rows can additionally name a verification strategy and a
+The per-PR gate is `.github/workflows/acceptance-report.yml`, which on a weekly
+schedule also runs `fr debt issue`, keeping one "Technical debt" issue up to date (its
+Acceptance section lists the rows still owed). Rows can additionally name a verification strategy and a
 walk scenario; that is covered in the [verification strategies guide](../verification-strategies.md).

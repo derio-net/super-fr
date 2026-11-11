@@ -84,7 +84,8 @@ session holds each workspace.
 its worktree, green when it is an fr workspace and purple when not, and
 `fr-statusline-claude.sh` is a ready-made Claude Code status line built on it.
 
-A repo with no devcontainer profile is a stop, not a degraded mode: the `fr-init` skill scans
+In the default devcontainer mode, a repo with no profile is a stop, not a degraded mode (the
+two docker-less modes above need none): the `fr-init` skill scans
 the repo, interviews you about tools, credentials and working patterns, and scaffolds the
 profiles with `fr init scaffold`. You pay that once per repo. And `fr isolation down` refuses
 while the branch's PR is still open unless you pass `--force`, so cleanup cannot race your

@@ -5,6 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/types.py
+  - packages/fr/src/fr/plan/**
   - packages/fr/src/fr/commands/plan_cmd.py
 reviewed: 2026-11-11 docs-currency phase 5
 ---

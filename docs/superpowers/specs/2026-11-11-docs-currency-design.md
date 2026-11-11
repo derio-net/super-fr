@@ -85,7 +85,7 @@ R17. `index` and `fr-isolation` have Markdown sources that carry the content of 
 R18. The seven operator guides in `docs/` are published pages, each with `covers` and `reviewed`.
 R19. Every shipped skill is covered by a published page, enforced by `must_cover`.
 R20. The README is a front door of at most 200 lines: the badges it carries today (the Acceptance badge among them), what super-fr is, install, a first goal, the skills table, the CLI table and links to the pages; a test fails a longer README.
-R21. The README's skills table and CLI table are generated from the skills' front matter and the `fr` command tree, and a test fails when either is stale.
+R21. The README's skills table and CLI table are generated: each skill's name and plugin from its front matter, its one line from `scripts/readme-skill-summaries.yaml` (an entry is required for every shipped skill, since a `description` is written to tell an agent when to load the skill), its link from the page that covers it, and the CLI rows from the `fr` command tree. A test fails when either table is stale.
 R22. The reference material removed from the README (plan model, workflow shapes, label lifecycle, per-repo profile, acceptance matrix, Hermes, components, isolation, requirements) is published as pages.
 R23. The pages deploy runs when a page source, the docs config, the site build, the renderer pin or the acceptance report's inputs change, and not on other changes under `docs/`.
 R24. `.claude/rules/explainers-currency.md` and its mirrors describe the new model, and the tripwires that read rendered HTML read the Markdown sources.

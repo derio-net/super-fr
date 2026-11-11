@@ -25,7 +25,8 @@ curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/boo
 ```
 
 This installs the `fr` CLI, enables the Claude Code plugins and, if OpenCode or Hermes is
-present, installs for those too. Running it again updates. You also need
+present, installs for those too. Running it again updates. You also need `git`, `jq` and
+`rsync` (the installer names any that is missing),
 [superpowers](https://github.com/obra/superpowers), [uv](https://docs.astral.sh/uv/), and
 your forge's CLI logged in (`gh` by default); Docker is used for the default isolation.
 Release candidates, OpenCode, Hermes and the CLI-only route are on the
@@ -39,10 +40,12 @@ In any repo, start your agent and type:
 /fr-goal add rate limiting to the webhook receiver
 ```
 
-The first time in a repo, super-fr scaffolds a devcontainer profile after a short interview.
-Then it isolates, brainstorms and asks its question round, and runs
-spec, plan, test-driven implementation and review on its own. You get one PR to read and
-merge. When it is merged, `fr archive` and `fr isolation down` close the run out.
+With the default, container-based isolation, the first run in a repo interviews you briefly
+and scaffolds a devcontainer profile; a host without Docker skips that and isolates in a
+worktree alone. Then it isolates, brainstorms and asks its question round, and runs spec,
+plan, test-driven implementation and review on its own. You get one PR to read and merge.
+After the merge, the run's last message gives you one command to start the close-out, which
+archives the plan and removes the workspace.
 
 To see what is going on while it works: `fr status` shows plans and phases, and
 `fr isolation status` shows the workspaces.
@@ -50,26 +53,26 @@ To see what is going on while it works: `fr status` shows plans and phases, and
 ## The skills
 
 You mostly type `/fr-goal`; the others are called for you or are there when you want one on
-its own. A page for each is listed under [Read more](#read-more).
+its own. Each name links to the page that covers it.
 
 <!-- generated:skills -->
 | Skill | Plugin | What it is for |
 |---|---|---|
-| `fr-acceptance` | super-fr | Drive the acceptance matrix: backfill an existing repo's business-level acceptance tests into docs/acceptance/matrix.yaml… |
-| `fr-audit` | super-fr | Use when asked what a run or session cost, where the money went, whether a process change made the pipeline cheaper… |
-| `fr-brainstorming` | super-fr | Brainstorm a feature INSIDE an isolated workspace: invokes fr-isolation first… |
-| `fr-debugging` | super-fr | Debug a bug, test failure, or unexpected behavior INSIDE an isolated workspace and deliver a reviewed fix-PR. |
-| `fr-devops-gate` | super-fr | Use when a delivered run's effective gates include devops, when `fr pickup --run` prints a DevOps brief… |
-| `fr-dispatch` | super-fr-dispatch | Queue a plan's phases to a runner (`fr apply --to <runner>`) and reconcile its GitHub Issues. |
-| `fr-execute` | super-fr | Execute an agentic phase from a plan. |
-| `fr-goal` | super-fr | Run a feature goal end-to-end autonomously via the `fr-goal` workflow shape: brainstorm, one question round sized to the feature… |
-| `fr-init` | super-fr | Initialize a repo for isolated runs: scan it, interview the operator about working patterns, tools, and credentials… |
-| `fr-isolation` | super-fr | Run work in an isolated workspace: git worktree + devcontainer, driven through the `fr isolation` CLI (exec-bridge). |
-| `fr-origins` | super-fr | Use when asked where a repo's recent bugs came from, to classify the issues filed in a window by origin, to build a defect-origins page… |
-| `fr-plan` | super-fr | Write phase-structured plans with operator collaboration. |
-| `fr-progress` | super-fr | Plan / spec progress reporting, and the repo-state preflight for any repo with docs/superpowers/ or fr config. |
-| `fr-runner` | super-fr-dispatch | Operate and debug an autonomous runner: verify tick health, diagnose stuck or undispatched phases, recover orphan workspaces… |
-| `fr-triage` | super-fr | Use when asked to triage, rank, prioritise or organise the open issues of a repo or of a whole org… |
+| [`fr-acceptance`](https://derio-net.github.io/super-fr/fr-acceptance.html) | super-fr | Keep the acceptance matrix honest; add rows, move statuses as evidence lands, backfill an existing repo. |
+| [`fr-audit`](https://derio-net.github.io/super-fr/fr-audit.html) | super-fr | Show what a run or session cost and where the money went, and compare runs before and after a change. |
+| [`fr-brainstorming`](https://derio-net.github.io/super-fr/fr-brainstorming-and-plan.html) | super-fr | Design a feature into a written spec, inside an isolated workspace from the first command. |
+| [`fr-debugging`](https://derio-net.github.io/super-fr/fr-debugging.html) | super-fr | Find a bug's root cause in an isolated workspace and deliver the fix as a reviewed PR. |
+| [`fr-devops-gate`](https://derio-net.github.io/super-fr/fr-devops-gate.html) | super-fr | Apply a delivered PR's manual operations (deploys, secrets, checks), record each result, then merge. |
+| [`fr-dispatch`](https://derio-net.github.io/super-fr/fr-dispatch.html) | super-fr-dispatch | Queue a plan's phases to an autonomous runner and keep its tracking issues in step. |
+| [`fr-execute`](https://derio-net.github.io/super-fr/fr-brainstorming-and-plan.html) | super-fr | Implement one phase of a plan, test-first, then stop. |
+| [`fr-goal`](https://derio-net.github.io/super-fr/01-fr-goal.html) | super-fr | Take a feature from a sentence to a reviewed pull request, with one question round and no other approval gates. |
+| [`fr-init`](https://derio-net.github.io/super-fr/fr-init.html) | super-fr | Interview you about a repo once and scaffold the devcontainer profiles its isolated runs use. |
+| [`fr-isolation`](https://derio-net.github.io/super-fr/fr-isolation.html) | super-fr | Run work in a throwaway worktree and container so your checkout is never touched. |
+| [`fr-origins`](https://derio-net.github.io/super-fr/fr-triage.html) | super-fr | Classify where a repo's recent bugs came from and which process change would have prevented them. |
+| [`fr-plan`](https://derio-net.github.io/super-fr/fr-brainstorming-and-plan.html) | super-fr | Turn a spec into a phase-by-phase plan that tooling can track and an agent can execute. |
+| [`fr-progress`](https://derio-net.github.io/super-fr/fr-progress.html) | super-fr | Report what is in progress, what drifted and what is ready to archive. |
+| [`fr-runner`](https://derio-net.github.io/super-fr/fr-dispatch.html) | super-fr-dispatch | Check that an autonomous runner is alive and diagnose phases it did not pick up. |
+| [`fr-triage`](https://derio-net.github.io/super-fr/fr-triage.html) | super-fr | Rank a repo's or an org's open issues, group them into batches and drive the batches to merged PRs. |
 <!-- /generated:skills -->
 
 ## The `fr` command line
@@ -87,12 +90,12 @@ The skills drive `fr`, and every step they take is a command you can run yoursel
 | `fr undispatch` | Close a plan's tracking Issues and null the fields. |
 | `fr pickup` | Output phase scope (markdown) for an agent. |
 | `fr repair` | Normalize stale plan/spec refs + strip dead plan-config keys (dry-run; --yes to write). |
-| `fr skills` | Show the v2 CLI surface + skill summaries. |
+| `fr skills` | Show the CLI surface and a summary of each skill. |
 | `fr services` | Read-only: the resolved forge / ci / tracking services. |
 | `fr acceptance` | Acceptance matrix: business-level acceptance tests × verification levels. |
-| `fr plan` | v2 plan editing commands. |
-| `fr spec` | v2 spec status commands. |
-| `fr migrate` | v2 migration tools. |
+| `fr plan` | Create, edit, review and rework plans. |
+| `fr spec` | Spec status: which specs are planned, in progress or shipped. |
+| `fr migrate` | Migrations: bring plans, layouts and artifacts up to this fr (preview by default). |
 | `fr isolation` | Isolated workspaces: git worktree + devcontainer. |
 | `fr init` | Repo initialization: devcontainer profile scaffolding (driven by fr-init). |
 | `fr cloud` | Claude Code cloud sessions: check the environment, print its setup script. |
@@ -110,7 +113,7 @@ The skills drive `fr`, and every step they take is a command you can run yoursel
 | `fr debt` | What this repo owes: acceptance, plans and owed actions (read-only). |
 | `fr docs` | Docs currency: pages must keep up with the code they cover (read-only). |
 | `fr gate` | Post-merge gates: record that a gate passed on its PR (the gate ledger). |
-| `fr ops` | Manual operations: check, apply, attest (spec 2026-10-22-fr-ops). |
+| `fr ops` | Manual operations of a plan: check, apply, attest. |
 | `fr release` | Release gating: what still waits on a post-merge gate since the last final. |
 | `fr closeout` | Close-out records: one outcome per spec Test Plan step. |
 <!-- /generated:cli -->
@@ -151,4 +154,5 @@ The site: **https://derio-net.github.io/super-fr/**
 ## Contributing
 
 Working on super-fr itself: [`AGENTS.md`](AGENTS.md) covers the workflow, the release and
-version rule, and the CI gate. Pages under `docs/` are published by every merge to `main`.
+version rule, and the CI gate. The site is rebuilt from `docs/explainers/`, `docs/*.md` and
+`docs/reference/` whenever a merge to `main` changes them.

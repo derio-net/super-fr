@@ -1,0 +1,19 @@
+# One line per shipped skill, for the README's skills table (scripts/sync-readme.py).
+# A skill's own `description` is written to tell an agent WHEN to load it, which
+# reads badly as a table cell, so the table takes its line from here. The sync
+# fails when a skill has no line or a line names no skill.
+fr-acceptance: Keep the acceptance matrix honest; add rows, move statuses as evidence lands, backfill an existing repo.
+fr-audit: Show what a run or session cost and where the money went, and compare runs before and after a change.
+fr-brainstorming: Design a feature into a written spec, inside an isolated workspace from the first command.
+fr-debugging: Find a bug's root cause in an isolated workspace and deliver the fix as a reviewed PR.
+fr-devops-gate: Apply a delivered PR's manual operations (deploys, secrets, checks), record each result, then merge.
+fr-dispatch: Queue a plan's phases to an autonomous runner and keep its tracking issues in step.
+fr-execute: Implement one phase of a plan, test-first, then stop.
+fr-goal: Take a feature from a sentence to a reviewed pull request, with one question round and no other approval gates.
+fr-init: Interview you about a repo once and scaffold the devcontainer profiles its isolated runs use.
+fr-isolation: Run work in a throwaway worktree and container so your checkout is never touched.
+fr-origins: Classify where a repo's recent bugs came from and which process change would have prevented them.
+fr-plan: Turn a spec into a phase-by-phase plan that tooling can track and an agent can execute.
+fr-progress: Report what is in progress, what drifted and what is ready to archive.
+fr-runner: Check that an autonomous runner is alive and diagnose phases it did not pick up.
+fr-triage: Rank a repo's or an org's open issues, group them into batches and drive the batches to merged PRs.
