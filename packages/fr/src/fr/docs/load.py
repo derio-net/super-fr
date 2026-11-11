@@ -102,16 +102,21 @@ def on_default_branch(root: Path, default_ref: str) -> bool:
     return bool(branch) and branch == default_ref.partition("/")[2]
 
 
+def merge_base_of(root: Path, base: str) -> str:
+    """The merge base of `base` and HEAD, or a `DocsEnvError`."""
+    try:
+        return _git(root, "merge-base", base, "HEAD").strip()
+    except DocsEnvError as e:
+        raise DocsEnvError(f"no merge base between {base} and HEAD: {e}") from e
+
+
 def changed_paths(root: Path, base: str) -> list[str] | None:
     """Paths changed from the merge base of `base` and HEAD to HEAD, both sides of a rename.
 
     None when HEAD *is* the merge base (HEAD is on the base branch): there is
     nothing to compare, so only the structural checks run (R6).
     """
-    try:
-        merge_base = _git(root, "merge-base", base, "HEAD").strip()
-    except DocsEnvError as e:
-        raise DocsEnvError(f"no merge base between {base} and HEAD: {e}") from e
+    merge_base = merge_base_of(root, base)
     head = _git(root, "rev-parse", "HEAD").strip()
     if merge_base == head:
         return None

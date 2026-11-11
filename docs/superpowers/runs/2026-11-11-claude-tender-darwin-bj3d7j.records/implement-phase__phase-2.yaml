@@ -1,0 +1,55 @@
+schema_version: 10
+run: 2026-11-11-claude-tender-darwin-bj3d7j
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2]
+refactor:
+  P2.T2: "prose and wiring only: one new rule file, one sentence per skill, one list entry in install.sh and sync-hermes.py; nothing duplicated to fold"
+  P2.T3: "one CI job copied from change-fragment's pins, which a test now pins equal; nothing to clean"
+journal:
+  - kind: decision
+    id: p2-docs-gate-module
+    phase: 2
+    title: fr.docs.gate.evaluate is the one evaluation shared by the command and the deliver witness
+    body: |
+      `fr docs check` and `deliver`'s `docs` witness differ only in how they pick the base, so the
+      selection (tracked files, pages, the no-page refusal, changed paths, check) moved into
+      `fr/docs/gate.py`'s `evaluate(root, config, base)`, base None meaning structure only.
+      `load.merge_base_of` was split out of `changed_paths` so the witness can name its merge base.
+      The witness stores `<merge-base>:<sha256>` of `status_json` over the current pages, `none`
+      with no `.fr/docs.yaml`.
+  - kind: decision
+    id: p2-witness-base-helper
+    phase: 2
+    title: _witness_base shares the base lookup and its refusal between proportionality and docs
+    body: |
+      P2.T1.S3: `_witness_base(key, repo_root, name, *, announce)` wraps `_proportionality_base`
+      with the no-base refusal and the fallback notice, worded with the witness's name, so
+      proportionality's output is unchanged. `docs` announces a fallback base only when the step
+      does not also declare `proportionality`, so the notice prints once.
+  - kind: decision
+    id: p2-docs-evidence-position
+    phase: 2
+    title: docs sits after proportionality in deliver.evidence
+    body: |
+      Both shapes now read `[tests, proportionality, docs, visual, walk]`; the tripwire's
+      `evidence[-2] == "visual"` pin and the drift test's replacement string were updated.
+      Drift compares ids only, so in-flight runs are unaffected.
+  - kind: discovery
+    id: p2-fr-debugging-line-cap
+    phase: 2
+    title: fr-debugging's SKILL.md sits at the 120-line cap
+    body: |
+      test_skill_validation caps a SKILL.md at 120 lines and fr-debugging was at 118; the R10
+      sentence was folded into existing lines to land at exactly 120. The next addition there
+      has to shorten something.
+  - kind: discovery
+    id: p2-every-flow-row-r24
+    phase: 2
+    title: docs-currency-every-flow moved to ci while its R24 origin is still owed
+    body: |
+      The row also cites R24 (the explainers-currency rule rewrite and tripwires), which is a
+      later phase's. Its note says so; that phase should add its refs to the row.
+resolves: []
+evidence: {tests: ci}

@@ -305,12 +305,30 @@ jobs:
       - name: User-visible changes add a change fragment; no PR edits a version
         run: uv run --no-project python scripts/check-change-fragment.py "origin/${{ github.base_ref }}"
 
+  # Docs currency (spec 2026-11-11-docs-currency R11): every flow ends in a PR,
+  # so this is the gate none can skip. A pull request diffs against its base; a
+  # push to main runs the structural checks only, and a merge group diffs
+  # against the default branch (R6). No `.fr/docs.yaml`: nothing to check.
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Pages covering a changed path changed too (pull request)
+        if: github.event_name == 'pull_request'
+        run: uv run fr docs check --base "origin/${{ github.base_ref }}"
+      - name: Pages are well formed and cover what they claim
+        if: github.event_name != 'pull_request'
+        run: uv run fr docs check
+
   # One stable check name for a future required-check rule (#706).
   ci-ok:
     if: always()
     needs: [lint, typecheck, plan, collect, test, split-check, coverage,
             validate-artifacts, opencode-plugin-test, version-sync,
-            change-fragment]
+            change-fragment, docs-check]
     runs-on: ubuntu-latest
     steps:
       - name: Every CI job succeeded or was skipped by its own condition

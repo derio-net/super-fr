@@ -205,9 +205,12 @@ steps:
     # runs `fr plan proportionality` and stores `<merge-base>:<sha256>` of the
     # report the orchestrator pastes into the PR body. Report-first — it gates
     # nothing but its own witness.
+    # `docs` (2026-11-11-docs-currency R9) is DERIVED too: resolve runs the
+    # `fr docs check` gate against proportionality's base and refuses while a
+    # page covering a changed path is unchanged; `none` with no `.fr/docs.yaml`.
     # `visual` (spec 2026-09-28-ui-visual-evidence §C): for the rows citing the
     # run's spec, screenshots captured and opened by the orchestrator itself
     # during delivery, on the delivered branch.
     # `walk` (2026-10-06-verification-strategies §C): the log `fr verification walk`
     # wrote on this code tree; owed only when the spec asks for a pre-merge walk.
-    evidence: [tests, proportionality, visual, walk]
+    evidence: [tests, proportionality, docs, visual, walk]

@@ -12,10 +12,9 @@ import typer
 
 from fr.commands.common import resolve_repo_root
 from fr.docs import render
-from fr.docs.check import check
+from fr.docs.gate import evaluate
 from fr.docs.load import (
     DocsEnvError,
-    changed_paths,
     load_config,
     load_pages,
     on_default_branch,
@@ -48,26 +47,17 @@ def check_cmd(
         if config is None:
             typer.echo("fr docs: no .fr/docs.yaml, nothing to check")
             return
-        tracked = tracked_files(root)
-        pages, errors = load_pages(root, config, tracked)
-        if not pages and not errors:
-            # A config that selects no page is a typo, never "nothing owed".
-            raise DocsEnvError(
-                f".fr/docs.yaml selects no page: `pages` {config.pages!r} matches no tracked file"
-            )
-        base_ref = resolve_base(root, base)
-        if base is None and on_default_branch(root, base_ref):
-            changed = None
-        else:
-            changed = changed_paths(root, base_ref)
+        default = resolve_base(root, base)
+        structure_only = base is None and on_default_branch(root, default)
+        outcome = evaluate(root, config, None if structure_only else default)
     except DocsEnvError as e:
         raise _die(str(e)) from e
-    findings = check(pages, errors, tracked, changed, config.must_cover)
-    if findings:
-        typer.echo(render.findings_text(findings))
+    if outcome.findings:
+        typer.echo(render.findings_text(outcome.findings))
         raise typer.Exit(1)
+    changed = outcome.changed
     scope = "structure only" if changed is None else f"{len(changed)} changed path(s)"
-    typer.echo(f"fr docs: {len(pages)} page(s) current ({scope})")
+    typer.echo(f"fr docs: {len(outcome.pages)} page(s) current ({scope})")
 
 
 @docs_app.command("status")
