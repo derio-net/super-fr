@@ -10850,8 +10850,8 @@ rows:
       page fails fr docs check, which names the page, the changed paths and both fixes;
       touching the page or its reviewed stamp passes
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R3
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R3
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R6
     levels:
       unit:
       - super-fr:tests/unit/test_docs_cmd.py#test_a_stale_page_exits_1_with_both_fixes
@@ -10870,12 +10870,12 @@ rows:
       nothing, and a must-cover file no page covers; a repo with no docs config passes;
       fr docs status lists pages with coverage and stamps
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R4
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R7
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R2
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R4
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R5
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R7
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_docs_model.py#test_a_bad_page_is_a_page_error
@@ -10895,7 +10895,7 @@ rows:
     acceptance: An fr-goal run cannot deliver its PR while fr docs check fails for its
       branch; a repo with no docs config delivers as before
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R9
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R9
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence.py#test_deliver_refuses_while_a_covered_page_is_stale
@@ -10913,9 +10913,9 @@ rows:
       runs fr docs check on every PR, and a shipped rule plus the fr-goal and fr-debugging
       skills state it on Claude Code, OpenCode and Hermes
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R10
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R11
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R24
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R10
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R11
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R24
     levels:
       unit:
       - super-fr:tests/unit/test_docs_currency_flows.py#test_the_delivering_skills_name_fr_docs_check
@@ -10937,8 +10937,8 @@ rows:
       default branch and runs only structural checks on the default branch itself; it
       runs on a repository with stale artifacts and changes no file
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R6
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R8
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R6
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R8
     levels:
       unit:
       - super-fr:tests/unit/test_docs_cmd.py#test_on_the_default_branch_only_structure_is_checked
@@ -10957,11 +10957,11 @@ rows:
       configured page renders, links between pages resolve, the index lists every page,
       and CI fails a pull request whose page does not render
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R12
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R13
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R14
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R15
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R23
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R12
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R13
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R14
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R15
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R23
     levels:
       unit:
       - super-fr:tests/unit/test_build_site.py#test_routes
@@ -10984,10 +10984,10 @@ rows:
       URLs (/, /01-fr-goal.html, /fr-isolation.html, /acceptance/) plus the guides and
       reference pages
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R16
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R17
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R18
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R22
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R16
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R17
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R18
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R22
     levels: {}
     status: not-implemented
     notes: ''
@@ -10997,7 +10997,7 @@ rows:
     acceptance: Every shipped skill is covered by a published page; adding a skill with
       no page fails the docs check
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R19
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R19
     levels:
       unit:
       - super-fr:tests/unit/test_docs_every_skill_page.py#test_every_shipped_skill_has_a_page
@@ -11010,8 +11010,8 @@ rows:
     acceptance: The README is a short front door whose skills and CLI tables are generated
       from the skills and the fr command tree, and a stale table fails CI
     origin:
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R20
-    - super-fr:docs/superpowers/specs/2026-11-11-docs-currency-design.md#R21
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R20
+    - super-fr:docs/superpowers/implemented/specs/2026-11-11-docs-currency-design.md#R21
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_readme_sync.py#test_the_repo_is_in_sync
