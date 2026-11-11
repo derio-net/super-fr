@@ -225,3 +225,8 @@ Phase 2 serves its own ask (R9-R11), reviewable apart from the engine.
 ### tier-2026-11-11-docs-currency-p2 · decision · hard: phase 2 changes deliver's evidence gate, which every fr-goal run in every repo passes through
 
 A wrong derive refuses every deliver (run_cmd.py _VERIFIABLE_EVIDENCE).
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-11-docs-currency-p3 created=2026-11-11T12:29:25+00:00 -->
+### phase-split-2026-11-11-docs-currency-p3 · decision · ask: R12-R17, R23, R24 make the site a build product
+
+Own ask.
