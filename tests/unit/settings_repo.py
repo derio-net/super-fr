@@ -32,6 +32,11 @@ def make_repo(tmp_path: Path) -> Path:
     git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
     work = tmp_path / "work"
     git(tmp_path, "init", "-q", "-b", "main", str(work))
+    # The identity lives in the clone's own config, not only in `git()`'s env: fr's own
+    # commits here (the squash's commit-tree, a cursor commit) run with the process env,
+    # and a CI runner has no global identity, nor a hostname git will guess one from.
+    git(work, "config", "user.name", _ENV["GIT_AUTHOR_NAME"])
+    git(work, "config", "user.email", _ENV["GIT_AUTHOR_EMAIL"])
     git(work, "remote", "add", "origin", str(origin))
     (work / "README.md").write_text("x\n")
     git(work, "add", "-A")
