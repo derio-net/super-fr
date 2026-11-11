@@ -388,3 +388,33 @@ Names report -o as the exception.
 ### p4b-r2-resolved · finding [fixed] · resolves p4b-r2: fr-dispatch example hits the reachability refusal (phase 4)
 
 The example states the precondition and points at the section.
+
+<!-- fr:journal kind=decision scope=plan id=p5-readme-section-map created=2026-11-11T16:07:30+00:00 phase=5 -->
+### p5-readme-section-map · decision · Where every old README section now lives (phase 5)
+
+The old 552-line README, section by section.
+Title, badges, intro: README (front door; four badges kept, the Acceptance one pinned by test_pages_workflow).
+Quickstart 1 Install: README keeps the one command; channels table, OpenCode plugin and git-resolution paragraphs, Hermes pointer, CLI-only route and uninstall moved to docs/reference/install.md (new page, an eighth beyond the plan's seven).
+Quickstart 2 first goal: README, shortened.
+Skills (two tables): README generated skills table (all 15 skills, from front matter), plus per-skill pages already on the site.
+How it works, Flow 1 diagram and the manual-phase and Test Plan prose: already in 01-fr-goal.md and index.md (diagram plus the numbered flow); not repeated.
+Flow 2 sequence diagram: dropped as a diagram; the same steps are prose in fr-dispatch.md (worked example, tracking versus queueing, reachability); the multi-backend note is in components.md (forge services).
+Isolation overview, exec-bridge discipline, lifecycle commands: already in fr-isolation.md. The where-worktrees-live table, statusline scripts, fr-init-on-missing-profile and down-refuses-open-PR were not there and were added to fr-isolation.md.
+Reference fr CLI tables: docs/reference/cli.md (generated full tree) and README generated top-level table; the old two hand-kept tables were stale (missing most groups) and are dropped.
+Plan model: docs/reference/plan-model.md. Workflow shapes and resolution order: workflow-shapes.md. Label lifecycle, reachability gate, per-repo profile and fr repos sync: dispatch-lifecycle.md. Acceptance matrix: acceptance-matrix.md. Hermes: hermes.md. Components table, Requirements, Services, self-hosted forges: components.md. For maintainers: README Contributing link to AGENTS.md.
+Dropped as false or duplicated: the claim the plugins ship eleven skills (fifteen now), the `fr run` command list in the README (reshape/adopt/check kept in workflow-shapes.md, the rest generated), the 2026-07-09 multi-backend spec pointer.
+
+<!-- fr:journal kind=decision scope=plan id=p5-skills-table-column created=2026-11-11T16:07:30+00:00 phase=5 -->
+### p5-skills-table-column · decision · The skills table column is "What it is for", cut at a clause (phase 5)
+
+Several skill descriptions open with "Use when ..." (they are trigger language), so a column headed "What it does" read wrong. The generated column is "What it is for". A first sentence over 150 characters has its parentheticals dropped, then is cut at the last clause boundary with an ellipsis. The fix for an unhelpful row is to improve the skill's description, not to edit the table.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-cli-help-quality created=2026-11-11T16:07:30+00:00 phase=5 -->
+### p5-cli-help-quality · discovery · Some fr help lines are thin ("v2 plan editing commands.") (phase 5)
+
+The generated CLI table prints each group's own help line, so thin ones (`plan`, `spec`, `migrate`) now show on the front page. Left as is: the table is a mirror of the code, and rewording help text is a CLI behaviour change outside this phase.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-11T16:07:30+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+Generator and tripwire written once to the target shape; nothing to clean.
