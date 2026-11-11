@@ -263,3 +263,128 @@ Staged or untracked pages do not satisfy a stale or uncovered finding; commit th
 ### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
 
 Content task: the read-back against sources (S3) was the cleanup; no code to restructure beyond the one new test file, written once.
+
+<!-- fr:journal kind=review scope=plan id=p4-review-1 created=2026-11-11T15:48:45+00:00 phase=4 -->
+### p4-review-1 · review · Phase 4 review: a page per skill (phase 4)
+
+Two separate reviewers fact-checked the ten new pages claim by claim against the skills, the code and the CLI's --help, five pages each, plus must_cover, its test, the matrix row and the fr-runner env var fix. No false command, flag, exit code or status was found. Twelve findings, all in scope, all fixed: one wrong path, two examples that could not be run as written, and wording and newcomer gaps.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r1 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r1 · finding [open] (reviewer: in scope) · fr plan create example shows no phases file (phase 4)
+
+fr-brainstorming-and-plan.md passed --phases-file with no content shown.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r2 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r2 · finding [open] (reviewer: in scope) · Debug journal path carries a date the code does not add (phase 4)
+
+fr-debugging.md said debug/<date>-<slug>.md; the code writes debug/<slug>.md.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r3 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r3 · finding [open] (reviewer: in scope) · fr journal add shown without its required flags (phase 4)
+
+--slug and --title were omitted.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r4 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r4 · finding [open] (reviewer: in scope) · fr-triage example leaves the file location and terms undefined (phase 4)
+
+Where judgements.yaml lives, severity, cx, wave, merge train and intent anchor.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r5 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r5 · finding [open] (reviewer: in scope) · Each requirement gets a row overstates (phase 4)
+
+The skill says one row per requirement or closely related group.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r6 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r6 · finding [open] (reviewer: in scope) · fr plan rework precondition omitted (phase 4)
+
+The parent must be complete and archived.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r7 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r7 · finding [open] (reviewer: in scope) · docs-currency guide has no adoption path (phase 4)
+
+No step-by-step sequence, and no statement that only tracked files are read.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r8 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r8 · finding [open] (reviewer: in scope) · Pin the checkout's full history (phase 4)
+
+Should say fetch (fetch-depth: 0).
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r9 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r9 · finding [open] (reviewer: in scope) · Structure-only stated unconditionally (phase 4)
+
+It holds with no --base on the default branch, or when HEAD is the merge base.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r10 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4a-r10 · finding [open] (reviewer: in scope) · Config sample omits docs/reference/*.md (phase 4)
+
+The repo's own config lists it and the page describes that route.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r1 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4b-r1 · finding [open] (reviewer: in scope) · fr-audit says report writes only under the cache (phase 4)
+
+report -o writes where it is pointed.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r2 created=2026-11-11T15:48:45+00:00 phase=4 state=open review_scope=in -->
+### p4b-r2 · finding [open] (reviewer: in scope) · fr-dispatch example hits the reachability refusal (phase 4)
+
+fr apply --to vk --yes was shown before the precondition that plan and spec are merged.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r1-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r1 -->
+### p4a-r1-resolved · finding [fixed] · resolves p4a-r1: fr plan create example shows no phases file (phase 4)
+
+The page shows a one-phase phases.yaml; fr plan create and self-review were run on exactly that file in a scratch repo and passed.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r2-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r2 -->
+### p4a-r2-resolved · finding [fixed] · resolves p4a-r2: Debug journal path carries a date the code does not add (phase 4)
+
+Path is debug/<slug>.md.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r3-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r3 -->
+### p4a-r3-resolved · finding [fixed] · resolves p4a-r3: fr journal add shown without its required flags (phase 4)
+
+The command carries --slug, --title and --body.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r4-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r4 -->
+### p4a-r4-resolved · finding [fixed] · resolves p4a-r4: fr-triage example leaves the file location and terms undefined (phase 4)
+
+The example says where the file lives, sets severity, and defines tier, severity, cx, wave, merge train and intent anchor.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r5-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r5 -->
+### p4a-r5-resolved · finding [fixed] · resolves p4a-r5: Each requirement gets a row overstates (phase 4)
+
+Says each requirement or closely related group, and that a row states what the product does.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r6-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r6 -->
+### p4a-r6-resolved · finding [fixed] · resolves p4a-r6: fr plan rework precondition omitted (phase 4)
+
+States the precondition.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r7-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r7 -->
+### p4a-r7-resolved · finding [fixed] · resolves p4a-r7: docs-currency guide has no adoption path (phase 4)
+
+New section 'Adopting it in your repo', five steps, including that only tracked files are read.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r8-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r8 -->
+### p4a-r8-resolved · finding [fixed] · resolves p4a-r8: Pin the checkout's full history (phase 4)
+
+Reworded.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r9-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r9 -->
+### p4a-r9-resolved · finding [fixed] · resolves p4a-r9: Structure-only stated unconditionally (phase 4)
+
+Reworded to the exact condition.
+
+<!-- fr:journal kind=finding scope=plan id=p4a-r10-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4a-r10 -->
+### p4a-r10-resolved · finding [fixed] · resolves p4a-r10: Config sample omits docs/reference/*.md (phase 4)
+
+Sample lists the third glob.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r1-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4b-r1 -->
+### p4b-r1-resolved · finding [fixed] · resolves p4b-r1: fr-audit says report writes only under the cache (phase 4)
+
+Names report -o as the exception.
+
+<!-- fr:journal kind=finding scope=plan id=p4b-r2-resolved created=2026-11-11T15:48:45+00:00 phase=4 state=fixed resolves=p4b-r2 -->
+### p4b-r2-resolved · finding [fixed] · resolves p4b-r2: fr-dispatch example hits the reachability refusal (phase 4)
+
+The example states the precondition and points at the section.
