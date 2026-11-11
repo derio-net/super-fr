@@ -10922,11 +10922,14 @@ rows:
       - super-fr:tests/unit/test_docs_currency_flows.py#test_ci_runs_fr_docs_check_on_every_pull_request_inside_ci_ok
       - super-fr:tests/unit/test_install_copies_rules.py#test_install_ships_the_docs_currency_rule
       - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py#test_the_soul_block_carries_the_docs_currency_rule
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_no_rendered_html_is_tracked_under_the_explainers
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_every_configured_page_parses_with_fr_docs
+      - super-fr:tests/unit/test_tripwire_fr_goal_question_rounds.py#test_surface_describes_question_rounds
     status: ci
-    notes: 'R10/R11: the shipped docs-currency rule reaches install.sh, OpenCode and
-      the Hermes SOUL block, fr-goal and fr-debugging name fr docs check, and ci.yml''s
-      docs-check job sits in ci-ok; R24''s rule rewrite lands in a later phase of the
-      same plan'
+    notes: 'R24 evidence added: the explainers-currency rule and its mirrors describe
+      the source-only model, and the tripwires that read rendered HTML now read the
+      Markdown sources (no tracked explainer HTML; every configured page parses with
+      fr.docs).'
     verify: none
   - id: docs-check-default-base-readonly
     capability: docs currency
