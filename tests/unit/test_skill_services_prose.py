@@ -41,6 +41,8 @@ def test_fr_init_documents_services() -> None:
     assert "ask the operator" in t and "re-run" in t
 
 
-def test_readme_mentions_services() -> None:
-    t = (ROOT / "README.md").read_text()
+def test_the_published_reference_explains_services() -> None:
+    """The README is a front door; the forge/ci/tracking detail lives on the reference page."""
+    assert "fr services" in (ROOT / "README.md").read_text()
+    t = (ROOT / "docs" / "reference" / "components.md").read_text()
     assert "fr services" in t and "tracking:" in t
