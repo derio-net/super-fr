@@ -243,3 +243,23 @@ Reworded; OpenCode mirror regenerated.
 ### p3-r7-resolved · finding [fixed] · resolves p3-r7: index.md says every run is in a sealed container (phase 3)
 
 Out of scope by origin, but the page is rewritten here, so it now says the container is the default and names the two docker-less modes, linking fr-isolation.
+
+<!-- fr:journal kind=decision scope=plan id=p4-one-page-per-flow created=2026-11-11T15:44:10+00:00 phase=4 -->
+### p4-one-page-per-flow · decision · Skills are grouped into nine pages by flow, not one page per skill (phase 4)
+
+fr-brainstorming, fr-plan and fr-execute share a page (one flow), as do fr-triage with fr-origins and fr-dispatch with fr-runner; each page's covers names every skill it describes, so must_cover is satisfied for all fifteen skills.
+
+<!-- fr:journal kind=finding scope=plan id=p4-runner-env-var created=2026-11-11T15:44:10+00:00 phase=4 state=fixed review_scope=in -->
+### p4-runner-env-var · finding [fixed] (reviewer: in scope) · fr-runner SKILL.md named a recovery env var the code does not read (phase 4)
+
+The skill said VK_BRIDGE_RECOVER_ORPHAN_CARDS; fr_vk.workspaces reads FR_BRIDGE_RECOVER_ORPHAN_CARDS. Found while checking the dispatch page's claims against the code; the skill is corrected and the page uses the code's spelling.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-docs-check-reads-committed-head created=2026-11-11T15:44:10+00:00 phase=4 -->
+### p4-docs-check-reads-committed-head · discovery · fr docs check judges committed HEAD, so new pages count only once committed (phase 4)
+
+Staged or untracked pages do not satisfy a stale or uncovered finding; commit the pages, then re-run the check.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-11T15:44:10+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+Content task: the read-back against sources (S3) was the cleanup; no code to restructure beyond the one new test file, written once.
