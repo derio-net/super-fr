@@ -168,3 +168,78 @@ Content-only task (page sources and front matter); no code to clean.
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 Workflow YAML and its pinning test were written once to the target shape; nothing to clean.
+
+<!-- fr:journal kind=review scope=plan id=p3-review-1 created=2026-11-11T15:29:31+00:00 phase=3 -->
+### p3-review-1 · review · Phase 3 review: site build from Markdown sources (phase 3)
+
+A separate reviewer read the phase 3 diff against R12-R17, R23, R24 and built the site (10 pages). Routes, link rewriting, the page list, failure behaviour, the workflows and the fidelity of the two rewritten pages against the old HTML were verified. Seven findings: five fixed, one refuted by CI, one out of scope and fixed anyway.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-11T15:29:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · blog-craft checkout with the default token unverified (phase 3)
+
+pages.yml and the site-build job check out derio-net/blog-craft with the default token; if it were not readable every deploy and every PR's site-build would fail.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-11T15:29:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · index.md says the diagram marks the human steps (phase 3)
+
+The flowchart carries no such marking; the old page's colouring was lost in the conversion.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-11T15:29:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · site-builds-from-sources cites no ref that builds the real site (phase 3)
+
+The unit tests cover pure functions; the CI job that builds every page was not cited.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-11T15:29:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · herdr guide covers too little (phase 3)
+
+It documents fr triage batch replace/drive but covered only packages/fr-herdr/src/**.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-11T15:29:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · rewrite_markdown ignores three link shapes (phase 3)
+
+Reference-style definitions, images and raw HTML links were neither rewritten nor checked; indented code blocks are not recognised.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-11T15:29:31+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · Garbled trigger sentence in explainers-currency.md (phase 3)
+
+'Triggers are the shipped rule docs-currency; ...'
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-11T15:29:31+00:00 phase=3 state=open review_scope=out -->
+### p3-r7 · finding [open] (reviewer: out of scope) · index.md says every run is in a sealed container (phase 3)
+
+Untrue in host-worktree and external modes; the old page said the same.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-11T15:29:31+00:00 phase=3 state=refuted resolves=p3-r1 -->
+### p3-r1-resolved · finding [refuted] · resolves p3-r1: blog-craft checkout with the default token unverified (phase 3)
+
+The site-build job checked out blog-craft at the pinned ref with the default token and passed on f65d6ed6 (check runs site-build, docs-check and ci-ok: success), so the repo is readable by the workflow token.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-11T15:29:31+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: index.md says the diagram marks the human steps (phase 3)
+
+The sentence now says the diagram shows the order and the list says which steps are the reader's.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-11T15:29:31+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: site-builds-from-sources cites no ref that builds the real site (phase 3)
+
+The row cites .github/workflows/ci.yml (job site-build) at the int level and its note says the CI job is the proof of the real build.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-11T15:29:31+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: herdr guide covers too little (phase 3)
+
+covers now includes packages/fr/src/fr/triage/batch*.py and commands/triage_batch_cmd.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-11T15:29:31+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: rewrite_markdown ignores three link shapes (phase 3)
+
+A relative reference definition, image or raw HTML href/src is refused with a BuildError naming the fix; the docstring states the indented-code limit. Tests: test_a_relative_link_in_a_shape_the_build_does_not_rewrite_is_refused, test_absolute_links_in_those_shapes_and_code_samples_pass.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-11T15:29:31+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: Garbled trigger sentence in explainers-currency.md (phase 3)
+
+Reworded; OpenCode mirror regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-11T15:29:31+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: index.md says every run is in a sealed container (phase 3)
+
+Out of scope by origin, but the page is rewritten here, so it now says the container is the default and names the two docker-less modes, linking fr-isolation.
