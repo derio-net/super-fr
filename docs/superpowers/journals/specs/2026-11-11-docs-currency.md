@@ -220,3 +220,8 @@ run_kind: candidate
 ### phase-split-2026-11-11-docs-currency-p2 · decision · ask: R9-R11 put the gate into deliver, the skills, a shipped rule and CI
 
 Phase 2 serves its own ask (R9-R11), reviewable apart from the engine.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-11-docs-currency-p2 created=2026-11-11T12:29:24+00:00 -->
+### tier-2026-11-11-docs-currency-p2 · decision · hard: phase 2 changes deliver's evidence gate, which every fr-goal run in every repo passes through
+
+A wrong derive refuses every deliver (run_cmd.py _VERIFIABLE_EVIDENCE).
