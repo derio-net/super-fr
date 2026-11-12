@@ -32,9 +32,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
-import yaml
-
 REPO: Final = "repo"
+QUIET: Final = "quiet"
 FEATURES_DIR: Final = "features"
 """Below a quiet or stealth root, each feature's artifacts live at `features/<feature-id>/`."""
 RECORDS_SUFFIX: Final = ".records"
@@ -183,11 +182,18 @@ def _has_switch_ref(repo_root: Path) -> bool:
 
 def _switch_placement(repo_root: Path) -> str | None:
     """The placement a fetched `origin/fr` switch names, read by commit (never a working
-    tree); None when there is no such ref, or its settings name no placement."""
+    tree); None when there is no such ref, it holds no `settings.yaml`, or that file
+    says `repo`.
+
+    R23's switch is a root `settings.yaml` saying `placement: quiet`, parsed by the
+    settings loader's own closed schema (R4). Any other content refuses, naming the ref:
+    invalid settings with the loader's wording, and `stealth` by R24's rule, since stealth
+    is never chosen by repo settings."""
     if not _has_switch_ref(repo_root):
         return None
     from fr.git import GitUnavailableError, git_answer
     from fr.settings import SettingsError
+    from fr.settings.load import parse_settings_text
 
     source = f"{SWITCH_REF}:{SWITCH_SETTINGS}"
     try:
@@ -196,12 +202,15 @@ def _switch_placement(repo_root: Path) -> str | None:
         return None
     if done.returncode != 0:
         return None
-    try:
-        data = yaml.safe_load(done.stdout)
-    except yaml.YAMLError as e:
-        raise SettingsError(f"{source}: not valid YAML: {e}") from e
-    placement = data.get("placement") if isinstance(data, dict) else None
-    return placement if isinstance(placement, str) and placement != REPO else None
+    placement = parse_settings_text(done.stdout, source=source, servable=False).placement
+    if placement == REPO:
+        return None
+    if placement != QUIET:
+        raise SettingsError(
+            f"{source}: placement: {placement} cannot be set on the `fr` switch: stealth is "
+            "chosen per run, never by repo settings (R24); the switch says `placement: quiet`"
+        )
+    return placement
 
 
 def _marker_placement(repo_root: Path) -> str | None:

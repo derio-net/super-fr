@@ -163,6 +163,53 @@ def test_an_fr_branch_that_says_repo_or_nothing_is_no_switch(tmp_path: Path) -> 
     assert space_for(root).placement == "repo"
 
 
+def test_no_origin_fr_ref_is_the_repo_placement(tmp_path: Path) -> None:
+    root = make_repo(tmp_path)
+    assert not (root / ".git/refs/remotes/origin/fr").exists()
+    assert space_for(root).placement == "repo"
+
+
+_SWITCH = "refs/remotes/origin/fr:settings.yaml"
+
+
+def test_stealth_on_the_switch_is_refused_by_r24s_rule(tmp_path: Path) -> None:
+    root = make_repo(tmp_path)
+    _push_fr_branch(root, "schema: 1\nplacement: stealth\n")
+    with pytest.raises(SettingsError) as caught:
+        space_for(root)
+    message = str(caught.value)
+    assert _SWITCH in message and "placement: stealth" in message
+    assert "chosen per run, never by repo settings" in message
+    assert "not yet available" not in message
+
+
+def test_an_unknown_placement_on_the_switch_is_refused_naming_it(tmp_path: Path) -> None:
+    root = make_repo(tmp_path)
+    _push_fr_branch(root, "schema: 1\nplacement: foo\n")
+    with pytest.raises(SettingsError) as caught:
+        space_for(root)
+    message = str(caught.value)
+    assert _SWITCH in message and "placement" in message and "'foo'" in message
+    assert "not yet available" not in message
+
+
+def test_an_unknown_key_on_the_switch_is_refused_naming_it(tmp_path: Path) -> None:
+    root = make_repo(tmp_path)
+    _push_fr_branch(root, "schema: 1\nplacement: quiet\nbogus: 2\n")
+    with pytest.raises(SettingsError, match=r"origin/fr:settings\.yaml: bogus"):
+        space_for(root)
+
+
+def test_garbage_yaml_on_the_switch_is_refused_naming_the_ref(tmp_path: Path) -> None:
+    root = make_repo(tmp_path)
+    _push_fr_branch(root, "placement: [quiet\n  : :\n")
+    with pytest.raises(SettingsError) as caught:
+        space_for(root)
+    message = str(caught.value)
+    assert _SWITCH in message and "not valid YAML" in message
+    assert "not yet available" not in message
+
+
 def test_a_packed_origin_fr_ref_is_seen(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")

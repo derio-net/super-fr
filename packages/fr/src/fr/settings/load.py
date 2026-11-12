@@ -235,10 +235,14 @@ def _servable(settings: Settings, source: str) -> Settings:
     return settings
 
 
-def parse_settings_text(text: str | None, *, source: str) -> Settings:
+def parse_settings_text(text: str | None, *, source: str, servable: bool = True) -> Settings:
     """A settings file's text (None: absent, the defaults) as `Settings`, by the same
-    closed, strict model and placement check the checkout reader applies."""
-    return _servable(parse_settings(_yaml_of(text, source), source=source), source)
+    closed, strict model and placement check the checkout reader applies.
+
+    `servable=False` skips only the placement check, for a caller that decides what a
+    valid placement means itself (the `origin/fr` switch, `fr.artifacts.paths`)."""
+    settings = parse_settings(_yaml_of(text, source), source=source)
+    return _servable(settings, source) if servable else settings
 
 
 def load_settings(repo_root: Path) -> EffectiveSettings:
