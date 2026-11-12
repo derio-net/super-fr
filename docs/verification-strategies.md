@@ -5,7 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/verification/**
-reviewed: 2026-11-12 repo-feature-settings, gates and test_plan off; labels follow forge.labels
+reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
 ---
 
 # Verification strategies
@@ -86,7 +86,7 @@ strings. They may interpolate these placeholders and no others:
 | `{bin}` | `<prefix>/bin`, put first on `PATH` for every step |
 | `{fixture}` | a fresh `git init` repo; each row's scenario runs in a copy of it |
 | `{client}` | the `--client` repo, else the fixture |
-| `{scenario}` | the row's `scenario:` script, repo-relative in the matrix |
+| `{scenario}` | the row's `scenario:` script, repo-relative in its acceptance fragment |
 
 `fr verification check` refuses a post-merge strategy that installs anything (the
 released build is what runs), an agent-driven pre-merge strategy with no

@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/types.py
   - packages/fr/src/fr/plan/**
   - packages/fr/src/fr/commands/plan_cmd.py
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
 ---
 
 # The plan model
