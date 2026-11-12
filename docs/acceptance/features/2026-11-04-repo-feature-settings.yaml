@@ -201,10 +201,14 @@ rows:
       a hardcoded artifact path anywhere else fails CI
     origin:
     - spec:2026-11-04-repo-feature-settings#R1
-    levels: {}
-    status: not-implemented
-    notes: added at planning (plan 3); scenario tests/scenarios/placement-resolver.sh
-      is built by plan 2026-11-12-placement-resolver
+    levels:
+      unit:
+      - super-fr:tests/unit/test_artifact_paths.py#test_quiet_and_stealth_keep_the_layout_below_a_feature_root
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_placement_resolver
+    status: ci
+    notes: resolver, locators, logical refs and fr settings paths built; scenario in
+      CI
     scenario: tests/scenarios/placement-resolver.sh
   - id: placement-merged-status
     capability: repo-feature-settings
