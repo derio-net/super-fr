@@ -698,6 +698,11 @@ def _migrate_and_commit(
         emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
     for skipped in report.skipped:
         emit(f"  skipped (another writer got there first): {_rel(skipped.path, root)}")
+    for other in report.elsewhere:
+        emit(
+            f"  stale, another feature's, not migrated here (its own workspace migrates it "
+            f"when it next runs fr): {other}"
+        )
 
     if report.applied:
         do_commit = commit if commit is not None else commit_migration

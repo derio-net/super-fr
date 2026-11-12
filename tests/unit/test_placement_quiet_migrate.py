@@ -56,25 +56,40 @@ def test_repo_output_is_unchanged(tmp_path: Path) -> None:
     assert list(iter_artifact_paths(repo, "plan")) == [meta]
 
 
-def test_a_migration_commits_in_the_fr_worktree_one_commit_per_feature(
+def test_a_migration_commits_only_the_callers_feature_and_reports_the_other(
     ws: tuple[Path, Path],
 ) -> None:
+    """Another branch's feature root may be live in its own workspace: it is reported,
+    never rewritten or committed from here (R23, security review of p3-r4)."""
     wt, fr_root = ws
-    _stale_plan(fr_root, "feat__q", "2026-11-12-a")
-    _stale_plan(fr_root, "feat__other", "2026-11-12-b")
+    mine = _stale_plan(fr_root, "feat__q", "2026-11-12-a")
+    theirs = _stale_plan(fr_root, "feat__other", "2026-11-12-b")
+    theirs_before = theirs.read_text()
     before = git(fr_root, "rev-parse", "HEAD").strip()
     report = run_migrations(wt, dry_run=False)
-    assert len(report.changed_paths) == 2
+    assert report.changed_paths == (mine,)
+    assert report.elsewhere == (theirs,)
+    assert theirs.read_text() == theirs_before
     outcome = commit_migration(wt, report, fr_version="9.9.9")
     assert outcome.committed, outcome.reason
     log = git(fr_root, "log", "--format=%x00%s", "--name-only", f"{before}..HEAD")
-    commits = [b.split("\n") for b in log.split("\x00")[1:]]
-    assert len(commits) == 2
-    for lines in commits:
-        names = [n for n in lines[1:] if n.strip()]
-        assert names and len({n.split("/")[1] for n in names}) == 1, names
+    commits = [[n for n in b.split("\n")[1:] if n.strip()] for b in log.split("\x00")[1:]]
+    assert commits == [["features/feat__q/docs/superpowers/plans/2026-11-12-a/_meta.yaml"]]
     assert not git(fr_root, "status", "--porcelain", "--untracked-files=no").strip()
-    assert git(wt, "log", "-1", "--format=%s").strip() != lines[0]
+
+
+def test_migrate_artifacts_reports_another_features_stale_artifact(
+    ws: tuple[Path, Path],
+) -> None:
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    wt, fr_root = ws
+    _stale_plan(fr_root, "feat__other", "2026-11-12-b")
+    env = {**os.environ, "VK_REPO_ROOT": str(wt)}
+    result = CliRunner().invoke(app, ["migrate", "artifacts", "--yes"], env=env)
+    flat = " ".join(result.output.split())
+    assert "another feature's, not migrated here" in flat and "2026-11-12-b" in flat, flat
 
 
 def test_validate_artifacts_sees_a_stale_plan_in_the_fr_worktree(ws: tuple[Path, Path]) -> None:

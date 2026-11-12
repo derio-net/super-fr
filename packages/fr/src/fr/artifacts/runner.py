@@ -58,6 +58,7 @@ from fr.artifacts.registry import (
     ArtifactError,
     ArtifactKind,
     iter_paths_of,
+    own_feature,
 )
 
 
@@ -191,6 +192,9 @@ class MigrationReport:
     """Planned, then found unnecessary at apply time — another writer got there
     first. Recorded rather than dropped: it is the visible half of invariant 2."""
     failed: tuple[FailedAction, ...] = ()
+    elsewhere: tuple[Path, ...] = ()
+    """Under quiet, stale artifacts in ANOTHER feature's root: reported, never rewritten
+    from this workspace (`registry.own_feature`); its own workspace migrates them."""
 
     @property
     def changed_paths(self) -> tuple[Path, ...]:
@@ -318,8 +322,9 @@ def plan_migrations(
     """
     reg = registry if registry is not None else MIGRATIONS
     actions: list[PlannedAction] = []
+    owned = own_feature(repo_root)
     for name, kind in _ordered_kinds(reg):
-        for path in iter_paths_of(repo_root, kind):
+        for path in filter(owned, iter_paths_of(repo_root, kind)):
             actions.extend(_actions_for(reg, name, kind, path)[0])
     return tuple(actions)
 
@@ -337,8 +342,9 @@ def is_stale(repo_root: Path, *, registry: MigrationRegistry | None = None) -> b
     wave through precisely the case it exists for.
     """
     reg = registry if registry is not None else MIGRATIONS
+    owned = own_feature(repo_root)
     for name, kind in _ordered_kinds(reg):
-        for path in iter_paths_of(repo_root, kind):
+        for path in filter(owned, iter_paths_of(repo_root, kind)):
             actions, failures = _actions_for(reg, name, kind, path)
             if actions or failures:
                 return True
@@ -358,8 +364,9 @@ def inspection_failures(
     """
     reg = registry if registry is not None else MIGRATIONS
     failures: list[FailedAction] = []
+    owned = own_feature(repo_root)
     for name, kind in _ordered_kinds(reg):
-        for path in iter_paths_of(repo_root, kind):
+        for path in filter(owned, iter_paths_of(repo_root, kind)):
             failures.extend(_actions_for(reg, name, kind, path)[1])
     return tuple(failures)
 
@@ -525,9 +532,15 @@ def run_migrations(
     reg = registry if registry is not None else MIGRATIONS
     planned: list[tuple[str, ArtifactKind, Path, list[PlannedAction]]] = []
     failed: list[FailedAction] = []
+    elsewhere: list[Path] = []
+    owned = own_feature(repo_root)
 
     for name, kind in _ordered_kinds(reg):
         for path in iter_paths_of(repo_root, kind):
+            if not owned(path):
+                if _actions_for(reg, name, kind, path)[0]:
+                    elsewhere.append(path)
+                continue
             actions, planning_failures = _actions_for(reg, name, kind, path)
             failed.extend(planning_failures)
             if not actions:
@@ -543,6 +556,7 @@ def run_migrations(
             dry_run=True,
             applied=tuple(a for _, _, _, actions in planned for a in actions),
             failed=_distinct(failed),
+            elsewhere=tuple(dict.fromkeys(elsewhere)),
         )
 
     applied: list[PlannedAction] = []
@@ -573,6 +587,7 @@ def run_migrations(
         applied=tuple(applied),
         skipped=tuple(skipped),
         failed=_distinct(failed),
+        elsewhere=tuple(dict.fromkeys(elsewhere)),
     )
 
 

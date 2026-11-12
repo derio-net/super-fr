@@ -669,6 +669,30 @@ def iter_paths_of(repo_root: Path, kind: ArtifactKind) -> Iterator[Path]:
                 yield path
 
 
+def own_feature(repo_root: Path) -> Callable[[Path], bool]:
+    """Whether an artifact path is this checkout's to MIGRATE. Under quiet only its own
+    feature root (the one `space_for` checked the OWNER of) is: another feature's root
+    belongs to another branch's workspace, which may be editing it, and R23 ties each
+    commit's one feature path to the branch making it. Its stale artifacts are reported
+    and migrated when that workspace next runs fr. Validation still reads every root.
+    Everything is this checkout's under `repo`."""
+    from fr.artifacts.paths import FEATURES_DIR, REPO, feature_root, space_for
+
+    space = space_for(repo_root)
+    if space.placement == REPO:
+        return lambda _path: True
+    features = (space.root / FEATURES_DIR).resolve()
+    mine = feature_root(space).resolve() if space.feature is not None else None
+
+    def owned(path: Path) -> bool:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(features):
+            return True  # repo configuration in the product checkout
+        return mine is not None and resolved.is_relative_to(mine)
+
+    return owned
+
+
 def iter_artifact_paths(repo_root: Path, name: str) -> Iterator[Path]:
     """Every live artifact of kind `name` under `repo_root`, sorted."""
     yield from iter_paths_of(repo_root, artifact_kind(name))

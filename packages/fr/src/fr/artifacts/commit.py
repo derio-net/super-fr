@@ -533,15 +533,27 @@ def _commit_groups(
 ) -> CommitOutcome:
     """One commit per group: product paths in the product checkout, each feature's in the
     fr worktree under its lock. Committed when every group was."""
-    from fr.artifacts.paths import space_for
+    from fr.artifacts.paths import feature_root, space_for
     from fr.placement.quiet import fr_worktree_lock
     from fr.settings import SettingsError
 
-    fr_root = space_for(repo_root).root
+    space = space_for(repo_root)
+    fr_root = space.root
+    mine = feature_root(space).resolve() if space.feature is not None else None
     outcomes: list[CommitOutcome] = []
     for key, group in groups.items():
         if key is None:
             outcomes.append(commit_paths(repo_root, group, message))
+            continue
+        if mine is None or key.resolve() != mine:
+            # Defence in depth (the runner never rewrites another feature's root): a
+            # commit here touches only the committing branch's own feature path (R23).
+            outcomes.append(
+                CommitOutcome(
+                    committed=False,
+                    reason=f"refusing to commit {key.name}'s artifacts: another feature's path",
+                )
+            )
             continue
         try:
             with fr_worktree_lock(fr_root):
