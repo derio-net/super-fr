@@ -3,7 +3,7 @@ run: 2026-11-12-feat-code-quality-steps
 workflow: fr-goal@1
 branch: feat/code-quality-steps
 started: '2026-11-12T14:45:47+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-12-review-lenses-design.md
   spec-review:
-    state: running
-    at: '2026-11-12T15:54:53+00:00'
+    state: done
+    at: '2026-11-12T17:13:20+00:00'
     units:
       step/spec-review:
         attempts:
@@ -25,6 +25,12 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
+          returned: '2026-11-12T17:13:18+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a0fbabbaae8aa2534
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14
   plan:
     state: pending
   plan-review:
