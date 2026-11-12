@@ -37,9 +37,12 @@ rows:
       no longer does'
     origin:
     - spec:2026-11-12-remove-vk-compat#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_fr_repo_root_is_honoured
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_vk_repo_root_is_not_read
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
     verify: none
   - id: installer-names-no-vk-residue
     capability: Installer
