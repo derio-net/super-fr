@@ -1,0 +1,20 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-06-07-isolation-guard-cd-transition
+repo: derio-net/super-fr
+rows:
+  - id: isolation-guard-base-deny
+    capability: Isolation
+    acceptance: While an fr pipeline is active, base-repo-cwd Bash is denied and worktree
+      cwd (including cd into it) is allowed
+    origin:
+    - spec:2026-06-07-isolation-guard-cd-transition
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+    status: ci
+    notes: Guard allow/deny matrix incl. FR_CD_ALLOW_PREFIXES pinned per-PR.

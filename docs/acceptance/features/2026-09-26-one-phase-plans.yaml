@@ -1,0 +1,27 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-26-one-phase-plans
+repo: derio-net/super-fr
+rows:
+  - id: plan-one-phase-is-first-class
+    capability: fr-goal-methodology
+    acceptance: A plan with one agentic phase self-reviews clean with no skeleton marker
+      or override; the skeleton gate applies only to plans with two or more agentic
+      phases
+    origin:
+    - spec:2026-09-26-one-phase-plans
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_a_sole_unmarked_agentic_phase_passes_with_no_override
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_self_review_minimal_plan_has_no_issues
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_self_review_errors_when_first_agentic_phase_is_not_a_skeleton
+    status: ci
+    notes: 'gh#673: skeleton gate applies only with 2+ agentic phases. The 2+ side (unmarked-first
+      error, override, misplaced marker) stays pinned by the existing goal-phase-one-skeleton-smoke
+      row''s tests. gh#531: line anchors re-pointed to the tests they were recorded
+      for (they had slid onto other tests as lines moved). gh#676: the 2+-agentic-phases
+      half is now cited here too (an unmarked first phase still errors).'

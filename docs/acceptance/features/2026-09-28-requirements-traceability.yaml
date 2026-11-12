@@ -1,0 +1,22 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-28-requirements-traceability
+repo: derio-net/super-fr
+rows:
+  - id: requirements-post-merge-rows
+    capability: fr-goal-methodology
+    acceptance: A requirement that can only be verified after merge does not block delivery
+      and stays visibly owed in the PR body
+    origin:
+    - spec:2026-09-28-requirements-traceability#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: 'Re-pointed (spec-is-the-contract): the requirement-rows deliver gate is
+      removed, so nothing blocks delivery; the PR body''s Post-merge verification owed
+      section still lists the row (test_deliver_pr_body.py).'

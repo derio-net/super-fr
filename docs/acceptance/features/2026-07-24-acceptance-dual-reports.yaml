@@ -1,0 +1,23 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-24-acceptance-dual-reports
+repo: derio-net/super-fr
+rows:
+  - id: acceptance-report-dual-gate
+    capability: Acceptance report
+    acceptance: 'Every fr-acceptance repo is gated on both reports: fr acceptance check
+      fails when the committed report set is stale or incomplete (enforcement via the
+      universal gate, no per-repo workflow change).'
+    origin:
+    - spec:2026-07-24-acceptance-dual-reports
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_cmd.py
+      - super-fr:tests/unit/test_tripwire_acceptance_report_sync.py
+    status: ci
+    notes: Existence-gated report-sync folded into check() (P2); reaches existing consumer
+      repos on fr upgrade.

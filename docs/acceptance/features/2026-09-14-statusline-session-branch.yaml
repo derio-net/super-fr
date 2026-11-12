@@ -1,0 +1,24 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-14-statusline-session-branch
+repo: derio-net/super-fr
+rows:
+  - id: statusline-harness-neutral-segment
+    capability: isolation-traceability
+    acceptance: Any harness can render the session branch and fr-isolation state from
+      one shell command (--cwd, --format oneline), without the fr CLI and without stdin
+      JSON.
+    origin:
+    - spec:2026-09-14-statusline-session-branch
+    levels:
+      int:
+      - super-fr:tests/unit/test_statusline_segment.py
+    status: ci
+    notes: Born at brainstorm 2026-09-14. Level int (golden subprocess tests in tests/unit/test_statusline_segment.py);
+      --cwd/oneline covered by golden tests (test_cwd_flag_reads_no_stdin, test_oneline,
+      test_never_invokes_fr). Hermes custom_command wiring is docs-only until NousResearch/hermes-agent#109596
+      ships; OpenCode has no status-line hook (anomalyco/opencode#37464).

@@ -1,0 +1,20 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-26-isolation-gc-fetch-timeout
+repo: derio-net/super-fr
+rows:
+  - id: isolation-gc-fetch-is-bounded
+    capability: Isolation GC
+    acceptance: An isolation gc candidate whose origin fetch hangs is bounded by the
+      configured network timeout and is not reaped on the resulting fetch failure.
+    origin:
+    - spec:2026-09-26-isolation-gc-fetch-timeout
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_network_timeouts.py
+    status: ci
+    notes: Regression test implemented for _reap_hazard fetch timeout handling (P1.T1.S1-S2)

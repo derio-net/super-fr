@@ -1,0 +1,21 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-06-09-terminal-done-issue-close
+repo: derio-net/super-fr
+rows:
+  - id: bridge-done-issue-close
+    capability: Bridge
+    acceptance: A card moved Done out-of-band closes its tracking Issue exactly once
+      and unblocks the dependent phase
+    origin:
+    - spec:2026-06-09-terminal-done-issue-close
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bridge_lifecycle.py
+      - super-fr:tests/unit/test_done_reconcile.py
+    status: ci
+    notes: Seen-set idempotence pinned per-PR.

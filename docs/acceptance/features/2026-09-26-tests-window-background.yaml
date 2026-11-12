@@ -1,0 +1,33 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-26-tests-window-background
+repo: derio-net/super-fr
+rows:
+  - id: deliver-tests-log-background
+    capability: fr-goal-methodology
+    acceptance: deliver's tests=<log> gate accepts a suite the orchestrator ran in the
+      background once its task-notification reports success
+    origin:
+    - spec:2026-09-26-tests-window-background
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: 'gh#594/#607/#631. Window core landed in #702 (run-deliver-tests-log-background-command);
+      this row now pins what this change adds on top: the queued-attachment notice carrier
+      and the timeout-moved ack, in test_run_telemetry.py.'
+  - id: deliver-tests-log-shell-variable
+    capability: fr-goal-methodology
+    acceptance: deliver's tests=<log> gate accepts a log whose path the writing command
+      held in a shell variable
+    origin:
+    - spec:2026-09-26-tests-window-background
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: _writes resolves same-command $VAR/${VAR} targets (gh#594/#607/#631)

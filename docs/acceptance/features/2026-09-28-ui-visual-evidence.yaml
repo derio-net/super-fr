@@ -1,0 +1,104 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-28-ui-visual-evidence
+repo: derio-net/super-fr
+rows:
+  - id: visual-evidence-row-flag
+    capability: acceptance-matrix
+    acceptance: An acceptance row can declare `visual` with the states and interactions
+      (limits included) that visual evidence must cover, written by `fr acceptance add`
+      and by a step record, and validated (no empty or duplicate names).
+    origin:
+    - spec:2026-09-28-ui-visual-evidence#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_visual.py
+      - super-fr:tests/unit/test_record_visual.py
+    status: ci
+    notes: 'Implemented in phase 1 of plan 2026-09-28-ui-visual-evidence: Visual model
+      and validation, fr acceptance add --visual-*, set-status preserving it, record
+      AcceptanceItem.visual; unit tests run in CI.'
+  - id: visual-evidence-gate
+    capability: fr-goal-evidence
+    acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
+      while a `visual` row they owe lacks a fresh screenshot for any named state or
+      interaction, or any named screenshot was not opened (image read) in the owing
+      agent''s transcript since the unit opened; a script''s pass/fail alone never satisfies
+      it.'
+    origin:
+    - spec:2026-09-28-ui-visual-evidence#R2
+    - spec:2026-09-28-ui-visual-evidence#R3
+    - spec:2026-09-28-ui-visual-evidence#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+      - super-fr:tests/unit/test_run_telemetry_visual.py
+    status: ci
+    notes: 'Implemented in phase 2 of plan 2026-09-28-ui-visual-evidence: fr.run.visual
+      checks 1-5 and the resolve gate at implement-phase, review-phase and deliver (freshness,
+      image reads in the witness transcript, unobserved, derived refusals); unit tests
+      run in CI.'
+  - id: visual-evidence-reviewer-own-eyes
+    capability: fr-goal-evidence
+    acceptance: At `review-phase` the screenshots must have been opened in the dispatched
+      reviewer's own transcript; the executor having opened them is refused.
+    origin:
+    - spec:2026-09-28-ui-visual-evidence#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+    status: ci
+    notes: 'Implemented in phase 2 of plan 2026-09-28-ui-visual-evidence: at review-phase
+      the witness is the offered reviewer''s own transcript; reads only in the executor''s
+      transcript are refused (test_review_reads_only_in_the_executors_transcript_are_refused);
+      CI.'
+  - id: visual-evidence-capture-script
+    capability: fr-goal-evidence
+    acceptance: A capture script named in visual evidence must exist and be re-run by
+      the stage that names it; the skills prefer such a script to agent-driven browsing.
+    origin:
+    - spec:2026-09-28-ui-visual-evidence#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+      - super-fr:tests/unit/test_skill_visual_evidence.py
+      - super-fr:tests/unit/test_run_telemetry_visual.py#test_a_uv_run_flag_value_is_not_the_program
+    status: ci
+    notes: 'gh#999: the executes-the-script matcher skips the values of uv run flags
+      (uv run --with <pkg> python <script>), pinned in test_run_telemetry_visual.py.'
+  - id: visual-evidence-live-run
+    capability: fr-goal-evidence
+    acceptance: On a live fr-goal run of a UI feature with a `visual` row, the executor,
+      the reviewer and deliver each open their own fresh screenshots and the cursor
+      records the witness.
+    origin:
+    - spec:2026-09-28-ui-visual-evidence#R2
+    - spec:2026-09-28-ui-visual-evidence#R3
+    - spec:2026-09-28-ui-visual-evidence#R4
+    - spec:2026-09-28-ui-visual-evidence#R5
+    levels: {}
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1366
+    verify: live
+    issues:
+    - derio-net/super-fr#1366
+  - id: visual-evidence-browser-check-prose
+    capability: fr-goal-prose
+    acceptance: 'fr-execute, fr-goal and the phase-executor agent carry a browser-check
+      step: capture every named state and interaction at its limits, prefer a capture
+      script re-run at each stage, open every screenshot, fill the record''s `visual:`
+      section.'
+    origin:
+    - spec:2026-09-28-ui-visual-evidence#R5
+    - spec:2026-09-28-ui-visual-evidence#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_skill_visual_evidence.py
+    status: ci
+    notes: 'Phase 3: fr-execute''s Browser check step, fr-phase-executor''s return contract,
+      and fr-goal/fr-brainstorming/fr-plan''s visual mentions land; test_skill_visual_evidence.py
+      pins them.'

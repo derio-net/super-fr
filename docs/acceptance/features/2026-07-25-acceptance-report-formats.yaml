@@ -1,0 +1,22 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-25-acceptance-report-formats
+repo: derio-net/super-fr
+rows:
+  - id: acceptance-report-formats
+    capability: Acceptance report
+    acceptance: The committed deterministic report set is three files — report_local.html
+      (local HTML), report_linked.html (github HTML), and report_linked.md (github Markdown,
+      rendered inline on github.com); report.html is ad-hoc and uncommitted.
+    origin:
+    - spec:2026-07-25-acceptance-report-formats
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_report.py
+    status: ci
+    notes: Markdown renderer + 3-format set (report_local.html, report_linked.html,
+      report_linked.md); report.html reverts to ad-hoc/gitignored. Unit-pinned per-PR.

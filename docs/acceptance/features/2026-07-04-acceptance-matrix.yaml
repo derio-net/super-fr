@@ -1,0 +1,94 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-04-acceptance-matrix
+repo: derio-net/super-fr
+rows:
+  - id: acceptance-init-scaffold
+    capability: Acceptance matrix
+    acceptance: fr acceptance init scaffolds matrix + CI workflow + backfill rule into
+      any repo; check is green on the skeleton
+    origin:
+    - spec:2026-07-04-acceptance-matrix
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init.py
+    status: ci
+    notes: Idempotence, skeleton-passes-check, workflow shape pinned per-PR.
+  - id: acceptance-check-gate
+    capability: Acceptance matrix
+    acceptance: Schema/status violations are rejected; failing rows exit 2 and fail
+      CI; staleness and plan linkage are guarded
+    origin:
+    - spec:2026-07-04-acceptance-matrix
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_model.py
+      - super-fr:tests/unit/test_acceptance_cmd.py
+    status: ci
+    notes: Exit contract 2/1/0, ref grammar traps, trap-7 path-filter coverage pinned
+      per-PR.
+  - id: acceptance-archive-twin
+    capability: Acceptance matrix
+    acceptance: 'Archiving a cited spec never breaks the gate: check downgrades to a
+      warning and report links follow the file'
+    origin:
+    - spec:2026-07-04-acceptance-matrix
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_cmd.py
+      - super-fr:tests/unit/test_acceptance_report.py
+    status: ci
+    notes: Twin resolution both directions; citation survives the move.
+  - id: acceptance-pipeline-rows
+    capability: Acceptance matrix
+    acceptance: Rows are born at brainstorm (presented with defenses), linked in plans,
+      flipped at execution; self-review fails unlinked plans
+    origin:
+    - spec:2026-07-04-acceptance-matrix
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_acceptance_links.py
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1338
+    issues:
+    - derio-net/super-fr#1338
+  - id: acceptance-added-since
+    capability: Acceptance matrix
+    acceptance: Mid-flight row additions are diffable against a base ref and defended
+      in the delivered PR body
+    origin:
+    - spec:2026-07-04-acceptance-matrix
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_status_add.py
+    status: manual
+    notes: 'reclassified at the skipped split (spec 2026-10-11-debt-engine R7): the
+      PR-body defense is a review process (demonstrated in PR #352), never automatable;
+      the CLI diff itself is ci-pinned.'
+  - id: acceptance-nag-channels
+    capability: Acceptance matrix
+    acceptance: Session start surfaces open debt (capped), fr status carries the summary,
+      and the weekly digest issue upserts and closes at zero
+    origin:
+    - spec:2026-07-04-acceptance-matrix
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_acceptance_nag.py
+      - super-fr:tests/unit/test_plan_acceptance_links.py
+      - super-fr:tests/unit/test_acceptance_init.py
+    status: walked
+    notes: 'walked (p1-r4): the live weekly upsert has been observed, issue #363 refreshed
+      by the schedule on 2026-10-05; hook, digest formatter and Actions summary scaffold
+      are ci-pinned. The close at zero debt is not yet observed.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-05T00:00:00Z'
+      evidence: issue derio-net/super-fr#363 'Acceptance debt' is open and was last
+        refreshed by the scheduled acceptance-report run (github-actions) on 2026-10-05

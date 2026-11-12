@@ -1,0 +1,50 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-24-vk-mcp-timeout-permit-leak
+repo: derio-net/super-fr
+rows:
+  - id: vk-mcp-timeout-survives-slow-ops
+    capability: fr→VK dispatch
+    acceptance: A VK MCP op taking up to 180s (start_workspace under load, init handshake)
+      completes without the client abandoning the in-flight request, so bridge dispatch
+      leaks no VK concurrency permits
+    origin:
+    - spec:2026-07-24-vk-mcp-timeout-permit-leak
+    levels:
+      unit:
+      - super-fr:tests/unit/test_mcp_client_timeout.py
+    status: ci
+    notes: 'Issue #404: 30s _recv default abandoned slow ops; abandoned spawns leak
+      VK_MAX_CONCURRENT_EXECUTIONS permits cumulatively until the pool wedges. Fixed
+      in v3.15.1 — uniform 180s default for _recv/call_tool, unit-pinned per-PR.'
+  - id: vk-mcp-post-timeout-correctness
+    capability: fr→VK dispatch
+    acceptance: After one MCP call times out, later calls on the same client still receive
+      their own responses — card/workspace state transitions stay correct (no stale-response
+      misattribution)
+    origin:
+    - spec:2026-07-24-vk-mcp-timeout-permit-leak
+    levels:
+      unit:
+      - super-fr:tests/unit/test_mcp_client.py
+    status: ci
+    notes: JSON-RPC response-id correlation (_recv_matching) landed in v3.15.1; stale-id
+      discard, notification skip, and deadline exhaustion are unit-pinned per-PR.
+  - id: vk-bridge-init-timeout-graceful
+    capability: bridge tick resilience
+    acceptance: A bridge tick whose MCP client init times out exits gracefully with
+      a failure metric (mcp_init_error) instead of an unhandled traceback; the next
+      tick runs normally
+    origin:
+    - spec:2026-07-24-vk-mcp-timeout-permit-leak
+    levels:
+      int:
+      - super-fr:tests/integration/test_bridge_resilience.py
+    status: ci
+    notes: v3.14.0 died with a raw traceback during _construct_mcp_client(); no metric
+      was pushed. v3.15.1 guards init with (TimeoutError, OSError) → mcp_init_error
+      + exit 1; SystemExit(2) for missing binaries still propagates (I1).

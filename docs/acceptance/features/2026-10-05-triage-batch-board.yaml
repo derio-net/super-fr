@@ -1,0 +1,168 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-05-triage-batch-board
+repo: derio-net/super-fr
+rows:
+  - id: triage-board-columns
+    capability: triage-batch-board
+    acceptance: '`fr triage board` writes board.html showing one card per batch in seven
+      lifecycle columns (Proposed, Waiting, Running, PR open, Closing out, Partial,
+      Done) with counts, a partial batch in Partial until its close-out is archived,
+      a blocked mark for unsatisfiable dependencies and a pill for cancelled/abandoned/partial,
+      linked from triage.html, readable in light and dark and at phone width.'
+    origin:
+    - spec:2026-10-05-triage-batch-board#R1
+    - spec:2026-10-05-triage-batch-board#R2
+    - spec:2026-10-05-triage-batch-board#R3
+    - spec:2026-10-05-triage-batch-board#R13
+    - spec:2026-10-05-triage-batch-board#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+    status: ci
+    notes: 'board model, page and command unit-tested; browser-checked light, dark,
+      375px (phase 2). gh#985: a partial batch owed its close-out has its own Partial
+      column (operator decision 2026-10-06), pinned in test_triage_kanban.py and test_triage_kanban_render.py'
+    visual:
+      states:
+      - empty board
+      - every column populated
+      - waiting card blocked
+      - done card with cancelled pill
+      - dark theme
+      - phone width stacked columns
+    issues:
+    - derio-net/super-fr#985
+  - id: triage-board-card-detail
+    capability: triage-batch-board
+    acceptance: A board card expands in place, scripts on or off, to show member issues,
+      PR and CI state, lifecycle details, the event timeline and a next-action hint
+      drawn from what the driver would do on the same facts.
+    origin:
+    - spec:2026-10-05-triage-batch-board#R4
+    - spec:2026-10-05-triage-batch-board#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hints and card sections unit-tested; expand/collapse browser-checked
+    visual:
+      states:
+      - expanded card with PR and close-out
+      - expanded card without PR
+      interactions:
+      - expand and collapse a card
+  - id: triage-board-jump-focus
+    capability: triage-batch-board
+    acceptance: A card's jump button copies `fr triage batch focus <id>` (with --closeout
+      for the close-out session) and confirms; that command focuses the batch's live
+      herdr session, and refuses with exit 2 and a reason when there is no event, no
+      capable runner or no live session.
+    origin:
+    - spec:2026-10-05-triage-batch-board#R5
+    - spec:2026-10-05-triage-batch-board#R8
+    - spec:2026-10-05-triage-batch-board#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_focus.py
+      - super-fr:tests/unit/test_fr_herdr_runner.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: focus CLI and herdr unit-tested; copy button and clipboard fallback unit-tested
+      (command text) and browser-checked
+    visual:
+      states:
+      - copy confirmed on button
+      interactions:
+      - click jump button
+      - clipboard unavailable fallback
+  - id: triage-board-session-status
+    capability: triage-batch-board
+    acceptance: Each dispatched batch and started close-out shows its live session status
+      from the runner (working, blocked, idle, done, unknown, no session); a missing,
+      failing or incapable runner shows unknown with a page note and never fails the
+      render; a blocked session flags its card as needing the operator.
+    origin:
+    - spec:2026-10-05-triage-batch-board#R7
+    - spec:2026-10-05-triage-batch-board#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: session_statuses degrades to unknown plus a note for every failing runner;
+      herdr side tested in phase 1; blocked highlight browser-checked
+    visual:
+      states:
+      - blocked session card highlighted
+      - unknown status with page note
+  - id: triage-board-refresh
+    capability: triage-batch-board
+    acceptance: The board stays fresh without the operator re-rendering it — the drive
+      re-renders it after each pass (a render failure only warns), `fr triage board
+      --watch` re-collects and re-renders when no drive runs (refusing while one does),
+      and the page reloads on a configurable timer keeping expanded cards and scroll
+      position.
+    origin:
+    - spec:2026-10-05-triage-batch-board#R10
+    - spec:2026-10-05-triage-batch-board#R11
+    - spec:2026-10-05-triage-batch-board#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_cmd.py
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py
+    status: ci
+    notes: The drive re-renders board.html after every --yes pass and warns once per
+      cause when it cannot (tests/unit/test_triage_batch_drive_cmd.py); fr triage board
+      --watch re-collects and renders every interval and refuses under a live drive
+      lock (tests/unit/test_triage_kanban_cmd.py); the timer reload keeping expanded
+      cards was captured in Chrome (phase 3 visual record).
+    visual:
+      states:
+      - rendered and collected times shown
+      interactions:
+      - reload keeps expanded cards
+  - id: triage-board-untrusted-text
+    capability: triage-batch-board
+    acceptance: Forge- and judgement-sourced text on the board is escaped and never
+      reaches a script element, and the copied command is built only from the validated
+      batch id and scope options.
+    origin:
+    - spec:2026-10-05-triage-batch-board#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py
+    status: ci
+    notes: hostile titles, hostile --dir and script-text constancy unit-tested
+  - id: triage-board-live-herdr
+    capability: triage-batch-board
+    acceptance: Inside herdr during a live drive, cards move columns as the drive acts,
+      the pasted jump command switches to the batch's tab in its wave workspace, and
+      a session waiting on a prompt shows blocked.
+    origin:
+    - spec:2026-10-05-triage-batch-board#R7
+    - spec:2026-10-05-triage-batch-board#R8
+    - spec:2026-10-05-triage-batch-board#R11
+    levels:
+      int:
+      - super-fr:docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): all three
+      post-merge Test Plan items driven live 2026-10-06 inside herdr; evidence in the
+      int ref.'
+    verify: live
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-06T00:00:00Z'
+      evidence: 'docs/acceptance/evidence/2026-10-06-triage-board-live-herdr.md: all
+        three post-merge Test Plan items driven inside herdr over 101 batches'

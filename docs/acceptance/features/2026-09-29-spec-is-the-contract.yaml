@@ -1,0 +1,57 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-29-spec-is-the-contract
+repo: derio-net/super-fr
+rows:
+  - id: spec-contract-plain-requirements
+    capability: fr-goal-methodology
+    acceptance: A spec's Requirements section is a plain R<n> list with no quote, source
+      or gate; the parser also reads a pre-5.0 three-column table, and phase sizing
+      and visual evidence work on both
+    origin:
+    - spec:2026-09-29-spec-is-the-contract#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_requirements_list.py
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+      - super-fr:tests/unit/test_plan_proportionality.py
+    status: ci
+    notes: The plain R<n> list and the pre-5.0 table parse to the same ids and text;
+      phase sizing and proportionality give the same result on both.
+  - id: spec-contract-dry-run
+    capability: fr-goal-methodology
+    acceptance: A super-fr-3 feature-C run on 5.0.0 records the brief and answers at
+      brainstorm, writes a plain R1..Rn list, runs spec review once with no coverage
+      or partition loop, and delivers
+    origin:
+    - spec:2026-09-29-spec-is-the-contract#R2
+    levels: {}
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): verified
+      live 2026-09-29 (super-fr-3 take 12) for this harness and model only (#822).'
+    verify: live
+    walks:
+    - strategy: live
+      harness: opencode
+      model: gpt-6-sol
+      outcome: pass
+      at: '2026-09-29T00:00:00Z'
+      evidence: 'super-fr-3 take 12 (feature-C brief, OpenCode 1.18.33, fr 5.0.0, fr-goal-light@1,
+        self-hosted GitLab without CI): brief and answer verbatim in the spec journal'
+  - id: spec-contract-record-v7
+    capability: artifact-versioning
+    acceptance: Record kind 7 drops delegated and the unconfirmed state; the chain reaches
+      7 from 1 hop by hop through a frozen RecordV6, and an unconfirmed record is left
+      byte-identical and reported
+    origin:
+    - spec:2026-09-29-spec-is-the-contract#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_contract.py
+    status: ci
+    notes: Record chain reaches 7 hop by hop through the frozen RecordV6; delegated
+      dropped; unconfirmed left byte-identical and reported; RecordV6 source pinned.

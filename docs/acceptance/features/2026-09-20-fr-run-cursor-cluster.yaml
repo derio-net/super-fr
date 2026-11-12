@@ -1,0 +1,112 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-20-fr-run-cursor-cluster
+repo: derio-net/super-fr
+rows:
+  - id: run-advance-refuses-running
+    capability: Run state
+    acceptance: An operator re-entering the loop cold is told to wait rather than handed
+      a second dispatch brief for an agent that is still running.
+    origin:
+    - spec:2026-09-20-fr-run-cursor-cluster
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'SUPERSEDED - MERGED INTO run-dispatch-refuses-second (2026-09-21, unit-record-unification
+      spec section 7). One behaviour, one row: witness decision u1 established that
+      "advance refuses a RUNNING unit" and "advance refuses a HELD unit" are the same
+      claim, because the open ATTEMPT is the witness and "running" is lifecycle state
+      everywhere else. Two rows that can only ever move together are one row wearing
+      two labels.
+
+      KEPT, NOT DELETED, and that is a tooling fact rather than a preference: fr acceptance
+      ships add / set-status / check / report and no delete or edit verb (checked against
+      fr acceptance --help on 2026-09-21), and striking a row out of matrix.yaml by
+      hand is precisely the hand-edit .claude/rules/acceptance-matrix.md forbids. So
+      this row survives as a POINTER. Add no evidence here; read run-dispatch-refuses-second,
+      which now carries this row''s test refs as well as its own.
+
+      Status stays ci and that is not an overclaim: the behaviour named above really
+      is CI-pinned in tests/unit/test_run_cli.py (test_advance_refuses_a_running_member,
+      test_advance_refuses_a_running_top_level_agent_step, test_redispatch_re_emits_the_brief_for_the_outstanding_unit_only,
+      test_redispatch_with_nothing_outstanding_is_refused). A merged row demoted to
+      not-implemented would report a false red for a capability that works. LIVE 2026-09-24,
+      scratch fr-goal run (fr 4.19.2, host-worktree, CLI-level; not mid-way through
+      a model-driven run): a second advance with a unit outstanding exits 2 ''ALREADY
+      HELD … (dispatched <ts>)''; --redispatch re-briefs only that unit (cursor diff:
+      old attempt abandoned, new appended); with nothing outstanding --redispatch exits
+      2 and leaves the cursor byte-identical.'
+  - id: run-resolve-teaches-item-flag
+    capability: Run state
+    acceptance: A grouped for_each member id copied from advance's output resolves,
+      or the failure teaches the two flags that do.
+    origin:
+    - spec:2026-09-20-fr-run-cursor-cluster
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'Composite member id refused with the two flags spelled out; advance prints
+      the same command before the JSON brief, and the brief stays the last stdout line.
+      LIVE 2026-09-24, scratch fr-goal run (fr 4.19.2, host-worktree, CLI-level; not
+      mid-way through a model-driven run): resolve --step phase/1/implement-phase exits
+      2 and teaches ''--step implement-phase --item phase/1''; the resolve hint precedes
+      the JSON and advance | tail -1 | jq parses.'
+  - id: run-start-binds-session
+    capability: Worktree traceability
+    acceptance: A workspace created by fr run start is attributable to the session that
+      started it, so fr isolation status can answer 'where is this session's work?'
+      for an fr-goal run.
+    origin:
+    - spec:2026-09-20-fr-run-cursor-cluster
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_hooks_session_bind.py
+    status: ci
+    notes: 'Flag, hook and skill prose all landed; the hook case is the one that binds
+      with no agent cooperation, which is why a flag alone was not enough. LIVE 2026-09-24,
+      scratch fr-goal run (fr 4.19.2, host-worktree, CLI-level; not mid-way through
+      a model-driven run): right after fr run start, isolation status shows sessions=<the
+      calling session''s uuid>; with the ambient Claude Code session env stripped, fr
+      run start --session <id> --harness claude-code binds exactly that id.'
+  - id: plan-manual-phase-trailing
+    capability: Plan authoring
+    acceptance: A plan whose manual work an agentic phase would have to wait on is refused
+      at authoring, not discovered mid-run.
+    origin:
+    - spec:2026-09-20-fr-run-cursor-cluster
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_ops.py
+    status: ci
+    notes: 'severity=error in self_review, which fr-goal runs as its plan-review cli
+      step, so a mis-shaped plan fails before phase 1 dispatches. depends_on checked
+      alongside position. LIVE 2026-09-24, scratch fr-goal run (fr 4.19.2, host-worktree,
+      CLI-level; not mid-way through a model-driven run): a plan with a MIDDLE manual
+      phase (agentic, manual, agentic) is refused by fr plan self-review, exit 1, ''an
+      agentic phase must never wait on a human''; the trailing-manual form of the same
+      plan passes.'
+  - id: run-manual-phase-never-dispatched
+    capability: Run state
+    acceptance: A manual phase is never offered to an agent, and the cursor still shows
+      it rather than hiding a deliberate omission.
+    origin:
+    - spec:2026-09-20-fr-run-cursor-cluster
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_adopt.py
+    status: ci
+    notes: 'No brief is built for a manual phase on any path; the cursor records phase/<n>:
+      manual so a deliberate omission stays visible; advance and adopt write it identically.
+      The marker keys on tag alone, never on completion, so an already-complete front-loaded
+      manual phase is recorded manual too — the two writers agree without either parsing
+      state. LIVE, Run C (#592, a real Claude Code fr-goal run on #526, 2026-09-23):
+      the trailing [manual] phase 4 got no dispatch unit in the cursor, implement completed,
+      and deliver still opened the PR.'

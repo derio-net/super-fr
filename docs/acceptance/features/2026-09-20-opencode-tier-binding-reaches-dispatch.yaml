@@ -1,0 +1,33 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-20-opencode-tier-binding-reaches-dispatch
+repo: derio-net/super-fr
+rows:
+  - id: opencode-tier-binding-reaches-dispatch
+    capability: OpenCode parity
+    acceptance: A tier→model binding the operator makes — including one answered mid-run,
+      and one that REPLACES an earlier binding — reaches the agent OpenCode actually
+      dispatches, rather than being frozen at whatever the last install.sh run resolved.
+    origin:
+    - spec:2026-09-20-opencode-tier-binding-reaches-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_agents_materialize.py
+      - super-fr:tests/unit/test_models_cmd.py
+      - super-fr:tests/unit/test_fr_goal_dispatch_prose.py
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py
+    status: ci
+    notes: 'ci, and now also LIVE-CONFIRMED 2026-09-21 end to end on OpenCode (github-copilot/gpt-5.6-terra):
+      with the opencode tiers cleared, install.sh installed all three tier agents with
+      no model:; during a real /fr-goal run the binding was set and all three materialised
+      to the answered model; the dispatched child (opencode.db ses_f3b00175…) ran fr-phase-executor-mechanical
+      on it. Automated levels are unchanged and still what keeps this row ci: the stale-binding
+      regression in test_opencode_agents_materialize.py, both triggers, and the real-fr
+      integration tests. What neither the tests nor the live run show: that fr-goal
+      ASKS for the binding when it is unbound — on the live run it did not (#538); the
+      answer arrived as the operator''s reply.'

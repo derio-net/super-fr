@@ -1,0 +1,20 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-25-flat-agent-step-evidence-debt
+repo: derio-net/super-fr
+rows:
+  - id: run-flat-step-evidence-debt
+    capability: Workflow runs
+    acceptance: Completed flat agent steps with missing required evidence are visible
+      as debt in fr run check and fr run status
+    origin:
+    - spec:2026-09-25-flat-agent-step-evidence-debt
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py
+    status: ci
+    notes: Unit-pinned for both CLI views; check exit remains unchanged.

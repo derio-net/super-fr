@@ -1,0 +1,21 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-06-07-isolation-guard-fr-rename
+repo: derio-net/super-fr
+rows:
+  - id: isolation-fr-rename
+    capability: Isolation
+    acceptance: Guard, sentinel, and exec-bridge operate under the fr names after the
+      vk→fr rename
+    origin:
+    - spec:2026-06-07-isolation-guard-fr-rename
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py
+      - super-fr:tests/unit/test_hooks_sentinel.py
+    status: ci
+    notes: Migration + pod-bridge walk done live 2026-06; hook logic pinned per-PR.

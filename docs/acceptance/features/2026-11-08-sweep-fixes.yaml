@@ -1,0 +1,127 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-08-sweep-fixes
+repo: derio-net/super-fr
+rows:
+  - id: release-skips-rc-nothing-installable
+    capability: release
+    acceptance: A merge that changes nothing installable cuts no release candidate,
+      while promotion and fragment releases behave as before
+    origin:
+    - spec:2026-11-08-sweep-fixes#R16
+    - spec:2026-11-08-sweep-fixes#R17
+    - spec:2026-11-08-sweep-fixes#R18
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_something_waits_and_nothing_new_since_the_newest_rc_is_a_no_op
+      - super-fr:tests/unit/test_installable.py#test_every_tracked_path_that_requires_a_bump_is_installable
+    status: ci
+    notes: Pinned by release.py unit tests over fixture git histories in CI.
+    verify: none
+  - id: release-noop-first-real-use
+    capability: release
+    acceptance: On the real Release workflow, a housekeeping merge cuts no tag or pre-release,
+      and a later gate pass still promotes the RC to a final
+    origin:
+    - spec:2026-11-08-sweep-fixes#R16
+    - spec:2026-11-08-sweep-fixes#R18
+    levels: {}
+    status: walked
+    notes: 'Walked on the first real use: a housekeeping merge cut nothing, and the
+      gate pass promoted the RC to a final with no code change since the RC.'
+    verify: live
+    issues:
+    - derio-net/super-fr#1321
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-09T07:42:25Z'
+      evidence: 'Release 42579256294 on 46f9fe61e (archive PR 1397, docs only): nothing
+        installable changed since v6.2.0-rc.1, no release, no tag. After the gate:tester
+        pass on PR 1387, Release 42580426586 cut final v6.2.0 at b74f323c1; v6.2.0-rc.1..v6.2.0
+        changes only version surfaces and docs/.'
+  - id: printed-commands-run
+    capability: gate-backfill
+    acceptance: Every fr command the gate backfill and gate pass flows print runs as
+      printed once its placeholders are filled, and linking a row to its tracker keeps
+      the row's status and note
+    origin:
+    - spec:2026-11-08-sweep-fixes#R1
+    - spec:2026-11-08-sweep-fixes#R2
+    - spec:2026-11-08-sweep-fixes#R3
+    - spec:2026-11-08-sweep-fixes#R4
+    - spec:2026-11-08-sweep-fixes#R5
+    - spec:2026-11-08-sweep-fixes#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_printed_commands_run.py#test_every_command_the_gate_and_backfill_flows_print_runs
+      - super-fr:tests/unit/test_acceptance_set_status.py#test_link_only_keeps_status_and_note
+    status: ci
+    notes: Link-only set-status and the printed commands run in CI; the installed-CLI
+      scenario runs at the walk and in test_scenarios.
+    verify: candidate
+    scenario: tests/scenarios/printed-commands-run.sh
+  - id: gate-backfill-digest-not-lookalike
+    capability: gate-backfill
+    acceptance: The repo's debt digest issue is never suggested as a row's look-alike
+      tracker, whatever its title
+    origin:
+    - spec:2026-11-08-sweep-fixes#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_candidates.py#test_r7_an_open_digest_naming_a_row_is_never_a_look_alike
+    status: ci
+    notes: Pinned by unit tests in CI, both markers under any author.
+    verify: none
+  - id: gate-pass-keep
+    capability: gate-backfill
+    acceptance: A deliberate partial gate pass keeps tracking the items still owed,
+      and a closing comment never reads as if the item were done
+    origin:
+    - spec:2026-11-08-sweep-fixes#R10
+    - spec:2026-11-08-sweep-fixes#R11
+    - spec:2026-11-08-sweep-fixes#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gate_close_trackers.py#test_r10_keep_converts_a_tracker_comment_first_then_body_and_never_closes
+      - super-fr:tests/unit/test_gate_cmd.py#test_p4_r4_a_checkout_of_another_repo_is_no_checkout
+    status: ci
+    notes: Pinned by unit tests in CI over the fake client.
+    verify: none
+  - id: gate-backfill-closes-discharged
+    capability: gate-backfill
+    acceptance: A tracked-only tracker is closed once its item is proven discharged,
+      and never without that proof
+    origin:
+    - spec:2026-11-08-sweep-fixes#R13
+    - spec:2026-11-08-sweep-fixes#R14
+    - spec:2026-11-08-sweep-fixes#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_closes.py#test_a_dry_run_lists_a_discharged_tracked_only_tracker_and_records_it
+      - super-fr:tests/unit/test_gatebackfill_discharged.py#test_a_row_in_a_debt_status_is_not
+    status: ci
+    notes: Pinned by unit tests in CI over real git and the fake client.
+    verify: none
+  - id: test-plan-repair-covers-refused
+    capability: artifact-migration
+    acceptance: Every Test Plan heading fr refuses as a near-miss is repaired by migration,
+      keeping the steps as written, so a migrated spec validates clean
+    origin:
+    - spec:2026-11-08-sweep-fixes#R8
+    - spec:2026-11-08-sweep-fixes#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_plan_heading.py#test_every_refused_form_is_repaired_and_validates_clean
+      - super-fr:tests/unit/test_test_plan_heading.py#test_the_demotion_keywords_are_exactly_the_sections_fr_reads_by_keyword
+    status: ci
+    notes: Every refused form is repaired in CI; the installed-CLI scenario runs at
+      the walk and in test_scenarios.
+    verify: candidate
+    scenario: tests/scenarios/test-plan-repair-covers-refused.sh

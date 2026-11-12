@@ -1,0 +1,77 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-05-drive-herdr-sessions
+repo: derio-net/super-fr
+rows:
+  - id: drive-wave-workspaces
+    capability: triage-batch-drive
+    acceptance: The driver opens each batch's session, and its close-out, in a herdr
+      workspace of the batch's wave (<prefix>-wave-<n>, <prefix>-no-wave; prefix default
+      drive), created once and reused, while a batch dispatched by hand opens where
+      it always did
+    origin:
+    - spec:2026-10-05-drive-herdr-sessions#R1
+    - spec:2026-10-05-drive-herdr-sessions#R2
+    - spec:2026-10-05-drive-herdr-sessions#R3
+    - spec:2026-10-05-drive-herdr-sessions#R4
+    - spec:2026-10-05-drive-herdr-sessions#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_a_group_with_no_workspace_creates_one_and_uses_its_root_pane
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_driven_dispatch_carries_its_waves_group
+    status: ci
+    notes: 'Phase 1 shipped: group payload hint, herdr group workspaces (reuse by label,
+      create with tab rename), drive --workspace-prefix; manual dispatch carries no
+      group.'
+  - id: drive-closes-finished-sessions
+    capability: triage-batch-drive
+    acceptance: Once a batch is finished the driver closes its batch and close-out sessions,
+      never a working or blocked one and never a session that is not its own, closes
+      an emptied wave workspace, and never holds or fails the drive over it; --keep-sessions
+      turns it off
+    origin:
+    - spec:2026-10-05-drive-herdr-sessions#R7
+    - spec:2026-10-05-drive-herdr-sessions#R8
+    - spec:2026-10-05-drive-herdr-sessions#R9
+    - spec:2026-10-05-drive-herdr-sessions#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_close_closes_the_group_workspace_of_a_lone_tab
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_finished_batchs_sessions_are_closed_on_the_runner_each_event_recorded
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_keep_sessions_probes_and_closes_nothing
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_closing_adds_nothing_to_the_summary
+    status: ci
+    notes: 'Phase 2 shipped: herdr close (busy/absent/lone-tab-workspace rules), drive
+      close step and probes, --keep-sessions; closing never changes the exit code. Live
+      run stays in drive-herdr-sessions-live.'
+  - id: drive-herdr-sessions-live
+    capability: triage-batch-drive
+    acceptance: A live two-wave drive inside herdr groups each wave's sessions in its
+      own workspace and leaves no finished batch's tab or emptied wave workspace open
+    origin:
+    - spec:2026-10-05-drive-herdr-sessions#R1
+    - spec:2026-10-05-drive-herdr-sessions#R7
+    - spec:2026-10-05-drive-herdr-sessions#R9
+    levels: {}
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1344
+    verify: live
+    issues:
+    - derio-net/super-fr#1344
+  - id: runner-close-optional
+    capability: runner-protocol
+    acceptance: A runner may offer to close an item's sessions; one that does not is
+      never asked and behaves as before
+    origin:
+    - spec:2026-10-05-drive-herdr-sessions#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_unit_runner_contract.py#test_session_closer_is_a_runtime_protocol_a_plain_runner_is_not
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_runner_that_cannot_close_is_never_asked
+    status: ci
+    notes: 'Phase 2 shipped: SessionCloser optional protocol + check_close_contract;
+      a plain runner is not a SessionCloser and the drive never asks it.'

@@ -1,0 +1,20 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-26-isolation-network-timeouts
+repo: derio-net/super-fr
+rows:
+  - id: isolation-network-calls-bounded
+    capability: isolation network calls are bounded
+    acceptance: The default-branch forge lookup and verify-merge's fetches are timed
+      and non-interactive; a timeout reads as unknown, never as a verdict
+    origin:
+    - spec:2026-09-26-isolation-network-timeouts
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_network_timeouts.py
+    status: ci
+    notes: unit-pinned by tests/unit/test_isolation_network_timeouts.py

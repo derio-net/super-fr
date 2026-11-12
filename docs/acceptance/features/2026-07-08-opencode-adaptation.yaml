@@ -1,0 +1,69 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-08-opencode-adaptation
+repo: derio-net/super-fr
+rows:
+  - id: opencode-skills-in-repo
+    capability: OpenCode adaptation
+    acceptance: An operator can git clone super-fr and use its fr-* skills directly
+      from OpenCode with no install step
+    origin:
+    - spec:2026-07-08-opencode-adaptation
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_opencode_skills_sync.py
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      step 1 walked live post-merge 2026-07-09; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-09T00:00:00Z'
+      evidence: 'Test Plan step 1 post-merge walk: opencode debug skill in a fresh isolation
+        devcontainer on merged main discovered all fr-* skills'
+  - id: opencode-skills-installer
+    capability: OpenCode adaptation
+    acceptance: An operator can run scripts/install.sh and get super-fr's skills available
+      globally in OpenCode
+    origin:
+    - spec:2026-07-08-opencode-adaptation
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_skills.py
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      step 2 walked live post-merge 2026-07-09; install.sh wiring guarded in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-09T00:00:00Z'
+      evidence: 'Test Plan step 2 post-merge walk: install.sh with OPENCODE_SKILLS_INSTALL=1
+        delivered the skills, --uninstall removed them (scratch HOME)'
+  - id: opencode-isolation-enforcement
+    capability: OpenCode adaptation
+    acceptance: Edits to tracked source in an fr-isolation-enabled repo are blocked
+      from OpenCode outside an isolation workspace, matching the Claude Code hook's
+      guarantee
+    origin:
+    - spec:2026-07-08-opencode-adaptation
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/index.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
+    status: ci
+    notes: 'OpenCode 2 only: the plugin''s execute.before refuses every file-writing
+      tool (nested and absolute paths, patch bodies, symlinks) outside a valid workspace
+      (index.test.ts, marker.test.ts, CI), and the delivered copy refuses a base-clone
+      edit inside the real 2.x binary (test_opencode_runs_the_delivered_gate, CI on
+      2.0.32 and 2.1.0). The 2026-09-22 live sessions were on OpenCode 1.x, now unsupported;
+      the model-driven 2.x walk is owed by opencode-2-edit-gate.'

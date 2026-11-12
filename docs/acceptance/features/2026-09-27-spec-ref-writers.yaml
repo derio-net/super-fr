@@ -1,0 +1,36 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-27-spec-ref-writers
+repo: derio-net/super-fr
+rows:
+  - id: archive-repair-warns-once
+    capability: Archive spec-sweep
+    acceptance: fr archive runs repair once per invocation, so each repair warning reaches
+      the operator exactly once.
+    origin:
+    - spec:2026-09-27-spec-ref-writers
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_cmd.py
+    status: ci
+    notes: Unit tests assert fr archive calls repair_repo exactly once and prints each
+      warning exactly once, for both the plan-move path and --sweep-only, when the sweep
+      moves a spec (#710).
+  - id: spec-writers-one-canonical-form
+    capability: Spec ref canonical form
+    acceptance: Every spec writer (fr plan create, rework create, fr repair, the v1-to-v2
+      migration) stores the same canonical spec form, and none of them shortens a ref
+      that leaves the repo.
+    origin:
+    - spec:2026-09-27-spec-ref-writers
+    levels:
+      unit:
+      - super-fr:tests/unit/test_repair.py
+      - super-fr:tests/unit/test_v2_migrate.py
+    status: ci
+    notes: 'Unit tests cover all four spec: writers agreeing on canonical_spec_ref,
+      incl. the repo-escape guard (#709) and the v1->v2 migration writer (#711).'

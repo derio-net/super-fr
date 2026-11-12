@@ -1,0 +1,72 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-05-isolation-teardown-354
+repo: derio-net/super-fr
+rows:
+  - id: isolation-down-verified
+    capability: Isolation teardown
+    acceptance: A teardown that cannot complete (transient docker/git failure) leaves
+      the workspace visible to `fr isolation status` and its state intact — never a
+      silent state delete that orphans the container.
+    origin:
+    - spec:2026-07-05-isolation-teardown-354
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py#test_down_raises_when_container_survives_stop_rm
+      - super-fr:tests/unit/test_isolation.py#test_down_raises_when_worktree_remove_fails
+      - super-fr:tests/unit/test_isolation.py#test_down_raises_when_docker_query_fails
+      - super-fr:tests/unit/test_isolation.py#test_down_completes_when_worktree_already_gone
+      - super-fr:tests/unit/test_isolation.py#test_down_force_still_verifies_container
+      - super-fr:tests/unit/test_isolation.py#test_down_reclaims_image
+      - super-fr:tests/unit/test_isolation.py#test_down_rmi_failure_is_non_fatal
+      - super-fr:tests/unit/test_isolation.py#test_down_removes_isolation_marker
+    status: ci
+    notes: '#354 Task A. Verification + image reclamation unit-pinned over the Runner
+      seam (stateful docker fake: surviving container/worktree → raise + state kept,
+      daemon-unreachable guard, rmi failure non-fatal). Real-docker transient-failure
+      leg is Test-Plan item 1, post-merge — not in CI.'
+  - id: isolation-gc-reconciles-merged
+    capability: Isolation teardown
+    acceptance: A merged isolation workspace is torn down (container, worktree, state,
+      image) without the originating session — host-wide, fired opportunistically on
+      every up/down, bounded to <=1 stale workspace with no daemon. "Merged" covers
+      a MERGED PR and a PR-less merge whose changes already reached origin/<default>
+      (merged-by-content, squash-safe); multi-tagged dangling images are reaped by tag.
+    origin:
+    - spec:2026-07-05-isolation-teardown-354
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py#test_gc_classifies_and_reaps
+      - super-fr:tests/unit/test_isolation.py#test_gc_discovers_label_and_worktree_union
+      - super-fr:tests/unit/test_isolation.py#test_gc_one_failure_does_not_abort_sweep
+      - super-fr:tests/unit/test_isolation.py#test_gc_merged_reap_unexpected_error_does_not_abort_sweep
+      - super-fr:tests/unit/test_isolation.py#test_gc_corrupt_state_does_not_abort_discovery
+      - super-fr:tests/unit/test_isolation.py#test_gc_sweeps_dangling_vsc_images
+      - super-fr:tests/unit/test_isolation.py#test_gc_reaps_multitagged_dangling_image
+      - super-fr:tests/unit/test_isolation.py#test_gc_image_rmi_failure_is_non_fatal
+      - super-fr:tests/unit/test_isolation.py#test_gc_reaps_no_pr_branch_squash_merged
+      - super-fr:tests/unit/test_isolation.py#test_gc_does_not_reap_idle_branch_that_fell_behind
+      - super-fr:tests/unit/test_isolation.py#test_gc_warns_no_pr_branch_with_unmerged_commits
+      - super-fr:tests/unit/test_isolation.py#test_gc_does_not_reap_fresh_branch_at_default_tip
+      - super-fr:tests/unit/test_isolation.py#test_gc_does_not_reap_merged_content_with_dirty_worktree
+      - super-fr:tests/unit/test_isolation.py#test_gc_content_reap_dry_run_mutates_nothing
+      - super-fr:tests/unit/test_isolation.py#test_up_spawns_background_gc
+      - super-fr:tests/unit/test_isolation.py#test_down_spawns_background_gc
+      - super-fr:tests/unit/test_isolation.py#test_gc_second_concurrent_sweep_noops
+      - super-fr:tests/unit/test_isolation.py#test_gc_dry_run_mutates_nothing
+      - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_reports
+      - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_json
+      - super-fr:tests/unit/test_isolation_cmd.py#test_gc_cli_empty
+    status: ci
+    notes: '#354 Task B + merged-by-content/multi-tag reap. Classification (merged/merged-by-content/open/no-pr/orphan/no-state),
+      discovery, per-workspace error isolation, image sweep (tag-keyed, multi-tag safe),
+      opportunistic spawn seam, flock no-op, dry-run safety, and CLI output all unit-pinned
+      over the Runner seam. merged-by-content is squash-safe (content comparison, not
+      is-ancestor) and reaps only when the branch changed files, all present on origin/<default>,
+      with a clean worktree — a fresh/idle/dirty workspace is warned, never reaped.
+      Real-docker reap + live opportunistic trigger are Test-Plan items 3-4, post-merge
+      — not in CI.'

@@ -1,0 +1,55 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-03-acceptance-report-pages
+repo: derio-net/super-fr
+rows:
+  - id: pages-acceptance-report-published
+    capability: acceptance-matrix
+    acceptance: A push to main touching explainers, acceptance or the acceptance renderer
+      redeploys the Pages site (visible under Deployments) with the acceptance report
+      at /acceptance/, freshly rendered with github links pinned to the deployed commit,
+      published even when rows are failing
+    origin:
+    - spec:2026-10-03-acceptance-report-pages#R1
+    - spec:2026-10-03-acceptance-report-pages#R2
+    - spec:2026-10-03-acceptance-report-pages#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+      - super-fr:tests/unit/test_acceptance_report.py#test_report_out_under_site_dir_is_sha_pinned_and_stamped
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1357
+    verify: live
+    issues:
+    - derio-net/super-fr#1357
+  - id: pages-explainers-preserved
+    capability: acceptance-matrix
+    acceptance: Publishing the acceptance report keeps every explainer page at its current
+      URL, because one workflow deploys both in a single Pages artifact
+    origin:
+    - spec:2026-10-03-acceptance-report-pages#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1358
+    verify: live
+    issues:
+    - derio-net/super-fr#1358
+  - id: pages-acceptance-report-discoverable
+    capability: acceptance-matrix
+    acceptance: The explainers landing page links to the published acceptance report
+      and the README carries a badge pointing at it
+    origin:
+    - spec:2026-10-03-acceptance-report-pages#R5
+    - spec:2026-10-03-acceptance-report-pages#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py#test_index_links_to_acceptance_report
+      - super-fr:tests/unit/test_pages_workflow.py#test_readme_has_acceptance_badge
+    status: ci
+    notes: Index link and README badge pinned by unit tests.

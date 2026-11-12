@@ -1,0 +1,24 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-26-acceptance-set-status-drop-level
+repo: derio-net/super-fr
+rows:
+  - id: lifecycle-acceptance-drop-level
+    capability: Artifact lifecycles
+    acceptance: An operator can remove a stale evidence ref from an acceptance row with
+      a command (in the same rewrite as its status move), so re-pointing a row whose
+      tests were deleted needs no hand-edited YAML.
+    origin:
+    - spec:2026-09-26-acceptance-set-status-drop-level
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_set_status.py
+    status: ci
+    notes: gh#624. fr acceptance set-status --drop-level removes a stale evidence ref
+      in the same rewrite as the status move. Absent, contradictory and unknown-level
+      drops exit 2 with the matrix and reports byte-identical. Engine refusals are pinned
+      in test_record_apply.py.
