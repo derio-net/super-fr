@@ -8,6 +8,7 @@ and no other byte. It is the one migration that reaches the archive
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from fr.artifacts.registry import artifact_kind, iter_paths_of
 from fr.artifacts.runner import (
     MIGRATIONS,
     ArtifactMigrationError,
+    MigrationReport,
     Repair,
     inspection_failures,
     is_stale,
@@ -118,8 +120,28 @@ def test_predicate_is_true_for_a_mapping_with_the_key(tmp_path: Path) -> None:
             b"# head\nschema_version: 2\n\nvk_version: 1.2  # retired\nplan: demo # p\n",
             b"# head\nschema_version: 2\n\nplan: demo # p\n",
         ),
+        # key on the first line
+        (
+            b"vk_version: 1.2\nschema_version: 2\nplan: demo\n",
+            b"schema_version: 2\nplan: demo\n",
+        ),
+        # no value
+        (
+            b"schema_version: 2\nvk_version:\nplan: demo\n",
+            b"schema_version: 2\nplan: demo\n",
+        ),
     ],
-    ids=["lf", "crlf", "bom", "last-line", "double-quoted", "bare", "comment"],
+    ids=[
+        "lf",
+        "crlf",
+        "bom",
+        "last-line",
+        "double-quoted",
+        "bare",
+        "comment",
+        "first-line",
+        "no-value",
+    ],
 )
 def test_the_rewrite_removes_exactly_the_one_line(
     tmp_path: Path, before: bytes, after: bytes
@@ -270,6 +292,37 @@ def test_an_unreadable_archived_file_never_makes_the_repo_stale(tmp_path: Path) 
     assert [f.path for f in report.unrepairable] == [tmp_path / ARCHIVED.format("broken")]
 
 
+def test_a_non_utf8_archived_file_is_reported_and_never_stale(tmp_path: Path) -> None:
+    p = tmp_path / ARCHIVED.format("latin")
+    p.parent.mkdir(parents=True)
+    data = b"plan: caf\xe9\nvk_version: 1\n"
+    p.write_bytes(data)
+    assert is_stale(tmp_path) is False
+    report = run_migrations(tmp_path, dry_run=False)
+    assert [f.path for f in report.unrepairable] == [p]
+    assert report.failed == () and report.ok
+    assert p.read_bytes() == data
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes anywhere")
+def test_an_archived_file_in_an_unwritable_directory_is_never_stale(tmp_path: Path) -> None:
+    # Its dry check passes and its write would fail: counted as repairable it
+    # would keep the repo stale for good (review p2-r1).
+    p = _put(tmp_path, ARCHIVED.format("a1"), CARRIER.format(slug="a1"))
+    before = p.read_bytes()
+    p.parent.chmod(0o500)
+    try:
+        assert is_stale(tmp_path) is False
+        assert list(plan_migrations(tmp_path)) == []
+        report = run_migrations(tmp_path, dry_run=False)
+    finally:
+        p.parent.chmod(0o700)
+    assert [f.path for f in report.unrepairable] == [p]
+    assert "PermissionError" in report.unrepairable[0].error
+    assert report.failed == () and report.ok and report.changed_paths == ()
+    assert p.read_bytes() == before
+
+
 def test_inspection_failures_never_names_an_archive_path(repo) -> None:
     _put(repo["root"], ARCHIVED.format("broken"), "vk_version: [unclosed\n")
     assert all("implemented" not in f.path.parts for f in inspection_failures(repo["root"]))
@@ -298,7 +351,7 @@ def test_validate_artifacts_neither_counts_nor_fails_the_archive(repo) -> None:
 def test_the_gate_migrates_past_an_unrewritable_archived_file(tmp_path: Path) -> None:
     # No git here: the gate's default-branch refusal is not the subject.
     repo = _layout(tmp_path)
-    committed: list[object] = []
+    committed: list[MigrationReport] = []
     lines: list[str] = []
     trigger.ensure_artifacts_current(
         argv=["apply"],
@@ -310,8 +363,26 @@ def test_the_gate_migrates_past_an_unrewritable_archived_file(tmp_path: Path) ->
         err=lines.append,
     )
     assert len(committed) == 1
+    assert set(committed[0].changed_paths) == {repo["live"], repo["a1"], repo["a2"]}
     assert b"vk_version" not in repo["a1"].read_bytes()
     assert any("bad" in line for line in lines), lines
+
+
+def test_ci_repairs_an_archived_carrier_in_place_and_commits_nothing(tmp_path: Path) -> None:
+    p = _put(tmp_path, ARCHIVED.format("a1"), CARRIER.format(slug="a1"))
+    committed: list[object] = []
+    trigger.ensure_artifacts_current(
+        argv=["apply"],
+        invoked_subcommand="apply",
+        env={},
+        repo_root=tmp_path,
+        context="ci",
+        commit=lambda root, report: committed.append(report),
+        err=lambda line: None,
+    )
+    assert committed == []
+    assert b"vk_version" not in p.read_bytes()
+    assert is_stale(tmp_path) is False
 
 
 def test_a_held_archived_file_is_held_like_any_other(repo) -> None:
@@ -365,3 +436,27 @@ def test_every_archived_plan_in_this_repo_parses() -> None:
         except Exception as e:
             failures.append(f"{slug}: {type(e).__name__}: {e}")
     assert failures == [], "\n".join(failures)
+
+
+@pytest.mark.parametrize("slug", sorted(ARCHIVED_PLANS_THAT_DO_NOT_PARSE))
+def test_every_allowlisted_archived_plan_still_fails_to_parse(slug: str) -> None:
+    # An entry that parses again is stale: remove it from the allowlist.
+    from fr.parser import parse
+
+    with pytest.raises(Exception, match="phase.number|greater than or equal to 1"):
+        parse(REPO_ROOT / "docs/superpowers/implemented/plans" / slug, enforce_fr_version=False)
+
+
+def test_the_cli_does_not_call_the_repo_current_beside_an_unrepairable_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    _put(tmp_path, ARCHIVED.format("bad"), BLOCK)
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
+    result = CliRunner().invoke(app, ["migrate", "artifacts"])
+    assert result.exit_code == 0, result.output
+    assert "nothing to migrate; 1 archived file(s) left as they are." in result.output
+    assert "already current" not in result.output

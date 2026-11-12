@@ -207,7 +207,11 @@ def artifacts_cmd(
         )
 
     if not report.applied and not report.failed:
-        typer.echo("every artifact is already current.")
+        if report.unrepairable:
+            n = len(report.unrepairable)
+            typer.echo(f"nothing to migrate; {n} archived file(s) left as they are.")
+        else:
+            typer.echo("every artifact is already current.")
         _offer_adoption(repo_root, adopt=adopt, yes=yes)
         return
     if not yes:

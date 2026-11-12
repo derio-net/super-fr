@@ -51,6 +51,7 @@ Three invariants the rest of the framework leans on:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -437,6 +438,11 @@ def _scan_extra(repo_root: Path, reg: MigrationRegistry, *, first_only: bool = F
                         continue
                     if r.check is not None:
                         r.check(path)
+                    # The write replaces the file through its directory. One that
+                    # cannot be written would pass every check, fail every apply,
+                    # and keep the repo stale for good (review p2-r1).
+                    if not os.access(path.parent, os.W_OK):
+                        raise PermissionError(f"{path.parent} is not writable")
                 except Exception as e:
                     unrepairable.append(
                         FailedAction(name, path, r.summary, f"{type(e).__name__}: {e}")

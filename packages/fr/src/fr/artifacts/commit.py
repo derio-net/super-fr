@@ -465,11 +465,31 @@ def _group_of(action: PlannedAction) -> str:
     return f"{action.kind}: schema {action.from_version} -> {action.to_version}"
 
 
+def _without_ignored(repo_root: Path, paths: Sequence[Path]) -> tuple[Path, ...]:
+    """`paths` minus the untracked ones git ignores.
+
+    `git add` refuses an ignored path, and one refusal loses the whole commit.
+    A repair that reaches the archive can meet such a file; it is rewritten and
+    left out of history, where it never was. When git cannot answer, nothing is
+    dropped and `commit_paths` reports whatever git says next.
+    """
+    if not paths:
+        return ()
+    try:
+        done = _git(repo_root, "check-ignore", "--", *(str(p) for p in paths))
+    except GitUnavailableError:
+        return tuple(paths)
+    if done.returncode != 0:
+        return tuple(paths)
+    ignored = set(done.stdout.splitlines())
+    return tuple(p for p in paths if str(p) not in ignored)
+
+
 def commit_migration(
     repo_root: Path, report: MigrationReport, *, fr_version: str | None = None
 ) -> CommitOutcome:
     """Commit exactly `report.changed_paths`, or explain why it did not."""
-    paths = report.changed_paths
+    paths = _without_ignored(repo_root, report.changed_paths)
     if not paths:
         return CommitOutcome(committed=False, reason="nothing was migrated; nothing to commit")
     if fr_version is None:
