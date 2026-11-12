@@ -100,3 +100,13 @@ amendments:
       itself; with no lens requested the step completes without dispatching anyone
     why: the design moved from per-phase lens declarations to a feature-level lens review
       before deliver (operator decision)
+  - row: review-lenses-shown-on-pr
+    op: reword
+    base: 0
+    acceptance: The pull request shows each lens that was reviewed, why it was there,
+      how many files were examined and how each finding closed, says so when no lens
+      was requested, and states any change the branch made to the repo's lens config;
+      the skills, agents and an operator page tell every agent it may add a lens and
+      how
+    why: the design moved from per-phase lens declarations to a feature-level lens review
+      before deliver (operator decision)
