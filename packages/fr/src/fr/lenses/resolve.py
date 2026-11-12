@@ -1,4 +1,4 @@
-"""Where the shipped lenses live, and a repo's effective lenses (spec 2026-11-12-review-lenses R1-R2).
+"""Shipped-lens lookup and a repo's effective lenses (spec 2026-11-12-review-lenses R1-R2).
 
 Shipped lookup, the same walk `fr.verification.resolve` uses (`fr._shipped`):
 
