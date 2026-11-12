@@ -65,9 +65,13 @@ rows:
     origin:
     - spec:2026-11-12-remove-vk-compat#R10
     - spec:2026-11-12-remove-vk-compat#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_plan_vk_version.py#test_the_rewrite_removes_exactly_the_one_line
+      - super-fr:tests/unit/test_migration_plan_vk_version.py#test_apply_repairs_live_and_archived_and_leaves_the_unrewritable_one
+    status: ci
+    notes: unit tests run the drop-vk-version repair over LF/CRLF/BOM/quoted live and
+      archived carriers and over refused files, asserting bytes, in CI
     verify: none
   - id: archived-plans-readable-after-repair
     capability: Artifact migration
