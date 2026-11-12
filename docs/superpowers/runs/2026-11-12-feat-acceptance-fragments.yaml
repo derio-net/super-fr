@@ -1,0 +1,26 @@
+schema_version: 11
+run: 2026-11-12-feat-acceptance-fragments
+workflow: fr-goal@1
+branch: feat/acceptance-fragments
+started: '2026-11-12T00:15:08+00:00'
+cursor: plan
+steps:
+  brainstorm:
+    state: done
+    emitted:
+      spec: docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md
+  spec-review:
+    state: done
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
