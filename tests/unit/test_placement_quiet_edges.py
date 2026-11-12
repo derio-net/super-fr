@@ -25,9 +25,20 @@ from tests.unit.settings_repo import git, make_repo
 from tests.unit.test_placement_quiet import QUIET, push_fr_branch
 
 
+@pytest.fixture(autouse=True)
+def _sandbox_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Some commands read the cwd, not VK_REPO_ROOT: never let one reach this checkout."""
+    monkeypatch.chdir(tmp_path)
+
+
 def _invoke(cwd: Path, *argv: str) -> tuple[int, str]:
     env = {**os.environ, "VK_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
-    result = CliRunner().invoke(app, list(argv), env=env)
+    back = Path.cwd()
+    os.chdir(cwd)
+    try:
+        result = CliRunner().invoke(app, list(argv), env=env)
+    finally:
+        os.chdir(back)
     return result.exit_code, " ".join(result.output.split())
 
 
@@ -121,3 +132,33 @@ def test_apply_to_is_refused_by_the_switch_alone_without_a_worktree(tmp_path: Pa
     assert "not available under placement quiet" in out
     home = Path(os.environ["HOME"])
     assert not (home / ".cache" / "fr" / "worktrees" / "work" / "fr").exists()
+
+
+# --- p3-r6: a feature root records the branch that owns it -------------------------------
+
+
+def test_the_first_fr_commit_records_the_owning_branch(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
+    state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
+    code, out = _invoke(
+        state.worktree, "plan", "create", "--slug", "2026-11-12-q", "--target-repo", "derio-net/q"
+    )
+    assert code == 0, out
+    fr_root = Path(os.environ["HOME"]) / ".cache" / "fr" / "worktrees" / "work" / "fr"
+    assert git(fr_root, "show", "HEAD:features/feat__q/OWNER") == "feat/q\n"
+
+
+def test_a_feature_root_owned_by_another_branch_is_refused(tmp_path: Path) -> None:
+    """gh#1419 across clones: the other branch need not exist here, its OWNER file does."""
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
+    state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
+    fr_root = ensure_worktree(state.worktree)
+    owner = fr_root / "features" / "feat__q" / "OWNER"
+    owner.parent.mkdir(parents=True)
+    owner.write_text("feat__q\n")
+    git(fr_root, "add", "-A")
+    git(fr_root, "commit", "-qm", "another clone's feature")
+    with pytest.raises(SettingsError, match="'feat/q'.*'feat__q'"):
+        space_for(state.worktree)

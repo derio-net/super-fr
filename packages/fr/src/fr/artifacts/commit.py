@@ -44,6 +44,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fr.artifacts.runner import MigrationReport, PlannedAction
 from fr.git import (
@@ -57,6 +58,9 @@ from fr.git import (
 from fr.git import WELL_KNOWN_DEFAULTS as _WELL_KNOWN_DEFAULTS
 from fr.git import git_answer as _git
 from fr.git import ref_exists as _ref_exists
+
+if TYPE_CHECKING:
+    from fr.artifacts.paths import ArtifactSpace
 
 __all__ = [
     "GIT_TIMEOUT_SECONDS",
@@ -530,7 +534,7 @@ def _quiet_product_artifacts(
 
 def _quiet_commit(
     repo_root: Path, toplevel: Path, paths: Sequence[Path], elsewhere: list[Path]
-) -> Path | CommitOutcome:
+) -> tuple[Path, Path | None] | CommitOutcome:
     """Where a commit of paths outside *toplevel* is made: the fr worktree under quiet,
     when EVERY path is below this feature's own path there (R23: each commit touches
     one feature's path). Anything else is the existing outside-the-repo refusal."""
@@ -557,7 +561,25 @@ def _quiet_commit(
                 f"({prefix}/), and {stray[0]} is not in it; {_UNCOMMITTED}"
             ),
         )
-    return space.root
+    return space.root, _owner_file(repo_root, space)
+
+
+def _owner_file(repo_root: Path, space: ArtifactSpace) -> Path | None:
+    """The feature root's OWNER file, written with this branch when it is not there yet,
+    so the feature's first commit records who owns its path (p3-r6); None when it was
+    already recorded (`space_for` has refused a different owner)."""
+    from fr.artifacts.paths import FEATURE_OWNER, feature_root
+    from fr.placement.quiet import branch_of
+
+    owner = feature_root(space) / FEATURE_OWNER
+    if owner.exists():
+        return None
+    branch = branch_of(repo_root)
+    if branch is None:
+        return None
+    owner.parent.mkdir(parents=True, exist_ok=True)
+    owner.write_text(f"{branch}\n")
+    return owner
 
 
 def commit_paths(
@@ -642,9 +664,10 @@ def commit_paths(
         rerouted = _quiet_commit(repo_root, toplevel, paths, elsewhere)
         if isinstance(rerouted, CommitOutcome):
             return rerouted
+        fr_root, owner = rerouted
         return commit_paths(
-            rerouted,
-            paths,
+            fr_root,
+            (*paths, owner) if owner is not None else paths,
             message,
             no_verify=no_verify,
             restore_index=restore_index,

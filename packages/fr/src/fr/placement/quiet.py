@@ -322,11 +322,29 @@ def fast_forward(root: Path) -> None:
         _git(path, "merge", "--ff-only", "--quiet", paths.SWITCH_REF)
 
 
-def quiet_space(root: Path) -> paths.ArtifactSpace:
-    """The quiet `ArtifactSpace` of the checkout at *root*: the fr worktree, and the
-    feature its branch names (none in the fr worktree itself)."""
-    root = Path(root)
-    path = worktree_path(root)
+def owner_of(fr_root: Path, fid: str) -> str | None:
+    """The branch the feature root *fid* records as its owner, or None when unrecorded."""
+    try:
+        text = (fr_root / paths.FEATURES_DIR / fid / paths.FEATURE_OWNER).read_text()
+    except OSError:
+        return None
+    return text.strip() or None
+
+
+def check_owner(fr_root: Path, fid: str, branch: str) -> None:
+    """Refuse when *fid*'s feature root is owned by a branch other than *branch*: the id
+    is not injective, and the other branch may live only in another clone (p3-r6)."""
+    owner = owner_of(fr_root, fid)
+    if owner is not None and owner != branch:
+        raise SettingsError(
+            f"placement quiet: branch {branch!r} has the feature id {fid!r}, whose path on the "
+            f"`{QUIET_BRANCH}` branch is owned by {owner!r} "
+            f"({paths.FEATURES_DIR}/{fid}/{paths.FEATURE_OWNER}). Rename the branch"
+        )
+
+
+def branch_of(root: Path) -> str | None:
+    """The branch a checkout works on: its HEAD, or the marker's branch when detached."""
     branch = head_branch(root)
     if branch is None:
         from fr.isolation.marker import marker_at
@@ -334,6 +352,15 @@ def quiet_space(root: Path) -> paths.ArtifactSpace:
         marker = marker_at(root)
         recorded = marker.get("branch") if marker else None
         branch = recorded if isinstance(recorded, str) else None
+    return branch
+
+
+def quiet_space(root: Path) -> paths.ArtifactSpace:
+    """The quiet `ArtifactSpace` of the checkout at *root*: the fr worktree, and the
+    feature its branch names (none in the fr worktree itself)."""
+    root = Path(root)
+    path = worktree_path(root)
+    branch = branch_of(root)
     if branch == QUIET_BRANCH or root.resolve() == path.resolve():
         return paths.ArtifactSpace(paths.QUIET, path, None)
     if branch is None:
@@ -343,6 +370,7 @@ def quiet_space(root: Path) -> paths.ArtifactSpace:
         )
     fid = check_feature_id(root, branch)
     ensure_worktree(root)
+    check_owner(path, fid, branch)
     return paths.ArtifactSpace(paths.QUIET, path, fid)
 
 
