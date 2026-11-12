@@ -1,0 +1,88 @@
+schema_version: 2
+run: 2026-11-12-feat-acceptance-fragments
+captures:
+- host: h-eb3456e1
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-12T00:29:22+00:00'
+  at:
+  - resolve:plan
+  sessions:
+  - session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 178
+        cache_write: 340829
+        cache_read: 10615117
+        output: 72101
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 43
+      other:
+        usd: null
+        turns: 15
+      paperwork:
+        usd: null
+        turns: 30
+    steps:
+      (outside run):
+        usd: null
+        turns: 5
+        input: 12
+        cache_write: 87608
+        cache_read: 475185
+        output: 1250
+      plan:
+        usd: null
+        turns: 81
+        input: 166
+        cache_write: 253221
+        cache_read: 10139932
+        output: 70851
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 5
+          input: 12
+          cache_write: 87608
+          cache_read: 475185
+          output: 1250
+        plan:
+          usd: null
+          turns: 29
+          input: 62
+          cache_write: 95271
+          cache_read: 4580110
+          output: 43035
+      subagent:
+        plan:
+          usd: null
+          turns: 52
+          input: 104
+          cache_write: 157950
+          cache_read: 5559822
+          output: 27816
+    units:
+      step/plan:
+        orchestrator:
+          usd: null
+          turns: 20
+          input: 42
+          cache_write: 66067
+          cache_read: 3417246
+          output: 38477
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 52
+          input: 104
+          cache_write: 157950
+          cache_read: 5559822
+          output: 27816
+    briefs:
+      aede680bb830731bb: 3530
