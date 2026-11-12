@@ -192,6 +192,23 @@ GOOD_OPS = (
 """
 )
 
+FRAGMENT_REL = f"docs/acceptance/features/{PLAN_SLUG}.yaml"
+GOOD_FRAGMENT = (
+    f"schema_version: {ARTIFACT_KINDS['acceptance-fragment'].current_version}\n"  # built
+    + f"""feature: {PLAN_SLUG}
+repo: derio-net/super-fr
+rows:
+  - id: a-fragment-row
+    capability: A capability
+    acceptance: It works.
+    origin:
+      - spec:{PLAN_SLUG}#R1
+    status: ci
+amendments:
+  - {{row: a-row, op: set-status, base: 0, status: unwired, notes: moved, why: it moved}}
+"""
+)
+
 
 def seed_good_repo(root: Path) -> dict[str, Path]:
     """One structurally valid live artifact per registered kind."""
@@ -206,6 +223,7 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
         "ops": _w(root, f"docs/superpowers/plans/{PLAN_SLUG}/ops.yaml", GOOD_OPS),
         "run": _w(root, "docs/superpowers/runs/2019-03-04-feat-widget.yaml", GOOD_RUN),
         "matrix": _w(root, "docs/acceptance/matrix.yaml", GOOD_MATRIX),
+        "acceptance-fragment": _w(root, FRAGMENT_REL, GOOD_FRAGMENT),
         "spec": _w(root, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", GOOD_SPEC),
         "usage": _w(root, "docs/superpowers/usage/2019-03-04-feat-widget.yaml", GOOD_USAGE),
         "record": _w(root, GOOD_RECORD_REL, GOOD_RECORD),
@@ -305,6 +323,11 @@ MISSING_FIELD_CASES = {
     "matrix": (
         "docs/acceptance/matrix.yaml",
         GOOD_MATRIX.replace("    status: ci\n", ""),
+        "status",
+    ),
+    "acceptance-fragment": (
+        FRAGMENT_REL,
+        GOOD_FRAGMENT.replace("    status: ci\n", ""),
         "status",
     ),
     "spec": (
@@ -1001,3 +1024,43 @@ def test_a_valid_repo_authored_shape_does_not_fail_validation(tmp_path: Path) ->
     )
 
     assert validate_repo(tmp_path).ok
+
+
+# --- acceptance fragments (spec 2026-11-04-repo-feature-settings R19) -----
+
+
+def _fragment_problems(tmp_path: Path, text: str, *, sibling: str | None = None) -> str:
+    seed_good_repo(tmp_path)
+    _w(tmp_path, FRAGMENT_REL, text)
+    if sibling is not None:
+        _w(tmp_path, "docs/acceptance/features/2019-03-05-other.yaml", sibling)
+    report = validate_repo(tmp_path)
+    return "\n".join(str(i) for i in report.issues if i.kind == "acceptance-fragment")
+
+
+def test_a_valid_fragment_passes(tmp_path: Path) -> None:
+    sibling = "feature: 2019-03-05-other\nrepo: derio-net/super-fr\nrows: []\n"
+    assert _fragment_problems(tmp_path, GOOD_FRAGMENT, sibling=sibling) == ""
+
+
+def test_a_fragment_with_a_duplicate_key_fails_naming_the_file(tmp_path: Path) -> None:
+    problems = _fragment_problems(tmp_path, GOOD_FRAGMENT + "repo: derio-net/super-fr\n")
+    assert f"{PLAN_SLUG}.yaml" in problems and "duplicate" in problems, problems
+
+
+def test_a_fragment_with_a_bad_op_fails_naming_the_file(tmp_path: Path) -> None:
+    problems = _fragment_problems(tmp_path, GOOD_FRAGMENT.replace("op: set-status", "op: bend"))
+    assert f"{PLAN_SLUG}.yaml" in problems and "bend" in problems, problems
+
+
+def test_fragments_disagreeing_on_repo_fail_naming_the_file(tmp_path: Path) -> None:
+    sibling = "feature: 2019-03-05-other\nrepo: derio-net/elsewhere\nrows: []\n"
+    problems = _fragment_problems(tmp_path, GOOD_FRAGMENT, sibling=sibling)
+    assert "2019-03-05-other.yaml" in problems and "derio-net/elsewhere" in problems, problems
+
+
+def test_a_fragment_whose_feature_is_not_its_name_fails(tmp_path: Path) -> None:
+    problems = _fragment_problems(
+        tmp_path, GOOD_FRAGMENT.replace(f"feature: {PLAN_SLUG}", "feature: 2019-03-05-other")
+    )
+    assert "feature" in problems, problems

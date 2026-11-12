@@ -29,6 +29,7 @@ EXPECTED_KINDS = {
     "ops",
     "run",
     "matrix",
+    "acceptance-fragment",
     "spec",
     "usage",
     "record",
@@ -58,6 +59,15 @@ def test_locators_never_reach_archived_artifacts() -> None:
     """`implemented/` records what shipped; rewriting it would falsify history."""
     for kind in ARTIFACT_KINDS.values():
         assert "implemented" not in kind.locator
+
+
+def test_the_acceptance_fragment_kind_is_registered() -> None:
+    """Spec 2026-11-04-repo-feature-settings R19: its own locator, a yaml stamp, born at 1."""
+    kind = ARTIFACT_KINDS["acceptance-fragment"]
+    assert kind.current_version == 1
+    assert kind.locator == "docs/acceptance/features/*.yaml"
+    assert "schema_version" in kind.stamp
+    assert ARTIFACT_KINDS["matrix"].locator == "docs/acceptance/matrix.yaml", "matrix untouched"
 
 
 def test_unknown_kind_raises() -> None:
@@ -95,6 +105,9 @@ def _seed_repo(root: Path) -> dict[str, Path]:
     w("docs/superpowers/implemented/runs/2026-01-01-done.yaml", "run: done\n")
 
     live["matrix"] = w("docs/acceptance/matrix.yaml", "rows: []\n")
+    live["acceptance-fragment"] = w(
+        "docs/acceptance/features/2026-01-01-live.yaml", "feature: 2026-01-01-live\n"
+    )
 
     live["spec"] = w("docs/superpowers/specs/2026-01-01-live-design.md", "# live\n")
     w("docs/superpowers/implemented/specs/2026-01-01-done-design.md", "# done\n")
@@ -202,6 +215,14 @@ UNSTAMPED: dict[str, str] = {
         "\n"
         "# trailing comment\n"
     ),
+    "acceptance-fragment": (
+        "# one feature's acceptance rows\n"
+        "feature: 2026-01-01-live\n"
+        "repo: derio-net/super-fr   # identity\n"
+        "\n"
+        "rows: []\n"
+        "# trailing comment\n"
+    ),
     "agents": (
         "---\n"
         "# the canonical agent, as a repo carries it\n"
@@ -233,6 +254,9 @@ STAMPED_3: dict[str, str] = {
     ),
     "matrix": UNSTAMPED["matrix"].replace(
         "repo: super-fr\n", "schema_version: 3\nrepo: super-fr\n"
+    ),
+    "acceptance-fragment": UNSTAMPED["acceptance-fragment"].replace(
+        "feature: 2026-01-01-live\n", "schema_version: 3\nfeature: 2026-01-01-live\n"
     ),
     "spec": "---\nfr_schema: 3\n---\n" + UNSTAMPED["spec"],
     "usage": UNSTAMPED["usage"].replace("run: r\n", "schema_version: 3\nrun: r\n"),
@@ -622,6 +646,7 @@ def _seed_one(root: Path, kind: str, *, version: int) -> Path | None:
         "journal": next((root / "docs" / "superpowers" / "journals").rglob("*.md")),
         "run": next((root / "docs" / "superpowers" / "runs").glob("*.yaml")),
         "matrix": root / "docs" / "acceptance" / "matrix.yaml",
+        "acceptance-fragment": next((root / "docs" / "acceptance" / "features").glob("*.yaml")),
         "spec": next((root / "docs" / "superpowers" / "specs").glob("*.md")),
         "usage": next((root / "docs" / "superpowers" / "usage").glob("*.yaml")),
         "record": next((root / "docs" / "superpowers" / "runs").glob("*.records/*.yaml")),

@@ -43,6 +43,7 @@ import yaml
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.structure import (
     validate_agents,
+    validate_fragment,
     validate_journal,
     validate_matrix,
     validate_ops,
@@ -495,6 +496,18 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_matrix,
+        ),
+        ArtifactKind(
+            name="acceptance-fragment",
+            # One feature's acceptance rows and amendments (spec
+            # `2026-11-04-repo-feature-settings-design` R16, R19, §3.D), folded into
+            # the effective matrix by `fr.acceptance.fold`. Born at 1.
+            current_version=1,
+            locator="docs/acceptance/features/*.yaml",
+            stamp="`schema_version` in the fragment yaml",
+            read_stamp=_read_yaml_stamp,
+            write_version=_write_yaml_stamp,
+            validate=validate_fragment,
         ),
         ArtifactKind(
             name="spec",

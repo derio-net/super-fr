@@ -421,6 +421,41 @@ def validate_matrix(path: Path) -> list[str]:
     return _matrix_strategy_problems(Matrix.model_validate(data), path.parents[2])
 
 
+def validate_fragment(path: Path) -> list[str]:
+    """One acceptance fragment against `Fragment` (spec 2026-11-04-repo-feature-settings
+    R19), plus what only the folder can show: every fragment names the same `repo:`.
+
+    Whether the fragments FOLD (a row defined twice, an amendment on an unknown row)
+    needs git history and is `fr.acceptance.fold`'s answer."""
+    from fr.acceptance.fragment import Fragment, parse_fragment
+    from fr.acceptance.model import AcceptanceError
+
+    data, problems = _load_mapping(path)
+    if problems or data is None:
+        return problems
+    problems = _model_problems(Fragment, data)
+    if problems:
+        return problems
+    try:
+        fragment = parse_fragment(path.read_text(), source=path.name)
+    except AcceptanceError as e:
+        return [str(e)]
+    for sibling in sorted(path.parent.glob("*.yaml")):
+        if sibling == path:
+            continue
+        try:
+            other: Any = yaml.safe_load(sibling.read_text())
+        except (OSError, yaml.YAMLError):
+            continue  # the sibling's own validation reports it
+        theirs = other.get("repo") if isinstance(other, dict) else None
+        if isinstance(theirs, str) and theirs != fragment.repo:
+            problems.append(
+                f"`repo: {fragment.repo}` disagrees with {sibling.name} (`repo: {theirs}`): "
+                "every fragment names the same repo"
+            )
+    return problems + _matrix_strategy_problems(fragment, path.parents[3])
+
+
 def _matrix_strategy_problems(matrix: Any, repo_root: Path) -> list[str]:
     """Each row's `verify` resolves to a strategy or is `none` (spec
     2026-10-06-verification-strategies §B). It needs the repo, because a
