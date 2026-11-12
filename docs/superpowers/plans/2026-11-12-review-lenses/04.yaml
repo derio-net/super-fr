@@ -1,0 +1,121 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The PR section, skills, agents and docs (R12, R14)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - review-lenses-shown-on-pr
+  tier: standard
+  files:
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/lenses/*
+  - plugins/super-fr/skills/*
+  - plugins/super-fr/agents/*
+  - packages/fr/src/fr/agents/*
+  - packages/fr/src/fr/artifacts/*
+  - .claude/agents/*
+  - .opencode/*
+  - .hermes/*
+  - docs/review-lenses.md
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/index.md
+  - docs/*.md
+  - .fr/docs.yaml
+  - README.md
+  - AGENTS.md
+  - scripts/readme-s*
+  - tests/unit/test_pr_body*.py
+  - tests/unit/test_record_pr_body*.py
+  - tests/unit/test_tripwire_*.py
+  - tests/unit/test_opencode_agent_mirror.py
+  - tests/unit/test_skill_validation.py
+  - tests/integration/test_scenarios.py
+  - tests/scenarios/review-lenses-shown-on-pr.sh
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: The Review lenses section (R12)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: PR-body tests over fixture runs: a run with a rule lens and an agent lens renders `## Review lenses` after the findings sections as a table: lens, why (`rule <globs> (<file>)`, or `<step>[ phase N]: "<reason>"` per addition, `command line` when no step was recorded), files examined (the count from the `lenses` evidence, or `not observable`), findings each with its folded state (`fixed`, `refuted`, `out of scope (<issue>)`) or `none`; an empty set renders the single line `No lens was requested for this change.`; a branch whose diff touches `.fr/lenses.yaml` adds a line saying the branch changed the repo's lens config; a run with no `lens-review` step on its cursor (older shape) renders `This run predates review lenses.`; the section is absent from `REQUIRED_SECTIONS` so `missing_sections` on an old live body is unchanged; under `forge.pr_body: minimal` the section is in the durable render only. See them fail.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: add `_review_lenses(repo_root, state)` to `fr/record/pr_body.py` and place it in the render order after the out-of-scope section; it reads the step's `lenses` evidence, `fr.lenses.accumulate.lens_set` for the why column and the plan-journal fold for finding states. See them pass.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: reuse `_md_row` and the existing finding-state wording helper rather than new formatting code.
+- number: 2
+  title: Skills and agents say a lens can be added (R14)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Edit the canonical sources, in harness-neutral wording (no tool or argument names outside a scoped per-harness clause, `scan_prose` must stay clean): `plugins/super-fr/skills/fr-brainstorming/SKILL.md`, `fr-plan/SKILL.md`, `fr-execute/SKILL.md` and `plugins/super-fr/agents/fr-phase-executor.md` each gain one short paragraph: when the work gives you a reason to want the whole feature examined under a concern, add a lens in your step record (`journal: [{kind: lens, lens: <id>, title: "<why, one line>"}]`), `fr lenses list` shows the set, a lens is never removed. `plugins/super-fr/agents/fr-spec-reviewer.md` (read-only): it may end its return with suggested lens entries, which the orchestrator records. `plugins/super-fr/skills/fr-goal/SKILL.md`: section 6 tells the orchestrator to pass that sentence to phase reviewers (who return a suggestion) and never any lens text; a new section between journal-check and deliver for `lens-review`: read the brief's `lens_review`, dispatch one reviewer per lens with that lens's text and rule verbatim and nothing else's, a separate context from every implementer, receive each review by the usual in-scope and out-of-scope rules with findings journalled `global: true` under their `l-<lens>-r<k>` ids, resolve with `reviewer: "<lens>=<id>,..."`; with an empty set resolve at once; a refusal naming a late lens prints its brief; renumber the later sections and fix the cross-references to them. Update the skill description front matter only if a pipeline summary there lists the steps.
+  - id: P4.T2.S2
+    text: |-
+      Regenerate every mirror and derived copy and commit them: `scripts/sync-opencode.py`, `scripts/sync-hermes.py`, `scripts/sync-readme.py`; for the two agent edits follow `AGENTS.md`'s agents procedure exactly: `scripts/sync-agents-data.py`, move the `agents` kind's `current_version`, update `fr.agents.CANONICAL_SHA256` and `PINNED_AT_VERSION`, register the `rerender_migration` hop, `uv run fr migrate artifacts --yes`. Run `tests/unit/test_tripwire_opencode_skills_sync.py`, `test_tripwire_opencode_instructions_sync.py`, `test_opencode_agent_mirror.py`, `test_tripwire_hermes_skills_sync.py`, `test_tripwire_agents_data.py`, `test_tripwire_skill_tool_neutrality.py`, `test_tripwire_readme_sync.py`, `test_skill_validation.py` and any question-rounds or section-number tripwire that reads `fr-goal`'s SKILL; all pass.
+- number: 3
+  title: Docs (R14, docs currency)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Write `docs/review-lenses.md` with front matter `title`, `tldr`, `standalone_style: broadsheet`, `covers: [packages/fr/src/fr/lenses/**, plugins/super-fr/lenses/**, packages/fr/src/fr/commands/lenses_cmd.py]` and `reviewed: <today> new page`, in the site's voice (second person, why before what): what a lens is, the four shipped texts in full, how any agent adds one, path rules and the base-plus-branch rule, the lens review before deliver and what it refuses, the PR table, `.fr/lenses.yaml` reference, `fr lenses` commands, what it does not prove. Add the lens review to the pipeline description in `docs/explainers/01-fr-goal.md`, and to `docs/explainers/index.md` only where a claim there lists the pipeline's steps. Bump `reviewed` on every other page `uv run fr docs check` reports. `uv run fr docs check` exits 0.
+  - id: P4.T3.S2
+    text: |-
+      Build the site locally per `.claude/rules/explainers-currency.md` (pinned renderer into a directory outside the repo) and confirm the new page and the edited explainer render and their links resolve.
+- number: 4
+  title: Scenario, row, closing gates
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Write `tests/scenarios/review-lenses-shown-on-pr.sh`: render the PR body of a fixture run with a rule lens and an agent lens and of one with an empty set, and assert the table rows and the "No lens was requested" line. Register it in `tests/integration/test_scenarios.py` and see it pass.
+  - id: P4.T4.S2
+    text: |-
+      `uv run fr acceptance set-status --id review-lenses-shown-on-pr --status ci --notes "<what proves it>" --level unit=... --level int=...` with real test names. Final `AGENTS.md` pass: the `fr/lenses` paragraph names every module that now exists. Run `uv run fr harness parity --check`, `uv run fr validate artifacts`, `uv run fr acceptance check`, `uv run fr docs check`, format, lint, mypy, then the full suite into a log outside the repo, after the last code commit; refresh `.test_durations` if the suite's file set changed materially.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -408,3 +408,4 @@ strategy: candidate
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-11-12-review-lenses | `derio-net/super-fr` | `2026-11-12-review-lenses` | — |
