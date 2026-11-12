@@ -37,7 +37,7 @@ pre{overflow-x:auto;padding:1rem 1.1rem;background:var(--panel);border:1px solid
 .band ul{margin:1rem 0 0;padding-left:1.3rem;color:var(--paper-dim)}
 .band li{margin:.3rem 0}
 .band p strong:first-child{color:var(--paper)}
-.kicker{margin:0 0 .9rem;font-family:var(--mono);font-size:.82rem;letter-spacing:.14em;color:var(--brass)}
+.kicker{margin:0 0 1.1rem;font-family:var(--mono);font-size:.82rem;letter-spacing:.14em;color:var(--brass)}
 
 /* the run strip */
 .flow{background:var(--ink-2)}
@@ -50,7 +50,7 @@ pre{overflow-x:auto;padding:1rem 1.1rem;background:var(--panel);border:1px solid
 .legend{margin:1.2rem 0 0;font-size:.9rem;color:var(--muted)}
 
 /* a numbered guarantee */
-.problem{margin:0 0 1.1rem;max-width:40rem;font-style:italic;font-size:1.12rem;line-height:1.55;color:var(--muted)}
+.problem{margin:0 0 1.5rem;max-width:40rem;font-style:italic;font-size:1.12rem;line-height:1.55;color:var(--muted)}
 .problem p{margin:0;color:inherit}
 .guarantee .body{max-width:40rem}
 .more{display:inline-block;margin:1.5rem 0 0;padding:.45rem 0;font-family:var(--display);font-weight:600;font-size:1.02rem;color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass)}
