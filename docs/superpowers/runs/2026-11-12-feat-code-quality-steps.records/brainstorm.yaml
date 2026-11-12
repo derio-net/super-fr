@@ -1,0 +1,95 @@
+schema_version: 11
+run: 2026-11-12-feat-code-quality-steps
+step: brainstorm
+outcome: done
+journal:
+  - kind: discovery
+    input: true
+    id: brief
+    title: Operator's brief, verbatim
+    body: |
+      How can we ship better code with super-fr? How can we sensibly use flows or steps in the existing flows to make the code more maintainable, readable, secure? An extra datapoint: https://evanxmerz.com/post/ai-usage-generates-a-fragile-codebase/
+  - kind: decision
+    id: d1-first-focus
+    title: Design review lenses first
+    body: |
+      Asked which of four quality areas to design first (review lenses, whole-change review, reuse search at plan time, operator comprehension). Operator chose review lenses. The other three are later specs.
+  - kind: decision
+    id: d2-lenses-per-phase
+    title: Lenses are chosen per phase in the plan
+    body: |
+      Asked how lenses are applied in a phase's review. Operator chose lenses named on the plan's phase header, checked by fr plan self-review, with one reviewer covering the named ones; not all lenses always, not one reviewer per lens.
+  - kind: decision
+    id: d3-waiver-plus-path-rules
+    title: Every lens applied or waived with a reason, plus repo path rules
+    body: |
+      Asked what stops a phase under-declaring. Operator chose both: every agentic phase states each lens as applied or waived with a reason, and a repo may map path globs to mandatory lenses that a waiver does not satisfy.
+  - kind: decision
+    id: d4-four-shipped-repo-may-add
+    title: Four shipped lenses; a repo may add, replace and disable
+    body: |
+      Asked which lenses exist. Operator chose security, tests, simplicity and errors shipped by fr, with a repo file able to add lenses or replace a shipped lens's instruction text.
+  - kind: decision
+    id: d5-evidence-tied-to-files
+    title: Reviewer lines tied to changed files, checked by fr, shown in the PR
+    body: |
+      Asked what the reviewer returns per lens. Operator chose one line per declared lens naming changed files examined and finding ids; fr refuses the review resolve on a missing line, no file from the phase's diff, or an unknown finding id; the result is stored on the run and shown as a table in the PR body.
+  - kind: decision
+    id: d6-verification-candidate
+    title: Verified on a candidate build, all rows, no post-merge walk
+    body: |
+      The standing verification question. Operator chose the candidate strategy for every row, with a stubbed reviewer return in the scenarios; no gate holds the close-out.
+resolves: []
+acceptance:
+  - id: review-lenses-effective-set
+    capability: review lenses
+    acceptance: fr ships security, tests, simplicity and errors lenses; a repo's .fr/lenses.yaml can add a lens, replace a shipped lens's text or disable one; fr lenses list, show and check report the effective set and fail a broken config, writing nothing
+    origin:
+      - spec:2026-11-12-review-lenses#R1
+      - spec:2026-11-12-review-lenses#R2
+      - spec:2026-11-12-review-lenses#R3
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/review-lenses-effective-set.sh
+  - id: review-lenses-phase-must-declare
+    capability: review lenses
+    acceptance: A plan fails fr plan self-review when an agentic phase neither applies nor waives every effective lens, or waives one without a reason; a plan written before review lenses, carrying none, passes and is reviewed as before
+    origin:
+      - spec:2026-11-12-review-lenses#R4
+      - spec:2026-11-12-review-lenses#R5
+      - spec:2026-11-12-review-lenses#R13
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/review-lenses-phase-must-declare.sh
+  - id: review-lenses-path-rules
+    capability: review lenses
+    acceptance: Where a repo's path rule requires a lens, a phase planning to touch that path cannot waive it, and a phase review cannot be closed after the phase changed such a path without the lens applied; the refusal names the file, the rule and the lens
+    origin:
+      - spec:2026-11-12-review-lenses#R6
+      - spec:2026-11-12-review-lenses#R7
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/review-lenses-path-rules.sh
+  - id: review-lenses-reviewer-return-checked
+    capability: review lenses
+    acceptance: The reviewer of a phase is given each applied lens's instruction text and must return, per lens, the changed files it examined and the findings it raised; the review cannot be closed while a lens has no line, a line names no file the phase changed, or a line cites a finding the reviewer did not return, and fr records the outcome itself
+    origin:
+      - spec:2026-11-12-review-lenses#R8
+      - spec:2026-11-12-review-lenses#R9
+      - spec:2026-11-12-review-lenses#R10
+      - spec:2026-11-12-review-lenses#R11
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/review-lenses-reviewer-return-checked.sh
+  - id: review-lenses-shown-on-pr
+    capability: review lenses
+    acceptance: The pull request shows, per phase, each applied lens with the files examined and how each finding closed, each waived lens with its reason, and any change the branch made to the repo's lens config; the skills and an operator page tell authors and orchestrators how to use lenses
+    origin:
+      - spec:2026-11-12-review-lenses#R12
+      - spec:2026-11-12-review-lenses#R14
+    status: not-implemented
+    verify: candidate
+    scenario: tests/scenarios/review-lenses-shown-on-pr.sh
+emitted:
+  spec: docs/superpowers/specs/2026-11-12-review-lenses-design.md
+evidence: {}
