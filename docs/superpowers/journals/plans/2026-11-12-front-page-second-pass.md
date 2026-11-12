@@ -152,3 +152,143 @@ prose page; no code to restructure
 ### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
 
 guidance prose and generated mirrors
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · pipeline figure numbers nine steps but the eight cards below number them differently (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · 'The long read' is in a centred 760px column offset from every other section, with a tight gap above (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · light scheme: dashed 'you act' outlines look hatched because the solid panel stroke shows through (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · contrast test skips --you, --ok, --on-accent and --text-muted on --surface-2 (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · exit-gates copy says the spec names the gate and a person passes it; the linked page says more (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · terminal, card 08 and figure state the Test Plan as unconditional (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · wave figure's 'sleep, then repeat' and the unexplained 'after' are not on the wave-driver page (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · gate figure says 'the fragments are consumed', undefined jargon (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · pipeline figure's full-width animated dashed line carries no meaning (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r10 · finding [open] (reviewer: in scope) · at 390px the four fact tiles stack one per row (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=out -->
+### p2-r11 · finding [open] (reviewer: out of scope) · shared top bar is cramped at 390 and wraps at 320, and its left edge differs between article pages and the landing (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r12 · finding [open] (reviewer: in scope) · pipeline figure lost its numerals but kept the empty top band in each box, so labels sit low (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r13 created=2026-11-12T14:58:42+00:00 phase=2 state=open review_scope=in -->
+### p2-r13 · finding [open] (reviewer: in scope) · gate-ledger.svg rc.1 caption still says 'no fragment consumed' (phase 2)
+
+Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-11-12T14:58:42+00:00 phase=2 -->
+### p2-review · review · independent review of phase 2: 13 findings (phase 2)
+
+Findings raised: p2-r1 to p2-r10, p2-r12, p2-r13 (in scope), p2-r11 (out of scope). The reviewer ran the targeted tests and ruff, checked every R10 refusal and its test, the reduced-motion structure, the copy against each linked page, built the site and took and opened its own screenshots (dark, light, 390px, 320px, 768px, reduced motion, each figure, interactions), then re-verified the fixes at df02e464 on fresh screenshots. p2-r12, p2-r13 and the figure part of p2-r5 were fixed afterwards and checked by the orchestrator on fresh screenshots.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: pipeline figure numbers nine steps but the eight cards below number them differently (phase 2)
+
+Numerals removed from both forms of the figure.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: 'The long read' is in a centred 760px column offset from every other section, with a tight gap above (phase 2)
+
+Left-aligned with the wrap, same top padding as its neighbours. This is also the implementer's finding p2-prose-alignment.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: light scheme: dashed 'you act' outlines look hatched because the solid panel stroke shows through (phase 2)
+
+You-boxes use a fill-only panel under the dashed outline; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: contrast test skips --you, --ok, --on-accent and --text-muted on --surface-2 (phase 2)
+
+Added to the contrast tests in both schemes.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: exit-gates copy says the spec names the gate and a person passes it; the linked page says more (phase 2)
+
+Section 05, the facts tile and both forms of the gate figure now say the gate comes from the spec or is added for manual operations, and that the tester gate is passed by you or by the driver once its rows are walked.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: terminal, card 08 and figure state the Test Plan as unconditional (phase 2)
+
+All three say 'if there is one'.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: wave figure's 'sleep, then repeat' and the unexplained 'after' are not on the wave-driver page (phase 2)
+
+The driver waits --interval seconds between passes; the page says so, the box reads 'wait, then repeat', and the figure defines after.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: gate figure says 'the fragments are consumed', undefined jargon (phase 2)
+
+Now 'the final release is cut'.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: pipeline figure's full-width animated dashed line carries no meaning (phase 2)
+
+Removed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r10 -->
+### p2-r10-resolved · finding [fixed] · resolves p2-r10: at 390px the four fact tiles stack one per row (phase 2)
+
+A 2x2 grid at 390 and 320.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r11-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=open resolves=p2-r11 out_of_scope=true -->
+### p2-r11-resolved · finding [out-of-scope] · resolves p2-r11: shared top bar is cramped at 390 and wraps at 320, and its left edge differs between article pages and the landing (phase 2)
+
+The top bar and bar.css were built in the first pass and are not changed by this run; its phone layout is a follow-up.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r12 -->
+### p2-r12-resolved · finding [fixed] · resolves p2-r12: pipeline figure lost its numerals but kept the empty top band in each box, so labels sit low (phase 2)
+
+Labels moved up in the wide form; the narrow form's boxes were already centred. Checked on a fresh screenshot.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r13-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-r13 -->
+### p2-r13-resolved · finding [fixed] · resolves p2-r13: gate-ledger.svg rc.1 caption still says 'no fragment consumed' (phase 2)
+
+Now 'no final release yet'.
+
+<!-- fr:journal kind=finding scope=plan id=p2-prose-alignment-resolved created=2026-11-12T14:58:42+00:00 phase=2 state=fixed resolves=p2-prose-alignment -->
+### p2-prose-alignment-resolved · finding [fixed] · resolves p2-prose-alignment: The long-read prose section is centred in a narrower column than the sections around it (phase 2)
+
+Same defect as p2-r2; the long-read section is left-aligned with the wrap.
