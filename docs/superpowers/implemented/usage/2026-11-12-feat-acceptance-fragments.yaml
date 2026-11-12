@@ -4,19 +4,20 @@ captures:
 - host: h-eb3456e1
   harness: claude-code
   mode: devcontainer
-  captured_at: '2026-11-12T09:16:49+00:00'
+  captured_at: '2026-11-12T11:33:53+00:00'
   at:
   - resolve:plan
   - deliver
+  - closeout
   sessions:
   - session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
     role: main
     models:
       claude-opus-5-5:
-        input: 2332
-        cache_write: 3222624
-        cache_read: 278277899
-        output: 783896
+        input: 2720
+        cache_write: 3692898
+        cache_read: 310916409
+        output: 888339
         usd: null
         usd_source: none
       claude-sonnet-5-5:
@@ -29,21 +30,21 @@ captures:
     activity:
       implementation:
         usd: null
-        turns: 750
+        turns: 820
       other:
         usd: null
-        turns: 350
+        turns: 414
       paperwork:
         usd: null
-        turns: 255
+        turns: 305
     steps:
       (outside run):
         usd: null
-        turns: 5
-        input: 12
-        cache_write: 87608
-        cache_read: 475185
-        output: 1250
+        turns: 188
+        input: 400
+        cache_write: 557882
+        cache_read: 33113695
+        output: 105693
       plan:
         usd: null
         turns: 81
@@ -69,11 +70,11 @@ captures:
       main:
         (outside run):
           usd: null
-          turns: 5
-          input: 12
-          cache_write: 87608
-          cache_read: 475185
-          output: 1250
+          turns: 84
+          input: 190
+          cache_write: 174965
+          cache_read: 18769423
+          output: 48514
         plan:
           usd: null
           turns: 29
@@ -110,6 +111,13 @@ captures:
           cache_write: 157950
           cache_read: 5559822
           output: 27816
+        (outside run):
+          usd: null
+          turns: 104
+          input: 210
+          cache_write: 382917
+          cache_read: 14344272
+          output: 57179
     units:
       step/plan:
         orchestrator:
@@ -250,11 +258,11 @@ captures:
       (unattributed):
         subagent:
           usd: null
-          turns: 300
-          input: 600
-          cache_write: 956626
-          cache_read: 40314996
-          output: 162165
+          turns: 404
+          input: 810
+          cache_write: 1339543
+          cache_read: 54659268
+          output: 219344
     briefs:
       aede680bb830731bb: 3530
       phase/1/implement-phase: 4190
@@ -268,3 +276,4 @@ captures:
       phase/4/implement-phase: 5741
       phase/4/review-phase: 2999
       ac417ba53b5f7d86b: 6853
+      aee3df36006e79b80: 6081
