@@ -295,3 +295,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_acceptance_archive_twin.py#test_check_survives_debug_journal_archive
     why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_archive_twin.py#test_a_plan_dir_ref_resolves_at_its_archived_counterpart
+    why: read-time resolution of archived refs is ci-pinned
