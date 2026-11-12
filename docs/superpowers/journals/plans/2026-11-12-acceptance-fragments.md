@@ -739,3 +739,8 @@ df844f367: render and render_markdown say 'from the folded fragments in docs/acc
 ### pr1408-r9-resolved · finding [fixed] · resolves pr1408-r9: _companions swallows the frozen reader's failure for a pre-v5 matrix, so the uncommitted-changes veto covers only the reports
 
 d060bb715: _companions falls back to every fragment on disk when split_texts cannot name its own. Red: test_a_pre_v5_matrix_still_names_every_fragment_the_split_may_touch
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r5-resolved-2 created=2026-11-12T09:47:10+00:00 state=fixed resolves=pr1408-r5 -->
+### pr1408-r5-resolved-2 · finding [fixed] · resolves pr1408-r5: matrix-parse-libyaml and archive-retargets-matrix-refs, owned by other features, were edited in place after the migration instead of amended
+
+Corrects the range in the previous record: 68f14ff5c restores both owners' fragments with git from migration commit ae7791862; 13 amendments in 2026-11-04-repo-feature-settings's fragment, 5bdb2c831..753c24d93 (fr acceptance amend: 1 reword, 4 drop-level, 6 add-level, 2 set-status), re-apply the changes; the effective rows are identical before and after (JSON dump compared).
