@@ -52,4 +52,6 @@ def test_every_configured_page_parses_with_fr_docs() -> None:
         "docs/explainers/why-fr.md",
         "docs/explainers/01-fr-goal.md",
         "docs/explainers/fr-isolation.md",
+        "docs/explainers/fr-wave-driver.md",
+        "docs/explainers/fr-exit-gates.md",
     } <= paths

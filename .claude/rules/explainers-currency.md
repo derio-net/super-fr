@@ -30,18 +30,31 @@ Reference lists, and GitHub. `why-fr.md` is the long essay on why fr is trustwor
 
 **The front page** is `docs/explainers/index.md` with `layout: landing`. It is not rendered by
 blog-craft: `scripts/build-site.py` renders it from `scripts/site/landing.html` and
-`landing.css`, and copies the fonts and the dark palette from a page blog-craft rendered in the
-same build. Its front matter carries `hero` (`headline`, `subline` and `primary: {label, href}`
-are required; `eyebrow`, `command` and `secondary` are optional) and `facts` (`figure` and
-`caption`). The body is split at `## ` headings, and a `<!-- landing:<kind> -->` line under a
-heading names the section: `flow` (one ordered list, `{you}` marks the operator's steps),
-`guarantee` (a blockquote problem, the gain and how, and a last paragraph holding exactly one
-link; six to eight of them, numbered by the build), `pages` (needs the `<!-- site:pages -->`
-marker), `cta`, or none for plain prose. A claim on it must be one the page it links to already
-makes. The build fails, naming the page, on a missing hero key, an unknown kind, a malformed
-section, a link to an untracked path, `layout: landing` anywhere but the page routed to
-`index.html`, a rendered page with no embedded font, or one that cannot take the top bar. A
-change under `scripts/site/` deploys the site.
+`landing.css`, which define the page's own dark and light look. The landing embeds no font and
+takes nothing from a rendered page; article pages keep the broadsheet look. Its front matter
+carries `hero` (`headline`, `subline` and `primary: {label, href}` are required; `eyebrow`,
+`command` and `secondary` are optional, and `terminal` is an optional list of `{kind, text}`
+lines with `kind` one of `prompt` (typed out), `out`, `you` (a point where the operator acts)
+and `ok`; with it the terminal panel replaces the single `command` line) and `facts` (`figure`
+and `caption`). The body is split at `## ` headings, and a `<!-- landing:<kind> -->` line under
+a heading names the section: `flow` (one ordered list, `{you}` marks the operator's steps),
+`act` (an act opener: the heading and its introduction; the build labels the acts in order, and
+every `guarantee` after one belongs to it until the next), `guarantee` (a blockquote problem,
+the gain and how, and a last paragraph holding exactly one link; six to eight of them, numbered
+across acts by the build), `grid` (optional prose, then one list of three to eight cards, each
+`**Title.** one sentence [label](href)` with exactly one link), `pages` (needs the
+`<!-- site:pages -->` marker), `cta`, or none for plain prose. A line `<!-- site:figure <name> -->`
+on its own places a diagram from `scripts/site/figures/` on any page, and in a `flow`,
+`guarantee` or prose section of the landing (one per section; an `act`, `grid`, `pages` or `cta`
+refuses it). A figure file has an accessible name (`role="img"` and a `<title>`), runs no script,
+refers to nothing outside the page, takes its colours from the classes of `figures.css` rather
+than literal values, prefixes its ids with the file's name and two hyphens, and has a
+`<name>.narrow.svg` when its text would fall under about 11 px on a phone. A claim on the front
+page must be one the page it links to already makes. The build fails, naming the page, on a
+missing hero key, an unknown kind, an unknown terminal kind, an act with no numbered section, a
+malformed card or grid, a missing or unsafe figure, a link to an untracked path, `layout:
+landing` anywhere but the page routed to `index.html`, a renderer page with no embedded font, or
+one that cannot take the top bar. A change under `scripts/site/` deploys the site.
 A relative link to another page's `.md` becomes its route; a link to any other tracked file
 becomes a GitHub link at the built commit; a link to a path git does not track fails the
 build. `./acceptance/` is the one site route a page may name directly.
