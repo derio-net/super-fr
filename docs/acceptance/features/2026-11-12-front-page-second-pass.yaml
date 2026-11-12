@@ -20,9 +20,14 @@ rows:
     - spec:2026-11-12-front-page-second-pass#R9
     - spec:2026-11-12-front-page-second-pass#R12
     - spec:2026-11-12-front-page-second-pass#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve
+      - super-fr:tests/unit/test_build_site.py#test_an_act_exposes_its_title_and_introduction_and_is_numbered_in_order
+    status: ci
+    notes: unit tests parse this repo's index.md (two acts, six numbered sections, grid,
+      terminal, figures, links resolve) and the acts, grid and terminal parsers; the
+      site-build job renders it; screenshots taken and opened at implement
     verify: none
     visual:
       states:
