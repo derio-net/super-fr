@@ -112,5 +112,13 @@ journal:
       site-wave-driver-and-exit-gates-pages: the fold reads origin/main's fragments while their spec
       and tests are not on this branch. Nothing from this phase; it clears when the branch takes
       origin/main (delivery's call). placement-quiet itself checks clean.
+  - kind: discovery
+    id: quiet-init-subject-through-templates
+    phase: 3
+    title: The first full suite caught init --quiet's chore(fr) subject bypassing the R14 seam
+    body: |
+      test_every_chore_fr_producer_goes_through_the_seam failed on commands/settings_cmd.py: the root
+      commit of `fr` was written by commit-tree with a literal subject. It now goes through
+      `fr_message` (the repo's templates and the Fr-Commit trailer). The full suite was re-run after.
 resolves: []
 evidence: {}
