@@ -214,6 +214,16 @@ rows:
     levels: {}
     status: not-implemented
     notes: 'added at planning (plan 3): R25 and R17''s quiet/stealth clause had no row'
+  - id: placement-fr-enabled
+    capability: repo-feature-settings
+    acceptance: A quiet fr-branch switch and a stealth workspace count as fr-enabled
+      in the bash decision library, the OpenCode plugin and the Hermes hook, each with
+      its parity row
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R26
+    levels: {}
+    status: not-implemented
+    notes: 'added at planning (plan 3): R26 had no row'
 amendments:
   - row: acceptance-report-formats
     op: reword
