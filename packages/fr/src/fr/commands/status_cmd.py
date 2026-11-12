@@ -1,7 +1,7 @@
 """`fr status` CLI — read-only plan report (2026-06-05 dispatch-guards spec).
 
 The safely-allowlistable audit verb: same read pipeline as `fr apply`'s
-dry-run (via `vk.commands.common.build_plan_report`, so the two can never
+dry-run (via `fr.commands.common.build_plan_report`, so the two can never
 drift) but with no mutation vocabulary and no `--yes` to misfire. Exit 0
 even when drift exists — it's a report, not a gate. Allowlist as
 `fr status*`.

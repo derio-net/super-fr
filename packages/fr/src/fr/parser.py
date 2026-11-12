@@ -1,7 +1,7 @@
 """Parser for v2 plan-as-folder format.
 
 Loads `_meta.yaml` and per-phase yaml files (`NN.yaml`) from a plan
-folder, validates them against the pydantic schemas in `vk.types`,
+folder, validates them against the pydantic schemas in `fr.types`,
 and returns an immutable `Plan` dataclass.
 
 Design rationale lives in:
@@ -10,7 +10,7 @@ Design rationale lives in:
 Key invariants enforced here:
   - The directory must contain `_meta.yaml` (otherwise it's not a v2 plan).
   - The plan's `fr_version` constraint (when present) must be satisfiable by the
-    installed `vk` package (otherwise we'd produce wrong renders).
+    installed `fr` package (otherwise we'd produce wrong renders).
   - All errors surface as `PlanSchemaError` with the offending file
     in the message — no naked pydantic/packaging exceptions leak out.
 """

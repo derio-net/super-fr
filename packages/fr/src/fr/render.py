@@ -238,7 +238,7 @@ def plan_locally_complete(phase: PhaseDoc) -> bool:
     (2026-05-18 premature-close incident). This predicate answers a
     different question — "does the plan ITSELF claim this phase is done?" —
     and exists for surfaces that run before any Issue exists: the dispatch
-    guard in `vk.diff.diff` (2026-06-05 stale-plan dispatch postmortem),
+    guard in `fr.diff.diff` (2026-06-05 stale-plan dispatch postmortem),
     the `_drift_warnings` never-dispatched warning, the `fr spec status`
     roll-up, and the `fr archive` gate.
 
@@ -316,7 +316,7 @@ def spec_url(plan: Plan) -> str | None:
     """GitHub blob URL for `plan.meta.spec`; None when unset.
 
     Same-repo specs resolve against `target_repo`; cross-repo
-    `owner/repo:path` notation (see `vk._urls.is_cross_repo_spec`)
+    `owner/repo:path` notation (see `fr._urls.is_cross_repo_spec`)
     resolves against the named repo. `main` is the deliberate branch
     choice — it matches the bridge's hardcoded pull convention and the
     dispatch reachability gate ("plan and spec must be on origin/HEAD").

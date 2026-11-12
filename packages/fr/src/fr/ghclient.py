@@ -1,4 +1,4 @@
-"""GhClient Protocol — the single seam between vk and the GitHub world.
+"""GhClient Protocol — the single seam between fr and the GitHub world.
 
 The renderer/applier never call `gh` directly. They call methods on a
 `GhClient` instance. Production passes a real wrapper; tests pass

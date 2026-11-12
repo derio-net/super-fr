@@ -298,7 +298,7 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     # baseline: gh feature present; requested tool mapped to its feature
     assert any("github-cli" in k for k in cfg["features"])
     assert any(KNOWN_TOOLS["uv"].feature in k for k in cfg["features"])
-    # vk installed in postCreate; secrets env-file wired with localEnv HOME
+    # fr installed in postCreate; secrets env-file wired with localEnv HOME
     assert "super-fr#subdirectory=packages/fr" in cfg["postCreateCommand"]
     # host-path workspace mount — linked-worktree git breaks without it
     assert cfg["workspaceFolder"] == "${localWorkspaceFolder}"

@@ -1,6 +1,6 @@
 """`fr archive` CLI — move finished plans (and their specs) to implemented/.
 
-Gate per plan (vk.render.archive_gate): every dispatched phase
+Gate per plan (fr.render.archive_gate): every dispatched phase
 `_phase_complete`; every undispatched phase `plan_locally_complete` AND, for an
 agentic one, complete on the default branch's remote-tracking ref too (#544 —
 one `merge_evidence(fetch=True)` per invocation, not per plan). Manual phases

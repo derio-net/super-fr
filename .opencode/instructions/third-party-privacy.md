@@ -24,7 +24,7 @@ and those transcripts land in artifacts that are **committed and pushed**:
 | plan step notes (`fr plan edit --tick --note`) | pasted command output |
 | journals (`fr journal add`) | findings quoting real URLs |
 | captured test fixtures | error strings carrying the API host |
-| `docs/acceptance/matrix.yaml` notes | "live-verified against `<host>`" |
+| acceptance fragment notes (`docs/acceptance/features/*.yaml`) | "live-verified against `<host>`" |
 | the derived acceptance report (job summary, artifact, Pages, PR comment) | whatever the notes said |
 | **PR bodies** | the whole transcript |
 | **commit messages** | the hardest to scrub afterwards |

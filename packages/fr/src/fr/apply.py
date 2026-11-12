@@ -1,7 +1,7 @@
 """Apply a Diff to GitHub. The only mutation path in v2.
 
 `apply()` is the single point through which any GH-side change flows.
-It consumes a `Diff` (produced by `vk.diff.diff`), executes each
+It consumes a `Diff` (produced by `fr.diff.diff`), executes each
 mutation through the `GhClient`, and accumulates failures rather than
 short-circuiting — so one bad mutation doesn't strand the rest.
 
