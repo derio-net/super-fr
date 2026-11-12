@@ -1215,7 +1215,7 @@ def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
     ):
         subprocess.run(cmd, cwd=tmp_path, check=True)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     result = CliRunner().invoke(app, ["migrate", "dirs", "--yes"])
     assert result.exit_code == 0, result.output
     # the spec may itself have been swept to implemented/specs/
@@ -1411,7 +1411,7 @@ def test_migrate_dirs_holds_pending_spec(tmp_path, monkeypatch):
     ):
         subprocess.run(cmd, cwd=tmp_path, check=True)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     result = CliRunner().invoke(app, ["migrate", "dirs", "--yes"])
     assert result.exit_code == 0, result.output
     sp = tmp_path / "docs" / "superpowers"

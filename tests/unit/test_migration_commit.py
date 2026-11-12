@@ -312,7 +312,7 @@ def test_the_cli_entry_gate_commits_the_migration_it_made(
     argv = ["models", "get", "--harness", "claude-code"]
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: True)
-    result = CliRunner().invoke(app, argv, env={"VK_REPO_ROOT": str(root)})
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(root)})
 
     assert result.exit_code == 0, result.output
     assert "claude-code" in result.output, "the typed command must still run"
@@ -447,7 +447,7 @@ def test_the_gate_never_commits_the_operators_edit_to_a_migrated_artifact(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: True)
-    result = CliRunner().invoke(app, argv, env={"VK_REPO_ROOT": str(root)})
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(root)})
 
     assert result.exit_code == 2, "a held-back artifact is a refusal, not a silent skip"
     assert _git(root, "rev-parse", "HEAD") == before_head, "nothing was committed"
@@ -468,7 +468,7 @@ def test_the_gate_never_commits_on_the_default_branch(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: True)
-    result = CliRunner().invoke(app, argv, env={"VK_REPO_ROOT": str(root)})
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(root)})
 
     assert result.exit_code == 2
     assert _git(root, "rev-parse", "HEAD") == before_head

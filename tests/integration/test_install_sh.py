@@ -94,7 +94,7 @@ def _run_install(
         # Bypass the main/clean/in-sync gate: integration tests run install.sh
         # from the repo checkout (often detached HEAD on CI), which would
         # always fail the gate. The escape hatch is documented in install.sh.
-        "VK_INSTALL_SKIP_PREFLIGHT": "1",
+        "FR_INSTALL_SKIP_PREFLIGHT": "1",
         **(extra_env or {}),
     }
     result = subprocess.run(
@@ -553,7 +553,7 @@ class TestFrCliInstallResilience:
         env = {
             "HOME": str(fake_home),
             "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
-            "VK_INSTALL_SKIP_PREFLIGHT": "1",
+            "FR_INSTALL_SKIP_PREFLIGHT": "1",
             "UV_STUB_TOOLDIR": str(tooldir),
             "UV_STUB_STATE": str(state),
             "UV_STUB_INSTALL_FAILS": str(install_fails),
@@ -862,7 +862,7 @@ class TestFrHerdrOnPath:
         env = {
             "HOME": str(fake_home),
             "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
-            "VK_INSTALL_SKIP_PREFLIGHT": "1",
+            "FR_INSTALL_SKIP_PREFLIGHT": "1",
             "FR_INSTALL_RETRY_SLEEP": "0",
             "FR_INSTALL_DRAIN_SECONDS": "0",
             "UV_STUB_BINDIR": str(path_bin),

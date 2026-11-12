@@ -28,7 +28,7 @@ def unresolvable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     git(root, "commit", "-qm", "seed")
     git(root, "push", "-q", "origin", "main:feature")
     git(root, "fetch", "-q", "origin")
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     monkeypatch.chdir(root)
     return root
 

@@ -72,7 +72,7 @@ def _hermetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(cfg / "global"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg / "xdg"))
     monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
-    for var in ("GIT_SSH_COMMAND", "GIT_SSH", "VK_REPO_ROOT"):
+    for var in ("GIT_SSH_COMMAND", "GIT_SSH", "FR_REPO_ROOT"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(isolation_cmd, "_runner", _no_pr_runner)
     monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
@@ -98,7 +98,7 @@ def _repo(tmp_path: Path) -> Path:
 
 
 def _fr(root: Path, shipped: Path, argv: list[str]) -> Any:
-    env = {**os.environ, "VK_REPO_ROOT": str(root), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {**os.environ, "FR_REPO_ROOT": str(root), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
     return cli.invoke(app, argv, env=env)
 
 

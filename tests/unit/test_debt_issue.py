@@ -45,7 +45,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Gh, dict[str, 
         ["git", "-C", str(tmp_path), "remote", "add", "origin", f"https://github.com/{SLUG}.git"],
         check=True,
     )
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     gh = Gh()
     box = {"report": _report(True)}

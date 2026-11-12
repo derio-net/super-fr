@@ -20,7 +20,7 @@ runner = CliRunner()
 
 
 def _invoke(repo: Path, argv: list[str]):
-    env = {**os.environ, "VK_REPO_ROOT": str(repo)}
+    env = {**os.environ, "FR_REPO_ROOT": str(repo)}
     return runner.invoke(app, argv, env=env)
 
 

@@ -71,7 +71,7 @@ def _four_bucket_repo(tmp_path: Path) -> Path:
 def _invoke(monkeypatch: pytest.MonkeyPatch, repo: Path, argv: list[str]):
     monkeypatch.setattr(status_cmd, "_make_gh_client", lambda: FakeGhClient())
     monkeypatch.chdir(repo)
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     return CliRunner().invoke(app, argv)
 
 
@@ -288,7 +288,7 @@ def test_sweep_never_calls_gh_mutations(tmp_path: Path, monkeypatch: pytest.Monk
     gh = FakeGhClient()
     monkeypatch.setattr(status_cmd, "_make_gh_client", lambda: gh)
     monkeypatch.chdir(repo)
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     for argv in (["status"], ["status", "--format", "json"]):
         result = CliRunner().invoke(app, argv)
         assert result.exit_code == 0, result.output

@@ -68,3 +68,49 @@ def test_no_bare_isolation_up_remedy(rel: str) -> None:
     text = (REPO / rel).read_text()
     bare = [m.group(0) for m in re.finditer(r"fr isolation up(?=[`'\")]|$)", text, re.M)]
     assert bare == []
+
+
+# --- Task 3: FR_REPO_ROOT, FR_INSTALL_SKIP_PREFLIGHT -------------------------------
+
+
+def test_fr_repo_root_is_honoured(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from fr.commands.common import resolve_repo_root
+
+    monkeypatch.delenv("VK_REPO_ROOT", raising=False)
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
+    assert resolve_repo_root() == tmp_path.resolve()
+
+
+def test_vk_repo_root_is_not_read(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from fr.commands.common import resolve_repo_root
+
+    monkeypatch.delenv("FR_REPO_ROOT", raising=False)
+    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    assert resolve_repo_root() != tmp_path.resolve()
+
+
+def test_empty_fr_repo_root_falls_through_to_git(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from fr.commands.common import resolve_repo_root
+
+    monkeypatch.setenv("FR_REPO_ROOT", "")
+    assert resolve_repo_root(REPO) == REPO.resolve()
+
+
+def test_no_vk_env_names_remain() -> None:
+    this = Path(__file__).resolve()
+    hits: list[str] = []
+    for top in ("packages", "plugins", "scripts", "tests"):
+        for path in (REPO / top).rglob("*"):
+            if not path.is_file() or path.resolve() == this or "node_modules" in path.parts:
+                continue
+            if "fixtures/github_rest" in path.as_posix():  # captures are never rewritten
+                continue
+            try:
+                text = path.read_text()
+            except (UnicodeDecodeError, OSError):
+                continue
+            if "VK_REPO_ROOT" in text or "VK_INSTALL_SKIP_PREFLIGHT" in text:
+                hits.append(str(path.relative_to(REPO)))
+    assert hits == []

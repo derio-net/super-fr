@@ -98,7 +98,7 @@ def _commit(repo: Path, msg: str) -> None:
 def _invoke(monkeypatch, repo, gh, argv):
     monkeypatch.setattr(archive_cmd, "_make_gh_client", lambda: gh)
     monkeypatch.chdir(repo)
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     return CliRunner().invoke(app, argv)
 
 

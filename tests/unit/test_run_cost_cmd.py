@@ -78,7 +78,7 @@ def _write(path: Path, file: UsageFile) -> Path:
 
 
 def _invoke(repo: Path, *argv: str):
-    return runner.invoke(app, ["run", "cost", *argv], env={**os.environ, "VK_REPO_ROOT": str(repo)})
+    return runner.invoke(app, ["run", "cost", *argv], env={**os.environ, "FR_REPO_ROOT": str(repo)})
 
 
 # --- the summarizer ---------------------------------------------------------

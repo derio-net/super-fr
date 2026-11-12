@@ -265,7 +265,7 @@ _DRIFTED = parse_matrix(
 
 
 def test_check_on_this_repo_exits_zero(monkeypatch) -> None:
-    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
+    monkeypatch.setenv("FR_REPO_ROOT", str(REPO_ROOT))
     result = runner_cli.invoke(app, ["harness", "parity", "--check"])
     assert result.exit_code == 0, result.output
 
@@ -286,7 +286,7 @@ def _only_cell_drift(monkeypatch) -> None:
     shipped scripts, and `_DRIFTED` declares two — without this the fixture
     reports eight "no row" findings that have nothing to do with what is under
     test. Pairing gets its own CLI test below."""
-    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
+    monkeypatch.setenv("FR_REPO_ROOT", str(REPO_ROOT))
     monkeypatch.setattr("fr.commands.harness_cmd.load_matrix", lambda: _DRIFTED)
     monkeypatch.setattr(
         "fr.commands.harness_cmd.shipped_scripts",
@@ -308,7 +308,7 @@ def test_check_outside_a_super_fr_checkout_declines_and_exits_zero(monkeypatch, 
     """It needs the registration files, and there are none — so it says so
     and exits 0 rather than inventing a verdict (the `fr acceptance check`
     precedent, spec §3.F)."""
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     result = runner_cli.invoke(app, ["harness", "parity", "--check"])
     assert result.exit_code == 0
     assert "cannot check" in result.output
@@ -400,7 +400,7 @@ def test_check_reports_an_undeclared_shipped_hook_through_the_cli(monkeypatch) -
     `fr harness parity --check` must exit 1 — before the fix it printed
     "declared matrix agrees with the registration files" and exited 0 while
     the pytest tripwire went red on the very same repo."""
-    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
+    monkeypatch.setenv("FR_REPO_ROOT", str(REPO_ROOT))
     real = shipped_scripts(REPO_ROOT)
     monkeypatch.setattr(
         "fr.commands.harness_cmd.shipped_scripts",
@@ -414,7 +414,7 @@ def test_check_reports_an_undeclared_shipped_hook_through_the_cli(monkeypatch) -
 def test_a_pairing_finding_survives_the_harness_filter(monkeypatch) -> None:
     """`--harness hermes` must not hide a missing row: it is not one harness's
     problem, so it is not filtered away."""
-    monkeypatch.setenv("VK_REPO_ROOT", str(REPO_ROOT))
+    monkeypatch.setenv("FR_REPO_ROOT", str(REPO_ROOT))
     real = shipped_scripts(REPO_ROOT)
     monkeypatch.setattr(
         "fr.commands.harness_cmd.shipped_scripts",

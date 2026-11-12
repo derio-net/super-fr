@@ -204,7 +204,7 @@ def test_a_stale_amendment_merged_anyway_makes_its_row_contested_debt(
     assert fold(root).contested == frozenset({"r"})
 
     status = invoke(root, monkeypatch, "status")
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     debt = runner.invoke(app, ["debt", "--offline"])
 
     assert status.exit_code == 0, status.output
@@ -436,7 +436,7 @@ def test_a_retired_contested_row_is_debt_everywhere_and_status_and_debt_agree(
     assert [(r.id, r.retired, r.contested) for r in acc.rows] == [("r", True, True)]
 
     status = invoke(root, monkeypatch, "status")
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     debt = runner.invoke(app, ["debt", "--offline"])
     digest = invoke(root, monkeypatch, "digest")
 

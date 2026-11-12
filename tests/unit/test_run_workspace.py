@@ -79,7 +79,7 @@ def _start(repo: Path, shipped: Path, branch: str = "feat/x"):
     return runner_cli.invoke(
         app,
         ["run", "start", "tiny", "--branch", branch, "--run-id", "r1"],
-        env={**os.environ, "VK_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
     )
 
 

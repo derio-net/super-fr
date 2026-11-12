@@ -92,7 +92,7 @@ def test_the_cli_flag_rewrites_and_exits_zero(
     )
     rel = ".github/workflows/acceptance-report.yml"
     _put(tmp_path, rel, LEGACY_GITHUB)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     r = CliRunner().invoke(app, ["acceptance", "init", "--refresh-ci"])
     assert r.exit_code == 0, r.output
@@ -113,7 +113,7 @@ def test_the_cli_flag_refuses_a_foreign_file_with_exit_one(
         check=True,
     )
     _put(tmp_path, ".github/workflows/acceptance-report.yml", "name: mine\n")
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     r = CliRunner().invoke(app, ["acceptance", "init", "--refresh-ci"])
     assert r.exit_code == 1 and "not an fr-scaffolded" in r.output

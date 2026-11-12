@@ -67,7 +67,7 @@ def transcripts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def _invoke(repo: Path, shipped: Path, argv: list[str], **extra: str):
     env = {
         **os.environ,
-        "VK_REPO_ROOT": str(repo),
+        "FR_REPO_ROOT": str(repo),
         "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
         **extra,
     }

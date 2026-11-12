@@ -756,7 +756,7 @@ def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
     r5-c2). Now git answers separately, so the two can be compared — and a
     disagreement is a refusal, not a shrug.
 
-    Not a refusal when `$VK_REPO_ROOT` deliberately points somewhere else and
+    Not a refusal when `$FR_REPO_ROOT` deliberately points somewhere else and
     that somewhere else IS a repo root; that is the documented test/override
     seam, and it agrees with git by definition when it is a real root.
     """

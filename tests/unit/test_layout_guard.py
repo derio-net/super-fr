@@ -60,7 +60,7 @@ def test_require_migrated_layout_noop_without_superpowers_tree(tmp_path):
 def test_verbs_hard_stop_on_legacy_layout(tmp_path, monkeypatch, argv):
     repo = _legacy_repo(tmp_path)
     monkeypatch.chdir(repo)
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
 
     result = CliRunner().invoke(app, argv)
     assert result.exit_code == 2, f"{argv}: rc={result.exit_code}\n{result.output}"
@@ -76,7 +76,7 @@ def test_spec_status_hard_stops_on_legacy_layout(tmp_path, monkeypatch):
         "# X\n\n## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
     )
     monkeypatch.chdir(repo)
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
 
     result = CliRunner().invoke(app, ["spec", "status", str(spec_file)])
     assert result.exit_code == 2, result.output

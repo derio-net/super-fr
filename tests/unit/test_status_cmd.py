@@ -63,7 +63,7 @@ def _plan_repo(tmp_path: Path, *, tick: bool = False, tracking: str | None = Non
 def _invoke(monkeypatch, tmp_path, gh, argv):
     monkeypatch.setattr(status_cmd, "_make_gh_client", lambda: gh)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     return CliRunner().invoke(app, argv)
 
 

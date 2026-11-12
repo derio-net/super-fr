@@ -108,7 +108,7 @@ def _write_shape(shipped: Path, name: str, text: str) -> None:
 
 
 def _invoke(repo: Path, shipped: Path, argv: list[str]):
-    env = {**os.environ, "VK_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
     return runner_cli.invoke(app, argv, env=env)
 
 
@@ -127,7 +127,7 @@ def _invoke_as_harness(
     deletes it); anything else sets it."""
     env: dict[str, str | None] = {
         **os.environ,
-        "VK_REPO_ROOT": str(repo),
+        "FR_REPO_ROOT": str(repo),
         "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
     }
     # `None` (not a pop) so click's `CliRunner.isolation` actively DELETES the
@@ -299,7 +299,7 @@ def test_advance_executes_cli_step_captures_exit_and_stdout_and_moves_cursor(
     result = runner_cli.invoke(
         app,
         ["run", "advance", "r1"],
-        env={**os.environ, "VK_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
     )
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
@@ -546,7 +546,7 @@ def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -
     result = runner_cli.invoke(
         app,
         ["run", "advance", "r1"],
-        env={**os.environ, "VK_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
     )
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
@@ -1316,7 +1316,7 @@ def test_the_dispatch_brief_survives_a_narrow_terminal(tmp_path: Path) -> None:
     )
     env = {
         **os.environ,
-        "VK_REPO_ROOT": str(repo),
+        "FR_REPO_ROOT": str(repo),
         "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
         "COLUMNS": "40",
     }
@@ -2620,7 +2620,7 @@ def _invoke_measurable(repo: Path, shipped: Path, argv: list[str], root: Path, s
     """
     env = {
         **os.environ,
-        "VK_REPO_ROOT": str(repo),
+        "FR_REPO_ROOT": str(repo),
         "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
         "FR_TRANSCRIPT_ROOT": str(root),
         "CLAUDECODE": "1",

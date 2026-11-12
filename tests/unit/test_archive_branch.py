@@ -129,7 +129,7 @@ def _journal(repo: Path, scope_dir: str, slug: str, body: str = "# journal\n") -
 def _invoke(monkeypatch: pytest.MonkeyPatch, repo: Path, argv: list[str]):
     monkeypatch.setattr(archive_cmd, "_make_gh_client", lambda: FakeGhClient())
     monkeypatch.chdir(repo)
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     return CliRunner().invoke(app, argv)
 
 

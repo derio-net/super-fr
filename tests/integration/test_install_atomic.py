@@ -122,7 +122,7 @@ def _env(sb: dict[str, Path], **extra: str) -> dict[str, str]:
     return {
         "HOME": str(sb["home"]),
         "PATH": f"{sb['home'] / 'bin'}:/usr/bin:/bin:/usr/local/bin",
-        "VK_INSTALL_SKIP_PREFLIGHT": "1",
+        "FR_INSTALL_SKIP_PREFLIGHT": "1",
         "UV_STUB_TOOLDIR": str(sb["tooldir"]),
         "UV_STUB_BINDIR": str(sb["bindir"]),
         "UV_STUB_STATE": str(sb["state"]),

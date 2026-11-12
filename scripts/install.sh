@@ -420,11 +420,11 @@ fi
 # subsequent `git pull --ff-only`) trace back to running this from a dirty tree.
 #
 # Escape hatch: integration tests (and only integration tests) set
-# VK_INSTALL_SKIP_PREFLIGHT=1 to bypass these checks. CI runs this script from
+# FR_INSTALL_SKIP_PREFLIGHT=1 to bypass these checks. CI runs this script from
 # a detached HEAD on a PR ref, which would always fail the branch/sync gates.
 echo ""
-if [ "${VK_INSTALL_SKIP_PREFLIGHT:-}" = "1" ]; then
-  echo "Preflight: SKIPPED (VK_INSTALL_SKIP_PREFLIGHT=1 — testing only)"
+if [ "${FR_INSTALL_SKIP_PREFLIGHT:-}" = "1" ]; then
+  echo "Preflight: SKIPPED (FR_INSTALL_SKIP_PREFLIGHT=1 — testing only)"
 else
 echo "Preflight: validating source repo at $PLUGIN_ROOT..."
 
@@ -510,7 +510,7 @@ else
   echo "  OK: on main, clean, in sync with origin/main"
   echo "Channel: main"
 fi
-fi  # end VK_INSTALL_SKIP_PREFLIGHT guard
+fi  # end FR_INSTALL_SKIP_PREFLIGHT guard
 
 # VK MCP binary is optional — warn but continue if missing.
 if [ ! -x "$VK_MCP_BINARY" ]; then

@@ -434,7 +434,7 @@ def _invoke(
     monkeypatch.setattr(sys, "argv", ["fr", *argv])
     monkeypatch.setattr(trigger, "is_interactive", lambda **k: interactive)
     monkeypatch.setattr(trigger, "commit_migration", lambda root, report: None)
-    return runner_cli.invoke(app, argv, env={"VK_REPO_ROOT": str(tmp_path)})
+    return runner_cli.invoke(app, argv, env={"FR_REPO_ROOT": str(tmp_path)})
 
 
 def test_the_callback_runs_before_the_invoked_command(

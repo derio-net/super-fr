@@ -291,7 +291,7 @@ def test_the_repair_is_registered_as_a_repair_on_the_plan_kind() -> None:
 def test_fr_migrate_artifacts_is_dry_run_by_default(tmp_path: Path, monkeypatch) -> None:
     meta = _plan(tmp_path, "old", fr_version=">=3.0.0,<4.0.0")
     before = _freeze(meta)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
 
     result = runner_cli.invoke(app, ["migrate", "artifacts"])
 
@@ -303,7 +303,7 @@ def test_fr_migrate_artifacts_is_dry_run_by_default(tmp_path: Path, monkeypatch)
 
 def test_fr_migrate_artifacts_yes_applies(tmp_path: Path, monkeypatch) -> None:
     meta = _plan(tmp_path, "old", fr_version=">=3.0.0,<4.0.0")
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
 
     result = runner_cli.invoke(app, ["migrate", "artifacts", "--yes"])
 
@@ -314,7 +314,7 @@ def test_fr_migrate_artifacts_yes_applies(tmp_path: Path, monkeypatch) -> None:
 
 def test_fr_migrate_artifacts_reports_nothing_to_do(tmp_path: Path, monkeypatch) -> None:
     _plan(tmp_path, "current", fr_version=f">=4.0.0,<{CEILING_VERSION}")
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
 
     result = runner_cli.invoke(app, ["migrate", "artifacts", "--yes"])
 
@@ -326,7 +326,7 @@ def test_fr_migrate_artifacts_exits_non_zero_when_an_artifact_fails(
     tmp_path: Path, monkeypatch
 ) -> None:
     _plan(tmp_path, "broken", fr_version=">=3.0.0,<<4.0.0")
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
 
     result = runner_cli.invoke(app, ["migrate", "artifacts", "--yes"])
 

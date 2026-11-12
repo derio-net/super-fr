@@ -18,7 +18,7 @@ runner = CliRunner()
 
 
 def _invoke(repo: Path, argv: list[str], shipped: Path | None = None):
-    env = {**os.environ, "VK_REPO_ROOT": str(repo)}
+    env = {**os.environ, "FR_REPO_ROOT": str(repo)}
     if shipped is not None:
         env["FR_SHIPPED_VERIFICATIONS_DIR"] = str(shipped)
     return runner.invoke(app, argv, env=env)

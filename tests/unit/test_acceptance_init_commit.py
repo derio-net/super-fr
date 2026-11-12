@@ -53,7 +53,7 @@ def _repo_on_branch(tmp_path: Path, *, gitignore: str | None = None) -> Path:
 
 
 def _init(root: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     return runner.invoke(app, ["acceptance", "init"])
 
 
@@ -144,7 +144,7 @@ def test_add_refuses_a_level_ref_into_the_pipeline(
 ) -> None:
     root = make_repo(tmp_path, "")
     before = (root / "docs/acceptance/features/legacy.yaml").read_text()
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(
         app,
         [
@@ -164,7 +164,7 @@ def test_set_status_refuses_adding_a_pipeline_level_ref(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row(status="not-implemented"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(
         app,
         [
@@ -184,7 +184,7 @@ def test_live_evidence_under_docs_acceptance_is_still_a_level_ref(
     root = make_repo(tmp_path, "")
     (root / "docs/acceptance/evidence").mkdir()
     (root / "docs/acceptance/evidence/live.md").write_text("# live\n")
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(
         app,
         [
@@ -205,7 +205,7 @@ def test_a_legacy_pipeline_ref_does_not_block_moving_its_row(
         tmp_path,
         row(unit='"own:docs/superpowers/specs/s.md"', status="not-implemented"),
     )
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(
         app, ["acceptance", "set-status", "--id", "r1", "--status", "unwired", "--notes", "x"]
     )

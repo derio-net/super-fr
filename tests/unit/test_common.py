@@ -19,20 +19,20 @@ from fr.commands.common import resolve_repo_root
 
 @pytest.fixture
 def clear_env(monkeypatch):
-    """Ensure VK_REPO_ROOT is unset for the test."""
-    monkeypatch.delenv("VK_REPO_ROOT", raising=False)
+    """Ensure FR_REPO_ROOT is unset for the test."""
+    monkeypatch.delenv("FR_REPO_ROOT", raising=False)
 
 
 def test_env_override_wins(monkeypatch, tmp_path):
-    """$VK_REPO_ROOT takes precedence over git/cwd."""
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    """$FR_REPO_ROOT takes precedence over git/cwd."""
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     assert resolve_repo_root() == tmp_path.resolve()
 
 
 def test_empty_env_falls_through_to_git(monkeypatch, tmp_path):
-    """Empty $VK_REPO_ROOT is treated as unset (so users can disable
+    """Empty $FR_REPO_ROOT is treated as unset (so users can disable
     the override without unsetting it)."""
-    monkeypatch.setenv("VK_REPO_ROOT", "")
+    monkeypatch.setenv("FR_REPO_ROOT", "")
     # Real git invocation in a tmp path that's not a repo → falls through to cwd
     monkeypatch.chdir(tmp_path)
     # subprocess will error since tmp_path isn't a git repo; we should land at cwd
@@ -61,7 +61,7 @@ def test_resolves_symlinks(clear_env, tmp_path, monkeypatch):
     real.mkdir()
     link = tmp_path / "link"
     link.symlink_to(real)
-    monkeypatch.setenv("VK_REPO_ROOT", str(link))
+    monkeypatch.setenv("FR_REPO_ROOT", str(link))
     result = resolve_repo_root()
     assert result == real.resolve()
     assert os.path.realpath(result) == os.path.realpath(real)

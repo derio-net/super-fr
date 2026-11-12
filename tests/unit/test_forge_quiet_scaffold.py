@@ -75,7 +75,7 @@ def test_refresh_ci_drops_the_debt_steps_once_issues_are_off(
     _init(root)
     assert "fr debt issue" in (root / WORKFLOW).read_text()
     land_on_main(root, "forge:\n  issues: 'off'\n")
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = CliRunner().invoke(app, ["acceptance", "init", "--refresh-ci"])
     assert result.exit_code == 0, result.output
     assert "fr debt issue" not in (root / WORKFLOW).read_text()
