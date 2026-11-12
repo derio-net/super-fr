@@ -301,3 +301,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-review-lenses-p4 created=2026-11-12T17:17:05+00:00 -->
 ### phase-split-2026-11-12-review-lenses-p4 · decision · ask: the PR section, skills, agents and docs (R12, R14) is its own ask
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-review-lenses-p2 created=2026-11-12T17:17:16+00:00 -->
+### tier-2026-11-12-review-lenses-p2 · decision · hard: two artifact shape changes with migrations (journal 4, record 12) that every reader relies on
