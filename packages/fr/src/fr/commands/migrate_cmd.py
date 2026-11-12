@@ -150,8 +150,8 @@ def artifacts_cmd(
     specs), applies each registered migration whose guard says it is needed,
     and reports what it did. Archived artifacts under `implemented/` are never
     touched — they record what shipped — except by the one repair that removes
-    the retired `vk_version` key from archived plans (an archived file it cannot
-    rewrite is reported and left as it is).
+    the retired vk key from archived plans (`drop-vk-version`; an archived file
+    it cannot rewrite is reported and left as it is).
 
     Dry-run by default, like every other fr mutation. **This verb never
     commits** (spec §3.D; review r5-e9): committing is the CLI-entry gate's
