@@ -19,6 +19,7 @@ from fr.artifacts.registry import (
     artifact_kind,
     iter_all_artifacts,
     iter_artifact_paths,
+    iter_paths_of,
     read_version,
     write_version,
 )
@@ -723,3 +724,66 @@ def test_a_bom_spec_keeps_its_bom_and_one_front_matter_block(tmp_path: Path) -> 
     artifact_kind("spec").write_version(p, 2)
 
     assert p.read_bytes() == b"\xef\xbb\xbf---\nfr_schema: 2\n---\n# D\n"
+
+
+# --- R1: the locators are the resolver's `repo` output (plan 3, phase 1) ---------------
+
+_REPO = Path(__file__).resolve().parents[2]
+
+_PRE_RESOLVER_LOCATORS = {
+    "plan": "docs/superpowers/plans/*/_meta.yaml",
+    "journal": "docs/superpowers/journals/**/*.md",
+    "run": "docs/superpowers/runs/*.yaml",
+    "matrix": "docs/acceptance/matrix.yaml",
+    "acceptance-fragment": "docs/acceptance/features/*.yaml",
+    "spec": "docs/superpowers/specs/*.md",
+    "usage": "docs/superpowers/usage/*.yaml",
+    "record": "docs/superpowers/runs/*.records/*.yaml",
+    "profiles": ".devcontainer/fr-profiles.yaml",
+    "ops": "docs/superpowers/plans/*/ops.yaml",
+    "agents": ".claude/agents/fr-*.md",
+}
+
+
+# Repo configuration rather than placement-moved artifacts: always on the product branch.
+_REPO_CONFIG_KINDS = {"profiles", "agents"}
+
+
+@pytest.mark.parametrize("name", sorted(set(ARTIFACT_KINDS) - _REPO_CONFIG_KINDS))
+def test_every_locator_is_the_resolvers_repo_output(name: str) -> None:
+    from fr.artifacts.paths import KIND_DIRS, ArtifactSpace, kind_dir
+
+    loc = ARTIFACT_KINDS[name].locator
+    space = ArtifactSpace("repo", _REPO, None)
+    owners = [k for k in KIND_DIRS if loc.startswith(f"{KIND_DIRS[k]}/")]
+    assert owners, f"{name}: {loc} is not below any resolver directory"
+    deepest = max(owners, key=lambda k: len(KIND_DIRS[k]))
+    rest = loc.removeprefix(f"{KIND_DIRS[deepest]}/")
+    assert (kind_dir(deepest, space) / rest).relative_to(_REPO).as_posix() == loc
+
+
+def test_the_locators_did_not_move_when_the_resolver_took_them_over() -> None:
+    assert {n: k.locator for n, k in ARTIFACT_KINDS.items()} == _PRE_RESOLVER_LOCATORS
+
+
+@pytest.mark.parametrize("name", ["plan", "journal", "run", "spec", "usage", "acceptance-fragment"])
+def test_iter_paths_of_yields_the_same_files_on_this_repo(name: str) -> None:
+    kind = ARTIFACT_KINDS[name]
+    before = [
+        p
+        for p in sorted(_REPO.glob(_PRE_RESOLVER_LOCATORS[name]))
+        if "implemented" not in p.relative_to(_REPO).parts
+        and (kind.owns is None or kind.owns(p))
+        and p.is_file()
+    ]
+    assert list(iter_paths_of(_REPO, kind)) == before
+    if name in ("plan", "journal", "spec", "acceptance-fragment"):
+        assert before, f"this repo has live {name} artifacts"
+
+
+def test_registry_py_carries_no_artifact_directory_literal() -> None:
+    import fr.artifacts.registry as registry
+
+    source = Path(registry.__file__).read_text()
+    for needle in ('"docs/', "'docs/", 'locator="docs'):
+        assert needle not in source, needle

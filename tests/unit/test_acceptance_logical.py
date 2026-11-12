@@ -133,3 +133,41 @@ def test_a_row_origin_may_be_logical() -> None:
 def test_a_row_origin_that_looks_logical_but_is_malformed_is_refused() -> None:
     with pytest.raises(ValueError, match="spec:"):
         _row("spec:a/b#R1")
+
+
+# --- R18 from plan 3: logical refs resolve through R1's resolver ------------------------
+
+
+def test_candidates_follow_the_resolver_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import MappingProxyType
+
+    from fr.acceptance.logical import candidates
+    from fr.artifacts import paths
+
+    moved = dict(paths.KIND_DIRS, spec="elsewhere/specs", plan="elsewhere/plans")
+    monkeypatch.setattr(paths, "KIND_DIRS", MappingProxyType(moved))
+    assert candidates(parse_logical(f"spec:{SLUG}"))[0] == f"elsewhere/specs/{SLUG}-design.md"
+    assert candidates(parse_logical(f"plan:{SLUG}"))[0] == f"elsewhere/plans/{SLUG}"
+    _touch(tmp_path, f"elsewhere/specs/{SLUG}-design.md")
+    assert resolve_logical(f"spec:{SLUG}", tmp_path) == Path(f"elsewhere/specs/{SLUG}-design.md")
+    _touch(tmp_path, "elsewhere/plans/2026-01-01-p/_meta.yaml")
+    assert resolve_logical("plan:2026-01-01-p", tmp_path) == Path("elsewhere/plans/2026-01-01-p")
+
+
+def test_a_spec_in_another_quiet_feature_root_resolves_there(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.artifacts import paths
+
+    fr_root = tmp_path / "fr-worktree"
+    other = fr_root / "features" / "feat__other"
+    _touch(other, f"docs/superpowers/specs/{SLUG}-design.md")
+    (fr_root / "features" / "feat__mine").mkdir(parents=True)
+    space = paths.ArtifactSpace("quiet", fr_root, "feat__mine")
+    monkeypatch.setattr(paths, "space_for", lambda _root: space)
+    found = resolve_logical(f"spec:{SLUG}#R1", tmp_path / "product")
+    assert found == other / f"docs/superpowers/specs/{SLUG}-design.md"
+    assert resolution_problem(f"spec:{SLUG}#R1", tmp_path / "product") is None
+    assert resolve_logical("spec:2026-01-01-nope", tmp_path / "product") is None

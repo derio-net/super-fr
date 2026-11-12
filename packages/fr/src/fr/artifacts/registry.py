@@ -41,6 +41,7 @@ from typing import Any
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import RECORDS_SUFFIX, repo_glob
 from fr.artifacts.structure import (
     validate_agents,
     validate_fragment,
@@ -406,7 +407,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # than adding a second one: `PlanMeta` is `extra="forbid"`, so a
             # new key would make every stamped plan unparseable.
             current_version=2,
-            locator="docs/superpowers/plans/*/_meta.yaml",
+            locator=repo_glob("plan", "*/_meta.yaml"),
             stamp="`schema_version` in `_meta.yaml`",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
@@ -419,7 +420,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 3: the `op` entry kind (spec `2026-10-22-fr-ops-design` §D, R17),
             # migration `fr.artifacts.journal_op` — stamp-only.
             current_version=3,
-            locator="docs/superpowers/journals/**/*.md",
+            locator=repo_glob("journal", "**/*.md"),
             stamp="`<!-- fr:journal-schema=N -->` header comment",
             read_stamp=_read_journal_stamp,
             write_version=_write_journal_stamp,
@@ -472,7 +473,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # PR `fr pr create` opened (spec 2026-11-04-repo-feature-settings
             # R12, R14), migration `fr.artifacts.run_issue`. Additive, so stamp-only.
             current_version=11,
-            locator="docs/superpowers/runs/*.yaml",
+            locator=repo_glob("run", "*.yaml"),
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
@@ -501,7 +502,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # frozen `fr.acceptance.legacy.MatrixV5`. A matrix still on disk is stale.
             current_version=6,
             retired=True,
-            locator="docs/acceptance/matrix.yaml",
+            locator=repo_glob("acceptance", "matrix.yaml"),
             stamp="`schema_version` in `matrix.yaml`",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
@@ -513,7 +514,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `2026-11-04-repo-feature-settings-design` R16, R19, §3.D), folded into
             # the effective matrix by `fr.acceptance.fold`. Born at 1.
             current_version=1,
-            locator="docs/acceptance/features/*.yaml",
+            locator=repo_glob("acceptance-fragment", "*.yaml"),
             stamp="`schema_version` in the fragment yaml",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
@@ -522,7 +523,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ArtifactKind(
             name="spec",
             current_version=1,
-            locator="docs/superpowers/specs/*.md",
+            locator=repo_glob("spec", "*.md"),
             stamp="`fr_schema:` in the front matter",
             read_stamp=_read_spec_stamp,
             write_version=_write_spec_stamp,
@@ -535,7 +536,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 1 -> 2 for `steps_by_role` and `units` (spec
             # `2026-10-06-cost-evidence-design` §C), stamp only.
             current_version=2,
-            locator="docs/superpowers/usage/*.yaml",
+            locator=repo_glob("usage", "*.yaml"),
             stamp="`schema_version` in the usage yaml",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
@@ -579,7 +580,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `2026-11-04-repo-feature-settings-design` R16, R19, §5), migration
             # `fr.artifacts.record_amendments`, stamp only.
             current_version=11,
-            locator="docs/superpowers/runs/*.records/*.yaml",
+            locator=repo_glob("run", f"*{RECORDS_SUFFIX}/*.yaml"),
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
@@ -605,7 +606,7 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `2026-10-22-fr-ops-design` R1, R2, R17). Born at 1; 2 adds the
             # `none:` acknowledgement (spec 2026-11-01-ops-gate-probes R4, stamp only).
             current_version=2,
-            locator="docs/superpowers/plans/*/ops.yaml",
+            locator=repo_glob("plan", "*/ops.yaml"),
             stamp="`schema_version` in `ops.yaml`",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,

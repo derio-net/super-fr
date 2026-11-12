@@ -16,11 +16,23 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from fr.acceptance.model import AcceptanceError, Matrix, same_repo, split_ref
+from fr.artifacts import paths
 
 LOGICAL_KINDS: tuple[str, ...] = ("spec", "plan")
 
-SPEC_DIRS: tuple[str, ...] = ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/")
-PLAN_DIRS: tuple[str, ...] = ("docs/superpowers/plans/", "docs/superpowers/implemented/plans/")
+
+def spec_dirs() -> tuple[str, ...]:
+    """The spec directories, live then archived, from R1's resolver (`/`-terminated)."""
+    return (f"{paths.KIND_DIRS['spec']}/", f"{paths.KIND_DIRS['spec-archived']}/")
+
+
+def plan_dirs() -> tuple[str, ...]:
+    """The plan directories, live then archived, from R1's resolver (`/`-terminated)."""
+    return (f"{paths.KIND_DIRS['plan']}/", f"{paths.KIND_DIRS['plan-archived']}/")
+
+
+SPEC_DIRS: tuple[str, ...] = spec_dirs()
+PLAN_DIRS: tuple[str, ...] = plan_dirs()
 
 _SLUG_RE = re.compile(r"^[^/:#\s]+$")
 
@@ -70,11 +82,11 @@ def to_logical(ref: str, *, own_repo: str | None = None) -> str:
         return ref
     from fr.acceptance.fragment import fragment_slug_for_spec
 
-    for base in SPEC_DIRS:
+    for base in spec_dirs():
         rest = path.removeprefix(base)
         if rest != path and "/" not in rest and rest.endswith(".md"):
             return str(LogicalRef("spec", fragment_slug_for_spec(rest), frag))
-    for base in PLAN_DIRS:
+    for base in plan_dirs():
         rest = path.removeprefix(base).rstrip("/")
         if rest != path.rstrip("/") and rest and "/" not in rest and not frag:
             return str(LogicalRef("plan", rest))
@@ -84,9 +96,9 @@ def to_logical(ref: str, *, own_repo: str | None = None) -> str:
 def candidates(ref: LogicalRef) -> tuple[str, ...]:
     if ref.kind == "spec":
         return tuple(
-            f"{base}{ref.slug}{suffix}" for base in SPEC_DIRS for suffix in ("-design.md", ".md")
+            f"{base}{ref.slug}{suffix}" for base in spec_dirs() for suffix in ("-design.md", ".md")
         )
-    return tuple(f"{base}{ref.slug}" for base in PLAN_DIRS)
+    return tuple(f"{base}{ref.slug}" for base in plan_dirs())
 
 
 def _resolve(ref: str, repo_root: Path) -> tuple[Path | None, str | None]:
@@ -95,10 +107,13 @@ def _resolve(ref: str, repo_root: Path) -> tuple[Path | None, str | None]:
     except AcceptanceError as e:
         return None, str(e)
     root = Path(repo_root)
-    for rel in candidates(logical):
-        target = root / rel
-        if target.is_dir() if logical.kind == "plan" else target.is_file():
-            return Path(PurePosixPath(rel)), None
+    for feature_root in paths.feature_roots(paths.space_for(root)):
+        for rel in candidates(logical):
+            target = feature_root / rel
+            if target.is_dir() if logical.kind == "plan" else target.is_file():
+                # Repo-relative under `repo`; absolute when the feature root is elsewhere,
+                # which `repo_root / found` still reads correctly.
+                return (Path(PurePosixPath(rel)) if feature_root == root else target), None
     tried = ", ".join(candidates(logical))
     return None, f"{ref}: no {logical.kind} {logical.slug!r} in this repo (looked for {tried})"
 
@@ -106,10 +121,12 @@ def _resolve(ref: str, repo_root: Path) -> tuple[Path | None, str | None]:
 def resolve_logical(ref: str, repo_root: Path) -> Path | None:
     """The repo-relative path a logical ref names, or None (`resolution_problem` says why).
 
-    Until plan 3 this reads `repo` paths only (R18): a live spec
+    Looks in every feature root of R1's resolver (`fr.artifacts.paths.feature_roots`;
+    the repo toplevel alone under `repo`), in order: a live spec
     (`specs/<slug>-design.md`, else `specs/<slug>.md`), else its archived twin under
-    `implemented/`; a plan folder, live or archived. Plan 3 swaps in R1's resolver
-    behind this one function, so no caller changes."""
+    `implemented/`; a plan folder, live or archived. Plan 3 swapped the resolver in
+    behind this one function (R18), so no caller changed. The path is repo-relative
+    when found under the repo, absolute when found in a feature root elsewhere."""
     return _resolve(ref, repo_root)[0]
 
 

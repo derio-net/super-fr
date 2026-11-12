@@ -229,3 +229,10 @@ def space_for(repo_root: Path) -> ArtifactSpace:
     if switched is not None:
         raise unservable_placement(switched, f"{SWITCH_REF}:{SWITCH_SETTINGS}")
     return ArtifactSpace(REPO, root, None)
+
+
+def repo_glob(kind: str, pattern: str) -> str:
+    """A glob below *kind*'s directory under the `repo` placement, relative to the
+    toplevel (`repo_glob("plan", "*/_meta.yaml")`): how `fr.artifacts.registry` builds
+    each `ArtifactKind.locator`, which is the resolver's `repo` output (§3.E)."""
+    return f"{_known(kind, KIND_DIRS)}/{pattern}"

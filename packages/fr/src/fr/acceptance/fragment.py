@@ -47,8 +47,9 @@ from fr.acceptance.model import (
     check_status,
     check_verify,
 )
+from fr.artifacts.paths import KIND_DIRS
 
-FRAGMENTS_DIR = Path("docs/acceptance/features")
+FRAGMENTS_DIR = Path(KIND_DIRS["acceptance-fragment"])
 """Where fragments live under `repo` (§3.D); the kind's locator is `<this>/*.yaml`."""
 
 LEGACY_FEATURE = "legacy"

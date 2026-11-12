@@ -23,8 +23,9 @@ from fr.acceptance.model import (
     same_repo,
     split_ref,
 )
+from fr.artifacts.paths import KIND_DIRS
 
-SPEC_DIRS = ("docs/superpowers/specs", "docs/superpowers/implemented/specs")
+SPEC_DIRS = (KIND_DIRS["spec"], KIND_DIRS["spec-archived"])
 LIVE_SPEC_DIR = SPEC_DIRS[0]
 
 
