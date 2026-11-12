@@ -282,12 +282,46 @@ def test_a_merged_amendment_to_a_row_retired_meanwhile_marks_it_contested(repo: 
     assert any("retired row" in n for n in eff.notices), eff.notices
 
 
-def test_a_pending_amendment_to_a_retired_row_is_an_error(repo: Repo) -> None:
+def test_a_stale_pending_amendment_to_a_retired_row_is_stale_not_an_error(repo: Repo) -> None:
+    # pr1408-r1: a retired row keeps R17's base rule (plan journal
+    # `fold-retired-rows-keep-the-base-rule`): a stale pending one is refused by
+    # check/deliver as stale, never a FoldError that breaks every reader.
     retire = {"row": ROW, "op": "retire", "base": 0, "notes": "superseded", "why": "gone"}
     repo.feature("2026-01-02-bravo", amendments=[retire])
-    repo.feature("2026-01-03-charlie", amendments=[_amend(ROW, 1, "unwired")], merge=False)
-    with pytest.raises(FoldError, match="retired row"):
-        fold(repo.root)
+    repo.feature("2026-01-03-charlie", amendments=[_amend(ROW, 0, "unwired")], merge=False)
+    eff = fold(repo.root)
+    assert [(s.row, s.base, s.revision) for s in eff.stale_pending] == [(ROW, 0, 1)]
+    assert [r.id for r in eff.retired] == [ROW]
+
+
+def test_a_contested_retired_row_is_cleared_by_a_correctly_based_amendment(repo: Repo) -> None:
+    # pr1408-r1: retired, then a stale set-status merged anyway (contested, revision 2).
+    retire = {"row": ROW, "op": "retire", "base": 0, "notes": "superseded", "why": "gone"}
+    repo.feature("2026-01-02-bravo", amendments=[retire])
+    repo.feature("2026-01-03-charlie", amendments=[_amend(ROW, 0, "unwired")])
+    assert fold(repo.root).contested == frozenset({ROW})
+    repo.feature(
+        "2026-01-04-delta",
+        amendments=[{"row": ROW, "op": "retire", "base": 2, "notes": "gone", "why": "settle"}],
+        merge=False,
+    )
+    eff = fold(repo.root)
+    assert eff.stale_pending == ()
+    assert eff.contested == frozenset(), "a correctly based amendment clears it"
+    assert [r.id for r in eff.retired] == [ROW], "and the row stays retired"
+    assert eff.revisions[ROW] == 3
+    repo.merge_feature("feat/2026-01-04-delta")
+    assert fold(repo.root).contested == frozenset()
+
+
+def test_a_stale_retire_that_merged_anyway_leaves_the_row_contested(repo: Repo) -> None:
+    # pr1408-r2: both branched at revision 0; the set-status merges first, then the retire.
+    repo.feature("2026-01-02-bravo", amendments=[_amend(ROW, 0, "unwired")])
+    retire = {"row": ROW, "op": "retire", "base": 0, "notes": "superseded", "why": "gone"}
+    repo.feature("2026-01-03-charlie", amendments=[retire])
+    eff = fold(repo.root)
+    assert [r.id for r in eff.retired] == [ROW]
+    assert eff.contested == frozenset({ROW}), "a stale retire is visible, as debt"
 
 
 def test_retire_removes_the_row_and_keeps_it_listed(repo: Repo) -> None:

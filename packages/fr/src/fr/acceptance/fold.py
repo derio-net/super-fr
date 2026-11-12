@@ -46,7 +46,7 @@ GIT_TIMEOUT_SECONDS = 60.0
 
 class FoldError(AcceptanceError):
     """The fragments cannot be folded: a row defined twice, a pending amendment naming
-    an unknown or retired row, a git failure."""
+    an unknown row, a git failure."""
 
 
 class FoldHistoryError(FoldError):
@@ -76,8 +76,7 @@ class Effective:
     revisions: dict[str, int]
     """Row id -> the count of amendments applied to it."""
     contested: frozenset[str]
-    """Rows whose last applied amendment had a stale base (R17), and retired rows a
-    merged amendment still named: debt."""
+    """Rows, live or retired, whose last amendment had a stale base (R17): debt."""
     owners: dict[str, str]
     """Row id -> the feature whose fragment created it."""
     retired: tuple[Row, ...]
@@ -485,22 +484,22 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
     stale: list[StalePending] = []
     for amendment, path, is_merged, index in queue:
         rid = amendment.row
-        if rid in retired or rid not in state:
-            what = "retired" if rid in retired else "unknown"
+        if rid not in state and rid not in retired:
             if not is_merged:
-                raise FoldError(f"{path}: amendment {amendment.op} names {what} row {rid}")
-            # R17: a stale amendment that merged anyway still counts, as debt. A
-            # merged entry is immutable, so raising here would leave every reader of
-            # the default ref broken with no legal fix; it marks the row contested
-            # (an unknown row has none to mark) and the fold goes on.
+                raise FoldError(f"{path}: amendment {amendment.op} names unknown row {rid}")
+            # A merged entry is immutable, so raising here would leave every reader of
+            # the default ref broken with no legal fix: an unknown row has nothing to
+            # mark, so it is a notice and the fold goes on.
             notices.append(
-                f"{path}: merged amendment {amendment.op} names {what} row {rid}; not applied"
+                f"{path}: merged amendment {amendment.op} names unknown row {rid}; not applied"
             )
-            if rid in retired:
-                revisions[rid] += 1
-                contested.add(rid)
             continue
-        if amendment.base != revisions[rid]:
+        # A retired row keeps R17's base rule (plan journal
+        # `fold-retired-rows-keep-the-base-rule`): every amendment naming it, pending
+        # or merged, is checked like one on a live row, so a contested retired row is
+        # cleared by the next correctly based amendment, and a stale retire is visible.
+        stale_base = amendment.base != revisions[rid]
+        if stale_base:
             contested.add(rid)
             if not is_merged:
                 stale.append(
@@ -516,10 +515,20 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
         else:
             contested.discard(rid)
         revisions[rid] += 1
+        if rid in retired:
+            if stale_base:
+                # R17 "merged anyway" on a row retired meanwhile: counted, contested,
+                # and not applied to the retired snapshot.
+                notices.append(
+                    f"{path}: amendment {amendment.op} names retired row {rid} with a "
+                    f"stale base; not applied"
+                )
+            else:
+                retired[rid] = apply_amendment(retired[rid], amendment)
+            continue
         state[rid] = apply_amendment(state[rid], amendment)
         if amendment.op == "retire":
             retired[rid] = state.pop(rid)
-            contested.discard(rid)
 
     def order(rid: str) -> tuple[str, str, int]:
         return (state[rid].capability, owners[rid], rows[rid][2])
