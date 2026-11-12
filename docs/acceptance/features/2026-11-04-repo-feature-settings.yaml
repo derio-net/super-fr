@@ -227,7 +227,9 @@ rows:
     - spec:2026-11-04-repo-feature-settings#R26
     levels: {}
     status: not-implemented
-    notes: 'added at planning (plan 3): R26 had no row'
+    notes: added at planning (plan 3); scenario tests/scenarios/placement-fr-enabled.sh
+      is built by plan 2026-11-12-placement-resolver
+    scenario: tests/scenarios/placement-fr-enabled.sh
 amendments:
   - row: acceptance-report-formats
     op: reword
