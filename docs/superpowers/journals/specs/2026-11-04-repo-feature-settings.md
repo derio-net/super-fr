@@ -941,3 +941,8 @@ Shared by quiet and stealth, with its own row placement-merged-status.
 ### phase-split-2026-11-12-placement-resolver-p6 · decision · ask: hooks, OpenCode and Hermes are fr-enabled for quiet and stealth (R26)
 
 A different surface (bash, TypeScript, Hermes) with its own row placement-fr-enabled and parity rows.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p7 created=2026-11-12T11:57:16+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p7 · decision · ask: placement moves and branch drift (R27, R28)
+
+Its own requirements and row placement-move-and-drift.
