@@ -100,3 +100,72 @@ An empty or whitespace glob parsed; R6 would consume it in phase 2.
 ### p1-r4-resolved · finding [fixed] · resolves p1-r4: PathRule.paths accepts blank glob strings (phase 1)
 
 `PathRule` refuses a blank glob; two new `test_parse_config_refuses` cases.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-one-kind-tokens-table created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-one-kind-tokens-table · discovery · input, lens and step share one table-driven validator (P2.T1.S3) (phase 2)
+
+`JournalEntry._one_kind_tokens` reads `_ONE_KIND_TOKENS` (token -> kind, optional scope,
+reason), replacing the inline `input` check; the `input` error text is unchanged, so the
+existing `match="`input` is only valid"` tests still hold.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-lens-retry-is-a-no-op created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-lens-retry-is-a-no-op · discovery · an identical lens addition is a no-op, so a retried apply does not mint lens-<id>-2 (phase 2)
+
+fr numbers lens entries by counting the journal's entries for that lens, so a retry of an
+interrupted apply would otherwise add a second entry. `_lens_entry` returns nothing when an
+entry with the same lens, reason, body, step and phase already exists. Consequence: re-adding
+the very same reason from the command line is also a no-op; a different reason is kept.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-head-rules-from-working-tree created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-head-rules-from-working-tree · discovery · the branch's path rules are read from the working tree, like every other lens setting (phase 2)
+
+`fr.lenses.rules.head_config_text` reads `.fr/lenses.yaml` from the working tree (as
+`load_config` does for `disable` and definitions); the base's copy is `git show
+<default-ref>:.fr/lenses.yaml`. With no default ref, HEAD's rules are in force but there is
+no base to diff against, so `lens_set` applies no rule and says so in `warnings`. Outside a
+git checkout there is no base; a git refusal inside one is a `LensError`, never "no rules".
+
+<!-- fr:journal kind=discovery scope=plan id=p2-feature-diff-shared created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-feature-diff-shared · discovery · feature_merge_base and feature_diff were written shared from the start (P2.T3.S3) (phase 2)
+
+`fr.proportionality.feature_merge_base` / `feature_diff` are the one diff definition; `_run`
+and `fr.lenses.accumulate` both call them, and `tests/unit/test_proportionality*.py` pass
+unchanged.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-cli-lens-refusals created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-cli-lens-refusals · discovery · fr journal add --kind lens refuses --scope debug and --id (phase 2)
+
+A lens is read from the run's spec and plan journals only, so `--scope debug` is refused, and
+`--id` is refused because fr assigns `lens-<id>-<n>`. `--lens` on any other kind is refused.
+A step record's `{kind: lens}` item refuses `id` and `step` the same way (the model).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-rows-unwired-with-ci-scenarios created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-rows-unwired-with-ci-scenarios · discovery · both rows moved to unwired although their scenarios already run in CI (phase 2)
+
+`review-lenses-accumulate` and `review-lenses-path-rules` carry unit and int refs and their
+scenarios are registered in `tests/integration/test_scenarios.py`; they stay `unwired` as the
+brief asked, until phase 3 adds the lens-review cases the acceptance text names.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-empty-r1-records-dir created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-empty-r1-records-dir · discovery · an empty untracked docs/superpowers/runs/r1.records/ was already in the worktree (phase 2)
+
+Dated before this phase started and holding nothing, so git ignores it. Not caused by this
+phase's runs (every new test here builds its repo under tmp_path); worth a look if it
+reappears after a suite run.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-suite-slow-under-shared-load created=2026-11-12T21:42:59+00:00 phase=2 -->
+### p2-suite-slow-under-shared-load · discovery · the full suite took 42 minutes here; a first run hit its 50-minute bound at 99% (phase 2)
+
+Another worktree's full suite ran on the host at the same time. The first run was killed
+by its own `timeout 3000` with no failure printed; the rerun (bound 5400 s) passed and is
+the evidence named below. CI's sharded run is unaffected.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-12T21:42:59+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+The lens branch in apply.py is one helper (_lens_entry) beside the existing loop, and the CLI path reuses the engine through the one-entry record; nothing duplicated to fold.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-12T21:42:59+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+The status command is two small formatters over lens_set; the scenarios share one sourced fixture (_lens_fixture.sh) already; nothing to clean.
