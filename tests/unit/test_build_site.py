@@ -674,3 +674,22 @@ def test_layout_landing_on_a_page_not_routed_to_index_is_refused(
     with pytest.raises(bs.BuildError, match=r"docs/a.md.*landing"):
         bs.build(root, out, craft, REF, "https://github.com/o/r")
     assert not list(out.rglob("*.html"))
+
+
+def test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve() -> None:
+    page = "docs/explainers/index.md"
+    text = (REPO / page).read_text(encoding="utf-8")
+    assert bs.is_landing(bs.parse_front_matter(text))
+    land = bs.parse_landing(text, page)
+    guarantees = [s for s in land.sections if s.kind == "guarantee"]
+    assert 6 <= len(guarantees) <= 8
+    assert len(land.hero.headline.split()) <= 10
+    tracked = bs.tracked_files(REPO)
+    patterns = bs.load_config(REPO / ".fr" / "docs.yaml")
+    hrefs = [land.hero.primary.href, *(x.href for x in land.hero.secondary)]
+    hrefs += [s.link.href for s in guarantees if s.link]
+    for h in hrefs:
+        bs.rewrite_href(h, page, patterns, tracked, REF)
+    for sec in land.sections:
+        bs.rewrite_markdown(sec.body, page, patterns, tracked, REF)
+    assert bs.rewrite_href("01-fr-goal.md", page, patterns, tracked, REF) == "01-fr-goal.html"
