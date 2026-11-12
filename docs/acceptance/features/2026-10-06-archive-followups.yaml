@@ -39,10 +39,14 @@ rows:
       - super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_rewrites_no_acceptance_fragment
       - super-fr:tests/unit/test_acceptance_effective_readers.py#test_the_staleness_guard_counts_a_logical_citation
       - super-fr:tests/unit/test_acceptance_effective_readers.py#test_rows_citing_matches_a_logical_origin_live_and_archived
+      - super-fr:tests/unit/test_acceptance_archive_twin.py#test_check_survives_debug_journal_archive
+      - super-fr:tests/unit/test_acceptance_archive_twin.py#test_a_plan_dir_ref_resolves_at_its_archived_counterpart
     status: ci
-    notes: 'check stays clean after closeout because rows cite specs and plans logically
-      (spec 2026-11-04 R18): archive rewrites no fragment and the retarget step is gone;
-      the live close-out (verify: live, post-merge) is still owed'
+    notes: 'review p2-r5: archive rewrites no fragment and the retarget step is gone;
+      logical spec/plan refs survive an archive (spec 2026-11-04 R18), and check resolves
+      a pre-archive path ref under docs/superpowers/{specs,journals,plans}/ at its archived
+      counterpart at read time, ci-pinned; the live close-out (verify: live, post-merge)
+      is still owed'
   - id: archive-files-open-ends
     capability: archive
     acceptance: fr archive lists the open and out-of-scope findings of the journals
