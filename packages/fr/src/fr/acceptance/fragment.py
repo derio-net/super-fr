@@ -45,6 +45,7 @@ from fr.acceptance.model import (
     Walk,
     check_issue_refs,
     check_status,
+    check_verify,
 )
 
 FRAGMENTS_DIR = Path("docs/acceptance/features")
@@ -90,6 +91,11 @@ class SetStatus(_AmendmentBase):
     notes: StrictStr
     walk: Walk | None = None
     issues: tuple[StrictStr, ...] = ()
+    verify: StrictStr | None = None
+    """The row's verification strategy, replaced when given (plan journal
+    `amend-set-status-verify-scenario`: `set-status --verify` on a merged row)."""
+    scenario: StrictStr | None = None
+    """The row's walk scenario, replaced when given (as `verify`)."""
 
     @field_validator("status", mode="before")
     @classmethod
@@ -101,6 +107,12 @@ class SetStatus(_AmendmentBase):
     @classmethod
     def _issues_are_qualified(cls, v: tuple[str, ...]) -> tuple[str, ...]:
         check_issue_refs(v)
+        return v
+
+    @field_validator("verify")
+    @classmethod
+    def _verify_spelling(cls, v: str | None) -> str | None:
+        check_verify(v)
         return v
 
 

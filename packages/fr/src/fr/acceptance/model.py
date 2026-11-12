@@ -48,6 +48,14 @@ DEBT_STATUSES: frozenset[str] = frozenset({"not-implemented", "unwired", "walk-o
 acceptance debt counts these. `walked` and `manual` are listed, never debt."""
 
 LISTED_STATUSES: frozenset[str] = DEBT_STATUSES | {"walked", "manual"}
+
+
+def is_debt(status: str, *, contested: bool = False) -> bool:
+    """The one definition of a debt row: a `DEBT_STATUSES` status, or a row the fold
+    marks contested whatever its status (spec 2026-11-04 R17)."""
+    return contested or status in DEBT_STATUSES
+
+
 """What `fr debt` lists per row: the debt statuses plus `walked` and `manual`
 (listed with their counts, never debt)."""
 

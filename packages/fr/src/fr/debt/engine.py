@@ -22,6 +22,8 @@ from fr.acceptance.model import (
     LISTED_STATUSES,
     AcceptanceError,
     Matrix,
+    Row,
+    is_debt,
     latest_passing_walk_at,
 )
 from fr.archive import MergeEvidence, merge_evidence
@@ -337,15 +339,23 @@ def _run_branches(repo_root: Path) -> dict[str, str]:
 # --- sections -----------------------------------------------------------------
 
 
-def acceptance_from_matrix(matrix: Matrix) -> AcceptanceDebt:
-    """The Acceptance section of a matrix already in hand (the digest's seam)."""
+def acceptance_from_matrix(
+    matrix: Matrix, contested: frozenset[str] = frozenset()
+) -> AcceptanceDebt:
+    """The Acceptance section of a matrix already in hand (the digest's seam);
+    *contested* is the fold's contested rows (spec 2026-11-04 R17), debt whatever
+    their status."""
     by_status: dict[str, int] = {}
     for r in matrix.rows:
         by_status[r.status] = by_status.get(r.status, 0) + 1
-    listed = [r for r in matrix.rows if r.status in LISTED_STATUSES]
+
+    def debt(r: Row) -> bool:
+        return is_debt(r.status, contested=r.id in contested)
+
+    listed = [r for r in matrix.rows if r.status in LISTED_STATUSES or r.id in contested]
     # Debt rows oldest origin first, as `open_rows` orders the nag; the rest keep matrix order.
-    ordered = sorted((r for r in listed if r.status in DEBT_STATUSES), key=_age_key) + [
-        r for r in listed if r.status not in DEBT_STATUSES
+    ordered = sorted((r for r in listed if debt(r)), key=_age_key) + [
+        r for r in listed if not debt(r)
     ]
     rows = tuple(
         DebtRow(
@@ -354,10 +364,12 @@ def acceptance_from_matrix(matrix: Matrix) -> AcceptanceDebt:
             acceptance=r.acceptance,
             notes=r.notes,
             walked_at=latest_passing_walk_at(r) if r.status == "walked" else None,
+            contested=r.id in contested,
         )
         for r in ordered
     )
-    return AcceptanceDebt(by_status=by_status, rows=rows, available=True)
+    extra = sum(1 for r in matrix.rows if r.id in contested and r.status not in DEBT_STATUSES)
+    return AcceptanceDebt(by_status=by_status, rows=rows, available=True, contested=extra)
 
 
 def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, SourceStatus]:
@@ -366,17 +378,18 @@ def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, Sou
 
     if disabled(repo_root, "acceptance"):
         return AcceptanceDebt(available=False), None, SourceStatus(state="read", why=DISABLED)
-    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.acceptance.fold import effective, has_fragments
     from fr.acceptance.fragment import FRAGMENTS_DIR
 
     try:
         if not has_fragments(repo_root) and not (repo_root / FRAGMENTS_DIR).is_dir():
             raise AcceptanceError(f"no acceptance fragments under {FRAGMENTS_DIR}/")
-        matrix = load_effective(repo_root)
+        folded = effective(repo_root)
     except (AcceptanceError, OSError) as e:
         why = " ".join(str(e).split())
         return AcceptanceDebt(available=False), None, SourceStatus(state="unavailable", why=why)
-    return acceptance_from_matrix(matrix), matrix, SourceStatus(state="read")
+    matrix = folded.matrix
+    return acceptance_from_matrix(matrix, folded.contested), matrix, SourceStatus(state="read")
 
 
 def compute(

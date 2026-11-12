@@ -3,7 +3,8 @@
 `fr acceptance add` creates a row in the fragment of the feature that owns it (its
 one origin spec, else `--feature`), converting a spec or plan path origin to its
 logical form and taking `repo:` from a sibling fragment, else the origin remote,
-else `--repo`. `set-status` rewrites a row in place in the fragment that holds it,
+else `--repo`. `set-status` rewrites a row still pending on this branch in place in
+the fragment that holds it (a merged row takes amendments: test_acceptance_amend),
 and `fr acceptance init` creates the fragments directory and no report. Every
 commit holds only the fragment.
 """
@@ -163,28 +164,6 @@ def test_set_status_on_a_pending_row_rewrites_it_in_its_own_fragment(
     assert res.exit_code == 0, res.output
     (row,) = _fragment(root, SLUG)["rows"]
     assert (row["status"], row["notes"]) == ("ci", "wired")
-    assert _committed(root) == [f"{FRAGMENTS_REL}/{SLUG}.yaml"]
-
-
-def test_interim_set_status_on_a_merged_row_edits_its_owning_fragment_in_place(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """INTERIM, until amendments (plan 2026-11-12-acceptance-fragments phase 3): a
-    merged row changes only by amendment (R16); until `set-status` writes one, it
-    moves the row in place in the fragment that owns it."""
-    root = _repo(tmp_path)
-    assert _add(root, monkeypatch, "w1", f"spec:{SLUG}#R1").exit_code == 0
-    _git(root, "checkout", "-q", "main")
-    _git(root, "merge", "-q", "--ff-only", "feat/w")
-    _git(root, "checkout", "-q", "-b", "feat/later")
-
-    res = _invoke(
-        root, monkeypatch, "set-status", "--id", "w1", "--status", "ci", "--notes", "later"
-    )
-
-    assert res.exit_code == 0, res.output
-    (row,) = _fragment(root, SLUG)["rows"]
-    assert row["status"] == "ci"
     assert _committed(root) == [f"{FRAGMENTS_REL}/{SLUG}.yaml"]
 
 

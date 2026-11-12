@@ -54,7 +54,7 @@ from fr.journal.model import (
     resolution_entry,
     spec_journal_slug,
 )
-from fr.record.model import StepRecord, allowed_sections, present_sections
+from fr.record.model import AmendmentItem, StepRecord, allowed_sections, present_sections
 from fr.workflow.artifacts import journal_scope
 
 _SESSION_START = "1970-01-01T00:00:00+00:00"
@@ -106,6 +106,10 @@ class RecordTarget:
     acceptance_repo: str | None = None
     """`<org>/<repo>` for the first fragment of a repo whose fragments name none and
     whose origin remote does not say (`fr acceptance add --repo`)."""
+    feature: str | None = None
+    """The feature (spec slug) whose fragment a verb record's amendments are written
+    to (`fr acceptance amend|set-status --feature`, else the branch's run; spec
+    2026-11-04 R16). A run record uses the run's spec."""
 
 
 @dataclass
@@ -736,7 +740,11 @@ def _check_drops(
             f"a run record never reads them (run {run_id!r})"
         )
     for row_id, levels in drops.items():
-        named = [item for item in record.acceptance if item.id == row_id]
+        named = [
+            item
+            for item in record.acceptance
+            if not isinstance(item, AmendmentItem) and item.id == row_id
+        ]
         if not named:
             raise RecordRefusedError(
                 f"acceptance {row_id}: a drop names a row the record does not move"
@@ -801,6 +809,192 @@ def strategy_error(name: str, repo_root: Path) -> str | None:
     return None
 
 
+class _Amending:
+    """Amendments for one record (spec 2026-11-04 R16, R17): which rows are merged on
+    the default ref, each row's revision (the base an amendment names when the
+    record gives none), and the row each amendment leaves, so a second amendment of
+    one row in the same record builds on the first."""
+
+    def __init__(self, repo_root: Path, feature: str | None) -> None:
+        self.repo_root = repo_root
+        self._feature = feature
+        self._merged: frozenset[str] | None = None
+        self._current: Any = None
+        self.rows: dict[str, Any] = {}
+        from collections import Counter
+
+        self.taken: Counter[str] = Counter()
+
+    def _fold(self) -> Any:
+        if self._current is None:
+            from fr.acceptance.fold import effective
+            from fr.acceptance.model import AcceptanceError
+
+            try:
+                self._current = effective(self.repo_root)
+            except AcceptanceError as e:
+                raise RecordRefusedError(f"the acceptance fragments do not fold: {e}") from e
+            self.rows = {r.id: r for r in self._current.matrix.rows}
+        return self._current
+
+    def is_merged(self, row_id: str) -> bool:
+        """Whether the default ref's fragments define *row_id* (none without one)."""
+        if self._merged is None:
+            from fr.acceptance.fold import default_ref_fold
+            from fr.acceptance.model import AcceptanceError
+
+            try:
+                merged = default_ref_fold(self.repo_root)
+            except AcceptanceError as e:
+                raise RecordRefusedError(f"the default ref's fragments do not fold: {e}") from e
+            self._merged = frozenset(merged.owners) if merged is not None else frozenset()
+        return row_id in self._merged
+
+    def feature(self) -> str:
+        if self._feature is None:
+            from fr.acceptance.amend import NO_FEATURE
+
+            raise RecordRefusedError(NO_FEATURE)
+        return self._feature
+
+    def row(self, row_id: str) -> Any:
+        current = self._fold()
+        if row_id not in self.rows:
+            retired = any(r.id == row_id for r in current.retired)
+            raise RecordRefusedError(
+                f"acceptance {row_id}: "
+                + ("the row is retired" if retired else "no such row")
+                + " — an amendment names a row of the effective matrix"
+            )
+        return self.rows[row_id]
+
+    def base(self, row_id: str) -> int:
+        return int(self._fold().revisions.get(row_id, 0)) + self.taken[row_id]
+
+    def amend(self, item: AmendmentItem, write: Any, no_ci: str | None) -> str:
+        from fr.acceptance.anchors import line_anchor_error
+        from fr.acceptance.fold import apply_amendment
+        from fr.acceptance.logical import is_logical, parse_logical
+        from fr.acceptance.model import AcceptanceError, pipeline_ref_error, split_ref, walked_error
+
+        old = self.row(item.row)
+        base = item.base if item.base is not None else self.base(item.row)
+        try:
+            amendment = item.to_amendment(base)
+        except ValueError as e:
+            raise RecordRefusedError(str(e)) from e
+        where = f"acceptance {item.row}"
+        if amendment.op == "add-level":
+            try:
+                parse_logical(amendment.ref) if is_logical(amendment.ref) else split_ref(
+                    amendment.ref
+                )
+            except AcceptanceError as e:
+                raise RecordRefusedError(f"{where}: {e}") from e
+            for why in (pipeline_ref_error(amendment.ref), line_anchor_error(amendment.ref)):
+                if why is not None:
+                    raise RecordRefusedError(f"{where}: {why}")
+        if amendment.op == "drop-level" and amendment.ref not in old.levels.get(
+            amendment.level, ()
+        ):
+            raise RecordRefusedError(
+                f"{where}: cannot drop {amendment.ref!r} from level {amendment.level!r}: the "
+                f"row does not carry it (current refs: {list(old.levels.get(amendment.level, ()))})"
+            )
+        new = apply_amendment(old, amendment)
+        if amendment.op == "set-status":
+            if amendment.verify is not None and (
+                why := strategy_error(amendment.verify, self.repo_root)
+            ):
+                raise RecordRefusedError(f"{where}: {why}")
+            if (why := walked_error(new)) is not None:
+                raise RecordRefusedError(f"{where}: {why}")
+            if no_ci is not None and new.status == "ci" and old.status != "ci":
+                raise RecordRefusedError(
+                    f"{where}: status `ci` needs a CI run as its evidence, but {no_ci}. "
+                    "Record it as `unwired` (a test exists, not in CI) instead."
+                )
+        write(amendment)
+        if amendment.op == "retire":
+            self.rows.pop(item.row)
+        else:
+            self.rows[item.row] = new
+        return f"{item.row}: {amendment.op} amendment (base {base}) in {self.feature()}"
+
+    def move(
+        self,
+        item: Any,
+        drops: Mapping[str, tuple[str, ...]],
+        write: Any,
+        no_ci: str | None,
+    ) -> str:
+        """An `AcceptanceItem` move of a merged row, as the amendments it amounts to:
+        a `set-status` for its status, note, walk, issues, verify and scenario, then
+        one `add-level` per ref it adds and one `drop-level` per ref it drops."""
+        from fr.acceptance.edit import describe_move
+
+        old = self.row(item.id)
+        if any(h not in old.harnesses for h in item.harnesses):
+            raise RecordRefusedError(
+                f"acceptance {item.id}: the row is merged, and no amendment op carries "
+                "`harnesses`; a merged row changes only by amendment"
+            )
+        if not item.notes and item.status != old.status:
+            raise RecordRefusedError(
+                f"acceptance {item.id}: moving a row's status needs `notes` — "
+                "a status that moved for no recorded reason is a silent change"
+            )
+        issues = tuple(i for i in dict.fromkeys(item.issues) if i not in old.issues)
+        notes = item.notes or old.notes
+        verify = item.verify if item.verify is not None and item.verify != old.verify else None
+        scenario = (
+            item.scenario if item.scenario is not None and item.scenario != old.scenario else None
+        )
+        why = notes or f"set-status {item.status}"
+        planned: list[AmendmentItem] = []
+        if (
+            item.status != old.status
+            or notes != old.notes
+            or item.walk is not None
+            or issues
+            or verify is not None
+            or scenario is not None
+        ):
+            planned.append(
+                AmendmentItem(
+                    row=item.id,
+                    op="set-status",
+                    status=item.status,
+                    notes=notes,
+                    walk=item.walk,
+                    issues=issues,
+                    verify=verify,
+                    scenario=scenario,
+                    why=why,
+                )  # fmt: skip
+            )
+        for lv, refs in item.levels.items():
+            for ref in refs:
+                if ref not in old.levels.get(lv, ()):
+                    planned.append(
+                        AmendmentItem(row=item.id, op="add-level", level=lv, ref=ref, why=why)
+                    )
+        for lv, refs in drops.items():
+            for ref in dict.fromkeys(refs):
+                planned.append(
+                    AmendmentItem(row=item.id, op="drop-level", level=lv, ref=ref, why=why)
+                )
+        for amendment in planned:
+            self.amend(amendment, write, no_ci)
+        new = self.rows[item.id]
+        return (
+            f"{item.id}: {describe_move(old, new)} "
+            f"({len(planned)} amendment{'s' if len(planned) != 1 else ''} in {self.feature()}"
+            if planned
+            else f"{item.id}: unchanged (no amendment"
+        ) + ")"
+
+
 def _acceptance_writes(
     record: StepRecord,
     overlay: _Overlay,
@@ -812,9 +1006,11 @@ def _acceptance_writes(
     default_feature: str | None = None,
 ) -> tuple[dict[str, int], list[str]]:
     """The record's `acceptance:` entries as fragment writes (spec 2026-11-04 R16):
-    a new row into the fragment of its one origin spec (or `features[id]`), an
-    existing row rewritten in place in the fragment that holds it. No report is
-    written: reports are derived (R20)."""
+    a new row into the fragment of its one origin spec (or `features[id]`); a row
+    still pending on this branch rewritten in place in the fragment that holds it;
+    a row merged on the default ref, and every amendment item, appended as
+    amendments to the feature's fragment (*default_feature*). No report is written:
+    reports are derived (R20)."""
     if not record.acceptance:
         return {}, []
     from fr.settings import disabled, disabled_because
@@ -825,6 +1021,7 @@ def _acceptance_writes(
 
     from fr.acceptance.anchors import line_anchor_error
     from fr.acceptance.edit import (
+        append_amendment,
         describe_move,
         drop_levels,
         insert_row,
@@ -889,9 +1086,24 @@ def _acceptance_writes(
     lines: list[str] = []
     valid = list(get_args(Status))
     no_ci: str | None = (
-        _no_ci_reason(repo_root) if any(item.status == "ci" for item in record.acceptance) else None
+        _no_ci_reason(repo_root)
+        if any(getattr(item, "status", None) == "ci" for item in record.acceptance)
+        else None
     )
+    amending = _Amending(repo_root, default_feature)
+
+    def write_amendment(amendment: Any) -> None:
+        feature = amending.feature()
+        path = folder / f"{feature}.yaml"
+        text = texts.get(path) or render_fragment(feature, identity(), ())
+        texts[path] = append_amendment(text, amendment)
+        amending.taken[amendment.row] += 1
+        counts["amendment"] = counts.get("amendment", 0) + 1
+
     for item in record.acceptance:
+        if isinstance(item, AmendmentItem):
+            lines.append(amending.amend(item, write_amendment, no_ci))
+            continue
         if item.status not in valid:
             raise RecordRefusedError(
                 f"acceptance {item.id}: unknown status {item.status!r} (valid: {' | '.join(valid)})"
@@ -909,6 +1121,10 @@ def _acceptance_writes(
             raise RecordRefusedError(
                 f"acceptance {item.id}: a new row needs both `capability` and `acceptance`"
             )
+        if not creates and amending.is_merged(item.id):
+            # R16: a row merged on the default ref changes only by amendment.
+            lines.append(amending.move(item, drops.get(item.id, {}), write_amendment, no_ci))
+            continue
         if not creates and existing is None:
             raise RecordRefusedError(
                 f"acceptance {item.id}: no such row — moving a status needs an existing id; "
@@ -1036,8 +1252,8 @@ def _acceptance_writes(
             counts["row added"] = counts.get("row added", 0) + 1
         else:
             assert owner is not None
-            # Interim (until amendments, plan 2026-11-12-acceptance-fragments phase 3):
-            # a row moves in place in the fragment that holds it.
+            # A row still pending on this branch (no default ref defines it) moves in
+            # place in the fragment that holds it; a merged one took the branch above.
             texts[owner] = replace_row(texts[owner], item.id, row)
             lines.append(f"{row.id}: {describe_move(existing, row)}")
             counts["row moved"] = counts.get("row moved", 0) + 1
@@ -1065,6 +1281,7 @@ _COUNT_ORDER = (
     "refactor",
     "row added",
     "row moved",
+    "amendment",
 )
 
 
@@ -1141,6 +1358,7 @@ def apply_record(
             completes_phase=False,
             emits_ticks=target.plan_dir is not None,
             discharges_owed=target.discharges_owed,
+            feature=target.feature,
         )
 
     overlay = _Overlay()

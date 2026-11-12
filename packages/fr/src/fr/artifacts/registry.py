@@ -574,8 +574,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # frozen `fr.record.legacy.RecordV8`; 9 -> 10 for `JournalItem.gate`/
             # `narrows`/`filed_as` (spec `2026-10-14-exit-gates-design` §C, R10,
             # R12), migration
-            # `fr.artifacts.record_exit_gates`, stamp only.
-            current_version=10,
+            # `fr.artifacts.record_exit_gates`, stamp only; 10 -> 11 for the
+            # `acceptance:` section's amendment item (spec
+            # `2026-11-04-repo-feature-settings-design` R16, R19, §5), migration
+            # `fr.artifacts.record_amendments`, stamp only.
+            current_version=11,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

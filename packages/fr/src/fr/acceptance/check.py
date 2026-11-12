@@ -104,14 +104,15 @@ def _age_key(row: Row) -> str:
     return min(dates, default="")
 
 
-def open_rows(matrix: Matrix) -> list[Row]:
-    """The nag set: the `DEBT_STATUSES` rows, oldest origin first.
+def open_rows(matrix: Matrix, contested: frozenset[str] = frozenset()) -> list[Row]:
+    """The nag set: the debt rows (`is_debt`: a `DEBT_STATUSES` status, or one of
+    the fold's *contested* rows), oldest origin first.
 
     The sort is stable, so rows of the same age keep their matrix order.
     """
-    from fr.acceptance.model import DEBT_STATUSES
+    from fr.acceptance.model import is_debt
 
-    opens = [r for r in matrix.rows if r.status in DEBT_STATUSES]
+    opens = [r for r in matrix.rows if is_debt(r.status, contested=r.id in contested)]
     return sorted(opens, key=_age_key)
 
 

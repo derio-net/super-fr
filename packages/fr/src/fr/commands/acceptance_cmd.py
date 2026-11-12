@@ -71,6 +71,17 @@ def _load(root: Path) -> Matrix:
         raise typer.Exit(1) from e
 
 
+def _contested(root: Path) -> frozenset[str]:
+    """The fold's contested rows (spec 2026-11-04 R17); `_load` already refused an
+    unfoldable tree, and the fold is memoised, so this re-reads nothing."""
+    from fr.acceptance.fold import effective
+
+    try:
+        return effective(root).contested
+    except AcceptanceError:
+        return frozenset()
+
+
 def _ids_at(root: Path, ref: str) -> set[str]:
     """Every row id `<ref>` defines: its fold, or — for a base from before the
     split (R19) — its retired matrix's ids. A ref with neither defines none."""
@@ -123,13 +134,26 @@ def check_cmd(
         "--added-since",
         help="Also list rows added since this git ref (feeds the PR-body section).",
     ),
+    no_fetch: bool = typer.Option(
+        False,
+        "--no-fetch",
+        help="Judge stale amendment bases against the last fetched default ref (offline).",
+    ),
 ) -> None:
-    """The gate: refs resolve, staleness, exit 2 on failing rows."""
+    """The gate: refs resolve, staleness, exit 2 on failing rows.
+
+    It first fetches the default ref, then refuses (exit 2) a branch amendment whose
+    base is stale and (exit 1) an in-place edit of a row merged on the default ref
+    (spec 2026-11-04 R16, R17)."""
+    from fr.acceptance.amend import branch_refusals
     from fr.acceptance.check import check
 
     root = resolve_repo_root()
     if _say_if_off(root):
         return
+    branch = branch_refusals(root, fetch=not no_fetch)
+    for w in branch.warnings:
+        typer.echo(f"::warning title=acceptance-matrix::{w}")
     matrix = _load(root)
     try:
         result = check(matrix, root, sibling_root)
@@ -154,13 +178,17 @@ def check_cmd(
         )
     for w in result.warnings:
         typer.echo(f"::warning title=acceptance-matrix::{w}")
+    result.errors.extend(branch.errors)
     for e_line in result.errors:
         typer.echo(f"ERROR: {e_line}", err=True)
+    for s_line in branch.stale:
+        typer.echo(f"ERROR: stale amendment base: {s_line}", err=True)
     if result.failing_ids:
         typer.echo(f"ERROR: failing acceptance rows: {result.failing_ids}", err=True)
-    if result.exit_code == 0:
+    code = 2 if branch.stale else result.exit_code
+    if code == 0:
         typer.echo(result.summary)
-    raise typer.Exit(result.exit_code)
+    raise typer.Exit(code)
 
 
 @acceptance_app.command("report")
@@ -303,16 +331,20 @@ def status_cmd(
     if _say_if_off(root):
         return
     matrix = _load(root)
+    contested = _contested(root)
     counts = Counter(r.status for r in matrix.rows)
     summary = ", ".join(f"{s}: {n}" for s, n in sorted(counts.items())) or "empty matrix"
+    if contested:
+        summary += f"; contested: {len(contested)}"
     typer.echo(f"acceptance: {summary}")
-    opens = open_rows(matrix)
+    opens = open_rows(matrix, contested)
     if not opens:
         typer.echo("no acceptance debt.")
         return
     shown = opens[:3] if brief else opens
     for r in shown:  # open_rows: oldest origin date first
-        typer.echo(f"  {r.id} [{r.status}] {r.acceptance} — {r.notes}")
+        tag = f"{r.status}, contested" if r.id in contested else r.status
+        typer.echo(f"  {r.id} [{tag}] {r.acceptance} — {r.notes}")
     if brief and len(opens) > len(shown):
         typer.echo(f"  … +{len(opens) - len(shown)} more (fr acceptance status)")
 
@@ -512,9 +544,11 @@ def _apply_rows(
     *,
     feature: str | None = None,
     repo: str | None = None,
+    amend_feature: str | None = None,
 ) -> None:
     """A one-entry record through the step-record engine (spec 2026-09-25
     §5.C.6): the fragment edit, one commit holding only the fragment.
+    `amend_feature` is the fragment an amendment is written to (R16).
 
     `drops` (row id → level → refs to remove, gh#624) is passed only when it
     names something: the engine refuses an empty per-row mapping. `feature` names
@@ -532,6 +566,7 @@ def _apply_rows(
                 acceptance_drops=drops or {},
                 acceptance_features={item.id: feature} if feature else {},  # type: ignore[attr-defined]
                 acceptance_repo=repo,
+                feature=amend_feature,
             ),
         )
     except engine.RecordRefusedError as e:
@@ -642,14 +677,22 @@ def set_status_cmd(
         help="--walk: when the walk happened (ISO date or timestamp); default now. For a "
         "walk recorded after the fact, from the evidence's own date.",
     ),
+    feature: str | None = typer.Option(
+        None,
+        "--feature",
+        help="The feature (spec slug) whose fragment the amendments of a MERGED row are "
+        "written to; default: the spec of this branch's run.",
+    ),
 ) -> None:
-    """Move an existing row's status, in place, with a reason (spec §3.G.2).
+    """Move an existing row's status, with a reason (spec §3.G.2).
 
-    The matrix is a registry of CURRENT state, not a log: `check` and the three
-    committed reports read today's status, so this rewrites the row and
-    regenerates the report set. Provenance lives in git history, which for a
-    registry is the right place — the asymmetry with `fr journal resolve`
-    (append-only) is deliberate.
+    A row still pending on this branch is rewritten in place in its fragment. A row
+    merged on the default ref changes only by amendment (spec 2026-11-04 R16): the
+    move is appended to this feature's fragment as `set-status`, `add-level` and
+    `drop-level` amendments.
+
+    The effective matrix is CURRENT state, not a log: `check` reads today's
+    status. Provenance lives in git history and in the amendments.
 
     Refuses an unknown id rather than creating a row: that is `add`'s job, and
     silently creating one on a typo'd id is how a row gets orphaned.
@@ -673,6 +716,7 @@ def set_status_cmd(
     """
     from typing import get_args
 
+    from fr.acceptance.amend import resolve_feature
     from fr.acceptance.edit import describe_move, drop_levels, merge_levels
     from fr.acceptance.model import Status
 
@@ -783,10 +827,129 @@ def set_status_cmd(
         ),
         f"chore(fr): acceptance — {row_id} {describe_move(target, new_row)}",
         {row_id: {k: tuple(v) for k, v in drops.items()}} if drops else None,
+        amend_feature=resolve_feature(root, feature),
     )
     typer.echo(f"{row_id}: {describe_move(target, new_row)}")
     if new_walk is not None:
         _print_close_commands(root, target)
+
+
+@acceptance_app.command("amend")
+def amend_cmd(
+    row_id: str | None = typer.Option(None, "--id", help="The row to amend."),
+    op: str | None = typer.Option(
+        None, "--op", help="reword | set-status | add-level | drop-level | retire."
+    ),
+    why: str | None = typer.Option(None, "--why", help="Why the row changes (required)."),
+    acceptance: str | None = typer.Option(None, "--acceptance", help="reword: the statement."),
+    capability: str | None = typer.Option(None, "--capability", help="reword: the heading."),
+    status: str | None = typer.Option(None, "--status", help="set-status: the new status."),
+    notes: str | None = typer.Option(
+        None, "--notes", help="set-status, retire: the row's note (required by both)."
+    ),
+    issue: list[str] = typer.Option(
+        [], "--issue", help="set-status: an 'owner/repo#n' issue to add (repeatable)."
+    ),
+    verify: str | None = typer.Option(None, "--verify", help="set-status: the strategy."),
+    scenario: str | None = typer.Option(None, "--scenario", help="set-status: the scenario."),
+    level: str | None = typer.Option(
+        None, "--level", help="add-level, drop-level: '<level>=<ref>'."
+    ),
+    base: int | None = typer.Option(
+        None, "--base", help="The row revision this is based on; default: the current one."
+    ),
+    feature: str | None = typer.Option(
+        None,
+        "--feature",
+        help="The feature (spec slug) whose fragment the amendment is written to; "
+        "default: the spec of this branch's run.",
+    ),
+    rebase: bool = typer.Option(
+        False,
+        "--rebase",
+        help="Re-base every stale amendment of this branch onto its row's current "
+        "revision (after reviewing the row), instead of writing one.",
+    ),
+) -> None:
+    """Append an amendment of a row to this feature's fragment (spec 2026-11-04 R16).
+
+    A row another feature merged changes only by amendment: `reword` (acceptance,
+    capability), `set-status` (status, notes, issue, verify, scenario), `add-level`
+    and `drop-level` (one ref), `retire` (notes). The amendment names the row
+    revision it is based on (default: the current one); a base another feature's
+    merged amendment has since passed is refused by `fr acceptance check` and
+    `deliver` until `--rebase` (R17). One commit holding only the fragment."""
+    from fr.acceptance.amend import resolve_feature
+    from fr.acceptance.fragment import AMENDMENT_OPS
+    from fr.record.model import AmendmentItem
+
+    root = resolve_repo_root()
+    _refuse_if_off(root, "`fr acceptance amend` writes no amendment")
+    if rebase:
+        _rebase(root)
+        return
+    if row_id is None or op is None or not why:
+        err_console.print(
+            "[red]error:[/red] --id, --op and --why are required (or --rebase); nothing changed"
+        )
+        raise typer.Exit(2)
+    if op not in AMENDMENT_OPS:
+        err_console.print(
+            f"[red]error:[/red] unknown op {op!r} (valid: {' | '.join(AMENDMENT_OPS)})"
+        )
+        raise typer.Exit(2)
+    lv, ref = None, None
+    if level is not None:
+        (lv, refs), *more = _parse_levels([level]).items()
+        ref = refs[0]
+    _load(root)
+    try:
+        item = AmendmentItem(
+            row=row_id, op=op, why=why, base=base, acceptance=acceptance,  # type: ignore[arg-type]
+            capability=capability, status=status, notes=notes, issues=tuple(issue),
+            verify=verify, scenario=scenario, level=lv, ref=ref,
+        )  # fmt: skip
+    except ValueError as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}; nothing changed")
+        raise typer.Exit(2) from e
+    _apply_rows(
+        root,
+        item,
+        f"chore(fr): acceptance — amend {row_id} ({op})",
+        amend_feature=resolve_feature(root, feature),
+    )
+    typer.echo(f"{row_id}: {op} amendment written")
+
+
+def _rebase(root: Path) -> None:
+    """`amend --rebase`: every stale pending amendment's `base` set to the revision
+    its row has when it applies (R17), one commit holding only the fragments."""
+    from fr.acceptance.edit import rebase_amendment
+    from fr.acceptance.fold import effective
+    from fr.artifacts.atomic import write_text_atomic
+    from fr.artifacts.commit import commit_paths
+
+    try:
+        stale = effective(root).stale_pending
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(1) from e
+    if not stale:
+        typer.echo("no stale amendment base: nothing to re-base")
+        return
+    written: dict[Path, str] = {}
+    for s in stale:
+        path = root / s.path
+        text = written.get(path, path.read_text())
+        written[path] = rebase_amendment(text, s.index, s.revision)
+        typer.echo(f"{s.row}: {s.op} amendment re-based {s.base} → {s.revision}")
+    for path, text in written.items():
+        write_text_atomic(path, text)
+    outcome = commit_paths(
+        root, sorted(written), "chore(fr): acceptance — re-base stale amendments"
+    )
+    if not outcome.committed:
+        err_console.print(f"[yellow]not committed: {escape(outcome.reason or '')}[/yellow]")
 
 
 @acceptance_app.command("add")
@@ -1180,6 +1343,6 @@ def digest_cmd() -> None:
     if disabled(root, "acceptance"):
         section = acceptance_section(AcceptanceDebt(available=False), off=True)
     else:
-        section = acceptance_section(acceptance_from_matrix(_load(root)))
+        section = acceptance_section(acceptance_from_matrix(_load(root), _contested(root)))
     lines = [section, "", DIGEST_MARKER, "", "_generated by `fr acceptance digest`_"]
     typer.echo("\n".join(lines))

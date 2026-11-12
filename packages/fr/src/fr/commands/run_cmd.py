@@ -6694,6 +6694,33 @@ def _gate_journals(read: Callable[[], _T_JOURNALS]) -> _T_JOURNALS:
         raise typer.Exit(2) from e
 
 
+def _deliver_acceptance_gate(repo_root: Path) -> None:
+    """Spec 2026-11-04 R16, R17: `deliver` fetches the default ref and refuses a
+    branch amendment whose base is stale, and an in-place edit of a merged row —
+    the same refusals `fr acceptance check` prints, from the one function."""
+    from fr.acceptance.amend import branch_refusals
+    from fr.settings import SettingsError, disabled
+
+    try:
+        if disabled(repo_root, "acceptance"):
+            return
+    except SettingsError:
+        pass  # the settings' own gates refuse an unreadable file
+    found = branch_refusals(repo_root)
+    for w in found.warnings:
+        err_console.print(f"warning: {w}", markup=False, soft_wrap=True)
+    problems = [*found.errors, *found.stale]
+    if not problems:
+        return
+    lines = "\n".join(f"  {p}" for p in problems)
+    err_console.print(
+        f"refused: the branch's acceptance amendments cannot merge as they stand:\n{lines}",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
 def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
     """Exit-gates R9: `deliver` refuses while the run leaves anything unaccounted
     — an out-of-scope finding, an owed entry, an owed row citing the spec, a
@@ -7007,6 +7034,7 @@ def _resolve_body(
         # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
+        _deliver_acceptance_gate(repo_root)
         _deliver_leftovers_gate(repo_root, state)
         _deliver_pr_gate(repo_root, state, pr)
         _deliver_exit_guard(repo_root, state)

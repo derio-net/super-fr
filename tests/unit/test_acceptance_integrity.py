@@ -391,9 +391,9 @@ def test_set_status_with_an_unchanged_status_names_the_added_level(
     messages: list[str] = []
     real = cmd._apply_rows
 
-    def spy(root_: Path, item: object, message: str, drops: object = None) -> None:
+    def spy(root_: Path, item: object, message: str, drops: object = None, **kw: object) -> None:
         messages.append(message)
-        real(root_, item, message, drops)  # type: ignore[arg-type]
+        real(root_, item, message, drops, **kw)  # type: ignore[arg-type]
 
     monkeypatch.setattr(cmd, "_apply_rows", spy)
     result = _invoke(

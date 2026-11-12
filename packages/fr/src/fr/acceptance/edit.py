@@ -27,10 +27,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING
 
 import yaml
 
 from fr.acceptance.model import LEVELS, AcceptanceError, Row
+
+if TYPE_CHECKING:
+    from fr.acceptance.fragment import Amendment
 
 _ROWS_KEY_RE = re.compile(r"^rows:\s*(#.*)?$")
 _ITEM_RE = re.compile(r"^(\s*)-\s")
@@ -339,3 +343,85 @@ def render_fragment(feature: str, repo: str, rows: Iterable[Row]) -> str:
     parse is byte-identical (spec 2026-11-04 R19)."""
     body = "".join(render_row_block(row) for row in rows)
     return f"{FRAGMENT_HEADER}schema_version: 1\nfeature: {feature}\nrepo: {repo}\nrows:\n{body}"
+
+
+_AMENDMENTS_KEY_RE = re.compile(r"^amendments:\s*(#.*)?$")
+_AMENDMENT_KEY_ORDER = ("row", "op", "base")
+
+
+def render_amendment_block(amendment: Amendment, indent: str = "  ") -> str:
+    """One amendment as the list item a fragment's `amendments:` stores: `row`, `op`
+    and `base` first, `why` last, unset fields absent (spec 2026-11-04 §3.D)."""
+    data = amendment.model_dump(mode="json", exclude_none=True)
+    if not data.get("issues"):
+        data.pop("issues", None)
+    why = data.pop("why")
+    ordered = {k: data.pop(k) for k in _AMENDMENT_KEY_ORDER}
+    block = yaml.dump(
+        [{**ordered, **data, "why": why}],
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    return "".join(
+        (indent + line if line.strip() else line) + "\n" for line in block.rstrip("\n").split("\n")
+    )
+
+
+def _amendment_starts(lines: list[str]) -> tuple[int | None, list[int], int]:
+    """(the `amendments:` line, each item's first line, where the list ends)."""
+    at = next((i for i, ln in enumerate(lines) if _AMENDMENTS_KEY_RE.match(ln)), None)
+    if at is None:
+        return None, [], len(lines)
+    starts: list[int] = []
+    indent: str | None = None
+    end = len(lines)
+    for i in range(at + 1, len(lines)):
+        line = lines[i]
+        if not line.strip():
+            continue
+        m = _ITEM_RE.match(line)
+        if m and (indent is None or m.group(1) == indent):
+            indent = m.group(1)
+            starts.append(i)
+            continue
+        if not line[:1].isspace() and not line.startswith("#"):
+            end = i
+            break
+    return at, starts, end
+
+
+def append_amendment(text: str, amendment: Amendment) -> str:
+    """*text* with *amendment* appended to its `amendments:` list (created at the end
+    of the file when absent); every existing byte is kept (R16: append-only)."""
+    lines = text.splitlines(keepends=True)
+    at, starts, end = _amendment_starts(lines)
+    if at is None:
+        head = text if not text or text.endswith("\n") else text + "\n"
+        return head + "amendments:\n" + render_amendment_block(amendment)
+    indent = "  "
+    if starts:
+        first = lines[starts[0]]
+        indent = first[: len(first) - len(first.lstrip())]
+    while end - 1 > at and not lines[end - 1].strip():
+        end -= 1
+    head = "".join(lines[:end])
+    if not head.endswith("\n"):
+        head += "\n"
+    return head + render_amendment_block(amendment, indent) + "".join(lines[end:])
+
+
+def rebase_amendment(text: str, index: int, base: int) -> str:
+    """*text* with the `index`-th amendment's `base` set to *base*, every other line
+    kept: how `fr acceptance amend --rebase` answers R17's stale-base refusal."""
+    lines = text.splitlines(keepends=True)
+    at, starts, end = _amendment_starts(lines)
+    if at is None or index >= len(starts):
+        raise AcceptanceError(f"no amendment at index {index}")
+    stop = starts[index + 1] if index + 1 < len(starts) else end
+    for i in range(starts[index], stop):
+        m = re.match(r"^(\s*(?:-\s+)?)base:\s*\d+\s*$", lines[i])
+        if m:
+            lines[i] = f"{m.group(1)}base: {base}\n"
+            return "".join(lines)
+    raise AcceptanceError(f"amendment {index} carries no `base:` line")

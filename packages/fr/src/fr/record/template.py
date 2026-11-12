@@ -110,6 +110,15 @@ def render_template(
             "#     a row may name its verification: verify: <strategy|none> "
             "(`fr verification list`), scenario: <path>"
         )
+        lines.append(
+            "#   - {row: <row>, op: reword|set-status|add-level|drop-level|retire, "
+            "why: <reason>, base: <revision, optional>, ...}"
+        )
+        lines.append(
+            "#     an amendment changes a row an earlier feature merged (spec 2026-11-04 "
+            "R16): reword: acceptance/capability; set-status: status, notes; "
+            "add-level/drop-level: level, ref; retire: notes"
+        )
     if emitted:
         lines.append("emitted: {}")
         lines.append(f"#   {', '.join(f'{n}: <path or url>' for n in emitted)}")

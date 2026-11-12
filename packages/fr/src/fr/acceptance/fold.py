@@ -54,6 +54,21 @@ class FoldHistoryError(FoldError):
 
 
 @dataclass(frozen=True)
+class StalePending:
+    """A branch's own amendment written against a revision its row has moved past
+    (R17's stale base): refused before merge by `check` and `deliver`."""
+
+    row: str
+    op: str
+    base: int
+    revision: int
+    """The row's revision when this amendment applies: what `base` should be."""
+    path: str
+    index: int
+    """The amendment's position in its fragment's `amendments:` list."""
+
+
+@dataclass(frozen=True)
 class Effective:
     """The effective matrix and what the fold learned on the way."""
 
@@ -69,6 +84,9 @@ class Effective:
     pending: tuple[Amendment, ...]
     """The branch's own amendments, applied after every merged one."""
     notices: tuple[str, ...]
+    stale_pending: tuple[StalePending, ...] = ()
+    """The branch's own amendments whose `base` is not the row's revision when they
+    apply (R17): `check` and `deliver` refuse them."""
 
 
 def git_runner(root: Path) -> GitRunner:
@@ -247,7 +265,8 @@ def _working_fragments(root: Path) -> dict[str, str]:
     }
 
 
-def _apply(row: Row, amendment: Amendment) -> Row:
+def apply_amendment(row: Row, amendment: Amendment) -> Row:
+    """*row* with *amendment* applied (R16 op semantics, plan journal `fold-op-semantics`)."""
     if amendment.op == "reword":
         update: dict[str, object] = {}
         if amendment.acceptance is not None:
@@ -258,14 +277,17 @@ def _apply(row: Row, amendment: Amendment) -> Row:
     if amendment.op == "set-status":
         walks = row.walks + ((amendment.walk,) if amendment.walk is not None else ())
         issues = tuple(dict.fromkeys(row.issues + amendment.issues))
-        return row.model_copy(
-            update={
-                "status": amendment.status,
-                "notes": amendment.notes,
-                "walks": walks,
-                "issues": issues,
-            }
-        )
+        update = {
+            "status": amendment.status,
+            "notes": amendment.notes,
+            "walks": walks,
+            "issues": issues,
+        }
+        if amendment.verify is not None:
+            update["verify"] = amendment.verify
+        if amendment.scenario is not None:
+            update["scenario"] = amendment.scenario
+        return row.model_copy(update=update)
     if amendment.op == "add-level" or amendment.op == "drop-level":
         levels = {lv: tuple(row.levels.get(lv, ())) for lv in LEVELS}
         refs = levels[amendment.level]
@@ -334,30 +356,62 @@ def has_fragments(repo_root: Path) -> bool:
 
 
 def load_effective(repo_root: Path, *, ref: str | None = None) -> Matrix:
-    """The effective matrix of *repo_root* (`fold(...).matrix`): what every reader of
-    acceptance rows reads (spec 2026-11-04 R17). Every failure is an `AcceptanceError`.
+    """The effective matrix (`effective(...).matrix`); see `effective`."""
+    return effective(repo_root, ref=ref).matrix
+
+
+def default_ref_fold(repo_root: Path) -> Effective | None:
+    """The fold of the default ref's history alone, or None when the repo has no
+    default ref (no remote, or none fetched): then no row is merged ON a default
+    ref, so nothing is held to "a merged row changes only by amendment" (R16)."""
+    from fr.git import GitRefusal, GitUnavailableError, remote_default_ref
+
+    try:
+        named = remote_default_ref(Path(repo_root))
+    except GitUnavailableError:
+        return None
+    if named is None or isinstance(named, GitRefusal):
+        return None
+    return fold(Path(repo_root), ref=f"refs/remotes/{named}", include_pending=False)
+
+
+def effective(repo_root: Path, *, ref: str | None = None) -> Effective:
+    """The fold of *repo_root*: what every reader of acceptance rows reads (spec
+    2026-11-04 R17). Every failure is an `AcceptanceError`.
 
     With *ref*, the fold of that ref's history alone (no pending entries). Without
-    it: an empty `Matrix` when the working tree has no fragment; the working tree's
+    it: an empty fold when the working tree has no fragment; the working tree's
     fragments folded in memory when *repo_root* is not the top of a git work tree
     (a bare fixture, an exported tree); else the full fold."""
     root = Path(repo_root)
     if ref is not None:
-        return fold(root, ref=ref, include_pending=False).matrix
+        return fold(root, ref=ref, include_pending=False)
     working = _working_fragments(root)
     if not working:
-        return Matrix()
+        return _empty()
     from fr.git import GitUnavailableError, git_answer
 
     try:
         top = git_answer(root, "rev-parse", "--show-toplevel")
     except GitUnavailableError:
-        return fold_texts(working).matrix
+        return fold_texts(working)
     if top.returncode != 0 or Path(top.stdout.strip()).resolve() != root.resolve():
         # Not a work tree, or a directory inside another repo's: the working tree's
         # fragments are all there is.
-        return fold_texts(working).matrix
-    return fold(root).matrix
+        return fold_texts(working)
+    return fold(root)
+
+
+def _empty() -> Effective:
+    return Effective(
+        matrix=Matrix(),
+        revisions={},
+        contested=frozenset(),
+        owners={},
+        retired=(),
+        pending=(),
+        notices=(),
+    )
 
 
 def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
@@ -387,8 +441,10 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
         ),
         key=lambda t: (t[0], t[1], t[2]),
     )
-    # (amendment, its fragment, whether it is merged)
-    queue: list[tuple[Amendment, str, bool]] = [(a, path, True) for _, _, _, a, path in ordered]
+    # (amendment, its fragment, whether it is merged, its index in the fragment)
+    queue: list[tuple[Amendment, str, bool, int]] = [
+        (a, path, True, k) for _, _, k, a, path in ordered
+    ]
 
     pending: list[tuple[str, int, Amendment, str]] = []
     pending_rows: list[tuple[Row, str, int, str]] = []
@@ -416,7 +472,7 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
     for row, path, i, feature in pending_rows:
         define(row, path, i, feature)
     pending.sort(key=lambda t: (t[0], t[1]))
-    queue += [(a, path, False) for _, _, a, path in pending]
+    queue += [(a, path, False, k) for _, k, a, path in pending]
 
     if len(set(repos.values())) > 1:
         listed = ", ".join(f"{p} ({r})" for p, r in sorted(repos.items()))
@@ -426,7 +482,8 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
     revisions = dict.fromkeys(state, 0)
     contested: set[str] = set()
     retired: dict[str, Row] = {}
-    for amendment, path, is_merged in queue:
+    stale: list[StalePending] = []
+    for amendment, path, is_merged, index in queue:
         rid = amendment.row
         if rid in retired or rid not in state:
             what = "retired" if rid in retired else "unknown"
@@ -445,10 +502,21 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
             continue
         if amendment.base != revisions[rid]:
             contested.add(rid)
+            if not is_merged:
+                stale.append(
+                    StalePending(
+                        row=rid,
+                        op=amendment.op,
+                        base=amendment.base,
+                        revision=revisions[rid],
+                        path=path,
+                        index=index,
+                    )
+                )
         else:
             contested.discard(rid)
         revisions[rid] += 1
-        state[rid] = _apply(state[rid], amendment)
+        state[rid] = apply_amendment(state[rid], amendment)
         if amendment.op == "retire":
             retired[rid] = state.pop(rid)
             contested.discard(rid)
@@ -471,4 +539,5 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
         retired=tuple(retired.values()),
         pending=tuple(a for _, _, a, _ in pending),
         notices=tuple(notices),
+        stale_pending=tuple(stale),
     )
