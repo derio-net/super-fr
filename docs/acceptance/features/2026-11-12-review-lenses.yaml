@@ -95,9 +95,17 @@ rows:
     - spec:2026-11-12-review-lenses#R4
     - spec:2026-11-12-review-lenses#R5
     - spec:2026-11-12-review-lenses#R13
-    levels: {}
-    status: not-implemented
-    notes: Born with the rewritten spec
+    levels:
+      unit:
+      - super-fr:tests/unit/test_record_lens.py#test_a_run_record_adds_a_lens_entry_stamped_with_its_step_and_phase
+      - super-fr:tests/unit/test_record_lens.py#test_a_refused_lens_item_writes_nothing
+      - super-fr:tests/unit/test_journal_cmd.py#TestAddLens::test_a_lens_is_added_with_an_fr_assigned_id_and_no_step
+      - super-fr:tests/unit/test_lenses_status.py#test_status_prints_each_lens_with_its_reason_and_step_and_writes_nothing
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_review_lenses_accumulate
+    status: unwired
+    notes: Unit tests and the first scenario cases exist; the row is complete once the
+      lens review step lands in phase 3
     verify: candidate
     scenario: tests/scenarios/review-lenses-accumulate.sh
 amendments:
