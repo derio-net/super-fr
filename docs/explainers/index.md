@@ -38,7 +38,7 @@ covers:
   - packages/fr/src/fr/commands/gate_cmd.py
   - packages/fr/src/fr/triage/batch_drive.py
   - scripts/release.py
-reviewed: 2026-11-12 second pass, two acts with exit gates and the wave driver added, each section checked against the page it links
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 ## How a run goes
