@@ -52,6 +52,7 @@ TRUST_EXCLUDED: tuple[str, ...] = (
     "docs/superpowers/runs/<run-id>.yaml",
     "docs/superpowers/runs/<run-id>.records/*.yaml",
     "docs/superpowers/runs/<run-id>.records/pr-body.md",
+    "docs/superpowers/runs/<run-id>.pr-body.md",
     "docs/acceptance/matrix.yaml",
     "docs/acceptance/report_local.html",
     "docs/acceptance/report_linked.html",
@@ -195,7 +196,7 @@ def is_trust_excluded(path: str, mode: str | None = None) -> bool:
             return len(parts) == 5 and parts[3] in _JOURNAL_SCOPES and parts[4].endswith(".md")
         if parts[2] == "runs":
             if len(parts) == 4:
-                return parts[3].endswith(".yaml")
+                return parts[3].endswith((".yaml", ".pr-body.md"))
             if len(parts) == 5 and parts[3].endswith(".records"):
                 return parts[4].endswith(".yaml") or parts[4] == "pr-body.md"
     return False

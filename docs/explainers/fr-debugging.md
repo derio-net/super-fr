@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 repo-feature-settings, delivery through fr push / fr pr create and the git policy
 ---
 
 ## Overview: why "just try something" is the expensive path
@@ -113,8 +113,12 @@ A bug fix does not enter the spec-then-plan pipeline, but the journal is durable
 2. **Docs check.** In a repo with `.fr/docs.yaml`, run `fr docs check` before opening the PR. A
    page covering a path the fix changed needs an edit, or its `reviewed` stamp updated when it is
    still true. See [the docs-currency guide](../docs-currency.md).
-3. **One PR.** Its body is derived from the debug journal: root cause, fix, and the
-   failing-test-first story.
+3. **One PR, through fr.** The skill pushes with `fr push` and opens the draft with
+   `fr pr create`, never `git push` or the forge's CLI. Both commands apply the repo's git policy
+   (`git.*` in `fr settings show`). Under `push: ask` or `pr: ask` each one refuses once and prints
+   a request id. The agent asks you, records your approval in the debug journal, and runs the
+   command again. `fr push` also checks commit subjects against the repo's templates. The body is
+   derived from the debug journal: root cause, fix, and the failing-test-first story.
 4. **Record the review.** Add a `review` entry. There is no run cursor here to enforce it, so
    nothing fails if you skip it; that is exactly why it is written down rather than assumed.
 5. **Push on the host** and confirm `git rev-list --count @{u}..HEAD` prints `0`. Every journal

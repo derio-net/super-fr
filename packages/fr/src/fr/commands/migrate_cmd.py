@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 import typer
@@ -9,6 +10,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from fr.commands.common import require_migrated_layout
+from fr.git_policy.templates import FR_COMMIT_TRAILER
 from fr.migrate import MigrationError, migrate_repo
 
 console = Console()
@@ -209,7 +211,10 @@ def artifacts_cmd(
             typer.echo("Commit them yourself when you are ready:")
             rels = " ".join(_rel(p, repo_root) for p in report.changed_paths)
             typer.echo(f"  git add -- {rels}")
-            typer.echo("  git commit -m 'chore(fr): migrate artifacts'")
+            typer.echo(
+                f"  git commit -m {shlex.quote(_migrate_subject(repo_root))}"
+                f" -m {shlex.quote(f'{FR_COMMIT_TRAILER}: migrate')}"
+            )
     _offer_adoption(repo_root, adopt=adopt, yes=yes)
 
     if report.failed:
@@ -268,3 +273,16 @@ def _rel(path: Path, repo_root: Path) -> str:
         return str(path.relative_to(repo_root))
     except ValueError:  # pragma: no cover — every artifact is under the root
         return str(path)
+
+
+def _migrate_subject(repo_root: Path) -> str:
+    """The subject to suggest, through the repo's commit templates (R14); today's
+    `chore(fr): migrate artifacts` when the policy cannot be read (a hint, not a write)."""
+    from fr.git_policy.templates import fr_message
+    from fr.settings import SettingsError
+
+    try:
+        # The subject line only: the hint adds the `Fr-Commit` trailer itself.
+        return fr_message(repo_root, "chore(fr): migrate artifacts").splitlines()[0]
+    except SettingsError:
+        return "chore(fr): migrate artifacts"

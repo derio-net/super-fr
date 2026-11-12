@@ -584,6 +584,24 @@ def archive_run_cursor(repo_root: Path, run_id: str) -> None:
     _archive_usage(repo_root, src, run_id)
     dst.parent.mkdir(parents=True, exist_ok=True)
     _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
+    _archive_pr_body(repo_root, run_id)
+
+
+def _archive_pr_body(repo_root: Path, run_id: str) -> None:
+    """Carry the run's durable PR body render (`forge.pr_body: minimal`, spec
+    2026-11-04-repo-feature-settings R10) to implemented/runs/ beside its cursor. Staged
+    first, like the usage file, so an uncommitted render moves too."""
+    from fr.record.pr_body import durable_pr_body_path
+
+    src = durable_pr_body_path(repo_root, run_id)
+    if not src.is_file():
+        return
+    dst = archived_run_path(repo_root, run_id).with_name(src.name)
+    if dst.exists():
+        return
+    rel = src.relative_to(repo_root)
+    subprocess.run(["git", "-C", str(repo_root), "add", "--", str(rel)], check=False)
+    _git_mv(repo_root, rel, dst.relative_to(repo_root))
 
 
 def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
@@ -786,8 +804,11 @@ def missing_outcomes(repo_root: Path, spec_path: Path) -> list[Step]:
     """The spec's Test Plan steps with no recorded outcome (R19), in order.
     `fr.spec.TestPlanHeadingError` when the spec's heading is a near-miss."""
     from fr.journal.model import resolve_journal_read_path
+    from fr.settings import disabled
     from fr.spec import test_plan_steps
 
+    if disabled(repo_root, "test_plan"):
+        return []  # R7: the repo owes no Test Plan outcomes
     try:
         text = spec_path.read_text()
     except OSError:

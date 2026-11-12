@@ -26,6 +26,30 @@ acceptance_app = typer.Typer(
 )
 
 
+def _refuse_if_off(root: Path, what: str) -> None:
+    """R6: under `artifacts.acceptance: off` the matrix is not written (exit 2)."""
+    from fr.settings import SettingsError, disabled, disabled_because
+
+    try:
+        off = disabled(root, "acceptance")
+    except SettingsError as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    if off:
+        err_console.print(f"[red]error:[/red] {escape(disabled_because('acceptance', what))}")
+        raise typer.Exit(2)
+
+
+def _say_if_off(root: Path) -> bool:
+    """R6: under `artifacts.acceptance: off` a read-only surface says so, exit 0."""
+    from fr.settings import DISABLED, disabled
+
+    if disabled(root, "acceptance"):
+        typer.echo(f"acceptance: {DISABLED} (artifacts.acceptance: off)")
+        return True
+    return False
+
+
 def _load(root: Path) -> Matrix:
     matrix_path = root / MATRIX_REL
     if not matrix_path.exists():
@@ -85,6 +109,8 @@ def check_cmd(
     from fr.acceptance.check import check
 
     root = resolve_repo_root()
+    if _say_if_off(root):
+        return
     matrix = _load(root)
     try:
         result = check(matrix, root, sibling_root)
@@ -165,6 +191,7 @@ def report_cmd(
         err_console.print(f"--link-mode must be github|local, got {link_mode!r}")
         raise typer.Exit(2)
     root = resolve_repo_root()
+    _refuse_if_off(root, "`fr acceptance report` writes no report")
     matrix = _load(root)
     # No `--out` → operate on the whole committed set; an explicit `--out`
     # (even one equal to the default path) narrows to that single file.
@@ -254,6 +281,8 @@ def status_cmd(
     from fr.acceptance.check import open_rows
 
     root = resolve_repo_root()
+    if _say_if_off(root):
+        return
     matrix = _load(root)
     counts = Counter(r.status for r in matrix.rows)
     summary = ", ".join(f"{s}: {n}" for s, n in sorted(counts.items())) or "empty matrix"
@@ -278,6 +307,8 @@ def summary_cmd() -> None:
     from fr.acceptance.check import open_rows
 
     root = resolve_repo_root()
+    if _say_if_off(root):
+        return
     matrix = _load(root)
     counts = Counter(r.status for r in matrix.rows)
     lines = [
@@ -420,15 +451,16 @@ def _walk_from_flags(
 
 def _print_close_commands(root: Path, before: Row) -> None:
     """R16: the issues this walk freed, each with the forge's close and
-    unlabel commands — nothing under `tracking: none`. fr never closes them."""
+    unlabel commands — nothing when forge issues are off (`forge.issues: off` or
+    `tracking: none`). fr never closes them."""
     from fr.acceptance.walks import AWAITING_LIVE_LABEL, issues_now_closable
     from fr.hostclient import issue_command
-    from fr.services.resolve import resolve_tracking
+    from fr.settings import forge_allows
 
     matrix = _load(root)
     after = next(r for r in matrix.rows if r.id == before.id)
     freed = issues_now_closable(matrix, before, after, root)
-    if not freed or resolve_tracking(root, lenient=True).type == "none":
+    if not freed or not forge_allows(root, "issues", lenient=True):
         return
     w = after.walks[-1]
     comment = f"Walk-verified ({w.strategy}, {w.harness}, {w.model}): {w.evidence}"
@@ -633,6 +665,7 @@ def set_status_cmd(
         },
     )
     root = resolve_repo_root()
+    _refuse_if_off(root, "`fr acceptance set-status` writes no row")
     matrix = _load(root)
 
     valid = list(get_args(Status))
@@ -785,6 +818,7 @@ def add_cmd(
     from fr.acceptance.model import Visual
 
     root = resolve_repo_root()
+    _refuse_if_off(root, "`fr acceptance add` writes no row")
     matrix = _load(root)
     _check_verify(root, verify)
 
@@ -870,6 +904,7 @@ def init_cmd(
     from fr.acceptance.scaffold import init
 
     root = resolve_repo_root()
+    _refuse_if_off(root, "`fr acceptance init` scaffolds no matrix, report or CI")
     try:
         org, repo = resolve_identity(Matrix(), root)
     except AcceptanceError as e:
@@ -937,8 +972,8 @@ def init_cmd(
 def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
     """`init --refresh-ci`: exit 0 rewritten/current, 1 refused (foreign file,
     nothing to refresh, or GitLab's shared file with the job to paste)."""
-    from fr.acceptance.ci import DEBT_PLATFORM, SCAFFOLD_PATHS
-    from fr.acceptance.scaffold import refresh_ci
+    from fr.acceptance.ci import SCAFFOLD_PATHS
+    from fr.acceptance.scaffold import debt_steps, refresh_ci
     from fr.records_commit import commit_records
 
     if with_ci:
@@ -950,7 +985,9 @@ def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
             f"[red]error:[/red] this repo's ci service is {ci_type!r}: nothing to refresh"
         )
         raise typer.Exit(1)
-    debt = services.tracking.type == DEBT_PLATFORM[ci_type]
+    debt, debt_off = debt_steps(root, ci_type, services.tracking.type)
+    if debt_off is not None:
+        typer.echo(f"no debt  {debt_off}; see `fr settings show`")
     out = refresh_ci(root, ci_type, debt=debt)
     if out.status == "missing":
         err_console.print(f"[red]error:[/red] {out.path} does not exist; run `fr acceptance init`")
@@ -1026,6 +1063,7 @@ def backfill_cmd() -> None:
     from fr.acceptance.model import archive_twin, split_ref
 
     root = resolve_repo_root()
+    _refuse_if_off(root, "`fr acceptance backfill` writes no row")
     matrix = _load(root)
 
     referenced: set[str] = set()
@@ -1087,9 +1125,14 @@ def digest_cmd() -> None:
     """Markdown for the upserted "Acceptance debt" issue (idempotence marker
     included; zero debt prints a closable body)."""
     from fr.debt.engine import acceptance_from_matrix
+    from fr.debt.model import AcceptanceDebt
     from fr.debt.render import acceptance_section
+    from fr.settings import disabled
 
-    matrix = _load(resolve_repo_root())
-    section = acceptance_section(acceptance_from_matrix(matrix))
+    root = resolve_repo_root()
+    if disabled(root, "acceptance"):
+        section = acceptance_section(AcceptanceDebt(available=False), off=True)
+    else:
+        section = acceptance_section(acceptance_from_matrix(_load(root)))
     lines = [section, "", DIGEST_MARKER, "", "_generated by `fr acceptance digest`_"]
     typer.echo("\n".join(lines))

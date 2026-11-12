@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-12 repo-feature-settings, fr settings, push and pr create in the generated tree
 ---
 
 # The fr command line
@@ -53,6 +53,7 @@ one artifact kind.
 - `fr undispatch`: Close a plan's tracking Issues and null the fields.
 - `fr pickup`: Output phase scope (markdown) for an agent.
 - `fr repair`: Normalize stale plan/spec refs + strip dead plan-config keys (dry-run; --yes to write).
+- `fr push`: Push this run's feature branch under the repo's git policy.
 - `fr skills`: Show the CLI surface and a summary of each skill.
 - `fr services`: Read-only: the resolved forge / ci / tracking services.
 - `fr acceptance`: Acceptance matrix: business-level acceptance tests × verification levels.
@@ -196,6 +197,10 @@ one artifact kind.
 - `fr debt`: What this repo owes: acceptance, plans and owed actions (read-only).
   - `fr debt issue`: Keep the one open `<repo>: Technical debt` issue current.
   - `fr debt archive-pr`: Open or refresh the one draft PR archiving long-merged plans.
+- `fr settings`: Per-repo feature settings: init, show, check.
+  - `fr settings init`: Write `.fr/settings.yaml` with every key commented out at its default.
+  - `fr settings show`: Print the effective settings and each key's source.
+  - `fr settings check`: Validate the settings: schema, servable placement, coherence.
 - `fr docs`: Docs currency: pages must keep up with the code they cover (read-only).
   - `fr docs check`: Fail when a covered path changed and its page did not (exit 1).
   - `fr docs status`: List every page with its covered globs and its `reviewed` stamp.
@@ -217,6 +222,8 @@ one artifact kind.
   - `fr release status`: List every PR merged since the last final tag that still waits on a post-merge gate.
 - `fr closeout`: Close-out records: one outcome per spec Test Plan step.
   - `fr closeout outcome`: Record one outcome for each Test Plan step in --step.
+- `fr pr`: Pull requests fr opens (always drafts).
+  - `fr pr create`: Open this run's PR as a draft and record it on the run cursor.
 <!-- /generated:cli-tree -->
 
 The list above is generated from the command tree by `scripts/sync-readme.py`; a test fails

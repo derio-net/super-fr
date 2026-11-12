@@ -206,10 +206,16 @@ def test_the_unstamped_repair_re_renders_the_file(tmp_path: Path) -> None:
 
 def test_every_version_bump_registers_its_re_render_hop() -> None:
     """The kind left 1 when fr-spec-reviewer learned the `## Test Plan` heading rule
-    (super-fr#1315): every hop from 1 to the current version is registered."""
-    assert KIND.current_version == 2
+    (super-fr#1315), and 2 when it learned to review against the repo's settings
+    (repo-feature-settings R15), and 3 when fr-phase-executor learned to push with
+    `fr push` (R12): every hop from 1 to the current version is registered."""
+    assert KIND.current_version == 4
     chain = MIGRATIONS.chain("agents", 1)
     assert [m.to_version for m in chain] == list(range(2, KIND.current_version + 1))
+
+
+NEXT = KIND.current_version + 1
+"""A hypothetical next version, for the bump tests."""
 
 
 def test_a_version_bump_re_renders_both_files_from_the_wheel(tmp_path: Path) -> None:
@@ -217,17 +223,17 @@ def test_a_version_bump_re_renders_both_files_from_the_wheel(tmp_path: Path) -> 
 
     repo = _repo(tmp_path)
     write_agents(repo)
-    bumped = dataclasses.replace(KIND, current_version=2)
+    bumped = dataclasses.replace(KIND, current_version=NEXT)
     reg = MigrationRegistry(kinds={"agents": bumped})
-    reg.register(rerender_migration(1, 2))
+    reg.register(rerender_migration(KIND.current_version, NEXT))
 
     report = run_migrations(repo, dry_run=False, registry=reg)
 
     assert report.ok, report
     for name in AGENT_NAMES:
         path = repo / ".claude" / "agents" / f"{name}.md"
-        assert path.read_text(encoding="utf-8") == render_agent(name, 2)
-    assert [m.to_version for m in reg.chain("agents", 1)] == [2]
+        assert path.read_text(encoding="utf-8") == render_agent(name, NEXT)
+    assert [m.to_version for m in reg.chain("agents", KIND.current_version)] == [NEXT]
 
 
 def test_the_re_render_leaves_a_consumers_own_fr_prefixed_agent_byte_identical(
@@ -240,13 +246,13 @@ def test_the_re_render_leaves_a_consumers_own_fr_prefixed_agent_byte_identical(
     foreign = repo / ".claude" / "agents" / "fr-custom.md"
     original = f"---\nname: fr-custom\n{STAMP_KEY}: 1\n---\nmine\n".encode()
     foreign.write_bytes(original)
-    bumped = dataclasses.replace(KIND, current_version=2)
+    bumped = dataclasses.replace(KIND, current_version=NEXT)
     reg = MigrationRegistry(kinds={"agents": bumped})
-    reg.register(rerender_migration(1, 2))
+    reg.register(rerender_migration(KIND.current_version, NEXT))
 
     report = run_migrations(repo, dry_run=False, registry=reg)
 
     assert not report.failed
     assert foreign.read_bytes() == original
     for name in AGENT_NAMES:
-        assert (repo / ".claude" / "agents" / f"{name}.md").read_text() == render_agent(name, 2)
+        assert (repo / ".claude" / "agents" / f"{name}.md").read_text() == render_agent(name, NEXT)

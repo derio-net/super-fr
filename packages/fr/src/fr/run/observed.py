@@ -15,6 +15,7 @@ on: `None` = could not read, `False` / `[]` = read and found nothing.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import os
 import re
 from collections.abc import Callable, Mapping
@@ -235,6 +236,31 @@ def _answered(part: ToolItem) -> bool:
     )
 
 
+def _answer_pairs(part: ToolItem) -> list[tuple[str, str]]:
+    """(question, answer) for one answered call: `metadata.answers[i]` answers
+    `input.questions[i]`. One selected option is its label; anything else (several,
+    none) is its JSON text, which never equals a label. A count mismatch pairs
+    nothing: fr does not guess which answer belongs to which question."""
+    questions = part.input.get("questions") if isinstance(part.input, Mapping) else None
+    answers = part.metadata.get("answers")
+    if not isinstance(questions, list) or not isinstance(answers, list):
+        return []
+    if len(questions) != len(answers):
+        return []
+    pairs: list[tuple[str, str]] = []
+    for question, answer in zip(questions, answers, strict=True):
+        text = question.get("question") if isinstance(question, Mapping) else None
+        if not isinstance(text, str):
+            continue
+        chosen = (
+            answer[0]
+            if isinstance(answer, list) and len(answer) == 1 and isinstance(answer[0], str)
+            else json.dumps(answer)
+        )
+        pairs.append((text, chosen))
+    return pairs
+
+
 def _query(db: Path, sql: str, params: tuple[object, ...]) -> list[tuple[Any, ...]] | None:
     """Rows of one read-only query on OpenCode's database; `None` when it
     cannot be read (missing, locked, another schema)."""
@@ -374,6 +400,11 @@ class OpenCodeSession:
             neutral=OPENCODE_ROUND_NEUTRAL_TOOLS,
             answered=lambda: {
                 p.call_id
+                for p in parts
+                if p.tool == OPENCODE_QUESTION_TOOL and p.call_id and _answered(p)
+            },
+            pairs=lambda: {
+                p.call_id: _answer_pairs(p)
                 for p in parts
                 if p.tool == OPENCODE_QUESTION_TOOL and p.call_id and _answered(p)
             },

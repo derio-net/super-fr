@@ -1,0 +1,150 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'Git policy: fr push, fr pr create, squash-unpushed, commit templates, run
+    issue'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - repo-settings-git-policy
+  tier: hard
+  files:
+  - packages/fr/src/fr/settings/*
+  - packages/fr/src/fr/git_policy/*
+  - packages/fr/src/fr/commands/push_cmd.py
+  - packages/fr/src/fr/commands/pr_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/run/model.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/run_issue.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/commit.py
+  - packages/fr/src/fr/records_commit.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/commands/pickup_cmd.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-debugging/SKILL.md
+  - plugins/super-fr/skills/fr-execute/SKILL.md
+  - plugins/super-fr/agents/fr-phase-executor.md
+  - packages/fr/src/fr/agents/*
+  - .claude/agents/*
+  - .opencode/**
+  - .hermes/**
+  - docs/superpowers/runs/*.yaml
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/01-fr-goal.html
+  - tests/unit/test_git_policy_*.py
+  - tests/unit/test_migration_run_issue.py
+  - tests/scenarios/repo-settings-git-policy.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: issue on the run cursor — run kind 10 -> 11 (R14)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_migration_run_issue.py — a v10 cursor migrates to v11 unchanged except the stamp; `RunState(issue=…)` round-trips; `fr run start --issue 123` records it; a cursor the migration cannot read is refused byte-identical; the chain assertion in the existing run-kind reachability test gains 11. Confirm red.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: add optional `issue: int | None = None` to RunState (packages/fr/src/fr/run/model.py); move the run kind's current_version to 11 in fr/artifacts/registry.py with a comment line; add stamp-only migration packages/fr/src/fr/artifacts/run_issue.py modelled on fr/artifacts/run_driver.py and import it from fr/artifacts/__init__.py; add `--issue` to `fr run start`; triage batch dispatch (fr/triage/batch_dispatch.py) passes the batch member's issue when the batch has exactly one. Run `uv run fr migrate artifacts --yes` in this workspace and commit the result as its own commit. Tests pass.
+- number: 2
+  title: Commit templates (R14)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_git_policy_templates.py — render_subject(settings, type, scope, summary, issue) uses with_issue iff issue is not None; with the default templates every `chore(fr): <summary>` subject fr writes today is byte-identical (assert over commit_records/commit_paths with a fixture message); a custom template `[{scope}] {summary}` changes fr's own commit subjects through the one seam; subject_matches(template, subject) accepts a rendered subject, rejects others, and merge commits are exempt by parent count. Confirm red.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: packages/fr/src/fr/git_policy/templates.py (render_subject, subject_matches as a regex built from the template with each placeholder a non-greedy group); apply it in fr/artifacts/commit.py commit_paths: a message whose first line matches `^chore\(fr\): (.*)` is re-rendered with type=chore, scope=fr, summary=<rest>, issue from the run when known. Tests pass.
+- number: 3
+  title: fr push — ask gate, squash-unpushed, subject check (R11–R13)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: tests/unit/test_git_policy_push.py over a tmp repo with a bare origin: `fr push` with defaults is `git push -u origin <branch>`; under history squash-unpushed, unpushed commits A,B (code) fold into one commit with a templated subject and the same final tree; on a first push the range is merge-base(default ref)..HEAD; a `chore(fr): migrate …` commit and a merge commit in the range stay as they are, the segments around them squashed separately, in order; pushed commits are never rewritten and no force flag is ever passed (assert the recorded git argv); an unpushed non-merge commit whose subject does not match the template refuses naming it. Under push ask: no operator decision → exit 2 printing the request and the journal command to record the answer; a decision recorded with answered_by operator after the request → pushes; an unobservable transcript (operator_answered_since returns None) → refuses naming the harness, and --no-questions is not accepted. Confirm red.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/git_policy/push.py (plan_push: compute range, segments, squash via `git reset --soft` + `git commit` per segment replaying with `git commit-tree` so fixed commits keep their trees; never `--force`), packages/fr/src/fr/git_policy/ask.py (request id = `push-<branch>-<head sha[:12]>` / `pr-<branch>`; approval = a spec-journal decision with that id and answered_by operator verified via fr.run.telemetry.operator_answered_since since the request was printed, request time recorded in the run's journal as a discovery entry), and packages/fr/src/fr/commands/push_cmd.py; register `push` in cli.py. Tests pass.
+  - id: P4.T3.S3
+    text: |-
+      REFACTOR: one `RemoteWriteRequest` type shared by push and PR asks; the request print names the exact `fr journal add … --kind decision --id <request-id> --answered-by operator` line.
+- number: 4
+  title: fr pr create — the PR seam (R11, R12)
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      RED: tests/unit/test_git_policy_pr.py with a fake forge client: `fr pr create --title t --body-file f` creates a DRAFT through fr.hostclient.client_for and records the PR url on the run cursor (existing pr field the deliver record uses — check RunState and reuse it); under pr ask it refuses until approved exactly like push; deliver (`_deliver_pr_gate`) under pr ask refuses a PR whose url the cursor did not record from fr pr create; there is no flag to create a non-draft. Confirm red.
+  - id: P4.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/commands/pr_cmd.py (`pr_app` with `create`), registered in cli.py; deliver's check in run_cmd.py. Tests pass.
+- number: 5
+  title: Skills switch to the seams; docs; scenario and row
+  steps:
+  - id: P4.T5.S1
+    text: |-
+      GREEN: fr-goal/SKILL.md §6/§8, fr-debugging/SKILL.md (line ~108) and fr-execute/SKILL.md: every `git push` becomes `fr push` (`uv run fr push` in a worktree), every draft PR creation becomes `fr pr create`; the briefs and `fr pickup` (packages/fr/src/fr/commands/pickup_cmd.py) carry the two commit templates. If plugins/super-fr/agents/fr-phase-executor.md names `git push`, change it too and follow AGENTS.md's agents procedure (sync-agents-data.py, agents kind version, CANONICAL_SHA256, rerender migration, `fr migrate artifacts --yes`). Run sync-opencode.py and sync-hermes.py; commit mirrors.
+  - id: P4.T5.S2
+    text: |-
+      GREEN: docs/explainers/01-fr-goal.md gains a short "Repo settings" section (settings live in .fr/settings.yaml read from the default branch; policy off; forge quiet; push/PR ask; squash-unpushed; templates; placements come later); regenerate docs/explainers/01-fr-goal.html with the command in .claude/rules/explainers-currency.md (`--isolated`, from `/`), first confirming the unmodified render is byte-identical.
+  - id: P4.T5.S3
+    text: |-
+      GREEN: tests/scenarios/repo-settings-git-policy.sh — fixture with bare origin and `git: {history: squash-unpushed, push: auto}` plus custom templates: two code commits then `fr push` → origin branch has one commit with the templated subject and the same tree; a bad subject refuses. Wire test_repo_settings_git_policy; run it. Then `fr acceptance set-status --id repo-settings-git-policy --status ci --scenario tests/scenarios/repo-settings-git-policy.sh --level unit=super-fr:tests/unit/test_git_policy_push.py#test_<name> --level integration=super-fr:tests/integration/test_scenarios.py#test_repo_settings_git_policy --notes "git policy built; scenario in CI"`.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T3.S3:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T4.S2:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T5.S1:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T5.S2:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+    P4.T5.S3:
+      state: x
+      ticked_at: '2026-11-07T15:32:18+00:00'
+      note: null
+  completion:
+    at: '2026-11-07T15:32:18+00:00'
+    note: null
+    observed_prs: []

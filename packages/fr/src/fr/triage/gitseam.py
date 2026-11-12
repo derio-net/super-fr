@@ -300,7 +300,7 @@ def commit_tree_from_paths(
     return out.strip()
 
 
-class PushRefused(GitError):  # noqa: N818 - beside StateRefConflict, a refusal
+class PushRefusedError(GitError):  # noqa: N818 - beside StateRefConflict, a refusal
     """The remote refused a push for a reason that is not a stale lease: a permission
     (HTTP 403 through a proxy), a hook that declined it, a connection the remote hung up.
     The remote's ref did not move, and nobody else moved it either."""
@@ -319,7 +319,7 @@ def push_ref_cas(cwd: Path, remote: str, sha: str, ref: str, *, expected_old: st
     it landed: False when the lease was stale, i.e. the remote's ref is not
     *expected_old* any more.
 
-    Any other failure is the remote refusing the push (`PushRefused`, git's words
+    Any other failure is the remote refusing the push (`PushRefusedError`, git's words
     carried): git exits 1 both ways, so the lease is told apart by git's `(stale info)`
     or, failing that, by reading the remote's ref again: a ref that is not *expected_old*
     is a lost race, one that still is (or that cannot even be read) was refused."""
@@ -332,10 +332,10 @@ def push_ref_cas(cwd: Path, remote: str, sha: str, ref: str, *, expected_old: st
         try:
             now = remote_ref(cwd, remote, ref)
         except GitError:
-            raise PushRefused(str(exc)) from exc
+            raise PushRefusedError(str(exc)) from exc
         if now != expected_old:
             return False
-        raise PushRefused(str(exc)) from exc
+        raise PushRefusedError(str(exc)) from exc
     return True
 
 
@@ -748,6 +748,20 @@ class Checkout:
             target.write_bytes(content)
             if meta.split(b" ")[0] == b"100755":
                 target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        # Make the copy a coherent repo whose default branch IS the snapshot: the settings
+        # loader reads policy from the default ref's commit and refuses a remote whose
+        # default it cannot resolve (spec 2026-11-04-repo-feature-settings R2).
+        git(["add", "-A", "--force"], dest)
+        git(
+            [
+                "-c", "user.name=fr", "-c", "user.email=fr@fr.invalid",
+                "-c", "commit.gpgsign=false",
+                "commit", "--quiet", "--allow-empty", "--no-verify", "-m", f"snapshot of {ref}",
+            ],
+            dest,
+        )  # fmt: skip
+        git(["update-ref", "refs/remotes/origin/main", "HEAD"], dest)
+        git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], dest)
 
     def run_command(self, argv: list[str]) -> str:
         """Run the repo's declared `post_merge` argument list in this clone (R14).

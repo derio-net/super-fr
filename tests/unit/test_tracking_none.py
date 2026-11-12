@@ -145,13 +145,13 @@ def test_a_cross_repo_plan_is_gated_by_the_plan_repos_tracking(
     assert "target_repo: derio-net/superpowers-for-vk" in meta  # not this repo
     _profiles(tmp_path, NONE)
     seen: list[Path] = []
-    real = apply_cmd.require_tracker
+    real = apply_cmd.require_forge
 
-    def _spy(root: Path) -> None:
+    def _spy(root: Path, kind: str) -> None:
         seen.append(root)
-        real(root)
+        real(root, kind)
 
-    monkeypatch.setattr(apply_cmd, "require_tracker", _spy)
+    monkeypatch.setattr(apply_cmd, "require_forge", _spy)
     gh = FakeGhClient()
     rc, text, _ = apply_cmd._apply_one(plan_dir, gh, yes=True, force=True)
     assert seen == [tmp_path.resolve()]
@@ -427,3 +427,52 @@ def test_f5_malformed_warning_only_when_out_of_scope_findings_exist(tmp_path: Pa
 
 def test_the_app_still_loads() -> None:
     assert CliRunner().invoke(app, ["--help"]).exit_code == 0
+
+
+# --- R9: dispatch / cancel need forge labels AND comments (p3-r5) ------------------------
+
+
+def _quiet(root: Path, kind: str) -> None:
+    """Land `forge.<kind>: off` on *root*'s local default branch (it has no remote)."""
+    (root / ".fr").mkdir(exist_ok=True)
+    (root / ".fr" / "settings.yaml").write_text(f"forge:\n  {kind}: 'off'\n")
+    for args in (
+        ["add", "-A"],
+        ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "quiet"],
+    ):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+
+@pytest.mark.parametrize("kind", ["labels", "comments"])
+def test_p3_r5_dispatch_yes_refuses_under_labels_or_comments_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    gh = FakeGhClient()
+    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: gh)
+    runner = dispatch_fixtures.FakeRunner()
+    monkeypatch.setattr(triage_batch_cmd, "load_runner", lambda name: runner)
+    clone = tmp_path / "clone"
+    _git_repo(clone)
+    _quiet(clone, kind)
+    monkeypatch.setattr(
+        triage_batch_cmd, "make_checkout", lambda path: dispatch_fixtures.FakeCheckout(clone)
+    )
+    code, out = _dispatch_yes(tmp_path, None, "--yes")
+    assert code == 2, out
+    assert f"forge.{kind}: off" in out
+    assert gh.calls == []
+    assert runner.dispatched == []
+
+
+@pytest.mark.parametrize("kind", ["labels", "comments"])
+def test_p3_r5_cancel_yes_refuses_under_labels_or_comments_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    from tests.unit import test_triage_batch_verbs as verbs
+
+    gh, state = _cancel_env(tmp_path, monkeypatch, None)
+    _quiet(tmp_path / "clone", kind)
+    code, out = verbs._run(state, "cancel", "lifecycle", "--yes")
+    assert code == 2, out
+    assert f"forge.{kind}: off" in out
+    assert gh.calls == []

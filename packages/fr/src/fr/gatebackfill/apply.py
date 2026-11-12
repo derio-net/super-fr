@@ -128,9 +128,11 @@ def _names(issue: dict[str, Any]) -> set[str]:
 
 class _Apply:
     def __init__(
-        self, root: Path, client: GhClient, repo: str, tracking: str, report: ApplyReport
-    ) -> None:
-        self.root, self.client, self.repo, self.tracking = root, client, repo, tracking
+        self, root: Path, client: GhClient, repo: str, report: ApplyReport,
+        *, issues: bool, comments: bool,
+    ) -> None:  # fmt: skip
+        self.root, self.client, self.repo = root, client, repo
+        self.issues, self.comments = issues, comments
         self.report = report
         self.w = _Writer(client, repo)
         self.me = ""
@@ -145,7 +147,7 @@ class _Apply:
 
     def read(self) -> None:
         """The facts every tracker decision needs; read before the first write."""
-        if self.tracking == "none":
+        if not self.issues:
             return
         self.me = self.client.viewer_login()
         self.open = self.client.list_issues(self.repo, "open", OPEN_LIMIT, OPEN_FIELDS)
@@ -223,7 +225,7 @@ class _Apply:
     def _apply(self, e: PlanEntry, adopt_ref: str | None, res: EntryResult) -> None:
         assert e.pr is not None and e.gate is not None
         pr, gate = e.pr.number, e.gate
-        tracked = self.tracking != "none"
+        tracked = self.issues
         issue_state = ""
         if tracked and e.issue is not None:
             issue_state = str(self.client.view_issue(self.repo, e.issue).get("state") or "").upper()
@@ -323,7 +325,9 @@ class _Apply:
         want = (e.key, gate, pr)
         read = trackers.fr_adopt_passed_marker if passed else trackers.fr_adopt_marker
         comments = self.client.list_issue_comments(self.repo, n)
-        if not any(read(b) == want for b in self._authored(comments)):
+        if not self.comments:
+            res.notes.append(f"{ref}: adopted without a comment (forge.comments: off)")
+        elif not any(read(b) == want for b in self._authored(comments)):
             text = (
                 trackers.adopt_passed_comment(e.key, gate, pr, repo_root=self.root)
                 if passed
@@ -336,7 +340,12 @@ class _Apply:
             self.w.issue_labels(n, missing)
             res.actions.append(f"{ref}: + {', '.join(lab.name for lab in missing)}")
         for dup in self.owned_all(e.key):
-            if dup.get("number") != n:
+            if dup.get("number") != n and not self.comments:
+                res.notes.append(
+                    f"duplicate {self.repo}#{dup['number']} left open: its close is a comment "
+                    "(forge.comments: off)"
+                )
+            elif dup.get("number") != n:
                 self.w.close(int(dup["number"]), f"Duplicate of {ref}; tracking moved there.")
                 res.actions.append(f"closed duplicate {self.repo}#{dup['number']}")
         return ref
@@ -344,6 +353,9 @@ class _Apply:
     def _link(self, e: PlanEntry, ref: str, res: EntryResult) -> None:
         assert e.issue is not None
         if ref == f"{self.repo}#{e.issue}":
+            return
+        if not self.comments:
+            res.notes.append(f"closed issue #{e.issue} not linked to {ref} (forge.comments: off)")
             return
         marker = trackers.link_marker(e.key, ref)
         comments = self.client.list_issue_comments(self.repo, e.issue)
@@ -361,8 +373,11 @@ class _Apply:
 
         if not closes:
             return
-        if self.tracking == "none":
-            self.report.notes.append("  tracking none: no tracker closes")
+        if not (self.issues and self.comments):  # a close carries a comment (R9)
+            self.report.notes.append(
+                "  no tracker closes: tracker writes are off "
+                "(forge.issues or forge.comments off, or tracking none)"
+            )
             return
         evidence = merge_evidence(self.root, fetch=False)
         blocked = closes_blocked(self.root, evidence)
@@ -442,7 +457,8 @@ def apply_plan(
     client: GhClient,
     *,
     repo: str,
-    tracking: str,
+    issues: bool,
+    comments: bool = True,
 ) -> ApplyReport:
     """Apply *plan*'s `owed` / `adopt` decisions. *candidates* are the entries re-resolved NOW
     (delivering PR and gate); what is applied is what the plan recorded, and an entry whose
@@ -453,7 +469,7 @@ def apply_plan(
     if plan.repo.lower() != repo.lower():
         raise ApplyRefusedError(f"the plan file names {plan.repo}, not {repo}")
     report = ApplyReport()
-    run = _Apply(repo_root, client, repo, tracking, report)
+    run = _Apply(repo_root, client, repo, report, issues=issues, comments=comments)
     try:
         run.read()
     except _FAILURES as exc:

@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-12 repo-feature-settings, delivery through fr, settable ask and forge-quiet
 ---
 
 ## The premise
@@ -66,7 +66,10 @@ flowchart TD
    Every finding is fixed before the work moves on, not deferred to a human's patience
    later.
 6. **Deliver one pull request (agent).** The whole feature arrives as a single,
-   coherent PR. The agent never merges its own work: delivery and approval are kept
+   coherent PR. It is pushed and opened through fr (`fr push`, `fr pr create`), so the
+   repo's settings (`fr settings show`) can require it to ask you before the push and
+   the PR, and can keep fr's labels, comments and issues off the forge. The agent never
+   merges its own work: delivery and approval are kept
    apart on purpose.
 7. **The manual phase, co-driven (you and the agent).** Anything a machine should not do
    alone (secrets, a production toggle, a deploy) is quarantined into the plan's final

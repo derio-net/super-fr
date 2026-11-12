@@ -26,7 +26,8 @@ from fr.journal.model import (
     spec_journal_slug,
 )
 from fr.run.model import RunState
-from fr.services import ServicesError, TrackerRequiredError, require_tracker
+from fr.services import ServicesError
+from fr.settings import ForgeQuietError, require_forge
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Row
@@ -130,33 +131,32 @@ def _out_of_scope_findings(repo_root: Path, scope: str, slug: str) -> list[tuple
     ]
 
 
-_NO_TRACKER = "no-tracker"
-
-
 def services_invalid_text(exc: Exception) -> str:
     """The one wording for an unreadable services declaration — the brief and
     `fr archive`'s open-ends step both print it."""
     return f"the services declaration in .devcontainer/fr-profiles.yaml is invalid ({exc})"
 
 
-def _tracker_note(repo_root: Path) -> str | None:
-    """`_NO_TRACKER` under `tracking: {type: none}`; a warning line when the
-    services declaration cannot be read; None otherwise.
+def _tracker_note(repo_root: Path) -> tuple[str | None, str | None]:
+    """`(off, warning)`: *off* names the setting under which fr files no issue
+    (`forge.issues: off`, or `tracking: {type: none}`); *warning* is a line when the
+    services declaration cannot be read. Both None otherwise.
 
     Strict resolution, deliberately: the brief is read-only, but a malformed
     `tracking:` block must not silently read as "has a tracker" and hand the
     reader issue-filing commands. It cannot refuse either — the brief has to
-    stay usable after a merge — so it warns loudly and keeps the default lines."""
+    stay usable after a merge — so it warns loudly and keeps the default lines.
+    An unreadable settings file is no such case: it refuses (`SettingsError`)."""
     try:
-        require_tracker(repo_root)
-    except TrackerRequiredError:
-        return _NO_TRACKER
+        require_forge(repo_root, "issues", "labels")  # filing, as `fr archive --issues`
+    except ForgeQuietError as exc:
+        return str(exc), None
     except ServicesError as exc:
-        return (
+        return None, (
             f"{services_invalid_text(exc)}; the `fr archive --issues` line below assumes a "
             "tracker — fix it first"
         )
-    return None
+    return None, None
 
 
 @dataclass(frozen=True)
@@ -274,17 +274,17 @@ def branch_closeout_brief(
     plan_path = run_extras.plan_path if run_extras is not None else None
     out_of_scope = run_extras.out_of_scope if run_extras is not None else []
     if out_of_scope:
-        tracker_note = _tracker_note(repo_root)
-        if tracker_note == _NO_TRACKER:
-            # R6: nowhere to file — the findings stay in the journal and PR body.
+        off, warning = _tracker_note(repo_root)
+        if off is not None:
+            # R6/R9: nowhere to file — the findings stay in the journal and PR body.
             out_of_scope = []
             lines.append(
                 "  out-of-scope findings stay recorded in the journal and PR body; "
-                "no tracker is configured"
+                f"no tracker is configured ({off})"
             )
-        elif tracker_note:
+        elif warning:
             # only the `--issues` line below depends on the declaration
-            lines.append(f"  WARNING: {tracker_note}")
+            lines.append(f"  WARNING: {warning}")
     lines.append("  fr status")
 
     # p4-r2: exact commands, not a "# on a housekeeping branch" comment that
@@ -360,9 +360,9 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     R17): that issue stays open until the walk, so it carries `fr:awaiting-live`
     and triage keeps it out of the ranked backlog. Each repo's add commands follow
     one command creating the label there, which may not exist yet (p4-r4). The PR
-    body is read through
-    the forge adapter, as `deliver` does (gh#742). Nothing under `tracking:
-    none`; an unreadable PR or matrix is said, never read as "nothing owed"."""
+    body is read through the forge adapter, as `deliver` does (gh#742). Nothing when
+    forge labels are off (`forge.labels: off` or `tracking: none`); an unreadable PR
+    or matrix is said, never read as "nothing owed"."""
     from fr.acceptance.check import resolve_identity
     from fr.acceptance.model import AcceptanceError, load_matrix
     from fr.commands.acceptance_cmd import MATRIX_REL
@@ -370,11 +370,11 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     from fr.labels import FR_AWAITING_LIVE
     from fr.record.pr_body import holds_open_for_run, normalize_issue_ref, referenced_refs
     from fr.requirements import load_spec_matrix, run_spec
-    from fr.services.resolve import resolve_tracking
+    from fr.settings import forge_allows
 
     header = "  issues the PR Refs whose post-merge row still awaits its walk:"
     path = repo_root / MATRIX_REL
-    if pr is None or not path.is_file() or resolve_tracking(repo_root, lenient=True).type == "none":
+    if pr is None or not path.is_file() or not forge_allows(repo_root, "labels", lenient=True):
         return []
     try:
         matrix = load_matrix(path)
@@ -469,6 +469,10 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
             has_test_plan = find_test_plan_heading(spec_file.read_text()) is not None
         except OSError:
             has_test_plan = False
+        from fr.settings import disabled as _disabled
+
+        if has_test_plan and _disabled(repo_root, "test_plan"):
+            has_test_plan = False  # R7: the repo owes no Test Plan outcomes
         if has_test_plan:
             from fr.archive import missing_outcomes
 
@@ -512,7 +516,7 @@ def archive_issue_args(repo_root: Path, state: RunState) -> list[str]:
     exactly as the close-out brief names them, or `--no-issues` when there are none or no
     tracker is configured (`tracking: none`), so the archive never stops to ask."""
     qids = [q for q, _ in run_out_of_scope(repo_root, state)]
-    if not qids or _tracker_note(repo_root) == _NO_TRACKER:
+    if not qids or _tracker_note(repo_root)[0] is not None:
         return ["--no-issues"]
     return ["--issues", ",".join(qids)]
 

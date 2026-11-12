@@ -30,7 +30,8 @@ from fr._urls import parse_issue_url
 from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError, parse
 from fr.plan_ops import PlanEditError
-from fr.services import ServicesError, require_tracker
+from fr.services import ServicesError
+from fr.settings import forge_allows, require_forge
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -61,12 +62,15 @@ def undispatch_command(
     # --yes` is — on the plan's own repo, which governs a cross-repo plan too
     # (gh#804). Strict: a malformed declaration refuses as well.
     try:
-        require_tracker(resolve_repo_root(plan_dir.resolve()))
+        root = resolve_repo_root(plan_dir.resolve())
+        require_forge(root, "issues")
+        comment = forge_allows(root, "comments")
     except ServicesError as e:
         if yes:
             err_console.print(str(e), markup=False, soft_wrap=True)
             raise typer.Exit(2) from e
         typer.echo(f"warning: --yes would be refused — {e}")
+        comment = False
     gh = _make_gh_client()
 
     try:
@@ -112,11 +116,12 @@ def undispatch_command(
             state = "CLOSED"
         if state != "CLOSED":
             try:
-                gh.comment_issue(
-                    repo,
-                    issue_n,
-                    f"fr undispatch: dispatched in error from {plan.meta.plan}",
-                )
+                if comment:  # R9: under forge.comments off the close carries no comment
+                    gh.comment_issue(
+                        repo,
+                        issue_n,
+                        f"fr undispatch: dispatched in error from {plan.meta.plan}",
+                    )
                 gh.edit_issue_state(repo, issue_n, state="CLOSED", reason="not planned")
             except Exception as e:  # noqa: BLE001 — keep field for retry
                 failures.append(f"phase {n}: close {repo}#{issue_n} failed: {e}")

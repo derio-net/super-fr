@@ -1,0 +1,118 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'Policy off: acceptance, test_plan and gates, reported as disabled'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - repo-settings-policy-off
+  tier: standard
+  files:
+  - packages/fr/src/fr/settings/*
+  - packages/fr/src/fr/acceptance/*
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/proportionality.py
+  - packages/fr/src/fr/debt/*
+  - packages/fr/src/fr/verification/*
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - plugins/super-fr/hooks/fr-acceptance-nag.sh
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - tests/unit/test_policy_off_*.py
+  - tests/scenarios/repo-settings-policy-off.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/*
+  estimate_lines: 800
+tasks:
+- number: 1
+  title: acceptance off (R6)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_policy_off_acceptance.py — with `artifacts.acceptance: off` on the default ref: `fr acceptance add`, `set-status` and `init` exit 2 naming the setting; a step record carrying an `acceptance:` section is refused by fr.record.apply.apply_record naming the setting (bytes restored); a spec Verification `gate: <row>=tester` line is refused while a run-level `gate: tester` stays valid; `fr acceptance status`, `fr debt`, `fr plan self-review`, proportionality and the rendered PR body each print "disabled by repo setting" where they print "None."/"no acceptance matrix" today. Confirm red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: guard each writer with fr.settings.disabled(root, "acceptance") — acceptance_cmd.py add/set-status/init, record/apply.py `_acceptance_writes`, verification/spec_section.py row-gate lines — and split every absent-matrix branch (record/pr_body.py owed sections, debt/engine.py, plan_ops.py acceptance link check, proportionality.py, acceptance_cmd status) into "absent" vs "disabled by repo setting". Walk evidence under acceptance off stays the run-bound walk log: make `set-status --walk` refuse naming the setting. Tests pass.
+  - id: P2.T1.S3
+    text: |-
+      GREEN: plugins/super-fr/hooks/fr-acceptance-nag.sh prints one "acceptance disabled by repo setting" line (via `fr settings show --json`) instead of the debt nag when disabled; extend its existing test (grep tests/ for fr-acceptance-nag) with that case.
+- number: 2
+  title: test_plan off and gates off, refused at spec time (R7, R8)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_policy_off_spec.py — under `test_plan: off` a spec carrying `## Test Plan` is refused by `fr run resolve --step brainstorm` and `--step spec-review` (exit 2, naming the setting, record untouched) and by `fr validate artifacts` (the spec kind's validator); close-out (fr.run.closeout) and archive (fr.archive outcome_hold) owe no Test Plan outcomes; the matrix staleness guard (acceptance/check.py) does not require a row citing that spec's Test Plan. Under `gates: off` a spec whose ## Verification has any `gate:` line is refused at the same three points, fr.verification.exit computes no gate, and sync_exit_labels writes no gate:<g> label (verification:<kind> labels still sync). Confirm red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: one helper fr.settings.spec_policy_problems(root, spec_path) -> list[str] used by run_cmd's brainstorm/spec-review resolve spec checks and by the spec validator in fr/artifacts/structure.py; guard closeout/archive/staleness with disabled(root, "test_plan"); guard verification/exit.py and verification/labels.py with disabled(root, "gates"). Tests pass.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: make the "disabled by repo setting" wording one constant in fr/settings/__init__.py used by every surface; grep that no surface spells it differently.
+- number: 3
+  title: Skills read the settings (R15, policy part)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      GREEN: add one clause each to plugins/super-fr/skills/fr-brainstorming/SKILL.md (§1/§3: read `fr settings show --json`; under acceptance off present no rows, under test_plan off write no Test Plan, under gates off write no gate lines), fr-acceptance/SKILL.md (disabled repos: nothing to backfill) and fr-goal/SKILL.md (§1 standing questions follow the settings). Keep harness-neutral wording (tests/unit/test_tripwire_skill_tool_neutrality.py). Run `uv run --no-project python scripts/sync-opencode.py` AND `uv run --no-project python scripts/sync-hermes.py`; commit the regenerated mirrors.
+- number: 4
+  title: Acceptance scenario and row
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      GREEN: tests/scenarios/repo-settings-policy-off.sh — fixture repo whose origin main carries `artifacts: {acceptance: off, test_plan: off, gates: off}`; assert `fr acceptance add` refuses naming the setting, `fr acceptance status` prints "disabled by repo setting", and `fr validate artifacts` refuses a spec with a `## Test Plan`. Wire test_repo_settings_policy_off in tests/integration/test_scenarios.py; run it.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: `uv run fr acceptance set-status --id repo-settings-policy-off --status ci --scenario tests/scenarios/repo-settings-policy-off.sh --level unit=super-fr:tests/unit/test_policy_off_acceptance.py#test_<name> --level integration=super-fr:tests/integration/test_scenarios.py#test_repo_settings_policy_off --notes "policy off built; scenario in CI"`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-11-07T10:23:27+00:00'
+      note: null
+  completion:
+    at: '2026-11-07T10:23:27+00:00'
+    note: null
+    observed_prs: []

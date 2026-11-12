@@ -40,15 +40,18 @@ def _now() -> datetime:
 
 
 def _forge(root: Path) -> tuple[DebtForge | None, str]:
-    """The repo's forge adapter and, when there is none, the reason why."""
+    """The repo's forge adapter and, when there is none, the reason why. Reads are never
+    gated (R9): `forge.issues: off` stops `fr debt issue` writing, not this report reading.
+    A repo that declares no tracker (`tracking: none`) has no issues to read."""
+    from fr.settings import TRACKING_NONE, tracking_none
+
+    if tracking_none(root, lenient=True):
+        return None, TRACKING_NONE
     try:
         from fr import _hosts
         from fr.commands.archive_cmd import _make_gh_client
         from fr.debt.forge import ClientDebtForge
-        from fr.services.resolve import resolve_tracking
 
-        if resolve_tracking(root, lenient=True).type == "none":
-            return None, "tracking: none"
         slug = _hosts.origin_slug(root)
         if not slug:
             return None, "no origin remote to name the repository"
@@ -141,8 +144,20 @@ def issue_cmd(
     from fr.debt.engine import DebtConfigError
     from fr.ghclient import ListingCapped, UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS
+    from fr.services import ServicesError
+    from fr.settings import forge_block
 
     root = resolve_repo_root()
+    try:
+        off = forge_block(root, "issues")
+        comments_off = forge_block(root, "comments")
+    except ServicesError as e:
+        typer.echo(f"error: nothing written — {_clean(e, 300)}", err=True)
+        raise typer.Exit(2) from e
+    if off is not None:
+        # R9: the leftover debt stays in the repo's own files; `fr debt` still reports it.
+        typer.echo(f"skipped: no debt issue is written — {off}")
+        return
     slug = _identity(root)
     title = _title(slug)
     try:
@@ -183,6 +198,9 @@ def issue_cmd(
             typer.echo(
                 _clean(client.create_issue(slug, title=title, body=body, labels=frozenset()), 300)
             )
+        elif zero and comments_off is not None:
+            # R9: no comment under `forge.comments: off`; the close is a bare state change
+            client.edit_issue_state(slug, number, state="CLOSED", reason="completed")
         elif zero:
             client.close_issue(
                 slug, number, "No technical debt as of this run; closing. `fr debt` has the report."
@@ -464,7 +482,10 @@ def _commit(root: Path) -> None:
     ident: list[str] = []
     if not _git(root, "config", "user.email", check=False):
         ident = ["-c", "user.name=fr-debt", "-c", "user.email=fr-debt@users.noreply.invalid"]
-    _git(root, *ident, "commit", "-q", "-m", "chore(fr): archive merged plans (debt sweep)")
+    from fr.git_policy.templates import fr_message
+
+    message = fr_message(root, "chore(fr): archive merged plans (debt sweep)")
+    _git(root, *ident, "commit", "-q", "-m", message)
 
 
 def _push(root: Path) -> None:

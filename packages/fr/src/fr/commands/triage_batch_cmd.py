@@ -97,7 +97,7 @@ from fr.isolation.adopt import (
 from fr.isolation.rename import IsolationError, rename_branch
 from fr.labels import APPROVED_FR, FR_AWAITING_LIVE, FR_IN_PROGRESS, held_gates, passed_gates
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
-from fr.services import ServicesError, require_tracker
+from fr.services import ServicesError
 from fr.services.resolve import resolve_services
 from fr.triage import batch_closeout as collected
 from fr.triage.approval import (
@@ -300,6 +300,7 @@ if TYPE_CHECKING:
     from fr_dispatch.protocols import Runner
     from fr_dispatch.work_item import WorkItem
 
+    from fr.settings.remote import RepoPolicy
     from fr.triage.batch import BatchStage
 
 DISPATCH_INSTALL_HINT = (
@@ -1070,8 +1071,12 @@ def _tracking_gate(checkout_path: Path | None, owner_repo: str, *, yes: bool) ->
             checkout = make_checkout(checkout_path)
         except TriageError:
             return  # a dry run needs no clone to warn
+    from fr.settings import require_forge
+
     try:
-        require_tracker(checkout.path)
+        # A dispatch marks its issues taken with a label and a marker comment.
+        require_forge(checkout.path, "labels")
+        require_forge(checkout.path, "comments")
     except ServicesError as exc:
         if yes:
             _fail(str(exc))
@@ -3782,6 +3787,7 @@ class _Driver:
         self._conflicts: dict[str, list[tuple[str, tuple[str, ...]]]] = {}
         self._queued = 0  # per pass: candidates not attempted behind a stopped train
         self._clients: dict[str, GhClient] = {}
+        self._policies: dict[str, RepoPolicy] = {}  # per pass: repo -> its forge policy (R9)
         self._checkouts: dict[str, Checkout] = {}
         self._runners: dict[str, Runner] = {}
         self._unloadable: set[str] = set()  # runners that failed to load, reported once
@@ -3854,6 +3860,37 @@ class _Driver:
 
     def path_of(self, repo: str) -> Path | None:
         return self.checkout_paths.get(repo.lower())
+
+    def policy(self, facts: Facts, repo: str) -> RepoPolicy | str:
+        """*repo*'s forge policy this pass (R9): its checkout's when the driver has one,
+        else its `.fr/settings.yaml` read at the default branch through the forge. A read
+        that fails is the reason the write is refused (a str), never the defaults."""
+        from fr.settings import SettingsError
+        from fr.settings.remote import local_policy, remote_policy
+
+        key = repo.lower()
+        if key not in self._policies:
+            path = self.path_of(repo)
+            try:
+                self._policies[key] = (
+                    local_policy(path)
+                    if path is not None
+                    else remote_policy(self.client(facts, repo), repo)
+                )
+            except SettingsError as exc:
+                return f"its forge policy is unknown, so nothing was written: {exc}"
+        return self._policies[key]
+
+    def forge_off(self, facts: Facts, repo: str, *kinds: str) -> str | None:
+        """The setting under which *repo* takes no tracker write of *kinds* (R9), or why
+        its policy could not be read; None when every kind may be written."""
+        policy = self.policy(facts, repo)
+        return policy if isinstance(policy, str) else policy.first_block(*kinds)
+
+    def ledger_off(self, facts: Facts, repo: str, kind: str) -> str | None:
+        """`forge_off` for the PR gate ledger: only `forge.<kind>` decides (R9)."""
+        policy = self.policy(facts, repo)
+        return policy if isinstance(policy, str) else policy.ledger_block(kind)
 
     def checkout(self, repo: str) -> Checkout:
         if repo not in self._checkouts:
@@ -5142,6 +5179,7 @@ class _Driver:
         self._ci, self._unlanded, self._held = {}, set(), 0
         self._fetched = set()
         self._rules = {}
+        self._policies = {}
         self._unknown_said = set()
         self._clone_unread = {}
         self._restart = {}
@@ -5458,6 +5496,9 @@ class _Driver:
         """R13: label an issue a gated row cites `fr:awaiting-live`, through the adapter. A
         failed write is reported, makes `--once` exit 1, and is planned again next pass."""
         repo, _, number = action.key.rpartition("#")
+        off = self.forge_off(facts, repo, "labels")
+        if off is not None:
+            return f"not labelled {action.key}: {off}", True
         try:
             client = self.client(facts, repo)
             client.ensure_labels(repo, [FR_AWAITING_LIVE])
@@ -5473,14 +5514,24 @@ class _Driver:
         """R14's rows-walked route: swap the merged PR's gate label and comment why."""
         assert action.pr is not None
         why = action.detail.partition(": ")[2] or action.detail
+        off = self.ledger_off(facts, repo, "labels")  # the PR's gate ledger
+        if off is not None:
+            return f"PR #{action.pr}: gate:{action.gate} not passed: {off}", True
+        comments_off = self.ledger_off(facts, repo, "comments")
         try:
-            pass_gate(self.client(facts, repo), repo, action.pr, action.gate, why=why)
+            pass_gate(
+                self.client(facts, repo), repo, action.pr, action.gate, why=why,
+                comment=comments_off is None,
+            )  # fmt: skip
         except _GATE_WRITE_FAILURES as exc:
             self.failed_write = True
             return f"gate pass failed, retried next pass: {exc}", False
         line = f"PR #{action.pr}: gate:{action.gate} -> gate:{action.gate}-passed"
         # R12: the pass also closes the PR's backfill trackers; a failure there is reported
-        # in the line and never reverses the pass.
+        # in the line and never reverses the pass. A tracker closes with a comment (R9).
+        trackers_off = self.forge_off(facts, repo, "issues", "comments")
+        if trackers_off is not None:
+            return f"{line}; trackers not closed: {trackers_off}", True
         report = close_gate_trackers(
             self.client(facts, repo),
             repo,
@@ -6371,7 +6422,14 @@ class _Driver:
         if marker is not None:
             _save_marker(self.target, marker.branch, pr=action.pr, merged=True)
         client = self.client(facts, repo)
-        if marker is None:
+        if marker is None or not marker.closes:
+            return
+        off = self.forge_off(facts, marker.repo, "labels")
+        if off is not None:  # R9: no label write of an off kind, the merge stands
+            self._report_once(
+                f"unlabel-off\0{action.key}",
+                f"{FR_AWAITING_LIVE.name} left on PR #{action.pr}'s closes: {off}",
+            )
             return
         try:
             for ref in marker.closes:

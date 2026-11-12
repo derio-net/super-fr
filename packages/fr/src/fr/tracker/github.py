@@ -26,6 +26,21 @@ if TYPE_CHECKING:
     from fr.ghclient import GhClient
 
 
+def _require_quiet_ok(gh: GhClient, repo: str, *kinds: str) -> None:
+    """Raise `ForgeQuietError` before any write when *repo*'s forge policy (its
+    `.fr/settings.yaml` at the default branch, read through *gh*; R9) forbids a tracker
+    write of *kinds*, or cannot be read."""
+    from fr.settings import ForgeQuietError, SettingsError
+    from fr.settings.remote import client_policy
+
+    try:
+        why = client_policy(gh, repo).first_block(*kinds)
+    except SettingsError as exc:
+        why = str(exc)
+    if why is not None:
+        raise ForgeQuietError(f"no tracker transition is written on {repo} — {why}.")
+
+
 @dataclass(frozen=True)
 class GithubTracker:
     """The GitHub tracker instance (spec §4.G).
@@ -106,6 +121,7 @@ class GithubTracker:
                 f"{self.name!r} instance {self.instance!r} cannot express state {to!r}"
             )
         repo, number = parse_issue_url(item.tracking)
+        _require_quiet_ok(self.gh, repo, "labels", *(("issues",) if to == "done" else ()))
         add = {label.name for label in project_github(to)}
         all_lifecycle = {label.name for state in ITEM_STATES for label in project_github(state)}
         remove = all_lifecycle - add

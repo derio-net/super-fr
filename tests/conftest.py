@@ -72,6 +72,15 @@ def _default_vk_project_id(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_forge_policy_cache() -> None:
+    """`fr.settings.remote.client_policy` keeps a repo's policy per client for minutes; a
+    test's fake client must never meet an answer a previous test's client read."""
+    from fr.settings.remote import clear_client_cache
+
+    clear_client_cache()
+
+
+@pytest.fixture(autouse=True)
 def _skip_artifact_migration_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the CLI-entry migration gate out of the rest of the suite.
 

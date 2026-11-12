@@ -13,7 +13,7 @@ description: >
 
 The matrix (`docs/acceptance/matrix.yaml`) is the registry of business-level acceptance tests × verification levels (unit/api/int/ui) × automation status. This skill drives the agent-side work; the mechanics live in the CLI.
 
-**Announce at start:** "I'm using fr-acceptance to work the acceptance matrix."
+**Announce at start:** "I'm using fr-acceptance to work the acceptance matrix." Check the setting first: If `fr settings show --json` reports `artifacts.acceptance` as `off`, this repo's matrix is disabled by repo setting: there is nothing to backfill, and `fr acceptance add`, `set-status` and `init` refuse. Stop there.
 
 ## Statuses — the honesty scale
 

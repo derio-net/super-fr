@@ -631,5 +631,5 @@ def test_push_ref_cas_tells_a_stale_lease_from_a_refusal(tmp_path: Path, origin:
     assert _git(origin, "rev-parse", ref).strip() == head
 
     _refuse_pushes(origin)
-    with pytest.raises(gitseam.PushRefused, match="refused by policy"):
+    with pytest.raises(gitseam.PushRefusedError, match="refused by policy"):
         gitseam.push_ref_cas(a, str(origin), head, f"{ref}-2", expected_old=None)

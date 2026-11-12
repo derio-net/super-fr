@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/gatebackfill/**
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-12 repo-feature-settings, forge.labels/issues/comments narrow backfill and pass
 ---
 
 # `fr gate backfill` — bringing old owed work into the gate lanes
@@ -192,8 +192,24 @@ Labels (`gate:<g>`, `fr:owed`, `fr:awaiting-live`) are created only right before
 that uses them. Forge errors, including a forge that cannot do an operation, are recorded on their
 entry and the rest go on; the exit code is 1 when any entry failed.
 
-## Tracking `none`
+## Tracking `none` and the repo's forge settings
 
 Under `tracking: {type: none}` in `.devcontainer/fr-profiles.yaml` `--yes` writes only the PR gate
 labels: no tracker, no comment, no `fr:awaiting-live`. The plan file and summary still list every
 owed item. An unreadable services declaration refuses before any write.
+
+The repo's `forge` settings (`fr settings show`) narrow the same writes. The labels are the gate
+ledger, so only `forge.labels` decides them:
+
+- **`forge.labels: off`**: there is no ledger to write. `fr gate backfill --yes` and `fr gate pass`
+  both refuse (exit 2) before writing anything.
+- **`forge.issues: off`**: acts as `tracking: none` does for trackers. None are filed, adopted or
+  closed, and the PR labels are still written.
+- **`forge.comments: off`**: stops every tracker close as well, because a close carries a comment.
+  An adopted issue is labelled without the comment, a duplicate is left open, and a closed issue is
+  not linked; each of these shows up as a note. `fr gate pass` swaps the label without leaving its
+  `fr:gate-pass` comment, so the retry no longer asks for one.
+
+`fr gate pass` reads these settings from the current checkout when its `origin` is the PR's repo,
+and otherwise from that repo's `.fr/settings.yaml` on its default branch. A read that fails
+refuses rather than falling back to the defaults.

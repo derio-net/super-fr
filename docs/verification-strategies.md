@@ -5,7 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/verification/**
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-12 repo-feature-settings, gates and test_plan off; labels follow forge.labels
 ---
 
 # Verification strategies
@@ -67,6 +67,14 @@ A repo can remap a kind's gate in `.fr/triage.yaml` (`exit: {gates: {<kind>:
 <gate>}}`), and a spec's `## Verification` section can set the run's gate with
 `gate: <gate>` and one row's with `gate: <row-id>=<gate>`. `fr verification exit
 --run <id> | --spec <path>` prints the resulting kinds, gates and gated rows.
+
+The repo's settings (`fr settings show`) can switch this off. Under
+`artifacts.gates: off` no gate is computed, labelled or held, and a spec whose
+`## Verification` still sets `gate:` is refused when its `brainstorm` or
+`spec-review` step resolves, and by `fr validate artifacts`. Under
+`artifacts.test_plan: off` a spec carrying a `## Test Plan` is refused at the same
+points, and close-out owes no Test Plan outcomes. Strategies and walks still run. The PR's `verification:*` and
+`gate:*` labels follow `forge.labels` alone.
 
 `install` and `scenario` are a string (split like a shell would) or a list of
 strings. They may interpolate these placeholders and no others:

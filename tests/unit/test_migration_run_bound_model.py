@@ -52,7 +52,7 @@ def test_the_run_kind_is_past_version_nine() -> None:
 def test_the_hop_is_registered_and_moves_eight_to_nine() -> None:
     chain = MIGRATIONS.chain("run", 8)
     # The chain carries on through 9 -> 10 (`run_fr_version`), stamp-only too.
-    assert [(m.from_version, m.to_version) for m in chain] == [(8, 9), (9, 10)]
+    assert [(m.from_version, m.to_version) for m in chain] == [(8, 9), (9, 10), (10, 11)]
 
 
 def test_a_v8_cursor_is_stamped_nine_and_its_body_is_untouched(tmp_path: Path) -> None:
@@ -62,8 +62,8 @@ def test_a_v8_cursor_is_stamped_nine_and_its_body_is_untouched(tmp_path: Path) -
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.failed == (), report.failed
-    assert read_version("run", cursor) == 10
-    assert cursor.read_text() == V8.replace("schema_version: 8", "schema_version: 10")
+    assert read_version("run", cursor) == 11
+    assert cursor.read_text() == V8.replace("schema_version: 8", "schema_version: 11")
     attempt = (
         parse_run_state(cursor.read_text())
         .steps["implement"]

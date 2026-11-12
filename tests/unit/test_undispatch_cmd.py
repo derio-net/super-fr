@@ -16,8 +16,11 @@ FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 REPO = "derio-net/superpowers-for-vk"
 
 
-def _dispatched_plan_repo(tmp_path: Path) -> Path:
-    """Plan with phase 1 dispatched to issue #7."""
+def _dispatched_plan_repo(tmp_path: Path, settings: str | None = None) -> Path:
+    """Plan with phase 1 dispatched to issue #7 (and *settings* as `.fr/settings.yaml`)."""
+    if settings is not None:
+        (tmp_path / ".fr").mkdir()
+        (tmp_path / ".fr" / "settings.yaml").write_text(settings)
     plan_dir = tmp_path / "docs" / "superpowers" / "plans" / "2026-05-09-fixture-minimal"
     shutil.copytree(FIXTURE, plan_dir)
     phase = plan_dir / "01.yaml"
@@ -150,3 +153,17 @@ def test_undispatch_clears_field_when_issue_deleted(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "no longer exists" in result.output
     assert "tracking_issue: null" in (plan_dir / "01.yaml").read_text()
+
+
+def test_p3_r5_comments_off_closes_with_no_comment(tmp_path, monkeypatch):
+    """R9: under `forge.comments: off` undispatch closes the issue and posts nothing."""
+    plan_dir = _dispatched_plan_repo(tmp_path, settings="forge:\n  comments: 'off'\n")
+    gh = FakeGhClient()
+    gh.add_issue(REPO, 7, state="OPEN")
+    result = _invoke(
+        monkeypatch, tmp_path, gh, ["undispatch", str(plan_dir.relative_to(tmp_path)), "--yes"]
+    )
+    assert result.exit_code == 0, result.output
+    assert [c for c in gh.calls if c[0] == "comment_issue"] == []
+    (close,) = [c[1] for c in gh.calls if c[0] == "edit_issue_state"]
+    assert close["state"] == "CLOSED" and close["reason"] == "not planned"

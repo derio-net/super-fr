@@ -1224,3 +1224,45 @@ def test_map_titles_to_item_ids_survives_a_mixed_list() -> None:
     resolved = map_titles_to_item_ids({f"{tag}#{issue_number}: [{repo}]"}, items)
 
     assert resolved == {items[0].id}
+
+
+# --- R9 (amended), p3-r2: the bridge's label writes answer to the repo's forge policy ---
+
+
+def test_p3_r2_labels_off_writes_no_label_and_still_dispatches():
+    """Under `forge.labels: off` (the repo's `.fr/settings.yaml` at its default branch, read
+    through the tick's client) neither the GH-side apply nor the dispatch stamp writes; the
+    item is dispatched and the dedup snapshot is its re-dispatch protection."""
+    from fr_dispatch import tick
+
+    plan, repo, n = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (n,))
+    gh.remote_tree[(repo, ".fr/settings.yaml")] = "forge:\n  labels: 'off'\n"
+    runner = FakeRunner()
+
+    result = tick(plan, gh, runner)
+
+    assert [i.id for i in runner.dispatched] == [MINIMAL_PHASE_1_ID]
+    assert gh.attempted_mutations == 0
+    assert result.errors == 0 and result.synced == 1
+
+
+def test_p3_r2_an_unreadable_policy_refuses_the_label_writes():
+    from fr_dispatch import tick
+
+    from tests.unit.fakes import FakeGhError
+
+    plan, repo, n = _one_phase_plan()
+    gh = FakeGhClient()
+    _ready(gh, plan, repo, (n,))
+
+    def broken(repo: str, path: str) -> str:
+        raise FakeGhError("HTTP 502: bad gateway")
+
+    gh.read_file = broken  # type: ignore[method-assign]
+    result = tick(plan, gh, FakeRunner())
+
+    assert gh.attempted_mutations == 0
+    assert result.synced == 0 and result.errors >= 1
+    assert any(".fr/settings.yaml" in f for f in result.failures)

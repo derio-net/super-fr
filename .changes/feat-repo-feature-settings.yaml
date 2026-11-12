@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr settings: per-repo feature settings (policy off, forge quiet, push/PR ask, squash-unpushed, commit templates)"

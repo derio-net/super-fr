@@ -159,6 +159,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "debt",
             "gate",
             "release",
+            "settings",
             "docs",
         }
     )
@@ -180,6 +181,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "debt",
         "gate",
         "release",
+        "settings",
         "docs",
         "FR_SKIP_MIGRATION=1",
     )

@@ -560,7 +560,8 @@ def file_cmd(
     all and nothing is written."""
     from fr import archive_followups as af
     from fr.journal import file as jf
-    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+    from fr.services import ServicesError
+    from fr.settings import require_forge
 
     _validate_scope(scope)
     if scope == "plan" and (slug is not None or plan_dir is not None):
@@ -582,10 +583,10 @@ def file_cmd(
         )
         raise typer.Exit(2)
     try:
-        require_tracker(root)
-    except (TrackerRequiredError, ServicesError) as e:
+        require_forge(root, "issues", "labels")  # a filed issue carries its labels
+    except ServicesError as e:
         err_console.print(
-            f"refused, nothing filed: {e} Under `tracking: none` a leftover stays recorded "
+            f"refused, nothing filed: {e} With forge issues off a leftover stays recorded "
             "in the journal and the PR body; `deliver` does not ask for it.",
             markup=False,
             soft_wrap=True,
@@ -697,7 +698,8 @@ def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
     The discharge is already recorded; this never changes the exit code."""
     from fr.archive_followups import OWED_ISSUE_FIELDS, owed_identity, owned_owed_key
     from fr.hostclient import issue_command
-    from fr.services import ServicesError, TrackerRequiredError, require_tracker
+    from fr.services import ServicesError
+    from fr.settings import require_forge
 
     shown = _shown(ref)
     comment = f"Discharged: {note}"
@@ -712,9 +714,9 @@ def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
         except Exception:  # noqa: BLE001 — fall back to the plain instruction
             pass
     try:
-        require_tracker(root)
-    except (TrackerRequiredError, ServicesError):
-        typer.echo(f"no tracker configured — close it yourself: {command}")
+        require_forge(root, "issues")
+    except ServicesError as e:
+        typer.echo(f"no tracker configured ({e}) — close it yourself: {command}")
         return
     if isinstance(target, str):
         typer.echo(f"warning: not closing {shown} — {target}; close it yourself if it is yours")
@@ -737,8 +739,11 @@ def _close_owed_issue(root: Path, ref: str, note: str, key: str | None) -> None:
             f"filed ending in this entry's marker; close it yourself if it is yours: {command}"
         )
         return
+    from fr.settings import forge_allows
+
     try:
-        gh.comment_issue(repo, number, comment)
+        if forge_allows(root, "comments"):  # R9: forge.comments off closes it silently
+            gh.comment_issue(repo, number, comment)
         gh.edit_issue_state(repo, number, state="CLOSED")
     except Exception as e:  # noqa: BLE001 — the forge is unreachable: say what to run
         typer.echo(

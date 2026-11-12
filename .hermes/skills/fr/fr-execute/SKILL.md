@@ -80,9 +80,8 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    ```
    A phase carrying `acceptance: [row-ids]` — flip those matrix rows now (`not-implemented` → `unwired`/`walk-owed`/`ci`), citing the test refs; the CLI warns on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows (`fr acceptance add`) — defended at PR time, never silent scope drift.
 
-6. **Open the PR** via `superpowers:finishing-a-development-branch`, with the
-   `fr pickup` title and the body shape above. **Caveat — under fr-goal LOCAL
-   mode, do NOT open a per-phase PR:** push the branch only; the single PR is
+6. **Open the PR** via `superpowers:finishing-a-development-branch`, with the `fr pickup` title and the body shape above: push with `fr push` (`uv run fr push` in a worktree), open the draft with `fr pr create --title <t> --body-file <f>`, never `git push` or the forge CLI — they apply the repo's git policy (`fr pickup`'s commit templates, `git.push`/`git.pr: ask`, `git.history`).
+   **Caveat — under fr-goal LOCAL mode, do NOT open a per-phase PR:** push the branch only (`fr push`); the single PR is
    fr-goal's step 8, opened as a draft by the orchestrator *after* its review
    pass — opening here reorders deliver ahead of review and reintroduces the
    #320 merge-race; with no PR here there is nothing to relay. Per-phase PRs are the standalone

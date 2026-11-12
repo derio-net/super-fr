@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 
 from fr import plan_ops
 from fr.apply import apply
-from fr.diff import diff
+from fr.diff import Diff, IssueLabelChange, Mutation, RepoLabelEnsure, diff
 from fr.ghclient import GhClient
 from fr.item_state import DISPATCH_STAMP, ItemState, state_from_labels
 from fr.observe import observe
@@ -339,6 +339,38 @@ def _tracker_blocker(
     )
 
 
+def _forge_block(gh: GhClient, repo: str, kind: str) -> tuple[str | None, bool]:
+    """`(why, unknown)`: why *repo* takes no tracker write of *kind* (R9; its
+    `.fr/settings.yaml` at the default branch, read through *gh*), and whether that is
+    because its policy could not be read. `(None, False)` when the write may proceed."""
+    from fr.settings import SettingsError
+    from fr.settings.remote import client_policy
+
+    try:
+        return client_policy(gh, repo).block(kind), False
+    except SettingsError as exc:
+        return str(exc), True
+
+
+def _mutation_kind(mutation: Mutation) -> str:
+    return "labels" if isinstance(mutation, IssueLabelChange | RepoLabelEnsure) else "issues"
+
+
+def _quiet_filtered(d: Diff, gh: GhClient, failures: list[str]) -> Diff:
+    """*d* without the mutations whose repo takes no write of their kind (R9). A
+    mutation refused for an unreadable policy is reported; an off kind is skipped."""
+    kept: list[Mutation] = []
+    for mutation in d.mutations:
+        why, unknown = _forge_block(gh, mutation.repo, _mutation_kind(mutation))
+        if why is None:
+            kept.append(mutation)
+        elif unknown:
+            failures.append(f"{mutation.repo}: tracker write refused: {why}")
+        else:
+            logger.info("%s: tracker write skipped: %s", mutation.repo, why)
+    return Diff(tuple(kept), d.suppressed)
+
+
 def tick(
     plan: Plan | SpecMeta | None,
     gh: GhClient,
@@ -417,6 +449,7 @@ def tick(
         # Issue creation is operator-only (via `apply --yes`). The tick must
         # NEVER auto-create Issues — see the 2026-05-18 incident
         # (sfv#196-#214 and sfv#216-#234).
+        d = _quiet_filtered(d, gh, failures)
         apply_result = apply(d, gh, plan=plan, skip_issue_create=True)
         failures.extend(f.error for f in apply_result.failures)
         for phase_n, url in apply_result.created_issues.items():
@@ -541,6 +574,19 @@ def tick(
                 # protection for it is `runner.existing_dispatches`.
                 synced += 1
                 m.push_sync_total()
+                continue
+
+            why, unknown = _forge_block(gh, item.repo, "labels")
+            if why is not None:
+                # R9: no label write of an off kind. Under `forge.labels: off` there is
+                # nothing to stamp (as with no tracker artifact, the dedup snapshot is
+                # the re-dispatch protection); a policy that cannot be read refuses it.
+                if unknown:
+                    failures.append(f"{item.id}: gh stamp refused: {why}")
+                    m.push_failure_total(reason="gh_error")
+                else:
+                    synced += 1
+                    m.push_sync_total()
                 continue
 
             try:

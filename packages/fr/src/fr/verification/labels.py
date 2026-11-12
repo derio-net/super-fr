@@ -70,6 +70,8 @@ class SyncOutcome:
     removed: tuple[str, ...] = ()
     unknown: bool = False
     """The run's exit could not be read, so its labels are not known (`warning` says why)."""
+    off: str | None = None
+    """The setting that turned PR labels off (`fr.settings.ledger_block`), when it did."""
 
 
 def desired_labels(kinds: frozenset[str], gates: frozenset[str]) -> list[LabelDef]:
@@ -107,7 +109,9 @@ def sync_exit_labels(
 ) -> SyncOutcome:
     """Bring the PR's `verification:*` / `gate:*` labels to the run's exit.
 
-    A no-op under `tracking: none`. `SyncOutcome.warning` carries a forge that cannot
+    These labels are the PR gate ledger, so `fr.settings.ledger_block` decides: a no-op
+    under `forge.labels: off` (`SyncOutcome.off` names it); `tracking: none` does not
+    stop them (R9). `SyncOutcome.warning` carries a forge that cannot
     label a PR (`UnsupportedForgeOperation`); `SyncOutcome.unknown` an exit that cannot
     be read (the section or matrix is `fr plan self-review`'s to report), which a caller
     that needs the labels treats as a failure. `ForgeUndeterminable` / `PrNotFound` say
@@ -115,16 +119,13 @@ def sync_exit_labels(
     remap, raises `LabelSyncError`.
     """
     from fr.acceptance.model import AcceptanceError
-    from fr.services.model import ServicesError
-    from fr.services.resolve import resolve_tracking
+    from fr.settings import ledger_block
     from fr.verification.exit import run_exit
     from fr.verification.spec_section import SectionError
 
-    try:
-        if resolve_tracking(repo_root, lenient=True).type == "none":
-            return SyncOutcome(synced=False)
-    except ServicesError:
-        pass
+    off = ledger_block(repo_root, "labels")
+    if off is not None:
+        return SyncOutcome(synced=False, off=off)
     try:
         gh = client if client is not None else client_for(repo_root)
         repo, number = _target(repo_root, state, pr, gh)
@@ -171,16 +172,19 @@ def gate_pass_comment(gate: str, why: str) -> str:
     return f"{GATE_PASS_MARKER}{gate} -->\nThe **{gate}** gate passed: {why}"
 
 
-def pass_gate(client: GhClient, repo: str, pr: int, gate: str, *, why: str) -> None:
+def pass_gate(
+    client: GhClient, repo: str, pr: int, gate: str, *, why: str, comment: bool = True
+) -> None:
     """R14, both routes: swap PR *pr*'s `gate:<gate>` for `gate:<gate>-passed` and comment
     what passed it. The merged PR's labels are the gate ledger, so a pass needs no commit.
     Forge failures propagate: the caller decides what one means.
     The comment goes FIRST and the labels after (p4-r4): a failed comment leaves the
     gate held, so the pass is retried and its record is never lost; a comment already
     carrying this gate's marker (a pass whose swap failed) is not posted twice.
+    With *comment* False (`forge.comments: off`, R9) only the labels move.
     """
     marker = f"{GATE_PASS_MARKER}{gate} -->"
-    posted = any(
+    posted = not comment or any(
         str(c.get("body") or "").lstrip().startswith(marker)
         for c in client.list_issue_comments(repo, pr)
     )

@@ -58,10 +58,10 @@ def test_review_record_is_pushed_before_the_closeout_relay(skill: Path) -> None:
     and checks the branch is level with its upstream — before stopping."""
     deliver = _deliver(skill)
     review = deliver.index("--kind review")
-    push = deliver.find("git push", review)
+    push = deliver.find("fr push", review)  # R12: the skills push through `fr push`
     relay = deliver.index("closeout: fr pickup --branch")
     assert review < push < relay, (
-        f"{skill.relative_to(REPO_ROOT)}: Deliver must `git push` after the review "
+        f"{skill.relative_to(REPO_ROOT)}: Deliver must `fr push` after the review "
         "record and before relaying the closeout line (gh#871)."
     )
     assert "@{u}..HEAD" in deliver[push:relay], (

@@ -42,11 +42,11 @@ def client(*prs: int) -> FakeGhClient:
 
 def run(
     c: FakeGhClient, *entries: PlanEntry, fresh: list[PlanEntry] | None = None,
-    tracking: str = "github", tmp: Path = Path("/nonexistent"),
+    tracking: str = "github", tmp: Path = Path("/nonexistent"), comments: bool = True,
 ) -> ApplyReport:  # fmt: skip
     plan = PlanFile(repo=REPO, entries=list(entries))
     return apply_plan(tmp, plan, fresh if fresh is not None else list(entries), c,
-                      repo=REPO, tracking=tracking)  # fmt: skip
+                      repo=REPO, issues=tracking != "none", comments=comments)  # fmt: skip
 
 
 def names(c: FakeGhClient) -> list[str]:
@@ -360,7 +360,7 @@ def test_a_second_apply_makes_no_write() -> None:
 def test_no_plan_file_refuses_before_any_write() -> None:
     c = client()
     with pytest.raises(ApplyRefusedError):
-        apply_plan(Path("/x"), None, [entry()], c, repo=REPO, tracking="github")
+        apply_plan(Path("/x"), None, [entry()], c, repo=REPO, issues=True)
     assert c.attempted_mutations == 0
 
 
@@ -368,7 +368,7 @@ def test_a_plan_for_another_repo_refuses() -> None:
     c = client()
     plan = PlanFile(repo="example-org/gadgets", entries=[entry()])
     with pytest.raises(ApplyRefusedError, match="gadgets"):
-        apply_plan(Path("/x"), plan, [entry()], c, repo=REPO, tracking="github")
+        apply_plan(Path("/x"), plan, [entry()], c, repo=REPO, issues=True)
     assert c.attempted_mutations == 0
 
 
@@ -558,3 +558,19 @@ def test_p2_r8_the_cursors_are_read_once_per_apply(
         tmp=tmp_path,
     )  # fmt: skip
     assert len(calls) == 1
+
+
+def test_r9_comments_off_adopts_links_and_dedupes_without_a_single_comment() -> None:
+    """spec 2026-11-04-repo-feature-settings R9: under `forge.comments: off` the backfill
+    still labels and files, but writes no comment anywhere — each skip is noted."""
+    c = client()
+    foreign(c, 8)
+    tracker(c, 5, t.tracker_body(KEY, "x", "devops", 41))
+    report = run(c, entry(decision=f"adopt {REPO}#8"), comments=False)
+    c.add_issue(REPO, 9, state="CLOSED")
+    linked = run(c, entry("issue:example-org/widgets#9", issue=9), comments=False)
+    assert "comment_issue" not in kinds(c) and "close_issue" not in kinds(c)
+    assert c.issues[(REPO, 8)].labels >= {"fr:owed"}
+    notes = [n for r in (*report.results, *linked.results) for n in r.notes]
+    assert any("forge.comments: off" in n and "adopted" in n for n in notes), notes
+    assert any("duplicate" in n for n in notes) and any("not linked" in n for n in notes)

@@ -556,6 +556,17 @@ def commit_paths(
             committed=False,
             reason=f"{toplevel} has no commits yet; the files are uncommitted",
         )
+    # Repo settings R14: fr's own `chore(fr): …` subject goes through the commit
+    # templates here, the one seam. A policy fr cannot read refuses the commit.
+    from fr.git_policy.templates import fr_message
+    from fr.settings import SettingsError
+
+    try:
+        message = fr_message(toplevel, message)
+    except SettingsError as e:
+        return CommitOutcome(
+            committed=False, reason=f"refusing to commit: repo settings: {e}; {_UNCOMMITTED}"
+        )
     held = index_lock_held(toplevel)
     deadline = time.monotonic() + lock_wait
     while held is not None and time.monotonic() < deadline:

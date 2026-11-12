@@ -123,6 +123,30 @@ def test_zero_debt_closes_the_issue_with_a_comment(env: tuple[Gh, dict]) -> None
     assert gh.issues[(SLUG, 5)].state == "CLOSED"
 
 
+def test_p3_r6_zero_debt_under_comments_off_closes_the_issue_with_no_comment(
+    env: tuple[Gh, dict], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R9: `forge.comments: off` writes no comment, so the zero-debt close is a bare state
+    change (the issue is still closed: closing is an `issues` write)."""
+    import types
+
+    from fr.settings.model import parse_settings
+
+    quiet = parse_settings({"forge": {"comments": "off"}}, source="test")
+    monkeypatch.setattr(
+        "fr.settings.load_settings", lambda _root: types.SimpleNamespace(settings=quiet)
+    )
+    gh, box = env
+    box["report"] = _report(False)
+    gh.add_issue(SLUG, 5, body=f"{render.MARKER}\n")
+    result = runner.invoke(app, ["debt", "issue", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert not [n for n, _ in gh.calls if n in ("close_issue", "comment_issue")]
+    (state,) = [c for n, c in gh.calls if n == "edit_issue_state"]
+    assert state["number"] == 5 and state["state"] == "CLOSED"
+    assert gh.issues[(SLUG, 5)].state == "CLOSED"
+
+
 def test_zero_debt_with_no_issue_files_nothing(env: tuple[Gh, dict]) -> None:
     gh, box = env
     box["report"] = _report(False)

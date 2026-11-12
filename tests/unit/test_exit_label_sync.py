@@ -95,15 +95,37 @@ def test_an_in_sync_pr_is_not_edited(tmp_path: Path) -> None:
     assert out.synced and not any(c[0] == "edit_pr_labels" for c in fake.calls)
 
 
-def test_nothing_is_synced_under_tracking_none(
+def test_p3_r1_the_ledger_syncs_under_tracking_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The PR's `verification:*` / `gate:*` labels are the gate ledger: `tracking: none`
+    (no tracker) does not stop them; only `forge.labels` does (R9)."""
     monkeypatch.setattr(
         "fr.services.resolve.resolve_tracking", lambda *_a, **_k: types.SimpleNamespace(type="none")
     )
     fake = _fake([])
     out = sync_exit_labels(_repo(tmp_path, "strategy: live"), _state(), URL, client=fake)
+    assert out.synced and out.off is None
+    assert fake.pr_labels[(REPO, 5)] == {"verification:live", "gate:tester"}
+
+
+def _labels_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.settings.model import parse_settings
+
+    settings = parse_settings({"forge": {"labels": "off"}}, source="test")
+    monkeypatch.setattr(
+        "fr.settings.load_settings", lambda _root: types.SimpleNamespace(settings=settings)
+    )
+
+
+def test_p3_r5_nothing_is_synced_under_forge_labels_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _labels_off(monkeypatch)
+    fake = _fake([])
+    out = sync_exit_labels(_repo(tmp_path, "strategy: live"), _state(), URL, client=fake)
     assert not out.synced and fake.calls == []
+    assert out.off is not None and "forge.labels: off" in out.off
 
 
 def test_an_unsupported_forge_is_a_warning(tmp_path: Path) -> None:

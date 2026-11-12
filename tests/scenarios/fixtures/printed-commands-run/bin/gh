@@ -5,6 +5,7 @@ so a second `--yes` sees what the first one wrote. Anything it does not know fai
 import json
 import os
 import sys
+from pathlib import Path
 
 argv = sys.argv[1:]
 with open(os.environ["FAKE_GH_LOG"], "a") as log:
@@ -61,6 +62,14 @@ elif head == ["pr", "view"]:
                       "baseRefName": "main", "mergeable": "UNKNOWN", "mergeStateStatus": "UNKNOWN",
                       "mergeCommit": {"oid": ""}, "title": "feat: widget", "body": "",
                       "labels": [{"name": x} for x in pr["labels"]]}))
+elif argv[:2] == ["api", "repos/example-org/widgets/contents/.fr/settings.yaml"]:
+    # No `.fr/settings.yaml` on the default branch: the contents API's captured 404 for a
+    # missing path (R9: absent means the defaults), as merge-train-label-gate's double answers.
+    caps = Path(__file__).resolve().parents[4] / "fixtures" / "github_rest"
+    err = json.loads((caps / "repo_contents_docs_no-such-path.error.json").read_text())
+    sys.stdout.write(err["stdout"])
+    sys.stderr.write(err["stderr"])
+    sys.exit(err["exit"])
 elif argv[:1] == ["api"] and "/commits/" in argv[1]:
     print('[{"number":12,"state":"closed","merged_at":"2026-10-11T00:00:00Z",'
           '"html_url":"https://github.com/example-org/widgets/pull/12"}]')

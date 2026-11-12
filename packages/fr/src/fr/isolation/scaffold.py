@@ -25,6 +25,7 @@ from typing import Any, Literal
 import yaml
 
 from fr._hosts import HostBackend
+from fr.git_policy.templates import fr_message
 from fr.isolation.types import IsolationError, harden_secret_file, secrets_env_file
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
@@ -679,7 +680,7 @@ def _commit_profile(
         repo_root,
         "commit",
         "-m",
-        f"chore(fr): scaffold {profile} devcontainer profile",
+        fr_message(repo_root, f"chore(fr): scaffold {profile} devcontainer profile"),
         "--",
         *paths,
     )
@@ -695,7 +696,7 @@ def commit_paths(repo_root: Path, paths: list[str], message: str) -> bool:
     _git(repo_root, "add", "--", *paths)
     if _git(repo_root, "diff", "--cached", "--quiet", "--", *paths).returncode == 0:
         return False
-    result = _git(repo_root, "commit", "-m", message, "--", *paths)
+    result = _git(repo_root, "commit", "-m", fr_message(repo_root, message), "--", *paths)
     if result.returncode != 0:
         _git(repo_root, "reset", "-q", "--", *paths)
         raise IsolationError(f"git commit failed: {result.stderr.strip() or result.stdout.strip()}")

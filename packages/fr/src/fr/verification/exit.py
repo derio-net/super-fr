@@ -67,8 +67,12 @@ def _build(verification: SpecVerification, rows: list[Row]) -> Exit:
     def kind(strategy: str | None) -> str:
         return strategy if strategy is not None else RESERVED
 
-    run_gate = verification.run_gate()
-    row_gates = {r.id: verification.gate(r) for r in rows}
+    from fr.settings import disabled
+
+    # R8: under `gates: off` no gate is computed, labelled or held; strategies still run.
+    gates_off = verification.repo_root is not None and disabled(verification.repo_root, "gates")
+    run_gate = "none" if gates_off else verification.run_gate()
+    row_gates = {r.id: "none" if gates_off else verification.gate(r) for r in rows}
     run_kind = kind(verification.run_strategy())
     row_kinds = {r.id: kind(verification.strategy(r)) for r in rows}
     kinds = {run_kind, *row_kinds.values()}
@@ -128,7 +132,10 @@ def run_plan_dir(repo_root: Path, state: RunState) -> Path | None:
 def _promote(exit_: Exit, repo_root: Path, state: RunState) -> Exit:
     """R13: `devops` beside the declared gates whenever the run's plan has any op."""
     from fr.ops.load import plan_has_ops
+    from fr.settings import disabled
 
+    if disabled(repo_root, "gates"):
+        return exit_
     plan_dir = run_plan_dir(repo_root, state)
     if plan_dir is None or not plan_has_ops(repo_root, plan_dir):
         return exit_

@@ -83,6 +83,14 @@ MIGRATIONS.register(rerender_migration(1, 2))
 """1 -> 2: `fr-spec-reviewer` checks the Test Plan heading is exactly `## Test Plan`
 (super-fr#1315)."""
 
+MIGRATIONS.register(rerender_migration(2, 3))
+"""2 -> 3: `fr-spec-reviewer` reviews against the repo's settings and raises nothing a
+setting turned off (spec 2026-11-04-repo-feature-settings R15)."""
+
+MIGRATIONS.register(rerender_migration(3, 4))
+"""3 -> 4: `fr-phase-executor` pushes with `fr push`, never `git push` (spec
+2026-11-04-repo-feature-settings R12)."""
+
 MIGRATIONS.register(
     Repair(
         kind=KIND,

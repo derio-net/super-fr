@@ -472,6 +472,21 @@ def test_p6_r8_the_driver_merges_the_collected_pr_then_unlabels_what_it_closed(
     assert judgements.closeouts[0].merged
 
 
+def test_p3_r2_labels_off_merges_the_collected_pr_and_leaves_its_closes_labelled(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """R9: under `forge.labels: off` on the batch repo the merge stands and
+    `fr:awaiting-live` is not removed (no label write of an off kind), said once."""
+    _started(world, tmp_path, "b1", "b2", checkout=checkout, draft=True)
+    world.files[".fr/settings.yaml"] = "forge:\n  labels: 'off'\n"
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert world.calls.count("pr_merge 900") == 1
+    assert "label 7" not in world.calls
+    assert "fr:awaiting-live left on PR #900's closes: forge.labels: off" in out
+
+
 def test_p6_r6_a_collected_pr_touching_code_is_never_auto_merged(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:

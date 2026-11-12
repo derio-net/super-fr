@@ -86,7 +86,7 @@ it never mutates the repo or gh (it may `git fetch` remote-tracking refs).
 
 `fr acceptance status` — counts by status + open debt (`unwired` / `walk-owed`
 / `not-implemented` / `failing`) rows (oldest first); `--brief` is the session-start form. `fr status <plan-dir>`
-appends the same summary when a matrix exists. See `fr-acceptance`.
+appends the same summary when a matrix exists. Under `artifacts.acceptance: off` (`fr settings show --json`) every acceptance surface says "disabled by repo setting": no debt to report. See `fr-acceptance`.
 
 ## Tick / complete phases
 

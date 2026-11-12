@@ -90,6 +90,7 @@ The skills drive `fr`, and every step they take is a command you can run yoursel
 | `fr undispatch` | Close a plan's tracking Issues and null the fields. |
 | `fr pickup` | Output phase scope (markdown) for an agent. |
 | `fr repair` | Normalize stale plan/spec refs + strip dead plan-config keys (dry-run; --yes to write). |
+| `fr push` | Push this run's feature branch under the repo's git policy. |
 | `fr skills` | Show the CLI surface and a summary of each skill. |
 | `fr services` | Read-only: the resolved forge / ci / tracking services. |
 | `fr acceptance` | Acceptance matrix: business-level acceptance tests × verification levels. |
@@ -111,11 +112,13 @@ The skills drive `fr`, and every step they take is a command you can run yoursel
 | `fr triage` | Backlog triage: collect forge facts, check judgements, render a board. |
 | `fr usage` | What harness sessions and runs cost, split by activity and step (read-only). |
 | `fr debt` | What this repo owes: acceptance, plans and owed actions (read-only). |
+| `fr settings` | Per-repo feature settings: init, show, check. |
 | `fr docs` | Docs currency: pages must keep up with the code they cover (read-only). |
 | `fr gate` | Post-merge gates: record that a gate passed on its PR (the gate ledger). |
 | `fr ops` | Manual operations of a plan: check, apply, attest. |
 | `fr release` | Release gating: what still waits on a post-merge gate since the last final. |
 | `fr closeout` | Close-out records: one outcome per spec Test Plan step. |
+| `fr pr` | Pull requests fr opens (always drafts). |
 <!-- /generated:cli -->
 
 ## Read more

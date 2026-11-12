@@ -463,7 +463,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 10: `RunState.fr_version` — the fr a run started under (spec
             # `2026-10-07-cloud-triage-design` §G, R16), migration
             # `fr.artifacts.run_fr_version`. Additive, so stamp-only.
-            current_version=10,
+            # 11: `RunState.issue` and `RunState.pr` — the run's issue and the
+            # PR `fr pr create` opened (spec 2026-11-04-repo-feature-settings
+            # R12, R14), migration `fr.artifacts.run_issue`. Additive, so stamp-only.
+            current_version=11,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
@@ -591,7 +594,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `fr.artifacts.agents_kind.rerender_migration` for the hop
             # (`tests/unit/test_tripwire_agents_data.py` pins the pair).
             # 2: fr-spec-reviewer checks the `## Test Plan` heading (#1315).
-            current_version=2,
+            # 3: fr-spec-reviewer reviews against the repo's settings (repo-feature-settings R15).
+            # 4: fr-phase-executor pushes with `fr push` (repo-feature-settings R12).
+            current_version=4,
             locator=".claude/agents/fr-*.md",
             stamp=f"`{AGENTS_STAMP_KEY}` in the agent's front matter",
             read_stamp=_read_agents_stamp,

@@ -44,7 +44,8 @@ from fr.diff import (
 )
 from fr.parser import Plan, PlanSchemaError
 from fr.plan_ops import PlanEditError
-from fr.services import ServicesError, require_tracker
+from fr.services import ServicesError
+from fr.settings import require_forge
 from fr.workflow.model import WorkflowError
 from fr.workflow.resolve import workflow_for_plan
 
@@ -265,7 +266,9 @@ def _apply_one(
         # The PLAN repo's declaration governs, for a cross-repo plan too
         # (gh#804): fr has no checkout of `target_repo` to read one from, and
         # the plan repo is the one that declared where its work is tracked.
-        require_tracker(resolve_repo_root(plan_dir.resolve()))
+        plan_root = resolve_repo_root(plan_dir.resolve())
+        require_forge(plan_root, "issues")
+        require_forge(plan_root, "labels")  # the runner reads its queue from the labels
     except ServicesError as e:
         tracking_problem = str(e)
     if yes and tracking_problem is not None:

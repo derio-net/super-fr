@@ -8,13 +8,20 @@ Exit code conventions (uniform across every subcommand):
   4 = gh / network failure during `fr apply`
   5 = plan parse error (`PlanSchemaError`)
 
+A `SettingsError` from any command is caught once, here, at the root group:
+`fr: settings: <message>` on stderr and exit 2, never a traceback (spec
+2026-11-04-repo-feature-settings R2).
+
 Mutating commands (`fr apply`, `fr migrate v1-to-v2`) default to a
 dry-run. Pass `--yes` to actually write changes.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 import typer
+from typer.core import TyperGroup
 
 from fr import __version__
 from fr.artifacts.trigger import ensure_artifacts_current
@@ -38,11 +45,14 @@ from fr.commands.models_cmd import models_app
 from fr.commands.ops_cmd import ops_app
 from fr.commands.pickup_cmd import pickup_command
 from fr.commands.plan_cmd import plan_app
+from fr.commands.pr_cmd import pr_app
+from fr.commands.push_cmd import push_cmd
 from fr.commands.release_cmd import release_app
 from fr.commands.repair_cmd import repair_command
 from fr.commands.repos_cmd import repos_app
 from fr.commands.run_cmd import run_app
 from fr.commands.services_cmd import services_command
+from fr.commands.settings_cmd import settings_app
 from fr.commands.skills_cmd import skills as skills_command
 from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
@@ -53,7 +63,22 @@ from fr.commands.validate_cmd import validate_app
 from fr.commands.verification_cmd import verification_app
 from fr.commands.workflow_cmd import workflow_app
 
+
+class _FrGroup(TyperGroup):
+    """The root group: maps a settings refusal from any subcommand to a clean exit 2."""
+
+    def invoke(self, ctx: Any) -> Any:  # a click Context; fr never imports click
+        from fr.settings import SettingsError
+
+        try:
+            return super().invoke(ctx)
+        except SettingsError as e:
+            typer.echo(f"fr: settings: {e}", err=True)
+            raise typer.Exit(2) from e
+
+
 app = typer.Typer(
+    cls=_FrGroup,
     name="fr",
     help="super-fr: plan-as-folder superpowers toolchain, render → observe → diff → apply.",
     no_args_is_help=True,
@@ -93,11 +118,16 @@ app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
 app.add_typer(debt_app, name="debt")
+app.add_typer(settings_app, name="settings")
 app.add_typer(docs_app, name="docs")
 app.add_typer(gate_app, name="gate")
 app.add_typer(ops_app, name="ops")
 app.add_typer(release_app, name="release")
 app.add_typer(closeout_app, name="closeout")
+app.add_typer(pr_app, name="pr")
+app.command(name="push", help="Push this run's feature branch under the repo's git policy.")(
+    push_cmd
+)
 app.command(name="skills")(skills_command)
 app.command(name="services", help="Read-only: the resolved forge / ci / tracking services.")(
     services_command

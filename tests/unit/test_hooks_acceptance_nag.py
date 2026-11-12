@@ -219,3 +219,40 @@ def test_a_stale_refusal_names_the_workspace_way_to_carry_it(tmp_path: Path) -> 
     assert "fr-isolation workspace" in done.stdout
     assert "fr isolation up --branch" in done.stdout
     assert "fr migrate artifacts --yes" in done.stdout
+
+
+def test_nag_says_acceptance_is_disabled_when_the_repo_setting_is_off(tmp_path: Path) -> None:
+    from tests.unit.settings_repo import land_on_main, make_repo
+
+    root = make_repo(tmp_path)
+    land_on_main(root, "artifacts:\n  acceptance: off\n")
+    assert run_hook(root).stdout == ""  # no matrix: the cheap early exit (p2-r6)
+    (root / "docs" / "acceptance").mkdir(parents=True)
+    (root / "docs" / "acceptance" / "matrix.yaml").write_text("org: o\nrepo: r\nrows: []\n")
+    result = run_hook(root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "acceptance disabled by repo setting"
+
+
+def test_p2_r6_no_matrix_exits_before_spawning_fr(tmp_path: Path) -> None:
+    """The cheap early exit: a repo with no matrix never starts an `fr` process."""
+    root = tmp_path / "plain"
+    root.mkdir()
+    _git(root)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "calls"
+    fake = bin_dir / "fr"
+    fake.write_text(f'#!/bin/bash\necho "$@" >> {calls}\n')
+    fake.chmod(0o755)
+    payload = json.dumps({"session_id": "s", "cwd": str(root), "hook_event_name": "SessionStart"})
+    result = subprocess.run(
+        ["bash", str(SCRIPT)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert not calls.exists(), calls.read_text()

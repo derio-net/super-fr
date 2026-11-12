@@ -62,6 +62,14 @@ class LabelForge:
     def __init__(self, prs: dict[int, dict[str, Any]]) -> None:
         self.prs = prs
         self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
+        self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
+
+    def read_file(self, repo: str, path: str) -> str:
+        from fr.gh import GhError
+
+        if path not in self.files:
+            raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
+        return self.files[path]
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         return dict(self.prs[number])
@@ -105,6 +113,17 @@ def test_settle_voids_a_head_the_chain_does_not_reach_and_removes_the_label() ->
     assert (event.head, event.voided_at) == ("h1", "h9")
     assert got == {"a": Unlabelled()}
     assert said == ["approval of PR #7 at h1 voided: head moved to h9"]
+
+
+def test_p3_r2_labels_off_leaves_the_label_and_records_no_void() -> None:
+    """R9: under `forge.labels: off` fr removes no `approved-fr` label, so it records no
+    void either (the void and the removal stand together) and approves nothing."""
+    forge = LabelForge({7: {"state": "OPEN", "head_oid": "h9", "labels": [LABEL, "x"]}})
+    forge.files[".fr/settings.yaml"] = "forge:\n  labels: 'off'\n"
+    got, written, said = _settle(forge, [(_batch("a", _approval(7, "h1")), 7)])
+    assert forge.label_edits == [] and written == []
+    assert said[0].startswith("approval of PR #7 at h1 not voided: forge.labels: off")
+    assert got["a"] != Approved("h1")
 
 
 def test_settle_is_a_no_op_on_an_approved_or_unlabelled_pr() -> None:

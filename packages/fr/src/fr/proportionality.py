@@ -162,6 +162,10 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
     )
     from fr.phase_sizing import phase_asks, split_decisions
     from fr.requirements import RequirementsError, parse_requirements
+    from fr.settings import disabled, disabled_because
+
+    if disabled(repo_root, "acceptance"):
+        return [disabled_because("acceptance", "asks cannot be derived from a matrix") + "."]
 
     meta = _meta_at_head(repo_root, plan)
     spec_ref_value = str(meta.get("spec") or "")

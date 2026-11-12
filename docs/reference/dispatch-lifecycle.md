@@ -11,7 +11,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-12 repo-feature-settings, label and issue writes follow the repo's forge settings
 ---
 
 # Dispatch labels and the per-repo plan profile
@@ -37,6 +37,18 @@ Two more labels are markers, not states. `fr:synced` is the bookkeeping stamp th
 phase was handed to the runner, so it is never handed over twice. `manual` marks a
 human-only phase, which is never routed to an agent. An issue created without `--to` is
 tracking-only and carries no lifecycle label.
+
+All of this is what the defaults give you. A repo's forge settings (`.fr/settings.yaml`
+on its default branch, `fr settings show`) can switch writes off by kind:
+
+- **`forge.labels: off`**: neither `fr apply` nor the bridge writes any of these labels,
+  including `fr:synced`. The bridge's dedup snapshot is then the only thing that stops a
+  phase being handed over twice.
+- **`forge.issues: off`**: no tracking issue is created or closed, and the bridge's
+  close-on-merge backstop closes nothing.
+
+If the bridge cannot read a repo's settings, it refuses that repo's writes and reports
+the failure. It never falls back to the defaults.
 
 ## The reachability gate
 

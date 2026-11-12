@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -513,12 +514,26 @@ def test_advance_rejects_an_unrecognised_fr_harness_value(tmp_path: Path) -> Non
 # --- Task 2: fr run advance — agent steps NEVER execute anything ---
 
 
+def _boom_but_git(message: str):
+    """A `subprocess.run` that refuses everything but `git`: the brief reads the repo's
+    commit templates from the default ref (repo settings R14), a git read. Executing
+    anything else for an agent step — a model above all — still fails the test."""
+    real = subprocess.run
+
+    def run(*args, **kwargs):
+        argv = args[0] if args else kwargs.get("args")
+        if isinstance(argv, (list, tuple)) and argv and Path(str(argv[0])).name == "git":
+            return real(*args, **kwargs)
+        raise AssertionError(message)
+
+    return run
+
+
 def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -> None:
     """The structural half of no-claude-p-batch: assert nothing is executed."""
     import fr.commands.run_cmd as run_cmd
 
-    def _boom(*args, **kwargs):
-        raise AssertionError("fr run advance must never execute anything for an agent step")
+    _boom = _boom_but_git("fr run advance must never execute anything for an agent step")
 
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
@@ -565,8 +580,7 @@ def test_advance_onto_a_still_held_agent_step_refuses_and_still_executes_nothing
     the step is still left `running` — a refusal writes no state at all."""
     import fr.commands.run_cmd as run_cmd
 
-    def _boom(*args, **kwargs):
-        raise AssertionError("must never execute anything for an agent step")
+    _boom = _boom_but_git("must never execute anything for an agent step")
 
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
@@ -1093,12 +1107,14 @@ def test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields(tmp_pat
     # `record` the pre-filled step record (spec 2026-09-25 §5.C.3), and
     # `unbound_tiers` the active harness's unbound tiers (gh#538), and
     # `dead_bindings`/`binding_offers` the gated step's binding health
-    # (spec 2026-10-06-model-binding-churn R6).
+    # (spec 2026-10-06-model-binding-churn R6), and `commit_templates` the repo's
+    # commit subject templates (spec 2026-11-04-repo-feature-settings R14).
     assert set(brief) == step_fields | {
         "run",
         "workflow",
         "step",
         "record",
+        "commit_templates",
         "unbound_tiers",
         "dead_bindings",
         "binding_offers",
@@ -5624,8 +5640,7 @@ def test_advance_refusing_a_running_agent_step_executes_and_writes_nothing(
     writes nothing, so the run file is byte-identical across the refusal."""
     import fr.commands.run_cmd as run_cmd
 
-    def _boom(*args, **kwargs):
-        raise AssertionError("must never execute anything for an agent step")
+    _boom = _boom_but_git("must never execute anything for an agent step")
 
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
@@ -6639,7 +6654,7 @@ def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path
     stdout = result.stdout
     idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
     idx_pickup = stdout.index("fr pickup --run r1")
-    idx_push = stdout.index("push it (git push)")
+    idx_push = stdout.index("push it (fr push)")
     assert idx_push < idx_closeout < idx_pickup
     assert stdout.rstrip().splitlines()[-1].strip() == "fr pickup --run r1"
 
@@ -6703,7 +6718,7 @@ def test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pus
 
     assert result.exit_code == 0, result.output
     assert "cursor committed as" not in result.stdout
-    assert "push it (git push)" not in result.stdout
+    assert "push it (fr push)" not in result.stdout
     assert "cursor NOT committed" in result.stdout
     # #814: the refusal line, too, comes before the closeout pair, never after.
     assert result.stdout.rstrip().splitlines()[-1].strip() == "fr pickup --run r1"
@@ -6861,6 +6876,7 @@ def _grouped_oi_repo(tmp_path: Path, journal: str | None) -> tuple[Path, Path]:
 
 
 _MEMBER_BRIEF_KEYS = {
+    "commit_templates",  # spec 2026-11-04-repo-feature-settings R14
     "run",
     "workflow",
     "step",

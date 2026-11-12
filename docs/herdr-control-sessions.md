@@ -7,7 +7,7 @@ covers:
   - packages/fr-herdr/src/**
   - packages/fr/src/fr/triage/batch*.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-12 repo-feature-settings, batch dispatch records the run's issue; the session control described is unchanged
 ---
 
 # Herdr control sessions

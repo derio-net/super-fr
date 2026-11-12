@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-12 repo-feature-settings, the OpenCode nag exits early under acceptance off; install unchanged
 ---
 
 # Installing super-fr

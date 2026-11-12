@@ -101,6 +101,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "debt",
     "gate",
     "release",
+    "settings",
     "docs",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
@@ -164,6 +165,9 @@ PR's `gate:<g>` label for `gate:<g>-passed` and comments, because the merged PR'
 the gate ledger; it touches no registered artifact.
 `fr release` (same spec, R21) reads tags and the forge and writes nothing: `status` lists the
 merged PRs a post-merge gate still holds, and `release.py` runs it on the default branch.
+`fr settings` (spec 2026-11-04-repo-feature-settings, R3) never mutates a registered artifact:
+`show` and `check` read `.fr/settings.yaml` from the default ref, and `init` writes that file,
+which is no artifact kind, and commits nothing.
 `fr docs` (2026-11-11 docs-currency, R8) writes nothing: it reads `.fr/docs.yaml` (not a registered
 artifact kind, like `.fr/debt.yaml`), page files and read-only git, and must run in CI on a tree
 the gate would refuse."""
@@ -222,6 +226,12 @@ _FALSY: Final[frozenset[str]] = frozenset({"", "0", "false", "no", "off"})
 
 def _truthy(environ: Mapping[str, str], name: str) -> bool:
     return (environ.get(name) or "").strip().lower() not in _FALSY
+
+
+def in_ci(env: Mapping[str, str] | None = None) -> bool:
+    """Whether any `CI_ENV_VARS` marker is truthy: the one "is this CI?" answer."""
+    environ = os.environ if env is None else env
+    return any(_truthy(environ, name) for name in CI_ENV_VARS)
 
 
 def is_exempt(
@@ -333,7 +343,7 @@ def is_interactive(
     predicate rather than inventing a second answer to the same question.
     """
     environ = os.environ if env is None else env
-    if any(_truthy(environ, name) for name in CI_ENV_VARS):
+    if in_ci(environ):
         return False
     if _truthy(environ, NON_INTERACTIVE_ENV_VAR):
         return False
@@ -367,7 +377,7 @@ def classify(
     `is_interactive` stays the one answer to "is this an operator's terminal?".
     """
     environ = os.environ if env is None else env
-    if any(_truthy(environ, name) for name in CI_ENV_VARS):
+    if in_ci(environ):
         return "ci"
     if _truthy(environ, NON_INTERACTIVE_ENV_VAR):
         return "opt-out"

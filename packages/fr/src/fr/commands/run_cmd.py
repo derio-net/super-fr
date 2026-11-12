@@ -413,7 +413,7 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
     except GitUnavailableError:
         sha = None
     if sha:
-        return [f"cursor committed as {sha} — push it (git push) so the PR carries it", *closeout]
+        return [f"cursor committed as {sha} — push it (fr push) so the PR carries it", *closeout]
     return closeout
 
 
@@ -3504,8 +3504,24 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
         # step; a fan-out group's record is per member, in the member brief.
         "record": None if step.steps else _record_brief(state, step),
+        "commit_templates": commit_templates_brief(resolve_repo_root(), state.issue),
         "unbound_tiers": _unbound_tiers(resolve_repo_root()),
         **_gated_binding_keys(step),
+    }
+
+
+def commit_templates_brief(repo_root: Path, issue: int | None) -> dict[str, Any]:
+    """The repo's commit subject templates and the run's issue (spec
+    2026-11-04-repo-feature-settings R14): what an agent's commit subjects must
+    match, `with_issue` when the run records an issue. `fr push` checks them."""
+    from fr.settings import load_settings
+
+    commit = load_settings(repo_root).settings.git.commit
+    return {
+        "use": "with_issue" if issue is not None else "without_issue",
+        "with_issue": commit.with_issue,
+        "without_issue": commit.without_issue,
+        "issue": issue,
     }
 
 
@@ -4290,6 +4306,7 @@ def _build_member_brief(
         "for_each": group.for_each,
         "steps": [],
         "record": _record_brief(state, member, group, item),
+        "commit_templates": commit_templates_brief(resolve_repo_root(), state.issue),
         # R6: every agent-step brief carries them; a member is never
         # `gate: operator`, so there is nobody here to answer them.
         "dead_bindings": None,
@@ -4777,6 +4794,50 @@ def _bind_session(workspace: Path, branch: str, session: str | None, harness: st
         )
 
 
+def _refuse_spec_policy(
+    repo_root: Path, state: RunState, step_id: str, emitted_map: dict[str, str]
+) -> None:
+    """R7, R8: the step that accepts the spec (`brainstorm`, `spec-review`) refuses one the
+    repo's policy forbids (a Test Plan under `test_plan: off`, a `gate:` line under
+    `gates: off`), naming the setting, before anything is written."""
+    if step_id not in ("brainstorm", *_spec_review_ids(repo_root, state)):
+        return
+    from fr.requirements import run_spec
+    from fr.settings import SettingsError, spec_policy_problems
+
+    spec_rel = emitted_map.get("spec") or run_spec(state)
+    if not spec_rel:
+        return
+    try:
+        problems = spec_policy_problems(repo_root, repo_root / spec_rel)
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    if problems:
+        err_console.print(f"[red]{step_id}: {escape(spec_rel)} breaks the repo's settings:[/red]")
+        for problem in problems:
+            err_console.print(f"  {escape(problem)}", soft_wrap=True)
+        raise typer.Exit(2)
+
+
+def _refuse_incoherent_settings(repo_root: Path) -> None:
+    """Spec 2026-11-04-repo-feature-settings R5: a run never starts over settings that
+    are invalid or contradict each other, named one per line, before anything is written."""
+    from fr.settings import SettingsError
+    from fr.settings.check import check_settings
+
+    try:
+        problems = check_settings(repo_root)
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    if problems:
+        err_console.print("[red]fr settings are incoherent:[/red]")
+        for problem in problems:
+            err_console.print(f"  {escape(problem.message)}", soft_wrap=True)
+        raise typer.Exit(2)
+
+
 @run_app.command("start")
 @_commits_run_writes("start")
 def start_cmd(
@@ -4797,6 +4858,12 @@ def start_cmd(
         help="`standalone` when standalone fr-brainstorming starts the run: its operator "
         "gate is not held to fr-goal's two-round cap (gh#761). Omit under /fr-goal.",
     ),
+    issue: int | None = typer.Option(
+        None,
+        "--issue",
+        help="The forge issue this run works on: fr's commit subjects then use the "
+        "`git.commit.with_issue` template (repo settings R14).",
+    ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
 
@@ -4814,6 +4881,9 @@ def start_cmd(
             "/fr-goal drives the run)[/red]",
             soft_wrap=True,
         )
+        raise typer.Exit(2)
+    if issue is not None and issue < 1:
+        err_console.print(f"[red]--issue {issue}: an issue number is positive[/red]")
         raise typer.Exit(2)
     repo_root = resolve_repo_root()
     try:
@@ -4836,6 +4906,8 @@ def start_cmd(
         for err in shape_errors:
             err_console.print(f"  {err}", soft_wrap=True)
         raise typer.Exit(2)
+
+    _refuse_incoherent_settings(repo_root)
 
     try:
         workspace = ensure_run_workspace(repo_root, branch)
@@ -4934,6 +5006,7 @@ def start_cmd(
         steps=steps,
         driver="standalone" if driver == "standalone" else None,
         fr_version=_fr_version(),
+        issue=issue,
     )
     _save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")
@@ -6355,6 +6428,42 @@ def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id
         raise refuse(outcome.warning or "the exit cannot be read")
     if outcome.warning:
         err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
+    if outcome.off:
+        err_console.print(f"PR labels not synced: {outcome.off}", markup=False, soft_wrap=True)
+
+
+def _same_pr(recorded: str, pr: str) -> bool:
+    """*pr* (a url, `#n` or `n`) names the PR whose url the cursor recorded."""
+    if pr == recorded:
+        return True
+    number = pr.removeprefix("#")
+    return number.isdigit() and recorded.rstrip("/").rsplit("/", 1)[-1] == number
+
+
+def _deliver_pr_ask_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
+    """Under `git.pr: ask` (spec 2026-11-04-repo-feature-settings R12), `deliver`
+    accepts only the PR `fr pr create` opened: the one the cursor recorded."""
+    from fr.settings import load_settings
+
+    if load_settings(repo_root).settings.git.pr != "ask":
+        return
+    if state.pr is None:
+        err_console.print(
+            "refused: under `git.pr: ask` deliver accepts only a PR `fr pr create` opened, "
+            "and this run's cursor records none. Open it with `fr pr create --title <t> "
+            "--body-file <f>` (it asks the operator first), then resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if pr is not None and not _same_pr(state.pr, pr):
+        err_console.print(
+            f"refused: under `git.pr: ask` deliver accepts only the PR `fr pr create` opened "
+            f"({state.pr}), not {pr}",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
 
 
 def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
@@ -6362,6 +6471,12 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     carries every required section (spec 2026-09-25 §5.C.4). The render is
     the one file a refusal leaves behind: it is what the agent opens the PR
     with. On success the render is removed — it goes with the delivered step.
+
+    Under `forge.pr_body: minimal` (spec 2026-11-04-repo-feature-settings R10) the
+    live PR stays a plain summary: the render is kept durable at
+    `runs/<run-id>.pr-body.md` (committed with this resolve, never removed), the live
+    body is not asked for fr's sections but is refused any fr marker, and the
+    closing-keyword checks hold either way.
     """
     from fr.artifacts.atomic import write_text_atomic
     from fr.hostclient import FORGE_ERRORS, client_for, pr_command
@@ -6369,12 +6484,21 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.record.pr_body import (
         PR_BODY_NAME,
         REQUIRED_SECTIONS,
+        durable_pr_body_path,
+        fr_markers,
         missing_sections,
         render_pr_body,
         shared_closing_keywords,
     )
+    from fr.settings import load_settings
 
-    body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
+    _deliver_pr_ask_gate(repo_root, state, pr)
+    pr = pr or state.pr
+    minimal = load_settings(repo_root).settings.forge.pr_body == "minimal"
+    if minimal:
+        body_path = durable_pr_body_path(repo_root, state.run)
+    else:
+        body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
     write_text_atomic(body_path, render_pr_body(repo_root, state))
     rel = body_path.relative_to(repo_root).as_posix()
@@ -6384,7 +6508,8 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     try:
         live = client_for(repo_root).pr_body(ref, cwd=repo_root)
     except FORGE_ERRORS as e:
-        create = pr_command(repo_root, "create", body=rel)
+        # R12: fr's skills open every PR through `fr pr create` (always a draft).
+        create = f"fr pr create --title <title> --body-file {rel}"
         err_console.print(
             f"refused: cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open "
             f"the PR with `{create}`, record its url (`emitted: "
@@ -6393,14 +6518,30 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
-    required = (
-        (*REQUIRED_SECTIONS, HISTORICAL_HEADING) if historical_reviews(state) else REQUIRED_SECTIONS
-    )
-    missing = missing_sections(live, required=required)
-    # Review p2-r1: the heading alone is not the control — the operator's ok
-    # is given against the LIST, so every historical review must be named.
-    live_lines = {line.strip() for line in live.splitlines()}
-    missing += [line for line in historical_review_lines(state) if line not in live_lines]
+    if minimal:
+        markers = fr_markers(live)
+        if markers:
+            edit = pr_command(repo_root, "edit", ref=ref, body="<plain summary file>")
+            err_console.print(
+                "refused: under `forge.pr_body: minimal` the live PR carries no fr marker, "
+                f"and it has: {'; '.join(markers)}. Replace the body with a plain summary "
+                f"(`{edit}`); the full render stays at {rel} — and resolve again",
+                markup=False,
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        missing: list[str] = []
+    else:
+        required = (
+            (*REQUIRED_SECTIONS, HISTORICAL_HEADING)
+            if historical_reviews(state)
+            else REQUIRED_SECTIONS
+        )
+        missing = missing_sections(live, required=required)
+        # Review p2-r1: the heading alone is not the control — the operator's ok
+        # is given against the LIST, so every historical review must be named.
+        live_lines = {line.strip() for line in live.splitlines()}
+        missing += [line for line in historical_review_lines(state) if line not in live_lines]
     if missing:
         edit = pr_command(repo_root, "edit", ref=ref, body=rel)
         err_console.print(
@@ -6428,6 +6569,16 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         )
         raise typer.Exit(2)
     _refuse_premature_closes(repo_root, state, live)
+    if minimal:
+        # Kept, and committed with this resolve: it is what the operator reviews.
+        _note_record_write(repo_root, body_path)
+        err_console.print(
+            f"PR body (forge.pr_body: minimal): review the full render at {rel} — its "
+            "findings, owed rows and historical-review list; the live PR stays plain",
+            markup=False,
+            soft_wrap=True,
+        )
+        return
     from fr.record.apply import _is_tracked
 
     tracked = _is_tracked(repo_root, body_path)
@@ -6689,6 +6840,9 @@ def _resolve_body(
             f"{state.workflow!r} changed after `fr run start`[/red]"
         )
         raise typer.Exit(2)
+
+    if state_value == "done":
+        _refuse_spec_policy(repo_root, state, step_id, emitted_map)
 
     cursor_record = state.steps.get(state.cursor)
     finished = (

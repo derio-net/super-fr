@@ -15,7 +15,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 repo-feature-settings, settings shape the spec and plan; executor pushes through fr
 ---
 
 ## Overview: why the idea gets written down twice
@@ -198,6 +198,12 @@ Constraints worth knowing:
   superpowers skills unchanged.
 - `fr plan self-review` is a lint, not a proof. It cannot tell whether a spec's
   requirements are the right ones.
+- What a spec and plan contain depends on the repo's settings (`fr settings show`).
+  Under `artifacts.acceptance: off` there are no acceptance rows to present or link.
+  Under `test_plan: off` there is no Test Plan. Under `gates: off` there is no gate split.
+  The spec, the plan and the journals themselves can never be turned off.
+- Outside fr-goal, the executor pushes with `fr push` and opens its draft with
+  `fr pr create`, never `git push` or the forge's CLI, so the repo's git policy applies.
 - A plan that is a single `.md` file is the old v1 format. `fr migrate v1-to-v2 --yes`
   converts every one in the repo at once; commit that as its own change.
 

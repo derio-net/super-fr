@@ -362,7 +362,7 @@ def push_state(
             # The remote no longer has the ref at all (p3-r4): the base is stale, not a sign
             # of another writer. Create it, still as a compare-and-swap.
             landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=None)
-    except gitseam.PushRefused as exc:
+    except gitseam.PushRefusedError as exc:
         raise StateRefPushRefused(
             f"{remote_repo} refused the push of {ref} (not another writer: the ref did not "
             f"move): {exc}"

@@ -1755,6 +1755,15 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
         for rid in ph.phase.acceptance:
             linked.setdefault(rid, ph.phase.number)
 
+    from fr.settings import disabled, disabled_because
+
+    if disabled(root, "acceptance"):
+        return [
+            ReviewIssue(
+                severity="info",
+                message=disabled_because("acceptance", "no matrix rows to link to the Test Plan"),
+            )
+        ]
     matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
     if not matrix_path.exists():
         return [

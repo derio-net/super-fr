@@ -107,6 +107,16 @@ describe("acceptance nag", () => {
     }
   });
 
+  test("acceptance: off says disabled, never debt (spec 2026-11-04 R6)", async () => {
+    const { runFr } = stub({
+      code: 0,
+      stdout: "acceptance: disabled by repo setting (artifacts.acceptance: off)\n",
+    });
+    const event = ctxEvent();
+    await createNagHandler({ session: topLevel, directory: repo, runFr })(event);
+    expect(event.system).toEqual([{ type: "text", text: "acceptance disabled by repo setting\n" }]);
+  });
+
   test("a stale-artifact refusal says why the nag is missing", async () => {
     const { runFr } = stub({ code: 2, stdout: "", stderr: "fr: artifacts … must be migrated" });
     const event = ctxEvent();

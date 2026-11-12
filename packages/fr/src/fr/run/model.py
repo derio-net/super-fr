@@ -383,6 +383,14 @@ class RunState(BaseModel):
     (`fr.artifacts.run_fr_version`), which the triage driver's drift check
     reports as unknown and never re-homes (R17). No plugin version beside it:
     the plugin is lockstepped with `fr`."""
+    issue: int | None = None
+    """The forge issue this run works on (spec 2026-11-04-repo-feature-settings
+    R14), set by `fr run start --issue <n>`. When set, fr's commit subjects use
+    the `git.commit.with_issue` template. Run version 11
+    (`fr.artifacts.run_issue`)."""
+    pr: str | None = None
+    """The PR `fr pr create` opened for this run (R12), its url. Under
+    `git.pr: ask`, `deliver` accepts only this PR. Run version 11."""
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

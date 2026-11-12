@@ -71,6 +71,7 @@ class World:
         self.stale_in_progress: list[Any] = []  # closed hits collect read (post-merge truth)
         self.skipped: list[Any] = []  # repos collect did not read
         self.hidden: set[int] = set()  # PRs opened after the facts' collect (merge-truth R7)
+        self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
 
     # -- world building
     def pr(self, number: int, head_ref: str, closes: list[int], **kw: Any) -> None:
@@ -235,6 +236,14 @@ class World:
 
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"
+
+    def read_file(self, repo: str, path: str) -> str:
+        """The contents API at the default branch: a repo's `.fr/settings.yaml` (R9)."""
+        from fr.gh import GhError
+
+        if path not in self.files:
+            raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
+        return self.files[path]
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         return [dict(c) for c in self.comments.get(number, [])]
