@@ -1,0 +1,170 @@
+# Captured 2026-11-12: a verbatim excerpt of derio-net/super-fr's own
+# docs/acceptance/matrix.yaml at schema_version 5 (rows copied byte for byte,
+# in matrix order; the header comment block dropped). Never edit by hand.
+schema_version: 5
+org: derio-net
+repo: super-fr
+rows:
+  - id: acceptance-pipeline-rows
+    capability: Acceptance matrix
+    acceptance: Rows are born at brainstorm (presented with defenses), linked in plans,
+      flipped at execution; self-review fails unlinked plans
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_acceptance_links.py
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1338
+    issues:
+    - derio-net/super-fr#1338
+  - id: acceptance-nag-channels
+    capability: Acceptance matrix
+    acceptance: Session start surfaces open debt (capped), fr status carries the summary,
+      and the weekly digest issue upserts and closes at zero
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_acceptance_nag.py
+      - super-fr:tests/unit/test_plan_acceptance_links.py
+      - super-fr:tests/unit/test_acceptance_init.py
+    status: walked
+    notes: 'walked (p1-r4): the live weekly upsert has been observed, issue #363 refreshed
+      by the schedule on 2026-10-05; hook, digest formatter and Actions summary scaffold
+      are ci-pinned. The close at zero debt is not yet observed.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-10-05T00:00:00Z'
+      evidence: issue derio-net/super-fr#363 'Acceptance debt' is open and was last
+        refreshed by the scheduled acceptance-report run (github-actions) on 2026-10-05
+  - id: acceptance-report-dual
+    capability: Acceptance report
+    acceptance: The committed report set is generated together and regenerated on every
+      matrix mutation (fr acceptance add / report --deterministic / init).
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-acceptance-dual-reports-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-25-acceptance-report-formats-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_report.py
+      - super-fr:tests/unit/test_acceptance_status_add.py
+    status: ci
+    notes: render_committed_set writes the whole set; add/init regenerate it. File set
+      is report_local.html + report_linked.html + report_linked.md (see acceptance-report-formats).
+  - id: runner-unit-refusal
+    capability: Runner and tracker negotiation
+    acceptance: fr apply --to <runner> refuses, before any forge call, a runner that
+      takes no phase work; and a tick that refuses an item for its unit says so instead
+      of blaming the repo.
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-apply-runner-units.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_apply_runner_units.py
+    status: ci
+    notes: 'super-fr#644. Runner.units is a class attribute read off the registered
+      entry point (fr_dispatch.registry.runner_units) without building the runner, since
+      vk and cncd have no from_env. apply refuses a runner whose units lack phase (herdr:
+      run only) or that declares none, with exit 2 and _make_gh_client never called.
+      vk, cncd and herdr each gate can_dispatch on their own units, so the declaration
+      and the per-item gate cannot drift. tick reports a unit refusal as unit_mismatch
+      naming the units the runner does take; any other can_dispatch refusal is reported
+      as a refusal naming the runner, unit and repo, with the historical unknown_repo
+      metric reason kept.'
+  - id: agent-worktrees-reaped-by-fr
+    capability: isolation-conformity
+    acceptance: A subagent's isolation worktree is cut outside the repo, locked with its
+      Claude session's pid, and every dispatch fires a sweep that reaps it once it is
+      at least 24h old (72h while its session's pid still answers), clean, and every
+      commit on it is reachable from a ref; dirty or unreachable ones are reported,
+      never removed.
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-11-01-agent-worktrees-accumulate.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_agent_worktrees.py
+      - super-fr:tests/unit/test_isolation_gc_hygiene.py#test_gc_runs_the_agent_worktree_sweep
+      int:
+      - super-fr:tests/unit/test_hooks_worktree.py#TestWorktreeCreate::test_agent_worktree_lands_outside_the_repo
+      - super-fr:tests/unit/test_hooks_worktree.py#TestWorktreeCreate::test_agent_worktree_is_locked_with_the_session_pid
+    status: ci
+    notes: 'gh#1270. Hook level filed under int (no hook level). LIVE 2026-11-01, Claude
+      Code 2.1.316, throwaway repo registering this branch''s fr-worktree-create.sh
+      as its only WorktreeCreate hook: the subagent ran in ~/.cache/fr/agent-worktrees/repo/agent-<id>,
+      locked with the Claude pid; WorktreeRemove was never fired (twice observed); the
+      sweep skipped it as young, then with the clock at +25h and the pid dead reaped
+      and logged it. Claude Code accepted the out-of-repo path for a subagent.'
+    issues:
+    - derio-net/super-fr#1270
+    harnesses:
+    - claude-code
+  - id: opencode-2-plugin-loads
+    capability: OpenCode adaptation
+    acceptance: The delivered super-fr plugin loads in OpenCode 2.x as a V2 plugin definition
+      (id plus setup) and its hooks are registered
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-20-opencode-2-support-design.md#R1
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/plugin.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/wiring.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/registration.test.ts
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_registers_the_delivered_plugin_exactly_once
+      - super-fr:tests/integration/test_opencode_plugin_live.py#test_opencode_runs_the_delivered_gate
+    status: ci
+    notes: 'Retained existing CI coverage: delivered V2 super-fr loads and refuses base
+      edits in test_opencode_plugin_live.py on CI-pinned versions. Added 2026-10-30
+      synthetic registration-control regression for repository super-fr.development
+      plus global super-fr: explicit -super-fr selects source setup once in either discovery
+      order and repo-only use, including distinct module paths; real source edit gate
+      denies a base edit. This is not a real 2.1.4 server-loader walk. Final isolated
+      Bun run independently confirmed: 243 pass, 1 existing marker test fails because
+      it assumes no container evidence inside a devcontainer. Global/repo registration
+      on a real server remains unwalked for the new bytes; external RC14 failure evidence
+      is in the debug journal.'
+    verify: candidate
+    scenario: tests/scenarios/opencode-plugin-v2.sh
+  - id: light-path-shape
+    capability: fr-goal-cost
+    acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light`
+      or a brainstorm-record rebind (first step only, same first step), and the light
+      plan step refuses a plan with more than one agentic phase
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-fr-goal-light-path-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_light_shape.py
+      - super-fr:tests/unit/test_migration_record_shape.py
+    status: ci
+    notes: 'Phase 3 (spec §A, R1/R2): fr-goal-light shape, brainstorm-record rebind
+      (first step only, same first step, valid shape, done only), single-phase derived
+      gate, record kind v5.'
+  - id: board-idle-session
+    capability: Backlog triage
+    acceptance: The triage board marks a card needs-you, saying why, when its batch
+      or close-out session has sat idle past the threshold with nothing to show for
+      it
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-10-06-driver-sessions-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_batch_card_idle_with_no_pr_needs_you_and_says_why
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_closeout_card_idle_with_no_archive_pr_needs_you_and_says_why
+      - super-fr:tests/unit/test_triage_kanban.py#test_a_card_with_a_pr_is_not_flagged
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_write_board_judges_idleness_by_the_wall_clock
+    status: ci
+    notes: card needs-you and its reason line are pinned by kanban card tests and write_board's
+      wall clock; rendered and screenshot-checked in a headless browser (record visual
+      section)
+    verify: none
+    visual:
+      states:
+      - idle-batch-card-needs-you
+      - idle-closeout-card-needs-you
+      - idle-card-with-pr-not-flagged

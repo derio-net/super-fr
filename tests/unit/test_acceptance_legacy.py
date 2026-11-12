@@ -88,3 +88,47 @@ def test_guard_matrix_still_refuses_an_unreadable_matrix(tmp_path: Path) -> None
     path.write_text(_V2.replace("status: ci", "status: sheduled"))
     with pytest.raises(UnreadableMatrixError):
         guard_matrix(path)
+
+
+# --- version 5 (spec 2026-11-04-repo-feature-settings R19) --------------------
+
+_V5_FIXTURE = Path(__file__).parents[1] / "fixtures" / "acceptance" / "matrix_v5_excerpt.yaml"
+
+
+def test_the_v5_reader_reads_the_captured_excerpt_of_this_repos_matrix() -> None:
+    m = legacy.parse_matrix_v5(_V5_FIXTURE.read_text())
+    assert m.schema_version == 5
+    assert (m.org, m.repo) == ("derio-net", "super-fr")
+    by_id = {r.id: r for r in m.rows}
+    assert len(by_id) == 8
+    assert any(r.walks for r in m.rows)
+    assert any(r.visual for r in m.rows)
+    assert any(r.issues for r in m.rows)
+    assert any(r.scenario for r in m.rows)
+    assert len(by_id["light-path-shape"].origin) == 2
+    assert len(by_id["acceptance-report-dual"].origin) == 2
+    assert "journals/debug/" in by_id["runner-unit-refusal"].origin[0]
+
+
+def test_the_v5_reader_refuses_an_older_shape_and_duplicates() -> None:
+    text = _V5_FIXTURE.read_text()
+    with pytest.raises(legacy.MatrixV5Error):
+        legacy.parse_matrix_v5(text.replace("status: ci", "status: skipped", 1))
+    with pytest.raises(legacy.MatrixV5Error):
+        legacy.parse_matrix_v5(text.replace("schema_version: 5", "schema_version: 4"))
+    with pytest.raises(legacy.MatrixV5Error, match="duplicate"):
+        legacy.parse_matrix_v5(text + text.partition("rows:\n")[2])
+
+
+def test_the_frozen_v5_reader_has_not_been_edited() -> None:
+    frozen = {
+        name for name, obj in vars(legacy).items() if inspect.isclass(obj) and name.endswith("V5")
+    } - {"MatrixV5Error"}
+    assert frozen == set(legacy.FROZEN_V5_CLASS_SHA256)
+    drifted = {
+        name
+        for name in frozen
+        if hashlib.sha256(inspect.getsource(getattr(legacy, name)).encode()).hexdigest()
+        != legacy.FROZEN_V5_CLASS_SHA256[name]
+    }
+    assert not drifted, f"{sorted(drifted)} changed; freeze a `…V6` beside them instead"
