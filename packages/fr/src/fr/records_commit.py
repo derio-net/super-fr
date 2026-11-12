@@ -20,6 +20,7 @@ from fr.artifacts.commit import (
     CommitOutcome,
     NoRepo,
     QuietProductWriteError,
+    StealthPushError,
     commit_paths,
     git_context,
 )
@@ -91,8 +92,10 @@ def commit_records(
         if not todo or isinstance(git_context(repo_root), NoRepo):
             return outcome  # not in a git repo (or nothing written): a no-op, as before
         reason = outcome.reason
-    except QuietProductWriteError:
-        raise  # R23: a hard error (exit 2), never a stderr line over exit 0 (p3-r1)
+    except (QuietProductWriteError, StealthPushError):
+        # R23 / R24: a hard error (exit 2), never a stderr line over exit 0 (p3-r1); a
+        # tracking push that did not land refuses the step.
+        raise
     except Exception as e:  # noqa: BLE001 — losing the commit must not lose the write
         reason = f"{type(e).__name__}: {e}"
         outcome = CommitOutcome(committed=False, reason=reason)

@@ -18,10 +18,9 @@ logical spec lookup) iterates `feature_roots` rather than knowing the placement.
 (`docs/superpowers/...`, `docs/acceptance/...`) may appear in fr's source; the tripwire
 `tests/unit/test_tripwire_artifact_paths.py` refuses one anywhere else.
 
-The placement is read in the plan's precedence: a stealth marker in this workspace,
-then a valid `refs/remotes/origin/fr` switch (quiet, `fr.placement.quiet`), then `repo`.
-Stealth is not served yet: R4's "not yet available" refusal, in the loader's own wording
-(`fr.settings.load.unservable_placement`).
+The placement is read in the plan's precedence: a stealth marker in this workspace
+(`fr.placement.stealth`, chosen per run, R24), then a valid `refs/remotes/origin/fr`
+switch (quiet, `fr.placement.quiet`), then `repo`.
 """
 
 from __future__ import annotations
@@ -37,6 +36,7 @@ if TYPE_CHECKING:
 
 REPO: Final = "repo"
 QUIET: Final = "quiet"
+STEALTH: Final = "stealth"
 FEATURES_DIR: Final = "features"
 """Below a quiet or stealth root, each feature's artifacts live at `features/<feature-id>/`."""
 FEATURE_OWNER: Final = "OWNER"
@@ -223,16 +223,20 @@ def sticky_refusal(recorded: str, current: str, source: str) -> SettingsError:
 def space_for(repo_root: Path) -> ArtifactSpace:
     """The artifact space of the checkout at *repo_root*.
 
-    Precedence: a stealth marker, then a valid `origin/fr` switch (quiet), then `repo`.
-    Stealth is not served yet (R4's refusal, in the loader's wording). A workspace whose
-    marker recorded one placement while the switch now names another refuses, naming
-    both (R23 "sticky")."""
+    Precedence: a stealth marker (R24: stealth is chosen per run and recorded in the
+    workspace, so no command run there falls back to `repo`), then a valid `origin/fr`
+    switch (quiet), then `repo`. A workspace whose marker recorded one placement while
+    the switch now names another refuses, naming both (R23 "sticky")."""
     from fr.isolation.marker import MARKER
     from fr.placement.quiet import quiet_space, read_switch
     from fr.settings.load import unservable_placement
 
     root = Path(repo_root)
     marked = _marker_placement(root)
+    if marked == STEALTH:
+        from fr.placement.stealth import stealth_space
+
+        return stealth_space(root)
     if marked is not None and marked not in (REPO, QUIET):
         raise unservable_placement(marked, str(root / MARKER))
     current = QUIET if read_switch(root) is not None else REPO
@@ -241,6 +245,18 @@ def space_for(repo_root: Path) -> ArtifactSpace:
     if current == QUIET:
         return quiet_space(root)
     return ArtifactSpace(REPO, root, None)
+
+
+def outside_repo(repo_root: Path) -> str | None:
+    """`quiet` or `stealth` when the checkout's artifacts live off its product branches,
+    None under `repo`. Reads the marker and the switch only: no worktree is created and
+    no tracking repo asked, so a writer can refuse BEFORE it writes."""
+    root = Path(repo_root)
+    if _marker_placement(root) == STEALTH:
+        return STEALTH
+    from fr.placement.quiet import read_switch
+
+    return QUIET if read_switch(root) is not None else None
 
 
 REPO_CONFIG_KINDS: Final = frozenset(

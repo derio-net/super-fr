@@ -4839,14 +4839,38 @@ def _refuse_incoherent_settings(repo_root: Path) -> None:
         raise typer.Exit(2)
 
 
-def _fetch_switch_or_refuse(repo_root: Path, *, no_fetch: bool = False) -> None:
-    """R23 "the switch": `run start` fetches `origin/fr` like `fr isolation up`, and
-    refuses (exit 2) when origin is unreachable, even when the workspace already exists.
-    `--no-fetch` reads the last fetched `origin/fr` and says so, as `up --no-fetch` does."""
-    from fr.placement.quiet import fetch_switch
+def _stealth_ref_or_exit(cwd: Path, stealth: str | None, target: Path | None) -> Any:
+    """`--stealth`/`--target` as a `StealthRef` (R24, chosen per run), or None."""
+    from fr.placement.stealth import from_tracking_repo, parse_ref
     from fr.settings import SettingsError
 
     try:
+        if target is not None:
+            return parse_ref(stealth) if stealth else from_tracking_repo(cwd)
+        return parse_ref(stealth) if stealth is not None else None
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
+def _fetch_switch_or_refuse(
+    repo_root: Path, *, no_fetch: bool = False, stealth: Any = None
+) -> None:
+    """R23 "the switch": `run start` fetches `origin/fr` like `fr isolation up`, and
+    refuses (exit 2) when origin is unreachable, even when the workspace already exists.
+    `--no-fetch` reads the last fetched `origin/fr` and says so, as `up --no-fetch` does.
+    Under stealth (requested, or recorded by the workspace) the tracking repo must answer
+    instead, before anything is written (R24 fail-fast)."""
+    from fr.placement.quiet import fetch_switch
+    from fr.placement.stealth import check_reachable, marker_tracking
+    from fr.settings import SettingsError
+
+    try:
+        recorded = marker_tracking(repo_root)
+        ref = stealth if stealth is not None else (recorded[0] if recorded else None)
+        if ref is not None:
+            check_reachable(ref, repo_root)
+            return
         fetch_switch(repo_root, no_fetch=no_fetch, command="fr run start")
     except SettingsError as e:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
@@ -4885,6 +4909,17 @@ def start_cmd(
         help="Read the last fetched origin/fr for the placement instead of fetching it "
         "(as `fr isolation up --no-fetch`; not a reachability check).",
     ),
+    stealth: str | None = typer.Option(
+        None,
+        "--stealth",
+        help="Run under the stealth placement, keeping fr's state on <repo>@<branch> "
+        "(as `fr isolation up --stealth`; chosen per run).",
+    ),
+    target: Path | None = typer.Option(
+        None,
+        "--target",
+        help="Started from the tracking repo: the local target checkout (stealth).",
+    ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
 
@@ -4907,6 +4942,9 @@ def start_cmd(
         err_console.print(f"[red]--issue {issue}: an issue number is positive[/red]")
         raise typer.Exit(2)
     repo_root = resolve_repo_root()
+    stealth_ref = _stealth_ref_or_exit(repo_root, stealth, target)
+    if target is not None:
+        repo_root = target.resolve()
     try:
         manifest = resolve_workflow(workflow, repo_root)
     except WorkflowError as e:
@@ -4928,11 +4966,19 @@ def start_cmd(
             err_console.print(f"  {err}", soft_wrap=True)
         raise typer.Exit(2)
 
-    _fetch_switch_or_refuse(repo_root, no_fetch=no_fetch)
-    _refuse_incoherent_settings(repo_root)
+    _fetch_switch_or_refuse(repo_root, no_fetch=no_fetch, stealth=stealth_ref)
+    if stealth_ref is None:
+        # Under a requested stealth the policy is the tracking repo's, read once the
+        # workspace records it: checked below, inside the workspace.
+        _refuse_incoherent_settings(repo_root)
 
     try:
-        workspace = ensure_run_workspace(repo_root, branch, no_fetch=no_fetch)
+        workspace = ensure_run_workspace(
+            repo_root,
+            branch,
+            no_fetch=no_fetch,
+            **({"stealth": stealth_ref} if stealth_ref else {}),
+        )
     except RunWorkspaceError as e:
         # soft_wrap=True, like every other operator-facing refusal in this
         # module (p1-f1, r1-f2). This message embeds the repository path, so
@@ -4962,6 +5008,8 @@ def start_cmd(
             for err in shape_errors:
                 err_console.print(f"  {err}", soft_wrap=True)
             raise typer.Exit(2)
+    if stealth_ref is not None:
+        _refuse_incoherent_settings(workspace)
 
     try:
         # `--run-id` is operator input and becomes a path segment

@@ -106,9 +106,10 @@ def test_a_local_branch_named_like_the_remote_ref_cannot_supply_policy(repo: Pat
     assert load_settings(repo).settings.artifacts.gates == "off"
 
 
-def test_an_unservable_placement_is_refused_by_the_loader(repo: Path) -> None:
+def test_stealth_in_repo_settings_is_refused_by_the_loader(repo: Path) -> None:
+    """Every placement is servable now; stealth is chosen per run, never here (R24)."""
     _land_on_main(repo, "placement: stealth\n")
-    with pytest.raises(SettingsError, match="not yet available in this fr"):
+    with pytest.raises(SettingsError, match="chosen per run"):
         load_settings(repo)
 
 

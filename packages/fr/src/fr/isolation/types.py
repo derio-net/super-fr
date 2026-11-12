@@ -65,9 +65,13 @@ class IsolationState(BaseModel):
     # default branch does not resolve. None for a branch `up` found already
     # existing, and on a record an older fr wrote.
     base_sha: str | None = None
-    # The artifact placement `up` found (`repo` | `quiet`, spec 2026-11-04 R23 "sticky"),
-    # also written to the marker. None on a record an older fr wrote: read as `repo`.
+    # The artifact placement `up` found (`repo` | `quiet` | `stealth`, spec 2026-11-04
+    # R23 "sticky", R24), also written to the marker. None on a record an older fr
+    # wrote: read as `repo`.
     placement: str | None = None
+    # Under stealth, the tracking ref (`<repo>@<branch>`) the run chose (R24 "the local
+    # record"); None otherwise.
+    tracking: str | None = None
 
     model_config = {"frozen": True}
 
@@ -181,6 +185,7 @@ def carried_state(
     target: IsolationMode,
     base_sha: str | None = None,
     placement: str | None = None,
+    tracking: str | None = None,
 ) -> IsolationState:
     """The record `up` saves, for every target (spec 2026-09-23 §3.C).
 
@@ -214,6 +219,12 @@ def carried_state(
             f"{sticky_refusal(recorded, placement, str(state_path(repo_root, branch)))} "
             f"(`fr isolation down --branch {branch}` finishes it)"
         )
+    if prior is not None and tracking is not None and prior.tracking not in (None, tracking):
+        raise IsolationError(
+            f"{state_path(repo_root, branch)}: this workspace tracks its state in "
+            f"{prior.tracking}, not {tracking}; fr will not move a live stealth workspace "
+            f"between tracking repos (`fr isolation down --branch {branch}` finishes it)"
+        )
     return IsolationState(
         repo_root=repo_root,
         branch=branch,
@@ -224,6 +235,7 @@ def carried_state(
         sessions=list(prior.sessions) if prior else [],
         base_sha=base_sha or (prior.base_sha if prior else None),
         placement=placement or (prior.placement if prior else None),
+        tracking=tracking or (prior.tracking if prior else None),
     )
 
 
@@ -598,6 +610,7 @@ class Target(Protocol):
         path: Path | None = None,
         base: str | None = None,
         no_fetch: bool = False,
+        stealth: Any = None,
     ) -> IsolationState: ...
 
     def exec(self, state: IsolationState, argv: list[str]) -> int: ...

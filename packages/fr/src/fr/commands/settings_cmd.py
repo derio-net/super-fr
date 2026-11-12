@@ -53,6 +53,12 @@ def init_cmd(
         help="Switch the repo to the quiet placement: create the orphan `fr` branch with "
         "its root settings.yaml and push it to origin (plain push; refused if it exists).",
     ),
+    stealth: str | None = typer.Option(
+        None,
+        "--stealth",
+        help="Write this target's settings.yaml on the stealth tracking branch "
+        "<repo>@<branch> and push it compare-and-swap (refused if it exists).",
+    ),
 ) -> None:
     """Write `.fr/settings.yaml` with every key commented out at its default.
 
@@ -61,6 +67,19 @@ def init_cmd(
     """
     from fr.settings.render import render_init
 
+    if stealth is not None:
+        if force or quiet:
+            typer.echo(
+                "--stealth takes neither --force (fr never overwrites a target's file on the "
+                "tracking branch) nor --quiet",
+                err=True,
+            )
+            raise typer.Exit(2)
+        try:
+            typer.echo(init_stealth(resolve_repo_root(), stealth))
+        except SettingsError as e:
+            raise _refuse(e) from e
+        return
     if quiet:
         if force:
             typer.echo(
@@ -146,6 +165,41 @@ def init_quiet(root: Path) -> str:
         f"pushed the `fr` branch ({commit[:12]}) to origin: this repo is now quiet.\n"
         f"{QUIET_LIMITATION}\n"
         "The policy keys are read from `fr`: protect it as you protect the default branch."
+    )
+
+
+def init_stealth(root: Path, text: str) -> str:
+    """Write `<target-dir>/settings.yaml` (from `render_init("stealth")`) on the tracking
+    branch and push it compare-and-swap (R3, R24). Refuses an unreachable tracking repo
+    or a missing branch before writing, and a file that is already there."""
+    from fr.git_policy.templates import fr_message
+    from fr.placement import stealth
+    from fr.settings.render import render_init
+
+    ref = stealth.parse_ref(text)
+    stealth.check_reachable(ref, root)
+    target = stealth.target_dir(root)
+    wt = stealth.ensure_worktree(root, ref)
+    path = wt / target / stealth.TARGET_SETTINGS
+    if path.exists():
+        raise SettingsError(
+            f"fr settings init --stealth: {ref.text} already holds {target}/"
+            f"{stealth.TARGET_SETTINGS}; fr never overwrites it (edit it there instead)"
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_init("stealth"))
+    message = fr_message(root, f"chore(fr): stealth settings for {target}")
+    try:
+        outcome = stealth.commit_and_push(ref, wt, [path], message, stealth.plain_commit)
+    except SettingsError:
+        path.unlink(missing_ok=True)
+        raise
+    if not outcome.committed:
+        path.unlink(missing_ok=True)
+        raise SettingsError(f"fr settings init --stealth: {outcome.reason}")
+    return (
+        f"pushed {target}/{stealth.TARGET_SETTINGS} to {ref.text}: start a run with "
+        f"`fr isolation up --stealth {ref.text}` (stealth is chosen per run)"
     )
 
 

@@ -33,8 +33,9 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         path: Path | None = None,
         base: str | None = None,
         no_fetch: bool = False,
+        stealth: Any = None,
     ) -> IsolationState:
-        placement = self._fetch_placement(branch, no_fetch)
+        placement = self._fetch_placement(branch, no_fetch, stealth)
         worktree = self._worktree_up_core(branch, path)
         base_sha = self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
@@ -46,6 +47,7 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
             "worktree",
             base_sha=base_sha,
             placement=placement,
+            tracking=stealth.text if stealth is not None else None,
         )
         save_state(state)
         self._write_isolation_marker(
@@ -54,6 +56,7 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
             created_at=state.created_at,
             target="worktree",
             placement=state.placement,
+            tracking=self._tracking_entry(state),
         )
         self._spawn_gc()
         return state

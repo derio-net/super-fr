@@ -919,13 +919,24 @@ def fetch_placement(
     branch: str,
     no_fetch: bool,
     network: Callable[[list[str]], subprocess.CompletedProcess[str]],
+    stealth: Any = None,
 ) -> str:
-    """The placement `up` records for *branch* (every target's one call): fetch the
+    """The placement `up` records for *branch* (every target's one call): with *stealth*
+    (a `fr.placement.stealth.StealthRef`, chosen per run, R24) the tracking repo's
+    reachability, privacy and worktree, before anything is written; otherwise fetch the
     quiet switch through *network* and, under quiet, check the branch's feature id. A
     refusal is an `IsolationError` (exit 2)."""
     from fr.placement.quiet import check_feature_id, ensure_worktree, fetch_switch
     from fr.settings import SettingsError
 
+    if stealth is not None:
+        from fr.placement.stealth import enter
+
+        try:
+            enter(repo_root, branch, stealth)
+        except SettingsError as e:
+            raise IsolationError(str(e)) from e
+        return "stealth"
     try:
         placement = fetch_switch(repo_root, no_fetch=no_fetch, network=network)
         if placement == "quiet":
@@ -1199,8 +1210,9 @@ class LocalWorktreeDevcontainerTarget:
         path: Path | None = None,
         base: str | None = None,
         no_fetch: bool = False,
+        stealth: Any = None,
     ) -> IsolationState:
-        placement = self._fetch_placement(branch, no_fetch)
+        placement = self._fetch_placement(branch, no_fetch, stealth)
         worktree = self._worktree_up_core(branch, path)
         name = resolve_profile(self.repo_root, profile)
         base_sha = self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
@@ -1237,10 +1249,15 @@ class LocalWorktreeDevcontainerTarget:
             "devcontainer",
             base_sha=base_sha,
             placement=placement,
+            tracking=stealth.text if stealth is not None else None,
         )
         save_state(state)
         self._write_isolation_marker(
-            worktree, branch, created_at=state.created_at, placement=state.placement
+            worktree,
+            branch,
+            created_at=state.created_at,
+            placement=state.placement,
+            tracking=self._tracking_entry(state),
         )
         try:
             self._devcontainer_up(worktree, name)
@@ -2755,13 +2772,22 @@ class LocalWorktreeDevcontainerTarget:
         back as a non-zero, non-2 exit — `unknown`, never `absent`."""
         return run_network(self.run, self.repo_root, argv, cwd=cwd)
 
-    def _fetch_placement(self, branch: str, no_fetch: bool) -> str:
+    def _fetch_placement(self, branch: str, no_fetch: bool, stealth: Any = None) -> str:
         """R23 "the switch": fetch `origin/fr` (absent is fine) and return the placement
         it names, refusing an unreachable origin before anything is provisioned; under
-        quiet, also refuse a branch whose feature id another branch holds (gh#1419)."""
+        quiet, also refuse a branch whose feature id another branch holds (gh#1419).
+        With *stealth*, R24's checks instead (`fetch_placement`)."""
         return fetch_placement(
-            self.repo_root, branch, no_fetch, lambda argv: self._run_network(argv)
+            self.repo_root, branch, no_fetch, lambda argv: self._run_network(argv), stealth
         )
+
+    def _tracking_entry(self, state: IsolationState) -> dict[str, str] | None:
+        """The marker's `tracking` record under stealth (R24 "the local record")."""
+        if state.placement != "stealth" or state.tracking is None:
+            return None
+        from fr.placement.stealth import marker_entry, parse_ref, target_dir
+
+        return marker_entry(parse_ref(state.tracking), target_dir(self.repo_root))
 
     def _remote_view(self, branch: str, no_fetch: bool) -> RemoteView:
         """Probe `origin/<B>`: `ls-remote --exit-code` (0 exists, 2 absent,
@@ -2812,6 +2838,7 @@ class LocalWorktreeDevcontainerTarget:
         created_at: str | None = None,
         target: str = "devcontainer",
         placement: str | None = None,
+        tracking: dict[str, str] | None = None,
     ) -> None:
         """Write the `.fr-isolation` identity marker and git-exclude it.
 
@@ -2844,6 +2871,9 @@ class LocalWorktreeDevcontainerTarget:
                     # R23 "sticky": the placement `up` found; `space_for` refuses a
                     # later switch that disagrees. Omitted only by a caller with none.
                     **({"placement": placement} if placement is not None else {}),
+                    # R24 "the local record": under stealth, the tracking ref and the
+                    # target's directory in the tracking worktree.
+                    **({"tracking": tracking} if tracking is not None else {}),
                 },
                 indent=2,
             )

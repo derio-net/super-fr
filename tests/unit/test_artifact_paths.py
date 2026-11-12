@@ -223,12 +223,14 @@ def test_a_packed_origin_fr_ref_is_seen(tmp_path: Path) -> None:
     assert space_for(root).placement == "quiet"
 
 
-def test_a_stealth_marker_is_read_first_and_is_not_yet_available(tmp_path: Path) -> None:
+def test_a_stealth_marker_is_read_first_even_over_a_quiet_switch(tmp_path: Path) -> None:
+    """Precedence: the stealth marker wins over the switch, and one without its tracking
+    ref refuses rather than falling back to quiet or repo (R24 "the local record")."""
     root = make_repo(tmp_path)
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")
     marker = {"toplevel": str(root), "branch": "main", "mode": "worktree"}
     (root / ".fr-isolation").write_text(json.dumps({**marker, "placement": "stealth"}))
-    with pytest.raises(SettingsError, match="placement: stealth is not yet available"):
+    with pytest.raises(SettingsError, match="placement: stealth without its `tracking` ref"):
         space_for(root)
 
 

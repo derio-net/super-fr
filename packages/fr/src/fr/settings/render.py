@@ -82,6 +82,18 @@ def render_init(placement: str = "repo") -> str:
             "## Every other key is commented out at its default; to change one, drop the single",
             "## leading `#` of its line (lines starting `##` are prose).",
         ]
+    elif placement == "stealth":
+        out = [
+            "## fr settings for one target of a STEALTH tracking repo (spec "
+            "2026-11-04-repo-feature-settings R2, R5, R24).",
+            "## This is <target-dir>/settings.yaml on the tracking branch, read from the",
+            "## tracking ref: an edit has no effect until it is pushed there.",
+            "## Stealth sets the forge keys itself (labels, comments and issues off, pr_body",
+            "## minimal): they are shown at those values, and an explicit contrary value is",
+            "## refused by `fr settings check` and `fr run start`.",
+            "## Every other key is commented out at its default; to change one, drop the single",
+            "## leading `#` of its line (lines starting `##` are prose).",
+        ]
     else:
         out = [
             "## fr settings for this repo (spec 2026-11-04-repo-feature-settings).",
@@ -90,9 +102,23 @@ def render_init(placement: str = "repo") -> str:
             "## `#` of its line (lines starting `##` are prose).",
         ]
     _emit(Settings, Settings.model_validate({}), 0, out)
-    if placement == "quiet":
-        out = ["placement: quiet" if line == "#placement: repo" else line for line in out]
+    if placement in ("quiet", "stealth"):
+        out = [f"placement: {placement}" if line == "#placement: repo" else line for line in out]
+    if placement == "stealth":
+        out = [_stealth_forge(line) for line in out]
     return "\n".join(out) + "\n"
+
+
+def _stealth_forge(line: str) -> str:
+    """A commented forge key at stealth's own value (R5)."""
+    from fr.placement.stealth import QUIET_FORGE
+
+    for key, value in QUIET_FORGE.items():
+        stripped = line.lstrip("#")
+        if stripped.strip().startswith(f"{key}:") and line.startswith("#"):
+            indent = stripped[: len(stripped) - len(stripped.lstrip())]
+            return f"#{indent}{key}: {value}"
+    return line
 
 
 def _wrap(text: str, width: int = 84) -> list[str]:

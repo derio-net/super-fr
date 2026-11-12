@@ -44,7 +44,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fr.artifacts.runner import MigrationReport, PlannedAction
 from fr.git import (
@@ -509,14 +509,14 @@ def _quiet_feature_groups(
     """Under quiet, *paths* grouped by the fr worktree feature root that holds each
     (`None`: a path in the product checkout, repo configuration); None otherwise.
     A migration may reach every feature (p3-r4), and R23 allows one feature per commit."""
-    from fr.artifacts.paths import FEATURES_DIR, QUIET, space_for
+    from fr.artifacts.paths import FEATURES_DIR, QUIET, STEALTH, space_for
     from fr.settings import SettingsError
 
     try:
         space = space_for(repo_root)
     except SettingsError:
         return None  # commit_paths reports it, by its own refusal
-    if space.placement != QUIET:
+    if space.placement not in (QUIET, STEALTH):
         return None
     features = (space.root / FEATURES_DIR).resolve()
     groups: dict[Path | None, list[Path]] = {}
@@ -534,7 +534,7 @@ def _commit_groups(
 ) -> CommitOutcome:
     """One commit per group: product paths in the product checkout, each feature's in the
     fr worktree under its lock. Committed when every group was."""
-    from fr.artifacts.paths import feature_root, space_for
+    from fr.artifacts.paths import STEALTH, feature_root, space_for
     from fr.placement.quiet import fr_worktree_lock
     from fr.settings import SettingsError
 
@@ -555,6 +555,10 @@ def _commit_groups(
                     reason=f"refusing to commit {key.name}'s artifacts: another feature's path",
                 )
             )
+            continue
+        if space.placement == STEALTH:
+            # Through the seam: the tracking commit is pushed, and a failed push is fatal.
+            outcomes.append(commit_paths(repo_root, group, message))
             continue
         try:
             with fr_worktree_lock(fr_root):
@@ -595,13 +599,19 @@ class QuietProductWriteError(SettingsError):
     `SettingsError`, so the CLI's root group turns it into exit 2."""
 
 
+class StealthPushError(SettingsError):
+    """A stealth state commit the tracking repo did not take (R24 "fail-fast": a failed
+    tracking push refuses the step, never only a warning). The tracking worktree has been
+    put back as it was; a `SettingsError`, so the CLI turns it into exit 2."""
+
+
 def _quiet_product_artifacts(
     repo_root: Path, toplevel: Path, paths: Sequence[Path], elsewhere: list[Path]
 ) -> None:
     """R23 "nothing on the product branches", held at the one commit seam: under quiet,
     an artifact path inside the PRODUCT checkout (a writer not yet routed through the
     resolver) is refused, never committed on the feature branch."""
-    from fr.placement.quiet import read_switch
+    from fr.artifacts.paths import outside_repo
     from fr.run.code_tree import FR_ARTIFACT_PREFIXES
     from fr.settings import SettingsError
 
@@ -613,16 +623,17 @@ def _quiet_product_artifacts(
     if not artifacts:
         return None
     try:
-        quiet = read_switch(repo_root) is not None
+        placement = outside_repo(repo_root)
     except SettingsError:  # an invalid switch is space_for's to report, by its own refusal
-        quiet = False
-    if not quiet:
+        placement = None
+    if placement is None:
         return None
+    where = "the `fr` branch (R23)" if placement == "quiet" else "the tracking repo (R24)"
     # A hard error, never a warning (review p3-r1): a caller that carried on would exit 0
     # over a file that a plain `git add -A` then puts on the product branch.
     raise QuietProductWriteError(
-        f"refusing to commit {artifacts[0]} on the product branch: under placement quiet "
-        "fr's artifacts live on the `fr` branch (R23), and this command wrote it below the "
+        f"refusing to commit {artifacts[0]} on the product branch: under placement "
+        f"{placement} fr's artifacts live on {where}, and this command wrote it below the "
         f"product checkout instead; {_UNCOMMITTED}. Delete it (it is not committed "
         "anywhere) and report the command: every fr writer asks the resolver for its root"
     )
@@ -634,14 +645,14 @@ def _quiet_commit(
     """Where a commit of paths outside *toplevel* is made: the fr worktree under quiet,
     when EVERY path is below this feature's own path there (R23: each commit touches
     one feature's path). Anything else is the existing outside-the-repo refusal."""
-    from fr.artifacts.paths import QUIET, feature_root, space_for
+    from fr.artifacts.paths import QUIET, STEALTH, feature_root, space_for
     from fr.settings import SettingsError
 
     try:
         space = space_for(repo_root)
     except SettingsError as e:
         return CommitOutcome(committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}")
-    if space.placement != QUIET or space.feature is None:
+    if space.placement not in (QUIET, STEALTH) or space.feature is None:
         return CommitOutcome(
             committed=False,
             reason=(f"refusing to commit: {elsewhere[0]} is outside the git repository {toplevel}"),
@@ -653,11 +664,23 @@ def _quiet_commit(
         return CommitOutcome(
             committed=False,
             reason=(
-                f"refusing to commit: under quiet a commit touches only this feature's path "
-                f"({prefix}/), and {stray[0]} is not in it; {_UNCOMMITTED}"
+                f"refusing to commit: under {space.placement} a commit touches only this "
+                f"feature's path ({prefix}/), and {stray[0]} is not in it; {_UNCOMMITTED}"
             ),
         )
+    if space.placement == STEALTH:
+        from fr.placement.stealth import tracking_root
+
+        return tracking_root(space), _owner_file(repo_root, space)
     return space.root, _owner_file(repo_root, space)
+
+
+def _stealth_ref(repo_root: Path) -> Any:
+    """The tracking ref of a stealth workspace (`StealthRef`), or None."""
+    from fr.placement.stealth import marker_tracking
+
+    found = marker_tracking(repo_root)
+    return found[0] if found is not None else None
 
 
 def _owner_file(repo_root: Path, space: ArtifactSpace) -> Path | None:
@@ -686,6 +709,7 @@ def commit_paths(
     no_verify: bool = False,
     restore_index: bool = False,
     lock_wait: float = 0.0,
+    tracking_branch: bool = False,
 ) -> CommitOutcome:
     """Commit exactly `paths` under `message`, or explain why it did not.
 
@@ -703,7 +727,9 @@ def commit_paths(
     repository's commit hooks (signing is left as configured); `restore_index`
     puts the index entries of `paths` back as they were if the commit fails;
     `lock_wait` waits up to that many seconds for a held `index.lock` to clear
-    before refusing (p3-r3).
+    before refusing (p3-r3). `tracking_branch` is the stealth seam's own recursion into
+    the tracking worktree, whose branch may be that repo's default (R24): the
+    default-branch refusal is a product-branch rule.
     """
     paths = tuple(p if p.is_absolute() else repo_root / p for p in paths)
     if not paths:
@@ -732,7 +758,7 @@ def commit_paths(
                 "orphaned. The files are in your working tree, uncommitted"
             ),
         )
-    if state.branch == state.default_branch:
+    if state.branch == state.default_branch and not tracking_branch:
         return CommitOutcome(
             committed=False,
             reason=(
@@ -761,6 +787,31 @@ def commit_paths(
         fr_root, owner = rerouted
         from fr.placement.quiet import fr_worktree_lock, fr_worktree_problem
         from fr.settings import SettingsError
+
+        files = (*paths, owner) if owner is not None else paths
+        stealthy = _stealth_ref(repo_root)
+        if stealthy is not None:
+            from fr.placement.stealth import commit_and_push
+
+            def tracking(wt: Path, todo: Sequence[Path], msg: str) -> CommitOutcome:
+                return commit_paths(
+                    wt,
+                    todo,
+                    msg,
+                    no_verify=no_verify,
+                    restore_index=restore_index,
+                    lock_wait=lock_wait,
+                    tracking_branch=True,
+                )
+
+            try:
+                return commit_and_push(stealthy, fr_root, files, message, tracking)
+            except StealthPushError:
+                raise  # R24: fatal, the caller exits 2 (the worktree is already restored)
+            except SettingsError as e:
+                return CommitOutcome(
+                    committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}"
+                )
 
         # p3-r8: every workspace of the repo shares this worktree and its index.
         try:

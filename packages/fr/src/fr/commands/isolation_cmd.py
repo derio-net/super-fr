@@ -248,6 +248,27 @@ def _refuse_no_docker_status_extras(target: Target) -> None:
         )
 
 
+def _stealth_request(
+    repo: Path, stealth: str | None, target: Path | None
+) -> tuple[Path, dict[str, Any]]:
+    """The repo to isolate and the stealth keyword `up` takes (R24, chosen per run):
+    `--stealth <repo>@<branch>` from the target, or `--target <path>` from the tracking
+    repo, whose own origin and branch are then the tracking ref unless `--stealth` names
+    one. Neither: no keyword, today's `up`."""
+    from fr.placement.stealth import from_tracking_repo, parse_ref
+    from fr.settings import SettingsError
+
+    try:
+        if target is not None:
+            ref = parse_ref(stealth) if stealth else from_tracking_repo(repo)
+            return target, {"stealth": ref}
+        if stealth is not None:
+            return repo, {"stealth": parse_ref(stealth)}
+    except SettingsError as e:
+        raise IsolationError(str(e)) from e
+    return repo, {}
+
+
 @isolation_app.command()
 def up(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
@@ -284,6 +305,18 @@ def up(
         help="Print ONLY the worktree path on stdout (last line); everything else "
         "to stderr. For WorktreeCreate hooks.",
     ),
+    stealth: str | None = typer.Option(
+        None,
+        "--stealth",
+        help="Run under the stealth placement: keep fr's state on <repo>@<branch>, a "
+        "separate tracking repo (chosen per run, never by repo settings).",
+    ),
+    target_repo: Path | None = typer.Option(
+        None,
+        "--target",
+        help="Run from the tracking repo: the local target checkout to isolate (stealth; "
+        "the tracking ref defaults to this checkout's origin and branch).",
+    ),
 ) -> None:
     """Create worktree + start the profile's devcontainer against it.
 
@@ -295,8 +328,9 @@ def up(
     the human-facing lines move to stderr.
     """
     try:
+        repo, extra = _stealth_request(repo, stealth, target_repo)
         state = _target(repo).up(
-            profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch
+            profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch, **extra
         )
         if session:
             state = _sessions.attach(state.repo_root, state.branch, session, harness=harness)

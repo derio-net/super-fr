@@ -75,6 +75,19 @@ def is_public(visibility: str | None) -> bool:
     return visibility == "public"
 
 
+VISIBILITY_ORDER: dict[str, int] = {"private": 0, "internal": 1, "public": 2}
+"""How far a repo is seen, least first. A visibility this list does not name is treated
+as public, the most visible: an unknown answer must never pass a guard."""
+
+
+def more_visible(a: str, b: str) -> bool:
+    """Is a repo of visibility *a* seen more widely than one of visibility *b*? The
+    stealth placement refuses a tracking repo more visible than its target (spec
+    2026-11-04-repo-feature-settings R24 "privacy"), beside `leak_risk`'s issue rule."""
+    top = max(VISIBILITY_ORDER.values())
+    return VISIBILITY_ORDER.get(a, top) > VISIBILITY_ORDER.get(b, top)
+
+
 def leaks(
     keys: Mapping[str, str], state_repo: str, visibility: Mapping[str, str | None]
 ) -> list[tuple[str, str]]:

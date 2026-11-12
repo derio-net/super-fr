@@ -51,9 +51,8 @@ def quiet_repo(tmp_path: Path, branch: str = "feat/q") -> Path:
     return root
 
 
-def test_quiet_is_servable_and_stealth_is_still_not() -> None:
+def test_quiet_is_servable() -> None:
     assert "quiet" in SERVABLE_PLACEMENTS
-    assert "stealth" not in SERVABLE_PLACEMENTS
 
 
 def test_an_origin_fr_switch_reads_as_quiet(tmp_path: Path, _home: Path) -> None:
@@ -109,11 +108,13 @@ def test_no_origin_is_repo_even_with_a_local_fr_branch(tmp_path: Path) -> None:
     assert load_settings(root).settings.placement == "repo"
 
 
-def test_a_stealth_marker_is_still_not_yet_available(tmp_path: Path) -> None:
+def test_a_stealth_marker_outranks_the_switch(tmp_path: Path) -> None:
+    """Stealth (chosen per run) is read before the quiet switch; a marker that records it
+    without its tracking ref refuses instead of falling back to quiet (R24)."""
     root = quiet_repo(tmp_path)
     marker = {"toplevel": str(root), "branch": "feat/q", "mode": "worktree"}
     (root / ".fr-isolation").write_text(json.dumps({**marker, "placement": "stealth"}))
-    with pytest.raises(SettingsError, match="placement: stealth is not yet available"):
+    with pytest.raises(SettingsError, match="without its `tracking` ref"):
         space_for(root)
 
 

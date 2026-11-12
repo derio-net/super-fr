@@ -126,7 +126,12 @@ class ExternalTarget:
             )
         return data
 
-    def _set_marker_branch(self, branch: str, placement: str | None = None) -> None:
+    def _set_marker_branch(
+        self,
+        branch: str,
+        placement: str | None = None,
+        tracking: dict[str, str] | None = None,
+    ) -> None:
         """Rewrite the marker's `branch` claim in place, preserving every other
         preparer-written field. Never unlinks the file — it is the preparer's.
 
@@ -143,6 +148,8 @@ class ExternalTarget:
         data["branch"] = branch
         if placement is not None:
             data["placement"] = placement  # R23 "sticky", as the local targets record it
+        if tracking is not None:
+            data["tracking"] = tracking  # R24 "the local record"
         p.write_text(json.dumps(data, indent=2) + "\n")
 
     def _exclude_marker(self) -> None:
@@ -166,6 +173,7 @@ class ExternalTarget:
         path: Path | None = None,
         base: str | None = None,
         no_fetch: bool = False,
+        stealth: Any = None,
     ) -> IsolationState:
         self._load_marker()  # validate before touching anything
         placement = fetch_placement(
@@ -173,6 +181,7 @@ class ExternalTarget:
             branch,
             no_fetch,
             lambda argv: run_network(self.run, self.repo_root, argv),
+            stealth,
         )
         if profile is not None:
             print(
@@ -182,10 +191,21 @@ class ExternalTarget:
             )
         self._ensure_branch(branch)
         state = carried_state(
-            self.repo_root, branch, self.repo_root, "external", "external", placement=placement
+            self.repo_root,
+            branch,
+            self.repo_root,
+            "external",
+            "external",
+            placement=placement,
+            tracking=stealth.text if stealth is not None else None,
         )
         save_state(state)
-        self._set_marker_branch(branch, state.placement)
+        tracking = None
+        if state.placement == "stealth" and state.tracking is not None:
+            from fr.placement.stealth import marker_entry, parse_ref, target_dir
+
+            tracking = marker_entry(parse_ref(state.tracking), target_dir(self.repo_root))
+        self._set_marker_branch(branch, state.placement, tracking)
         self._exclude_marker()
         return state
 
