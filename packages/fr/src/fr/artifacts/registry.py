@@ -41,7 +41,7 @@ from typing import Any
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
-from fr.artifacts.paths import RECORDS_SUFFIX, repo_glob
+from fr.artifacts.paths import RECORDS_SUFFIX, repo_glob, search_roots
 from fr.artifacts.structure import (
     validate_agents,
     validate_fragment,
@@ -657,13 +657,16 @@ def iter_paths_of(repo_root: Path, kind: ArtifactKind) -> Iterator[Path]:
     registry is injectable in tests); `iter_artifact_paths` is the by-name
     front door and the archive check lives here, once, for both.
     """
-    for path in sorted(repo_root.glob(kind.locator)):
-        if ARCHIVE_SEGMENT in path.relative_to(repo_root).parts:
-            continue
-        if kind.owns is not None and not kind.owns(path):
-            continue
-        if path.is_file():
-            yield path
+    # Under quiet a placement-bound kind lives below every feature root of the fr
+    # worktree, the same relative layout (review p3-r4); repo output is unchanged.
+    for root in search_roots(repo_root, kind.locator):
+        for path in sorted(root.glob(kind.locator)):
+            if ARCHIVE_SEGMENT in path.relative_to(root).parts:
+                continue
+            if kind.owns is not None and not kind.owns(path):
+                continue
+            if path.is_file():
+                yield path
 
 
 def iter_artifact_paths(repo_root: Path, name: str) -> Iterator[Path]:

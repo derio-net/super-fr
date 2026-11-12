@@ -234,6 +234,35 @@ def space_for(repo_root: Path) -> ArtifactSpace:
     return ArtifactSpace(REPO, root, None)
 
 
+REPO_CONFIG_KINDS: Final = frozenset(
+    {"workflow", "verification", "models", "trackers", "plan-config"}
+)
+"""Kinds below the artifact directories that are REPO CONFIGURATION, authored by the repo
+owner and read from the product checkout under every placement (decision
+quiet-artifact-root-scope). Everything else below `docs/superpowers/` and
+`docs/acceptance/` is placement-bound: it lives at the placement's root (R1)."""
+
+
+def placement_bound(rel: str) -> bool:
+    """Does the repo-relative path (or glob) *rel* name a placement-bound fr artifact?
+    `docs/superpowers/**` and `docs/acceptance/**` are, except `REPO_CONFIG_KINDS`;
+    repo configuration elsewhere (`.devcontainer/`, `.claude/`, `.fr/`) is not."""
+    rel = rel.removeprefix("./")
+    for kind in REPO_CONFIG_KINDS:
+        own = KIND_DIRS[kind]
+        if rel == own or rel.startswith(f"{own}/"):
+            return False
+    return any(rel == root or rel.startswith(f"{root}/") for root in (_SP, _ACC))
+
+
+def search_roots(repo_root: Path, rel: str) -> list[Path]:
+    """The roots a reader of *rel* (a repo-relative path or glob) looks below: the
+    toplevel for repo configuration and under `repo`; every feature root otherwise."""
+    if not placement_bound(rel):
+        return [Path(repo_root)]
+    return list(feature_roots(space_for(Path(repo_root))))
+
+
 def repo_glob(kind: str, pattern: str) -> str:
     """A glob below *kind*'s directory under the `repo` placement, relative to the
     toplevel (`repo_glob("plan", "*/_meta.yaml")`): how `fr.artifacts.registry` builds

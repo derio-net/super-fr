@@ -367,6 +367,18 @@ def uncommitted_paths(root: Path) -> frozenset[Path]:
     return state.dirty
 
 
+def _quiet_fr_root(root: Path) -> Path | None:
+    """The fr worktree under quiet, else None (also when the placement cannot be read)."""
+    from fr.artifacts.paths import QUIET, space_for
+    from fr.settings import SettingsError
+
+    try:
+        space = space_for(root)
+    except SettingsError:
+        return None
+    return space.root if space.placement == QUIET else None
+
+
 def uncommitted_veto(root: Path) -> Callable[[Path], str | None]:
     """A `run_migrations(veto=...)` hold over artifacts with local changes.
 
@@ -380,6 +392,9 @@ def uncommitted_veto(root: Path) -> Callable[[Path], str | None]:
     surprise. The refusal names the file and the two ways forward.
     """
     dirty = uncommitted_paths(root)
+    fr_root = _quiet_fr_root(root)
+    if fr_root is not None:  # p3-r4: the fr worktree's artifacts are migrated too
+        dirty |= uncommitted_paths(fr_root)
 
     def veto(path: Path) -> str | None:
         if path.resolve() not in dirty:
@@ -480,7 +495,70 @@ def commit_migration(
         from fr import __version__
 
         fr_version = __version__
-    return commit_paths(repo_root, paths, migration_commit_message(report, fr_version=fr_version))
+    message = migration_commit_message(report, fr_version=fr_version)
+    groups = _quiet_feature_groups(repo_root, paths)
+    if groups is None:
+        return commit_paths(repo_root, paths, message)
+    return _commit_groups(repo_root, groups, message)
+
+
+def _quiet_feature_groups(
+    repo_root: Path, paths: Sequence[Path]
+) -> dict[Path | None, list[Path]] | None:
+    """Under quiet, *paths* grouped by the fr worktree feature root that holds each
+    (`None`: a path in the product checkout, repo configuration); None otherwise.
+    A migration may reach every feature (p3-r4), and R23 allows one feature per commit."""
+    from fr.artifacts.paths import FEATURES_DIR, QUIET, space_for
+    from fr.settings import SettingsError
+
+    try:
+        space = space_for(repo_root)
+    except SettingsError:
+        return None  # commit_paths reports it, by its own refusal
+    if space.placement != QUIET:
+        return None
+    features = (space.root / FEATURES_DIR).resolve()
+    groups: dict[Path | None, list[Path]] = {}
+    for path in paths:
+        resolved = (path if path.is_absolute() else repo_root / path).resolve()
+        key: Path | None = None
+        if resolved.is_relative_to(features):
+            key = features / resolved.relative_to(features).parts[0]
+        groups.setdefault(key, []).append(path)
+    return groups
+
+
+def _commit_groups(
+    repo_root: Path, groups: dict[Path | None, list[Path]], message: str
+) -> CommitOutcome:
+    """One commit per group: product paths in the product checkout, each feature's in the
+    fr worktree under its lock. Committed when every group was."""
+    from fr.artifacts.paths import space_for
+    from fr.placement.quiet import fr_worktree_lock
+    from fr.settings import SettingsError
+
+    fr_root = space_for(repo_root).root
+    outcomes: list[CommitOutcome] = []
+    for key, group in groups.items():
+        if key is None:
+            outcomes.append(commit_paths(repo_root, group, message))
+            continue
+        try:
+            with fr_worktree_lock(fr_root):
+                outcomes.append(commit_paths(fr_root, group, message))
+        except SettingsError as e:
+            outcomes.append(
+                CommitOutcome(committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}")
+            )
+    done = [o for o in outcomes if o.committed or o.unchanged]
+    return CommitOutcome(
+        committed=len(done) == len(outcomes) and any(o.committed for o in outcomes),
+        reason="; ".join(o.reason for o in outcomes),
+        paths=tuple(p for o in outcomes for p in o.paths),
+        message=message,
+        sha=next((o.sha for o in reversed(outcomes) if o.sha), None),
+        unchanged=all(o.unchanged for o in outcomes),
+    )
 
 
 _UNCOMMITTED = "the files are in your working tree, uncommitted"
