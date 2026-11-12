@@ -1,0 +1,108 @@
+schema_version: 11
+run: 2026-11-12-chore-remove-vk-compat
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: review
+    id: review-p1
+    phase: 1
+    title: Phase 1 code review, seven findings, all in scope
+    body: |
+      A separate reviewer read the phase-1 diff against the spec (R1-R8, R15, R17-R19),
+      ran the three mirror checks, `fr docs check`, `fr acceptance check`, the new test
+      file and the OpenCode plugin's tests. R1-R8, R15, R18 and R19 held. R17 did not:
+      three emitted remedies still named a bare `fr isolation up`. The executor's two
+      deviations (the `github_rest` capture skip, the dropped installer seed) were judged
+      to lose no coverage.
+  - kind: finding
+    id: p1-r1
+    phase: 1
+    review_scope: in
+    title: Three hook remedies still recommend a bare `fr isolation up`
+    body: |
+      `plugins/super-fr/hooks/fr-isolation-required.sh`, the cross-repo sentence of
+      `fr-isolation-guard.sh` and its port `packages/fr-opencode-plugin/src/guard.ts`;
+      `tests/fixtures/hooks/guard-verdicts.yaml` pinned the bare form ten times.
+  - kind: finding
+    id: p1-r2
+    phase: 1
+    review_scope: in
+    title: The R17 tripwire could not see the Claude Code hooks or shell-escaped backticks
+    body: |
+      `REMEDY_FILES` omitted the two Claude Code hooks and `guard.ts`, and the regex
+      missed the `\`` form those hooks write.
+  - kind: finding
+    id: p1-r3
+    phase: 1
+    review_scope: in
+    title: The amended row vk-legacy-fallbacks-removed contradicted R2
+    body: |
+      It still said `~/.config/vk/secrets` mounts no longer resolve, and its note cited
+      the deleted hard-error test.
+  - kind: finding
+    id: p1-r4
+    phase: 1
+    review_scope: in
+    title: The isolation rule and the phase-executor guard gave `fr isolation up --repo <path>` with no --branch
+    body: |
+      `plugins/super-fr/rules/fr-isolation-required.md`, its repo mirror under
+      `.claude/rules/`, and the deny reason of `fr-phase-executor-guard.sh`.
+  - kind: finding
+    id: p1-r5
+    phase: 1
+    review_scope: in
+    title: _UP_REMEDY sat between the fr-archive comment and the constant it documents
+    body: "`packages/fr/src/fr/isolation/local.py`."
+  - kind: finding
+    id: p1-r6
+    phase: 1
+    review_scope: in
+    title: Small nits in the new tests and two docstrings
+    body: |
+      A leftover `test_smoke`, mid-file imports, a docstring reflow in `trigger.py`, a
+      placeholder in two descriptive docstrings, and two installer tests named for a
+      cleanup step that no longer exists.
+  - kind: finding
+    id: p1-r7
+    phase: 1
+    review_scope: in
+    title: .test_durations not refreshed
+    body: Ten entries for deleted tests, none for the new test file.
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: |
+      All three messages name `--branch`; the fixture was re-captured with
+      `capture_guard_verdicts.py`, never edited.
+  - id: p1-r2
+    state: fixed
+    body: |
+      Three tests replace the file list for hooks: one reads each hook's non-comment
+      lines, one reads every captured deny reason in `guard-verdicts.yaml`, one reads the
+      rule and its mirror. The captured-reason test was red before the re-capture.
+  - id: p1-r3
+    state: fixed
+    body: |
+      Two more amendments: a reword that drops the secrets-mount clause and says a mount
+      is followed whatever its path is named, and a set-status at the same status with a
+      note naming the tests that exist.
+  - id: p1-r4
+    state: fixed
+    body: Both rule files and the guard's reason name `--branch <branch>`; mirrors regenerated.
+  - id: p1-r5
+    state: fixed
+    body: Moved above the archive comment.
+  - id: p1-r6
+    state: fixed
+    body: |
+      `test_smoke` removed, imports moved to the top, the reflow repaired, the two
+      installer tests renamed for what they still assert (user skills are left alone).
+      The two descriptive docstrings keep `--branch <branch>`: it is accurate, and the
+      file-list tripwire reads those files whole.
+  - id: p1-r7
+    state: fixed
+    body: Refreshed by the full-suite run made after these fixes (`--store-durations`).
+evidence:
+  review: review-p1
+  reviewer: af479a0920b5f0d10
