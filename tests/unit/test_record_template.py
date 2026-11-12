@@ -29,7 +29,7 @@ def _pickup(root: Path, env: dict[str, str] | None = None):
     return CliRunner().invoke(
         app,
         ["pickup", str(root / PLAN_REL), "--phase", "1"],
-        env={**os.environ, "VK_REPO_ROOT": str(root), **(env or {})},
+        env={**os.environ, "FR_REPO_ROOT": str(root), **(env or {})},
     )
 
 

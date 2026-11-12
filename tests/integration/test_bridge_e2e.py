@@ -34,7 +34,6 @@ def _write_minimal_plan(plan_dir: Path, *, target_repo: str, phases: list[dict[s
         schema_version: 2
         plan: e2e-fixture
         target_repo: {target_repo}
-        vk_version: ">=2.0.0,<3.0.0"
         created: "2026-05-18"
         """
     )

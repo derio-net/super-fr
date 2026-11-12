@@ -190,7 +190,7 @@ def test_adhoc_report_keeps_row_count_and_tiles(
     """The ad-hoc gitignored report.html is where a human reads counts: it
     keeps the `N rows` figure, the tiles and the sharp-line panels (§3.I)."""
     root = make_repo(tmp_path, row(id="a") + row(id="b", status="unwired"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     res = runner.invoke(app, ["acceptance", "report"])
     assert res.exit_code == 0, res.output
     adhoc = (root / "docs" / "acceptance" / "report.html").read_text()
@@ -235,7 +235,7 @@ def test_report_adhoc_writes_uncommitted_report_html(
 ) -> None:
     """`report` with no flags writes the ignored report.html honoring --link-mode."""
     root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     res = runner.invoke(app, ["acceptance", "report", "--link-mode", "github", "--ref", "abc123"])
     assert res.exit_code == 0, res.output
     report_html = root / "docs" / "acceptance" / "report.html"
@@ -251,7 +251,7 @@ def test_report_out_under_site_dir_is_sha_pinned_and_stamped(
     commit SHA, git-stamped, and exit 0 even with a failing row (report, not gate)."""
     sha = "0123456789abcdef0123456789abcdef01234567"
     root = make_repo(tmp_path, row(id="a") + row(id="f", status="failing"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     res = runner.invoke(
         app,
         [
@@ -275,7 +275,7 @@ def test_report_out_under_site_dir_is_sha_pinned_and_stamped(
 
 def test_report_format_md_writes_report_md(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     res = runner.invoke(app, ["acceptance", "report", "--format", "md"])
     assert res.exit_code == 0, res.output
     md = root / "docs" / "acceptance" / "report.md"
@@ -286,7 +286,7 @@ def test_report_format_md_writes_report_md(tmp_path: Path, monkeypatch: pytest.M
 
 def test_report_format_rejects_unknown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     assert runner.invoke(app, ["acceptance", "report", "--format", "pdf"]).exit_code == 2
 
 
@@ -297,7 +297,7 @@ def test_report_open_goes_through_the_one_opener(
     opened: list[Path] = []
     monkeypatch.setattr("fr.commands.acceptance_cmd._open_report", opened.append)
     root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     res = runner.invoke(app, ["acceptance", "report", "--open"])
     assert res.exit_code == 0, res.output
     assert opened == [root / "docs" / "acceptance" / "report.html"]
@@ -311,7 +311,7 @@ def test_the_committed_report_flags_are_gone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str
 ) -> None:
     root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     assert runner.invoke(app, ["acceptance", "report", flag]).exit_code == 2
 
 
@@ -333,7 +333,7 @@ def test_check_fails_on_a_tracked_report(tmp_path: Path, monkeypatch: pytest.Mon
     import subprocess
 
     root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     tracked = root / "docs" / "acceptance" / "report_linked.md"
     tracked.write_text("# stale\n")
     for cmd in (
@@ -351,7 +351,7 @@ def test_check_passes_with_an_untracked_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     assert runner.invoke(app, ["acceptance", "report"]).exit_code == 0
     res = runner.invoke(app, ["acceptance", "check"])
     assert res.exit_code == 0, res.output
@@ -368,7 +368,7 @@ def test_fr_help_names_the_local_report() -> None:
 
 def test_report_writes_default_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row())
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(app, ["acceptance", "report"])
     assert result.exit_code == 0, result.output
     out = root / "docs" / "acceptance" / "report.html"
@@ -378,7 +378,7 @@ def test_report_writes_default_out(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 def test_report_github_mode_embeds_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row())
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     result = runner.invoke(
         app, ["acceptance", "report", "--link-mode", "github", "--ref", "abc123"]
     )
@@ -416,7 +416,7 @@ def test_summary_still_carries_counts(tmp_path: Path, monkeypatch: pytest.Monkey
     """`fr acceptance summary` (the Actions job summary) and `status` keep the
     counts the committed reports dropped."""
     root = make_repo(tmp_path, _EVERY_PANEL)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     summary = runner.invoke(app, ["acceptance", "summary"])
     assert summary.exit_code == 0, summary.output
     assert "| not-implemented | 1 |" in summary.output

@@ -769,7 +769,7 @@ def test_headings_inside_a_code_fence_are_not_sections(tmp_path: Path) -> None:
 
 
 def _invoke(repo: Path, argv: list[str]):
-    return runner_cli.invoke(app, argv, env={**os.environ, "VK_REPO_ROOT": str(repo)})
+    return runner_cli.invoke(app, argv, env={**os.environ, "FR_REPO_ROOT": str(repo)})
 
 
 def test_cli_passes_on_a_clean_repo(tmp_path: Path) -> None:

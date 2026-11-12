@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 pr1408 review fixes, retired rows keep the base rule, a failed fetch reads the local default ref, ties break by base
+reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
 ---
 
 ## Overview: claims, not tests

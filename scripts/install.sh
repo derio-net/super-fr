@@ -173,8 +173,6 @@ CLAUDE_RULES=(
   no-claude-p-batch.md
   fr-worktree-override.md
 )
-# Retired rule name, no longer installed but must be removed on --uninstall.
-RETIRED_CLAUDE_RULES=(vk-plan-override.md)
 # Retired OpenCode agents: fr-phase-reviewer (4.29–4.40) was removed in 5.0.0
 # (spec 2026-09-29-spec-is-the-contract). Its copies told the agent to fetch the
 # operator input first, so install and uninstall both purge them.
@@ -184,8 +182,6 @@ RETIRED_OPENCODE_AGENTS=(
   fr-phase-reviewer-standard.md
   fr-phase-reviewer-hard.md
 )
-# Legacy user-level copies from pre-plugin installs (old vk-* names).
-SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
 if [[ "${1:-}" == "--install-bridge" ]]; then
   # Write the cron wrapper that exec's `python -m fr_vk.bridge`. Hidden by
@@ -230,11 +226,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   for rule in "${CLAUDE_RULES[@]}"; do
     rm -f "$RULES_DIR/$rule"
   done
-  # Remove retired rules that may be left over from older installations
-  for rule in "${RETIRED_CLAUDE_RULES[@]}"; do
-    rm -f "$RULES_DIR/$rule"
-  done
-  echo "  Removed Claude rules (including retired vk-plan-override.md)"
+  echo "  Removed Claude rules"
   if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     jq "$WT_HOOKS_STRIP" "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
     echo "  Removed fr's WorktreeCreate/WorktreeRemove hooks from $SETTINGS"
@@ -245,12 +237,6 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       echo "  Removed vibe_kanban from $MCP_CONFIG"
     fi
   fi
-  for skill in "${SKILL_NAMES[@]}"; do
-    if [ -d "$CLAUDE_DIR/skills/$skill" ] || [ -L "$CLAUDE_DIR/skills/$skill" ]; then
-      rm -rf "$CLAUDE_DIR/skills/$skill"
-      echo "  Removed stale $CLAUDE_DIR/skills/$skill"
-    fi
-  done
   if [ -d "$OPENCODE_SKILLS_DIR" ]; then
     for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
       skill="$(basename "$skill_dir")"
@@ -420,11 +406,11 @@ fi
 # subsequent `git pull --ff-only`) trace back to running this from a dirty tree.
 #
 # Escape hatch: integration tests (and only integration tests) set
-# VK_INSTALL_SKIP_PREFLIGHT=1 to bypass these checks. CI runs this script from
+# FR_INSTALL_SKIP_PREFLIGHT=1 to bypass these checks. CI runs this script from
 # a detached HEAD on a PR ref, which would always fail the branch/sync gates.
 echo ""
-if [ "${VK_INSTALL_SKIP_PREFLIGHT:-}" = "1" ]; then
-  echo "Preflight: SKIPPED (VK_INSTALL_SKIP_PREFLIGHT=1 — testing only)"
+if [ "${FR_INSTALL_SKIP_PREFLIGHT:-}" = "1" ]; then
+  echo "Preflight: SKIPPED (FR_INSTALL_SKIP_PREFLIGHT=1 — testing only)"
 else
 echo "Preflight: validating source repo at $PLUGIN_ROOT..."
 
@@ -510,7 +496,7 @@ else
   echo "  OK: on main, clean, in sync with origin/main"
   echo "Channel: main"
 fi
-fi  # end VK_INSTALL_SKIP_PREFLIGHT guard
+fi  # end FR_INSTALL_SKIP_PREFLIGHT guard
 
 # VK MCP binary is optional — warn but continue if missing.
 if [ ! -x "$VK_MCP_BINARY" ]; then
@@ -559,7 +545,7 @@ if command -v jq &>/dev/null; then
     echo "  Registered $MARKETPLACE_NAME in known_marketplaces.json"
   fi
 
-  # Enable both plugins in settings.json (v3: superpowers-for-vk is gone)
+  # Enable both plugins in settings.json
   if [ -f "$SETTINGS" ]; then
     for plugin_name in "${PLUGIN_NAMES[@]}"; do
       jq --arg id "$plugin_name@$MARKETPLACE_NAME" '.enabledPlugins[$id] = true' \
@@ -618,7 +604,7 @@ if command -v jq &>/dev/null; then
     done
     case " $purged_ids " in
       *"@$LEGACY_MARKETPLACE_NAME"*)
-        if [ -n "$(echo "$purged_ids" | tr ' ' '\n' | grep -v "^super-fr@\|^super-fr-dispatch@\|^superpowers-for-vk@\|^$" || true)" ]; then
+        if [ -n "$(echo "$purged_ids" | tr ' ' '\n' | grep -v "^super-fr@\|^super-fr-dispatch@\|^$" || true)" ]; then
           echo "  NOTE: some of those belong to sibling repos. Re-run their installers" >&2
           echo "  to re-register them under their own 'derio-net--<repo>' marketplace." >&2
         fi
@@ -743,8 +729,6 @@ if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
       fi
     done
   done
-  # (The retired superpowers-for-vk@derio-net entry needs no special case any
-  # more — the bare-org purge above drops every `*@derio-net` id wholesale.)
 
   # Report — never delete — `X@derio-net--super-fr` registrations our own
   # manifest doesn't list. Ours is the only repo that can legitimately write
@@ -786,20 +770,10 @@ else
   echo "  WARNING: cannot register plugins — jq or installed_plugins.json missing" >&2
 fi
 
-# 6. Clean stale user-level skill copies (from older installs)
-for skill in "${SKILL_NAMES[@]}"; do
-  if [ -d "$CLAUDE_DIR/skills/$skill" ] || [ -L "$CLAUDE_DIR/skills/$skill" ]; then
-    rm -rf "$CLAUDE_DIR/skills/$skill"
-    echo "  Removed stale $CLAUDE_DIR/skills/$skill (now delivered by plugin)"
-  fi
-done
-
 # 7. Rules
 echo ""
 echo "Installing rules..."
 mkdir -p "$RULES_DIR"
-# Remove stale vk-plan-override.md from older installations
-rm -f "$RULES_DIR/vk-plan-override.md"
 # Remove any stale versions of current rules (including symlinks) before installing fresh
 for rule in "${CLAUDE_RULES[@]}"; do
   rm -f "$RULES_DIR/$rule"

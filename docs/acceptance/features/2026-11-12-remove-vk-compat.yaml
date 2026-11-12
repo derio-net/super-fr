@@ -1,0 +1,123 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-12-remove-vk-compat
+repo: derio-net/super-fr
+rows:
+  - id: init-migrate-removed
+    capability: Isolation
+    acceptance: The CLI offers no `fr init migrate` command
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_init_has_no_migrate_command
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_isolation_migrate_module_is_gone
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
+    verify: none
+  - id: isolation-up-requires-branch
+    capability: Isolation
+    acceptance: '`fr isolation up` without `--branch` refuses with a usage error naming
+      the flag, and creates no workspace'
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_up_without_branch_is_a_usage_error
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
+    verify: none
+  - id: fr-repo-root-override
+    capability: CLI
+    acceptance: '`FR_REPO_ROOT` points an fr command at another repo root, and `VK_REPO_ROOT`
+      no longer does'
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_fr_repo_root_is_honoured
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_vk_repo_root_is_not_read
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
+    verify: none
+  - id: installer-names-no-vk-residue
+    capability: Installer
+    acceptance: The installer removes nothing named for the retired vk tool and treats
+      a validator wrapper as its own only when it names super-fr
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R6
+    - spec:2026-11-12-remove-vk-compat#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_install_sh_names_no_retired_vk_thing
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_wrapper_needs_super_fr_in_its_text
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
+    verify: none
+  - id: plan-vk-version-repaired
+    capability: Artifact migration
+    acceptance: '`fr migrate artifacts --yes` removes `vk_version` from live and archived
+      plans, changing no other byte, and reports a plan it cannot rewrite'
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R10
+    - spec:2026-11-12-remove-vk-compat#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_plan_vk_version.py#test_the_rewrite_removes_exactly_the_one_line
+      - super-fr:tests/unit/test_migration_plan_vk_version.py#test_apply_repairs_live_and_archived_and_leaves_the_unrewritable_one
+    status: ci
+    notes: unit tests run the drop-vk-version repair over LF/CRLF/BOM/quoted live and
+      archived carriers and over refused files, asserting bytes, in CI
+    verify: none
+  - id: archived-plans-readable-after-repair
+    capability: Artifact migration
+    acceptance: After the repair has run, `fr status` reads every archived plan that
+      used to carry `vk_version`
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_plan_vk_version.py#test_every_archived_plan_in_this_repo_parses
+    status: ci
+    notes: a unit test parses every archived plan in this repo after the migration (three
+      phase-0 plans that fail on origin/main too are allowlisted by slug), in CI
+    verify: none
+amendments:
+  - row: installer-names-no-vk-residue
+    op: reword
+    base: 0
+    acceptance: The installer contains no code or text naming the retired vk tool, and
+      treats a validator wrapper as its own only when it names super-fr
+    why: 'spec review sr-6: the generic bare-org purge still drops any *@derio-net id,
+      so ''removes nothing'' was untrue'
+  - row: vk-legacy-fallbacks-removed
+    op: reword
+    base: 0
+    acceptance: The vk-spelling dual-read fallbacks (vk-profiles.yaml, .git/vk/isolation
+      state dir, ~/.config/vk/secrets devcontainer mounts, VK_BRIDGE_* env) no longer
+      resolve; vk spellings are not read, and the kept VibeKanban-product names (VK_DERIO_OPS_PROJECT_ID,
+      willikins_vk_bridge_* metrics) are unaffected
+    why: fr init migrate and the legacy-secrets error are removed (spec 2026-11-12-remove-vk-compat
+      R1, R2)
+  - row: vk-legacy-fallbacks-removed
+    op: reword
+    base: 1
+    acceptance: 'The vk-spelling dual-read fallbacks (vk-profiles.yaml, .git/vk/isolation
+      state dir, VK_BRIDGE_* env) no longer resolve: vk spellings are not read. A devcontainer
+      mount is followed whatever its path is named, and the kept VibeKanban-product
+      names (VK_DERIO_OPS_PROJECT_ID, willikins_vk_bridge_* metrics) are unaffected'
+    why: 'review p1-r3: after R2 a config mounting ~/.config/vk/secrets is followed
+      like any other path, so ''no longer resolve'' was untrue for it'
+  - row: vk-legacy-fallbacks-removed
+    op: set-status
+    base: 2
+    status: ci
+    notes: test_isolation.py pins profiles_config and the state dir reading fr spellings
+      only, and that a mounted env file is created whatever its path; test_bridge_cli.py
+      pins bridge_env reading only FR_BRIDGE_*. Run in CI.
+    why: 'review p1-r3: the note cited the legacy-vk-mount hard-error test, which this
+      change deletes with the error'

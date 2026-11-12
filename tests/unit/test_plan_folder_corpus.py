@@ -63,7 +63,6 @@ def test_full_featured_round_trips_the_optional_fields():
     plan = parse_strict(CORPUS / "valid" / "full-featured")
     m = plan.meta
     assert m.spec is not None and ":" in m.spec  # cross-repo form
-    assert m.vk_version is not None  # inert legacy field retained
     assert m.parent_plan and m.prior_rework
     assert [o.id for o in m.origin_items] == [1, 2]
     tags = [p.phase.tag for p in plan.phases]

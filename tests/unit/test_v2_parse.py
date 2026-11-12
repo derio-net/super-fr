@@ -12,7 +12,6 @@ def test_planmeta_loads_minimal_fixture():
     meta = PlanMeta.model_validate(yaml.safe_load((FIXTURE_DIR / "_meta.yaml").read_text()))
     assert meta.plan == "2026-05-09-fixture-minimal"
     assert meta.target_repo == "derio-net/superpowers-for-vk"
-    assert meta.vk_version == ">=1.0.0,<3.0.0"
     assert meta.parent_plan is None
     assert meta.origin_items == []
 
@@ -89,8 +88,7 @@ def test_parse_accepts_phase_one():
 
 
 def test_parse_enforces_fr_version(monkeypatch, tmp_path):
-    """`fr_version` (when present) gates parsing; the legacy `vk_version`
-    field is INERT — it constrains a tool that no longer exists (v3)."""
+    """`fr_version` (when present) gates parsing."""
     import shutil
 
     from fr import PlanSchemaError, parse
@@ -135,25 +133,24 @@ def test_parse_enforce_fr_version_false_admits_a_plan_the_default_would_reject(
     assert plan.meta.fr_version == ">=9.0.0,<10.0.0"  # retained, just unenforced
 
 
-def test_parse_legacy_vk_version_is_inert(monkeypatch, tmp_path):
-    """A wild plan pinned to vk <3.0.0 parses fine under fr 3.x —
-    the v3 landmine the split design defused (labels-are-data doctrine
-    applied to plan files)."""
+def test_a_plan_carrying_vk_version_no_longer_parses(tmp_path):
+    """R9: `PlanMeta` has no `vk_version` field, so the key fails as any
+    unknown key does. `fr migrate artifacts` removes it (`drop-vk-version`)."""
     import shutil
 
-    from fr import parse
+    from fr import PlanSchemaError, parse
 
     plan_dir = tmp_path / "plan"
     shutil.copytree(FIXTURE_DIR, plan_dir)
-    # fixture carries vk_version ">=1.0.0,<3.0.0"
-    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "99.0.0")
-    plan = parse(plan_dir)
-    assert plan.meta.vk_version is not None  # parsed, retained, unenforced
+    meta = (plan_dir / "_meta.yaml").read_text()
+    (plan_dir / "_meta.yaml").write_text(meta + 'vk_version: ">=1.0.0,<3.0.0"\n')
+    with pytest.raises(PlanSchemaError, match="vk_version"):
+        parse(plan_dir)
 
 
 def test_parse_rejects_invalid_fr_version_specifier(tmp_path):
     """Malformed fr_version surfaces as PlanSchemaError, not
-    InvalidSpecifier. (A malformed legacy vk_version is inert — ignored.)"""
+    InvalidSpecifier."""
     import shutil
 
     from fr import PlanSchemaError, parse
@@ -161,7 +158,6 @@ def test_parse_rejects_invalid_fr_version_specifier(tmp_path):
     shutil.copytree(FIXTURE_DIR, tmp_path / "copy")
     (tmp_path / "copy" / "_meta.yaml").write_text(
         "schema_version: 2\nplan: x\ntarget_repo: o/r\n"
-        'vk_version: "totally not a spec"\n'
         'fr_version: "also not a spec"\ncreated: "2026-05-09"\n'
     )
     with pytest.raises(PlanSchemaError, match="invalid fr_version"):
@@ -330,9 +326,8 @@ def test_planmeta_rejects_extra_field():
                 "schema_version": 2,
                 "plan": "x",
                 "target_repo": "o/r",
-                "vk_version": ">=2",
                 "created": "2026-05-09",
-                "extra_field": "boom",
+                "not_a_field": "boom",
             }
         )
 

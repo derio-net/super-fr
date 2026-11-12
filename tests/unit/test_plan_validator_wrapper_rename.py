@@ -54,10 +54,17 @@ def test_recognizes_the_current_wrapper(tmp_path: Path) -> None:
     assert is_super_fr_validator_wrapper(_wrapper(tmp_path, WRAPPER_TEXT))
 
 
-@pytest.mark.parametrize("text", [LEGACY_WRAPPER, PRE_SWEEP_WRAPPER])
-def test_recognizes_a_committed_legacy_wrapper(tmp_path: Path, text: str) -> None:
+def test_recognizes_a_committed_legacy_wrapper(tmp_path: Path) -> None:
     """The deployed fleet's wrappers all point at the retired bare-org name."""
-    assert is_super_fr_validator_wrapper(_wrapper(tmp_path, text))
+    assert is_super_fr_validator_wrapper(_wrapper(tmp_path, LEGACY_WRAPPER))
+
+
+def test_a_pre_sweep_wrapper_is_foreign(tmp_path: Path) -> None:
+    """A wrapper that never names super-fr is not ours: it is refused, not overwritten."""
+    target = _wrapper(tmp_path, PRE_SWEEP_WRAPPER)
+    assert not is_super_fr_validator_wrapper(target)
+    with pytest.raises(ValidatorWrapperError):
+        ensure_validator_wrapper(tmp_path)
 
 
 def test_still_rejects_a_foreign_validator(tmp_path: Path) -> None:

@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/types.py
   - packages/fr/src/fr/plan/**
   - packages/fr/src/fr/commands/plan_cmd.py
-reviewed: 2026-11-12 docstring and comment wording only (fr where the old vk command was named); nothing this page describes changed
+reviewed: 2026-11-12 PlanMeta lost the never-enforced vk_version key, which this page never listed; still true
 ---
 
 # The plan model

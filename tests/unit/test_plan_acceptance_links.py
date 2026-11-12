@@ -330,7 +330,7 @@ def _status_repo(tmp_path: Path, *, matrix: bool) -> Path:
 def _status(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, plan_dir: Path):
     monkeypatch.setattr(status_cmd, "_make_gh_client", lambda: FakeGhClient())
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("FR_REPO_ROOT", str(tmp_path))
     return runner.invoke(app, ["status", str(plan_dir.relative_to(tmp_path))])
 
 

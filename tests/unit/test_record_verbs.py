@@ -67,7 +67,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def _fr(root: Path, argv: list[str]):
-    return CliRunner().invoke(app, argv, env={**os.environ, "VK_REPO_ROOT": str(root)})
+    return CliRunner().invoke(app, argv, env={**os.environ, "FR_REPO_ROOT": str(root)})
 
 
 @pytest.fixture

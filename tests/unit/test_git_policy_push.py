@@ -58,7 +58,7 @@ def _commit(repo: Path, name: str, subject: str) -> str:
 
 
 def _push(repo: Path, *args: str, env: dict[str, str] | None = None):
-    return runner.invoke(app, ["push", *args], env={"VK_REPO_ROOT": str(repo), **(env or {})})
+    return runner.invoke(app, ["push", *args], env={"FR_REPO_ROOT": str(repo), **(env or {})})
 
 
 def _feature(repo: Path) -> Path:
@@ -319,7 +319,7 @@ def _approve(repo: Path, request_id: str) -> None:
             "--answered-by",
             "operator",
         ],
-        env={"VK_REPO_ROOT": str(repo)},
+        env={"FR_REPO_ROOT": str(repo)},
     )
     assert result.exit_code == 0, result.output
 
@@ -347,7 +347,7 @@ def _answered(
     def rounds(env: dict[str, str], since: str) -> list[Round] | None:
         if value is not True:
             return None if value is None else []
-        requests = Path(env["VK_REPO_ROOT"]) / ".git" / "fr" / "requests"
+        requests = Path(env["FR_REPO_ROOT"]) / ".git" / "fr" / "requests"
         ids = [json.loads(p.read_text())["id"] for p in requests.glob("*.json")]
         question = "May fr do this? " + (" ".join(ids) if names_request else "(no id)")
         said = (
@@ -708,7 +708,7 @@ def _journal(repo: Path, scope: str, slug: str, *args: str):
     return runner.invoke(
         app,
         ["journal", "add", "--scope", scope, "--slug", slug, *args],
-        env={"VK_REPO_ROOT": str(repo)},
+        env={"FR_REPO_ROOT": str(repo)},
     )
 
 
@@ -767,7 +767,7 @@ def test_a_debugging_session_opens_its_pr_after_approving_in_its_debug_journal(
         return runner.invoke(
             app,
             ["pr", "create", "--title", "t", "--body-file", str(tmp_path / "body.md")],
-            env={"VK_REPO_ROOT": str(repo)},
+            env={"FR_REPO_ROOT": str(repo)},
         )
 
     first = create()

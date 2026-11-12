@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-12 docstring and comment wording only (fr where the old vk command was named); nothing this page describes changed
+reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
 ---
 
 # Installing super-fr

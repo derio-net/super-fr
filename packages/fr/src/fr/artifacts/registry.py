@@ -17,7 +17,11 @@ Three properties this module exists to guarantee:
    them would falsify history (spec §2 non-goals). The live locators are
    rooted at the live directories, so the archive is unreachable by
    construction; `iter_artifact_paths` re-checks anyway, because a future
-   locator edit is exactly the mistake that would go unnoticed.
+   locator edit is exactly the mistake that would go unnoticed. The single
+   exception is not a locator: the `drop-vk-version` plan repair
+   (`fr.artifacts.plan_vk_version`, spec 2026-11-12-remove-vk-compat R11),
+   authorised by the operator, reaches archived `_meta.yaml` files through its
+   own `Repair.extra_locators`, repair-only. Nothing here yields them.
 3. **Writing a stamp disturbs nothing else.** These run against files an
    operator has open. Every writer edits the carrier line *textually* and
    leaves every other byte — comments, key order, blank lines — alone. A
@@ -649,7 +653,9 @@ def iter_paths_of(repo_root: Path, kind: ArtifactKind) -> Iterator[Path]:
 
     Archived artifacts are never yielded — the locators cannot reach
     `implemented/`, and this re-checks so a future locator edit cannot quietly
-    start rewriting shipped history.
+    start rewriting shipped history. The one repair that does reach the
+    archive (`drop-vk-version`) declares it in `Repair.extra_locators` and is
+    walked by the runner's `_scan_extra`, never through here.
 
     Takes the kind rather than its name so the migration runner can walk the
     kinds it was handed without re-entering the global mapping (the runner's

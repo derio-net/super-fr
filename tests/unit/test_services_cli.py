@@ -34,7 +34,7 @@ def _repo(tmp_path: Path, *, remote: str, profiles: str | None) -> Path:
 
 
 def _invoke(repo: Path, monkeypatch: pytest.MonkeyPatch, *args: str) -> tuple[int, str]:
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     monkeypatch.chdir(repo)
     result = CliRunner().invoke(app, ["services", *args])
     return result.exit_code, result.output

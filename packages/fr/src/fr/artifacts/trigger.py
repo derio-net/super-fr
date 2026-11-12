@@ -151,10 +151,8 @@ must keep working on an unmigrated repo, whose version-1 file it reports as
 only the fr-profiles artifact, always at that kind's current version, and runs
 the 1 -> 2 migration in process over an existing version-1 file first (refusing,
 untouched, one it cannot migrate) — it never leaves, or proceeds over, a stale
-one (spec 2026-09-28 fr-profiles-services §3.E.1). `fr init migrate` renames
-vk-profiles.yaml to fr-profiles.yaml and so can leave a version-1 file, which the
-next gated command migrates. `fr init agents` (2026-10-07 cloud-triage R19) writes the
-`agents` artifact only at its current version, so it too never leaves a stale one.
+one (spec 2026-09-28 fr-profiles-services §3.E.1). `fr init agents` (2026-10-07 cloud-triage R19)
+writes the `agents` artifact only at its current version, so it too never leaves a stale one.
 `fr cloud` (same spec, R23) writes nothing: `doctor` reads the host's files and the
 repo's `agents` artifact, `setup-script` prints a template; and it is what an operator
 runs when the environment is not yet fit for fr, stale artifacts included.
@@ -644,6 +642,7 @@ def _migrate_in_place(
 
     for action in report.applied:
         emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
+    _emit_unrepairable(report, root, emit)
     if report.failed:
         for failure in report.failed:
             emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
@@ -697,6 +696,7 @@ def _migrate_and_commit(
         emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
     for skipped in report.skipped:
         emit(f"  skipped (another writer got there first): {_rel(skipped.path, root)}")
+    _emit_unrepairable(report, root, emit)
 
     if report.applied:
         do_commit = commit if commit is not None else commit_migration
@@ -747,6 +747,13 @@ def _migrate_and_commit(
         )
 
 
+def _emit_unrepairable(report: MigrationReport, root: Path, emit: Callable[[str], None]) -> None:
+    """Say which archived files a repair left alone. Never a refusal: they do
+    not make the tree stale (spec 2026-11-12-remove-vk-compat R12)."""
+    for left in report.unrepairable:
+        emit(f"  not repaired (archived, left as it is): {_rel(left.path, root)} · {left.error}")
+
+
 def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
     """Did `resolve_repo_root` hand us a cwd instead of the repository root?
 
@@ -758,7 +765,7 @@ def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
     r5-c2). Now git answers separately, so the two can be compared — and a
     disagreement is a refusal, not a shrug.
 
-    Not a refusal when `$VK_REPO_ROOT` deliberately points somewhere else and
+    Not a refusal when `$FR_REPO_ROOT` deliberately points somewhere else and
     that somewhere else IS a repo root; that is the documented test/override
     seam, and it agrees with git by definition when it is a real root.
     """

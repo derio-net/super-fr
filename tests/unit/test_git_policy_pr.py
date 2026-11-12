@@ -55,7 +55,7 @@ def _create(repo: Path, *args: str):
     return runner.invoke(
         app,
         ["pr", "create", "--title", "t", "--body-file", str(repo.parent / "body.md"), *args],
-        env={"VK_REPO_ROOT": str(repo)},
+        env={"FR_REPO_ROOT": str(repo)},
     )
 
 
@@ -114,7 +114,7 @@ def test_pr_ask_refuses_on_an_unobservable_transcript(
     result = runner.invoke(
         app,
         ["pr", "create", "--title", "t", "--body-file", str(tmp_path / "body.md")],
-        env={"VK_REPO_ROOT": str(repo), "FR_HARNESS": "hermes"},
+        env={"FR_REPO_ROOT": str(repo), "FR_HARNESS": "hermes"},
     )
 
     assert result.exit_code == 2, result.output

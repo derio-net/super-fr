@@ -82,7 +82,7 @@ def _fr(root: Path, shipped: Path, argv: list[str]):
     return runner_cli.invoke(
         app,
         argv,
-        env={**os.environ, "VK_REPO_ROOT": str(root), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={**os.environ, "FR_REPO_ROOT": str(root), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
     )
 
 

@@ -1,0 +1,120 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Remove vk_version from plans with a repair that reaches the archive (R9-R14,
+    R15 rest, R16, R20)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - plan-vk-version-repaired
+  - archived-plans-readable-after-repair
+  tier: hard
+  files:
+  - packages/fr/src/fr/artifacts/*
+  - packages/fr/src/fr/types.py
+  - packages/fr/src/fr/parser.py
+  - packages/fr/src/fr/spec.py
+  - plugins/super-fr/skills/fr-plan/SKILL.md
+  - .opencode/*
+  - .hermes/*
+  - .claude/rules/artifact-versioning.md
+  - docs/superpowers/implemented/plans/*
+  - docs/reference/*
+  - docs/explainers/*
+  - docs/*.md
+  - docs/acceptance/*
+  - tests/*
+  - .changes/chore-remove-vk-compat.yaml
+  - .test_durations
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: The repair on one file (R10)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Read `packages/fr/src/fr/artifacts/runner.py`, `registry.py` (`read_verbatim`, `split_lines`, `iter_paths_of`, `ARCHIVE_SEGMENT`), `fr_version.py`, `atomic.py` and `trigger.py` end to end before writing anything. RED: `tests/unit/test_migration_plan_vk_version.py` for a new module `fr.artifacts.plan_vk_version` exposing `has_vk_version(path) -> bool` and `drop_vk_version(path) -> None`: the predicate is False for a file whose bytes do not contain `vk_version` WITHOUT parsing it (assert by monkeypatching `yaml.safe_load` to raise), False when the string appears only inside another value or a comment, True for a mapping with the key. The rewrite removes exactly the one line and its terminator and leaves every other byte, asserted on raw bytes, for: LF file; CRLF file; file with a UTF-8 BOM; key on the last line with no final newline; single-quoted, double-quoted and bare values; key with a trailing comment. It raises a `PlanVkVersionError` (an `ArtifactMigrationError` subclass) and leaves the file byte-identical for: a block scalar (`vk_version: >-` with indented lines), a multi-line double-quoted scalar, a duplicated top-level key, a flow-mapping document (`{plan: x, vk_version: y}`), a nested `vk_version` under another key with none at top level. A second run on a repaired file is a no-op (predicate False). See them fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement `packages/fr/src/fr/artifacts/plan_vk_version.py`. `has_vk_version`: read bytes, return False when `b"vk_version"` is absent, else `yaml.safe_load` and return whether the document is a mapping containing the key (a parse error propagates, so the runner reports that artifact). `drop_vk_version`: read with `registry.read_verbatim`, split with `registry.split_lines`, collect lines matching `^vk_version\s*:` at column 0, require exactly one, build the new text without it, `yaml.safe_load` both texts and require `new == {k: v for k, v in old.items() if k != "vk_version"}`, raise `PlanVkVersionError` naming the path and the reason on any other outcome BEFORE writing, then `write_text_atomic` preserving the original encoding and line endings exactly as `read_verbatim`'s contract requires. See the tests pass.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: module docstring stating why this is a repair and not a schema migration (the plan stamp is `schema_version`; spec 2026-11-12-remove-vk-compat §3.D) and that it is the one migration that reaches the archive, by the operator's decision.
+- number: 2
+  title: Register it and reach the archive through all four walks (R11, R12)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in `tests/unit/test_migration_plan_vk_version.py`, against a tmp git repo holding one live plan and two archived plans (`docs/superpowers/implemented/plans/<slug>/_meta.yaml`) that carry the key, plus one archived plan with a block-scalar `vk_version`: `Repair` accepts `extra_locators`; the shipped registry holds a `plan` repair named `drop-vk-version` whose `extra_locators` is `("docs/superpowers/implemented/plans/*/_meta.yaml",)` and `CEILING_REPAIR.extra_locators == ()`; `plan_migrations` lists the live plan and the two rewritable archived plans as repair actions and the block-scalar one as a failure; `run_migrations` (apply) rewrites the three, leaves the fourth byte-identical and reports it, and its changed-paths list (what the migration commit stages) holds exactly the three; `is_stale` is True when only an archived carrier exists, and False when the only remaining carrier is the unrewritable archived file; `inspection_failures` never names an archive path; `iter_paths_of(repo, plan_kind)` still yields no archive path; a plan whose `fr_version` ceiling excludes the installed major is NOT widened when it sits in the archive (the ceiling repair still skips it); `fr validate artifacts` on the repo neither counts nor fails the archived files. See them fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add `extra_locators: tuple[str, ...] = ()` to `Repair` in `runner.py`. Add one runner helper that, for each registered repair declaring extra locators, globs them under the repo root (sorted) and classifies each path as repairable (`applies` true and a dry in-memory rewrite check passes), failing (the predicate or the dry check raised) or clean. For that, give `plan_vk_version` a pure `rewritten_text(path) -> str` used by both `drop_vk_version` and the dry check, so "repairable" and "will be rewritten" cannot disagree. Wire the helper into the four walks exactly as the spec's §3.D table says: `plan_migrations` lists repairable as actions and failing as failures; `run_migrations` applies repairable paths through a repair-only path (no stamp read, no schema chain, no structure validation; the uncommitted-changes veto and the changed-paths reporting apply as for any path) and reports failing ones without stopping the rest; `is_stale` counts repairable paths only; `inspection_failures` ignores archive paths. Leave `iter_paths_of` and `validate.py` untouched. Register `Repair(kind="plan", name="drop-vk-version", applies=has_vk_version, fn=drop_vk_version, description="remove the retired vk_version key from the plan", extra_locators=(...))` and import the module in `fr/artifacts/__init__.py`. Run the new tests and every existing migration test (`uv run pytest -q --no-cov -n auto tests/unit -k "migration or artifact or trigger or validate_artifacts"`); see them pass. If the four walks cannot take the helper without a second enumeration of kinds, stop and return `outcome: blocked` naming the seam: that is a spec defect, not something to work around.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: the four call sites share the one helper and one small result type; no walk re-globs by itself. Update the docstrings in `registry.py` (the archive paragraph near the top and at `iter_paths_of`) and `runner.py` (the sentence saying archives are never migrated) to state the single exception by name.
+- number: 3
+  title: Remove the field and migrate this repo (R9, R13, R14)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in `tests/unit/test_v2_parse.py` replace the tests that assert `vk_version` parses with one asserting a `_meta.yaml` carrying `vk_version` raises `PlanSchemaError`; change the unknown-key test to use a neutral key (`not_a_field`) so it cannot pass merely because `vk_version` became unknown; in `tests/unit/test_plan_folder_corpus.py` drop the `vk_version` expectation. Add to `tests/unit/test_migration_plan_vk_version.py`: no `_meta.yaml` under this repo's `docs/superpowers/plans/` or `docs/superpowers/implemented/plans/` contains a top-level `vk_version` key; every `docs/superpowers/implemented/plans/*/` directory that holds a `_meta.yaml` with `schema_version: 2` parses with `fr.parser.parse(dir, enforce_fr_version=False)` (collect failures and assert the list is empty, printing each; if a plan fails for a reason unrelated to `vk_version` on `origin/main` too, exclude exactly those by slug in a named allowlist with the reason, never by a broad except). See them fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: remove `vk_version` from `PlanMeta` in `packages/fr/src/fr/types.py` with its comment, and reword the module docstring's "must update your vk_version" to `fr_version`; remove the two `vk_version` sentences in `packages/fr/src/fr/parser.py`. Remove the key from every fixture under `tests/` that carried it (`tests/unit/fixtures/v2_plan_*/_meta.yaml`, `tests/fixtures/plan_folders/valid/full-featured/_meta.yaml` and its `_prose.md` mention) and from the inline YAML in `tests/unit/test_v2_migrate.py`, `tests/unit/test_vk_bridge_discover.py` and the `tests/integration/test_bridge_*.py` files; where `fr.migrate` (the v1-to-v2 plan migration) WRITES a `vk_version` key, stop writing it and update its tests. Remove `vk_version` from the field list in `plugins/super-fr/skills/fr-plan/SKILL.md` and run both skill sync scripts. Then migrate this repo by running the framework itself (never editing the archived files directly): commit the work so far, run `uv run fr migrate artifacts` (preview: expect 33 archived `_meta.yaml` files, no failures), then `uv run fr migrate artifacts --yes`; confirm with `git show --stat HEAD` that the migration commit holds only those `_meta.yaml` files and each lost one line. Run the new tests and `uv run fr validate artifacts`; see them pass.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: grep `packages/fr/src` for `vk_version`; the only hits allowed are inside `fr/artifacts/plan_vk_version.py`. Reword the "archives are never migrated" notes in `packages/fr/src/fr/parser.py` and `packages/fr/src/fr/spec.py` to name the exception.
+- number: 4
+  title: Rule, fragment, docs currency, full suite (R15, R16, R20)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      In `.claude/rules/artifact-versioning.md`, under "What this rule does not cover", add one paragraph: the single exception is the `drop-vk-version` plan repair (`fr.artifacts.plan_vk_version`, spec `2026-11-12-remove-vk-compat-design.md` R11), authorised by the operator, which removes one retired key from archived `_meta.yaml` files through `Repair.extra_locators`; it is repair-only (no stamp, no validation), an unrewritable archived file is reported and holds nothing, and a second archive-reaching repair needs the same explicit decision. Run `uv run python scripts/sync-opencode.py` (the rule is mirrored to `.opencode/instructions/`). Add `.changes/chore-remove-vk-compat.yaml` with `bump: major` and `summary: "the retired vk command's compatibility paths are gone: fr init migrate, the vk-iso/work default (fr isolation up now requires --branch), VK_REPO_ROOT (now FR_REPO_ROOT) and the vk_version plan key, which fr migrate artifacts removes"`. Run `uv run --no-project python scripts/check-change-fragment.py origin/main` and `uv run fr docs check --base origin/main`, fixing each page it names by edit or `reviewed:` bump. Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src`, `uv run pytest -n auto --no-cov --store-durations -q` is NOT needed; run the full suite `uv run pytest -q --no-cov -n auto` into a host-visible log after the last code commit; see it pass. Single-step task.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T19:22:30+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T19:22:30+00:00'
+    note: null
+    observed_prs: []

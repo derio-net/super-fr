@@ -19,7 +19,6 @@ schema_version: 2
 plan: {slug}
 spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md
 target_repo: derio-net/test
-vk_version: ">=1.0.0,<3.0.0"
 created: 2026-05-09
 """
 
@@ -325,7 +324,6 @@ def test_discover_plans_includes_phase_unblocked_by_completed_dependency(
         "plan: 2026-05-09-twophase\n"
         "spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md\n"
         "target_repo: derio-net/test\n"
-        'vk_version: ">=1.0.0,<3.0.0"\n'
         "created: 2026-05-09\n"
     )
     (pdir / "_prose.md").write_text("prose\n")
@@ -394,7 +392,6 @@ def test_discover_plans_skips_whole_plan_when_a_phase_issue_unviewable(
         "plan: 2026-05-09-twophase-badissue\n"
         "spec: docs/superpowers/specs/2026-05-06-vk-rebuild-state-machine-design.md\n"
         "target_repo: derio-net/test\n"
-        'vk_version: ">=1.0.0,<3.0.0"\n'
         "created: 2026-05-09\n"
     )
     (pdir / "_prose.md").write_text("prose\n")

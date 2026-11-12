@@ -77,7 +77,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     alpha = row(id="alpha-1").replace('"Cap"', '"Alpha"')
     beta = row(id="beta-1").replace('"Cap"', '"Beta"')
     root = make_repo(tmp_path, alpha + beta, git=False, header=MATRIX_HEADER)
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     _ok(root, "init", "-q", "-b", "main")
     _ok(root, "config", "user.email", "t@example.com")
     _ok(root, "config", "user.name", "t")

@@ -21,7 +21,7 @@ runner = CliRunner()
 
 
 def run_check(root: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
     return runner.invoke(app, ["acceptance", "check"])
 
 

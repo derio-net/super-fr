@@ -45,7 +45,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         ),
         stale_days=14,
     )
-    monkeypatch.setenv("VK_REPO_ROOT", str(repo))
+    monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     monkeypatch.delenv("FR_DEBT_TOKEN", raising=False)
     monkeypatch.setattr(debt_cmd, "_client", lambda root: gh)

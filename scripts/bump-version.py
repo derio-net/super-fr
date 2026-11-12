@@ -93,23 +93,21 @@ def bump(arg: str) -> int:
     subprocess.run(["uv", "sync"], check=True, cwd=REPO)
 
     # Verify the entry point reports the new number, which Python spells PEP 440
-    # (`X.Y.ZrcN` for an RC). The script name is `vk` until the Phase 3 rebrand
-    # flips it to `fr`; probe both.
+    # (`X.Y.ZrcN` for an RC).
     expected = Version.parse(new).pep440
-    for cli in ("fr", "vk"):
-        result = subprocess.run(
-            ["uv", "run", cli, "--version"],
-            cwd=REPO,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            reported = result.stdout.strip()
-            print(f"`{cli} --version` -> {reported}")
-            if expected not in reported.split():  # a token: 5.27.0 is not in 5.27.0rc1
-                sys.exit(f"error: {cli} --version output {reported!r} doesn't contain {expected!r}")
-            return 0
-    sys.exit("error: neither `fr` nor `vk` entry point responded to --version")
+    result = subprocess.run(
+        ["uv", "run", "fr", "--version"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        reported = result.stdout.strip()
+        print(f"`fr --version` -> {reported}")
+        if expected not in reported.split():  # a token: 5.27.0 is not in 5.27.0rc1
+            sys.exit(f"error: fr --version output {reported!r} doesn't contain {expected!r}")
+        return 0
+    sys.exit("error: the `fr` entry point did not respond to --version")
 
 
 def main() -> int:

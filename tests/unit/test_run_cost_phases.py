@@ -271,7 +271,7 @@ def _invoke(repo: Path) -> str:
     result = CliRunner().invoke(
         app,
         ["run", "cost", RUN],
-        env={**os.environ, "VK_REPO_ROOT": str(repo), "COLUMNS": "400"},
+        env={**os.environ, "FR_REPO_ROOT": str(repo), "COLUMNS": "400"},
     )
     assert result.exit_code == 0, result.output
     return " ".join(result.output.split())

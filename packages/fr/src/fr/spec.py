@@ -368,7 +368,8 @@ def compute_status(spec: SpecMeta, repo_root: Path, gh: GhClient | None = None) 
 
         try:
             # spec §3.E.1: this is a historical read, not execution — an
-            # archived plan is never migrated (spec §2 non-goal) and may
+            # archived plan is never migrated (spec §2 non-goal; the one
+            # exception, `drop-vk-version`, removes a retired key) and may
             # carry an `fr_version` ceiling that excludes the installed
             # major. Enforcing that ceiling here would degrade every such
             # plan to `state="Missing"` rather than reporting what actually

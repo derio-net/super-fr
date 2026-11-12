@@ -44,7 +44,7 @@ def models_errors_exit(fn: Callable[P, R]) -> Callable[P, R]:
 def resolve_repo_root(cwd: Path | None = None) -> Path:
     """Resolve the repo root for an fr command.
 
-    Honors `$VK_REPO_ROOT` first (so integration tests can point a
+    Honors `$FR_REPO_ROOT` first (so integration tests can point a
     command at `tmp_path` without spawning a fake git repo), then
     falls back to `git rev-parse --show-toplevel` (run from `cwd` if
     given), then to `Path.cwd()`.
@@ -55,10 +55,10 @@ def resolve_repo_root(cwd: Path | None = None) -> Path:
     or cwd) traversed a symlink.
 
     The empty string is treated like an unset env var (we fall through
-    to git) — keeping `VK_REPO_ROOT=""` as a way to disable the
+    to git) — keeping `FR_REPO_ROOT=""` as a way to disable the
     override without unsetting it.
     """
-    override = os.environ.get("VK_REPO_ROOT")
+    override = os.environ.get("FR_REPO_ROOT")
     if override:
         return Path(override).resolve()
     try:

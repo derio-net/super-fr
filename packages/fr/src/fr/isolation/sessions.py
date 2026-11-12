@@ -33,7 +33,7 @@ def ambient_binding(
     session: str | None, harness: str, env: Mapping[str, str]
 ) -> tuple[str | None, str]:
     """The (session, harness) to bind when the caller named none — `fr run
-    start` and `fr isolation up` both default through this, so the two
+    start` and `fr isolation up --branch <branch>` both default through this, so the two
     entry points cannot drift (2026-09-21 debug journal, C4).
 
     An explicit `--session` always wins. Otherwise the session is the one fr
@@ -136,7 +136,8 @@ def attach(
     state = load_state(repo_root, branch)
     if state is None:
         raise IsolationError(
-            f"no isolation workspace for branch {branch!r} — run `fr isolation up` first."
+            f"no isolation workspace for branch {branch!r} — "
+            "run `fr isolation up --branch <branch>` first."
         )
     prev = read_session_index(session_id)
     if prev and (Path(prev.get("repo_root", "")) != repo_root or prev.get("branch") != branch):
