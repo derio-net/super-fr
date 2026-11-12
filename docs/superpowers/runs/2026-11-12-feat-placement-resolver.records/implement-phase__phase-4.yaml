@@ -1,0 +1,105 @@
+schema_version: 11
+run: 2026-11-12-feat-placement-resolver
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T2.S1, P4.T2.S2, P4.T3.S1, P4.T3.S2, P4.T4.S1, P4.T4.S2, P4.T5.S1, P4.T5.S2, P4.T6.S1, P4.T6.S2]
+refactor:
+  P4.T1: "new module fr/placement/stealth.py; the targets share one fetch_placement and one _tracking_entry, the CLI one _stealth_request; nothing duplicated to fold"
+  P4.T2: "one _stealth source in the loader beside _quiet, one data rule in RULES, render_init gained a placement instead of a second renderer"
+  P4.T3: "the stealth commit is one branch of the existing commit seam (commit_and_push), reusing gitseam.push_ref_cas and the fr-worktree lock; no parallel path left to merge"
+  P4.T4: "more_visible sits beside leak_risk; check_privacy is the one guard, called by enter, init --stealth and the push seam"
+  P4.T5: "the product-head write is one _RunWrites hook; resume is prepare/finish around the existing up; the quiet-only refusals now share outside_repo"
+  P4.T6: "skills, mirrors, a scenario, docs and the row move; no code to clean"
+journal:
+  - kind: decision
+    id: stealth-run-start-new-workspace-only
+    phase: 4
+    title: run start --stealth records stealth only for a workspace it enters; an existing one must already be stealth on that ref
+    body: |
+      R24 says run start may choose stealth, R23 says a workspace never changes placement. `fr run
+      start --stealth <ref>` therefore records stealth when it enters isolation itself (case 3 of
+      ensure_run_workspace) and, in an existing workspace, requires the state/marker to record
+      stealth on the same tracking ref, refusing otherwise with the up command to use.
+  - kind: decision
+    id: stealth-product-head-is-the-pushed-head
+    phase: 4
+    title: The state records the PUSHED product head (refs/remotes/origin/<branch>), in <run-id>.stealth.json
+    body: |
+      "Code is pushed before state, and the state records the product head it describes" is held
+      by recording only pushed code: every run write (start, advance, resolve) rewrites
+      `<runs dir>/<run-id>.stealth.json` with the target remote, branch and origin/<branch>'s sha,
+      committed with the step. It is not a cursor field (no kind changes) and not *.yaml, so no
+      locator reads it as a cursor. "Redo the last step's bookkeeping" on resume is re-recording
+      that head for the branch as fetched, committed and pushed like any state write; idempotent.
+  - kind: decision
+    id: stealth-privacy-at-the-push-seam
+    phase: 4
+    title: The privacy verdict is required by commit_and_push itself, not only by its callers
+    body: |
+      Raised by the coordinator's security relay: `fr settings init --stealth` skipped the guard.
+      Beside the fix in init, `stealth.commit_and_push` calls `check_privacy(ref, target_remote)`
+      before committing (cached per process), so no future caller can push state to a tracking
+      repo more visible than its target. A local path counts as private; an unreadable visibility
+      refuses.
+  - kind: decision
+    id: stealth-reachability-once-per-process
+    phase: 4
+    title: space_for checks the tracking repo reachable once per process; up, run start and every push check it again
+    body: |
+      R24 fail-fast: `stealth_space` runs `git ls-remote` for the tracking ref the first time a
+      process resolves a stealth space, so any fr write refuses before writing when the tracking
+      repo is gone; `up`, `run start` and settings init check it uncached, and the CAS push is
+      itself the per-write check (a failure there is fatal, StealthPushError, exit 2, with the
+      tracking worktree reset to its pre-commit HEAD).
+  - kind: discovery
+    id: stealth-red-order
+    phase: 4
+    title: Most of stealth.py was written before its tests; RED taken by disabling each task's code
+    body: |
+      fr/placement/stealth.py was drafted in one sitting ahead of tasks 3-5. RED was taken honestly
+      per task: T1 (5 of 9 failed before servable/more_visible/_repo_file), T3 (with the commit
+      seam's stealth branch disabled 4 of 8 failed; the 4 passing were fail-fast checks already
+      in up), T4 (the two privacy-relay tests failed with the guard removed), T5 (all 5 failed
+      with run_cmd/isolation_cmd/apply_cmd stashed). The implementation was restored byte for byte.
+  - kind: discovery
+    id: relative-root-worktree-path
+    phase: 4
+    title: quiet.worktree_path("." ) named ~/.cache/fr/worktrees/fr; fixed by resolving the root
+    body: |
+      `fr isolation up` from the cwd passes Path("."), whose common dir is the relative `.git`, so
+      the repo name was empty. Found by the resume test on a second host; quiet had the same latent
+      bug. Both quiet.worktree_path and stealth.worktree_path/target_dir now resolve first.
+  - kind: discovery
+    id: record-home-message-outside-checkout
+    phase: 4
+    title: resolve --record's "not in this run's records dir" refusal crashed (ValueError) when the run lives outside the checkout
+    body: |
+      `home.relative_to(repo_root)` raised under quiet and stealth; it now prints the path relative
+      when inside the checkout, absolute otherwise (`_shown_path`).
+  - kind: discovery
+    id: stealth-full-suite-caught-workspace-read
+    phase: 4
+    title: The first full suite caught ensure_run_workspace reading state.placement on a stub without it
+    body: |
+      test_run_workspace's reuse test stubs the state with only `worktree`; the stealth check read
+      `placement` unconditionally. It now reads the recorded placement only for a stealth request
+      (91b550eee); the full suite was re-run after the fix.
+  - kind: finding
+    id: stealth-init-skipped-privacy
+    phase: 4
+    review_scope: in
+    title: fr settings init --stealth pushed into the tracking repo without the privacy guard
+    body: |
+      Security relay from the coordinator: init_stealth ran parse_ref -> check_reachable ->
+      target_dir -> ensure_worktree -> commit_and_push and never check_privacy, so it could push a
+      target's settings and identity into a tracking repo more visible than the target (R24).
+resolves:
+  - id: stealth-init-skipped-privacy
+    state: fixed
+    body: |
+      init_stealth calls check_privacy before cloning or pushing, and commit_and_push itself refuses
+      without a privacy verdict. Tests: test_init_stealth_refuses_a_public_tracking_repo_for_a_private_target
+      (exit 2, no worktree, tracking ref unmoved) and test_the_push_seam_itself_refuses_without_a_privacy_verdict;
+      both failed with the guard removed.
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f5689a0b-c781-4953-bf5a-b20b350b4acf/scratchpad/p4-suite.log}
