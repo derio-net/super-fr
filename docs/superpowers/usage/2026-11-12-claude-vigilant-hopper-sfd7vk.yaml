@@ -1,0 +1,104 @@
+schema_version: 2
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+captures:
+- host: h-93985a91
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-12T13:49:34+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 671e7103-998b-587e-980b-da83b609e16c
+    role: main
+    models:
+      claude-fable-5-2:
+        input: 287
+        cache_write: 764232
+        cache_read: 28981457
+        output: 109412
+        usd: 19.586407599999994
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 284
+        cache_write: 461001
+        cache_read: 24377189
+        output: 88633
+        usd: 4.477119399999998
+        usd_source: exact
+      claude-opus-5-5:
+        input: 46
+        cache_write: 121570
+        cache_read: 2100324
+        output: 19547
+        usd: 1.4190387999999998
+        usd_source: exact
+      claude-haiku-5-5:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0028181
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 2.4352654705029027
+        turns: 60
+      other:
+        usd: 14.91918634374837
+        turns: 187
+      paperwork:
+        usd: 8.130932085748709
+        turns: 62
+    steps:
+      (outside run):
+        usd: 24.071949245108268
+        turns: 283
+        input: 598
+        cache_write: 1309285
+        cache_read: 53614711
+        output: 197700
+      brainstorm:
+        usd: 1.4134346548917158
+        turns: 10
+        input: 19
+        cache_write: 37518
+        cache_read: 1844259
+        output: 19892
+    steps_by_role:
+      main:
+        (outside run):
+          usd: 18.172972945108274
+          turns: 124
+          input: 268
+          cache_write: 726714
+          cache_read: 27137198
+          output: 89520
+        brainstorm:
+          usd: 1.4134346548917158
+          turns: 10
+          input: 19
+          cache_write: 37518
+          cache_read: 1844259
+          output: 19892
+      subagent:
+        (outside run):
+          usd: 5.896158199999995
+          turns: 159
+          input: 330
+          cache_write: 582571
+          cache_read: 26477513
+          output: 108180
+    units:
+      (unattributed):
+        subagent:
+          usd: 5.896158199999995
+          turns: 159
+          input: 330
+          cache_write: 582571
+          cache_read: 26477513
+          output: 108180
+    briefs:
+      toolu_01MGKjsfr3Yzyy44XjsiYevj: 350
+      aba237f594f419c92: 2966
+      ac41a9459768eb4c9: 5406
+      a5adc03559013d159: 5772

@@ -1,0 +1,119 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-12-front-page-second-pass
+repo: derio-net/super-fr
+rows:
+  - id: site-landing-two-acts
+    capability: published docs
+    acceptance: The front page tells its story in two acts with six numbered sections,
+      exit gates and the wave driver among them, an 'also included' card grid and a
+      terminal-style hero
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R1
+    - spec:2026-11-12-front-page-second-pass#R2
+    - spec:2026-11-12-front-page-second-pass#R3
+    - spec:2026-11-12-front-page-second-pass#R4
+    - spec:2026-11-12-front-page-second-pass#R9
+    - spec:2026-11-12-front-page-second-pass#R12
+    - spec:2026-11-12-front-page-second-pass#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - desktop-dark
+      - desktop-light
+      - phone-width-390
+      interactions:
+      - follow-exit-gates-section-link
+      - follow-wave-driver-section-link
+      - follow-grid-card-link
+      - jump-to-explainers-anchor
+  - id: site-landing-figures
+    capability: published docs
+    acceptance: The front page draws four diagrams (run pipeline, isolation boundary,
+      gate ledger, wave of batches) that are named for assistive technology and readable
+      in dark, in light and at phone width; the two new pages each show one
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R5
+    - spec:2026-11-12-front-page-second-pass#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - each-figure-desktop-dark
+      - each-figure-desktop-light
+      - each-figure-phone-width-390
+      - figure-on-article-page
+  - id: site-landing-look-and-motion
+    capability: published docs
+    acceptance: The front page has a dark, modern look of its own with a light variant,
+      readable contrast, CSS-only motion that is off for visitors who prefer reduced
+      motion, no script and no request to another host; article pages keep the broadsheet
+      look
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R7
+    - spec:2026-11-12-front-page-second-pass#R8
+    - spec:2026-11-12-front-page-second-pass#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - desktop-dark
+      - desktop-light
+      - phone-width-390
+      - reduced-motion
+      - article-page-unchanged
+      interactions:
+      - hover-card
+  - id: site-landing-refuses-malformed-figures-and-acts
+    capability: published docs
+    acceptance: The site build fails, naming the page and the defect, on a missing or
+      unsafe diagram file, an act with no section, a malformed card grid or an unknown
+      terminal line kind
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R10
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: site-wave-driver-and-exit-gates-pages
+    capability: published docs
+    acceptance: The site explains the wave driver and the exit gates each on a page
+      of its own, linked from the front page
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: site-front-page-second-pass-published
+    capability: published docs
+    acceptance: The published site serves the second-pass front page, its diagrams are
+      drawn, and the exit-gates and wave-driver sections lead to their new pages
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R1
+    - spec:2026-11-12-front-page-second-pass#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+amendments:
+  - row: site-front-page-landing
+    op: reword
+    base: 0
+    acceptance: 'The site''s front page is a landing page: a hero with a call to action
+      to the fr-goal explainer, a how-a-run-goes strip, six to eight numbered sections
+      each linking the page that explains it, every other page listed by group, and
+      a closing call to action, in light and dark'
+    why: The second pass replaces the broadsheet identity on the front page and fixes
+      the numbered sections at six across two acts
