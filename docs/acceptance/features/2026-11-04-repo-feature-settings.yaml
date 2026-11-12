@@ -194,3 +194,11 @@ rows:
     scenario: tests/scenarios/acceptance-effective-matrix-fold.sh
     issues:
     - derio-net/super-fr#1379
+amendments:
+  - row: acceptance-report-formats
+    op: reword
+    base: 0
+    acceptance: 'The report renders on demand from the folded matrix in three forms:
+      local-link HTML, github-link HTML and github Markdown (fr acceptance report --format
+      md); none is committed.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
