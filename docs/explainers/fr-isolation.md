@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-12 vk compat removal: fr init migrate, the legacy vk install paths and VK_ env spellings are gone, isolation up requires --branch; this page names none of them
+reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
 ---
 
 ## Overview: two boundaries and a bridge

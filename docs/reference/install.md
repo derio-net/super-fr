@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-12 vk compat removal: fr init migrate, the legacy vk install paths and VK_ env spellings are gone, isolation up requires --branch; this page names none of them
+reviewed: 2026-11-12 vk compat removal, the page names no removed vk path or env name and isolation up already shows --branch
 ---
 
 # Installing super-fr
