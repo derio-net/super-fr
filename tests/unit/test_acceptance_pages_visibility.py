@@ -91,12 +91,21 @@ class TestGitlab:
     Pages access control on, which gitlab.com always does. Not captured: no instance here."""
 
     @staticmethod
-    def _serve(monkeypatch, level, visibility="private"):
+    def _serve(
+        monkeypatch, level, visibility="private", web_url="https://gitlab.com/grp/sub/proj"
+    ):
         seen: list[list[str]] = []
 
         def run(args, **kwargs):
             seen.append(args)
-            return json.dumps({"id": 7, "pages_access_level": level, "visibility": visibility})
+            return json.dumps(
+                {
+                    "id": 7,
+                    "web_url": web_url,
+                    "pages_access_level": level,
+                    "visibility": visibility,
+                }
+            )
 
         monkeypatch.setattr(_glab, "_run_glab", run)
         return seen
@@ -120,10 +129,21 @@ class TestGitlab:
         assert RealGlabClient().pages_visibility("grp/sub/proj") == expected
         assert seen == [["api", "projects/grp%2Fsub%2Fproj"]]
 
+    @pytest.mark.parametrize("env", ["GITLAB_HOST", "GL_HOST"])
+    def test_no_threaded_host_is_not_proof_of_gitlab_com(self, monkeypatch, env):
+        # host=None can still target a self-managed instance (env or glab's default host)
+        self._serve(monkeypatch, "private", "private", web_url="https://gitlab.example.com/g/p")
+        monkeypatch.setenv(env, "gitlab.example.com")
+        assert RealGlabClient().pages_visibility("g/p") == UNKNOWN
+
+    def test_an_answer_with_no_web_url_is_not_confirmed(self, monkeypatch):
+        self._serve(monkeypatch, "private", "private", web_url=None)
+        assert RealGlabClient().pages_visibility("g/p") == UNKNOWN
+
     @pytest.mark.parametrize("level", ["private", "enabled", "public"])
     def test_self_managed_access_control_is_unproven(self, monkeypatch, level):
         # the API does not say whether the instance enforces Pages access control
-        self._serve(monkeypatch, level, "private")
+        self._serve(monkeypatch, level, "private", web_url="https://gitlab.example.com/grp/proj")
         monkeypatch.setattr(_glab, "known_hosts", lambda: frozenset({"gitlab.example.com"}))
         got = RealGlabClient(host="gitlab.example.com").pages_visibility("grp/proj")
         assert got == (PUBLIC if level == "public" else UNKNOWN)
