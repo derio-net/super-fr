@@ -120,11 +120,18 @@ rows:
       - super-fr:tests/unit/test_record_lens.py#test_a_refused_lens_item_writes_nothing
       - super-fr:tests/unit/test_journal_cmd.py#TestAddLens::test_a_lens_is_added_with_an_fr_assigned_id_and_no_step
       - super-fr:tests/unit/test_lenses_status.py#test_status_prints_each_lens_with_its_reason_and_step_and_writes_nothing
+      - super-fr:tests/unit/test_lenses_review_inflight.py#test_reshape_inserts_lens_review_pending_and_keeps_every_unit
+      - super-fr:tests/unit/test_lenses_review_inflight.py#test_reshape_at_deliver_refuses_naming_adopt_supersede
+      - super-fr:tests/unit/test_lenses_review_inflight.py#test_adopt_supersede_at_deliver_owes_the_lens_review
+      - super-fr:tests/unit/test_lenses_review_inflight.py#test_a_journal_with_no_lens_entry_reads_as_an_empty_set
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_a_lens_added_after_the_brief_is_owed
       int:
       - super-fr:tests/integration/test_scenarios.py#test_review_lenses_accumulate
-    status: not-implemented
-    notes: 'Partial: the cited unit tests and the first scenario cases run in CI; the
-      row''s claim is complete only once the lens-review step lands in phase 3'
+    status: ci
+    notes: 'Lenses added from step records at two steps and the command line, status,
+      refusals, a pre-lens run reshaped before deliver and one at deliver carried over
+      by adopt --supersede owing lens-review: unit tests and the installed-candidate
+      scenario run in CI'
     verify: candidate
     scenario: tests/scenarios/review-lenses-accumulate.sh
 amendments:
