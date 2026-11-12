@@ -906,3 +906,8 @@ The retired matrix held org/repo. Code refs keep <repo>:<path>#<test> (R18), so 
 ### logical-ref-forms · decision · Only spec: and plan: refs are logical; journal and code origins keep their path form and their rows go to legacy
 
 R18 names spec:<slug>#R<n> and plan:<slug>. Rows citing only debug journals or code have no single origin spec and R19 sends them to the legacy fragment.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-12T09:15:46+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1409 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1409] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at deliver as derio-net/super-fr#1409; still owed until discharged.
