@@ -3,9 +3,10 @@
 Import both from here; `fr.artifacts.registry` is the only module that
 enumerates artifact kinds, and `fr.artifacts.runner` holds `MIGRATIONS`, the
 one registry of migrations. Importing this package registers the built-in
-migrations (`fr.artifacts.fr_version`) into `MIGRATIONS` — a migration nobody
-imported is a migration that silently never runs, so registration rides on the
-package import rather than on every caller remembering.
+migrations (`fr.artifacts.fr_version`, `fr.artifacts.plan_vk_version`, …) into
+`MIGRATIONS` — a migration nobody imported is a migration that silently never
+runs, so registration rides on the package import rather than on every caller
+remembering.
 """
 
 from fr.artifacts.registry import (
@@ -42,6 +43,7 @@ from fr.artifacts.runner import (
 # so they cannot come before it. EVERY registered migration is reached from
 # here — one that nobody imports silently never runs.
 from fr.artifacts import fr_version as _fr_version  # noqa: F401  (isort: skip)
+from fr.artifacts import plan_vk_version as _plan_vk_version  # noqa: F401  (isort: skip)
 from fr.artifacts import run_provenance as _run_provenance  # noqa: F401  (isort: skip)
 from fr.artifacts import run_telemetry as _run_telemetry  # noqa: F401  (isort: skip)
 from fr.artifacts import run_dispatch_holder as _run_dispatch_holder  # noqa: F401  (isort: skip)

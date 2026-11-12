@@ -31,7 +31,7 @@ import yaml
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.registry import read_verbatim, split_lines
-from fr.artifacts.runner import ArtifactMigrationError
+from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, Repair
 
 KEY = "vk_version"
 REPAIR_NAME = "drop-vk-version"
@@ -101,3 +101,16 @@ def drop_vk_version(path: Path) -> None:
     if KEY.encode() not in path.read_bytes():
         return
     write_text_atomic(path, rewritten_text(path))
+
+
+VK_VERSION_REPAIR = Repair(
+    kind="plan",
+    name=REPAIR_NAME,
+    applies=has_vk_version,
+    fn=drop_vk_version,
+    description="remove the retired vk_version key from the plan",
+    extra_locators=(ARCHIVE_LOCATOR,),
+    check=rewritten_text,
+)
+
+MIGRATIONS.register(VK_VERSION_REPAIR)

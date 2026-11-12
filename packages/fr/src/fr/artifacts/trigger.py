@@ -642,6 +642,7 @@ def _migrate_in_place(
 
     for action in report.applied:
         emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
+    _emit_unrepairable(report, root, emit)
     if report.failed:
         for failure in report.failed:
             emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
@@ -695,6 +696,7 @@ def _migrate_and_commit(
         emit(f"  migrated: {_rel(action.path, root)} · {action.summary}")
     for skipped in report.skipped:
         emit(f"  skipped (another writer got there first): {_rel(skipped.path, root)}")
+    _emit_unrepairable(report, root, emit)
 
     if report.applied:
         do_commit = commit if commit is not None else commit_migration
@@ -743,6 +745,13 @@ def _migrate_and_commit(
                 f"{SKIP_ENV_VAR}=1 to bypass this check.",
             ],
         )
+
+
+def _emit_unrepairable(report: MigrationReport, root: Path, emit: Callable[[str], None]) -> None:
+    """Say which archived files a repair left alone. Never a refusal: they do
+    not make the tree stale (spec 2026-11-12-remove-vk-compat R12)."""
+    for left in report.unrepairable:
+        emit(f"  not repaired (archived, left as it is): {_rel(left.path, root)} · {left.error}")
 
 
 def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
