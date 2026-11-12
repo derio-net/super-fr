@@ -819,3 +819,11 @@ what: **Quiet.** On a real forge, in a scratch repo, run `fr settings init --qui
 why: Quiet: fr settings' loader refuses placement quiet and stealth until plan 3 of R29 (resolver, quiet, stealth, moves) lands; plan 1 (repo-settings-core) shipped the repo placement only. Walk it once plan 3 merges.
 how: fr journal resolve --scope spec --slug 2026-11-04-repo-feature-settings --id test-plan-step-1 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-04-repo-feature-settings#step1
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-2 created=2026-11-12T00:14:31+00:00 -->
+### test-plan-step-2 · owed · Test Plan step 2 owed
+
+what: **Stealth.** From a tracking repo, run `/fr-goal mode=stealth` against a second scratch target. Interrupt it after phase 1, then resume it on another host from the tracking repo. Confirm that: - the target carries no fr file, commit, label, comment or issue; - the run resumed where it stopped.
+why: Stealth: fr settings' loader refuses placement quiet and stealth until plan 3 of R29 (resolver, quiet, stealth, moves) lands; plan 1 (repo-settings-core) shipped the repo placement only. Walk it once plan 3 merges.
+how: fr journal resolve --scope spec --slug 2026-11-04-repo-feature-settings --id test-plan-step-2 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-04-repo-feature-settings#step2
