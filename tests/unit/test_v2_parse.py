@@ -234,7 +234,7 @@ def test_plan_repo_root_discovered_when_in_git_repo():
     from fr import parse
 
     plan = parse(FIXTURE_DIR)
-    # We're running from the superpowers-for-vk repo, so repo_root should resolve
+    # We're running from the super-fr repo, so repo_root should resolve
     assert plan.repo_root is not None
     assert (plan.repo_root / ".git").exists()
     assert FIXTURE_DIR.is_relative_to(plan.repo_root)

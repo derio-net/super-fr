@@ -101,6 +101,15 @@ button.jump { font: inherit; font-size: .78rem; color: var(--accent); background
 code.cmd { display: block; margin: 4px 0; padding: 4px 6px; background: var(--ground);
   border: 1px solid var(--line); border-radius: 4px; white-space: pre-wrap;
   overflow-wrap: break-word; user-select: all; }
+/* A column with no card collapses to a strip in the wide layout (gh#1417). The selector reads
+   the cards themselves, so the markup carries no second statement of "empty". */
+@media (min-width: 1101px) {
+  .board { display: flex; }
+  .col { flex: 1 1 0; }
+  .col:not(:has(.card)) { flex: 0 0 2.4rem; padding: 10px 6px; }
+  .col:not(:has(.card)) h2 { writing-mode: vertical-rl; transform: rotate(180deg);
+    margin: 0 auto; gap: 8px; white-space: nowrap; justify-content: flex-start; }
+}
 @media (max-width: 1100px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .board { grid-template-columns: minmax(0, 1fr); } }
 """

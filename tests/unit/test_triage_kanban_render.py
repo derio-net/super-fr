@@ -75,6 +75,34 @@ def test_the_wide_grid_has_one_track_per_column() -> None:
     assert f".board {{ display: grid; grid-template-columns: repeat({len(COLUMNS)}," in CSS
 
 
+def test_a_column_holds_a_card_element_exactly_when_its_count_is_not_zero() -> None:
+    # The wide layout collapses a column by `.col:not(:has(.card))`, so "no .card inside"
+    # must mean "count 0" for every column, batch cards and gated cards alike.
+    page = _page()
+    cols = re.findall(
+        r'<section class="col" data-column="([^"]+)"><h2>[^<]* <span class="count">(\d+)</span>'
+        r"</h2>(.*?)</section>",
+        page,
+        re.S,
+    )
+    assert len(cols) == 11
+    for key, count, body in cols:
+        assert (re.search(r'class="card[ "]', body) is None) == (count == "0"), key
+    assert {count == "0" for _, count, _ in cols} == {True, False}
+
+
+def test_the_wide_layout_collapses_empty_columns_to_a_rotated_strip() -> None:
+    m = re.search(r"@media \(min-width: 1101px\) \{(.*?)\n\}", CSS, re.S)
+    assert m, "the collapse is scoped to the wide layout"
+    wide = m.group(1)
+    assert ".board { display: flex; }" in wide
+    assert ".col:not(:has(.card)) { flex: 0 0 " in wide
+    # Reads bottom to top: a -90 degree turn of the title.
+    assert "writing-mode: vertical-rl" in wide and "rotate(180deg)" in wide
+    # The narrow layouts keep the grid, where a strip would waste a row.
+    assert "max-width: 1100px" in CSS and "max-width: 720px" in CSS
+
+
 def test_every_card_is_a_details_element_with_its_id() -> None:
     board, _ = _board()
     page = _page()

@@ -84,7 +84,7 @@ Each call writes:
 - `.devcontainer/<profile>/devcontainer.json` — committed by scaffold; base
   image + the backend's CLI (github-cli feature for GitHub; a versioned,
   checksummed `glab`/`tea` binary install for GitLab/Gitea — no official
-  devcontainer feature exists for either) + mapped tool features + vk
+  devcontainer feature exists for either) + mapped tool features + fr
   installed in postCreate + `--env-file` pointing at the host secrets path.
 - `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile, purpose, expected
   secret keys, and the repo-level nested `forge:` / `ci:` / `tracking:` services (each `type`, optional

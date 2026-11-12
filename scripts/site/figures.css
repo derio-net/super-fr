@@ -1,0 +1,30 @@
+/* Figures inlined from scripts/site/figures/ (spec 2026-11-12-front-page-second-pass B).
+   Every colour comes from a --fig-* property, with a fallback to the broadsheet property
+   a renderer-produced page defines, and a literal last. */
+.site-figure{margin:2rem 0;padding:0}
+.site-figure svg{display:block;width:100%;height:auto;color:var(--fig-ink,var(--paper,#e7e1d3));fill:var(--fig-ink,var(--paper,#e7e1d3));stroke:none;font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace)}
+.site-figure .fig-ink{fill:var(--fig-ink,var(--paper,#e7e1d3))}
+.site-figure .fig-muted{fill:var(--fig-muted,var(--muted,#a9a393))}
+.site-figure .fig-line{fill:none;stroke:var(--fig-line,var(--muted,#8f897a));stroke-width:1.5}
+.site-figure .fig-panel{fill:var(--fig-panel,var(--ink-2,#101218));stroke:var(--fig-line,var(--muted,#8f897a));stroke-width:1.5}
+.site-figure .fig-panel-fill{fill:var(--fig-panel,var(--ink-2,#101218));stroke:none}
+.site-figure .fig-accent{fill:var(--fig-accent,var(--brass,#e0a24e))}
+.site-figure .fig-accent-line{fill:none;stroke:var(--fig-accent,var(--brass,#e0a24e));stroke-width:2}
+.site-figure .fig-you{fill:var(--fig-you,#f0b86e)}
+.site-figure .fig-you-line{fill:none;stroke:var(--fig-you,#f0b86e);stroke-width:2;stroke-dasharray:6 4}
+.site-figure .fig-ok{fill:var(--fig-ok,#7fcf8f)}
+.site-figure .fig-ok-line{fill:none;stroke:var(--fig-ok,#7fcf8f);stroke-width:2}
+.site-figure .fig-text{font-size:15px}
+.site-figure .fig-small{font-size:12.5px}
+.site-figure .fig-big{font-size:19px;font-weight:600}
+.site-figure .fig-narrow{display:none;max-width:480px;margin:0 auto}
+@media (max-width:860px){.site-figure .fig-wide{display:none}.site-figure .fig-narrow{display:block}}
+/* An article's column is narrower than the wide form needs: below 1080px show the narrow
+   form there, and above it let the figure break out of the column to its full 960px. */
+@media (max-width:1079px){article.explainer .site-figure .fig-wide{display:none}article.explainer .site-figure .fig-narrow{display:block}}
+@media (min-width:1080px){article.explainer .site-figure{width:960px;max-width:none;margin-left:calc(50% - 480px)}}
+@media (prefers-reduced-motion:no-preference){
+.site-figure .fig-flow{stroke-dasharray:8 6;animation:fig-dash 1.6s linear infinite}
+@keyframes fig-dash{to{stroke-dashoffset:-28}}
+}
+@media (prefers-reduced-motion:reduce){.site-figure *{animation:none;transition:none}}

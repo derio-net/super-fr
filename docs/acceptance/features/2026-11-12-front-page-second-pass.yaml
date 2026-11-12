@@ -1,0 +1,158 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-12-front-page-second-pass
+repo: derio-net/super-fr
+rows:
+  - id: site-landing-two-acts
+    capability: published docs
+    acceptance: The front page tells its story in two acts with six numbered sections,
+      exit gates and the wave driver among them, an 'also included' card grid and a
+      terminal-style hero
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R1
+    - spec:2026-11-12-front-page-second-pass#R2
+    - spec:2026-11-12-front-page-second-pass#R3
+    - spec:2026-11-12-front-page-second-pass#R4
+    - spec:2026-11-12-front-page-second-pass#R9
+    - spec:2026-11-12-front-page-second-pass#R12
+    - spec:2026-11-12-front-page-second-pass#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve
+      - super-fr:tests/unit/test_build_site.py#test_an_act_exposes_its_title_and_introduction_and_is_numbered_in_order
+    status: ci
+    notes: unit tests parse this repo's index.md (two acts, six numbered sections, grid,
+      terminal, figures, links resolve) and the acts, grid and terminal parsers; the
+      site-build job renders it; screenshots taken and opened at implement
+    verify: none
+    visual:
+      states:
+      - desktop-dark
+      - desktop-light
+      - phone-width-390
+      interactions:
+      - follow-exit-gates-section-link
+      - follow-wave-driver-section-link
+      - follow-grid-card-link
+      - jump-to-explainers-anchor
+  - id: site-landing-figures
+    capability: published docs
+    acceptance: The front page draws four diagrams (run pipeline, isolation boundary,
+      gate ledger, wave of batches) that are named for assistive technology and readable
+      in dark, in light and at phone width; the two new pages each show one
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R5
+    - spec:2026-11-12-front-page-second-pass#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_every_shipped_figure_passes_the_checks_and_all_four_exist
+      - super-fr:tests/unit/test_build_site.py#test_a_figure_is_emitted_where_its_section_kind_places_it
+    status: ci
+    notes: every figure file is checked and inlined on the landing and the article pages;
+      a real build kept all four intact; screenshots in dark, light and 390px at implement
+    verify: none
+    visual:
+      states:
+      - each-figure-desktop-dark
+      - each-figure-desktop-light
+      - each-figure-phone-width-390
+      - figure-on-article-page
+  - id: site-landing-look-and-motion
+    capability: published docs
+    acceptance: The front page has a dark, modern look of its own with a light variant,
+      readable contrast, CSS-only motion that is off for visitors who prefer reduced
+      motion, no script and no request to another host; article pages keep the broadsheet
+      look
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R7
+    - spec:2026-11-12-front-page-second-pass#R8
+    - spec:2026-11-12-front-page-second-pass#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_text_tokens_meet_4_5_to_1_on_both_surfaces_in_both_schemes
+      - super-fr:tests/unit/test_build_site.py#test_every_motion_in_landing_css_sits_under_no_preference_with_a_reduce_block
+    status: ci
+    notes: contrast, motion, no script, no font and no external reference are asserted
+      in unit tests; an article page builds byte-identical to the base; screenshots
+      dark, light, 390px, reduced motion and hover at implement
+    verify: none
+    visual:
+      states:
+      - desktop-dark
+      - desktop-light
+      - phone-width-390
+      - reduced-motion
+      - article-page-unchanged
+      interactions:
+      - hover-card
+  - id: site-landing-refuses-malformed-figures-and-acts
+    capability: published docs
+    acceptance: The site build fails, naming the page and the defect, on a missing or
+      unsafe diagram file, an act with no section, a malformed card grid or an unknown
+      terminal line kind
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_an_act_with_no_guarantee_before_the_next_act_or_the_end_is_refused
+      - super-fr:tests/unit/test_build_site.py#test_an_unknown_terminal_kind_or_a_missing_text_is_refused
+    status: ci
+    notes: 'each refusal is driven over fixture sources: act with no section, grid and
+      card shape, terminal kind, figure marker placement, and unsafe or missing figure
+      files'
+    verify: none
+  - id: site-wave-driver-and-exit-gates-pages
+    capability: published docs
+    acceptance: The site explains the wave driver and the exit gates each on a page
+      of its own, linked from the front page
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_every_configured_page_parses_with_fr_docs
+    status: ci
+    notes: fr docs check and the page-parsing tripwire cover both new pages in CI; test_build_site.py
+      asserts each carries one figure marker naming a real figure; a real build with
+      the pinned renderer wrote both pages with the figure intact and figures.css in
+      the head; reviewers check the claims against the code
+    verify: none
+  - id: site-front-page-second-pass-published
+    capability: published docs
+    acceptance: The published site serves the second-pass front page, its diagrams are
+      drawn, and the exit-gates and wave-driver sections lead to their new pages
+    origin:
+    - spec:2026-11-12-front-page-second-pass#R1
+    - spec:2026-11-12-front-page-second-pass#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+amendments:
+  - row: site-front-page-landing
+    op: reword
+    base: 0
+    acceptance: 'The site''s front page is a landing page: a hero with a call to action
+      to the fr-goal explainer, a how-a-run-goes strip, six to eight numbered sections
+      each linking the page that explains it, every other page listed by group, and
+      a closing call to action, in light and dark'
+    why: The second pass replaces the broadsheet identity on the front page and fixes
+      the numbered sections at six across two acts
+  - row: site-front-page-second-pass-published
+    op: set-status
+    base: 0
+    status: walked
+    notes: Walked live on the published site after the merge of derio-net/super-fr#1420
+    walk:
+      strategy: live
+      harness: claude-code
+      model: session-default
+      outcome: pass
+      at: '2026-11-12T15:32:28Z'
+      evidence: 'Browser walk of the published site on 2026-11-12 after the merge of
+        derio-net/super-fr#1420: terminal hero and two acts, four diagrams, both new
+        pages with their diagram, section links and the bar home link working'
+    why: Walked live on the published site after the merge of derio-net/super-fr#1420

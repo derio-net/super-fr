@@ -102,3 +102,20 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+amendments:
+  - row: site-front-page-published
+    op: set-status
+    base: 0
+    status: walked
+    notes: Walked live on the published site after the merge of derio-net/super-fr#1411
+    walk:
+      strategy: live
+      harness: claude-code
+      model: session-default
+      outcome: pass
+      at: '2026-11-12T12:12:56Z'
+      evidence: 'Browser walk of the published site on 2026-11-12 after the Pages deploy:
+        landing with hero and top bar; primary button opens the fr-goal explainer; bar
+        home link returns to the front page; all 30 internal front-page links return
+        200'
+    why: Walked live on the published site after the merge of derio-net/super-fr#1411

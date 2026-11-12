@@ -18,6 +18,8 @@ reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come f
 
 ## Overview: why a delivered PR can still be unfinished
 
+The DevOps stage is one of two post-merge gates; [exit gates](fr-exit-gates.md) explains how a run gets a gate and how gates hold the release.
+
 Most runs end when the pull request is open and reviewed. A run whose plan carries
 **manual operations** does not. Maybe the deploy key must exist before CI can pass,
 or a secret must be rotated the minute the new code lands. Left as prose in a PR

@@ -861,7 +861,7 @@ def _archive_path_variants(
 ) -> tuple[str | None, str | None, str | None]:
     """(active, implemented, legacy) gh-lookup candidates for a File cell.
 
-    Derived from the bare slug (`vk.refs.plan_slug`, 2026-06-06
+    Derived from the bare slug (`fr.refs.plan_slug`, 2026-06-06
     spec-path-repair design), so every historical cell form — bare slug,
     active path, legacy `archived-plans/` path, annotated cell — yields
     the same canonical-layout candidates. (None, None, None) for

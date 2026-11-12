@@ -167,3 +167,10 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-12T12:10:18+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: [developer] After merge, wait for the "Deploy explainers to Pages" run on `main`. Open `https://derio-net.github.io/super-fr/`: the landing page loads with its hero; the primary button opens the fr-goal explainer; the top bar on that explainer returns to the front page; `#explainers` lists every page; `/why-fr.html` and `/acceptance/` load.
+
+Evidence: Walked the published site in a browser on 2026-11-12 after the Pages deploy (last-modified 11:32 GMT): the landing loads with its hero and top bar; the primary button opens 01-fr-goal.html; the bar site name returns to index.html; all 30 internal links on the front page, including every page-list entry, why-fr.html and acceptance/, return 200.

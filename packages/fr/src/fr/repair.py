@@ -17,7 +17,7 @@ lifecycle-independent form (2026-06-06 spec-path-repair design):
   header mislabeled at authoring time or carried into an archived spec
   is fixed either way.
 
-A ref is rewritten ONLY when it resolves via `vk.refs`; anything
+A ref is rewritten ONLY when it resolves via `fr.refs`; anything
 unresolvable produces a loud warning naming the file, the row/field,
 and every path tried — and is left untouched. Running twice is a no-op
 (the canonical form is the fixed point). This consciously reverses

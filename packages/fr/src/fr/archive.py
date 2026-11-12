@@ -5,9 +5,9 @@ plans move to `docs/superpowers/implemented/plans/`, and a spec whose
 rows are all implemented follows to `implemented/specs/`. Moves are
 `git mv` (rename history survives); committing is the operator's job.
 
-The gate is `vk.render.archive_gate` — shared with the apply/status
+The gate is `fr.render.archive_gate` — shared with the apply/status
 nudge so the three surfaces can't disagree. The spec decision is
-`vk.migrate._spec_fully_implemented` — shared with `fr migrate dirs`.
+`fr.migrate._spec_fully_implemented` — shared with `fr migrate dirs`.
 """
 
 from __future__ import annotations

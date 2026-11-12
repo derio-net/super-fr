@@ -26,7 +26,7 @@ For fields that should always use the literal block style regardless of
 line count (e.g. step `text:` values), wrap the value in `LiteralStr`.
 The representer dispatches on type, so `LiteralStr` always gets `|-`.
 
-Both `vk.migrate` and `vk.plan_ops` route through this so migrated and
+Both `fr.migrate` and `fr.plan_ops` route through this so migrated and
 hand-edited yaml files stay visually consistent.
 """
 

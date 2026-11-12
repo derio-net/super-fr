@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-12 repo-feature-settings, fr settings, push and pr create in the generated tree
+reviewed: 2026-11-12 docstring and comment wording only (fr where the old vk command was named); nothing this page describes changed
 ---
 
 # The fr command line
