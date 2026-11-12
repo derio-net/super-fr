@@ -65,7 +65,7 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 11
+RECORD_SCHEMA_VERSION = 12
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
@@ -98,7 +98,9 @@ R12). Migration:
 `fr.artifacts.record_exit_gates`, stamp only — nothing is removed or moved.
 Bumped 10 -> 11 for the `acceptance:` section's amendment item (`AmendmentItem`,
 spec `2026-11-04-repo-feature-settings-design.md` R16, R19). Migration:
-`fr.artifacts.record_amendments`, stamp only."""
+`fr.artifacts.record_amendments`, stamp only. Bumped 11 -> 12 for the `lens`
+journal item and `JournalItem.lens` (spec `2026-11-12-review-lenses-design.md`
+§3.B, R4). Migration: `fr.artifacts.record_lens`, stamp only."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -169,6 +171,23 @@ class JournalItem(_Strict):
     filed_as: StrictStr | None = None
     """On an `open` record resolving an `owed` entry: the issue `fr journal file`
     filed it as (spec 2026-10-14 R10). Still owed until discharged."""
+    lens: StrictStr | None = None
+    """On a `lens` item: the effective lens the step adds to the feature (spec
+    2026-11-12-review-lenses R4). fr assigns the entry's id and stamps its step."""
+
+    @model_validator(mode="after")
+    def _lens_coupling(self) -> JournalItem:
+        if self.kind != "lens":
+            if self.lens is not None:
+                raise ValueError("`lens` is only valid on a `kind: lens` item")
+            return self
+        if self.lens is None:
+            raise ValueError("a `kind: lens` item names its lens (`lens: <id>`)")
+        if self.id is not None:
+            raise ValueError(
+                "fr assigns a lens entry's id (`lens-<id>-<n>`); drop `id` from the item"
+            )
+        return self
 
     @field_validator("kind")
     @classmethod

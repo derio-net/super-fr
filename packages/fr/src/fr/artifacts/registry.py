@@ -579,8 +579,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `fr.artifacts.record_exit_gates`, stamp only; 10 -> 11 for the
             # `acceptance:` section's amendment item (spec
             # `2026-11-04-repo-feature-settings-design` R16, R19, §5), migration
-            # `fr.artifacts.record_amendments`, stamp only.
-            current_version=11,
+            # `fr.artifacts.record_amendments`, stamp only; 11 -> 12 for the
+            # `lens` journal item (spec `2026-11-12-review-lenses-design` §3.B,
+            # R4), migration `fr.artifacts.record_lens`, stamp only.
+            current_version=12,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

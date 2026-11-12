@@ -2410,3 +2410,78 @@ class TestAddRefusesAnOrphanSlug:
         monkeypatch.chdir(root)
 
         assert self._decision(root, "debug", "2026-10-04-anything").exit_code == 0
+
+
+class TestAddLens:
+    """`fr journal add --kind lens` (spec 2026-11-12-review-lenses §3.B, R4): the same
+    builder as a step record's lens item, with no step recorded."""
+
+    def _lens(self, root: Path, *extra: str):
+        return _add(
+            root,
+            "--scope", "plan", "--slug", "S", "--kind", "lens", "--title",
+            "the retry path builds a shell command", "--phase", "2", *extra,
+        )  # fmt: skip
+
+    def test_a_lens_is_added_with_an_fr_assigned_id_and_no_step(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        first = self._lens(root, "--lens", "security")
+        second = self._lens(root, "--lens", "security", "--body", "and logs the token")
+
+        assert first.exit_code == 0, first.output
+        assert second.exit_code == 0, second.output
+        assert "added lens lens-security-1" in first.output
+        lenses = [
+            e for e in parse_journal(_journal_file(root, "S").read_text()) if e.kind == "lens"
+        ]
+        assert [(e.id, e.lens, e.step, e.phase) for e in lenses] == [
+            ("lens-security-1", "security", None, 2),
+            ("lens-security-2", "security", None, 2),
+        ]
+
+    def test_an_unknown_lens_is_refused_with_exit_two(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = self._lens(root, "--lens", "no-such-lens")
+        assert res.exit_code == 2, res.output
+        assert "no-such-lens" in res.output
+        assert not _journal_file(root, "S").exists()
+
+    def test_a_missing_lens_is_refused_with_exit_two(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = self._lens(root)
+        assert res.exit_code == 2, res.output
+        assert "--lens" in res.output
+        assert not _journal_file(root, "S").exists()
+
+    @pytest.mark.parametrize(
+        ("args", "needle"),
+        [
+            (("--lens", "security", "--id", "mine"), "no --id"),
+            (("--lens", "security", "--title", " "), "reason"),
+        ],
+    )
+    def test_an_id_or_an_empty_reason_is_refused(
+        self, tmp_path: Path, monkeypatch, args: tuple[str, ...], needle: str
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = self._lens(root, *args)
+        assert res.exit_code == 2, res.output
+        assert needle in res.output
+
+    def test_lens_on_another_kind_is_refused(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root, "--scope", "plan", "--slug", "S", "--kind", "discovery", "--title", "t",
+            "--phase", "1", "--lens", "security",
+        )  # fmt: skip
+        assert res.exit_code == 2, res.output
+        assert "--kind lens only" in res.output

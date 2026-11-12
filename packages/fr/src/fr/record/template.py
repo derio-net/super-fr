@@ -95,6 +95,10 @@ def render_template(
         lines.append(
             "#     a spec-journal discovery holding the operator's brief takes input: true"
         )
+        lines.append("#   - {kind: lens, lens: <id>, title: <why, one line>}")
+        lines.append(
+            "#     adds a review lens to the feature (`fr lenses list`); fr assigns its id"
+        )
     if "resolves" in allowed:
         lines.append("resolves: []")
         lines.append(

@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, get_args
+from typing import TYPE_CHECKING, Any, get_args
 
 import typer
 from rich.console import Console
@@ -224,9 +224,33 @@ def add(
         "(#N, owner/repo#N or an http(s) URL). `deliver` refuses `Closes` over one "
         "unless the operator answered the decision.",
     ),
+    lens: str | None = typer.Option(
+        None,
+        "--lens",
+        help="--kind lens only: the effective lens (`fr lenses list`) to add to the "
+        "feature; --title is the reason. fr assigns the id (lens-<id>-<n>).",
+    ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
+    if kind == "lens":
+        # spec 2026-11-12-review-lenses §3.B: an addition fr ids itself, read
+        # from the run's spec and plan journals only.
+        refusal = (
+            "--kind lens needs --lens <id>"
+            if lens is None
+            else "--kind lens takes --scope spec or plan"
+            if scope not in ("spec", "plan")
+            else "--kind lens takes no --id: fr assigns it (lens-<id>-<n>)"
+            if entry_id is not None
+            else None
+        )
+        if refusal is not None:
+            err_console.print(f"[red]{refusal}[/red]")
+            raise typer.Exit(2)
+    elif lens is not None:
+        err_console.print("[red]--lens applies to --kind lens only[/red]")
+        raise typer.Exit(2)
     if kind == "op":
         # spec 2026-10-22-fr-ops R17: evidence is recorded by `fr ops`, which
         # checks what it records; a hand-added op entry would read as DONE.
@@ -275,6 +299,8 @@ def add(
     eid = (
         entry_id or hashlib.sha1(f"{kind}|{scope}|{slug}|{title}|{body}".encode()).hexdigest()[:12]
     )
+    if kind == "lens":
+        eid = f"lens-{lens}"  # validation only; the engine assigns the numbered id
 
     narrowed = tuple(ref.strip() for ref in (narrows or "").split(",") if ref.strip())
     try:
@@ -295,6 +321,7 @@ def add(
             input=is_input,
             gate=gate,
             narrows=narrowed,
+            lens=lens,
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {escape(str(e))}")
@@ -306,7 +333,7 @@ def add(
         raise typer.Exit(2)
 
     existing = _load(path)
-    if any(e.id == eid for e in existing):
+    if kind != "lens" and any(e.id == eid for e in existing):
         err_console.print(
             f"[red]journal entry {eid!r} already exists; use `fr journal resolve` "
             "to change a finding[/red]"
@@ -330,7 +357,8 @@ def add(
     item = JournalItem.model_validate(
         {
             "kind": kind,
-            "id": eid,
+            "id": None if kind == "lens" else eid,
+            "lens": lens,
             "title": title,
             "body": body,
             "state": state,
@@ -344,7 +372,7 @@ def add(
             "narrows": narrowed,
         }
     )
-    _apply(
+    outcome = _apply(
         root,
         StepRecord(journal=(item,)),
         scope=scope,
@@ -352,7 +380,8 @@ def add(
         path=path,
         message=f"chore(fr): journal {scope}/{slug} — {entry.kind} {entry.id}",
     )
-    typer.echo(f"added {entry.kind} {entry.id} to {scope}/{slug}")
+    added = outcome.entries[0].id if outcome.entries else entry.id
+    typer.echo(f"added {entry.kind} {added} to {scope}/{slug}")
 
 
 def _apply(
@@ -364,8 +393,9 @@ def _apply(
     path: Path,
     message: str,
     discharges_owed: bool = False,
-) -> None:
-    """Hand a one-entry record to the engine; a refusal is exit 2, as before."""
+) -> Any:
+    """Hand a one-entry record to the engine; a refusal is exit 2, as before.
+    Returns the engine's `ApplyOutcome`."""
     from fr.record import apply as engine
 
     try:
@@ -386,6 +416,7 @@ def _apply(
         raise typer.Exit(2) from e
     for notice in outcome.notices:  # an unverifiable operator claim says so (p3-r1)
         err_console.print(notice, markup=False, soft_wrap=True)
+    return outcome
 
 
 RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
