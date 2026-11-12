@@ -744,3 +744,8 @@ d060bb715: _companions falls back to every fragment on disk when split_texts can
 ### pr1408-r5-resolved-2 · finding [fixed] · resolves pr1408-r5: matrix-parse-libyaml and archive-retargets-matrix-refs, owned by other features, were edited in place after the migration instead of amended
 
 Corrects the range in the previous record: 68f14ff5c restores both owners' fragments with git from migration commit ae7791862; 13 amendments in 2026-11-04-repo-feature-settings's fragment, 5bdb2c831..753c24d93 (fr acceptance amend: 1 reword, 4 drop-level, 6 add-level, 2 set-status), re-apply the changes; the effective rows are identical before and after (JSON dump compared).
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r10-resolved created=2026-11-12T10:17:26+00:00 state=open resolves=pr1408-r10 tracked_by=derio-net/super-fr#1412 -->
+### pr1408-r10-resolved · finding [deferred → derio-net/super-fr#1412] · resolves pr1408-r10: The record 10->11 hop validates with the live StepRecord via guard_v9_record
+
+Additive today; freezing the ~500-line StepRecord is far beyond a review fix, and no change removes a field yet. Tracked with the freeze-or-tripwire acceptance in #1412.
