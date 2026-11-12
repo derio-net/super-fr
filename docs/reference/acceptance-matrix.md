@@ -37,6 +37,14 @@ migrated by `fr migrate artifacts --yes`: the rows are split by origin spec, pat
 references to specs and plans become logical, and the matrix and its committed reports
 are deleted.
 
+A branch that was still editing `matrix.yaml` when its base split it keeps the file
+through `git merge`. The next fr command splits it again, carrying over only what the
+fragments lack. A row they do not know goes to its spec's fragment, and a row they hold
+identically is dropped. A row they hold *differently* stops the migration, which names
+the row and leaves every file as it was. Put that row back as the fragments hold it, or
+delete it from `matrix.yaml`, run `fr migrate artifacts --yes`, and then re-apply your
+change with `fr acceptance set-status`.
+
 A repo can turn the matrix off with `artifacts.acceptance: off` in `.fr/settings.yaml`
 (`fr settings show`). fr then writes no rows, reports or matrix CI. `fr acceptance add` and
 `set-status` refuse, naming the setting. `check`, `status`, `fr debt` and the session-start

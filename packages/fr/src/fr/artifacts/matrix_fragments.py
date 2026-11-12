@@ -26,10 +26,14 @@ stamp and checks the matrix is gone. Per `.claude/rules/artifact-versioning.md`:
    disk — is folded in memory and compared row for row with the matrix, before
    the first `write_text_atomic`. A matrix that cannot be split is left
    byte-identical and reported as that artifact's failure.
-3. **The crash window.** A fragment already on disk with exactly the bytes the
-   split would write is not rewritten, so a run that died after writing the
-   fragments finishes by deleting the matrix and reports. A fragment on disk
-   with OTHER bytes refuses the split: fr will not overwrite it.
+3. **Fragments already here** (review p2-r4) are never overwritten: the split
+   carries over only what their fold lacks. A row whose id the fold does not
+   know goes to its fragment by the same one-spec rule (inserted into one that
+   exists, keeping its bytes, or a new one); a row the fold holds identically is
+   dropped; a row the fold holds DIFFERENTLY refuses the matrix, byte-identical,
+   naming every such id. This is both the crash window (a run that died after
+   writing the fragments carries nothing over and finishes by deleting the
+   matrix) and an in-flight branch that kept editing matrix.yaml after main split.
 """
 
 from __future__ import annotations
@@ -78,7 +82,7 @@ def _identity(org: str | None, repo: str | None, root: Path) -> str:
 def split_texts(text: str, root: Path) -> dict[str, str]:
     """The fragment texts (repo-relative path → text) the split of a v5 matrix
     *text* writes, validated; raises leaving nothing written."""
-    from fr.acceptance.edit import render_fragment
+    from fr.acceptance.edit import insert_row, render_fragment
     from fr.acceptance.fold import fold_texts
     from fr.acceptance.fragment import (
         FRAGMENTS_DIR,
@@ -126,24 +130,51 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
         by_feature.setdefault(feature, []).append(row)
         expected[row.id] = row.model_dump()
 
-    out = {
-        f"{FRAGMENTS_DIR.as_posix()}/{feature}.yaml": render_fragment(feature, repo, rows)
-        for feature, rows in sorted(by_feature.items())
-    }
     folder = root / FRAGMENTS_DIR
     on_disk = (
         {f"{FRAGMENTS_DIR.as_posix()}/{p.name}": p.read_text() for p in folder.glob("*.yaml")}
         if folder.is_dir()
         else {}
     )
-    clashes = sorted(rel for rel, t in out.items() if rel in on_disk and on_disk[rel] != t)
-    if clashes:
+    # Review p2-r4: fragments already here (a branch that merged a split main, or
+    # a run that died after writing them) are never overwritten. The split carries
+    # over only what their fold lacks: a row it does not know is added, one it
+    # holds identically is dropped, one it holds DIFFERENTLY is refused by id.
+    try:
+        known = {r.id: r.model_dump() for r in fold_texts(on_disk).matrix.rows} if on_disk else {}
+    except AcceptanceError as e:
         raise UnconvertibleMatrixError(
-            f"{', '.join(clashes)} already exist with other content, so fr will not "
-            "overwrite them with the split of matrix.yaml — move them aside (or merge "
-            "them by hand), then re-run `fr migrate artifacts --yes`. "
+            f"the fragments already here do not fold ({e}), so fr cannot tell which rows of "
+            "matrix.yaml they lack. Left on version 5, byte-identical."
+        ) from e
+    differing = sorted(
+        r.id
+        for rows in by_feature.values()
+        for r in rows
+        if r.id in known and known[r.id] != expected[r.id]
+    )
+    if differing:
+        raise UnconvertibleMatrixError(
+            f"matrix.yaml and the fragments already here disagree on {len(differing)} row(s): "
+            f"{', '.join(differing)}. fr will not merge them silently. Finish the migration "
+            "without the edit (put those rows back as the fragments hold them, or delete them "
+            "from matrix.yaml), run `fr migrate artifacts --yes`, then re-apply the change "
+            "with `fr acceptance set-status` (`uv run fr …` inside an fr checkout). "
             "Left on version 5, byte-identical."
         )
+    out: dict[str, str] = {}
+    for feature, rows in sorted(by_feature.items()):
+        lacking = [r for r in rows if r.id not in known]
+        if not lacking:
+            continue
+        rel = f"{FRAGMENTS_DIR.as_posix()}/{feature}.yaml"
+        if rel in on_disk:
+            text_out = on_disk[rel]
+            for r in lacking:
+                text_out = insert_row(text_out, r)
+            out[rel] = text_out
+        else:
+            out[rel] = render_fragment(feature, repo, lacking)
     try:
         effective = fold_texts({**on_disk, **out})
     except AcceptanceError as e:

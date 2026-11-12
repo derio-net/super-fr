@@ -12,7 +12,11 @@ effective matrix is never stored — `fr` folds the fragments over git history
 (`fr.acceptance.fold`, R17), and every reader (`check`, `status`, `debt`,
 self-review, the PR body, close-out) reads that fold. The single
 `docs/acceptance/matrix.yaml` is retired: `fr migrate artifacts --yes` splits an
-old one (R19). **Any PR that does one of the following updates the rows in the
+old one (R19). An in-flight branch that kept editing it after its base split merges
+the base and lets the split run again: rows the fragments lack are carried over,
+identical ones dropped, and a row they hold differently refuses by id. Restore or
+delete that row in `matrix.yaml`, migrate, then re-apply the edit with
+`fr acceptance set-status`. **Any PR that does one of the following updates the rows in the
 SAME PR:**
 
 - adds or changes a spec `## Test Plan` (new spec ⇒ new rows; the CI

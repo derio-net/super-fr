@@ -146,20 +146,102 @@ def test_the_crash_window_finishes_without_rewriting_the_fragments(tmp_path: Pat
     assert _fragments(root) == written
 
 
-def test_a_fragment_already_there_with_other_bytes_is_refused(tmp_path: Path) -> None:
+def test_an_existing_fragment_the_split_targets_gains_the_rows_it_lacks(tmp_path: Path) -> None:
+    """Review p2-r4: a fragment already on disk is never overwritten, but the rows
+    it lacks are appended to it, its own bytes kept."""
     root = _repo(tmp_path)
     (root / FEATURES).mkdir(parents=True)
-    clash = root / FEATURES / "legacy.yaml"
-    clash.write_text("schema_version: 1\nfeature: legacy\nrepo: derio-net/super-fr\nrows:\n")
+    existing = root / FEATURES / "legacy.yaml"
+    head = "schema_version: 1\nfeature: legacy\nrepo: derio-net/super-fr\nrows:\n"
+    existing.write_text(head)
+
+    report = run_migrations(root, dry_run=False)
+
+    assert report.ok, report.failed
+    assert existing.read_text().startswith(head)
+    legacy = parse_fragment(existing.read_text(), source=f"{FEATURES}/legacy.yaml")
+    assert [r.id for r in legacy.rows] == [
+        "acceptance-report-dual",
+        "runner-unit-refusal",
+        "agent-worktrees-reaped-by-fr",
+    ]
+    assert not (root / "docs" / "acceptance" / "matrix.yaml").exists()
+
+
+# --- review p2-r4: an in-flight branch that still edits matrix.yaml --------------
+
+_NEW_ROW = """\
+  - id: {id}
+    capability: Acceptance matrix
+    acceptance: A row an in-flight branch added to matrix.yaml
+    origin:
+    - super-fr:docs/superpowers/specs/{spec}.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_acceptance_links.py
+    status: not-implemented
+    notes: added on a branch
+"""
+
+
+def _merged_main(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """main split its matrix into fragments; the branch still carries matrix.yaml
+    (what `git merge main` leaves when the branch edited the deleted file)."""
+    root = _repo(tmp_path)
+    run_migrations(root, dry_run=False)
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "main: split")
+    _git(root, "checkout", "-q", "HEAD~1", "--", "docs/acceptance/matrix.yaml")
+    clear_fold_cache()
+    return root, _fragments(root)
+
+
+def test_an_in_flight_matrix_carries_over_only_the_rows_the_fold_lacks(tmp_path: Path) -> None:
+    root, before = _merged_main(tmp_path)
     matrix = root / "docs" / "acceptance" / "matrix.yaml"
-    before = matrix.read_bytes()
+    matrix.write_text(
+        matrix.read_text()
+        + _NEW_ROW.format(id="branch-row-a", spec="2026-07-04-acceptance-matrix-design")
+        + _NEW_ROW.format(id="branch-row-b", spec="2026-11-30-brand-new-design")
+    )
+
+    report = run_migrations(root, dry_run=False)
+
+    assert report.ok, report.failed
+    assert not matrix.exists()
+    after = _fragments(root)
+    host = "2026-07-04-acceptance-matrix"
+    assert after[host].startswith(before[host]), "appended, existing bytes kept"
+    assert {k: v for k, v in after.items() if k not in (host, "2026-11-30-brand-new")} == {
+        k: v for k, v in before.items() if k != host
+    }, "fragments that gained nothing are untouched"
+    rows = {r.id: r for r in fold(root).matrix.rows}
+    assert rows["branch-row-a"].origin == ("spec:2026-07-04-acceptance-matrix",)
+    created = parse_fragment(
+        after["2026-11-30-brand-new"], source=f"{FEATURES}/2026-11-30-brand-new.yaml"
+    )
+    assert [r.id for r in created.rows] == ["branch-row-b"]
+    assert len(rows) == len(parse_matrix_v5(FIXTURE.read_text()).rows) + 2, "no duplicate"
+
+
+def test_an_in_flight_matrix_whose_row_differs_from_the_fold_is_refused(tmp_path: Path) -> None:
+    root, before = _merged_main(tmp_path)
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix.write_text(
+        matrix.read_text()
+        .replace("status: walk-owed", "status: ci", 1)
+        .replace("status: walked", "status: walk-owed", 1)
+    )
+    edited = matrix.read_bytes()
 
     report = run_migrations(root, dry_run=False)
 
     (failure,) = report.failed
-    assert "legacy.yaml" in failure.error
-    assert matrix.read_bytes() == before
-    assert [p.name for p in (root / FEATURES).iterdir()] == ["legacy.yaml"]
+    assert "acceptance-pipeline-rows" in failure.error
+    assert "acceptance-nag-channels" in failure.error
+    assert "fr acceptance set-status" in failure.error
+    assert matrix.read_bytes() == edited
+    assert _fragments(root) == before
 
 
 def test_a_matrix_the_frozen_reader_refuses_is_left_byte_identical(tmp_path: Path) -> None:
