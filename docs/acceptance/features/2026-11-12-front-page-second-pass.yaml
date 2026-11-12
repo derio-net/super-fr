@@ -96,9 +96,14 @@ rows:
       terminal line kind
     origin:
     - spec:2026-11-12-front-page-second-pass#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_an_act_with_no_guarantee_before_the_next_act_or_the_end_is_refused
+      - super-fr:tests/unit/test_build_site.py#test_an_unknown_terminal_kind_or_a_missing_text_is_refused
+    status: ci
+    notes: 'each refusal is driven over fixture sources: act with no section, grid and
+      card shape, terminal kind, figure marker placement, and unsafe or missing figure
+      files'
     verify: none
   - id: site-wave-driver-and-exit-gates-pages
     capability: published docs
