@@ -866,3 +866,8 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: none
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-acceptance-fragments-p2 created=2026-11-12T00:28:44+00:00 -->
+### phase-split-2026-11-12-acceptance-fragments-p2 · decision · ask: R19's migration and the cutover of every reader to the fold
+
+Moving the matrix kind's version makes this repo stale until migrated, so the migration, the reader cutover and this repo's own migration land together, apart from the fold library of phase 1.
