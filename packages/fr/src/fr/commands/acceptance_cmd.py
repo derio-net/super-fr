@@ -255,6 +255,31 @@ COMMENT_LIMIT = 60_000
 """Characters kept of the report in the PR comment: GitHub refuses a comment over 65,536."""
 
 
+def _login(name: Any) -> str:
+    """A login as comparable text: GitHub spells the workflow bot `github-actions[bot]`,
+    `github-actions` and `app/github-actions` in different answers."""
+    return str(name or "").lower().removeprefix("app/").removesuffix("[bot]")
+
+
+def _own_logins(client: Any) -> set[str]:
+    """The logins the credentials write as: the authenticated account, or, when the forge
+    will not say (an Actions token is no user), the workflow bot inside Actions. Empty when
+    neither is known, so no existing comment is ever reused."""
+    import os
+
+    from fr.debt.render import BOT_LOGINS
+
+    try:
+        login = _login(client.authenticated_login())
+    except Exception:
+        login = ""
+    if login:
+        return {login}
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return {_login(b) for b in BOT_LOGINS}
+    return set()
+
+
 @acceptance_app.command("comment")
 def comment_cmd(
     pr: int = typer.Option(..., "--pr", help="The pull request to comment on."),
@@ -311,7 +336,14 @@ def comment_cmd(
         raise typer.Exit(2)
     try:
         client = client_for(root)
-        mine = [c for c in client.list_issue_comments(slug, pr) if COMMENT_MARKER in c["body"]]
+        me = _own_logins(client)
+        # Only a comment this identity wrote is ever edited: the marker is public text, so
+        # anyone could plant it, and fr would then overwrite their comment (or post nothing).
+        mine = [
+            c
+            for c in client.list_issue_comments(slug, pr)
+            if COMMENT_MARKER in c["body"] and _login(c.get("author")) in me
+        ]
         if mine:
             client.edit_issue_comment(slug, int(mine[0]["id"]), body)
             typer.echo(f"updated the acceptance report comment on {slug}#{pr}")

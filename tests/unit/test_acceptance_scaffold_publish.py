@@ -282,9 +282,15 @@ def test_init_creates_no_readme(tmp_path: Path) -> None:
 
 
 class _Forge:
-    def __init__(self, comments: list[dict[str, Any]] | None = None) -> None:
+    def __init__(self, comments: list[dict[str, Any]] | None = None, login: str = "me") -> None:
         self.comments = comments or []
+        self.login = login
         self.calls: list[tuple[str, Any]] = []
+
+    def authenticated_login(self) -> str:
+        if isinstance(self.login, Exception):
+            raise self.login
+        return self.login
 
     def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
         self.calls.append(("list", (repo, number)))
@@ -322,8 +328,8 @@ def test_comment_posts_one_marker_comment_with_the_markdown_report(tmp_path, mon
 def test_comment_updates_the_existing_marker_comment_in_place(tmp_path, monkeypatch):
     forge = _Forge(
         [
-            {"id": 5, "body": "unrelated"},
-            {"id": 9, "body": "<!-- fr:acceptance-report -->\nold"},
+            {"id": 5, "author": "me", "body": "unrelated"},
+            {"id": 9, "author": "me", "body": "<!-- fr:acceptance-report -->\nold"},
         ]
     )
     _comment_repo(tmp_path, monkeypatch, forge, ON)
@@ -364,3 +370,35 @@ def test_comment_body_is_capped_under_the_forge_limit(tmp_path, monkeypatch):
     assert res.exit_code == 0, res.output
     body = forge.calls[-1][1][2]
     assert len(body) <= 300 and "truncated" in body
+
+
+def test_a_foreign_authors_marker_comment_is_never_edited(tmp_path, monkeypatch):
+    forge = _Forge(
+        [{"id": 3, "author": "mallory", "body": "<!-- fr:acceptance-report -->\nforged"}]
+    )
+    _comment_repo(tmp_path, monkeypatch, forge, ON)
+    res = runner.invoke(app, ["acceptance", "comment", "--pr", "7", "--yes"])
+    assert res.exit_code == 0, res.output
+    assert [c[0] for c in forge.calls] == ["list", "post"]  # a fresh comment, not an edit
+
+
+def test_the_workflow_bot_owns_its_marker_comment(tmp_path, monkeypatch):
+    forge = _Forge(
+        [{"id": 4, "author": "github-actions", "body": "<!-- fr:acceptance-report -->\nold"}],
+        login=RuntimeError("Resource not accessible by integration"),
+    )
+    _comment_repo(tmp_path, monkeypatch, forge, ON)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    assert runner.invoke(app, ["acceptance", "comment", "--pr", "7", "--yes"]).exit_code == 0
+    assert [c[0] for c in forge.calls] == ["list", "edit"]
+
+
+def test_an_unknown_identity_never_edits(tmp_path, monkeypatch):
+    forge = _Forge(
+        [{"id": 4, "author": "github-actions", "body": "<!-- fr:acceptance-report -->\nold"}],
+        login=RuntimeError("no token"),
+    )
+    _comment_repo(tmp_path, monkeypatch, forge, ON)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    assert runner.invoke(app, ["acceptance", "comment", "--pr", "7", "--yes"]).exit_code == 0
+    assert [c[0] for c in forge.calls] == ["list", "post"]
