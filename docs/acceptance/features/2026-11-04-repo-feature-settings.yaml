@@ -253,3 +253,9 @@ amendments:
       plan or journal still resolves, read at its archived location (no fragment is
       rewritten), so fr acceptance check stays clean after closeout
     why: the fragments split (R18) leaves archive rewriting no fragment
+  - row: archive-retargets-matrix-refs
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_retarget.py#test_other_repo_refs_notes_walks_and_comments_stay_byte_identical
+    why: the retarget step and its tests are gone
