@@ -42,7 +42,7 @@ def models_errors_exit(fn: Callable[P, R]) -> Callable[P, R]:
 
 
 def resolve_repo_root(cwd: Path | None = None) -> Path:
-    """Resolve the repo root for a vk command.
+    """Resolve the repo root for an fr command.
 
     Honors `$VK_REPO_ROOT` first (so integration tests can point a
     command at `tmp_path` without spawning a fake git repo), then

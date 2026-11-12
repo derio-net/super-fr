@@ -44,7 +44,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
 
@@ -301,12 +301,20 @@ def drop_leading_h1(text: str) -> str:
 
 # -- the landing source (spec 2026-11-12-landing-front-page R1, R3, R4, R9) -----------
 
-SECTION_KINDS = ("prose", "flow", "guarantee", "pages", "cta")
+SECTION_KINDS = ("prose", "flow", "guarantee", "act", "grid", "pages", "cta")
+TERMINAL_KINDS = ("prompt", "out", "you", "ok")
+CARDS = (3, 8)
+_NO_FIGURE = ("act", "grid", "pages", "cta")
 GUARANTEES = (6, 8)
 _KIND = re.compile(r"^<!--\s*landing:([A-Za-z0-9_-]*)\s*-->\s*$")
 _ONE_LINK = re.compile(r"^\[([^\]]+)\]\(([^)\s]+)\)$")
 _ORDERED = re.compile(r"^\d+[.)]\s+")
 _FENCE = re.compile(r"^\s*(```|~~~)")
+_FIGURE_MARKER = re.compile(r"^<!--\s*site:figure\s+(\S+)\s*-->\s*$")
+_FIGURE_NAME = re.compile(r"^[a-z0-9-]+$")
+_BULLET = re.compile(r"^\s{0,3}[-*+]\s+")
+_CARD = re.compile(r"^\*\*(.+?)\*\*\s*(.*)$", re.DOTALL)
+_MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 
 
 @dataclass(frozen=True)
@@ -322,6 +330,23 @@ class Fact:
 
 
 @dataclass(frozen=True)
+class TerminalLine:
+    """One line of the hero's terminal: a typed command, output, an operator point or a success."""
+
+    kind: str
+    text: str
+
+
+@dataclass(frozen=True)
+class Card:
+    """One card of the "also included" grid: a title, one sentence and exactly one link."""
+
+    title: str
+    text: str
+    link: Link
+
+
+@dataclass(frozen=True)
 class Hero:
     eyebrow: str
     headline: str
@@ -329,6 +354,7 @@ class Hero:
     command: str
     primary: Link
     secondary: tuple[Link, ...]
+    terminal: tuple[TerminalLine, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -343,8 +369,10 @@ class Step:
 class Section:
     """A `## ` section: its kind, headline and Markdown body.
 
-    `problem`, `link` (guarantee) and `steps` (flow) are set only for their kind;
-    for a guarantee `body` is the gain and how, without the problem and the link.
+    `problem`, `link` (guarantee), `steps` (flow) and `cards` (grid) are set only for their
+    kind; for a guarantee `body` is the gain and how, without the problem and the link. `act`
+    is an act's number, or for a guarantee the act it belongs to (0: none). `figure` is the
+    name of the figure placed in the section, lifted out of its body.
     """
 
     kind: str
@@ -353,6 +381,9 @@ class Section:
     problem: str = ""
     link: Link | None = None
     steps: tuple[Step, ...] = ()
+    cards: tuple[Card, ...] = ()
+    act: int = 0
+    figure: str = ""
 
 
 @dataclass(frozen=True)
@@ -429,7 +460,28 @@ def _parse_hero(fm: dict, page: str) -> Hero:
         command=str(hero.get("command") or ""),
         primary=Link(str(primary["label"]), str(primary["href"])),
         secondary=tuple(_link(item, "hero.secondary[]", page) for item in secondary),
+        terminal=_parse_terminal(hero.get("terminal"), page),
     )
+
+
+def _parse_terminal(value: object, page: str) -> tuple[TerminalLine, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise BuildError(f"{page}: hero.terminal must be a list of {{kind, text}}")
+    out = []
+    for item in value:
+        kind = item.get("kind") if isinstance(item, dict) else None
+        text = item.get("text") if isinstance(item, dict) else None
+        if kind not in TERMINAL_KINDS:
+            raise BuildError(
+                f"{page}: hero.terminal has a line of kind {kind!r} "
+                f"(known: {', '.join(TERMINAL_KINDS)})"
+            )
+        if not isinstance(text, str) or not text.strip():
+            raise BuildError(f"{page}: a hero.terminal {kind} line has no text")
+        out.append(TerminalLine(kind, text.strip()))
+    return tuple(out)
 
 
 def _parse_facts(fm: dict, page: str) -> tuple[Fact, ...]:
@@ -484,6 +536,72 @@ def _parse_guarantee(heading: str, body: str, page: str) -> Section:
     )
 
 
+def _lift_figure(heading: str, kind: str, raw: str, page: str) -> tuple[str, str]:
+    """`raw` without its figure-marker blocks, and the one figure name they held ("" if none)."""
+    keep: list[str] = []
+    names: list[str] = []
+    for block in split_blocks(raw):
+        found = _FIGURE_MARKER.match(block.strip())
+        if found is None:
+            keep.append(block)
+        else:
+            names.append(found.group(1))
+    if not names:
+        return raw, ""
+    if kind in _NO_FIGURE:
+        raise BuildError(f"{page}: the {kind} section {heading!r} cannot hold a figure")
+    if len(names) > 1:
+        raise BuildError(f"{page}: the section {heading!r} holds more than one figure marker")
+    if not _FIGURE_NAME.match(names[0]):
+        raise BuildError(f"{page}: figure name {names[0]!r} is not [a-z0-9-]+")
+    return "\n\n".join(keep), names[0]
+
+
+def _parse_card(item: str, heading: str, page: str) -> Card:
+    found = _CARD.match(item)
+    if found is None:
+        raise BuildError(
+            f"{page}: a card of the grid {heading!r} must read '**Title.** sentence [label](href)'"
+        )
+    title, rest = found.group(1).strip().rstrip("."), found.group(2)
+    links = _MD_LINK.findall(rest)
+    if len(links) != 1:
+        raise BuildError(
+            f"{page}: the card {title!r} of the grid {heading!r} needs exactly one link, "
+            f"found {len(links)}"
+        )
+    text = " ".join(_MD_LINK.sub("", rest).split())
+    return Card(title, text, Link(links[0][0], links[0][1]))
+
+
+def _parse_grid(heading: str, body: str, page: str) -> Section:
+    blocks = split_blocks(body)
+    if not blocks or not _BULLET.match(blocks[-1]) or any(_BULLET.match(b) for b in blocks[:-1]):
+        raise BuildError(f"{page}: the grid {heading!r} must be optional prose, then one list")
+    items: list[list[str]] = []
+    for line in blocks[-1].splitlines():
+        if _BULLET.match(line):
+            items.append([_BULLET.sub("", line, count=1)])
+        else:
+            items[-1].append(line.strip())
+    cards = tuple(_parse_card(" ".join(x for x in lines if x), heading, page) for lines in items)
+    if not CARDS[0] <= len(cards) <= CARDS[1]:
+        raise BuildError(
+            f"{page}: the grid {heading!r} has three to eight cards, found {len(cards)}"
+        )
+    return Section("grid", heading, "\n\n".join(blocks[:-1]), cards=cards)
+
+
+def _check_acts(sections: list[Section], page: str) -> None:
+    for i, sec in enumerate(sections):
+        if sec.kind != "act":
+            continue
+        after = sections[i + 1 :]
+        until = next((j for j, x in enumerate(after) if x.kind == "act"), len(after))
+        if not any(x.kind == "guarantee" for x in after[:until]):
+            raise BuildError(f"{page}: the act {sec.heading!r} has no numbered section")
+
+
 def parse_landing(text: str, page: str) -> Landing:
     """The landing page source as data; every R9 defect raises a `BuildError`.
 
@@ -494,6 +612,7 @@ def parse_landing(text: str, page: str) -> Landing:
     found = _FRONT.match(text)
     body = text[found.end() :] if found else text
     sections: list[Section] = []
+    acts = 0
     for heading, raw in _split_sections(body, page):
         lines = raw.splitlines()
         first = next((i for i, ln in enumerate(lines) if ln.strip()), None)
@@ -506,14 +625,24 @@ def parse_landing(text: str, page: str) -> Landing:
                 f"{page}: the section {heading!r} names an unknown kind {kind!r} "
                 f"(known: {', '.join(SECTION_KINDS)})"
             )
+        raw, figure = _lift_figure(heading, kind, raw, page)
         if kind == "flow":
-            sections.append(Section(kind, heading, raw, steps=_parse_flow(heading, raw, page)))
+            sec = Section(kind, heading, raw, steps=_parse_flow(heading, raw, page))
         elif kind == "guarantee":
-            sections.append(_parse_guarantee(heading, raw, page))
+            sec = _parse_guarantee(heading, raw, page)
+        elif kind == "grid":
+            sec = _parse_grid(heading, raw, page)
         elif kind == "pages" and MARKER not in raw:
             raise BuildError(f"{page}: the pages section {heading!r} lacks {MARKER}")
         else:
-            sections.append(Section(kind, heading, raw))
+            sec = Section(kind, heading, raw)
+        if kind == "act":
+            acts += 1
+            sec = replace(sec, act=acts)
+        elif kind == "guarantee":
+            sec = replace(sec, act=acts)
+        sections.append(replace(sec, figure=figure) if figure else sec)
+    _check_acts(sections, page)
     hero = _parse_hero(fm, page)
     count = sum(s.kind == "guarantee" for s in sections)
     if not GUARANTEES[0] <= count <= GUARANTEES[1]:
@@ -523,69 +652,19 @@ def parse_landing(text: str, page: str) -> Landing:
     return Landing(hero, _parse_facts(fm, page), tuple(sections))
 
 
-# -- rendering the landing (R1-R6, R10) ------------------------------------------------
+# -- rendering the landing (spec 2026-11-12-front-page-second-pass A, C) -----------------
 
 SITE_DIR = Path(__file__).resolve().parent / "site"
-_HEAD_FONT = re.compile(r"@font-face\s*\{[^}]*\}")
-_ROOT_BLOCK = re.compile(r":root\s*\{[^}]*\}")
 _LINKS_ONLY = re.compile(r"^(?:\[[^\]]+\]\([^)\s]+\)\s*)+$")
 _ANY_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+_ORDINALS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
+#: Seconds a typed prompt line takes, and an output line's gap, in the terminal's timeline.
+_TYPE_SECONDS, _LINE_SECONDS = 1.6, 0.7
 
 
 def site_file(name: str) -> str:
     """A file of `scripts/site/` (the landing skeleton and the stylesheets)."""
     return (SITE_DIR / name).read_text(encoding="utf-8")
-
-
-def extract_font_css(html: str) -> str:
-    """Every `@font-face` rule of a page the renderer produced."""
-    rules = _HEAD_FONT.findall(html)
-    if not rules:
-        raise BuildError("the rendered page carries no @font-face rule to copy for the landing")
-    return "\n".join(rules)
-
-
-#: Every custom property `scripts/site/*.css` reads. A renderer that stops defining
-#: one would otherwise ship a landing with unset colours or fonts (review p1-r2).
-THEME_PROPERTIES = (
-    "--ink",
-    "--ink-2",
-    "--paper",
-    "--paper-dim",
-    "--muted",
-    "--faint",
-    "--panel",
-    "--line",
-    "--line-2",
-    "--brass",
-    "--display",
-    "--serif",
-    "--mono",
-)
-
-
-def _defines(block: str, name: str) -> bool:
-    return re.search(rf"(?<![\w-]){re.escape(name)}\s*:", block) is not None
-
-
-def extract_theme_css(html: str) -> str:
-    """The `:root{...}` custom-property block of a page the renderer produced.
-
-    Refused unless it defines every property the site's own stylesheets use.
-    """
-    blocks = _ROOT_BLOCK.findall(html)
-    if not blocks:
-        raise BuildError("the rendered page carries no :root block to copy for the landing")
-    for block in blocks:
-        if _defines(block, "--ink"):
-            missing = [name for name in THEME_PROPERTIES if not _defines(block, name)]
-            if missing:
-                raise BuildError(
-                    "the rendered page's :root block does not define "
-                    f"{', '.join(missing)}, which the landing styles use"
-                )
-            return block
-    raise BuildError("the rendered page's :root block defines no --ink to copy for the landing")
 
 
 def _fill(template: str, values: dict[str, str]) -> str:
@@ -599,17 +678,230 @@ def _inline(to_html: Callable[[str], str], text: str) -> str:
     return m.group(1) if m else out
 
 
+def _headline_html(headline: str) -> str:
+    """The headline escaped; the text after its first sentence is wrapped in the accent gradient."""
+    first = _SENTENCE.match(headline)
+    if first is None or first.group(1) == headline:
+        return html.escape(headline)
+    rest = headline[first.end() :].strip()
+    return f'{html.escape(first.group(1))} <span class="accent">{html.escape(rest)}</span>'
+
+
+def _terminal_html(lines: tuple[TerminalLine, ...]) -> str:
+    """The hero's terminal panel: window chrome, then one line element per entry.
+
+    A `prompt` line carries its character count (`--chars`, the width its typing animation
+    steps over); every line carries its start time (`--d`) in the transcript's timeline.
+    """
+    last_prompt = max((i for i, t in enumerate(lines) if t.kind == "prompt"), default=-1)
+    rows: list[str] = []
+    at = 0.4
+    for i, line in enumerate(lines):
+        text = html.escape(line.text)
+        if line.kind == "prompt":
+            caret = " caret" if i == last_prompt else ""
+            rows.append(
+                f'<p class="tl tl-prompt{caret}" style="--chars:{len(line.text)};--d:{at:.1f}s">'
+                f'<span class="typed">{text}</span></p>'
+            )
+            at += _TYPE_SECONDS
+        else:
+            rows.append(
+                f'<p class="tl tl-{line.kind}" style="--d:{at:.1f}s"><span>{text}</span></p>'
+            )
+            at += _LINE_SECONDS
+    return (
+        '<div class="terminal" role="group" aria-label="An example run, as a terminal transcript">'
+        '<div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>fr run</span></div>'
+        f'<div class="term-body">{"".join(rows)}</div></div>'
+    )
+
+
+class _LandingRenderer:
+    """Renders each section kind of one landing; every link goes through the build's one rule."""
+
+    def __init__(
+        self,
+        *,
+        entries: list[Entry],
+        patterns: list[str],
+        tracked: list[str],
+        ref: str,
+        repo_url: str,
+        to_html: Callable[[str], str],
+        page: str,
+        total: int,
+    ) -> None:
+        self.entries, self.patterns, self.tracked = entries, patterns, tracked
+        self.ref, self.repo_url, self.to_html = ref, repo_url, to_html
+        self.page, self.total = page, total
+        self.number = 0
+        self.inserted: list[str] = []
+
+    def href(self, h: str) -> str:
+        return html.escape(
+            rewrite_href(h, self.page, self.patterns, self.tracked, self.ref, self.repo_url),
+            quote=True,
+        )
+
+    def rewrite(self, text: str) -> str:
+        return rewrite_markdown(
+            text, self.page, self.patterns, self.tracked, self.ref, self.repo_url
+        )
+
+    def md(self, text: str) -> str:
+        return self.to_html(self.rewrite(text))
+
+    def figure(self, sec: Section) -> str:
+        if not sec.figure:
+            return ""
+        try:
+            block = load_figure(sec.figure)
+        except BuildError as e:
+            raise BuildError(f"{self.page}: {e}") from e
+        self.inserted += re.findall(r"<svg\b.*?</svg>", block, re.DOTALL)
+        return block
+
+    def hero(self, hero: Hero, facts: tuple[Fact, ...]) -> str:
+        esc = html.escape
+        copy = []
+        if hero.eyebrow:
+            copy.append(f'<p class="eyebrow">{esc(hero.eyebrow)}</p>')
+        copy.append(f"<h1>{_headline_html(hero.headline)}</h1>")
+        copy.append(f'<p class="subline">{esc(hero.subline)}</p>')
+        if hero.command and not hero.terminal:
+            copy.append(f'<code class="command">{esc(hero.command)}</code>')
+        actions = [
+            f'<a class="btn" href="{self.href(hero.primary.href)}">{esc(hero.primary.label)}</a>'
+        ]
+        actions += [
+            f'<a class="link" href="{self.href(x.href)}">{esc(x.label)}</a>' for x in hero.secondary
+        ]
+        copy.append('<p class="actions">' + "".join(actions) + "</p>")
+        parts = [f'<div class="hero-copy">{"".join(copy)}</div>']
+        if hero.terminal:
+            parts.append(
+                f'<div class="hero-term"><div class="glow" aria-hidden="true"></div>'
+                f"{_terminal_html(hero.terminal)}</div>"
+            )
+        if facts:
+            items = "".join(
+                f"<li><strong>{esc(f.figure)}</strong><span>{esc(f.caption)}</span></li>"
+                for f in facts
+            )
+            parts.append(f'<ul class="facts">{items}</ul>')
+        solo = "" if hero.terminal else " solo"
+        return f'<div class="wrap hero-grid{solo}">{"".join(parts)}</div>'
+
+    def flow(self, sec: Section) -> str:
+        items = "".join(
+            f'<li class="step{" yours" if st.yours else ""}">'
+            + ('<span class="you-tag">You</span>' if st.yours else "")
+            + _inline(self.to_html, self.rewrite(st.text))
+            + "</li>"
+            for st in sec.steps
+        )
+        legend = (
+            '<p class="legend">The steps marked You are yours; the rest the agent does.</p>'
+            if any(st.yours for st in sec.steps)
+            else ""
+        )
+        return (
+            f'<section class="band flow"><div class="wrap"><h2>{html.escape(sec.heading)}</h2>'
+            f'{self.figure(sec)}<ol class="steps">{items}</ol>{legend}</div></section>'
+        )
+
+    def act(self, sec: Section) -> str:
+        word = _ORDINALS[sec.act - 1] if 0 < sec.act <= len(_ORDINALS) else str(sec.act)
+        return (
+            f'<section class="act" id="act-{sec.act}"><div class="wrap">'
+            f'<p class="act-label">Act {word}</p><h2>{html.escape(sec.heading)}</h2>'
+            f'<div class="act-intro">{self.md(sec.body)}</div></div></section>'
+        )
+
+    def guarantee(self, sec: Section) -> str:
+        assert sec.link is not None
+        self.number += 1
+        return (
+            f'<section class="band guarantee" id="section-{self.number}"><div class="wrap">'
+            f'<article class="card"><div class="g-head">'
+            f'<p class="kicker"><span class="num">{self.number:02d}</span>'
+            f'<span class="of"> / {self.total:02d}</span></p>'
+            f"<h2>{html.escape(sec.heading)}</h2>"
+            f'<div class="problem">{self.md(sec.problem)}</div></div>'
+            f'<div class="g-body">{self.md(sec.body)}</div>{self.figure(sec)}'
+            f'<a class="more" href="{self.href(sec.link.href)}">{html.escape(sec.link.label)}</a>'
+            "</article></div></section>"
+        )
+
+    def grid(self, sec: Section) -> str:
+        esc = html.escape
+        cards = "".join(
+            f'<li class="card"><h3>{esc(c.title)}</h3><p>{_inline(self.to_html, c.text)}</p>'
+            f'<a class="more" href="{self.href(c.link.href)}">{esc(c.link.label)}</a></li>'
+            for c in sec.cards
+        )
+        intro = self.md(sec.body) if sec.body.strip() else ""
+        return (
+            f'<section class="band grid"><div class="wrap"><h2>{esc(sec.heading)}</h2>{intro}'
+            f'<ul class="cards">{cards}</ul></div></section>'
+        )
+
+    def pages(self, sec: Section) -> str:
+        esc = html.escape
+        lists = []
+        here = posixpath.dirname(route(self.page)) or "."
+        for key, heading, rows in page_groups(self.page, self.entries):
+            lis = "".join(
+                f'<li><a href="{esc(posixpath.relpath(route(e.path), here))}">'
+                f"{esc(e.title)}</a><span>{esc(first_sentence(e.tldr))}</span></li>"
+                for e in rows
+            )
+            lists.append(f'<h3 id="{key}">{esc(heading)}</h3><ul>{lis}</ul>')
+        before, _, after = sec.body.partition(MARKER)
+        return (
+            f'<section class="band pages"><div class="wrap"><h2>{esc(sec.heading)}</h2>'
+            f"{self.md(before) if before.strip() else ''}{''.join(lists)}"
+            f"{self.md(after) if after.strip() else ''}</div></section>"
+        )
+
+    def cta(self, sec: Section) -> str:
+        esc = html.escape
+        blocks = []
+        for block in split_blocks(self.rewrite(sec.body)):
+            flat = " ".join(block.split())
+            if _LINKS_ONLY.match(flat):
+                btns = "".join(
+                    f'<a class="btn" href="{esc(h, quote=True)}">{esc(lab)}</a>'
+                    if i == 0
+                    else f'<a href="{esc(h, quote=True)}">{esc(lab)}</a>'
+                    for i, (lab, h) in enumerate(_ANY_LINK.findall(flat))
+                )
+                blocks.append(f'<p class="buttons">{btns}</p>')
+            else:
+                blocks.append(self.to_html(block))
+        return (
+            f'<section class="band cta"><div class="wrap narrow"><h2>{esc(sec.heading)}</h2>'
+            f"{''.join(blocks)}</div></section>"
+        )
+
+    def prose(self, sec: Section) -> str:
+        return (
+            f'<section class="band prose"><div class="wrap narrow">'
+            f"<h2>{html.escape(sec.heading)}</h2>{self.md(sec.body)}{self.figure(sec)}"
+            "</div></section>"
+        )
+
+
 def render_landing(
     landing: Landing,
     *,
     title: str,
     entries: list[Entry],
-    font_css: str,
     patterns: list[str],
     tracked: list[str],
     ref: str,
     repo_url: str = DEFAULT_REPO_URL,
-    theme_css: str,
     to_html: Callable[[str], str],
     description: str = "",
     page: str = INDEX_SOURCE,
@@ -617,133 +909,229 @@ def render_landing(
     """The landing page's HTML. Pure given its inputs (no filesystem but `scripts/site/`).
 
     Every relative link, in the front matter and in the bodies, goes through the
-    build's one link rule with `page` as the linking page (R10). `to_html` is the
-    Markdown converter; the build passes python-markdown's, tests a stand-in.
+    build's one link rule with `page` as the linking page. `to_html` is the Markdown
+    converter; the build passes python-markdown's, tests a stand-in. The page embeds no
+    font and takes nothing from a renderer-produced page; a figure it inlines must
+    survive into the output, as on an article page.
     """
-    esc = html.escape
-
-    def href(h: str) -> str:
-        return esc(rewrite_href(h, page, patterns, tracked, ref, repo_url), quote=True)
-
-    def md(text: str) -> str:
-        return to_html(rewrite_markdown(text, page, patterns, tracked, ref, repo_url))
-
-    hero = landing.hero
-    parts = ['<div class="wrap">']
-    if hero.eyebrow:
-        parts.append(f'<p class="eyebrow">{esc(hero.eyebrow)}</p>')
-    parts.append(f"<h1>{esc(hero.headline)}</h1>")
-    parts.append(f'<p class="subline">{esc(hero.subline)}</p>')
-    if hero.command:
-        parts.append(f'<code class="command">{esc(hero.command)}</code>')
-    actions = [f'<a class="btn" href="{href(hero.primary.href)}">{esc(hero.primary.label)}</a>']
-    actions += [f'<a class="link" href="{href(x.href)}">{esc(x.label)}</a>' for x in hero.secondary]
-    parts.append('<p class="actions">' + "".join(actions) + "</p>")
-    if landing.facts:
-        parts.append(
-            '<ul class="facts">'
-            + "".join(
-                f"<li><strong>{esc(f.figure)}</strong><span>{esc(f.caption)}</span></li>"
-                for f in landing.facts
-            )
-            + "</ul>"
-        )
-    parts.append("</div>")
-    hero_html = "\n".join(parts)
-
-    total = sum(sec.kind == "guarantee" for sec in landing.sections)
-    number = 0
-    out: list[str] = []
-    for sec in landing.sections:
-        head = f"<h2>{esc(sec.heading)}</h2>"
-        if sec.kind == "flow":
-            items = "".join(
-                f'<li class="step{" yours" if st.yours else ""}">'
-                + ('<span class="you-tag">You</span>' if st.yours else "")
-                + _inline(
-                    to_html, rewrite_markdown(st.text, page, patterns, tracked, ref, repo_url)
-                )
-                + "</li>"
-                for st in sec.steps
-            )
-            legend = (
-                '<p class="legend">The steps marked You are yours; the rest the agent does.</p>'
-                if any(st.yours for st in sec.steps)
-                else ""
-            )
-            out.append(
-                f'<section class="band flow"><div class="wrap">{head}'
-                f'<ol class="steps">{items}</ol>{legend}</div></section>'
-            )
-        elif sec.kind == "guarantee":
-            number += 1
-            assert sec.link is not None
-            out.append(
-                f'<section class="band guarantee"><div class="wrap narrow">'
-                f'<p class="kicker">{number:02d} / {total:02d}</p>'
-                f'<div class="problem">{md(sec.problem)}</div>{head}'
-                f'<div class="body">{md(sec.body)}</div>'
-                f'<a class="more" href="{href(sec.link.href)}">{esc(sec.link.label)}</a>'
-                "</div></section>"
-            )
-        elif sec.kind == "pages":
-            lists = []
-            here = posixpath.dirname(route(page)) or "."
-            for key, heading, rows in page_groups(page, entries):
-                lis = "".join(
-                    f'<li><a href="{esc(posixpath.relpath(route(e.path), here))}">'
-                    f"{esc(e.title)}</a><span>{esc(first_sentence(e.tldr))}</span></li>"
-                    for e in rows
-                )
-                lists.append(f'<h3 id="{key}">{esc(heading)}</h3><ul>{lis}</ul>')
-            before, _, after = sec.body.partition(MARKER)
-            out.append(
-                f'<section class="band pages"><div class="wrap">{head}'
-                f"{md(before) if before.strip() else ''}{''.join(lists)}"
-                f"{md(after) if after.strip() else ''}</div></section>"
-            )
-        elif sec.kind == "cta":
-            rewritten = rewrite_markdown(sec.body, page, patterns, tracked, ref, repo_url)
-            blocks = []
-            for block in split_blocks(rewritten):
-                flat = " ".join(block.split())
-                if _LINKS_ONLY.match(flat):
-                    links = _ANY_LINK.findall(flat)
-                    btns = "".join(
-                        f'<a class="btn" href="{esc(h, quote=True)}">{esc(lab)}</a>'
-                        if i == 0
-                        else f'<a href="{esc(h, quote=True)}">{esc(lab)}</a>'
-                        for i, (lab, h) in enumerate(links)
-                    )
-                    blocks.append(f'<p class="buttons">{btns}</p>')
-                else:
-                    blocks.append(to_html(block))
-            out.append(
-                f'<section class="band cta"><div class="wrap narrow">{head}{"".join(blocks)}'
-                "</div></section>"
-            )
-        else:
-            out.append(
-                f'<section class="band prose"><div class="wrap narrow">{head}{md(sec.body)}'
-                "</div></section>"
-            )
-    return _fill(
+    r = _LandingRenderer(
+        entries=entries,
+        patterns=patterns,
+        tracked=tracked,
+        ref=ref,
+        repo_url=repo_url,
+        to_html=to_html,
+        page=page,
+        total=sum(sec.kind == "guarantee" for sec in landing.sections),
+    )
+    hero_html = r.hero(landing.hero, landing.facts)
+    out = [getattr(r, sec.kind)(sec) for sec in landing.sections]
+    css = site_file("landing.css")
+    if r.inserted:
+        css = site_file("figures.css") + "\n" + css
+    page_html = _fill(
         site_file("landing.html"),
         {
-            "title": esc(title),
-            "description": esc(" ".join(description.split()), quote=True),
-            "font_css": font_css,
-            "css": theme_css + "\n" + site_file("landing.css"),
+            "title": html.escape(title),
+            "description": html.escape(" ".join(description.split()), quote=True),
+            "css": css,
             "hero": hero_html,
             "sections": "\n".join(out),
         },
     )
+    check_figures_survived(page_html, r.inserted, route(page))
+    return page_html
 
 
 def check_rendered(html: str, route_name: str) -> None:
     """Fail a page the renderer emitted without its embedded fonts."""
     if not re.search(r"@font-face\s*\{[^}]*url\(\s*data:", html):
         raise BuildError(f"{route_name}: rendered with no embedded @font-face data URI")
+
+
+# -- figures (spec 2026-11-12-front-page-second-pass B, R6, R10) -------------------------
+
+FIGURES_DIR = SITE_DIR / "figures"
+_SVG_OPEN = re.compile(r"<svg\b[^>]*>")
+_PAINT_PROPS = frozenset({"fill", "stroke", "stop-color", "flood-color", "color"})
+_CSS_DECL = re.compile(r"(?<![\w-])([\w-]+)\s*:\s*([^;}]*)")
+_URL_REF = re.compile(r"url\(\s*[\"']?([^)\"']*)[\"']?\s*\)", re.IGNORECASE)
+_SAME_DOC = re.compile(r"#[^\s#]+")
+_ALLOWED_PAINT = {"none", "currentcolor", "inherit", "transparent"}
+_REFUSED_ELEMENTS = {
+    "script": "contains a <script> element",
+    "image": "contains an <image> element, which would be a reference outside the page",
+    "foreignobject": "contains a <foreignObject> element",
+}
+_SMIL = {"animate", "set", "animatetransform", "animatemotion"}
+_XLINK = 'xmlns:xlink="http://www.w3.org/1999/xlink"'
+
+
+def _local(name: str) -> str:
+    """The local part of an ElementTree tag or attribute name, lower-cased."""
+    return name.rsplit("}", 1)[-1].lower()
+
+
+def _allowed_paint(value: str) -> bool:
+    v = re.sub(r"!\s*important\s*$", "", value.strip(), flags=re.IGNORECASE).strip()
+    low = v.lower()
+    return (
+        low in _ALLOWED_PAINT
+        or low.startswith("var(")
+        or re.fullmatch(r"url\(\s*#[^)\s]+\s*\)", v, re.IGNORECASE) is not None
+    )
+
+
+def check_figure(svg_text: str, name: str) -> None:
+    """Refuse a figure file that breaks a rule of spec 2026-11-12-front-page-second-pass B / R10.
+
+    `name` is the file's stem: `<name>` or `<name>.narrow`. The file is parsed as XML and
+    its elements and attributes are checked, never raw text, so a value cannot hide a
+    construct. Every refusal names the figure and the defect, so a bad file never reaches
+    a page. Motion is CSS in figures.css, so SMIL elements are refused outright.
+    """
+    import xml.etree.ElementTree as ET  # noqa: N817 - stdlib alias, local to the one user
+
+    def refuse(defect: str) -> BuildError:
+        return BuildError(f"figure {name}: {defect}")
+
+    text = svg_text if "xmlns:xlink" in svg_text else svg_text.replace("<svg", f"<svg {_XLINK}", 1)
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as e:
+        raise refuse(f"is not well-formed XML ({e})") from e
+    if _local(root.tag) != "svg":
+        raise refuse("the root element is not <svg>")
+    if root.get("role") != "img":
+        raise refuse('the root <svg> has no role="img"')
+    children = list(root)
+    first = children[0] if children else None
+    if first is None or _local(first.tag) != "title" or not (first.text or "").strip():
+        raise refuse("the first child of the root <svg> is not a non-empty <title>")
+    prefix = f"{name.partition('.')[0]}-{name.partition('.')[2]}--" if "." in name else f"{name}--"
+
+    def paint(prop: str, value: str) -> None:
+        if not _allowed_paint(value):
+            raise refuse(
+                f"{prop.lower()} is {value.strip()!r}, not a class-driven paint; use a class "
+                "from figures.css (allowed values: none, currentColor, inherit, transparent, "
+                "url(#id), var(...))"
+            )
+
+    def css(source: str) -> None:
+        for prop, value in _CSS_DECL.findall(source):
+            if prop.lower() in _PAINT_PROPS:
+                paint(prop, value)
+
+    def urls(source: str) -> None:
+        for ref in _URL_REF.findall(source):
+            if not _SAME_DOC.fullmatch(ref):
+                raise refuse(f"url({ref}) is not a same-document #id")
+
+    for el in root.iter():
+        tag = _local(el.tag)
+        if tag in _REFUSED_ELEMENTS:
+            raise refuse(_REFUSED_ELEMENTS[tag])
+        if tag in _SMIL:
+            raise refuse(f"contains the SMIL animation element <{tag}>; motion is CSS")
+        if tag == "style":
+            body = el.text or ""
+            if re.search(r"@import", body, re.IGNORECASE):
+                raise refuse("a <style> element uses @import")
+            urls(body)
+            css(body)
+        for key, value in el.attrib.items():
+            attr = _local(key)
+            if attr.startswith("on"):
+                raise refuse(f"carries the event attribute {attr}")
+            if attr == "href" and not _SAME_DOC.fullmatch(value):
+                raise refuse(f"href {value!r} is not a same-document #id")
+            if attr == "id" and not value.startswith(prefix):
+                raise refuse(f"id {value!r} does not start with {prefix!r}")
+            urls(value)
+            if attr == "style":
+                css(value)
+            elif attr in _PAINT_PROPS:
+                paint(attr, value)
+
+
+def _compact(svg_text: str) -> str:
+    """The SVG with no blank lines and no indentation, so Markdown keeps it one block."""
+    return "\n".join(line.strip() for line in svg_text.splitlines() if line.strip())
+
+
+def _with_class(svg: str, cls: str, name: str) -> str:
+    root = _SVG_OPEN.search(svg)
+    assert root is not None  # check_figure ran first
+    if re.search(r"(?<![\w-])class\s*=", root.group(0)):
+        raise BuildError(f"figure {name}: the root <svg> carries a class; the build adds one")
+    return svg.replace("<svg", f'<svg class="{cls}"', 1)
+
+
+def figure_svgs(name: str) -> list[str]:
+    """The checked, inlined `<svg>` texts of figure `name`: the wide one, then any narrow one.
+
+    The `fig-wide` / `fig-narrow` classes (which figures.css shows by width) are added only
+    when a narrow file exists, so a lone figure carries neither and is always shown.
+    """
+    wide = FIGURES_DIR / f"{name}.svg"
+    if not wide.is_file():
+        raise BuildError(f"figure {name}: {wide} does not exist")
+    narrow = FIGURES_DIR / f"{name}.narrow.svg"
+    files = [(name, wide)] + ([(f"{name}.narrow", narrow)] if narrow.is_file() else [])
+    out: list[str] = []
+    for stem, path in files:
+        text = path.read_text(encoding="utf-8")
+        check_figure(text, stem)
+        svg = _compact(text.strip())
+        if len(files) == 2:
+            svg = _with_class(svg, "fig-narrow" if stem.endswith(".narrow") else "fig-wide", stem)
+        out.append(svg)
+    return out
+
+
+def load_figure(name: str) -> str:
+    """`<figure class="site-figure">` holding figure `name`'s wide and narrow `<svg>`."""
+    return '<figure class="site-figure">' + "\n".join(figure_svgs(name)) + "</figure>"
+
+
+def fill_figures(text: str, page: str) -> tuple[str, list[str]]:
+    """Replace each `<!-- site:figure NAME -->` line outside fenced code with its figure.
+
+    Returns the new text and the exact `<svg>` strings inserted, which the survival check
+    looks for in the rendered page. The figure is `load_figure`'s markup, padded by a blank
+    line each side so python-markdown treats it as a block of its own.
+    """
+    lines: list[str] = []
+    inserted: list[str] = []
+    fence = ""
+    for line in text.split("\n"):
+        f = _FENCE.match(line)
+        if f:
+            fence = "" if fence == f.group(1) else (fence or f.group(1))
+        found = None if fence or f else _FIGURE_MARKER.match(line)
+        if found is None:
+            lines.append(line)
+            continue
+        name = found.group(1)
+        if not _FIGURE_NAME.match(name):
+            raise BuildError(f"{page}: figure name {name!r} is not [a-z0-9-]+")
+        try:
+            html_block = load_figure(name)
+        except BuildError as e:
+            raise BuildError(f"{page}: {e}") from e
+        inserted += re.findall(r"<svg\b.*?</svg>", html_block, re.DOTALL)
+        lines += ["", html_block, ""]
+    return "\n".join(lines), inserted
+
+
+def check_figures_survived(rendered_html: str, inserted: list[str], route_name: str) -> None:
+    """Fail a page whose rendering altered or dropped a figure the build inserted."""
+    for svg in inserted:
+        if svg not in rendered_html:
+            title = re.search(r"<title>([^<]*)</title>", svg)
+            what = title.group(1) if title else svg[:40]
+            raise BuildError(f"{route_name}: the figure {what!r} did not survive rendering intact")
 
 
 # -- the top bar (R8, R9) --------------------------------------------------------------
@@ -783,6 +1171,13 @@ def insert_bar(page_html: str, route_name: str, repo_url: str, bar_css: str) -> 
     )
     with_style = page_html.replace("</head>", f"<style>{bar_css}</style></head>", 1)
     return _BODY_OPEN.sub(lambda m: m.group(0) + "\n" + nav, with_style, count=1)
+
+
+def insert_figure_css(page_html: str, route_name: str, figure_css: str) -> str:
+    """`page_html` with the figure stylesheet before `</head>` (only pages with a figure get it)."""
+    if page_html.count("</head>") != 1:
+        raise BuildError(f"{route_name}: expected one </head> to insert the figure styles")
+    return page_html.replace("</head>", f"<style>{figure_css}</style></head>", 1)
 
 
 def load_config(path: Path) -> list[str]:
@@ -846,6 +1241,32 @@ def _markdown_converter() -> Callable[[str], str]:
     )
 
 
+def _render_article(
+    path: str,
+    raw: str,
+    entries: list[Entry],
+    patterns: list[str],
+    tracked: list[str],
+    ref: str,
+    repo_url: str,
+    renderer_env: tuple[Path, Path, str],
+) -> tuple[str, list[str]]:
+    """Render one article page: rewrite its links and markers, then run the renderer.
+
+    Figures are filled after the link rewrite, so `rewrite_markdown` never scans an SVG.
+    Returns the page's HTML and the `<svg>` strings the build inserted into it.
+    """
+    renderer, fonts, tmp = renderer_env
+    text = fill_pages(drop_leading_h1(raw), path, entries)
+    text = rewrite_markdown(text, path, patterns, tracked, ref, repo_url)
+    text, inserted = fill_figures(text, path)
+    source = Path(tmp) / posixpath.basename(path)
+    source.write_text(text, encoding="utf-8")
+    target = Path(tmp) / "out" / route(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return render_page(renderer, fonts, source, target), inserted
+
+
 def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) -> list[str]:
     """Render every configured page into `out_dir`; return the routes written.
 
@@ -877,29 +1298,22 @@ def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) 
     landing = parse_landing(texts[landing_pages[0]], landing_pages[0]) if landing_pages else None
     # 2. render
     pages_html: dict[str, str] = {}
+    figures: dict[str, list[str]] = {}
     with tempfile.TemporaryDirectory() as tmp:
         for path in pages:
             if path in landing_pages:
                 continue
-            text = fill_pages(drop_leading_h1(texts[path]), path, entries)
-            text = rewrite_markdown(text, path, patterns, tracked, ref, repo_url)
-            source = Path(tmp) / posixpath.basename(path)
-            source.write_text(text, encoding="utf-8")
-            target = Path(tmp) / "out" / route(path)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            pages_html[route(path)] = render_page(renderer, fonts, source, target)
+            pages_html[route(path)], figures[route(path)] = _render_article(
+                path, texts[path], entries, patterns, tracked, ref, repo_url, (renderer, fonts, tmp)
+            )
+    landed: set[str] = set()
     if landing is not None:
-        if not pages_html:
-            raise BuildError("the landing page has no rendered page to take its fonts from")
-        first = pages_html[sorted(pages_html)[0]]
         front = fronts[landing_pages[0]]
         pages_html["index.html"] = render_landing(
             landing,
             title=str(front.get("title") or landing_pages[0]),
             description=str(front.get("tldr") or ""),
             entries=entries,
-            font_css=extract_font_css(first),
-            theme_css=extract_theme_css(first),
             patterns=patterns,
             tracked=tracked,
             ref=ref,
@@ -907,11 +1321,20 @@ def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) 
             to_html=_markdown_converter(),
             page=landing_pages[0],
         )
+        landed.add("index.html")
     # 3. decorate, then write
     bar_css = site_file("bar.css")
     final: dict[str, str] = {}
+    figure_css = site_file("figures.css")
     for route_name, page_html in pages_html.items():
+        if route_name in landed:  # embeds no font, and checked its own figures
+            final[route_name] = insert_bar(page_html, route_name, repo_url, bar_css)
+            continue
         check_rendered(page_html, route_name)
+        inserted = figures.get(route_name, [])
+        check_figures_survived(page_html, inserted, route_name)
+        if inserted:
+            page_html = insert_figure_css(page_html, route_name, figure_css)
         final[route_name] = insert_bar(page_html, route_name, repo_url, bar_css)
     for route_name, page_html in final.items():
         target = out_dir / route_name

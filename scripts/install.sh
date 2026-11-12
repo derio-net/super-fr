@@ -199,7 +199,7 @@ if [[ "${1:-}" == "--install-bridge" ]]; then
   wrapper_path="${VK_BRIDGE_WRAPPER_PATH:-$HOME/.local/bin/vk-bridge}"
   mkdir -p "$(dirname "$wrapper_path")"
   # Prefer the active uv tool's interpreter so the wrapper can't pick
-  # up a stale system Python that doesn't have vk installed.
+  # up a stale system Python that doesn't have fr installed.
   vk_python="$(uv tool dir 2>/dev/null)/fr/bin/python"
   if [ ! -x "$vk_python" ]; then
     # Fallback chain: any `uv run` env, then plain `python3`.

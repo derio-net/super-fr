@@ -1,0 +1,141 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'The front page: two acts, four diagrams, its own look and motion (R1-R5,
+    R7-R10, R12, R13)'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - site-landing-two-acts
+  - site-landing-figures
+  - site-landing-look-and-motion
+  - site-landing-refuses-malformed-figures-and-acts
+  tier: standard
+  files:
+  - scripts/build-site.py
+  - scripts/site/*
+  - docs/explainers/index.md
+  - docs/docs-currency.md
+  - .claude/rules/explainers-currency.md
+  - .opencode/instructions/*
+  - .hermes/*
+  - tests/unit/test_build_site.py
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Parse acts, the grid, terminal lines and section figures (R1-R4, R10, spec
+    A, B)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests in `tests/unit/test_build_site.py` for `parse_landing`: `SECTION_KINDS` gains `act` and `grid`; an `act` section exposes its heading and introduction and an act number assigned in order; each `guarantee` records the act it belongs to (none before the first act); a landing with no `act` still parses; an `act` followed by no `guarantee` before the next `act` or the end raises `BuildError`; a `grid` section is optional prose then exactly one unordered list whose items are `**Title.** sentence [label](href)`, exposing title, text and link per card; fewer than three or more than eight cards, or a card with no link or more than one, raises; `hero.terminal` is an optional list of `{kind, text}` with kind in `prompt`, `out`, `you`, `ok`, any other kind (or a missing `text`) raises; a block holding only `<!-- site:figure <name> -->` in a `flow`, `guarantee` or prose section is lifted out before the shape checks and stored as the section's `figure`; a second marker in one section, or a marker in an `act`, `grid`, `pages` or `cta` section, raises. See them fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement in `scripts/build-site.py` (`Act`/`Card`/`TerminalLine` dataclasses or fields on the existing ones; pure, no filesystem). See the tests pass; every first-pass parser test stays green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: the per-kind parsers share the block splitter and one "lift the figure marker" helper; `parse_landing` reads as a dispatch over kinds.
+- number: 2
+  title: Render the new landing and drop the renderer coupling (R4-R9, spec B, C)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests for `render_landing`: it no longer takes `font_css` or `theme_css`; the output has no `@font-face`, no `<script`, and no `url(`, `src=` or stylesheet `href=` naming another host; numbering runs `01 / 06` … across acts; an act opener carries its label ("Act one", "Act two") and introduction; the grid renders one card per item with its rewritten link; the terminal panel renders one line element per `hero.terminal` entry with a class per kind and, on `prompt` lines, the character count as a custom property (`--chars`), and falls back to the single `command` line when `terminal` is absent; a section's figure is emitted through `load_figure` (flow: above the step list; guarantee: below the text, above the link; prose: below the text), `figures.css` is in the head when any section has a figure, and the survival check passes on the landing. Replace the first-pass tests the spec names (the copied-theme-block assertions, `test_a_theme_missing_a_property_the_landing_uses_is_refused`, `test_every_property_the_site_stylesheets_use_is_a_required_theme_property`, the missing-font refusal) with: every `var(--x)` used without a fallback in `scripts/site/landing.css`, and every `var(--x)` in `bar.css` and `figures.css`, names a property `landing.css` defines in both its dark and its light block. Contrast test: parse the dark and light token blocks of `landing.css`; `--text`, `--text-muted` and `--link` against `--canvas` and `--surface` are each at least 4.5:1 (WCAG relative luminance), every one of those tokens is an opaque 6-digit hex, and each gradient stop token (`--accent-a`, `--accent-b`) is at least 3:1 against `--canvas`. Motion test: every `animation` declaration in `landing.css` sits inside a `prefers-reduced-motion: no-preference` block and a `reduce` block sets `animation:none` and `transition:none`. `check_rendered`'s embedded-font requirement applies to renderer pages only. See them fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: remove `extract_theme_css`, `THEME_PROPERTIES`, `_defines`, `extract_font_css` and the two parameters; `build()` no longer needs to render the landing last. Rewrite `scripts/site/landing.html` and `scripts/site/landing.css` for the look in spec C: dark default and `@media (prefers-color-scheme: light)` token blocks (`--canvas` near-black, `--surface`, `--text`, `--text-muted`, `--link`, `--accent-a`, `--accent-b`, `--line`, plus `--display`, `--serif`, `--mono` set to system stacks, the properties `bar.css` reads, and the `--fig-*` set for both schemes); hero with an accent-gradient glow behind a terminal panel (window chrome, the lines, a blinking caret after the last prompt); a large tight sans-serif headline with gradient-filled accent words; facts as glass cards (opaque `--surface` background, gradient border/highlight drawn with pseudo-elements, never a translucent background under text); act openers with a large gradient act label; numbered sections as cards with the problem as a quote and the figure full width; the grid; the page list; the closing call to action; single column under about 720px; no horizontal scroll at 390px. Motion only inside `@media (prefers-reduced-motion: no-preference)`: prompt lines typed with `steps(var(--chars))` over their width, later lines appearing in turn by `animation-delay`, caret blink, card hover lift, figure accent dash animation; the base state of everything is its visible final state; a `reduce` block switches all of it off. See the tests pass.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: `render_landing` is one small function per kind plus an assembler; dead first-pass helpers and CSS removed; `bar.css` untouched unless a property it reads was renamed.
+- number: 3
+  title: The other two figures (R5, R6)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: extend the every-figure test to require `run-pipeline.svg` and `isolation-boundary.svg`. See it fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: read `docs/explainers/01-fr-goal.md` and `docs/explainers/fr-isolation.md` first. Author `run-pipeline.svg` (goal → isolate → question round → spec and plan, reviewed → build and review per phase → one pull request → merge → Test Plan, with the operator's points — question round, manual phase, merge and Test Plan — drawn in the `fig-you` class and the rest as the agent's) and `isolation-boundary.svg` (your clone, untouched; the worktree outside it; the container around the commands with scoped credentials; the edit gate refusing a write to the clone; the docker-less modes as a note), each with a `.narrow.svg` when its text would be under about 11px at 390px. Same rules as phase 1's figures. See the test pass. Record `refactor: {P2.T3: "hand-authored SVG assets; nothing to restructure"}`.
+- number: 4
+  title: The copy (R1-R4, R12, spec D)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: change `test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve` (or add beside it) to require of this repo's `docs/explainers/index.md`: two acts; exactly six numbered sections, four in act one and two in act two, whose links are in order `fr-isolation.md`, `fr-brainstorming-and-plan.md`, `01-fr-goal.md`, `01-fr-goal.md`, `fr-exit-gates.md`, `fr-wave-driver.md`; a grid whose links include `fr-acceptance.md`, `fr-audit.md`, `fr-debugging.md`, `fr-triage.md` and `../reference/install.md`; a `hero.terminal` with at least one `prompt` and one `you` line; figures `run-pipeline` (flow), `isolation-boundary`, `gate-ledger`, `wave-of-batches` on their sections; the headline still "Give an agent a goal. Merge a PR you trust."; the `pages` and `cta` sections and the `](./acceptance/)` link present. See it fail.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: rewrite `docs/explainers/index.md`. Keep `title`, `layout: landing`, the headline, the primary and secondary links; rewrite `tldr`, the subline and the facts for both acts (facts that do not go stale); add `hero.terminal` (the `/fr-goal …` command as a prompt, the workspace line, the question round as a `you` line, spec and plan reviewed, phases built and reviewed, the pull request delivered as `ok`, the merge as a `you` line); keep "How a run goes" with the `run-pipeline` figure; `## One goal, one pull request you can trust` as act one with sections 1-4; `## A whole backlog, run in waves` as act two with sections 5 (exit gates → `fr-exit-gates.md`) and 6 (wave driver → `fr-wave-driver.md`); the "Also included" grid; the pages section; the closing call to action. Each numbered section keeps problem (blockquote), gain, how, one link. Every claim must be one the linked page makes: re-read each linked page while writing its section, and keep the question-round wording the tripwire `tests/unit/test_tripwire_fr_goal_question_rounds.py` requires. Add `covers` entries for the gate and driver sources the new sections describe and bump `reviewed`. See the tests, `uv run fr docs check` and the question-round tripwire pass. Record `refactor: {P2.T4: "prose page; no code to restructure"}`.
+- number: 5
+  title: Guidance, real build, screenshots, acceptance (R13, verification)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Update `.claude/rules/explainers-currency.md` and `docs/docs-currency.md` where they describe the landing source: the `act` and `grid` kinds, `hero.terminal`, the `<!-- site:figure <name> -->` marker on any page, the figure file rules (accessible title, classes not colours, prefixed ids, optional `.narrow.svg`) and that the landing embeds no font. Run `scripts/sync-opencode.py` and `scripts/sync-hermes.py`, then both with `--check`; commit the regenerated mirrors. Run `uv run fr docs check`. Record `refactor: {P2.T5: "guidance prose and generated mirrors"}`.
+  - id: P2.T5.S2
+    text: |-
+      Real build as in P1.T4.S3; confirm `index.html` is written with four figures intact, no `<script`, no `@font-face`, and that an article page is byte-identical to a build of the phase's base commit. Screenshots with Playwright (a capture script kept in a git-ignored directory of the worktree, deviceScaleFactor 1), every one opened: full page at 1280px in dark and in light (`colorScheme`), at 390px in dark, and with `reducedMotion: 'reduce'` (all content visible, nothing mid-animation); each of the four figures cropped in dark, light and 390px; one article page (unchanged look) and one new page with its figure; interactions: follow the exit-gates section link, the wave-driver section link and one grid card link, jump to `#explainers`, hover a card. Check there is no horizontal scroll at 390px (`document.documentElement.scrollWidth <= innerWidth`). Fix what the screenshots show and re-capture. Fill the step record's `visual:` section for rows `site-landing-two-acts`, `site-landing-figures` and `site-landing-look-and-motion` with the states and interactions each row names.
+  - id: P2.T5.S3
+    text: |-
+      Move the four rows with `uv run fr acceptance set-status --feature 2026-11-12-front-page-second-pass --id <row> --status ci --level unit=super-fr:tests/unit/test_build_site.py#<test name> --notes "<what proves it>"` (one or two test refs each, anchored on test names), run `uv run fr acceptance check`, `uv run ruff check scripts tests`, `uv run ruff format scripts tests`, `uv run pytest tests/unit/test_build_site.py tests/unit/test_pages_workflow.py tests/unit/test_tripwire_explainers_fresh.py tests/unit/test_tripwire_fr_goal_question_rounds.py -q --no-cov`, and refresh `.test_durations` only if `test_build_site.py` grew by more than a third.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+    P2.T5.S3:
+      state: x
+      ticked_at: '2026-11-12T14:44:14+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T14:44:14+00:00'
+    note: null
+    observed_prs: []

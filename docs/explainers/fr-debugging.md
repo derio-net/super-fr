@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-12 repo-feature-settings, delivery through fr push / fr pr create and the git policy
+reviewed: 2026-11-12 skill wording only (fr-enabled, not vk-enabled); nothing this page describes changed
 ---
 
 ## Overview: why "just try something" is the expensive path
