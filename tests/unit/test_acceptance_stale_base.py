@@ -188,3 +188,91 @@ def test_the_next_amendment_at_the_current_base_clears_contested(
     clear_fold_cache()
     assert fold(root).contested == frozenset()
     assert "no acceptance debt" in invoke(root, monkeypatch, "status").output
+
+
+B_TWO = f"""\
+schema_version: 1
+feature: {SLUG_B}
+repo: acme/widget
+rows:
+amendments:
+  - row: r
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: owed
+    why: b1
+  - row: r
+    op: set-status
+    base: 1
+    status: unwired
+    notes: wired
+    why: b2
+"""
+
+
+def _two_merged(tmp_path: Path) -> Path:
+    """B's two amendments of r are merged on origin's main; a branch from it is checked out."""
+    root = merged_repo(tmp_path, branch="feat/c")
+    other = _clone(tmp_path)
+    (other / FRAGMENTS_REL / f"{SLUG_B}.yaml").write_text(B_TWO)
+    git(other, "add", "-A")
+    git(other, "commit", "-qm", "feat: beta amends r twice")
+    git(other, "push", "-q", "origin", "main")
+    git(root, "fetch", "-q", "origin")
+    git(root, "checkout", "-q", "-B", "feat/c", "origin/main")
+    clear_fold_cache()
+    return root
+
+
+def _blocks(text: str) -> tuple[str, list[str]]:
+    head, _, body = text.partition("amendments:\n")
+    items = ["  - " + b for b in body.split("  - ") if b]
+    return head + "amendments:\n", items
+
+
+def test_check_refuses_reordered_merged_amendments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p3-r2: the fold orders amendments by position, so a swap changes the post-merge
+    result; the merged list must lead the working list unchanged."""
+    root = _two_merged(tmp_path)
+    path = root / FRAGMENTS_REL / f"{SLUG_B}.yaml"
+    head, (first, second) = _blocks(path.read_text())
+    path.write_text(head + second + first)
+    git(root, "commit", "-qam", "swap")
+
+    res = invoke(root, monkeypatch, "check", "--no-fetch")
+
+    assert res.exit_code != 0, res.output
+    assert "merged amendment" in res.output
+
+
+def test_check_refuses_an_amendment_inserted_above_merged_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _two_merged(tmp_path)
+    path = root / FRAGMENTS_REL / f"{SLUG_B}.yaml"
+    head, items = _blocks(path.read_text())
+    new = "  - row: r\n    op: reword\n    base: 2\n    acceptance: r works, new\n    why: b3\n"
+    path.write_text(head + new + "".join(items))
+    git(root, "commit", "-qam", "insert above")
+
+    res = invoke(root, monkeypatch, "check", "--no-fetch")
+
+    assert res.exit_code != 0, res.output
+    assert "merged amendment" in res.output
+
+
+def test_check_passes_an_amendment_appended_after_merged_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _two_merged(tmp_path)
+    path = root / FRAGMENTS_REL / f"{SLUG_B}.yaml"
+    new = "  - row: r\n    op: reword\n    base: 2\n    acceptance: r works, new\n    why: b3\n"
+    path.write_text(path.read_text() + new)
+    git(root, "commit", "-qam", "append")
+
+    res = invoke(root, monkeypatch, "check", "--no-fetch")
+
+    assert "merged amendment" not in res.output, res.output

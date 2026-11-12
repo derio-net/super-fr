@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -162,13 +161,21 @@ def merged_row_edits(repo_root: Path, merged: Effective | None, ref: str | None)
                 f"{rel}: row {row.id} {what}; {rule} (`fr acceptance amend --id {row.id}`, "
                 f"or `fr acceptance set-status`, which writes one)"
             )
-        missing = Counter(frag.amendments) - Counter(now.amendments if now is not None else ())
-        missing -= Counter(frag.amendments) - Counter(then.amendments if then is not None else ())
-        for a in missing.elements():
+        # The fold orders a fragment's amendments by position, so the merged ones (as
+        # this branch forked from them: an amendment merged since is the branch being
+        # behind) must lead the working list unchanged, in order. A multiset compare
+        # let a swap, or an insert above them, pass and change the post-merge fold.
+        merged_list = then.amendments if then is not None else ()
+        working = now.amendments if now is not None else ()
+        for k, a in enumerate(merged_list):
+            if k < len(working) and working[k] == a:
+                continue
             errors.append(
-                f"{rel}: merged amendment {a.op} of row {a.row} (base {a.base}) removed or "
-                "changed; a merged amendment is never edited"
+                f"{rel}: merged amendment {k} ({a.op} of row {a.row}, base {a.base}) removed, "
+                "changed, reordered or preceded by a new one; a merged amendment is never "
+                "edited, and a new one is appended after every merged one"
             )
+            break
     return errors
 
 
