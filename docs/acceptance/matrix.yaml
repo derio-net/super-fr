@@ -10896,40 +10896,6 @@ rows:
     notes: git policy built; scenario in CI
     verify: candidate
     scenario: tests/scenarios/repo-settings-git-policy.sh
-  - id: acceptance-fragments-amendments
-    capability: repo-feature-settings
-    acceptance: A later feature changes an earlier feature's rows only by appending
-      amendments in its own fragment; the effective matrix is the fold over merged features,
-      and a stale-base amendment is refused before merge or marks its row contested
-    origin:
-    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R16
-    levels: {}
-    status: not-implemented
-    notes: built by plan 2 of the repo-feature-settings spec (R29), tracked in derio-net/super-fr#1379
-    issues:
-    - derio-net/super-fr#1379
-  - id: acceptance-matrix-migration
-    capability: repo-feature-settings
-    acceptance: An existing repo's single matrix migrates to per-feature fragments with
-      logical refs and no row lost
-    origin:
-    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R19
-    levels: {}
-    status: not-implemented
-    notes: built by plan 2 of the repo-feature-settings spec (R29), tracked in derio-net/super-fr#1379
-    issues:
-    - derio-net/super-fr#1379
-  - id: acceptance-reports-derived-published
-    capability: repo-feature-settings
-    acceptance: Acceptance reports are one documented command away and are published
-      per PR and on Pages in repo placement, never on Pages wider than the repo
-    origin:
-    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R20
-    levels: {}
-    status: not-implemented
-    notes: built by plan 2 of the repo-feature-settings spec (R29), tracked in derio-net/super-fr#1379
-    issues:
-    - derio-net/super-fr#1379
   - id: placement-quiet
     capability: repo-feature-settings
     acceptance: In a quiet repo no fr file or commit reaches the default or feature
