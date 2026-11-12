@@ -71,9 +71,14 @@ rows:
     - spec:2026-11-12-front-page-second-pass#R7
     - spec:2026-11-12-front-page-second-pass#R8
     - spec:2026-11-12-front-page-second-pass#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_text_tokens_meet_4_5_to_1_on_both_surfaces_in_both_schemes
+      - super-fr:tests/unit/test_build_site.py#test_every_motion_in_landing_css_sits_under_no_preference_with_a_reduce_block
+    status: ci
+    notes: contrast, motion, no script, no font and no external reference are asserted
+      in unit tests; an article page builds byte-identical to the base; screenshots
+      dark, light, 390px, reduced motion and hover at implement
     verify: none
     visual:
       states:
