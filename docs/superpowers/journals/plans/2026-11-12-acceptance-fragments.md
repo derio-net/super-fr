@@ -709,3 +709,8 @@ bb30cc024: a failed fetch reads refs/remotes/<default> when the checkout holds i
 ### pr1408-r4-resolved · finding [fixed] · resolves pr1408-r4: An in-flight branch whose matrix.yaml holds a row this PR retired gets 'duplicate row ids' with no fix named
 
 2eccfadea: split_texts refuses a matrix row the on-disk fold retired, naming the ids and the fix (delete from matrix.yaml, re-run fr migrate artifacts --yes; new id via fr acceptance add if still needed). Red: test_an_in_flight_matrix_holding_a_retired_row_names_it_and_the_fix
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r5-resolved created=2026-11-12T09:36:47+00:00 state=fixed resolves=pr1408-r5 -->
+### pr1408-r5-resolved · finding [fixed] · resolves pr1408-r5: matrix-parse-libyaml and archive-retargets-matrix-refs, owned by other features, were edited in place after the migration instead of amended
+
+68f14ff5c restores both owners' fragments with git from migration commit ae7791862 (rows equal the split of origin/main's matrix.yaml); 9 amendments in 2026-11-04-repo-feature-settings's fragment (fae5b63df..753c24d93, via fr acceptance amend) re-apply the changes; the effective rows are byte-identical before/after (JSON dump compared). Red: scratch check comparing other features' rows with the split of origin/main's matrix.yaml listed both rows
