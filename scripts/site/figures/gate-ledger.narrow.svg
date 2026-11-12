@@ -29,5 +29,5 @@
 <text x="54" y="446" class="fig-ink fig-text">rc.1: a gate is held</text>
 <text x="54" y="496" class="fig-ink fig-text">rc.2: still held</text>
 <text x="54" y="548" class="fig-ink fig-text">final: no gate waits,</text>
-<text x="54" y="568" class="fig-muted fig-small">fragments consumed</text>
+<text x="54" y="568" class="fig-muted fig-small">final release is cut</text>
 </svg>

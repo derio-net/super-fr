@@ -1398,6 +1398,28 @@ def test_text_tokens_meet_4_5_to_1_on_both_surfaces_in_both_schemes() -> None:
             assert contrast(tokens[stop].strip(), tokens["--canvas"].strip()) >= 3, stop
 
 
+def test_operator_ok_and_accent_text_tokens_are_readable_in_both_schemes() -> None:
+    for tokens in scheme_tokens():
+        for name in ("--you", "--ok", "--on-accent"):
+            assert re.fullmatch(r"#[0-9a-fA-F]{6}", tokens[name].strip()), name
+        for text in ("--you", "--ok"):
+            for surface in ("--canvas", "--surface"):
+                ratio = contrast(tokens[text].strip(), tokens[surface].strip())
+                assert ratio >= 4.5, f"{text} on {surface}: {ratio:.2f}"
+        muted = contrast(tokens["--text-muted"].strip(), tokens["--surface-2"].strip())
+        assert muted >= 4.5, f"--text-muted on --surface-2: {muted:.2f}"
+        for stop in ("--accent-a", "--accent-b"):
+            ratio = contrast(tokens["--on-accent"].strip(), tokens[stop].strip())
+            assert ratio >= 4.5, f"--on-accent on {stop}: {ratio:.2f}"
+
+
+def test_a_dashed_you_box_has_a_fill_only_panel_under_its_outline() -> None:
+    for name in ("run-pipeline", "run-pipeline.narrow"):
+        svg = (FIGURES / f"{name}.svg").read_text(encoding="utf-8")
+        for m in re.finditer(r'<rect ([^>]*) class="fig-you-line"/>', svg):
+            assert f'<rect {m.group(1)} class="fig-panel-fill"/>' in svg, m.group(1)
+
+
 def test_every_motion_in_landing_css_sits_under_no_preference_with_a_reduce_block() -> None:
     reduce_blocks = re.findall(
         r"@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)\s*\{(.*)", LANDING_CSS, re.DOTALL

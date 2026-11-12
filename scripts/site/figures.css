@@ -7,6 +7,7 @@
 .site-figure .fig-muted{fill:var(--fig-muted,var(--muted,#a9a393))}
 .site-figure .fig-line{fill:none;stroke:var(--fig-line,var(--muted,#8f897a));stroke-width:1.5}
 .site-figure .fig-panel{fill:var(--fig-panel,var(--ink-2,#101218));stroke:var(--fig-line,var(--muted,#8f897a));stroke-width:1.5}
+.site-figure .fig-panel-fill{fill:var(--fig-panel,var(--ink-2,#101218));stroke:none}
 .site-figure .fig-accent{fill:var(--fig-accent,var(--brass,#e0a24e))}
 .site-figure .fig-accent-line{fill:none;stroke:var(--fig-accent,var(--brass,#e0a24e));stroke-width:2}
 .site-figure .fig-you{fill:var(--fig-you,#f0b86e)}

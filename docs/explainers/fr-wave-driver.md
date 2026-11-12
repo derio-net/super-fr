@@ -120,7 +120,7 @@ actions and run it again: it repeats nothing the files can show. The one thing t
 twice is `post_merge`, which is at-least-once; a command that is safe to repeat is a good
 `post_merge`.
 
-A lock file in the scope's state directory refuses a second driver, so there is one driver per
+In loop mode it waits `--interval` seconds (the flag's default applies when you give none) between passes, and reads the forge again at the start of each. A lock file in the scope's state directory refuses a second driver, so there is one driver per
 scope. `--yes` is what makes it act: without it `drive` prints the plan one pass would follow
 and exits, loop mode included. `--once` makes a single pass and exits 0 when it acted or
 everything is done, 3 when it did nothing and work remains (a draft, CI, a dependency, a

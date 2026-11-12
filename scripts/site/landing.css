@@ -105,7 +105,7 @@ body.landing .site-bar a:hover{color:var(--text);text-decoration-color:var(--acc
 .typed{display:inline-block;overflow:hidden;white-space:nowrap;width:calc(var(--chars,40) * 1ch);max-width:100%;vertical-align:bottom}
 .caret::after{content:"";display:inline-block;width:.6ch;height:1.15em;margin-left:.3ch;background:var(--accent-a);vertical-align:text-bottom}
 
-.facts{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:1rem;margin:1.5rem 0 0;padding:0;list-style:none}
+.facts{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr));gap:1rem;margin:1.5rem 0 0;padding:0;list-style:none}
 .facts li{display:flex;flex-direction:column;gap:.35rem;padding:1.1rem 1.2rem}
 .facts strong{display:inline-block;align-self:flex-start;font:800 2.5rem/1 var(--mono);letter-spacing:-.04em}
 .facts span{font-size:.92rem;line-height:1.4;color:var(--text-muted)}
@@ -154,6 +154,11 @@ body.landing .site-bar a:hover{color:var(--text);text-decoration-color:var(--acc
 .more:hover{text-decoration:underline}
 .guarantee .more{grid-column:1/-1;justify-self:start;margin-top:.4rem}
 
+/* the long read */
+.prose{padding:4rem 0 1rem}
+.prose .wrap.narrow{max-width:1120px}
+.prose .wrap.narrow>*:not(.site-figure){max-width:46rem}
+
 /* the "also included" grid */
 .grid{padding:4rem 0 1rem}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5rem,1fr));gap:1rem;margin:1.8rem 0 0!important}
@@ -195,7 +200,10 @@ body.landing .site-bar a:hover{color:var(--text);text-decoration-color:var(--acc
   .hero{padding:2.8rem 0 2.5rem}
   .act{padding:3rem 0 1rem}
   .act .wrap::before{margin-bottom:2rem}
-  .grid,.pages{padding-top:2.5rem}
+  .grid,.pages,.prose{padding-top:2.5rem}
+  .facts li{padding:.9rem .9rem}
+  .facts strong{font-size:2rem}
+  .facts span{font-size:.85rem}
   .guarantee .card{padding:1.6rem 1.2rem}
   .site-figure{padding:.7rem}
   .typed{white-space:normal;width:auto}

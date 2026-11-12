@@ -12,7 +12,7 @@
 <text x="24" y="160" class="fig-muted fig-small">each → one pull request</text>
 <text x="24" y="180" class="fig-muted fig-small">no after: both may start now</text>
 <path d="M180 192 V222" class="fig-accent-line fig-flow" marker-end="url(#wave-of-batches-narrow--arrow)"/>
-<text x="196" y="212" class="fig-muted fig-small">after merged</text>
+<text x="196" y="212" class="fig-muted fig-small">after = merged first</text>
 <text x="10" y="244" class="fig-muted fig-small">WAVE 2</text>
 <rect x="10" y="252" width="340" height="82" rx="8" class="fig-panel"/>
 <text x="24" y="278" class="fig-ink fig-text">batch C, batch D</text>
@@ -30,7 +30,7 @@
 <text x="24" y="546" class="fig-ink fig-text">3 dispatch the next</text>
 <text x="24" y="564" class="fig-muted fig-small">by wave, up to the cap</text>
 <rect x="10" y="582" width="340" height="48" rx="8" class="fig-panel"/>
-<text x="24" y="604" class="fig-ink fig-text">4 sleep, then repeat</text>
-<text x="24" y="622" class="fig-muted fig-small">state is read, not kept</text>
+<text x="24" y="604" class="fig-ink fig-text">4 wait, then repeat</text>
+<text x="24" y="622" class="fig-muted fig-small">read again each pass</text>
 <text x="10" y="660" class="fig-you fig-small">you: label a green batch PR approved-fr</text>
 </svg>

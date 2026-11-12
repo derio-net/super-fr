@@ -39,6 +39,5 @@
 <text x="260" y="362" text-anchor="middle" class="fig-muted fig-small">release candidate only,</text>
 <text x="260" y="382" text-anchor="middle" class="fig-muted fig-small">no fragment consumed</text>
 <text x="800" y="342" text-anchor="middle" class="fig-muted fig-small">no gate waits:</text>
-<text x="800" y="362" text-anchor="middle" class="fig-muted fig-small">the fragments are consumed</text>
-<text x="800" y="382" text-anchor="middle" class="fig-muted fig-small">and the release is final</text>
+<text x="800" y="362" text-anchor="middle" class="fig-muted fig-small">the final release is cut</text>
 </svg>

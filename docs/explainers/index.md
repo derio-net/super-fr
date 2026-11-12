@@ -20,7 +20,7 @@ hero:
     - {kind: out, text: "spec and plan written, both reviewed"}
     - {kind: out, text: "phases built test-first, each one reviewed"}
     - {kind: ok, text: "pull request delivered, not merged"}
-    - {kind: you, text: "you merge, then walk the Test Plan"}
+    - {kind: you, text: "you merge, then walk the Test Plan if there is one"}
   primary: {label: "See how a run works", href: "01-fr-goal.md"}
   secondary:
     - {label: "Install", href: "../reference/install.md"}
@@ -29,7 +29,7 @@ facts:
   - {figure: "1", caption: "question round before the build, rarely two"}
   - {figure: "1", caption: "pull request per goal"}
   - {figure: "0", caption: "self-merges: you merge"}
-  - {figure: "2", caption: "post-merge gates that hold the final release until you pass them"}
+  - {figure: "2", caption: "post-merge gates that hold the final release until they are passed"}
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
@@ -53,7 +53,7 @@ reviewed: 2026-11-12 second pass, two acts with exit gates and the wave driver a
 5. **Review at every stage.** A separate reviewer reads the spec, the plan and each slice.
 6. **One pull request.** The agent delivers it and never merges it.
 7. {you} **The manual phase.** Secrets, deploys and other risky steps are done by you, with the agent guiding.
-8. {you} **Merge, then the Test Plan.** You merge, then confirm what the agent cannot reach.
+8. {you} **Merge, then the Test Plan.** You merge, then walk the Test Plan, if there is one, to confirm what the agent cannot reach.
 
 ## One goal, one pull request you can trust
 <!-- landing:act -->
@@ -127,9 +127,9 @@ Merging is not the end of the work, and one goal is not a backlog. These two sec
 
 **How.**
 
-- A run's spec names the gate that applies, Tester or DevOps, and the merged pull request carries it as a label.
+- The gate comes from the run's spec, or DevOps is added when the plan has manual operations, and the merged pull request carries it as a label.
 - While a gate is held, merges to main cut only release candidates. The final release is cut once none is held.
-- You pass a gate by walking its rows, or with `fr gate pass`.
+- You pass a gate, or the driver does once every row the Tester gate holds reads walked.
 
 <!-- site:figure gate-ledger -->
 
