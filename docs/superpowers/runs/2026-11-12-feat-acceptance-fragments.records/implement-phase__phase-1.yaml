@@ -1,0 +1,74 @@
+schema_version: 10
+run: 2026-11-12-feat-acceptance-fragments
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T4.S4, P1.T5.S1, P1.T5.S2, P1.T6.S1, P1.T6.S2]
+refactor:
+  P1.T1: "two stubs and a change fragment; T2 and T4 replace the stubs wholesale"
+  P1.T3: "logical.py is one small module whose resolve/problem pair already shares one _resolve; nothing duplicated"
+  P1.T5: "the validator reuses _load_mapping, _model_problems, parse_fragment and _matrix_strategy_problems; nothing new to extract"
+  P1.T6: "a scenario script and one row move; no code to clean"
+journal:
+  - kind: decision
+    id: fold-batched-blob-reads
+    phase: 1
+    title: The fold reads blobs in git cat-file --batch calls, so its git call count is constant
+    body: |
+      P1.T4.S2 allowed one `git show` per historical fragment revision (O(fragments-with-amendments
+      + 1)). fold() instead lists the tip with one ls-tree, reads every tip blob in one
+      `cat-file --batch`, runs the one first-parent log, and reads every needed historical
+      revision in a second `cat-file --batch`: six runner calls whatever the history
+      (test_the_git_call_count_does_not_grow_with_history asserts <= 8 over 120 fragments and
+      20 amendments). A repeat fold over the same ref commit and working-tree fragments costs
+      one rev-parse (memo key: repo, ref sha, sha256 of the working-tree fragments, include_pending).
+      The default ref is resolved by fr.git.remote_default_ref (the settings helper), outside the
+      injectable runner.
+  - kind: decision
+    id: fold-pending-is-the-working-tree
+    phase: 1
+    title: Pending entries are read from the working tree, by value against the merged tip
+    body: |
+      The plan left "the branch's own entries" open. fold() reads the working tree's fragments:
+      a row is pending when no merged fragment defines its id; an amendment is pending when the
+      merged tip of the same fragment does not carry an equal one (multiset subtraction, so an
+      un-rebased branch that lacks later merged amendments of its own fragment adds nothing).
+      A merged row edited in place in the working tree keeps its merged definition and adds a
+      notice (a merged row changes only by amendment). With no default ref, HEAD is the merged
+      history and only uncommitted edits are pending.
+  - kind: decision
+    id: fold-op-semantics
+    phase: 1
+    title: Amendment op semantics the spec left open
+    body: |
+      set-status replaces status and notes, appends its optional walk, and unions its issues;
+      add-level is idempotent; drop-level of a ref not on the row is a no-op (still a revision);
+      retire replaces notes and moves the row to `retired`. An amendment naming a retired row is
+      a FoldError, like one naming an unknown row. `feature` must equal the file stem in every
+      fragment, so legacy.yaml carries `feature: legacy`. Logical refs take an optional anchor on
+      both kinds (`spec:<slug>[#a]`, `plan:<slug>[#a]`); to_logical converts only a spec file
+      or a plan FOLDER (a file inside a plan keeps its path), and with own_repo leaves another
+      repo's refs alone. Row.origin now refuses a malformed `spec:`/`plan:` origin; other origins
+      are unchanged (check.py still treats a logical origin as a path: phase 2's reader cutover).
+  - kind: discovery
+    id: reviewed-stamps-for-library-only
+    phase: 1
+    title: fr docs check flags the acceptance pages for any change under fr/acceptance/
+    body: |
+      docs/reference/acceptance-matrix.md and docs/explainers/fr-acceptance.md cover
+      packages/fr/src/fr/acceptance/**, so this library-only phase restamped both `reviewed`
+      lines (still true: no reader uses the fold). Phases 2 and 4 owe real edits to both pages.
+  - kind: finding
+    id: docs-check-scenario-gnu-sed
+    phase: 1
+    state: fixed
+    review_scope: out
+    title: docs-check-flags-uncovered-change.sh used GNU-only `sed -i`, red on a macOS host
+    body: |
+      The scenario (from #1401) ran `sed -i 's/…/' docs/a.md`, which BSD sed reads as
+      `-i` with the script as its backup suffix, so the local full suite failed on macOS
+      (CI is Linux and passed). Fixed in this phase as a test-only change:
+      `sed -i.bak … && rm -f docs/a.md.bak`, portable to both.
+resolves: []
+evidence:
+  tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/31d40c59-91eb-4b4d-ab0c-fcbf9d042106/scratchpad/p1-suite.log
