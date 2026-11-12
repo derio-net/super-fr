@@ -475,3 +475,7 @@ def test_docs_check_structure(installed: Path, tmp_path: Path) -> None:
 
 def test_docs_check_default_base_readonly(installed: Path, tmp_path: Path) -> None:
     _scenario("docs-check-default-base-readonly", installed, tmp_path)
+
+
+def test_acceptance_effective_matrix_fold(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-effective-matrix-fold", installed, tmp_path)
