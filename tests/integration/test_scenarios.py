@@ -477,6 +477,10 @@ def test_docs_check_structure(installed: Path, tmp_path: Path) -> None:
     _scenario("docs-check-structure", installed, tmp_path)
 
 
+def test_review_lenses_effective_set(installed: Path, tmp_path: Path) -> None:
+    _scenario("review-lenses-effective-set", installed, tmp_path)
+
+
 def test_docs_check_default_base_readonly(installed: Path, tmp_path: Path) -> None:
     _scenario("docs-check-default-base-readonly", installed, tmp_path)
 
