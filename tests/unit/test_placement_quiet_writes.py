@@ -117,3 +117,24 @@ def test_code_tree_under_quiet_excludes_nothing(workspace: tuple[Path, Path]) ->
     assert any(e.endswith(f"{KIND_DIRS['superpowers']}/notes.md") for e in entries)
     whole = hashlib.sha256("\0".join(entries).encode()).hexdigest()
     assert code_tree(worktree) == whole
+
+
+def test_fr_never_commits_an_artifact_path_on_the_product_branch(
+    workspace: tuple[Path, Path],
+) -> None:
+    """A writer not yet on the resolver writes below the product checkout; under quiet the
+    commit seam refuses it rather than put an fr file on the feature branch (R23)."""
+    from fr.artifacts.commit import commit_paths
+
+    worktree, _ = workspace
+    stray = worktree / KIND_DIRS["acceptance-fragment"] / "x.yaml"
+    stray.parent.mkdir(parents=True)
+    stray.write_text("rows: []\n")
+    head = git(worktree, "rev-parse", "HEAD").strip()
+    outcome = commit_paths(worktree, [stray], "chore(fr): acceptance")
+    assert not outcome.committed
+    assert "quiet" in outcome.reason and KIND_DIRS["acceptance-fragment"] in outcome.reason
+    assert git(worktree, "rev-parse", "HEAD").strip() == head
+    code = worktree / "code.txt"
+    code.write_text("x\n")
+    assert commit_paths(worktree, [code], "feat(q): code").committed  # code still commits

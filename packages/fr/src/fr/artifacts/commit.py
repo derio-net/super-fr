@@ -495,6 +495,39 @@ def _outside(toplevel: Path, paths: Sequence[Path]) -> list[Path]:
     return out
 
 
+def _quiet_product_artifacts(
+    repo_root: Path, toplevel: Path, paths: Sequence[Path], elsewhere: list[Path]
+) -> CommitOutcome | None:
+    """R23 "nothing on the product branches", held at the one commit seam: under quiet,
+    an artifact path inside the PRODUCT checkout (a writer not yet routed through the
+    resolver) is refused, never committed on the feature branch."""
+    from fr.placement.quiet import read_switch
+    from fr.run.code_tree import FR_ARTIFACT_PREFIXES
+    from fr.settings import SettingsError
+
+    inside = [p for p in paths if p not in elsewhere]
+    if not inside:
+        return None
+    rels = [p.resolve().relative_to(toplevel).as_posix() for p in inside]
+    artifacts = [r for r in rels if r.startswith(FR_ARTIFACT_PREFIXES)]
+    if not artifacts:
+        return None
+    try:
+        quiet = read_switch(repo_root) is not None
+    except SettingsError:  # an invalid switch is space_for's to report, by its own refusal
+        quiet = False
+    if not quiet:
+        return None
+    return CommitOutcome(
+        committed=False,
+        reason=(
+            f"refusing to commit {artifacts[0]} on the product branch: under placement "
+            "quiet fr's artifacts live on the `fr` branch (R23), and this command wrote it "
+            f"below the checkout instead; {_UNCOMMITTED}"
+        ),
+    )
+
+
 def _quiet_commit(
     repo_root: Path, toplevel: Path, paths: Sequence[Path], elsewhere: list[Path]
 ) -> Path | CommitOutcome:
@@ -602,6 +635,9 @@ def commit_paths(
     # of them is made THERE, never on this product branch. The product-side refusals
     # above still apply first (no fr commit for a detached or default-branch checkout).
     elsewhere = _outside(toplevel, paths)
+    held = _quiet_product_artifacts(repo_root, toplevel, paths, elsewhere)
+    if held is not None:
+        return held
     if elsewhere:
         rerouted = _quiet_commit(repo_root, toplevel, paths, elsewhere)
         if isinstance(rerouted, CommitOutcome):
