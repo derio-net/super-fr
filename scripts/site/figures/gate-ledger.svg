@@ -1,0 +1,44 @@
+<svg viewBox="0 0 960 400" role="img" aria-labelledby="gate-ledger--t">
+<title id="gate-ledger--t">The gate ledger: a merged pull request carries a gate:tester label and a gate:devops label. A person passes each, which swaps it for a -passed label. While either label is held, merges to main cut only release candidates; once none is held the final release is cut.</title>
+<defs>
+<marker id="gate-ledger--arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fig-ink"/></marker>
+</defs>
+<text x="20" y="26" class="fig-muted fig-small">THE PULL REQUEST'S LABELS ARE THE LEDGER</text>
+<rect x="20" y="40" width="250" height="150" rx="10" class="fig-panel"/>
+<text x="40" y="70" class="fig-ink fig-big">merged pull request</text>
+<rect x="40" y="86" width="150" height="34" rx="17" class="fig-panel"/>
+<text x="115" y="108" text-anchor="middle" class="fig-you fig-text">gate:tester</text>
+<rect x="40" y="132" width="150" height="34" rx="17" class="fig-panel"/>
+<text x="115" y="154" text-anchor="middle" class="fig-you fig-text">gate:devops</text>
+<path d="M270 103 H340" class="fig-you-line" marker-end="url(#gate-ledger--arrow)"/>
+<path d="M270 149 H340" class="fig-you-line" marker-end="url(#gate-ledger--arrow)"/>
+<rect x="340" y="72" width="270" height="62" rx="8" class="fig-panel"/>
+<text x="356" y="97" class="fig-you fig-text">a person passes the tester gate</text>
+<text x="356" y="119" class="fig-muted fig-small">walk its rows, or fr gate pass</text>
+<rect x="340" y="144" width="270" height="62" rx="8" class="fig-panel"/>
+<text x="356" y="169" class="fig-you fig-text">a person passes the devops gate</text>
+<text x="356" y="191" class="fig-muted fig-small">fr ops gate, or fr gate pass</text>
+<path d="M610 103 H680" class="fig-line" marker-end="url(#gate-ledger--arrow)"/>
+<path d="M610 175 H680" class="fig-line" marker-end="url(#gate-ledger--arrow)"/>
+<rect x="680" y="84" width="260" height="38" rx="19" class="fig-panel"/>
+<text x="810" y="109" text-anchor="middle" class="fig-ok fig-text">gate:tester-passed</text>
+<rect x="680" y="156" width="260" height="38" rx="19" class="fig-panel"/>
+<text x="810" y="181" text-anchor="middle" class="fig-ok fig-text">gate:devops-passed</text>
+<text x="20" y="252" class="fig-muted fig-small">WHAT EACH MERGE TO MAIN RELEASES</text>
+<path d="M40 310 H900" class="fig-line"/>
+<path d="M40 310 H520" class="fig-accent-line fig-flow"/>
+<circle cx="60" cy="310" r="9" class="fig-accent"/>
+<circle cx="260" cy="310" r="9" class="fig-accent"/>
+<circle cx="460" cy="310" r="9" class="fig-accent"/>
+<circle cx="800" cy="310" r="11" class="fig-ok"/>
+<text x="60" y="288" text-anchor="middle" class="fig-ink fig-text">merge</text>
+<text x="260" y="288" text-anchor="middle" class="fig-ink fig-text">rc.1</text>
+<text x="460" y="288" text-anchor="middle" class="fig-ink fig-text">rc.2</text>
+<text x="800" y="288" text-anchor="middle" class="fig-ink fig-text">final</text>
+<text x="260" y="342" text-anchor="middle" class="fig-muted fig-small">a gate is held:</text>
+<text x="260" y="362" text-anchor="middle" class="fig-muted fig-small">release candidate only,</text>
+<text x="260" y="382" text-anchor="middle" class="fig-muted fig-small">no fragment consumed</text>
+<text x="800" y="342" text-anchor="middle" class="fig-muted fig-small">no gate waits:</text>
+<text x="800" y="362" text-anchor="middle" class="fig-muted fig-small">the fragments are consumed</text>
+<text x="800" y="382" text-anchor="middle" class="fig-muted fig-small">and the release is final</text>
+</svg>

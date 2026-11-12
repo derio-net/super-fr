@@ -746,6 +746,152 @@ def check_rendered(html: str, route_name: str) -> None:
         raise BuildError(f"{route_name}: rendered with no embedded @font-face data URI")
 
 
+# -- figures (spec 2026-11-12-front-page-second-pass B, R6, R10) -------------------------
+
+FIGURES_DIR = SITE_DIR / "figures"
+_FIGURE_MARKER = re.compile(r"^<!--\s*site:figure\s+(\S+)\s*-->\s*$")
+_FIGURE_NAME = re.compile(r"^[a-z0-9-]+$")
+_SVG_OPEN = re.compile(r"<svg\b[^>]*>")
+_TITLE_FIRST = re.compile(r"\s*<title\b[^>]*>([^<]*)</title>")
+_PAINT_PROPS = r"(?:fill|stroke|stop-color|flood-color|color)"
+_PAINT_DECL = re.compile(rf"(?<![\w-])({_PAINT_PROPS})\s*[:=]\s*[\"']?([^;}}\"'>]+)")
+_URL_REF = re.compile(r"url\(\s*[\"']?([^)\"']*)[\"']?\s*\)")
+_HREF = re.compile(r"(?<![\w-])(?:xlink:)?href\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
+_ID = re.compile(r"(?<![\w:-])id\s*=\s*[\"']([^\"']*)[\"']")
+_NAMED_OK = {"none", "currentcolor", "inherit", "transparent", ""}
+
+# One table of the figure refusals that are a plain pattern: (what to find, what to say).
+_FIGURE_REFUSALS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern, re.IGNORECASE), message)
+    for pattern, message in (
+        (r"<script", "contains a <script>"),
+        (r"(?<![\w:-])on[a-z]+\s*=", "carries an on*= event attribute"),
+        (r"<image\b", "contains an <image>, which would be a reference outside the page"),
+        (r"<foreignObject\b", "contains a <foreignObject>"),
+    )
+)
+
+
+def _literal_paint(value: str) -> bool:
+    """True when `value` (a paint with its `url(#…)` references already removed) is a colour."""
+    v = value.strip().lower()
+    if v in _NAMED_OK or v.startswith("var("):
+        return False
+    return bool(re.match(r"^(?:#|rgba?\(|hsla?\()", v) or re.match(r"^[a-z]+$", v))
+
+
+def check_figure(svg_text: str, name: str) -> None:
+    """Refuse a figure file that breaks a rule of spec 2026-11-12-front-page-second-pass B / R10.
+
+    `name` is the file's stem: `<name>` or `<name>.narrow`. Every refusal names the
+    figure and the defect, so a bad file never reaches a page.
+    """
+
+    def refuse(defect: str) -> BuildError:
+        return BuildError(f"figure {name}: {defect}")
+
+    root = _SVG_OPEN.search(svg_text)
+    if root is None or not svg_text.lstrip().startswith("<svg"):
+        raise refuse("the file does not start with an <svg> element")
+    if not re.search(r"""\brole\s*=\s*["']img["']""", root.group(0)):
+        raise refuse('the root <svg> has no role="img"')
+    title = _TITLE_FIRST.match(svg_text, root.end())
+    if title is None or not title.group(1).strip():
+        raise refuse("the first child of the root <svg> is not a non-empty <title>")
+    for pattern, message in _FIGURE_REFUSALS:
+        if pattern.search(svg_text):
+            raise refuse(message)
+    for m in _HREF.finditer(svg_text):
+        if not re.fullmatch(r"#[^\s#]+", m.group(1)):
+            raise refuse(f"href {m.group(1)!r} is not a same-document #id")
+    for m in _URL_REF.finditer(svg_text):
+        if not re.fullmatch(r"#[^\s#]+", m.group(1)):
+            raise refuse(f"url({m.group(1)}) is not a same-document #id")
+    for m in _PAINT_DECL.finditer(_URL_REF.sub("", svg_text)):
+        if _literal_paint(m.group(2)):
+            raise refuse(
+                f"{m.group(1)} is the literal colour {m.group(2).strip()!r}; "
+                "use a class from figures.css"
+            )
+    base, _, form = name.partition(".")
+    prefix = f"{base}-{form}--" if form else f"{base}--"
+    for m in _ID.finditer(svg_text):
+        if not m.group(1).startswith(prefix):
+            raise refuse(f"id {m.group(1)!r} does not start with {prefix!r}")
+
+
+def _compact(svg_text: str) -> str:
+    """The SVG with no blank lines and no indentation, so Markdown keeps it one block."""
+    return "\n".join(line.strip() for line in svg_text.splitlines() if line.strip())
+
+
+def _with_class(svg: str, cls: str, name: str) -> str:
+    root = _SVG_OPEN.search(svg)
+    assert root is not None  # check_figure ran first
+    if re.search(r"(?<![\w-])class\s*=", root.group(0)):
+        raise BuildError(f"figure {name}: the root <svg> carries a class; the build adds one")
+    return svg.replace("<svg", f'<svg class="{cls}"', 1)
+
+
+def figure_svgs(name: str) -> list[str]:
+    """The checked, inlined `<svg>` texts of figure `name`: the wide one, then any narrow one."""
+    out: list[str] = []
+    for stem, cls in ((name, "fig-wide"), (f"{name}.narrow", "fig-narrow")):
+        path = FIGURES_DIR / f"{stem}.svg"
+        if not path.is_file():
+            if cls == "fig-wide":
+                raise BuildError(f"figure {name}: {path} does not exist")
+            continue
+        text = path.read_text(encoding="utf-8")
+        check_figure(text, stem)
+        out.append(_with_class(_compact(text.strip()), cls, stem))
+    return out
+
+
+def load_figure(name: str) -> str:
+    """`<figure class="site-figure">` holding figure `name`'s wide and narrow `<svg>`."""
+    return '<figure class="site-figure">' + "\n".join(figure_svgs(name)) + "</figure>"
+
+
+def fill_figures(text: str, page: str) -> tuple[str, list[str]]:
+    """Replace each `<!-- site:figure NAME -->` line outside fenced code with its figure.
+
+    Returns the new text and the exact `<svg>` strings inserted, which the survival check
+    looks for in the rendered page. The figure is padded by a blank line each side so
+    python-markdown treats it as a block of its own.
+    """
+    lines: list[str] = []
+    inserted: list[str] = []
+    fence = ""
+    for line in text.split("\n"):
+        f = _FENCE.match(line)
+        if f:
+            fence = "" if fence == f.group(1) else (fence or f.group(1))
+        found = None if fence or f else _FIGURE_MARKER.match(line)
+        if found is None:
+            lines.append(line)
+            continue
+        name = found.group(1)
+        if not _FIGURE_NAME.match(name):
+            raise BuildError(f"{page}: figure name {name!r} is not [a-z0-9-]+")
+        try:
+            svgs = figure_svgs(name)
+        except BuildError as e:
+            raise BuildError(f"{page}: {e}") from e
+        inserted += svgs
+        lines += ["", '<figure class="site-figure">' + "\n".join(svgs) + "</figure>", ""]
+    return "\n".join(lines), inserted
+
+
+def check_figures_survived(rendered_html: str, inserted: list[str], route_name: str) -> None:
+    """Fail a page whose rendering altered or dropped a figure the build inserted."""
+    for svg in inserted:
+        if svg not in rendered_html:
+            title = re.search(r"<title>([^<]*)</title>", svg)
+            what = title.group(1) if title else svg[:40]
+            raise BuildError(f"{route_name}: the figure {what!r} did not survive rendering intact")
+
+
 # -- the top bar (R8, R9) --------------------------------------------------------------
 
 _BODY_OPEN = re.compile(r"<body\b[^>]*>")
@@ -783,6 +929,13 @@ def insert_bar(page_html: str, route_name: str, repo_url: str, bar_css: str) -> 
     )
     with_style = page_html.replace("</head>", f"<style>{bar_css}</style></head>", 1)
     return _BODY_OPEN.sub(lambda m: m.group(0) + "\n" + nav, with_style, count=1)
+
+
+def insert_figure_css(page_html: str, route_name: str, figure_css: str) -> str:
+    """`page_html` with the figure stylesheet before `</head>` (only pages with a figure get it)."""
+    if page_html.count("</head>") != 1:
+        raise BuildError(f"{route_name}: expected one </head> to insert the figure styles")
+    return page_html.replace("</head>", f"<style>{figure_css}</style></head>", 1)
 
 
 def load_config(path: Path) -> list[str]:
@@ -846,6 +999,32 @@ def _markdown_converter() -> Callable[[str], str]:
     )
 
 
+def _render_article(
+    path: str,
+    raw: str,
+    entries: list[Entry],
+    patterns: list[str],
+    tracked: list[str],
+    ref: str,
+    repo_url: str,
+    renderer_env: tuple[Path, Path, str],
+) -> tuple[str, list[str]]:
+    """Render one article page: rewrite its links and markers, then run the renderer.
+
+    Figures are filled after the link rewrite, so `rewrite_markdown` never scans an SVG.
+    Returns the page's HTML and the `<svg>` strings the build inserted into it.
+    """
+    renderer, fonts, tmp = renderer_env
+    text = fill_pages(drop_leading_h1(raw), path, entries)
+    text = rewrite_markdown(text, path, patterns, tracked, ref, repo_url)
+    text, inserted = fill_figures(text, path)
+    source = Path(tmp) / posixpath.basename(path)
+    source.write_text(text, encoding="utf-8")
+    target = Path(tmp) / "out" / route(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return render_page(renderer, fonts, source, target), inserted
+
+
 def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) -> list[str]:
     """Render every configured page into `out_dir`; return the routes written.
 
@@ -877,17 +1056,14 @@ def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) 
     landing = parse_landing(texts[landing_pages[0]], landing_pages[0]) if landing_pages else None
     # 2. render
     pages_html: dict[str, str] = {}
+    figures: dict[str, list[str]] = {}
     with tempfile.TemporaryDirectory() as tmp:
         for path in pages:
             if path in landing_pages:
                 continue
-            text = fill_pages(drop_leading_h1(texts[path]), path, entries)
-            text = rewrite_markdown(text, path, patterns, tracked, ref, repo_url)
-            source = Path(tmp) / posixpath.basename(path)
-            source.write_text(text, encoding="utf-8")
-            target = Path(tmp) / "out" / route(path)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            pages_html[route(path)] = render_page(renderer, fonts, source, target)
+            pages_html[route(path)], figures[route(path)] = _render_article(
+                path, texts[path], entries, patterns, tracked, ref, repo_url, (renderer, fonts, tmp)
+            )
     if landing is not None:
         if not pages_html:
             raise BuildError("the landing page has no rendered page to take its fonts from")
@@ -910,8 +1086,13 @@ def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) 
     # 3. decorate, then write
     bar_css = site_file("bar.css")
     final: dict[str, str] = {}
+    figure_css = site_file("figures.css")
     for route_name, page_html in pages_html.items():
         check_rendered(page_html, route_name)
+        inserted = figures.get(route_name, [])
+        check_figures_survived(page_html, inserted, route_name)
+        if inserted:
+            page_html = insert_figure_css(page_html, route_name, figure_css)
         final[route_name] = insert_bar(page_html, route_name, repo_url, bar_css)
     for route_name, page_html in final.items():
         target = out_dir / route_name

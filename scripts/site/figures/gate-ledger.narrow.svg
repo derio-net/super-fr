@@ -1,0 +1,33 @@
+<svg viewBox="0 0 360 600" role="img" aria-labelledby="gate-ledger-narrow--t">
+<title id="gate-ledger-narrow--t">The gate ledger: a merged pull request carries a gate:tester label and a gate:devops label. A person passes each, which swaps it for a -passed label. While either label is held, merges to main cut only release candidates; once none is held the final release is cut.</title>
+<defs>
+<marker id="gate-ledger-narrow--arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fig-ink"/></marker>
+</defs>
+<rect x="10" y="10" width="340" height="96" rx="10" class="fig-panel"/>
+<text x="26" y="38" class="fig-ink fig-big">merged pull request</text>
+<rect x="26" y="56" width="140" height="34" rx="17" class="fig-panel"/>
+<text x="96" y="78" text-anchor="middle" class="fig-you fig-text">gate:tester</text>
+<rect x="190" y="56" width="140" height="34" rx="17" class="fig-panel"/>
+<text x="260" y="78" text-anchor="middle" class="fig-you fig-text">gate:devops</text>
+<path d="M180 106 V140" class="fig-you-line" marker-end="url(#gate-ledger-narrow--arrow)"/>
+<rect x="10" y="140" width="340" height="86" rx="8" class="fig-panel"/>
+<text x="26" y="168" class="fig-you fig-text">a person passes each gate</text>
+<text x="26" y="192" class="fig-muted fig-small">tester: walk its rows, or fr gate pass</text>
+<text x="26" y="212" class="fig-muted fig-small">devops: fr ops gate, or fr gate pass</text>
+<path d="M180 226 V260" class="fig-line" marker-end="url(#gate-ledger-narrow--arrow)"/>
+<rect x="10" y="260" width="340" height="62" rx="10" class="fig-panel"/>
+<text x="180" y="287" text-anchor="middle" class="fig-ok fig-text">gate:tester-passed</text>
+<text x="180" y="310" text-anchor="middle" class="fig-ok fig-text">gate:devops-passed</text>
+<text x="10" y="356" class="fig-muted fig-small">WHAT EACH MERGE TO MAIN RELEASES</text>
+<path d="M30 380 V560" class="fig-line"/>
+<path d="M30 380 V500" class="fig-accent-line fig-flow"/>
+<circle cx="30" cy="390" r="9" class="fig-accent"/>
+<circle cx="30" cy="440" r="9" class="fig-accent"/>
+<circle cx="30" cy="490" r="9" class="fig-accent"/>
+<circle cx="30" cy="550" r="11" class="fig-ok"/>
+<text x="54" y="396" class="fig-ink fig-text">merge</text>
+<text x="54" y="446" class="fig-ink fig-text">rc.1: a gate is held</text>
+<text x="54" y="496" class="fig-ink fig-text">rc.2: still held</text>
+<text x="54" y="548" class="fig-ink fig-text">final: no gate waits,</text>
+<text x="54" y="568" class="fig-muted fig-small">fragments consumed</text>
+</svg>

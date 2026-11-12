@@ -550,6 +550,8 @@ def test_a_theme_missing_a_property_the_landing_uses_is_refused(missing: str) ->
 def test_every_property_the_site_stylesheets_use_is_a_required_theme_property() -> None:
     used: set[str] = set()
     for sheet in bs.SITE_DIR.glob("*.css"):
+        if sheet.name == "figures.css":  # its own --fig-* vocabulary, tested below
+            continue
         used |= set(re.findall(r"var\((--[a-z0-9-]+)", sheet.read_text(encoding="utf-8")))
     assert used == set(bs.THEME_PROPERTIES)
 
@@ -938,23 +940,30 @@ def test_a_figure_the_renderer_drops_fails_the_build_and_writes_nothing(
     assert not list(out.rglob("*.html"))
 
 
-def test_every_animation_in_figures_css_sits_under_no_preference_with_a_reduce_block() -> None:
-    css = (REPO / "scripts" / "site" / "figures.css").read_text()
-    assert re.search(r"@media\s*\(prefers-reduced-motion:\s*reduce\)", css)
-    reduce_block = re.search(
-        r"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{(.*)", css, re.DOTALL
-    )
-    assert reduce_block and "animation:none" in reduce_block.group(1).replace(" ", "")
-    # strip the reduce block and every no-preference block; no animation may remain
-    rest = css
-    for m in re.finditer(r"@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{", css):
+def _strip_media(css: str, query: str) -> str:
+    """`css` with every `@media (<query>) { … }` block removed (balanced braces)."""
+    pattern = re.compile(rf"@media\s*\(\s*{query}\s*\)\s*\{{")
+    while (m := pattern.search(css)) is not None:
         depth, i = 1, m.end()
         while depth and i < len(css):
             depth += {"{": 1, "}": -1}.get(css[i], 0)
             i += 1
-        rest = rest.replace(css[m.start() : i], "")
-    rest = rest[: rest.find("@media (prefers-reduced-motion: reduce)")] if "reduce)" in rest else rest
-    assert not re.search(r"animation\s*:", rest.replace("animation:none", "")), rest
+        css = css[: m.start()] + css[i:]
+    return css
+
+
+def test_every_animation_in_figures_css_sits_under_no_preference_with_a_reduce_block() -> None:
+    css = (REPO / "scripts" / "site" / "figures.css").read_text()
+    reduce_blocks = re.findall(
+        r"@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)\s*\{(.*)", css, re.DOTALL
+    )
+    assert reduce_blocks, "figures.css needs a prefers-reduced-motion: reduce block"
+    assert "animation:none" in reduce_blocks[0].replace(" ", "")
+    outside = _strip_media(
+        _strip_media(css, r"prefers-reduced-motion:\s*no-preference"),
+        r"prefers-reduced-motion:\s*reduce",
+    )
+    assert "animation" not in outside, outside
 
 
 def test_every_shipped_figure_passes_the_checks_and_the_two_new_ones_exist() -> None:
