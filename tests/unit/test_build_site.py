@@ -414,7 +414,9 @@ def act(n: int, intro: str = "Intro paragraph.") -> str:
 
 
 def cards(n: int = 4) -> str:
-    return "".join(f"- **Card {i}.** Sentence {i}. [Go {i}](fr-isolation.md)\n" for i in range(1, n + 1))
+    return "".join(
+        f"- **Card {i}.** Sentence {i}. [Go {i}](fr-isolation.md)\n" for i in range(1, n + 1)
+    )
 
 
 def grid(body: str | None = None) -> str:
@@ -463,7 +465,16 @@ def test_a_landing_with_no_act_still_parses() -> None:
 
 
 def test_an_act_with_no_guarantee_before_the_next_act_or_the_end_is_refused() -> None:
-    mid = FRONT + "\n" + FLOW + act(1) + act(2) + "".join(guarantee(i) for i in range(1, 7)) + PAGES + CTA
+    mid = (
+        FRONT
+        + "\n"
+        + FLOW
+        + act(1)
+        + act(2)
+        + "".join(guarantee(i) for i in range(1, 7))
+        + PAGES
+        + CTA
+    )
     _refused(mid, r"act.*no numbered section|no numbered section.*act")
     end = FRONT + "\n" + FLOW + "".join(guarantee(i) for i in range(1, 7)) + act(1) + PAGES + CTA
     _refused(end, r"no numbered section")
@@ -515,10 +526,10 @@ def test_a_grid_that_is_not_prose_then_one_unordered_list_is_refused() -> None:
 
 TERMINAL = (
     "terminal:\n"
-    "    - {kind: prompt, text: \"/fr-goal do a thing\"}\n"
-    "    - {kind: out, text: \"workspace ready\"}\n"
-    "    - {kind: you, text: \"answer the round\"}\n"
-    "    - {kind: ok, text: \"pull request opened\"}\n"
+    '    - {kind: prompt, text: "/fr-goal do a thing"}\n'
+    '    - {kind: out, text: "workspace ready"}\n'
+    '    - {kind: you, text: "answer the round"}\n'
+    '    - {kind: ok, text: "pull request opened"}\n'
 )
 
 
@@ -558,7 +569,9 @@ def test_a_figure_marker_is_lifted_out_of_a_flow_guarantee_or_prose_section() ->
     flow = FLOW.replace("1. {you}", marker("run-pipeline") + "1. {you}")
     g1 = guarantee(1).replace("**What", marker("isolation-boundary") + "**What")
     prose = "## Read\n\nText.\n\n" + marker("gate-ledger")
-    text = FRONT + "\n" + flow + g1 + "".join(guarantee(i) for i in range(2, 7)) + prose + PAGES + CTA
+    text = (
+        FRONT + "\n" + flow + g1 + "".join(guarantee(i) for i in range(2, 7)) + prose + PAGES + CTA
+    )
     secs = parse(text).sections
     assert secs[0].figure == "run-pipeline" and secs[0].steps
     assert secs[1].figure == "isolation-boundary" and "site:figure" not in secs[1].body
@@ -654,7 +667,7 @@ def test_an_untracked_front_matter_href_fails_the_build() -> None:
 
 def test_guarantee_sections_are_numbered_in_order() -> None:
     html = render_landing()
-    nums = re.findall(r'class="num">(\d\d)</span> / (\d\d)', html)
+    nums = re.findall(r'class="num">(\d\d)</span><span class="of"> / (\d\d)', html)
     assert nums == [(f"0{i}", "07") for i in range(1, 8)]
     assert html.index("Headline 1") < html.index("Headline 7")
     assert 'href="fr-isolation.html"' in html
@@ -1249,12 +1262,13 @@ def test_each_new_explainer_has_exactly_one_figure_marker_naming_a_real_figure(
     assert len(markers) == 1
     assert (FIGURES / f"{markers[0]}.svg").is_file()
 
+
 # -- the second-pass landing: acts, grid, terminal, figures (R4-R9, spec B, C) ----------
 
 
 def test_numbering_runs_across_acts_and_an_act_opener_carries_its_label() -> None:
     html = render_landing(acts_text())
-    assert re.findall(r'class="num">(\d\d)</span> / (\d\d)', html) == [
+    assert re.findall(r'class="num">(\d\d)</span><span class="of"> / (\d\d)', html) == [
         (f"0{i}", "06") for i in range(1, 7)
     ]
     assert html.index("Act one") < html.index("Headline 1") < html.index("Act two")
@@ -1279,13 +1293,13 @@ def test_the_terminal_renders_a_line_per_entry_with_a_class_per_kind_and_chars()
     assert f"--chars:{n}" in lines[0][1]
     assert all("--chars" not in attrs for _, attrs in lines[1:])
     assert "workspace ready" in html and "/fr-goal do a thing" in html
-    assert html.count("tl-prompt") == 1 and "caret" in html
+    assert html.count('<p class="tl tl-prompt') == 1 and "caret" in html
 
 
 def test_without_a_terminal_the_single_command_line_is_the_fallback() -> None:
     html = render_landing()
     assert 'class="command"' in html and "/fr-goal do a thing" in html
-    assert "tl-prompt" not in html
+    assert '<p class="tl' not in html
 
 
 def test_a_headline_of_two_sentences_puts_the_second_in_the_accent_gradient() -> None:
@@ -1300,10 +1314,12 @@ def test_a_figure_is_emitted_where_its_section_kind_places_it() -> None:
     flow = FLOW.replace("1. {you}", marker("gate-ledger") + "1. {you}")
     g1 = guarantee(1).replace("**What", marker("gate-ledger") + "**What")
     prose = "## Read\n\nText before.\n\n" + marker("wave-of-batches")
-    text = FRONT + "\n" + flow + g1 + "".join(guarantee(i) for i in range(2, 7)) + prose + PAGES + CTA
+    text = (
+        FRONT + "\n" + flow + g1 + "".join(guarantee(i) for i in range(2, 7)) + prose + PAGES + CTA
+    )
     html = render_landing(text)
     assert html.count("<figure") == 3
-    flow_html = html[html.index('class="band flow'):]
+    flow_html = html[html.index('class="band flow') :]
     assert flow_html.index("<figure") < flow_html.index('<ol class="steps"')
     g = html[html.index("Headline 1") :]
     g = g[: g.index("</section>")]
@@ -1403,7 +1419,11 @@ def test_the_landing_is_built_without_a_renderer_page_or_an_embedded_font(
     only = tmp_path / "only"
     (only / ".fr").mkdir(parents=True)
     (only / "docs" / "explainers").mkdir(parents=True)
-    (only / ".fr" / "docs.yaml").write_text("pages:\n  - docs/explainers/*.md\n")
+    (only / ".fr" / "docs.yaml").write_text(
+        "pages:\n  - docs/explainers/*.md\n  - docs/reference/*.md\n"
+    )
+    (only / "docs" / "reference").mkdir()
+    (only / "docs" / "reference" / "cli.md").write_text("---\ntitle: c\n---\n\nB\n")
     (only / "docs" / "explainers" / "index.md").write_text(acts_text())
     for name in ("fr-isolation", "01-fr-goal"):
         (only / "docs" / "explainers" / f"{name}.md").write_text("---\ntitle: t\n---\n\nB\n")
