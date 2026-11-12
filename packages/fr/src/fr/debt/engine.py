@@ -27,7 +27,7 @@ from fr.acceptance.model import (
     latest_passing_walk_at,
 )
 from fr.archive import MergeEvidence, merge_evidence
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.closeout import plan_sweep
 from fr.debt.model import (
     AcceptanceDebt,
@@ -162,7 +162,7 @@ def spec_heading_problems(repo_root: Path) -> list[str]:
     zero. Archived specs are frozen and not read."""
     from fr.spec import find_test_plan_heading, near_miss_message
 
-    specs = repo_root / SPECS_REL
+    specs = artifact_root(repo_root) / SPECS_REL
     out: list[str] = []
     for spec in sorted(specs.glob("*.md")) if specs.is_dir() else []:
         try:
@@ -321,7 +321,7 @@ def _safe_branch(repo_root: Path, branch: str) -> bool:
 def _run_branches(repo_root: Path) -> dict[str, str]:
     """plan name -> run branch, from every run cursor that emitted the plan."""
     out: dict[str, str] = {}
-    runs = repo_root / RUNS_REL
+    runs = artifact_root(repo_root) / RUNS_REL
     for path in sorted(runs.glob("*.yaml")) if runs.is_dir() else []:
         try:
             data = yaml.safe_load(path.read_text())
@@ -391,7 +391,7 @@ def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, Sou
     from fr.acceptance.fragment import FRAGMENTS_DIR
 
     try:
-        if not has_fragments(repo_root) and not (repo_root / FRAGMENTS_DIR).is_dir():
+        if not has_fragments(repo_root) and not (artifact_root(repo_root) / FRAGMENTS_DIR).is_dir():
             raise AcceptanceError(f"no acceptance fragments under {FRAGMENTS_DIR}/")
         folded = effective(repo_root)
     except (AcceptanceError, OSError) as e:

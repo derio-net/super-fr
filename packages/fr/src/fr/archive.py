@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, artifact_root, below, kind_dir, space_for
 from fr.git import (
     GIT_TIMEOUT_SECONDS,
     GitRefusal,
@@ -97,7 +97,7 @@ def completed_unarchived_plans(repo_root: Path) -> list[str]:
     """
     return [
         name
-        for name, plan in _parsed_plans(repo_root / PLANS_REL)
+        for name, plan in _parsed_plans(artifact_root(repo_root) / PLANS_REL)
         if plan is not None and _fully_complete(plan)
     ]
 
@@ -336,7 +336,7 @@ def _plans_on_ref(repo_root: Path, ref: str) -> _PlanSets:
             check=True,
             timeout=GIT_TIMEOUT_SECONDS,
         )
-        for name, plan in _parsed_plans(Path(td) / PLANS_REL):
+        for name, plan in _parsed_plans(below(Path(td), "plan")):
             if plan is None:
                 unparsed.append(name)
                 continue
@@ -472,7 +472,7 @@ def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
     "does this plan already have a run?" — and a second implementation of
     the match would be a second chance to key it on a name.
     """
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if not runs_dir.is_dir():
         return None
     target = str(plan_rel).rstrip("/")

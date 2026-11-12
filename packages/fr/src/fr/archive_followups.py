@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.journal.model import (
     IMPLEMENTED_JOURNALS_REL,
     SCOPE_DIRS,
@@ -420,7 +420,7 @@ def _matrix_identity(repo_root: Path) -> str | None:
 
     from fr.acceptance.fragment import FRAGMENTS_DIR
 
-    folder = repo_root / FRAGMENTS_DIR
+    folder = artifact_root(repo_root) / FRAGMENTS_DIR
     for path in sorted(folder.glob("*.yaml")) if folder.is_dir() else ():
         try:
             data = yaml.safe_load(path.read_text())

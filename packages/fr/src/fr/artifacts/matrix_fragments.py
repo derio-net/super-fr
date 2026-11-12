@@ -43,7 +43,7 @@ from pathlib import Path
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.matrix_strategies import UnconvertibleMatrixError
 from fr.artifacts.matrix_verify import UnreadableMatrixError
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, below, kind_dir, space_for
 from fr.artifacts.runner import MIGRATIONS, SchemaMigration
 
 MIGRATION_NAME = "acceptance-fragments"
@@ -132,7 +132,7 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
         by_feature.setdefault(feature, []).append(row)
         expected[row.id] = row.model_dump()
 
-    folder = root / FRAGMENTS_DIR
+    folder = below(root, "acceptance-fragment")  # root: the one this matrix's path names
     on_disk = (
         {f"{FRAGMENTS_DIR.as_posix()}/{p.name}": p.read_text() for p in folder.glob("*.yaml")}
         if folder.is_dir()
@@ -252,13 +252,12 @@ def _companions(path: Path) -> list[Path]:
     own (a pre-v5 body the frozen reader refuses until the earlier hops run, or one
     it will refuse anyway), every fragment already here is named instead (review
     pr1408-r9): a fragment that does not exist yet holds no uncommitted change."""
-    from fr.acceptance.fragment import FRAGMENTS_DIR
 
     root = _root(path)
     try:
         written = [root / rel for rel in split_texts(path.read_text(), root)]
     except Exception:
-        written = sorted((root / FRAGMENTS_DIR).glob("*.yaml"))
+        written = sorted(below(root, "acceptance-fragment").glob("*.yaml"))
     return [*written, *_deleted(path)]
 
 

@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 placement-resolver phase 3, the quiet placement (init --quiet, the fr worktree, atomic push, sticky switch)
+reviewed: 2026-11-12 placement-resolver phase 3, the quiet placement (init --quiet, the fr worktree, atomic push, sticky switch; review fixes for acceptance on fr, refusals, OWNER and the lock)
 ---
 
 ## Overview
@@ -1208,10 +1208,28 @@ From then on fr writes every record into a second worktree of `fr`, at
 `~/.cache/fr/worktrees/<repo>/fr`, below `features/<feature-id>/`, where the feature
 id is the branch name with `/` written as `__` (`feat/q` becomes `feat__q`). Below
 that the layout is the usual one, so a plan sits at
-`features/feat__q/docs/superpowers/plans/<slug>/`. Each fr commit on `fr` touches
-only its own feature's path. Two branches whose names collapse to the same id, such
-as `feat/a__b` and `feat__a/b`, are refused, naming both, rather than left to share
-a path. `fr push` pushes your feature branch and `fr` together in one
+`features/feat__q/docs/superpowers/plans/<slug>/`. Acceptance rows are the same:
+`fr acceptance add` and `set-status` write this feature's fragment there, and
+`fr acceptance init` creates only that directory, with no CI workflow, rule file or
+`.gitignore` lines on the product branch. Each fr commit on `fr` touches only its own
+feature's path, and the feature's first commit writes `features/<feature-id>/OWNER`
+naming its branch. A branch whose id another branch already holds, here or in that
+`OWNER` file from another clone, is refused, naming both, rather than left to share a
+path (`feat/a__b` and `feat__a/b` collapse to the same id). Every workspace of the
+repository shares the one `fr` worktree, so fr's commits and pushes there take a lock
+in its git directory; a rebase left in progress there, or hand edits to its tracked
+files, is reported as exactly that. `fr migrate artifacts` and the migration check
+before every command rewrite only your own feature's records, and report another
+feature's stale ones for its own workspace to migrate; `fr validate artifacts`
+reads every feature.
+
+Some commands cannot put their files on `fr` yet, and refuse before writing anything
+rather than leave them in your checkout: `fr archive` and `fr debt archive-pr`
+(merged status under quiet comes later), `fr ops gate`, and renaming a branch. When a
+repository-configuration command such as `fr init agents` or a profile scaffold writes
+files that do belong on the product branch, fr makes no commit for them and says so:
+you commit them yourself. If an fr record ever does reach your checkout, the commit
+fails with an error instead of a warning. `fr push` pushes your feature branch and `fr` together in one
 `git push --atomic`, or `fr` alone when only bookkeeping moved. When another
 feature pushed `fr` in between, it fetches, replays its own fr commits on top (the
 paths never overlap) and tries again, at most three times. It never force-pushes
@@ -1227,11 +1245,14 @@ the `fr` branch the same branch protection as your default branch.**
 
 fr fetches `origin/fr` at `fr isolation up` and at `fr run start`, and both refuse
 when `origin` cannot be reached, naming `git remote -v`, rather than guess the
-placement. `fr isolation up --no-fetch` reads the last fetched `origin/fr` instead
-and says so. The workspace records the placement it was set up under, and a later
-disagreement refuses, naming both: deleting or renaming `fr`, or changing its
-`placement`, stops the workspace rather than quietly sending records back onto the
-feature branch. One known limitation: a host whose fr predates quiet support never
+placement. `fr isolation up --no-fetch` and `fr run start --no-fetch` read the last
+fetched `origin/fr` instead and say so. The workspace records the placement it was set
+up under, and a later disagreement refuses, naming both: deleting or renaming `fr`, or
+changing its `placement`, stops the workspace rather than quietly sending records back
+onto the feature branch. A workspace set up before the switch appeared counts as
+`repo` and refuses the same way. A local `fr` branch that is neither behind nor ahead
+of `origin/fr` is never adopted, and `fr settings init --quiet` refuses while one
+exists. One known limitation: a host whose fr predates quiet support never
 looks for the switch, and writes its records on the feature branch as before.
 Keeping records in a separate tracking repository (stealth) comes later.
 

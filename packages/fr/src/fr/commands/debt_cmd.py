@@ -355,6 +355,14 @@ def archive_pr_cmd(
     from fr.hostclient import FORGE_ERRORS
 
     root = resolve_repo_root()
+    from fr.placement.quiet import refuse_under_quiet
+
+    refuse_under_quiet(
+        root,
+        "fr debt archive-pr",
+        "it commits archived plans on a product branch; under quiet merged status is "
+        "recorded on the `fr` branch (R25)",
+    )
     slug = _identity(root)
     token = os.environ.get("FR_DEBT_TOKEN", "").strip()
     if token:

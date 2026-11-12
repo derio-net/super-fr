@@ -135,6 +135,15 @@ def kind_dir(kind: str, space: ArtifactSpace) -> Path:
     return feature_root(space) / _known(kind, KIND_DIRS)
 
 
+def below(root: Path, kind: str) -> Path:
+    """*kind*'s directory directly below *root*, with NO placement read. For a root that
+    already is an artifact root by construction (a feature root, an exported tree, the
+    root an artifact's own path names), or a reader of the product checkout's OWN git
+    tree, comparing it with its own history (which under quiet holds no fr artifact,
+    R23). Every other caller asks `artifact_root` (the tripwire holds the line)."""
+    return Path(root) / _known(kind, KIND_DIRS)
+
+
 def records_dir(run_id: str, space: ArtifactSpace) -> Path:
     """The step-record directory of run *run_id*: `<runs dir>/<run-id>.records`."""
     return kind_dir("run", space) / f"{run_id}{RECORDS_SUFFIX}"

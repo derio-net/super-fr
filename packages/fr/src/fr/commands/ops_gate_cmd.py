@@ -243,6 +243,14 @@ def gate(
         root = git_repo_root(Path.cwd())
     except Exception:  # noqa: BLE001 — any git failure means "not in a repo"
         _refuse("not inside a git repository")
+    from fr.placement.quiet import refuse_under_quiet
+
+    refuse_under_quiet(
+        root,
+        "fr ops gate",
+        "the DevOps stage commits its evidence and archive under docs/ on an ops branch of "
+        "the product repo",
+    )
     try:
         state = find_run(root, run)
     except RunLookupError as exc:

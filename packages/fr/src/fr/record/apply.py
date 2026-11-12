@@ -1052,8 +1052,9 @@ def _acceptance_writes(
         split_ref,
         walked_error,
     )
+    from fr.artifacts.paths import artifact_root
 
-    folder = repo_root / FRAGMENTS_DIR
+    folder = artifact_root(repo_root) / FRAGMENTS_DIR
     if not folder.is_dir():
         raise RecordRefusedError(
             f"no {FRAGMENTS_DIR}/ (run `fr acceptance init` to scaffold acceptance)"
@@ -1067,8 +1068,10 @@ def _acceptance_writes(
             texts[p] = t
     before = dict(texts)
 
+    froot = artifact_root(repo_root)
+
     def rel(p: Path) -> str:
-        return p.relative_to(repo_root).as_posix()
+        return p.relative_to(froot).as_posix()
 
     def parsed() -> dict[Path, Fragment]:
         try:

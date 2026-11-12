@@ -16,7 +16,13 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from fr.artifacts.commit import CommitOutcome, NoRepo, commit_paths, git_context
+from fr.artifacts.commit import (
+    CommitOutcome,
+    NoRepo,
+    QuietProductWriteError,
+    commit_paths,
+    git_context,
+)
 from fr.git import GitUnavailableError, git_answer
 
 __all__ = ["commit_records"]
@@ -85,6 +91,8 @@ def commit_records(
         if not todo or isinstance(git_context(repo_root), NoRepo):
             return outcome  # not in a git repo (or nothing written): a no-op, as before
         reason = outcome.reason
+    except QuietProductWriteError:
+        raise  # R23: a hard error (exit 2), never a stderr line over exit 0 (p3-r1)
     except Exception as e:  # noqa: BLE001 — losing the commit must not lose the write
         reason = f"{type(e).__name__}: {e}"
         outcome = CommitOutcome(committed=False, reason=reason)

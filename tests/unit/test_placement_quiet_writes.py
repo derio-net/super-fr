@@ -123,18 +123,71 @@ def test_fr_never_commits_an_artifact_path_on_the_product_branch(
     workspace: tuple[Path, Path],
 ) -> None:
     """A writer not yet on the resolver writes below the product checkout; under quiet the
-    commit seam refuses it rather than put an fr file on the feature branch (R23)."""
-    from fr.artifacts.commit import commit_paths
+    commit seam refuses it, a hard error (p3-r1), rather than put an fr file on the feature
+    branch (R23)."""
+    from fr.artifacts.commit import QuietProductWriteError, commit_paths
 
     worktree, _ = workspace
     stray = worktree / KIND_DIRS["acceptance-fragment"] / "x.yaml"
     stray.parent.mkdir(parents=True)
     stray.write_text("rows: []\n")
     head = git(worktree, "rev-parse", "HEAD").strip()
-    outcome = commit_paths(worktree, [stray], "chore(fr): acceptance")
-    assert not outcome.committed
-    assert "quiet" in outcome.reason and KIND_DIRS["acceptance-fragment"] in outcome.reason
+    with pytest.raises(QuietProductWriteError, match=KIND_DIRS["acceptance-fragment"]):
+        commit_paths(worktree, [stray], "chore(fr): acceptance")
     assert git(worktree, "rev-parse", "HEAD").strip() == head
+    stray.unlink()
     code = worktree / "code.txt"
     code.write_text("x\n")
     assert commit_paths(worktree, [code], "feat(q): code").committed  # code still commits
+
+
+# --- review p3-r1: every writer asks the resolver for its root -------------------------
+
+
+def _invoke(cwd: Path, *argv: str) -> tuple[int, str]:
+    env = {**os.environ, "VK_REPO_ROOT": str(cwd), "FR_ISOLATION_TARGET": "worktree"}
+    result = CliRunner().invoke(app, list(argv), env=env)
+    return result.exit_code, " ".join(result.output.split())
+
+
+def test_acceptance_init_add_and_set_status_land_on_the_fr_branch(
+    workspace: tuple[Path, Path],
+) -> None:
+    worktree, fr_root = workspace
+    _fr(worktree, "acceptance", "init")
+    _fr(
+        worktree,
+        "acceptance", "add", "--id", "q-row", "--capability", "c", "--acceptance", "a thing",
+        "--feature", "legacy", "--status", "not-implemented", "--notes", "n",
+        "--repo", "derio-net/q",
+    )  # fmt: skip
+    _fr(
+        worktree,
+        "acceptance", "set-status", "--id", "q-row", "--status", "unwired", "--notes", "m",
+        "--feature", "legacy",
+    )  # fmt: skip
+    fragment = fr_root / "features" / FEATURE / KIND_DIRS["acceptance-fragment"] / "legacy.yaml"
+    assert "status: unwired" in fragment.read_text()
+    assert "q-row" in git(
+        fr_root, "show", f"HEAD:features/{FEATURE}/{KIND_DIRS['acceptance-fragment']}/legacy.yaml"
+    )
+    for _, names in _fr_commits(fr_root):
+        assert all(n.startswith(f"features/{FEATURE}/") for n in names), names
+    _product_is_clean(worktree)
+
+
+def test_archive_is_refused_before_it_writes(workspace: tuple[Path, Path]) -> None:
+    worktree, _ = workspace
+    code, out = _invoke(worktree, "archive", "--all")
+    assert code == 2, out
+    assert "not available under placement quiet" in out and "Nothing was written" in out
+    _product_is_clean(worktree)
+
+
+def test_init_agents_makes_no_commit_on_the_product_branch(workspace: tuple[Path, Path]) -> None:
+    worktree, _ = workspace
+    head = git(worktree, "rev-parse", "HEAD").strip()
+    code, out = _invoke(worktree, "init", "agents", "--repo", str(worktree))
+    assert code == 0, out
+    assert git(worktree, "rev-parse", "HEAD").strip() == head
+    assert "made no commit" in out

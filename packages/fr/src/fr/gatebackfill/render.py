@@ -10,7 +10,7 @@ import shlex
 from pathlib import Path
 
 from fr.acceptance.amend import feature_flag
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.gatebackfill.candidates import PLANS_REL, Candidate, find_spec, split_key
 from fr.gatebackfill.model import PlanClose, PlanEntry
 
@@ -26,9 +26,10 @@ def _unticked(root: Path, name: str, phase: int) -> tuple[list[str], str | None]
     """`(unticked step ids, why not)` of a live plan's phase."""
     from fr.parser import PlanSchemaError, parse
 
-    d = root / PLANS_REL / name
+    base = artifact_root(root)
+    d = base / PLANS_REL / name
     if not d.is_dir():
-        archived = (root / KIND_DIRS["plan-archived"] / name).is_dir()
+        archived = (base / KIND_DIRS["plan-archived"] / name).is_dir()
         return (
             [],
             "an archived plan is frozen" if archived else f"plan {name} is not in this checkout",

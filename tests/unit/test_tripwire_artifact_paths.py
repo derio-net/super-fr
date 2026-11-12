@@ -127,6 +127,8 @@ def _key_ids(tree: ast.AST) -> set[int]:
             out.add(id(node.slice))
         elif isinstance(node, ast.Call) and _call_name(node) in _KEY_CALLS and node.args:
             out.add(id(node.args[0]))
+        elif isinstance(node, ast.Call) and _call_name(node) == "below" and len(node.args) > 1:
+            out.add(id(node.args[1]))  # `below(root, kind)`
     return out
 
 
@@ -274,3 +276,147 @@ def test_the_detector_finds_concatenation_joins_and_a_bare_superpowers() -> None
     lines = [line for line, _ in violations(_PLANTED_NEW_FORMS)]
     # B spells no whole `docs/superpowers` constant: only its joined static string does.
     assert lines == [6, 7, 8, 9, 10, 11, 12]
+
+
+# --- a placement-bound directory joined to a raw root (review p3-r1) ---------------------
+#
+# R1: "every caller asks the resolver for the ROOT as well as the layout". Phase 2 left
+# `repo_root / RUNS_REL`-style joins, which under quiet write into the product checkout.
+# Caught: a `/` whose right side is `KIND_DIRS[<kind>]` (or `Path(...)` of it, or a module
+# constant built from one, in any module) for a placement-bound kind, and whose left side
+# is not the resolver's answer: a call to one of `_ROOT_CALLS`, or a name bound from one
+# (assigned, or iterated over) in the same module. Repo configuration kinds
+# (`fr.artifacts.paths.REPO_CONFIG_KINDS`) are read from the product checkout everywhere.
+# A root that is ALREADY an artifact root by construction (an exported tree, the root an
+# artifact's own path names) says so with `paths.below(root, kind)`.
+
+_ROOT_CALLS = frozenset({"artifact_root", "feature_root", "feature_roots", "search_roots"})
+
+
+def _kind_keys(node: ast.AST) -> set[str]:
+    return {
+        n.slice.value
+        for n in ast.walk(node)
+        if isinstance(n, ast.Subscript)
+        and (
+            (isinstance(n.value, ast.Name) and n.value.id == "KIND_DIRS")
+            or (isinstance(n.value, ast.Attribute) and n.value.attr == "KIND_DIRS")
+        )
+        and isinstance(n.slice, ast.Constant)
+        and isinstance(n.slice.value, str)
+    }
+
+
+def _bound_kinds(keys: set[str]) -> bool:
+    from fr.artifacts.paths import REPO_CONFIG_KINDS
+
+    return any(k not in REPO_CONFIG_KINDS for k in keys)
+
+
+def _bound_constants(trees: dict[str, ast.Module]) -> set[str]:
+    """Module-level names, in any module, assigned a placement-bound `KIND_DIRS` path."""
+    names: set[str] = set()
+    for tree in trees.values():
+        for node in tree.body:
+            value = node.value if isinstance(node, (ast.Assign, ast.AnnAssign)) else None
+            if value is None or not _bound_kinds(_kind_keys(value)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names |= {t.id for t in targets if isinstance(t, ast.Name)}
+    return names
+
+
+def _resolved_names(tree: ast.AST) -> set[str]:
+    """Names bound from a resolver call in *tree*: `x = artifact_root(...)`, `for x in
+    feature_roots(...)`, a comprehension over one."""
+
+    def from_resolver(value: ast.AST | None) -> bool:
+        return isinstance(value, ast.Call) and _call_name(value) in _ROOT_CALLS
+
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and from_resolver(node.value):
+            out |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+        elif isinstance(node, (ast.For, ast.comprehension)) and from_resolver(node.iter):
+            if isinstance(node.target, ast.Name):
+                out.add(node.target.id)
+    return out
+
+
+def _right_is_bound(node: ast.AST, constants: set[str]) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in constants
+    if isinstance(node, ast.Attribute):
+        return node.attr in constants
+    if isinstance(node, ast.Call) and _call_name(node) in _PATH_CALLS and len(node.args) == 1:
+        return _right_is_bound(node.args[0], constants)
+    return _bound_kinds(_kind_keys(node)) and isinstance(node, ast.Subscript)
+
+
+def raw_root_joins(source: str, constants: set[str]) -> list[tuple[int, str]]:
+    tree = ast.parse(source)
+    resolved = _resolved_names(tree)
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)):
+            continue
+        if not _right_is_bound(node.right, constants):
+            continue
+        left = node.left
+        if isinstance(left, ast.Call) and _call_name(left) in _ROOT_CALLS:
+            continue
+        if isinstance(left, ast.Name) and left.id in resolved:
+            continue
+        found.append((node.lineno, f"{ast.unparse(left)} / {ast.unparse(node.right)}"))
+    return sorted(set(found))
+
+
+def _raw_root_offenders() -> dict[str, list[tuple[int, str]]]:
+    trees = {rel: ast.parse(path.read_text()) for rel, path in _modules().items()}
+    constants = _bound_constants(trees)
+    out = {}
+    for rel, path in _modules().items():
+        if rel == RESOLVER:
+            continue
+        found = raw_root_joins(path.read_text(), constants)
+        if found:
+            out[rel] = found
+    return out
+
+
+def test_no_placement_bound_directory_is_joined_to_a_raw_root() -> None:
+    offenders = _raw_root_offenders()
+    assert not offenders, (
+        "a placement-bound artifact directory joined to a raw root (ask the resolver: "
+        "artifact_root(root) / X, feature_roots(...), or paths.below(root, kind) for a root "
+        "that already is one):\n"
+        + "\n".join(f"  {rel}:{line} {what}" for rel, v in offenders.items() for line, what in v)
+    )
+
+
+_PLANTED_JOINS = """
+from pathlib import Path
+from fr.artifacts.paths import KIND_DIRS, artifact_root, feature_roots
+
+RUNS_REL = Path(KIND_DIRS["run"])
+WORKFLOWS_REL = Path(KIND_DIRS["workflow"])
+
+
+def f(repo_root):
+    a = repo_root / RUNS_REL
+    b = artifact_root(repo_root) / RUNS_REL
+    base = artifact_root(repo_root)
+    c = base / RUNS_REL
+    d = repo_root / WORKFLOWS_REL
+    e = repo_root / KIND_DIRS["plan"]
+    for froot in feature_roots(space):
+        g = froot / KIND_DIRS["plan"]
+    h = Path(repo_root) / Path(KIND_DIRS["spec"])
+"""
+
+
+def test_the_join_detector_finds_raw_roots_and_spares_the_resolver() -> None:
+    constants = _bound_constants({"m": ast.parse(_PLANTED_JOINS)})
+    assert constants == {"RUNS_REL"}
+    lines = [line for line, _ in raw_root_joins(_PLANTED_JOINS, constants)]
+    assert lines == [10, 15, 18]

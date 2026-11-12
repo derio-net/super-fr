@@ -58,6 +58,7 @@ from fr.git import (
 from fr.git import WELL_KNOWN_DEFAULTS as _WELL_KNOWN_DEFAULTS
 from fr.git import git_answer as _git
 from fr.git import ref_exists as _ref_exists
+from fr.settings import SettingsError
 
 if TYPE_CHECKING:
     from fr.artifacts.paths import ArtifactSpace
@@ -589,9 +590,14 @@ def _outside(toplevel: Path, paths: Sequence[Path]) -> list[Path]:
     return out
 
 
+class QuietProductWriteError(SettingsError):
+    """A quiet repo's fr artifact about to be committed on a product branch (R23). A
+    `SettingsError`, so the CLI's root group turns it into exit 2."""
+
+
 def _quiet_product_artifacts(
     repo_root: Path, toplevel: Path, paths: Sequence[Path], elsewhere: list[Path]
-) -> CommitOutcome | None:
+) -> None:
     """R23 "nothing on the product branches", held at the one commit seam: under quiet,
     an artifact path inside the PRODUCT checkout (a writer not yet routed through the
     resolver) is refused, never committed on the feature branch."""
@@ -612,13 +618,13 @@ def _quiet_product_artifacts(
         quiet = False
     if not quiet:
         return None
-    return CommitOutcome(
-        committed=False,
-        reason=(
-            f"refusing to commit {artifacts[0]} on the product branch: under placement "
-            "quiet fr's artifacts live on the `fr` branch (R23), and this command wrote it "
-            f"below the checkout instead; {_UNCOMMITTED}"
-        ),
+    # A hard error, never a warning (review p3-r1): a caller that carried on would exit 0
+    # over a file that a plain `git add -A` then puts on the product branch.
+    raise QuietProductWriteError(
+        f"refusing to commit {artifacts[0]} on the product branch: under placement quiet "
+        "fr's artifacts live on the `fr` branch (R23), and this command wrote it below the "
+        f"product checkout instead; {_UNCOMMITTED}. Delete it (it is not committed "
+        "anywhere) and report the command: every fr writer asks the resolver for its root"
     )
 
 
@@ -747,9 +753,7 @@ def commit_paths(
     # of them is made THERE, never on this product branch. The product-side refusals
     # above still apply first (no fr commit for a detached or default-branch checkout).
     elsewhere = _outside(toplevel, paths)
-    refused = _quiet_product_artifacts(repo_root, toplevel, paths, elsewhere)
-    if refused is not None:
-        return refused
+    _quiet_product_artifacts(repo_root, toplevel, paths, elsewhere)
     if elsewhere:
         rerouted = _quiet_commit(repo_root, toplevel, paths, elsewhere)
         if isinstance(rerouted, CommitOutcome):

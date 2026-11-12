@@ -262,7 +262,10 @@ def _introductions(
 
 
 def _working_fragments(root: Path) -> dict[str, str]:
-    folder = root / FRAGMENTS_DIR
+    """The fragments below *root*, an artifact root (the checkout, or a quiet feature's)."""
+    from fr.artifacts.paths import below
+
+    folder = below(root, "acceptance-fragment")
     if not folder.is_dir():
         return {}
     return {
@@ -358,7 +361,9 @@ def fold_texts(working: dict[str, str]) -> Effective:
 def has_fragments(repo_root: Path) -> bool:
     """Whether *repo_root*'s working tree holds at least one fragment: the one
     "this repo keeps acceptance rows" test every reader and hook shares (R19)."""
-    folder = Path(repo_root) / FRAGMENTS_DIR
+    from fr.artifacts.paths import artifact_root
+
+    folder = artifact_root(Path(repo_root)) / FRAGMENTS_DIR
     return folder.is_dir() and any(p.is_file() for p in folder.glob("*.yaml"))
 
 
@@ -373,6 +378,8 @@ def default_ref_fold(repo_root: Path) -> Effective | None:
     ref, so nothing is held to "a merged row changes only by amendment" (R16)."""
     from fr.git import GitRefusal, GitUnavailableError, remote_default_ref
 
+    if _quiet_root(Path(repo_root)) is not None:
+        return None  # R23: a quiet product default ref holds no row (merged status: R25)
     try:
         named = remote_default_ref(Path(repo_root))
     except GitUnavailableError:
@@ -391,6 +398,15 @@ def effective(repo_root: Path, *, ref: str | None = None) -> Effective:
     fragments folded in memory when *repo_root* is not the top of a git work tree
     (a bare fixture, an exported tree); else the full fold."""
     root = Path(repo_root)
+    froot = _quiet_root(root)
+    if froot is not None:
+        # Under quiet this feature's fragments sit in its root on the `fr` branch, and the
+        # product's default ref holds none (R23): they are folded as pending entries over
+        # no merged history. Merged status under quiet (R25) is plan 3 phase 5's.
+        if ref is not None:
+            return _empty()
+        quiet_working = _working_fragments(froot)
+        return fold_texts(quiet_working) if quiet_working else _empty()
     if ref is not None:
         return fold(root, ref=ref, include_pending=False)
     working = _working_fragments(root)
@@ -407,6 +423,14 @@ def effective(repo_root: Path, *, ref: str | None = None) -> Effective:
         # fragments are all there is.
         return fold_texts(working)
     return fold(root)
+
+
+def _quiet_root(root: Path) -> Path | None:
+    """This checkout's feature root when it is not the checkout itself (quiet), else None."""
+    from fr.artifacts.paths import artifact_root
+
+    froot = artifact_root(root)
+    return None if froot.resolve() == root.resolve() else froot
 
 
 def _empty() -> Effective:

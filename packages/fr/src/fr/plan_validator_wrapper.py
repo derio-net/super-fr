@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 
 PLANS_REL = Path(KIND_DIRS["plan"])
 # Harness-neutral: `fr init validator-wrapper` (below) runs identically on
@@ -40,7 +40,7 @@ class ValidatorWrapperError(RuntimeError):
 
 
 def plans_dir_exists(repo_root: Path) -> bool:
-    return (repo_root / PLANS_REL).is_dir()
+    return (artifact_root(repo_root) / PLANS_REL).is_dir()
 
 
 def validator_wrapper_path(repo_root: Path) -> Path:

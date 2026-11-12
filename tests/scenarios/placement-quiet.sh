@@ -5,8 +5,10 @@
 # (host worktree) records quiet; a plan, a journal entry and a run cursor land on `fr` under
 # features/feat__q/, a code commit stays on feat/q, and `fr push` pushes both. Then:
 # feat/q carries no fr path and no chore(fr) subject, every `fr` commit after the root
-# touches one feature path, and deleting origin's `fr` makes the workspace refuse,
-# naming both placements. Nothing reaches a forge.
+# touches one feature path; acceptance rows land on `fr`, `fr archive` refuses, and a
+# `git add -A` code commit plus `fr push` puts no fr path or chore(fr) subject on origin's
+# main or feat/q; deleting `fr` on origin makes `fr run start` (its fetch) refuse, naming
+# both placements. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 
@@ -68,10 +70,39 @@ for c in $(git --git-dir="$origin" rev-list fr ^"$root"); do
   [ -z "$stray" ] || fail "fr commit $c touches more than one feature path: $stray"
 done
 
-git push -q origin --delete fr || fail "delete origin fr"
-run_fr out run status "$run_id"
-[ "$RC" -ne 0 ] || fail "run status did not refuse after origin's fr was deleted: $out"
+# Writers that phase 2 left on the product root (review p3-r1): acceptance rows land on
+# `fr`, and a plain `git add -A` code commit plus `fr push` carries no fr file anywhere.
+run_fr out acceptance init
+require_exit 0 "$out"
+run_fr out acceptance add --id q-row --capability c --acceptance "a thing" \
+  --feature legacy --status not-implemented --notes n --repo derio-net/q
+require_exit 0 "$out"
+run_fr out acceptance set-status --id q-row --status unwired --notes m --feature legacy
+require_exit 0 "$out"
+run_fr out archive --all
+[ "$RC" -eq 2 ] || fail "fr archive did not refuse under quiet: $out"
+refuse_grep '.' "$(git status --porcelain)" "the product checkout is still clean"
+echo more > more.txt
+git add -A && git commit -qm "feat(q): more code" || fail "git add -A code commit"
+run_fr out push
+require_exit 0 "$out"
+for ref in main feat/q; do
+  fr_paths="$(git --git-dir="$origin" ls-tree -r --name-only "$ref" | grep -E '^docs/(superpowers|acceptance)/' || true)"
+  [ -z "$fr_paths" ] || fail "origin $ref carries fr paths: $fr_paths"
+  refuse_grep '^chore\(fr\)' "$(git --git-dir="$origin" log --format=%s "$ref")" \
+    "no chore(fr) commit on origin $ref"
+done
+expect_grep "^features/feat__q/docs/acceptance/features/legacy.yaml$" \
+  "$(git --git-dir="$origin" ls-tree -r --name-only fr)" "origin fr holds the acceptance row"
+
+# The switch deleted on origin's side only (review p3-r11): the local tracking ref still
+# says quiet, so only `run start`'s own fetch can notice, and it refuses, naming both.
+git --git-dir="$origin" branch -D fr >/dev/null || fail "delete fr on origin"
+run_fr out run start fr-goal --branch feat/q --run-id r-gone
+[ "$RC" -ne 0 ] || fail "run start did not refuse after origin's fr was deleted: $out"
 flat="$(printf '%s' "$out" | tr '\n' ' ')"
 expect_grep 'placement: quiet' "$flat" "the refusal names quiet"
 expect_grep 'placement: repo' "$flat" "the refusal names repo"
+run_fr out run status "$run_id"
+[ "$RC" -ne 0 ] || fail "run status did not refuse after the fetch dropped origin/fr: $out"
 echo "ok: placement-quiet"

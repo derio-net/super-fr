@@ -32,7 +32,7 @@ from typing import Any
 
 import yaml
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.usage.file import (
     NO_SESSION_FOUND,
     Capture,
@@ -187,7 +187,7 @@ def refresh_archived(
     from fr.artifacts.atomic import write_text_atomic
 
     report = BackfillReport()
-    runs = repo_root / ARCHIVED_RUNS_REL
+    runs = artifact_root(repo_root) / ARCHIVED_RUNS_REL
     for cursor in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():
         run_id = cursor.stem
         target = archived_usage_path(repo_root, run_id)
@@ -219,7 +219,7 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
     from fr.usage.capture import this_host
 
     report = refresh_archived(repo_root, env)
-    runs = repo_root / ARCHIVED_RUNS_REL
+    runs = artifact_root(repo_root) / ARCHIVED_RUNS_REL
     for cursor in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():
         run_id = cursor.stem
         target = archived_usage_path(repo_root, run_id)

@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.gates import POST_MERGE_GATES
 from fr.verification.model import RESERVED, StrategyError
 from fr.verification.resolve import resolve_strategy
@@ -121,10 +121,11 @@ def run_plan_dir(repo_root: Path, state: RunState) -> Path | None:
     )
     if not plan_rel:
         return None
-    live = repo_root / plan_rel
+    base = artifact_root(repo_root)
+    live = base / plan_rel
     if live.is_dir():
         return live
-    archived = repo_root / IMPLEMENTED_PLANS_REL / Path(plan_rel).name
+    archived = base / IMPLEMENTED_PLANS_REL / Path(plan_rel).name
     return archived if archived.is_dir() else None
 
 

@@ -670,6 +670,8 @@ def _commit_profile(
             file=sys.stderr,
         )
         return
+    if quiet_leaves_uncommitted(repo_root, paths):
+        return
     _git(repo_root, "add", "--", *paths)
     # `git diff --cached --quiet` → rc 0 means nothing staged (unchanged).
     if _git(repo_root, "diff", "--cached", "--quiet", "--", *paths).returncode == 0:
@@ -690,9 +692,28 @@ def _commit_profile(
         raise IsolationError(f"git commit failed: {result.stderr.strip() or result.stdout.strip()}")
 
 
+def quiet_leaves_uncommitted(repo_root: Path, paths: list[str]) -> bool:
+    """Under quiet, fr makes no commit on a product branch (R23), and repo configuration
+    (a devcontainer profile, `.claude/agents`) is written there for the OPERATOR to
+    commit. Says so on stderr and returns True; False (commit as usual) otherwise."""
+    from fr.placement.quiet import read_switch
+
+    if read_switch(repo_root) is None:
+        return False
+    print(
+        f"fr: placement quiet: wrote {', '.join(paths)} (repo configuration) but made no "
+        "commit: fr never commits on a product branch under quiet (R23); commit them "
+        "yourself",
+        file=sys.stderr,
+    )
+    return True
+
+
 def commit_paths(repo_root: Path, paths: list[str], message: str) -> bool:
     """Stage and commit exactly `paths` (pathspec commit: other staged work stays
     staged); whether a commit was made. Raises `IsolationError` when git refuses."""
+    if quiet_leaves_uncommitted(repo_root, paths):
+        return False
     _git(repo_root, "add", "--", *paths)
     if _git(repo_root, "diff", "--cached", "--quiet", "--", *paths).returncode == 0:
         return False

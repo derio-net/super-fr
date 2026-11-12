@@ -14,7 +14,7 @@ from rich.markup import escape
 
 from fr.acceptance.fragment import FRAGMENTS_DIR
 from fr.acceptance.model import AcceptanceError, Matrix, Row, Walk
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
@@ -59,7 +59,7 @@ def _load(root: Path) -> Matrix:
     fragment and no `docs/acceptance/features/` directory has no acceptance: exit 1."""
     from fr.acceptance.fold import has_fragments, load_effective
 
-    if not has_fragments(root) and not (root / FRAGMENTS_DIR).is_dir():
+    if not has_fragments(root) and not (artifact_root(root) / FRAGMENTS_DIR).is_dir():
         err_console.print(
             f"no acceptance fragments under {FRAGMENTS_DIR}/ "
             "(run `fr acceptance init` to scaffold, then `fr acceptance add`)"
@@ -240,7 +240,11 @@ def report_cmd(
     root = resolve_repo_root()
     _refuse_if_off(root, "`fr acceptance report` writes no report")
     matrix = _load(root)
-    out_path = (root / (out if out is not None else REPORT_OUTPUTS[fmt])).resolve()
+    # The default lands at the artifact root: under quiet the fr worktree, never the
+    # product checkout, where no `.gitignore` line keeps it out of `git add -A` (p3-r1).
+    out_path = (
+        (root / out) if out is not None else (artifact_root(root) / REPORT_OUTPUTS[fmt])
+    ).resolve()
     try:
         text = render_report(matrix, root, out_path.parent, sibling_root, link_mode, ref, fmt)
     except AcceptanceError as e:
@@ -1004,7 +1008,7 @@ def _rebase(root: Path) -> None:
         return
     written: dict[Path, str] = {}
     for s in stale:
-        path = root / s.path
+        path = artifact_root(root) / s.path  # the fold's paths hang from the artifact root
         text = written.get(path, path.read_text())
         written[path] = rebase_amendment(text, s.index, s.revision)
         typer.echo(f"{s.row}: {s.op} amendment re-based {s.base} → {s.revision}")
@@ -1154,6 +1158,38 @@ def add_cmd(
     typer.echo(f"added row {new_row.id} ({new_row.status})")
 
 
+def _init_quiet(root: Path, *, refresh_ci: bool) -> bool:
+    """Under quiet, `init` scaffolds only the fragment directory, in this feature's root
+    on the `fr` branch (p3-r1). The CI gate, the rule file, the `.gitignore` lines and
+    the badge are product-branch files, and a quiet product branch holds no row for them
+    to read (R23). False (nothing done) when the repo is not quiet."""
+    from fr.placement.quiet import read_switch
+    from fr.records_commit import commit_records
+
+    if read_switch(root) is None:
+        return False
+    if refresh_ci:
+        err_console.print(
+            "`fr acceptance init --refresh-ci` is not available under placement quiet: a "
+            "quiet repo keeps no acceptance gate on its product branches (R23)",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    keep = artifact_root(root) / FRAGMENTS_DIR / ".gitkeep"
+    if keep.exists():
+        typer.echo(f"exists  {keep} (left untouched)")
+    else:
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        keep.write_text("")
+        typer.echo(f"created {keep}")
+    typer.echo(
+        "quiet   no CI workflow, rule file, .gitignore lines or badge: under placement quiet "
+        "fr writes nothing on the product branches (R23)"
+    )
+    commit_records(root, [keep], "chore(fr): acceptance init")
+    return True
+
+
 @acceptance_app.command("init")
 def init_cmd(
     with_ci: bool = typer.Option(
@@ -1180,6 +1216,8 @@ def init_cmd(
 
     root = resolve_repo_root()
     _refuse_if_off(root, "`fr acceptance init` scaffolds no matrix, report or CI")
+    if _init_quiet(root, refresh_ci=refresh_ci):
+        return
     try:
         org, repo = resolve_identity(Matrix(), root)
     except AcceptanceError as e:

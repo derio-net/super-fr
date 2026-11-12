@@ -46,12 +46,13 @@ def _refuse(message: str, verb: str = "status") -> NoReturn:
 def plan_of_current_branch(repo_root: Path) -> Path | None:
     """The plan dir recorded by the run whose `branch` is the one checked out
     here; `None` when there is no such run, or the runs disagree."""
+    from fr.artifacts.paths import artifact_root
     from fr.record.model import RUNS_REL
     from fr.run.adopt import current_branch
     from fr.run.model import RunStateError, parse_run_state
 
     branch = current_branch(repo_root)
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if branch is None or not runs_dir.is_dir():
         return None
     plans: set[str] = set()

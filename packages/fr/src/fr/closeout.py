@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from fr.archive import PLANS_REL
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, below
 from fr.journal.model import JOURNALS_REL, SCOPE_DIRS
 from fr.run.model import RUNS_REL
 from fr.usage.file import USAGE_REL
@@ -178,7 +178,7 @@ def plan_sweep(repo_root: Path, evidence: MergeEvidence) -> PlanSweep:
     from fr.render import plan_locally_complete
 
     sweep = PlanSweep(evidence, [], [], [], [])
-    plans_dir = repo_root / PLANS_REL
+    plans_dir = below(repo_root, "plan")
     names = (
         sorted(p.name for p in plans_dir.iterdir() if (p / "_meta.yaml").exists())
         if plans_dir.is_dir()
@@ -271,7 +271,7 @@ def _owed_debug_journals(repo_root: Path, ref_files: frozenset[str] | None) -> l
     same rule `fr archive --branch` uses for a branch's own debug journal."""
     if ref_files is None:
         return []
-    debug_dir = repo_root / JOURNALS_REL / SCOPE_DIRS["debug"]
+    debug_dir = below(repo_root, "journal") / SCOPE_DIRS["debug"]
     if not debug_dir.is_dir():
         return []
     owed: list[Owed] = []
@@ -348,7 +348,7 @@ def _owed_specs(
     held: list[HeldSpec] = []
     if ref_files is None:
         return owed, held
-    specs_dir = repo_root / SPECS_REL
+    specs_dir = below(repo_root, "spec")
     if not specs_dir.is_dir():
         return owed, held
     for spec_path in sorted(specs_dir.glob("*.md")):
@@ -375,7 +375,7 @@ def _owed_orphan_journals(repo_root: Path, ref_files: frozenset[str] | None) -> 
     if ref_files is None:
         return owed
     for scope in ("plan", "spec"):
-        live_dir = repo_root / JOURNALS_REL / SCOPE_DIRS[scope]
+        live_dir = below(repo_root, "journal") / SCOPE_DIRS[scope]
         if not live_dir.is_dir():
             continue
         for p in sorted(live_dir.glob("*.md")):
@@ -390,7 +390,7 @@ def _owed_orphan_journals(repo_root: Path, ref_files: frozenset[str] | None) -> 
                 )
             else:
                 owner_archived = any(
-                    (repo_root / IMPLEMENTED_SPECS_REL / name).is_file()
+                    (below(repo_root, "spec-archived") / name).is_file()
                     and f"{IMPLEMENTED_SPECS_REL / name}" in ref_files
                     for name in (f"{slug}-design.md", f"{slug}.md")
                 )
@@ -409,7 +409,7 @@ def _owed_orphan_runs(repo_root: Path, ref_files: frozenset[str] | None) -> list
     owed: list[Owed] = []
     if ref_files is None:
         return owed
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = below(repo_root, "run")
     if not runs_dir.is_dir():
         return owed
     for cursor in sorted(runs_dir.glob("*.yaml")):

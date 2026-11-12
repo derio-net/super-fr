@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict
 
 from fr.archive_followups import owned_owed_key
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.gatebackfill.forge import OPEN_ISSUE_LIMIT, BackfillForge, Git
 from fr.gatebackfill.model import BackfillError, Manifest, ManifestItem, PlanEntry, PlanFile, PrHit
 from fr.gatebackfill.trackers import fr_gate_marker, fr_passed_marker, is_ours
@@ -161,8 +161,8 @@ def spec_plans(root: Path, spec_rel: str) -> tuple[str, ...]:
         for cell in line.split("|"):
             name = cell.strip().strip("`")
             if re.fullmatch(r"[\w.-]+", name) and name not in found:
-                if (root / PLANS_REL / name).is_dir() or (
-                    root / IMPLEMENTED_PLANS_REL / name
+                if (artifact_root(root) / PLANS_REL / name).is_dir() or (
+                    artifact_root(root) / IMPLEMENTED_PLANS_REL / name
                 ).is_dir():
                     found.append(name)
     return tuple(found)
@@ -197,10 +197,11 @@ def row_spec(root: Path, origins: tuple[str, ...]) -> str | None:
 
 
 def _plan_dir(root: Path, name: str) -> tuple[Path | None, bool]:
-    live = root / PLANS_REL / name
+    base = artifact_root(root)
+    live = base / PLANS_REL / name
     if live.is_dir():
         return live, False
-    archived = root / IMPLEMENTED_PLANS_REL / name
+    archived = base / IMPLEMENTED_PLANS_REL / name
     return (archived, True) if archived.is_dir() else (None, False)
 
 

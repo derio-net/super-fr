@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr.artifacts.atomic import write_text_atomic
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, below
 
 from .sessions import _write_index, read_session_index
 from .types import IsolationError, delete_state, load_state, save_state
@@ -117,6 +117,15 @@ def _cursor_branch_line(name: str) -> re.Pattern[str]:
 
 def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePlan:
     """Read every key and refuse before anything is written (spec §B, R9, R10)."""
+    from fr.placement.quiet import read_switch
+
+    if read_switch(Path(repo_root)) is not None:
+        # p3-r1: under quiet a branch rename moves the feature id, i.e. its path on the
+        # `fr` branch, which needs its own design; refused before any write.
+        raise IsolationError(
+            f"renaming {old} is not available under placement quiet yet: the branch name is "
+            "the feature's path on the `fr` branch. Nothing was written"
+        )
     wt = Path(worktree)
     if _git_path(wt, "rebase-merge").exists() or _git_path(wt, "rebase-apply").exists():
         raise IsolationError(f"{wt} is mid-rebase: finish or abort it before renaming {old}")
@@ -133,7 +142,7 @@ def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePl
     if head not in (old, new):
         raise IsolationError(f"{wt} is not on {old} (HEAD is {head}): refusing to rename")
 
-    runs = wt / RUNS_REL
+    runs = below(wt, "run")  # refused under quiet before this (cli), so the repo layout
     cursors: list[Path] = []
     uncommitted: list[Path] = []
     for f in sorted(runs.glob("*.yaml")) if runs.is_dir() else ():

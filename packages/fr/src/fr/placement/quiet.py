@@ -155,6 +155,18 @@ def switch(root: Path) -> Switch | None:
     return _read(Path(root))
 
 
+def refuse_under_quiet(root: Path, command: str, why: str) -> None:
+    """Refuse *command* BEFORE it writes anything when the repo is quiet (review p3-r1):
+    a writer that cannot yet put its files on the `fr` branch must not leave them in the
+    product checkout, where a plain `git add -A` carries them to the feature branch.
+    Reads the switch alone (no fr worktree is created to refuse)."""
+    if read_switch(Path(root)) is not None:
+        raise SettingsError(
+            f"`{command}` is not available under placement quiet yet: {why}. Nothing was "
+            "written (R23: no fr file reaches a product branch)"
+        )
+
+
 def worktree_path(root: Path) -> Path:
     """`~/.cache/fr/worktrees/<repo>/fr`, beside isolation's own worktrees (same `<repo>`
     as `fr.isolation.types.repo_cache_name`, read without a subprocess)."""

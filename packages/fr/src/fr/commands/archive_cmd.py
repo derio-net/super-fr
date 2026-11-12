@@ -48,7 +48,7 @@ from fr.archive import (
     spec_archive_sweep,
     unticked_manual_phases,
 )
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
 from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from fr.isolation.local import (
@@ -339,7 +339,7 @@ def _archive_follower(repo_root: Path, a: BranchArtifact) -> Path | str:
         return "follows no recorded plan"
     if (repo_root / plan).exists():
         return f"follows plan {plan}, still live"
-    if not (repo_root / IMPLEMENTED_REL / "plans" / Path(plan).name).is_dir():
+    if not (artifact_root(repo_root) / IMPLEMENTED_REL / "plans" / Path(plan).name).is_dir():
         return f"follows plan {plan}, which is neither live nor archived"
     # The orphan rule (§C): its plan is already archived, so it follows.
     try:
@@ -361,11 +361,11 @@ def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
     if not (repo_root / a.path).exists():  # its owner's move carried it
         return dst.relative_to(repo_root)
     if scope == "plan":
-        owner_archived = (repo_root / IMPLEMENTED_REL / "plans" / slug).is_dir()
+        owner_archived = (artifact_root(repo_root) / IMPLEMENTED_REL / "plans" / slug).is_dir()
         owner = f"plan {slug}"
     elif scope == "spec":
         owner_archived = any(
-            (repo_root / IMPLEMENTED_REL / "specs" / name).is_file()
+            (artifact_root(repo_root) / IMPLEMENTED_REL / "specs" / name).is_file()
             for name in (f"{slug}-design.md", f"{slug}.md")
         )
         owner = f"spec {slug}"
@@ -717,6 +717,14 @@ def archive_command(
     entirely. `--sweep-only` is the inverse: just the sweep, for finishing a
     close-out whose plan moves already landed.
     """
+    from fr.placement.quiet import refuse_under_quiet
+
+    refuse_under_quiet(
+        resolve_repo_root(),
+        "fr archive",
+        "under quiet a merged feature is recorded with `merged:` on the `fr` branch, never "
+        "moved to implemented/ (R25), which this fr does not do yet",
+    )
     require_migrated_layout()
     if branch is not None:
         for conflicting, name in (

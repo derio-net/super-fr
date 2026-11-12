@@ -54,7 +54,7 @@ from typing import Any, TypeGuard
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, below
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -210,7 +210,7 @@ def branch_runs(worktree: Path, branch: str) -> list[BranchRun]:
     a mapping), is kept as active and `unreadable`: unknown is not "finished".
     """
     try:
-        paths = sorted((Path(worktree) / RUNS_DIR).glob("*.yaml"))
+        paths = sorted(below(Path(worktree), "run").glob("*.yaml"))
     except OSError:
         return []
     runs: list[BranchRun] = []
@@ -429,7 +429,7 @@ def _collect(run: Runner, worktree: Path, runs: list[BranchRun]) -> _Collector:
         # git cannot read the tree (p4-f10): copy docs/superpowers/ wholesale,
         # base_blob null, so a restore only fills absent paths or reports a
         # conflict — never overwrites on a guess.
-        if (worktree / RECORDS_PREFIX).is_dir():
+        if below(worktree, "superpowers").is_dir():
             c.walk(RECORDS_PREFIX, lambda _p: None, ignored=True)
         return c
     for xy, path, source in entries:
@@ -1035,7 +1035,7 @@ def _live_holder(repo_root: Path, run_id: str) -> tuple[Path, str] | None:
             wt = Path(st.worktree)
             if wt.resolve() == here:
                 continue
-            f = wt / RUNS_DIR / f"{run_id}.yaml"
+            f = below(wt, "run") / f"{run_id}.yaml"
             if not f.is_file():
                 continue
             try:
@@ -1212,7 +1212,7 @@ def _on_default_ref(repo_root: Path, run_id: str) -> str | None:
 
 def _never_existed(repo_root: Path, run_id: str, path: Path) -> str:
     try:
-        ids = sorted(p.stem for p in (Path(repo_root) / RUNS_DIR).glob("*.yaml"))
+        ids = sorted(p.stem for p in below(Path(repo_root), "run").glob("*.yaml"))
     except OSError:
         ids = []
     return (
