@@ -323,3 +323,45 @@ def test_a_held_archived_file_is_held_like_any_other(repo) -> None:
     assert [f.path for f in report.failed] == [repo["a1"]]
     assert b"vk_version" in repo["a1"].read_bytes()
     assert repo["a2"] in report.changed_paths
+
+
+# --- this repo, after its own migration (R13) -----------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+_PHASE_ZERO = "numbers its first phase 0 (00.yaml); PhaseHeader.number is ge=1 on origin/main too"
+
+ARCHIVED_PLANS_THAT_DO_NOT_PARSE: dict[str, str] = {
+    "2026-04-11-plugin-canonical-skills": _PHASE_ZERO,
+    "2026-04-13-workspace-lifecycle-skill-hook": _PHASE_ZERO,
+    "2026-04-14-archive-and-unified-descriptions": _PHASE_ZERO,
+}
+"""Archived plans that fail to parse on `origin/main` too, for a reason that is
+not `vk_version`, by slug, with the reason. History is not rewritten for them."""
+
+
+def test_no_plan_in_this_repo_carries_vk_version() -> None:
+    metas = [
+        *REPO_ROOT.glob("docs/superpowers/plans/*/_meta.yaml"),
+        *REPO_ROOT.glob("docs/superpowers/implemented/plans/*/_meta.yaml"),
+    ]
+    assert metas
+    carriers = [str(p.relative_to(REPO_ROOT)) for p in metas if has_vk_version(p)]
+    assert carriers == [], "run `fr migrate artifacts --yes`"
+
+
+def test_every_archived_plan_in_this_repo_parses() -> None:
+    from fr.parser import parse
+
+    failures: list[str] = []
+    for meta in sorted(REPO_ROOT.glob("docs/superpowers/implemented/plans/*/_meta.yaml")):
+        if yaml.safe_load(meta.read_text()).get("schema_version") != 2:
+            continue
+        slug = meta.parent.name
+        if slug in ARCHIVED_PLANS_THAT_DO_NOT_PARSE:
+            continue
+        try:
+            parse(meta.parent, enforce_fr_version=False)
+        except Exception as e:
+            failures.append(f"{slug}: {type(e).__name__}: {e}")
+    assert failures == [], "\n".join(failures)

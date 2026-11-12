@@ -979,8 +979,8 @@ def test_migrate_preserves_task_intro_with_manual_operation_block(tmp_path):
     assert "Create secrets directory" in all_text
 
 
-def test_migrate_aligns_vk_version_with_create_default(tmp_path):
-    """#245 Minor: migrated plans get the same vk_version as freshly-created ones."""
+def test_migrate_aligns_fr_version_with_create_default(tmp_path):
+    """#245 Minor: migrated plans get the same fr_version as freshly-created ones."""
     from fr import parse
     from fr.migrate import migrate_repo
 
@@ -1199,7 +1199,7 @@ def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
     legacy_plan.mkdir(parents=True)
     (legacy_plan / "_meta.yaml").write_text(
         "schema_version: 2\nplan: 2026-05-10-old\n"
-        "target_repo: derio-net/test\nvk_version: '>=1.0.0,<3.0.0'\ncreated: 2026-05-10\n"
+        "target_repo: derio-net/test\ncreated: 2026-05-10\n"
     )
     spec = sp / "specs" / "2026-05-10-spec.md"
     spec.write_text(

@@ -35,7 +35,6 @@ def _write_plan(plan_dir: Path, phases: list[dict[str, Any]]) -> None:
             schema_version: 2
             plan: 2026-05-18-no-issue-create-fixture
             target_repo: {TARGET_REPO}
-            vk_version: ">=2.0.0,<3.0.0"
             created: "2026-05-18"
             """
         )
