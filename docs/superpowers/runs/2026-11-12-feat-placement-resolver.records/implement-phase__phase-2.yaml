@@ -1,0 +1,19 @@
+schema_version: 11
+run: 2026-11-12-feat-placement-resolver
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T3.S3]
+refactor:
+  P2.T1: "pure literal-to-resolver rewrites; each module was touched once and the result is the shortest spelling (KIND_DIRS constant or kind_dir(space_for(root))), nothing left to clean"
+  P2.T2: "same mechanical rewrites as T1; the per-module constants became derivations of the table, no duplicate left behind"
+journal:
+  - {kind: decision, id: placement-callers-lazy-import-in-refs, title: "fr.refs imports the resolver inside its functions (phase 2)", phase: 2, body: "`import fr` runs fr.parser, which imports fr.refs; a top-level `from fr.artifacts.paths import ...` there runs fr/artifacts/__init__.py, which reaches fr.spec and fr.parser while both are half-initialised (ImportError on _PHASE_FILE_RE). refs.py therefore imports kind_dir/space_for inside _resolve and the one other function that needs them. Every other converted module imports at the top and was checked with a fresh `import <module>`."}
+  - {kind: decision, id: placement-callers-scaffold-placeholders, title: "scaffold templates take their directories from placeholders filled at import (phase 2)", phase: 2, body: "The CI workflow and rule templates are full of braces, `${{ }}` and @@MARKERS@@, so f-strings are unusable. They now carry @@ACC_FRAGMENTS@@ / @@ACC_REPORT@@ and `_render_paths` fills them from KIND_DIRS once, at import; the rendered text is byte-identical (the scaffold tests are unchanged)."}
+  - {kind: decision, id: placement-callers-row-spec-resolver, title: "gatebackfill.row_spec follows the resolver (phase 2)", phase: 2, body: "Phase 1's review found row_spec checked `root / rel`, so a spec in a feature root outside the repo was missed. A logical spec origin now resolves through resolve_logical_at; a path origin is looked up in every feature_roots entry. The result is repo-relative under the repo and absolute elsewhere (as resolve_logical does). A new test pins the out-of-repo case."}
+  - {kind: discovery, id: placement-callers-validate-plans-shell, title: "validate-plans.sh reads its directories from `fr settings paths --shell` with literal fallbacks (phase 2)", phase: 2, body: "Both copies (scripts/ and packages/fr/src/fr/data/) changed identically: the script evals the resolver's FR_* lines when `fr` is on PATH and answers, else uses the repo layout's own literals (commented as such). The tripwire scans .py only; phase 6 owns the remaining shell surfaces. The script's pre-existing BSD-sed incompatibility on macOS is untouched."}
+  - {kind: discovery, id: placement-callers-registry-tripwire, title: "a kind-name tuple in batch_drive tripped the artifact-kinds tripwire (phase 2)", phase: 2, body: "`tuple(KIND_DIRS[k] for k in (\"plan\", \"spec\", ...))` is a second enumeration of kinds. ARCHIVE_DIRS is now five subscripts, which the detector does not read as a list of names."}
+  - {kind: discovery, id: placement-callers-red-order, title: "the tripwire's RED was taken after the conversion, not before (phase 2)", phase: 2, body: "The plan's steps remove modules from PENDING first and watch the tripwire name them. Here the 64 modules were converted in one sweep and PENDING emptied after, so the detector (which still fails a module with a literal left, as the scaffold and isolation/local.py leftovers showed) was the proof. PENDING's machinery is kept (empty): the stale-entry test and the 'only shrinks' contract are what the next exemption would need."}
+  - {kind: discovery, id: placement-callers-pages-restamped, title: "twenty docs pages were restamped, none edited (phase 2)", phase: 2, body: "The sweep touched modules covered by 20+ pages (`fr docs check` said so); none describes a path or behaviour that changed, so each reviewed stamp names this phase and says so."}
+resolves: []
+evidence: {}
