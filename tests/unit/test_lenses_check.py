@@ -78,3 +78,18 @@ def test_a_malformed_shipped_manifest_is_a_problem_not_a_crash(
 
     assert len(problems) == 1, problems
     assert "invalid YAML" in problems[0]
+
+
+def test_a_head_config_disabling_a_lens_a_base_only_rule_requires_is_a_problem(
+    tmp_path: Path,
+) -> None:
+    from tests.unit.lens_repo import lens_repo
+
+    root = lens_repo(
+        tmp_path, base_config="require:\n  - paths: ['src/auth/**']\n    lenses: [security]\n"
+    )
+    _write(root, "disable: [security]\n")
+
+    problems = check_config(root)
+
+    assert any("disables security" in p and "src/auth/**" in p for p in problems), problems
