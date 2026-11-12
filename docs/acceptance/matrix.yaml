@@ -11243,9 +11243,12 @@ rows:
       from the front page
     origin:
     - super-fr:docs/superpowers/specs/2026-11-12-landing-front-page-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_every_configured_page_parses_with_fr_docs
+    status: ci
+    notes: fr docs check and the page-parsing tripwire (which now lists why-fr.md) run
+      in CI; the question-round tripwire covers it too.
     verify: none
   - id: site-front-page-published
     capability: published docs
