@@ -1,16 +1,19 @@
 schema_version: 11
 run: 2026-11-12-claude-vigilant-hopper-sfd7vk
-workflow: fr-goal@1
+workflow: fr-goal-light@1
 branch: claude/vigilant-hopper-sfd7vk
 started: '2026-11-12T07:48:15+00:00'
-cursor: brainstorm
+cursor: plan
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-12T07:48:27+00:00'
-  spec-review:
-    state: pending
+    state: done
+    at: '2026-11-12T07:57:15+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-12-landing-front-page-design.md
   plan:
+    state: pending
+  spec-plan-review:
     state: pending
   plan-review:
     state: pending

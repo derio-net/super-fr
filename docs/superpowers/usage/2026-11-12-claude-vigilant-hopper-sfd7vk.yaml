@@ -1,0 +1,63 @@
+schema_version: 2
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+captures:
+- host: h-93985a91
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-12T07:57:16+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 671e7103-998b-587e-980b-da83b609e16c
+    role: main
+    models:
+      claude-fable-5-2:
+        input: 34
+        cache_write: 139005
+        cache_read: 2734063
+        output: 22550
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 2
+      other:
+        usd: null
+        turns: 10
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 5
+        input: 10
+        cache_write: 88392
+        cache_read: 661879
+        output: 1634
+      brainstorm:
+        usd: null
+        turns: 12
+        input: 24
+        cache_write: 50613
+        cache_read: 2072184
+        output: 20916
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 5
+          input: 10
+          cache_write: 88392
+          cache_read: 661879
+          output: 1634
+        brainstorm:
+          usd: null
+          turns: 12
+          input: 24
+          cache_write: 50613
+          cache_read: 2072184
+          output: 20916
+    briefs:
+      toolu_01MGKjsfr3Yzyy44XjsiYevj: 350
