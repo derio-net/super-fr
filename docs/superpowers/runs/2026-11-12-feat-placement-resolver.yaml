@@ -55,12 +55,19 @@ steps:
           tests: p1-suite.log@0491e1afc51f;tree=c8b9113639a579a4c41bb1bd948d5de0381bef583808d62c1ed8fb82af042daa
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-12T13:06:05+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
+          returned: '2026-11-12T13:26:46+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-1
+          reviewer: ae13d3036616d4b79
+          visual: none
+          findings: placement-resolver-row-ci-ahead-of-shell-side,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6
   journal-check:
     state: pending
   deliver:

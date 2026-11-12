@@ -81,3 +81,77 @@ the detector is two small predicates and one walk; PENDING was pasted from its o
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 a scenario, a row move and docs prose; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-11-12T13:26:46+00:00 phase=1 -->
+### review-phase-1 · review · Phase 1 review (resolver): five in-scope findings, all fixed; one out of scope, filed as #1419 (phase 1)
+
+Independent reviewer over `git diff 0b0585288..9874212ba`. Repo-placement locators are
+byte-identical to the old ones, `fr settings paths` quotes with shlex and exits 2 on bad
+flags and settings refusals, the scenario is wired, docstring exclusion and the stale-entry
+check of the tripwire work, and the change fragment fits the one-PR run. Fixes landed in
+4126c3299, bc85621d4, 9a4b76514, 178adaf56 and 5e7703c67.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-12T13:26:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · Tripwire missed Path("docs") / "superpowers", Path("docs", ...), joinpath, segment tuples and "superpowers/..." right segments; 7 unlisted modules hardcoded paths and passed (phase 1)
+
+Phase 2's proof (PENDING ends empty) would have gone green with records, usage files and renames still writing into the repo.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-12T13:26:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · placement-resolver row moved to ci while its acceptance text (all surfaces read the resolver) is not yet true (phase 1)
+
+The report and fr debt would show unpaid debt as paid.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-12T13:26:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · space_for took any non-repo placement on any origin/fr as a switch, unvalidated (phase 1)
+
+placement: stealth or foo, or garbage YAML on an unrelated fr branch, made every logical resolve refuse with a misleading message.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-12T13:26:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · resolve_logical's absolute return for out-of-repo feature roots made as_path_ref and origin_spec_path emit <repo>:/abs/path refs (phase 1)
+
+Broken refs, and a local home path leaking into derived reports.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-12T13:26:46+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · KIND_DIRS lacked directories live code uses (implemented/usage, archived-specs, implemented/audits) (phase 1)
+
+The names fr settings paths prints would have kept moving after phase 6's hooks start reading them.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-11-12T13:26:46+00:00 phase=1 state=open review_scope=out -->
+### p1-r6 · finding [open] (reviewer: out of scope) · branch_slug is not injective (feat/a__b and feat__a/b share a slug), now reused as the quiet/stealth feature id (phase 1)
+
+Pre-existing in isolation's worktree naming; filed as derio-net/super-fr#1419.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-12T13:26:46+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: Tripwire missed Path("docs") / "superpowers", Path("docs", ...), joinpath, segment tuples and "superpowers/..." right segments; 7 unlisted modules hardcoded paths and passed (phase 1)
+
+4126c3299: the tripwire splits every join into segments and flags docs followed by superpowers/acceptance across / chains, Path(), joinpath, os.path.join, other calls and tuples/lists; planted cases for all eight forms; PENDING re-derived 57 -> 64 and every module outside it scanned clean.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-12T13:26:46+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: placement-resolver row moved to ci while its acceptance text (all surfaces read the resolver) is not yet true (phase 1)
+
+bc85621d4: row back to not-implemented with phase 1's unit refs kept; it moves to ci when phase 2 empties PENDING and phase 6 lands the shell side.
+
+<!-- fr:journal kind=finding scope=plan id=placement-resolver-row-ci-ahead-of-shell-side-resolved created=2026-11-12T13:26:46+00:00 phase=1 state=fixed resolves=placement-resolver-row-ci-ahead-of-shell-side -->
+### placement-resolver-row-ci-ahead-of-shell-side-resolved · finding [fixed] · resolves placement-resolver-row-ci-ahead-of-shell-side: placement-resolver is ci while the tripwire still has 57 PENDING modules and the shell side is unbuilt (phase 1)
+
+Same defect as p1-r2, fixed by bc85621d4.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-12T13:26:46+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: space_for took any non-repo placement on any origin/fr as a switch, unvalidated (phase 1)
+
+9a4b76514: the switch is parsed by parse_settings_text (servable=False skips only the placement check); quiet is the switch, stealth is refused by R24's rule, unknown values/keys and invalid YAML refuse in the loader's wording, each naming refs/remotes/origin/fr:settings.yaml. An fr branch saying repo, or with no settings.yaml, stays no switch.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-12T13:26:46+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: resolve_logical's absolute return for out-of-repo feature roots made as_path_ref and origin_spec_path emit <repo>:/abs/path refs (phase 1)
+
+178adaf56: a Resolved result (feature root + relative path) and resolve_logical_at; as_path_ref and origin_spec_path always print the relative path; test with a fake out-of-repo feature root asserts no absolute path appears.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-12T13:26:46+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: KIND_DIRS lacked directories live code uses (implemented/usage, archived-specs, implemented/audits) (phase 1)
+
+5e7703c67: usage-archived, spec-legacy-archived and audit-archived added with shell names; existing values byte-identical; EXPECTED_DIRS updated.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-11-12T13:26:46+00:00 phase=1 state=open resolves=p1-r6 out_of_scope=true -->
+### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: branch_slug is not injective (feat/a__b and feat__a/b share a slug), now reused as the quiet/stealth feature id (phase 1)
+
+branch_slug predates this plan and its collision already exists for isolation worktrees; tracked as derio-net/super-fr#1419.
