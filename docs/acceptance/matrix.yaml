@@ -11221,9 +11221,13 @@ rows:
       page, its Explainers, Guides and Reference lists and GitHub work from every route
     origin:
     - super-fr:docs/superpowers/specs/2026-11-12-landing-front-page-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_the_bar_links_are_right_from_every_route_depth
+      - super-fr:tests/unit/test_build_site.py#test_a_good_build_writes_every_page_with_its_bar
+    status: ci
+    notes: Unit tests insert the bar at each route depth and check its links; the site-build
+      CI job fails when a page cannot take it; screenshots taken at implement.
     verify: none
     visual:
       states:
