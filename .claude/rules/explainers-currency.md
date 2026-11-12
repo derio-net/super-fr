@@ -24,8 +24,24 @@ would now be misled.
 Only the `.md`. There is nothing to regenerate and nothing to commit beside it:
 `docs/explainers/*.html` is git-ignored and `tests/unit/test_tripwire_explainers_fresh.py`
 fails if one is tracked. A page needs front matter with `title`, `tldr`,
-`standalone_style: broadsheet`, `covers` and `reviewed`. The index lists every other page
-at the `<!-- site:pages -->` marker, from their `title` and the first sentence of `tldr`.
+`standalone_style: broadsheet`, `covers` and `reviewed`. Every built page, the front page included, carries a top bar
+(`scripts/site/bar.css`): the site name, links to the front page's Explainers, Guides and
+Reference lists, and GitHub. `why-fr.md` is the long essay on why fr is trustworthy.
+
+**The front page** is `docs/explainers/index.md` with `layout: landing`. It is not rendered by
+blog-craft: `scripts/build-site.py` renders it from `scripts/site/landing.html` and
+`landing.css`, and copies the fonts and the dark palette from a page blog-craft rendered in the
+same build. Its front matter carries `hero` (`headline`, `subline` and `primary: {label, href}`
+are required; `eyebrow`, `command` and `secondary` are optional) and `facts` (`figure` and
+`caption`). The body is split at `## ` headings, and a `<!-- landing:<kind> -->` line under a
+heading names the section: `flow` (one ordered list, `{you}` marks the operator's steps),
+`guarantee` (a blockquote problem, the gain and how, and a last paragraph holding exactly one
+link; six to eight of them, numbered by the build), `pages` (needs the `<!-- site:pages -->`
+marker), `cta`, or none for plain prose. A claim on it must be one the page it links to already
+makes. The build fails, naming the page, on a missing hero key, an unknown kind, a malformed
+section, a link to an untracked path, `layout: landing` anywhere but the page routed to
+`index.html`, a rendered page with no embedded font, or one that cannot take the top bar. A
+change under `scripts/site/` deploys the site.
 A relative link to another page's `.md` becomes its route; a link to any other tracked file
 becomes a GitHub link at the built commit; a link to a path git does not track fails the
 build. `./acceptance/` is the one site route a page may name directly.
@@ -66,7 +82,8 @@ and look at the pages: a renderer change shows up in every page at once.
 - `fr docs check` — the currency gate, in CI and at `deliver`.
 - `tests/unit/test_tripwire_explainers_fresh.py` — no rendered explainer is tracked, and
   every configured page parses with `fr.docs`.
-- `tests/unit/test_build_site.py` — routes, link rewriting and the index list; this repo's
+- `tests/unit/test_build_site.py` — routes, link rewriting, the landing parser and its refusals,
+  the landing and top-bar renderers, and that this repo's own `index.md` is a valid landing;
   `/`, `/01-fr-goal.html` and `/fr-isolation.html` stay published.
 - `tests/unit/test_pages_workflow.py` — the deploy's triggers, the build step and the pin.
 - `tests/unit/test_tripwire_fr_goal_question_rounds.py` — the question-round wording on

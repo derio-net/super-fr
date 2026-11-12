@@ -1,187 +1,150 @@
 ---
-title: "fr: The Trustworthy Agent"
-date: 2026-11-11
-draft: false
+title: "fr: agent work you can merge"
 tldr: |
-  fr is not a faster way to write code. It is a way to make an autonomous
-  agent's output trustworthy, so the pull request that lands is as durable,
-  secure, testable, maintainable and correct as one a careful engineer would
-  open. Autonomous where it is safe, human exactly where judgment matters.
+  fr turns one goal into one reviewed pull request. The agent works in an isolated
+  workspace, a separate reviewer checks each stage, and you keep the merge and every
+  step that should not be automated.
 standalone: true
 standalone_style: broadsheet
+layout: landing
+hero:
+  eyebrow: "super-fr"
+  headline: "Give an agent a goal. Merge a PR you trust."
+  subline: "fr turns one goal into one reviewed pull request, built in an isolated workspace and checked by a separate reviewer at every stage. You answer one question round up front, and the merge stays yours."
+  command: "/fr-goal add rate limiting to the webhook receiver"
+  primary: {label: "See how a run works", href: "01-fr-goal.md"}
+  secondary:
+    - {label: "Install", href: "../reference/install.md"}
+    - {label: "GitHub", href: "https://github.com/derio-net/super-fr"}
+facts:
+  - {figure: "1", caption: "question round before the build, rarely two"}
+  - {figure: "1", caption: "pull request per goal"}
+  - {figure: "0", caption: "self-merges: you merge"}
+  - {figure: "3", caption: "harnesses: Claude Code, OpenCode and Hermes"}
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 repo-feature-settings, delivery through fr, settable ask and forge-quiet
+reviewed: 2026-11-12 rewritten as the landing front page
 ---
 
-## The premise
+## How a run goes
+<!-- landing:flow -->
 
-You type a sentence, such as "add rate limiting to the webhook receiver", and an
-agent designs it, builds it test-first, reviews its own work, and opens a single
-pull request. Between those two moments sits everything that separates a demo
-from something you would actually merge.
+1. **Isolate.** The run moves into a private workspace before anything is written.
+2. {you} **One question round.** You answer the design questions once, and the agent commits to a written spec.
+3. **Spec, then plan.** Both are reviewed before any code exists.
+4. **Build test-first.** One phase at a time, with a review inside every phase.
+5. **Review at every stage.** A separate reviewer reads the spec, the plan and each slice.
+6. **One pull request.** The agent delivers it and never merges it.
+7. {you} **The manual phase.** Secrets, deploys and other risky steps are done by you, with the agent guiding.
+8. {you} **Merge, then the Test Plan.** You merge, then confirm what the agent cannot reach.
 
-The interesting engineering in fr is not the writing. It is the scaffolding
-around the writing: the guarantees that let you leave the room. Each feature
-below earns its place by making the delivered PR trustworthy in one specific
-way. Nothing is decoration.
+## The agent cannot touch what it should not
+<!-- landing:guarantee -->
 
-Trust is not a vibe. It is assembled, one guarantee at a time.
+> An agent with write access to your checkout can collide with your in-flight work, and the commands it generates run with your credentials.
 
-## The flow: /fr-goal
+**What you gain.** Your clone is never touched, and the agent only holds what its workspace was explicitly granted.
 
-The same sequence runs every time, in an isolated workspace, and it only pauses
-at the four moments where a human's judgment actually changes the outcome. The
-diagram shows the order; the list under it says which steps are yours.
+**How.** Every run happens in a private git worktree outside your clone. By default its commands run in a sealed container with scoped credentials. A hook checks every edit against a marker in the workspace and refuses an edit to your clone before it reaches disk. Two docker-less modes keep the worktree and drop the container.
 
-```mermaid
-flowchart TD
-  A[Isolate] --> B[Brainstorm and one question round]
-  B --> C[Spec and plan]
-  C --> D[Build test-first, phase by phase]
-  D --> E[Adversarial review at every stage]
-  E --> F[Deliver one pull request]
-  F --> G[The manual phase, co-driven]
-  G --> H[Merge, then the Test Plan]
-```
+[How isolation works](fr-isolation.md)
 
-1. **Isolate (precondition).** Before a single line is written, the run moves into
-   a private workspace: a throwaway copy of the repo, with its commands running in a
-   sealed container by default (on a host without Docker, or in a container someone
-   already prepared, the throwaway copy alone is the workspace). If the repo has never been set up, the run stops and interviews
-   you once. There is no "run it directly" fallback.
-2. **Brainstorm and one question round (you decide).** The agent designs the feature
-   and asks one question round sized to the feature, rarely two, and only when
-   announced up front or you ask, then commits to a written spec. Intent is pinned
-   here, on the record, so nothing downstream has to guess what you meant.
-3. **Spec, then plan (agent).** The design becomes a durable spec and a phase-by-phase
-   plan stored in the repo. Both are reviewed before anyone writes code, so a bad plan
-   is caught while it is still cheap.
-4. **Build, test-first, phase by phase (agent).** Each slice is written the disciplined
-   way: the test first, then the code that satisfies it. Every command runs inside the
-   workspace, never against your own checkout.
-5. **Adversarial review at every stage (agent).** The spec, the plan and every
-   implementation slice face an independent review whose job is to find what is wrong.
-   Every finding is fixed before the work moves on, not deferred to a human's patience
-   later.
-6. **Deliver one pull request (agent).** The whole feature arrives as a single,
-   coherent PR. It is pushed and opened through fr (`fr push`, `fr pr create`), so the
-   repo's settings (`fr settings show`) can require it to ask you before the push and
-   the PR, and can keep fr's labels, comments and issues off the forge. The agent never
-   merges its own work: delivery and approval are kept
-   apart on purpose.
-7. **The manual phase, co-driven (you and the agent).** Anything a machine should not do
-   alone (secrets, a production toggle, a deploy) is quarantined into the plan's final
-   phase. The PR ships with it deliberately unfinished; you do that step, with the agent
-   scaffolding and guiding it, and push to the same PR.
-8. **Merge, then the Test Plan (you and the agent).** You review and merge. If the change
-   ships to real users, the spec carries a post-merge Test Plan the agent walks through
-   with you. It runs the checks it can reach and you confirm the ones it cannot, before
-   the workspace is torn down.
+## It asks you once, then builds from a written spec
+<!-- landing:guarantee -->
 
-## Why every feature exists: five guarantees
+> You hand an agent a sentence and it starts coding. Whether it built what you meant is luck.
 
-Read the pipeline again through this lens and it stops looking like ceremony. Every
-step is buying one of these properties for the code it produces.
+**What you gain.** Your intent is pinned down before the build, so nothing downstream has to guess it.
 
-### 1. Secure: the agent cannot touch what it should not
+**How.**
 
-By default every run happens in two nested boundaries. A private worktree means your actual
-checkout is never touched: no stray branches, no half-finished state, nothing to clean
-up if the run goes wrong. A sealed container means the agent only ever holds the
-credentials that workspace was explicitly granted. The two docker-less modes keep
-the worktree and drop the container, so there the agent holds what the host process
-holds; [fr-isolation](fr-isolation.md) explains all three.
+- You answer one question round sized to the feature. A second follows only when announced up front or when you ask, and there is never a third.
+- The result is a spec with numbered requirements, then a plan cut into phases whose steps have ids, so progress is a fact on disk.
+- The brainstorm also asks how the change will be proven before merge.
 
-- The default workspace is least-privileged: it carries no tokens at all, and a
-  privileged profile is a deliberate opt-in.
-- There is no unisolated mode. A repo that is not set up is a stop-and-configure moment,
-  never a quiet fallback to running loose on your machine.
+[From an idea to a plan](fr-brainstorming-and-plan.md)
 
-### 2. Correct: wrong is caught early, by something adversarial
+## A separate reviewer reads the work, at every stage
+<!-- landing:guarantee -->
 
-Correctness is defended in three places at once. Intent is pinned up front at one
-operator gate (a question round sized to the feature, rarely two), so the build is not
-chasing a moving target. Construction is test-first, so behaviour is specified before it
-is implemented. And judgment comes from independent adversarial reviews at each
-meaningful stage.
+> An agent that grades its own work will pass it.
 
-- Reviews run against the spec, the plan and every implementation slice, not just once at
-  the end.
-- Every finding is fixed before the work advances. There is no backlog of "known issues"
-  quietly riding along in the PR.
+**What you gain.** Findings are caught while they are cheap, and a review you can trust is one the author did not write.
 
-### 3. Testable: proof the feature works, and stays honest
+**How.**
 
-Two mechanisms carry testability past the merge. The post-merge Test Plan verifies the
-change in the real world, co-driven so nothing that needs a human's eyes gets rubber-
-stamped. The acceptance matrix tracks business-level truths ("an operator can do X") as
-first-class, durable tests.
+- The spec, the plan and every implementation slice are reviewed before the work moves on.
+- A phase's review has to name the separate reviewer that did it, never the agent that wrote the code.
+- Delivery has to name a test run the orchestrator ran itself. A finding the change caused is fixed; one it did not cause is filed and listed in the PR for you.
 
-- Acceptance rows are born at design time, presented for defense in the same question
-  round, and linked to the plan phases that satisfy them.
-- Each row carries an honesty status (automated-and-cannot-drift, verified-but-manual,
-  not-yet, or known-failing-on-purpose), so the matrix can never quietly overstate
-  coverage.
+[How a run works, step by step](01-fr-goal.md)
 
-### 4. Durable: the result survives contact with reality
+## Proof that stays honest: the acceptance matrix
+<!-- landing:guarantee -->
 
-Durability is about the work holding together after the excitement of the build. The
-feature ships whole: the risky human step is back-loaded into the plan so the PR is never
-left half-integrated waiting on it. Cleanup is guaranteed, and guardrails stop the classic
-after-the-fact mistakes.
+> A green test suite can sit on top of a product that does not do what anyone asked.
 
-- A merged-PR guard refuses pushes onto a branch whose PR is already closed, so a late
-  commit cannot orphan itself off the main line.
-- Workspaces are reconciled and torn down, so an unattended run does not leave a graveyard
-  of containers behind it.
+**What you gain.** A list of what a person can do with the product, and an honest read of how well each claim is proven.
 
-### 5. Maintainable: the next person can follow what happened
+**How.** Each row of the matrix is one business-level claim with the tests that verify it. Its status runs from automated, through proven live, to not yet implemented and known failing, and it moves only with a recorded reason. CI exits non-zero on a failing row, and where a claim sits between automated and unwired the rule is to choose unwired.
 
-Everything the agent does leaves a legible trail. The spec and plan live in the repo as
-durable documents, not a chat log that scrolls away. Delivery is always a reviewable PR.
-And the acceptance matrix doubles as living documentation of what the system actually
-promises its users.
+[The acceptance matrix](fr-acceptance.md)
 
-- New acceptance rows added mid-flight are diffable and defended in the PR: scope growth
-  is visible, never silent.
-- Plans are structured, phase-by-phase artifacts, so picking the work back up later reads
-  like a table of contents, not archaeology.
+## One pull request, never self-merged; the risky step stays yours
+<!-- landing:guarantee -->
 
-## Autonomy with seams
+> Some steps should not be automated: creating a key, rotating a token, restarting a service.
 
-fr is unattended almost end to end. It stays that way precisely because it does not try
-to automate the four things a human should own; it designs clean seams around them
-instead.
+**What you gain.** A pull request you review and merge, and a record of the operations around it instead of a note in a description.
 
-| Seam | When | What you do |
-|---|---|---|
-| The question round | once, up front | Answer the design questions in one round sized to the feature, before the build. A second round is announced up front or asked for by you, never a third. You set direction at one gate; the agent does not interrupt you eight times later. |
-| The manual phase | back-loaded | Drive the secrets, deploys and UI operations isolated into a final phase, with the agent preparing and guiding the step rather than handing it off blind. |
-| The merge | the gate | Approve. The agent delivers and you approve; keeping authorship and merge authority apart is the oldest safety rule in engineering, kept deliberately intact. |
-| The Test Plan | after the fact | Confirm what the agent cannot reach in a co-driven post-merge walkthrough for anything that reaches real users. |
+**How.**
 
-## Go deeper
+- The agent delivers the pull request and never merges it.
+- Each manual operation becomes a typed record with a probe that says whether it is done.
+- One command, `fr ops gate`, sequences those operations around the merge at your terminal. It refuses non-interactive contexts, so a delivering agent cannot run it, and it resumes at the first stage not yet recorded.
 
-- **The pipeline.** [fr-goal: one conversation, then a reviewed PR](01-fr-goal.md) is the
-  full local flow, step by step: brainstorm, a question round sized to the feature, spec,
-  plan, test-first build, review, merge, and the post-merge Test Plan.
-- **The boundary.** [fr-isolation: the sandbox an agent cannot walk out of](fr-isolation.md)
-  explains how "never touches your checkout" is made literally true: worktree, container,
-  and a marker no copy can fake.
-- **Coverage.** The [acceptance report](./acceptance/) lists every business-level promise
-  and how it is proven.
+[The DevOps gate](fr-devops-gate.md)
+
+## A trail you can read afterwards, with its cost
+<!-- landing:guarantee -->
+
+> When a run is done, can you say what it did and what it cost?
+
+**What you gain.** Where the money went, from the harness's own records, and a way to tell whether a process change made runs cheaper.
+
+**How.** `fr usage` reads what the harness recorded and takes the dollar figure it reports. It splits that across what the session was doing and which step it was in, and never prices a token itself. A figure nobody could observe prints as a dash, not as zero. `fr usage compare` sets two groups of runs side by side.
+
+[Auditing a run's cost](fr-audit.md)
+
+## From one goal to a backlog
+<!-- landing:guarantee -->
+
+> A single goal is easy to hand over. A whole backlog of issues is not.
+
+**What you gain.** Judgements about the backlog that survive between runs, and a group of related issues shipped as one reviewed pull request.
+
+**How.** `fr triage` keeps your judgements in a file that the engine reads and writes around, so a re-run costs only what is new. A batch is a group of judged issues delivered as one fr-goal run and one pull request.
+
+[Ranking a backlog with fr-triage](fr-triage.md)
+
+## The long read
+<!-- landing:prose -->
+
+If you want the whole argument in one page, [why fr is built around trust](why-fr.md) walks through the pipeline and the five properties each guarantee buys.
 
 ## Every page
+<!-- landing:pages -->
+
+The [acceptance report](./acceptance/) lists every business-level promise and how it is proven.
 
 <!-- site:pages -->
 
 ## Try it
+<!-- landing:cta -->
 
-In any repo (fr sets up the isolated workspace itself the first time), this is the entry
-point to everything above:
+In any repo, this is the entry point to everything above. fr sets up the isolated workspace itself the first time.
 
-```text
-/fr-goal add rate limiting to the webhook receiver
-```
+`/fr-goal add rate limiting to the webhook receiver`
+
+[See how a run works](01-fr-goal.md) [Install](../reference/install.md)

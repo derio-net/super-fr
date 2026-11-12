@@ -1,0 +1,88 @@
+/* The landing page's styles. The dark palette and the fonts are NOT defined here:
+   the build copies them from a page blog-craft rendered in the same build, so this
+   file only lays out and supplies the light set (spec 2026-11-12-landing-front-page B). */
+*,*::before,*::after{box-sizing:border-box}
+html{font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{margin:0;font-family:var(--serif);color:var(--paper);background:var(--ink)}
+a{color:var(--brass);text-decoration-thickness:1px;text-underline-offset:.18em}
+a:hover{color:var(--paper)}
+a:focus-visible{outline:2px solid var(--brass);outline-offset:3px;border-radius:2px}
+code,pre{font-family:var(--mono)}
+code{font-size:.88em}
+pre{overflow-x:auto;padding:1rem 1.1rem;background:var(--panel);border:1px solid var(--line-2);border-radius:6px;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding:0 1.5rem}
+.narrow{max-width:720px}
+
+/* hero */
+.hero{padding:5.5rem 0 4rem;border-bottom:1px solid var(--line-2);
+  background:radial-gradient(70rem 26rem at 18% -6rem,color-mix(in srgb,var(--brass) 14%,transparent),transparent 70%),var(--ink)}
+.eyebrow{margin:0 0 1.25rem;font-family:var(--mono);font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass)}
+.hero h1{margin:0;max-width:16ch;font-family:var(--display);font-optical-sizing:auto;font-weight:600;font-size:clamp(2.6rem,7.2vw,5rem);line-height:1.03;letter-spacing:-.02em;color:var(--paper)}
+.subline{margin:1.6rem 0 0;max-width:36rem;font-size:1.28rem;line-height:1.55;color:var(--paper-dim)}
+.command{display:block;margin:2rem 0 0;max-width:100%;padding:.85rem 1.1rem;font-family:var(--mono);font-size:.95rem;line-height:1.5;color:var(--paper);background:var(--panel);border:1px solid var(--line-2);border-left:3px solid var(--brass);border-radius:4px;overflow-wrap:anywhere;white-space:normal}
+.command::before{content:"> ";color:var(--brass)}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:.9rem 1.6rem;margin:2.2rem 0 0}
+.btn{display:inline-block;padding:.8rem 1.5rem;font-family:var(--display);font-weight:600;font-size:1.05rem;line-height:1.2;color:var(--ink);background:var(--brass);border:1px solid var(--brass);border-radius:4px;text-decoration:none}
+.btn:hover{color:var(--ink);background:color-mix(in srgb,var(--brass) 82%,var(--paper))}
+.link{font-family:var(--display);font-weight:500;color:var(--paper);text-decoration-color:var(--brass)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:1.5rem 2rem;margin:3.5rem 0 0;padding:1.6rem 0 0;border-top:1px solid var(--line-2);list-style:none}
+.facts li{display:flex;flex-direction:column;gap:.15rem}
+.facts strong{font-family:var(--display);font-weight:600;font-size:2.4rem;line-height:1;color:var(--brass)}
+.facts span{font-size:.95rem;line-height:1.4;color:var(--muted)}
+
+/* sections */
+.band{padding:4.5rem 0;border-bottom:1px solid var(--line)}
+.band h2{margin:0;font-family:var(--display);font-weight:600;font-size:clamp(1.8rem,4.2vw,2.6rem);line-height:1.12;letter-spacing:-.01em;color:var(--paper)}
+.band p{margin:1rem 0 0;color:var(--paper-dim)}
+.band ul{margin:1rem 0 0;padding-left:1.3rem;color:var(--paper-dim)}
+.band li{margin:.3rem 0}
+.band p strong:first-child{color:var(--paper)}
+.kicker{margin:0 0 1.1rem;font-family:var(--mono);font-size:.82rem;letter-spacing:.14em;color:var(--brass)}
+
+/* the run strip */
+.flow{background:var(--ink-2)}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem;margin:2rem 0 0;padding:0;list-style:none;counter-reset:step}
+.step{position:relative;display:flex;flex-direction:column;gap:.5rem;min-height:7.5rem;padding:1rem 1.1rem 1.1rem;background:var(--panel);border:1px solid var(--line-2);border-radius:6px;font-size:.98rem;line-height:1.5;color:var(--paper-dim);counter-increment:step}
+.step::before{content:counter(step,decimal-leading-zero);font-family:var(--mono);font-size:.78rem;letter-spacing:.1em;color:var(--faint)}
+.step.yours{border-color:var(--brass);border-top-width:3px;color:var(--paper)}
+.step.yours::before{color:var(--brass)}
+.you-tag{position:absolute;top:.85rem;right:1rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--brass)}
+.legend{margin:1.2rem 0 0;font-size:.9rem;color:var(--muted)}
+
+/* a numbered guarantee */
+.problem{margin:0 0 1.5rem;max-width:40rem;font-style:italic;font-size:1.12rem;line-height:1.55;color:var(--muted)}
+.problem p{margin:0;color:inherit}
+.guarantee .body{max-width:40rem}
+.more{display:inline-block;margin:1.5rem 0 0;padding:.45rem 0;font-family:var(--display);font-weight:600;font-size:1.02rem;color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass)}
+.more::after{content:" \2192"}
+.more:hover{color:var(--paper);border-bottom-color:var(--paper)}
+
+/* the page list */
+.pages h3{margin:2.4rem 0 .6rem;font-family:var(--mono);font-weight:400;font-size:.82rem;letter-spacing:.16em;text-transform:uppercase;color:var(--brass);scroll-margin-top:1rem}
+.pages ul{margin:0;padding:0;list-style:none;columns:2 20rem;column-gap:2.5rem}
+.pages li{break-inside:avoid;margin:0 0 1rem}
+.pages li a{font-family:var(--display);font-weight:600;color:var(--paper);text-decoration-color:var(--line-2)}
+.pages li a:hover{color:var(--brass)}
+.pages li span{display:block;font-size:.93rem;line-height:1.5;color:var(--muted)}
+
+/* closing call to action */
+.cta{padding:5rem 0 6rem;text-align:left;background:var(--ink-2)}
+.cta .buttons{display:flex;flex-wrap:wrap;align-items:center;gap:.9rem 1.6rem;margin:1.8rem 0 0}
+.cta .buttons a:not(.btn){font-family:var(--display);font-weight:500;color:var(--paper);text-decoration-color:var(--brass)}
+
+@media (max-width:720px){
+  html{font-size:16px}
+  .wrap{padding:0 1.15rem}
+  .hero{padding:3.5rem 0 2.75rem}
+  .band{padding:3rem 0}
+  .cta{padding:3.5rem 0 4rem}
+  .pages ul{columns:1}
+}
+
+/* light: the same names, lighter values. Brass darkens to keep 4.5:1 on paper. */
+@media (prefers-color-scheme: light){
+  :root{--ink:#f7f3ea;--ink-2:#efe8d8;--panel:#fffdf7;--paper:#1c1a16;--paper-dim:#3b372f;--muted:#5c564a;--faint:#7a7466;--line:#ddd5c0;--line-2:#cdc3a9;--brass:#8a5509;--teal:#1d625b;--rust:#9b3f1c}
+  .hero{background:radial-gradient(70rem 26rem at 18% -6rem,color-mix(in srgb,var(--brass) 12%,transparent),transparent 70%),var(--ink)}
+  .btn{color:#fffdf7}
+  .btn:hover{color:#fffdf7;background:color-mix(in srgb,var(--brass) 82%,#000)}
+}
