@@ -40,6 +40,7 @@ FR_BRAINSTORMING_COPIES = (
 
 EXPLAINER_MD = REPO_ROOT / "docs" / "explainers" / "01-fr-goal.md"
 INDEX_MD = REPO_ROOT / "docs" / "explainers" / "index.md"
+WHY_FR_MD = REPO_ROOT / "docs" / "explainers" / "why-fr.md"
 README = REPO_ROOT / "README.md"
 OPENCODE_COMMAND = REPO_ROOT / ".opencode" / "commands" / "fr-goal.md"
 
@@ -51,6 +52,7 @@ ALL_SURFACES = (
     *FR_BRAINSTORMING_COPIES,
     EXPLAINER_MD,
     INDEX_MD,
+    WHY_FR_MD,
     README,
     OPENCODE_COMMAND,
 )
@@ -164,6 +166,7 @@ MINIMAL_MARKER_SURFACES = (
     EXPLAINER_MD,
     README,
     INDEX_MD,
+    WHY_FR_MD,
 )
 
 

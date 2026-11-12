@@ -8,6 +8,7 @@ list are pure and need no renderer.
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -227,3 +228,485 @@ def test_the_cli_refuses_a_missing_renderer(tmp_path: Path) -> None:
     )
     assert done.returncode != 0
     assert "render_explainer.py" in done.stderr
+
+
+# -- the landing source (spec 2026-11-12-landing-front-page R1, R3, R4, R9) -----------
+
+FRONT = """---
+title: "T"
+tldr: "A tldr."
+layout: landing
+hero:
+  eyebrow: "super-fr"
+  headline: "A headline"
+  subline: "A subline."
+  command: "/fr-goal do a thing"
+  primary: {label: "Go", href: "01-fr-goal.md"}
+  secondary:
+    - {label: "Install", href: "../reference/cli.md"}
+    - {label: "GitHub", href: "https://github.com/derio-net/super-fr"}
+facts:
+  - {figure: "1", caption: "round"}
+---
+"""
+
+FLOW = (
+    "## How a run goes\n<!-- landing:flow -->\n\n"
+    "1. {you} Answer the round.\n2. The agent builds.\n3. {you} You merge.\n\n"
+)
+PAGES = "## Every page\n<!-- landing:pages -->\n\nIntro.\n\n<!-- site:pages -->\n\n"
+CTA = "## Try it\n<!-- landing:cta -->\n\n[Go](01-fr-goal.md)\n"
+
+
+def guarantee(n: int, *, problem: bool = True, link: bool = True) -> str:
+    out = f"## Headline {n}\n<!-- landing:guarantee -->\n\n"
+    if problem:
+        out += f"> Problem {n}.\n\n"
+    out += f"**What you gain.** Gain {n}.\n\n- how one\n- how two\n\n"
+    if link:
+        out += f"[Read more {n}](fr-isolation.md)\n\n"
+    return out
+
+
+def landing_text(n: int = 7, front: str = FRONT, extra: str = "") -> str:
+    return (
+        front + "\n" + FLOW + "".join(guarantee(i) for i in range(1, n + 1)) + PAGES + extra + CTA
+    )
+
+
+def parse(text: str):
+    return bs.parse_landing(text, "docs/explainers/index.md")
+
+
+def test_only_layout_landing_is_a_landing() -> None:
+    assert bs.is_landing({"layout": "landing"}) is True
+    assert bs.is_landing({"layout": "other"}) is False
+    assert bs.is_landing({}) is False
+
+
+def test_a_landing_parses_into_hero_facts_and_ordered_sections() -> None:
+    land = parse(landing_text())
+    assert land.hero.eyebrow == "super-fr"
+    assert land.hero.headline == "A headline"
+    assert land.hero.subline == "A subline."
+    assert land.hero.command == "/fr-goal do a thing"
+    assert (land.hero.primary.label, land.hero.primary.href) == ("Go", "01-fr-goal.md")
+    assert [(s.label, s.href) for s in land.hero.secondary] == [
+        ("Install", "../reference/cli.md"),
+        ("GitHub", "https://github.com/derio-net/super-fr"),
+    ]
+    assert [(f.figure, f.caption) for f in land.facts] == [("1", "round")]
+    assert [s.kind for s in land.sections] == ["flow"] + ["guarantee"] * 7 + ["pages", "cta"]
+    assert land.sections[1].heading == "Headline 1"
+
+
+def test_the_optional_hero_keys_may_be_absent() -> None:
+    front = (
+        "---\ntitle: T\nlayout: landing\nhero:\n  headline: H\n  subline: S\n"
+        "  primary: {label: Go, href: x.md}\n---\n"
+    )
+    land = parse(landing_text(front=front))
+    assert land.hero.eyebrow == "" and land.hero.command == ""
+    assert land.hero.secondary == () and land.facts == ()
+
+
+def test_a_guarantee_section_exposes_problem_link_and_body() -> None:
+    sec = parse(landing_text()).sections[1]
+    assert sec.problem == "Problem 1."
+    assert (sec.link.label, sec.link.href) == ("Read more 1", "fr-isolation.md")
+    assert "Gain 1." in sec.body and "how two" in sec.body
+    assert "Problem 1" not in sec.body and "Read more" not in sec.body
+
+
+def test_a_flow_section_marks_the_operators_steps() -> None:
+    sec = parse(landing_text()).sections[0]
+    assert [(s.text, s.yours) for s in sec.steps] == [
+        ("Answer the round.", True),
+        ("The agent builds.", False),
+        ("You merge.", True),
+    ]
+
+
+def test_a_section_without_a_marker_is_prose_and_a_heading_inside_a_fence_is_not_one() -> None:
+    text = landing_text(extra="## Long read\n\n```md\n## not a heading\n```\n\nText.\n\n")
+    secs = parse(text).sections
+    prose = [s for s in secs if s.kind == "prose"]
+    assert len(prose) == 1 and prose[0].heading == "Long read"
+    assert "## not a heading" in prose[0].body
+    assert len(secs) == 11
+
+
+def _refused(text: str, match: str) -> None:
+    with pytest.raises(bs.BuildError, match=match) as err:
+        parse(text)
+    assert "docs/explainers/index.md" in str(err.value)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "match"),
+    [
+        ("hero:\n", "nothero:\n", "hero"),
+        ('  headline: "A headline"\n', "", "hero.headline"),
+        ('  subline: "A subline."\n', "", "hero.subline"),
+        ('{label: "Go", href: "01-fr-goal.md"}', '{href: "01-fr-goal.md"}', "primary.label"),
+        ('{label: "Go", href: "01-fr-goal.md"}', '{label: "Go"}', "primary.href"),
+    ],
+)
+def test_a_missing_hero_key_is_refused_naming_the_key(old: str, new: str, match: str) -> None:
+    assert old in FRONT
+    _refused(landing_text(front=FRONT.replace(old, new)), match)
+
+
+def test_an_unknown_section_kind_is_refused() -> None:
+    _refused(landing_text(extra="## X\n<!-- landing:carousel -->\n\ntext\n\n"), "carousel")
+
+
+def test_a_guarantee_without_its_problem_or_its_link_is_refused() -> None:
+    base = FRONT + "\n" + FLOW + "".join(guarantee(i) for i in range(2, 8))
+    tail = PAGES + CTA
+    _refused(base + guarantee(1, problem=False) + tail, "problem")
+    _refused(base + guarantee(1, link=False) + tail, "link")
+
+
+def test_a_guarantee_whose_last_paragraph_is_not_exactly_one_link_is_refused() -> None:
+    bad = guarantee(1).replace(
+        "[Read more 1](fr-isolation.md)", "See [Read more 1](fr-isolation.md) now"
+    )
+    base = FRONT + "\n" + FLOW + "".join(guarantee(i) for i in range(2, 8))
+    _refused(base + bad + PAGES + CTA, "link")
+
+
+@pytest.mark.parametrize("n", [0, 5, 9])
+def test_fewer_than_six_or_more_than_eight_guarantees_is_refused(n: int) -> None:
+    _refused(landing_text(n), "six to eight")
+
+
+@pytest.mark.parametrize("n", [6, 8])
+def test_six_and_eight_guarantees_are_accepted(n: int) -> None:
+    assert len([s for s in parse(landing_text(n)).sections if s.kind == "guarantee"]) == n
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "- a\n- b\n",
+        "1. a\n\nProse after.\n",
+        "Prose first.\n\n1. a\n",
+        "",
+    ],
+)
+def test_a_flow_that_is_not_exactly_one_ordered_list_is_refused(body: str) -> None:
+    bad = f"## Flow\n<!-- landing:flow -->\n\n{body}\n"
+    text = FRONT + "\n" + bad + "".join(guarantee(i) for i in range(1, 7)) + PAGES + CTA
+    _refused(text, "ordered list")
+
+
+def test_a_pages_section_without_the_marker_is_refused() -> None:
+    text = landing_text().replace("<!-- site:pages -->", "")
+    _refused(text, "site:pages")
+
+
+# -- rendering the landing (R1-R6, R10) -----------------------------------------------
+
+LANDING_TRACKED = [
+    *TRACKED,
+    "docs/explainers/fr-isolation.md",
+    "docs/reference/install.md",
+    "README.md",
+]
+LANDING_ENTRIES = [
+    bs.Entry("docs/explainers/index.md", "Home", "Welcome. More."),
+    bs.Entry("docs/explainers/fr-isolation.md", "Isolation", "The box. Detail."),
+    bs.Entry("docs/explainers/01-fr-goal.md", "The goal", "One run. Detail."),
+    bs.Entry("docs/ops.md", "Ops", "Manual operations."),
+    bs.Entry("docs/reference/cli.md", "CLI", "Every command."),
+]
+FONT_CSS = "@font-face{src:url(data:font/woff2;base64,AAAA)}"
+THEME_CSS = ":root{--ink:#000;--paper:#fff}"
+
+
+def fake_html(md: str) -> str:
+    """A stand-in for python-markdown: structure only, never converted markup."""
+    return "".join(f"<p>{b}</p>" for b in bs.split_blocks(md))
+
+
+def render_landing(text: str | None = None, **kw) -> str:
+    land = bs.parse_landing(text or landing_text(), "docs/explainers/index.md")
+    args = {
+        "title": "Front <page>",
+        "entries": LANDING_ENTRIES,
+        "font_css": FONT_CSS,
+        "patterns": PATTERNS,
+        "tracked": LANDING_TRACKED,
+        "ref": REF,
+        "repo_url": bs.DEFAULT_REPO_URL,
+        "theme_css": THEME_CSS,
+        "to_html": fake_html,
+    }
+    args.update(kw)
+    return bs.render_landing(land, **args)
+
+
+def test_the_hero_headline_is_the_only_h1_and_the_title_is_escaped() -> None:
+    html = render_landing()
+    assert html.count("<h1") == 1
+    assert "A headline" in html.split("</h1>")[0]
+    assert "<title>Front &lt;page&gt;</title>" in html
+    assert "/fr-goal do a thing" in html
+
+
+def test_hero_links_go_through_the_one_link_rule() -> None:
+    front = FRONT.replace("../reference/cli.md", "../reference/install.md")
+    html = render_landing(landing_text(front=front))
+    assert 'href="01-fr-goal.html"' in html
+    assert 'href="reference/install.html"' in html
+    assert 'href="https://github.com/derio-net/super-fr"' in html
+
+
+def test_an_untracked_front_matter_href_fails_the_build() -> None:
+    front = FRONT.replace("../reference/cli.md", "../nope.md")
+    with pytest.raises(bs.BuildError, match="nope.md"):
+        render_landing(landing_text(front=front))
+
+
+def test_guarantee_sections_are_numbered_in_order() -> None:
+    html = render_landing()
+    nums = re.findall(r"0\d / 07", html)
+    assert nums == [f"0{i} / 07" for i in range(1, 8)]
+    assert html.index("Headline 1") < html.index("Headline 7")
+    assert 'href="fr-isolation.html"' in html
+
+
+def test_a_you_flow_step_carries_the_class_yours() -> None:
+    html = render_landing()
+    items = re.findall(r'<li class="([^"]*)">', html)
+    steps = [c for c in items if c.startswith("step")]
+    assert [("yours" in c.split()) for c in steps] == [True, False, True]
+
+
+def test_the_page_list_has_anchored_groups_and_every_entry_but_the_index() -> None:
+    html = render_landing()
+    for anchor in ("explainers", "guides", "reference"):
+        assert f'id="{anchor}"' in html
+    assert html.index('id="explainers"') < html.index('id="guides"') < html.index('id="reference"')
+    assert 'href="fr-isolation.html"' in html and "The box." in html
+    assert "Detail." not in html
+    assert 'href="guides/ops.html"' in html and 'href="reference/cli.html"' in html
+    assert ">Home<" not in html
+
+
+def test_body_links_are_rewritten_like_any_other_page() -> None:
+    extra = "## Read\n\nSee [iso](fr-isolation.md) and [the report](./acceptance/).\n\n"
+    html = render_landing(landing_text(extra=extra))
+    assert "iso](fr-isolation.html)" in html or 'href="fr-isolation.html">iso' in html
+    assert "(./acceptance/)" in html or 'href="./acceptance/"' in html
+    with pytest.raises(bs.BuildError, match="nope.md"):
+        render_landing(landing_text(extra="## R\n\n[x](nope.md)\n\n"))
+
+
+def test_a_cta_paragraph_of_links_becomes_buttons() -> None:
+    html = render_landing()
+    tail = html[html.rindex("cta") :]
+    assert 'class="btn' in tail and 'href="01-fr-goal.html"' in tail
+
+
+def test_the_page_embeds_the_given_css_and_carries_no_script_or_foreign_request() -> None:
+    html = render_landing()
+    assert FONT_CSS in html and THEME_CSS in html
+    assert html.index(THEME_CSS) < html.index("prefers-color-scheme: light")
+    assert 'name="color-scheme" content="dark light"' in html
+    assert "<script" not in html
+    assert not re.search(r"(?:src=|url\()\s*[\"']?https?:", html)
+    assert not re.search(r"<link[^>]*href=[\"']?https?:", html)
+    assert re.search(r"@media \(prefers-color-scheme: light\)", html)
+
+
+def test_font_css_is_every_font_face_rule_of_a_rendered_page() -> None:
+    page = "<style>@font-face{a:1}@font-face{b:url(data:x)}body{}</style>"
+    assert bs.extract_font_css(page) == "@font-face{a:1}\n@font-face{b:url(data:x)}"
+    with pytest.raises(bs.BuildError, match="font"):
+        bs.extract_font_css("<style>body{}</style>")
+
+
+def test_theme_css_is_the_rendered_pages_root_block() -> None:
+    block = ":root{\n" + ";".join(f"{name}:#0b0c10" for name in bs.THEME_PROPERTIES) + "}"
+    page = f"<style>{block}\nbody{{color:red}}</style>"
+    assert bs.extract_theme_css(page) == block
+    with pytest.raises(bs.BuildError, match=":root"):
+        bs.extract_theme_css("<style>body{}</style>")
+    with pytest.raises(bs.BuildError, match="--ink"):
+        bs.extract_theme_css("<style>:root{--bg:#fff}</style>")
+
+
+@pytest.mark.parametrize("missing", ["--paper", "--ink-2", "--brass", "--display", "--mono"])
+def test_a_theme_missing_a_property_the_landing_uses_is_refused(missing: str) -> None:
+    """A renamed renderer property must fail the build, not ship an unstyled landing."""
+    names = [n for n in bs.THEME_PROPERTIES if n != missing]
+    page = "<style>:root{" + ";".join(f"{n}:#0b0c10" for n in names) + "}</style>"
+    with pytest.raises(bs.BuildError, match=re.escape(missing) + r"\b"):
+        bs.extract_theme_css(page)
+
+
+def test_every_property_the_site_stylesheets_use_is_a_required_theme_property() -> None:
+    used: set[str] = set()
+    for sheet in bs.SITE_DIR.glob("*.css"):
+        used |= set(re.findall(r"var\((--[a-z0-9-]+)", sheet.read_text(encoding="utf-8")))
+    assert used == set(bs.THEME_PROPERTIES)
+
+
+# -- the top bar (R8, R9, R11) ---------------------------------------------------------
+
+PAGE_HTML = "<html><head><title>x</title></head><body>\n<article>a</article></body></html>"
+
+
+@pytest.mark.parametrize(
+    ("route_name", "home"),
+    [
+        ("index.html", "index.html"),
+        ("x.html", "index.html"),
+        ("guides/x.html", "../index.html"),
+        ("reference/x.html", "../index.html"),
+    ],
+)
+def test_the_bar_links_are_right_from_every_route_depth(route_name: str, home: str) -> None:
+    out = bs.insert_bar(PAGE_HTML, route_name, "https://github.com/o/r", "/*bar*/")
+    nav = re.search(r'<nav class="site-bar".*?</nav>', out, re.DOTALL)
+    assert nav is not None
+    hrefs = re.findall(r'href="([^"]+)"', nav.group(0))
+    assert hrefs == [
+        home,
+        f"{home}#explainers",
+        f"{home}#guides",
+        f"{home}#reference",
+        "https://github.com/o/r",
+    ]
+    assert "super-fr" in nav.group(0)
+
+
+def test_the_bar_sits_right_after_the_body_tag_and_its_style_before_the_head_closes() -> None:
+    out = bs.insert_bar(PAGE_HTML, "x.html", "https://github.com/o/r", "/*bar*/")
+    assert re.search(r'<body>\s*<nav class="site-bar"', out)
+    assert "<style>/*bar*/</style></head>" in out
+    assert out.count('site-bar"') == 1
+    out2 = bs.insert_bar(
+        PAGE_HTML.replace("<body>", '<body class="a">'), "x.html", "https://x/y", "/**/"
+    )
+    assert re.search(r'<body class="a">\s*<nav class="site-bar"', out2)
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<html><head></head><p>no body</p></html>",
+        "<html><head></head><body><body></body></html>",
+        "<html><body>no head close</body></html>",
+        "<html><head></head><head></head><body></body></html>",
+    ],
+)
+def test_a_page_that_cannot_take_the_bar_exactly_once_is_refused(html: str) -> None:
+    with pytest.raises(bs.BuildError, match="y/x.html"):
+        bs.insert_bar(html, "y/x.html", "https://github.com/o/r", "/**/")
+
+
+def _mini_repo(tmp_path: Path) -> tuple[Path, Path]:
+    root = tmp_path / "repo"
+    (root / ".fr").mkdir(parents=True)
+    (root / "docs").mkdir()
+    (root / ".fr" / "docs.yaml").write_text("pages:\n  - docs/*.md\n")
+    for name in ("a", "b"):
+        (root / "docs" / f"{name}.md").write_text(f"---\ntitle: {name}\n---\n\nBody {name}\n")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    craft = tmp_path / "craft"
+    (craft / "tools").mkdir(parents=True)
+    (craft / "tools" / "render_explainer.py").write_text("")
+    (craft / bs.FONTS_SUBDIR).mkdir(parents=True)
+    return root, craft
+
+
+def _fake_renderer(bad: str | None):
+    good = (
+        "<html><head><style>@font-face{src:url(data:font/woff2;base64,AA)}</style></head>"
+        "<body><article>x</article></body></html>"
+    )
+
+    def render(renderer, fonts, source, out):
+        html = good
+        if bad and source.name == f"{bad}.md":
+            html = "<html><head></head><p>no body at all</p></html>"
+        out.write_text(html, encoding="utf-8")
+        return html
+
+    return render
+
+
+def test_a_page_that_cannot_take_the_bar_leaves_no_file_in_the_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fake_renderer("b"))
+    with pytest.raises(bs.BuildError, match="guides/b.html"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not (out / "guides" / "b.html").exists()
+    assert not list(out.rglob("*.html"))
+
+
+def test_a_page_with_no_embedded_font_leaves_no_file_in_the_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    out = tmp_path / "out"
+
+    def render(renderer, fonts, source, target):
+        html = "<html><head></head><body>x</body></html>"
+        target.write_text(html, encoding="utf-8")
+        return html
+
+    monkeypatch.setattr(bs, "render_page", render)
+    with pytest.raises(bs.BuildError, match="@font-face"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not list(out.rglob("*.html"))
+
+
+def test_a_good_build_writes_every_page_with_its_bar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fake_renderer(None))
+    written = bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert sorted(written) == ["guides/a.html", "guides/b.html"]
+    assert 'href="../index.html"' in (out / "guides" / "a.html").read_text()
+
+
+def test_layout_landing_on_a_page_not_routed_to_index_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    (root / "docs" / "a.md").write_text("---\ntitle: a\nlayout: landing\n---\n\nBody\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    monkeypatch.setattr(bs, "render_page", _fake_renderer(None))
+    out = tmp_path / "out"
+    with pytest.raises(bs.BuildError, match=r"docs/a.md.*landing"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not list(out.rglob("*.html"))
+
+
+def test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve() -> None:
+    page = "docs/explainers/index.md"
+    text = (REPO / page).read_text(encoding="utf-8")
+    assert bs.is_landing(bs.parse_front_matter(text))
+    land = bs.parse_landing(text, page)
+    guarantees = [s for s in land.sections if s.kind == "guarantee"]
+    assert 6 <= len(guarantees) <= 8
+    assert len(land.hero.headline.split()) <= 10
+    tracked = bs.tracked_files(REPO)
+    patterns = bs.load_config(REPO / ".fr" / "docs.yaml")
+    hrefs = [land.hero.primary.href, *(x.href for x in land.hero.secondary)]
+    hrefs += [s.link.href for s in guarantees if s.link]
+    for h in hrefs:
+        bs.rewrite_href(h, page, patterns, tracked, REF)
+    for sec in land.sections:
+        bs.rewrite_markdown(sec.body, page, patterns, tracked, REF)
+    assert bs.rewrite_href("01-fr-goal.md", page, patterns, tracked, REF) == "01-fr-goal.html"

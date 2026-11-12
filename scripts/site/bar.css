@@ -1,0 +1,9 @@
+/* The top bar every built page carries (spec 2026-11-12-landing-front-page C).
+   It borrows the page's own custom properties and falls back to the broadsheet dark. */
+.site-bar{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem 1.2rem;margin:-3rem -1.25rem 2.75rem;padding:.7rem 1.25rem;font:500 .84rem/1.4 var(--mono,ui-monospace,monospace);background:var(--ink-2,#101218);border-bottom:1px solid var(--line,#23262f)}
+.site-bar a{color:var(--muted,#8f897a);text-decoration:none}
+.site-bar a:hover,.site-bar a:focus-visible{color:var(--paper,#e7e1d3);text-decoration:underline;text-decoration-color:var(--brass,#e0a24e)}
+.site-bar .site-name{margin-right:auto;font:600 1rem/1.4 var(--display,Georgia,serif);color:var(--paper,#e7e1d3)}
+.site-bar .site-name:hover{color:var(--brass,#e0a24e)}
+.landing .site-bar{margin:0}
+@media (max-width:480px){.site-bar{gap:.1rem .7rem;font-size:.74rem}.site-bar .site-name{font-size:.94rem}}

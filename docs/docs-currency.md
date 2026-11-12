@@ -12,9 +12,10 @@ covers:
   - plugins/super-fr/rules/docs-currency.md
   - .claude/rules/explainers-currency.md
   - scripts/build-site.py
+  - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-12 acceptance-fragments phase 4 adds a visibility gate to pages.yml, still true for this page
+reviewed: 2026-11-12 front page is rendered by the build itself; every page has a top bar; pages.yml's acceptance-fragments visibility gate is still true for this page
 ---
 
 # Docs currency: keeping pages true to the code
@@ -159,14 +160,20 @@ to the default branch that touches a page, the config, the build script or the r
 
 1. reads `.fr/docs.yaml` (it shares no code with `fr`, so the deploy needs no `fr` to build pages);
 2. renders each page with the `blog-craft` renderer, checked out at the one commit named in
-   `.github/blog-craft.ref`, using the broadsheet style with embedded fonts;
+   `.github/blog-craft.ref`, using the broadsheet style with embedded fonts. The one exception is
+   the front page: `docs/explainers/index.md` carries `layout: landing`, and the build renders it
+   itself from `scripts/site/`, copying the fonts and the dark palette from a page the renderer
+   produced in the same build;
 3. writes each page to its route: `docs/explainers/x.md` at the site root, `docs/x.md` under
    `guides/`, `docs/reference/x.md` under `reference/`;
 4. rewrites relative links: a link to another page's source becomes that page's route, a link to
    any other tracked file becomes a GitHub link at the built commit, and a link to a path git does
    not track **fails the build**;
-5. fills the index's `<!-- site:pages -->` marker with a list of every page, grouped by section,
-   from their `title` and the first sentence of `tldr`.
+5. fills a `<!-- site:pages -->` marker with a list of every page, grouped by section, from their
+   `title` and the first sentence of `tldr` (on the front page, as the Explainers, Guides and
+   Reference lists the top bar links to);
+6. gives every page the same top bar, a link home, links to the three lists and a link to GitHub,
+   and refuses to write a page it cannot put the bar on.
 
 CI runs the same build on every pull request (the `site-build` job), so a page that does not render,
 or links to nothing, fails before merge.
@@ -202,6 +209,6 @@ or links to nothing, fails before merge.
 
 ## Where to go next
 
-- [The explainers index](explainers/index.md) shows the finished site's front page.
+- [The front page](explainers/index.md) shows a finished landing source; [why fr](explainers/why-fr.md) is the long essay it links to.
 - [fr-isolation](explainers/fr-isolation.md) is a good example of a page with a long `covers` list.
 - [fr-debugging](explainers/fr-debugging.md) shows where the check runs before a fix is delivered.

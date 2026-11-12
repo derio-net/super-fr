@@ -1,0 +1,162 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Landing front page, why-fr essay and the top bar (R1-R12)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - site-front-page-landing
+  - site-landing-build-refuses-malformed
+  - site-top-bar-every-page
+  - site-why-fr-essay-kept
+  tier: standard
+  files:
+  - scripts/build-site.py
+  - scripts/site/*
+  - docs/explainers/index.md
+  - docs/explainers/why-fr.md
+  - docs/docs-currency.md
+  - docs/*.md
+  - docs/explainers/*.md
+  - README.md
+  - .claude/rules/explainers-currency.md
+  - .opencode/instructions/*
+  - .github/workflows/pages.yml
+  - tests/unit/test_build_site.py
+  - tests/unit/test_pages_workflow.py
+  - tests/unit/test_tripwire_fr_goal_question_rounds.py
+  - tests/unit/test_tripwire_explainers_fresh.py
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: The essay moves to why-fr.md (R7, spec D)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in `tests/unit/test_tripwire_explainers_fresh.py` add `docs/explainers/why-fr.md` to the set of pages that must parse with `fr.docs`; in `tests/unit/test_tripwire_fr_goal_question_rounds.py` add `WHY_FR_MD` to `ALL_SURFACES` (and to whatever per-surface checks `INDEX_MD` is in). See them fail (file missing).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: `git mv docs/explainers/index.md docs/explainers/why-fr.md`. In `why-fr.md` set the title to "Why fr: the trustworthy agent", drop the "## Every page" section with its `<!-- site:pages -->` marker, keep everything else, and bump `reviewed` to `2026-11-12 moved from the front page; content unchanged`. Create a minimal placeholder `docs/explainers/index.md` (valid front matter with `title`, `tldr`, `standalone_style: broadsheet`, `covers`, `reviewed`, a sentence naming the one question round (the question-round tripwire requires the word "round" on this page), a link `](./acceptance/)`, a link to `why-fr.md` and the `<!-- site:pages -->` marker) so every existing test stays green until task 5 writes the real copy. Re-point `README.md`'s "Start here" link to the published `index.html` ("the pipeline and why it is trustworthy") to `https://derio-net.github.io/super-fr/why-fr.html`; leave `docs/explainers/fr-isolation.md`'s "Back to the fr overview" link on `index.md`; grep `README.md`, `docs/`, `plugins/` and `.claude/rules/` for any other link (source path or published URL) that meant the essay and re-point it. No refactor step: this task is a file move (record `refactor: {P1.T1: "file move and link re-pointing only"}`). Run the two tripwires, `tests/unit/test_pages_workflow.py`, `tests/unit/test_build_site.py` and `uv run fr docs check`; see them pass.
+- number: 2
+  title: Parse the landing source (R1, R3, R4, R9, spec A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_build_site.py`, tests for new pure functions in `scripts/build-site.py`: `is_landing(front_matter)` (true only for `layout: landing`); `parse_landing(text, page)` returning the hero (`eyebrow`, `headline`, `subline`, `command`, `primary`, `secondary`), `facts` and an ordered list of sections `(kind, heading, body_markdown)` split at `## ` headings (a `## ` inside a fenced block is not a heading), the kind read from a `<!-- landing:<kind> -->` line directly under the heading (none = `prose`). Each refusal raises `BuildError` naming the page and the defect: a missing `hero`, `hero.headline`, `hero.subline`, `hero.primary.label` or `hero.primary.href`; an unknown kind; a `guarantee` section with no blockquote; a `guarantee` section whose last paragraph is not exactly one link; fewer than six or more than eight `guarantee` sections; a `flow` section that is not exactly one ordered list; a `pages` section without the `<!-- site:pages -->` marker. See them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement `is_landing`, a frozen `Landing` / `Section` dataclass pair and `parse_landing` in `scripts/build-site.py` (pure, no filesystem). For a `guarantee` section expose `problem` (the first blockquote's Markdown, `> ` stripped), `link` (label, href) and `body` (the rest). For a `flow` section expose the list items, each with `yours: bool` (item text starts with `{you}`; the marker is removed). See the tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: one helper for "split Markdown into top-level blocks outside fences", shared by the guarantee and flow parsers; docstrings naming spec 2026-11-12-landing-front-page R4/R9.
+- number: 3
+  title: Render the landing page (R1-R6, R10, spec B)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests for `render_landing(landing, title, entries, font_css, patterns, tracked, ref, repo_url)` returning the page HTML: the hero headline is the only `<h1>`; the primary button's href is the rewritten route (`01-fr-goal.html`), secondary hrefs are rewritten too (`reference/install.html`, the absolute GitHub URL unchanged), and an untracked front-matter href raises `BuildError`; `guarantee` sections are numbered `01 / 07` … `07 / 07` in order; a `{you}` flow step carries the class `yours`; the page list has group headings with `id="explainers"`, `id="guides"`, `id="reference"`, lists every entry except the index itself with route hrefs, and the first sentence of each `tldr`; body links are rewritten by the same rule as `rewrite_markdown`; the output contains the given `font_css`, no `<script`, and no `http` URL in a `src=`, `url(` or stylesheet `href=`. `render_landing` also takes `theme_css` (emitted before the landing's own CSS) and `to_html` (the Markdown converter): the tests pass a stand-in converter (`markdown` is not installed in the test environment) and assert on structure only, never on converted or highlighted markup. Also tests for `extract_font_css(html)` (returns every `@font-face{…}` rule of a rendered page; raises `BuildError` when there is none) and `extract_theme_css(html)` (returns the rendered page's `:root{…}` custom-property block; raises `BuildError` when there is none or it defines no `--ink`). See them fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `scripts/site/landing.html` (skeleton with `{{title}}`, `{{description}}`, `{{font_css}}`, `{{css}}`, `{{bar}}`, `{{hero}}`, `{{sections}}` placeholders; `<meta name="color-scheme" content="dark light">`) and `scripts/site/landing.css`: no dark palette of its own (the dark `:root` block comes from `extract_theme_css`; its names are `--ink --ink-2 --panel --paper --paper-dim --muted --faint --line --line-2 --brass --teal --rust --display --serif --mono`), a light set of the colour properties under `@media (prefers-color-scheme: light)` (paper background, ink text, a darker brass that keeps 4.5:1 contrast on it), hero with large display type and buttons, the facts strip, the step strip (a grid that wraps; `.yours` steps marked with the brass accent and a "you" label), numbered sections (number in mono, the problem as a muted italic pull line, headline in display type, a link styled as a text button), the grouped page list in columns, the closing call to action; one column under 720 px; `overflow-wrap:anywhere` on the command line so 390 px never scrolls sideways. Implement `render_landing`, `extract_font_css` and `extract_theme_css`; section bodies go through `rewrite_markdown` and then `to_html`. `build-site.py` must not import `markdown` at module level: `build()` imports it lazily and builds `to_html` as `markdown.markdown(…, extensions=["fenced_code", "codehilite", "tables", "sane_lists"])`. See the tests pass.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: the page-list rows come from one helper shared with `fill_pages` (same sorting, grouping and first-sentence rule), so the Markdown list and the landing list cannot drift.
+- number: 4
+  title: The top bar and the build wiring (R8, R9, R11, spec C)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests for `insert_bar(html, route_name, repo_url, bar_css)`: for `index.html`, `x.html`, `guides/x.html` and `reference/x.html` the bar's home link is `index.html` / `index.html` / `../index.html` / `../index.html`, its group links are that home plus `#explainers`, `#guides`, `#reference`, and its GitHub link is `repo_url`; the `<nav class="site-bar">` sits directly after the `<body…>` open tag and the bar's `<style>` directly before `</head>`; HTML with no `<body`, two `<body` tags, or no `</head>` raises `BuildError` naming the route. In `tests/unit/test_pages_workflow.py`: `on.push.paths` contains `scripts/site/**`. And a build-level test with a stand-in for `render_page` (monkeypatched to write fixture HTML): a page whose HTML cannot take the bar, or has no embedded font, raises `BuildError` and leaves no file at its route in the output directory. See them fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `scripts/site/bar.css` (uses `var(--paper, #e7e1d3)`, `var(--muted, …)`, `var(--line, …)`, `var(--brass, …)`, `var(--mono, …)` with fallbacks; a single row that wraps on a phone; not sticky) and `insert_bar`. Wire `build()`: read each page's front matter; a page with `layout: landing` whose route is not `index.html` raises `BuildError`; render every non-landing page with blog-craft into the temporary directory (never straight into `out_dir`, as `render_page` does today), then the landing with `render_landing` using `extract_font_css` and `extract_theme_css` of the first blog-craft page rendered in this build; run `check_rendered` and then `insert_bar` on each page's HTML, and only then write it to its route under `out_dir`. Add `scripts/site/**` to `pages.yml` `on.push.paths`. Update the module docstring. See the new tests pass.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: `build()` reads as three passes (select and parse, render, decorate and write); no page is written before every refusal for it has had the chance to fire.
+- number: 5
+  title: The front-page copy (R2-R5, R12, spec E)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED first: add a repo-level test to `tests/unit/test_build_site.py`: this repo's `docs/explainers/index.md` is a landing (`is_landing`), parses with `parse_landing` into six to eight `guarantee` sections, and every href in it (front matter and body) rewrites without error against `git ls-files`; see it fail on the placeholder. GREEN: write the real `docs/explainers/index.md` as a landing (spec A's front matter; `covers` unchanged from the old index plus nothing new; `reviewed: 2026-11-12 rewritten as the landing front page`). Hero for an evaluator deciding whether an agent's pull request can be trusted: headline of at most ten words, a two-sentence subline, `command: "/fr-goal add rate limiting to the webhook receiver"`, primary "See how a run works" → `01-fr-goal.md`, secondary "Install" → `../reference/install.md` and "GitHub". Facts: one question round (rarely two), one pull request per goal, zero self-merges, three harnesses (Claude Code, OpenCode, Hermes). A `flow` section with the eight steps of the essay's flow in one line each, `{you}` on the question round, the manual phase, the merge and the Test Plan. Seven `guarantee` sections in the spec's order and link targets (isolation; one question round then a written spec; adversarial review at every stage; the acceptance matrix; one pull request never self-merged with the risky step yours; a readable trail with its cost; triage and dispatch), each: a one- or two-sentence problem in a blockquote that an evaluator recognises, a "What you gain" paragraph, a short "How" paragraph or up to three bullets, then the link. Read each linked explainer first and state only what it states; keep the question-round wording within what `tests/unit/test_tripwire_fr_goal_question_rounds.py` allows. Then a prose section linking `why-fr.md` as the long read, a `pages` section (it also links `./acceptance/`), and a `cta` section repeating the primary and install links. Second person, concrete, no em-dash chains, no hype words. See the repo-level index test, `test_pages_workflow.py` and the question-round tripwire pass.
+  - id: P1.T5.S2
+    text: |-
+      Build the whole site with the pinned renderer into a scratch directory outside the repo (the command in `.claude/rules/explainers-currency.md`; the pinned blog-craft checkout may already exist at `/tmp/bc`). Capture with a Playwright script kept in the scratch directory: `index.html` at 1280 px dark, 1280 px light (`colorScheme: 'light'`), and 390 px (assert `document.documentElement.scrollWidth <= 390`); `01-fr-goal.html`, one `guides/` page and one `reference/` page at 1280 px and one of them at 390 px showing the bar; have the script follow the primary button, one numbered section's link, the `#explainers` anchor, and the bar's home link from the guide page, asserting each lands on an existing file. Open every screenshot, fix what looks wrong (spacing, contrast, wrapping, a bar that crowds the article), re-capture, and fill the record's `visual:` section for `site-front-page-landing` and `site-top-bar-every-page`.
+- number: 6
+  title: Guidance, matrix and the full suite (R12, spec F)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Update `.claude/rules/explainers-currency.md` ("What there is to edit"): the front page is `docs/explainers/index.md` with `layout: landing`, rendered by `scripts/build-site.py` from `scripts/site/`, its front-matter hero keys, the section kinds and what fails the build; every page gets the top bar; `why-fr.md` is the essay. Update the "Enforcement" list for the new tests. Update `docs/docs-currency.md` where it describes the index or the build, and add `scripts/site/**` to its `covers`. Run `scripts/sync-opencode.py` (the rule has no Hermes copy), commit the regenerated mirrors, and run `scripts/sync-opencode.py --check`.
+  - id: P1.T6.S2
+    text: |-
+      Move the four linked rows with `uv run fr acceptance set-status`: `site-front-page-landing`, `site-landing-build-refuses-malformed` and `site-top-bar-every-page` to `ci` with `--level unit=super-fr:tests/unit/test_build_site.py#<test name>` refs (name-anchored) and notes saying what proves them; `site-why-fr-essay-kept` to `ci` with the `test_tripwire_explainers_fresh.py` ref. Run `uv run fr acceptance check`, `uv run fr docs check`, `uv run ruff format packages/ tests/ scripts/`, `uv run ruff check packages/ tests/`, then, after the last code commit, the full suite `uv run pytest -q --no-cov -n auto` into a log outside the repo. Refresh `.test_durations` only if `test_build_site.py` grew enough to matter.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-12T09:34:31+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T09:34:31+00:00'
+    note: null
+    observed_prs: []

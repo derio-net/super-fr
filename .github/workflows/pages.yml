@@ -17,6 +17,7 @@ on:
       - 'docs/acceptance/**'
       - '.fr/docs.yaml'
       - 'scripts/build-site.py'
+      - 'scripts/site/**'
       - '.github/blog-craft.ref'
       - 'packages/fr/src/fr/acceptance/**'
   workflow_dispatch:
