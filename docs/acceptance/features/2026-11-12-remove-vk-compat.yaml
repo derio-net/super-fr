@@ -85,3 +85,12 @@ amendments:
       willikins_vk_bridge_* metrics) are unaffected
     why: fr init migrate and the legacy-secrets error are removed (spec 2026-11-12-remove-vk-compat
       R1, R2)
+  - row: vk-legacy-fallbacks-removed
+    op: reword
+    base: 1
+    acceptance: 'The vk-spelling dual-read fallbacks (vk-profiles.yaml, .git/vk/isolation
+      state dir, VK_BRIDGE_* env) no longer resolve: vk spellings are not read. A devcontainer
+      mount is followed whatever its path is named, and the kept VibeKanban-product
+      names (VK_DERIO_OPS_PROJECT_ID, willikins_vk_bridge_* metrics) are unaffected'
+    why: 'review p1-r3: after R2 a config mounting ~/.config/vk/secrets is followed
+      like any other path, so ''no longer resolve'' was untrue for it'
