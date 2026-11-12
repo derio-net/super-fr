@@ -204,18 +204,15 @@ def carried_state(
         )
     if prior is not None and prior.worktree.resolve() != worktree.resolve():
         prior = None
-    if (
-        prior is not None
-        and placement is not None
-        and prior.placement is not None
-        and prior.placement != placement
-    ):
+    # A state an older fr wrote without the key predates quiet: it recorded `repo` (p3-r5).
+    recorded = (prior.placement or "repo") if prior is not None else None
+    if recorded is not None and placement is not None and recorded != placement:
         # R23 "sticky": a workspace never changes placement under its own feet.
+        from fr.artifacts.paths import sticky_refusal
+
         raise IsolationError(
-            f"the workspace for {branch} was set up under placement: {prior.placement}, but "
-            f"the `fr` switch (origin/fr) now says placement: {placement}. fr will not move a "
-            f"live workspace between placements: restore origin/fr, or finish this workspace "
-            f"(`fr isolation down --branch {branch}`) before the next one"
+            f"{sticky_refusal(recorded, placement, str(state_path(repo_root, branch)))} "
+            f"(`fr isolation down --branch {branch}` finishes it)"
         )
     return IsolationState(
         repo_root=repo_root,

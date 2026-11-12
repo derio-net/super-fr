@@ -182,12 +182,16 @@ def _common_dir(repo_root: Path) -> Path | None:
 
 def _marker_placement(repo_root: Path) -> str | None:
     """The placement this workspace's `.fr-isolation` marker recorded at `up` (R23
-    "sticky"), or None for no marker or one an older fr wrote without the key."""
+    "sticky"), or None for no marker. A marker an older fr wrote without the key was
+    written before quiet existed, so it recorded `repo` (review p3-r5): a workspace made
+    before the switch appeared refuses rather than silently moving."""
     from fr.isolation.marker import marker_at
 
     marker = marker_at(repo_root)
-    placement = marker.get("placement") if marker else None
-    return placement if isinstance(placement, str) else None
+    if not marker:
+        return None
+    placement = marker.get("placement", REPO)
+    return placement if isinstance(placement, str) else REPO
 
 
 def sticky_refusal(recorded: str, current: str, source: str) -> SettingsError:
