@@ -649,3 +649,8 @@ Pre-merge review of PR #1408 (operator's independent review), item 1. fold.py re
 ### pr1408-r2 · finding [open] (reviewer: in scope) · A stale retire that merged anyway is silent: contested.discard runs unconditionally on retire (phase 1)
 
 PR #1408 review item 2. A's set-status (base 0) merges, then B's retire (base 0) merges: retired, not contested, no debt. Only the opposite order was tested.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r3 created=2026-11-12T09:18:51+00:00 phase=3 state=open review_scope=in -->
+### pr1408-r3 · finding [open] (reviewer: in scope) · Scaffolded GitHub matrix job checks out with persist-credentials: false, so check's default-ref fetch fails in CI on a private repo and every run is refused (phase 3)
+
+PR #1408 review item 3. scaffold.py GitHub matrix job + amend.py default-ref fetch. Reproduced with an unreachable origin and CI=true: exit 1 'cannot fetch the default ref'. The checkout already has the default branch (fetch-depth: 0).
