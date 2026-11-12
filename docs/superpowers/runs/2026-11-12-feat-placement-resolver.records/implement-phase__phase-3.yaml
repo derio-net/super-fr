@@ -121,4 +121,4 @@ journal:
       commit of `fr` was written by commit-tree with a literal subject. It now goes through
       `fr_message` (the repo's templates and the Fr-Commit trailer). The full suite was re-run after.
 resolves: []
-evidence: {}
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/f5689a0b-c781-4953-bf5a-b20b350b4acf/scratchpad/p3-suite.log}
