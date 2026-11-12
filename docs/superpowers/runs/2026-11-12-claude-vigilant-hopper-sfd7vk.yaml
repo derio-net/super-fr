@@ -105,3 +105,4 @@ steps:
           model: claude-fable-5-2
           session: 671e7103-998b-587e-980b-da83b609e16c
 fr_version: 6.2.0
+pr: https://github.com/derio-net/super-fr/pull/1411
