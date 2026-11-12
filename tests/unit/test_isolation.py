@@ -806,7 +806,7 @@ def test_up_no_origin_falls_back_to_head_with_warning(
     assert not _fetched(runner.git_calls)  # no origin → fetch never attempted
 
 
-def test_up_fetch_failure_falls_back_to_head_with_warning(
+def test_up_unreachable_origin_refuses_and_no_fetch_falls_back_to_head(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -819,7 +819,11 @@ def test_up_fetch_failure_falls_back_to_head_with_warning(
     runner = FakeRunner()
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
 
-    target.up(profile="dev", branch="feat/x")  # fetch fails → graceful fallback
+    # R23: an unreachable origin refuses `up` (it cannot read the quiet switch)...
+    with pytest.raises(IsolationError, match="git remote -v"):
+        target.up(profile="dev", branch="feat/x")
+    # ...and `--no-fetch` is the operator's way past it: the old graceful fallback.
+    target.up(profile="dev", branch="feat/x", no_fetch=True)
 
     assert _is_ancestor(repo, stray, "feat/x")
     assert "WARNING" in capsys.readouterr().err

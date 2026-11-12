@@ -914,6 +914,27 @@ def network_env(run: Runner, repo_root: Path) -> dict[str, str]:
     return env
 
 
+def fetch_placement(
+    repo_root: Path,
+    branch: str,
+    no_fetch: bool,
+    network: Callable[[list[str]], subprocess.CompletedProcess[str]],
+) -> str:
+    """The placement `up` records for *branch* (every target's one call): fetch the
+    quiet switch through *network* and, under quiet, check the branch's feature id. A
+    refusal is an `IsolationError` (exit 2)."""
+    from fr.placement.quiet import check_feature_id, fetch_switch
+    from fr.settings import SettingsError
+
+    try:
+        placement = fetch_switch(repo_root, no_fetch=no_fetch, network=network)
+        if placement == "quiet":
+            check_feature_id(repo_root, branch)
+    except SettingsError as e:
+        raise IsolationError(str(e)) from e
+    return placement
+
+
 def run_network(
     run: Runner,
     repo_root: Path,
@@ -1178,6 +1199,7 @@ class LocalWorktreeDevcontainerTarget:
         base: str | None = None,
         no_fetch: bool = False,
     ) -> IsolationState:
+        placement = self._fetch_placement(branch, no_fetch)
         worktree = self._worktree_up_core(branch, path)
         name = resolve_profile(self.repo_root, profile)
         base_sha = self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
@@ -1207,10 +1229,18 @@ class LocalWorktreeDevcontainerTarget:
         # `status` nor `down` could address. With the record saved first, a
         # failed `up` is a listed workspace — retry `up`, or `down` it.
         state = carried_state(
-            self.repo_root, branch, worktree, name, "devcontainer", base_sha=base_sha
+            self.repo_root,
+            branch,
+            worktree,
+            name,
+            "devcontainer",
+            base_sha=base_sha,
+            placement=placement,
         )
         save_state(state)
-        self._write_isolation_marker(worktree, branch, created_at=state.created_at)
+        self._write_isolation_marker(
+            worktree, branch, created_at=state.created_at, placement=state.placement
+        )
         try:
             self._devcontainer_up(worktree, name)
         except IsolationError as err:
@@ -2724,6 +2754,14 @@ class LocalWorktreeDevcontainerTarget:
         back as a non-zero, non-2 exit — `unknown`, never `absent`."""
         return run_network(self.run, self.repo_root, argv, cwd=cwd)
 
+    def _fetch_placement(self, branch: str, no_fetch: bool) -> str:
+        """R23 "the switch": fetch `origin/fr` (absent is fine) and return the placement
+        it names, refusing an unreachable origin before anything is provisioned; under
+        quiet, also refuse a branch whose feature id another branch holds (gh#1419)."""
+        return fetch_placement(
+            self.repo_root, branch, no_fetch, lambda argv: self._run_network(argv)
+        )
+
     def _remote_view(self, branch: str, no_fetch: bool) -> RemoteView:
         """Probe `origin/<B>`: `ls-remote --exit-code` (0 exists, 2 absent,
         anything else unknown — never absence, #354), then an explicit-refspec
@@ -2772,6 +2810,7 @@ class LocalWorktreeDevcontainerTarget:
         mode: str = "worktree",
         created_at: str | None = None,
         target: str = "devcontainer",
+        placement: str | None = None,
     ) -> None:
         """Write the `.fr-isolation` identity marker and git-exclude it.
 
@@ -2801,6 +2840,9 @@ class LocalWorktreeDevcontainerTarget:
                     # the state record's own created_at, so an `up` that
                     # carries the record forward does not restamp the marker
                     "created_at": created_at or datetime.now(UTC).isoformat(),
+                    # R23 "sticky": the placement `up` found; `space_for` refuses a
+                    # later switch that disagrees. Omitted only by a caller with none.
+                    **({"placement": placement} if placement is not None else {}),
                 },
                 indent=2,
             )

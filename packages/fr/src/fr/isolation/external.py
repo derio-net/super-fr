@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fr.isolation.local import GcAction, Runner, subprocess_runner
+from fr.isolation.local import GcAction, Runner, fetch_placement, run_network, subprocess_runner
 from fr.isolation.preserve import TeardownReport
 from fr.isolation.types import (
     IsolationError,
@@ -126,7 +126,7 @@ class ExternalTarget:
             )
         return data
 
-    def _set_marker_branch(self, branch: str) -> None:
+    def _set_marker_branch(self, branch: str, placement: str | None = None) -> None:
         """Rewrite the marker's `branch` claim in place, preserving every other
         preparer-written field. Never unlinks the file — it is the preparer's.
 
@@ -141,6 +141,8 @@ class ExternalTarget:
         except (OSError, json.JSONDecodeError) as e:
             raise IsolationError(f"unreadable {_MARKER} marker at {self.repo_root}: {e}") from e
         data["branch"] = branch
+        if placement is not None:
+            data["placement"] = placement  # R23 "sticky", as the local targets record it
         p.write_text(json.dumps(data, indent=2) + "\n")
 
     def _exclude_marker(self) -> None:
@@ -166,6 +168,12 @@ class ExternalTarget:
         no_fetch: bool = False,
     ) -> IsolationState:
         self._load_marker()  # validate before touching anything
+        placement = fetch_placement(
+            self.repo_root,
+            branch,
+            no_fetch,
+            lambda argv: run_network(self.run, self.repo_root, argv),
+        )
         if profile is not None:
             print(
                 f"[fr] note: --profile {profile!r} ignored in external mode — the "
@@ -173,9 +181,11 @@ class ExternalTarget:
                 file=sys.stderr,
             )
         self._ensure_branch(branch)
-        state = carried_state(self.repo_root, branch, self.repo_root, "external", "external")
+        state = carried_state(
+            self.repo_root, branch, self.repo_root, "external", "external", placement=placement
+        )
         save_state(state)
-        self._set_marker_branch(branch)
+        self._set_marker_branch(branch, state.placement)
         self._exclude_marker()
         return state
 

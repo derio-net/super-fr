@@ -65,6 +65,9 @@ class IsolationState(BaseModel):
     # default branch does not resolve. None for a branch `up` found already
     # existing, and on a record an older fr wrote.
     base_sha: str | None = None
+    # The artifact placement `up` found (`repo` | `quiet`, spec 2026-11-04 R23 "sticky"),
+    # also written to the marker. None on a record an older fr wrote: read as `repo`.
+    placement: str | None = None
 
     model_config = {"frozen": True}
 
@@ -177,6 +180,7 @@ def carried_state(
     profile: str,
     target: IsolationMode,
     base_sha: str | None = None,
+    placement: str | None = None,
 ) -> IsolationState:
     """The record `up` saves, for every target (spec 2026-09-23 §3.C).
 
@@ -200,6 +204,19 @@ def carried_state(
         )
     if prior is not None and prior.worktree.resolve() != worktree.resolve():
         prior = None
+    if (
+        prior is not None
+        and placement is not None
+        and prior.placement is not None
+        and prior.placement != placement
+    ):
+        # R23 "sticky": a workspace never changes placement under its own feet.
+        raise IsolationError(
+            f"the workspace for {branch} was set up under placement: {prior.placement}, but "
+            f"the `fr` switch (origin/fr) now says placement: {placement}. fr will not move a "
+            f"live workspace between placements: restore origin/fr, or finish this workspace "
+            f"(`fr isolation down --branch {branch}`) before the next one"
+        )
     return IsolationState(
         repo_root=repo_root,
         branch=branch,
@@ -209,6 +226,7 @@ def carried_state(
         created_at=prior.created_at if prior else datetime.now(UTC).isoformat(),
         sessions=list(prior.sessions) if prior else [],
         base_sha=base_sha or (prior.base_sha if prior else None),
+        placement=placement or (prior.placement if prior else None),
     )
 
 

@@ -93,12 +93,14 @@ def test_up_adopts_marker_saves_state(tmp_path: Path) -> None:
         profile="external",
         created_at=st.created_at,
         target="external",  # gh#569: every up records its own mode
+        placement="repo",  # R23 "sticky": no origin, so `repo`
     )
     assert load_state(repo, "feat/x") == st
     # marker rewritten with the branch filled in, mode preserved
     marker = json.loads((repo / ".fr-isolation").read_text())
     assert marker["branch"] == "feat/x"
     assert marker["mode"] == "external"
+    assert marker["placement"] == "repo"
     _no_docker_or_worktree(runner)
 
 

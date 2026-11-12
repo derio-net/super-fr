@@ -4839,6 +4839,19 @@ def _refuse_incoherent_settings(repo_root: Path) -> None:
         raise typer.Exit(2)
 
 
+def _fetch_switch_or_refuse(repo_root: Path) -> None:
+    """R23 "the switch": `run start` fetches `origin/fr` like `fr isolation up`, and
+    refuses (exit 2) when origin is unreachable, even when the workspace already exists."""
+    from fr.placement.quiet import fetch_switch
+    from fr.settings import SettingsError
+
+    try:
+        fetch_switch(repo_root)
+    except SettingsError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
 @run_app.command("start")
 @_commits_run_writes("start")
 def start_cmd(
@@ -4908,6 +4921,7 @@ def start_cmd(
             err_console.print(f"  {err}", soft_wrap=True)
         raise typer.Exit(2)
 
+    _fetch_switch_or_refuse(repo_root)
     _refuse_incoherent_settings(repo_root)
 
     try:

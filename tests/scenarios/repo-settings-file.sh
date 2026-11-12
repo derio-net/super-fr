@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Row repo-settings-file: `fr settings init` writes a fully commented defaults file;
 # `show` reads it from the DEFAULT branch of origin (source repo), an unknown key
-# on main is refused by `check` and `show` naming it, and an unservable placement
-# is refused as not yet available. The fixture is a fresh `git init` with a local bare origin.
+# on main is refused by `check` and `show` naming it, an unservable placement
+# (stealth) is refused as not yet available, and quiet in this file points at the
+# `fr` branch. The fixture is a fresh `git init` with a local bare origin.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 
@@ -42,9 +43,16 @@ run_fr out settings show
 require_exit 2 "$out"
 expect_grep 'forge\.bogus' "$out" "show names the unknown key"
 
+printf 'placement: stealth\n' > .fr/settings.yaml
+git commit -qam "stealth" && git push -q origin main || fail "land stealth"
+run_fr out settings check
+require_exit 2 "$out"
+expect_grep 'not yet available' "$(printf '%s' "$out" | tr '\n' ' ')" "stealth is refused as not yet available"
+
+# Quiet is switched on by the `fr` branch, never by this file (plan 3, phase 3).
 printf 'placement: quiet\n' > .fr/settings.yaml
 git commit -qam "quiet" && git push -q origin main || fail "land quiet"
 run_fr out settings check
 require_exit 2 "$out"
-expect_grep 'not yet available' "$(printf '%s' "$out" | tr '\n' ' ')" "quiet is refused as not yet available"
+expect_grep 'fr settings init --quiet' "$(printf '%s' "$out" | tr '\n' ' ')" "quiet in .fr/settings.yaml points at the fr branch"
 echo "ok: repo-settings-file"

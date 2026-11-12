@@ -73,6 +73,12 @@ class GitRunner:
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(argv))
         self.kwargs.append(kw)
+        # The quiet switch probe (`refs/heads/fr`, R23) is not under test here: it
+        # answers "origin has no `fr`" (rc 2), so `up` is not refused for an origin
+        # the test broke on purpose before the branch classification under test runs.
+        # Every simulated failure below is the BRANCH probe's.
+        if argv[:2] == ["git", "ls-remote"] and argv[-1] == SWITCH_PROBE:
+            return subprocess.CompletedProcess(argv, 2, stdout="", stderr="")
         if argv[:2] == ["git", "ls-remote"] and self.ls_remote_rc is not None:
             return subprocess.CompletedProcess(
                 argv, self.ls_remote_rc, stdout="", stderr="fatal: simulated probe failure\n"
@@ -90,6 +96,17 @@ class GitRunner:
 
     def kwargs_for(self, sub: str) -> list[dict[str, Any]]:
         return [k for c, k in zip(self.calls, self.kwargs, strict=True) if c[:2] == ["git", sub]]
+
+
+SWITCH_PROBE = "refs/heads/fr"
+NO_FETCH_SWITCH_LINE = (
+    "fr: --no-fetch: reading the last fetched origin/fr for the placement "
+    "(not a reachability check)"
+)
+
+
+def _branch_probes(runner: GitRunner) -> list[list[str]]:
+    return [c for c in runner.git("ls-remote") if c[-1] != SWITCH_PROBE]
 
 
 def _is_refspec_fetch(argv: list[str]) -> bool:
@@ -498,7 +515,7 @@ def test_network_calls_are_non_interactive_and_bounded(
     bounded = runner.kwargs_for("ls-remote") + [
         k for c, k in zip(runner.calls, runner.kwargs, strict=True) if _is_refspec_fetch(c)
     ]
-    assert len(bounded) == 2
+    assert len(bounded) == 3  # the switch probe (R23), the branch probe, the fetch
     for kw in bounded:
         assert kw["env"]["GIT_TERMINAL_PROMPT"] == "0"
         assert "BatchMode=yes" in kw["env"]["GIT_SSH_COMMAND"]
@@ -595,7 +612,7 @@ def test_existing_worktree_short_circuit_never_probes(
 
     _up(repo, runner, branch="feat/x")
 
-    assert not runner.git("ls-remote")
+    assert not _branch_probes(runner)  # the switch probe runs at every up (R23)
     assert not runner.git("fetch")
 
 
@@ -637,6 +654,7 @@ def test_no_fetch_without_origin_ref_is_a_soft_line(
     assert _head(st.worktree) == main
     lines = _err_lines(capsys)
     assert lines == [
+        NO_FETCH_SWITCH_LINE,
         "isolation: origin/feat/new not checked (--no-fetch, no local ref) — starting a new branch",
         f"isolation: basing new branch feat/new on origin/main (local, --no-fetch) ({main[:12]})",
     ]
@@ -654,7 +672,8 @@ def test_no_fetch_local_branch_without_origin_ref(
     _up(repo, GitRunner(), branch="feat/pre", no_fetch=True)
 
     assert _err_lines(capsys) == [
-        f"isolation: reusing local branch feat/pre at {main[:12]} (origin not checked: --no-fetch)"
+        NO_FETCH_SWITCH_LINE,
+        f"isolation: reusing local branch feat/pre at {main[:12]} (origin not checked: --no-fetch)",
     ]
 
 

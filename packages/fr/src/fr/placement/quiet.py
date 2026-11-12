@@ -96,9 +96,16 @@ def _ref_sha(common: Path, ref: str) -> str | None:
 
 
 def _has_origin(root: Path) -> bool:
-    from fr.git import git_answer
+    """An `origin` remote is configured. Not a git repo (or no such directory) is no:
+    the caller's own repo check names that problem."""
+    from fr.git import GitUnavailableError, git_answer
 
-    return git_answer(root, "config", "--get", "remote.origin.url").returncode == 0
+    if not Path(root).is_dir():
+        return False
+    try:
+        return git_answer(root, "config", "--get", "remote.origin.url").returncode == 0
+    except GitUnavailableError:
+        return False
 
 
 def _read(root: Path) -> Switch | None:
