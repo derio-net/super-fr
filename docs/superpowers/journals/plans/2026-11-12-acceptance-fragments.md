@@ -689,3 +689,8 @@ PR #1408 review item 9 (read only), matrix_fragments.py:213-222. Fix if small, e
 ### pr1408-r10 · finding [open] (reviewer: in scope) · The record 10->11 hop validates with the live StepRecord via guard_v9_record (phase 3)
 
 PR #1408 review item 10 (read only). Additive today; the artifact-versioning rule's freeze obligation lands on the first removal. Fix if small, else defer with an issue.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r1-resolved created=2026-11-12T09:29:29+00:00 state=fixed resolves=pr1408-r1 -->
+### pr1408-r1-resolved · finding [fixed] · resolves pr1408-r1: A retired row that became contested can never be cleared: every pending amendment naming a retired row raises FoldError, whatever its base
+
+b9475854b: fold checks every amendment naming a retired row against its revision; a stale pending one is stale_pending, a correctly based one clears contested. Red: test_a_stale_pending_amendment_to_a_retired_row_is_stale_not_an_error, test_a_contested_retired_row_is_cleared_by_a_correctly_based_amendment
