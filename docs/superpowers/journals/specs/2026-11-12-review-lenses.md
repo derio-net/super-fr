@@ -304,3 +304,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-review-lenses-p2 created=2026-11-12T17:17:16+00:00 -->
 ### tier-2026-11-12-review-lenses-p2 · decision · hard: two artifact shape changes with migrations (journal 4, record 12) that every reader relies on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-review-lenses-p3 created=2026-11-12T17:17:25+00:00 -->
+### tier-2026-11-12-review-lenses-p3 · decision · hard: changes the evidence gate in run_cmd.py that every review step resolves through
