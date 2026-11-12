@@ -68,3 +68,11 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: installer-names-no-vk-residue
+    op: reword
+    base: 0
+    acceptance: The installer contains no code or text naming the retired vk tool, and
+      treats a validator wrapper as its own only when it names super-fr
+    why: 'spec review sr-6: the generic bare-org purge still drops any *@derio-net id,
+      so ''removes nothing'' was untrue'
