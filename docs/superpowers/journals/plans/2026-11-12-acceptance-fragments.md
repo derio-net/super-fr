@@ -425,3 +425,65 @@ stale_pending is recorded inside the fold's existing apply loop and both check a
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 skill, rule and explainer prose, regenerated mirrors and a scenario script; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-12T06:40:25+00:00 phase=3 -->
+### review-phase-3 · review · Phase 3 review (amendments): four in-scope findings, all fixed (phase 3)
+
+Independent reviewer over `git diff 378340641..4856be6d0`. Amendment bases, --rebase,
+in-place edits of pending rows, the stale-base refusal's network behaviour, the record
+10->11 migration and the scenario held; check on this branch is clean (617 rows).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-12T06:40:25+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · set-status owner fallback wrote into another feature's merged fragment, contradicting R16 ('its own fragment') (phase 3)
+
+Reintroduced shared-file conflicts (legacy.yaml hotspot); the explainer's 'two different files' sentence became false.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-12T06:40:25+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · check compared merged amendments as a multiset, so reordering or inserting above them passed and changed the post-merge fold (phase 3)
+
+Reproduced: walk-owed became unwired, contested after merge.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-12T06:40:25+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · branch_refusals silently skipped fetch, immutability and stale checks when the default ref could not be resolved, so CI passed (phase 3)
+
+Contrary to R17 and the CI fail-closed decision.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-12T06:40:25+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · Retired-but-contested rows were counted by acceptance status but by no debt reader (phase 3)
+
+status said contested: 1 while fr debt and the digest counted 0.
+
+<!-- fr:journal kind=decision scope=plan id=p3-set-status-feature-required created=2026-11-12T06:40:25+00:00 phase=3 -->
+### p3-set-status-feature-required · decision · Supersedes p3-set-status-owner-fallback: set-status with no feature refuses; printed post-merge commands name the feature they close (phase 3)
+
+R16 writes an amendment to the fragment of the feature making it, so the owner fallback
+is gone: `set-status` with no `--feature` and no run refuses, as `amend` does. A
+post-merge walk or issue link belongs to the feature whose gate or delivery it closes,
+so every command fr prints for one carries `--feature` (the run's spec, else the row's
+one origin spec, else a `<spec-slug>` placeholder). legacy.yaml never takes amendments
+by default.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-12T06:40:25+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: set-status owner fallback wrote into another feature's merged fragment, contradicting R16 ('its own fragment') (phase 3)
+
+992e9515f: fallback removed; feature_flag() adds --feature to every printed post-merge command; printed-commands scenario asserts the link lands in the feature's own fragment.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-12T06:40:25+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: check compared merged amendments as a multiset, so reordering or inserting above them passed and changed the post-merge fold (phase 3)
+
+ecf32e7dc: merged amendments (at the merge base) must be an exact prefix of the working list; tests for swap, insert-above, append-after.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-12T06:40:25+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: branch_refusals silently skipped fetch, immutability and stale checks when the default ref could not be resolved, so CI passed (phase 3)
+
+0cd01545d: a remote with no resolvable default ref is refused in CI, warned elsewhere; this repo's acceptance-report.yml and the scaffold templates check out full history.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-12T06:40:25+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: Retired-but-contested rows were counted by acceptance status but by no debt reader (phase 3)
+
+dcb086cff: retired contested rows are debt in status, open_rows, fr debt, the digest, fr status and summary (DebtRow.retired).
+
+<!-- fr:journal kind=finding scope=plan id=p3-stray-r1-records-dir-resolved created=2026-11-12T06:40:25+00:00 phase=3 state=open resolves=p3-stray-r1-records-dir out_of_scope=true -->
+### p3-stray-r1-records-dir-resolved · finding [out-of-scope] · resolves p3-stray-r1-records-dir: An empty untracked docs/superpowers/runs/r1.records/ sits in the workspace, created before phase 3 (phase 3) (phase 3)
+
+An empty untracked dir that predates phase 3 (created 02:05, before any phase ran), likely from a test run in the workspace; nothing in this change writes it. Removed locally (empty, never tracked).
