@@ -85,8 +85,8 @@ body.landing .site-bar a:hover{color:var(--text);text-decoration-color:var(--acc
 
 /* the terminal */
 .hero-term{position:relative}
-.glow{position:absolute;inset:-22% -14%;z-index:0;filter:blur(40px);pointer-events:none;
-  background:radial-gradient(closest-side,color-mix(in srgb,var(--accent-a) 46%,transparent),color-mix(in srgb,var(--accent-b) 32%,transparent) 55%,transparent)}
+.glow{position:absolute;inset:-18% -12%;z-index:0;filter:blur(36px);pointer-events:none;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--accent-a) 62%,transparent),color-mix(in srgb,var(--accent-b) 48%,transparent) 58%,transparent)}
 .terminal{z-index:1;overflow:hidden;border-color:var(--line-2);box-shadow:0 30px 70px -28px rgb(0 0 0/.7),inset 0 1px 0 color-mix(in srgb,var(--text) 8%,transparent)}
 .term-bar{display:flex;align-items:center;gap:.45rem;padding:.7rem 1rem;background:var(--surface-2);border-bottom:1px solid var(--line)}
 .term-bar i{width:.7rem;height:.7rem;border-radius:50%;background:var(--line-2)}
