@@ -1,0 +1,11 @@
+lens: simplicity
+title: Simplicity
+brief: |
+  Review the whole change for complexity it does not need. Look for:
+  - a helper, layer, option or abstraction the change does not need;
+  - code that duplicates something the repo already has, or that two phases
+    each wrote;
+  - names that do not say what the thing is;
+  - a function a reader cannot follow in one pass.
+  Not style a formatter or linter owns.
+  A problem you see outside this lens is still reported, as an ordinary finding.
