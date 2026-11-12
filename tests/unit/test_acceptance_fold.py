@@ -242,6 +242,23 @@ def test_amendments_added_to_an_existing_fragment_take_their_own_merge_position(
     assert eff.contested == frozenset()
 
 
+def test_an_amendment_inserted_above_a_merged_one_takes_its_own_merge_position(
+    repo: Repo,
+) -> None:
+    # pr1408-r8: the merged order is found by value, not by list position (the
+    # insert is refused before merge, so this shape needs a check bypass).
+    first = _amend(ROW, 0, "unwired", why="first")
+    repo.feature("2026-01-02-bravo", amendments=[first])
+    repo.feature("2026-01-03-charlie", amendments=[_amend(ROW, 1, "manual")])
+    repo.checkout("feat/bravo-2", new=True)
+    repo.write("2026-01-02-bravo", amendments=[_amend(ROW, 2, "ci", why="third"), first])
+    repo.commit("feat: bravo plan 2, inserted above")
+    repo.merge_feature("feat/bravo-2")
+    eff = fold(repo.root)
+    assert _status(eff) == "ci"
+    assert eff.contested == frozenset()
+
+
 def test_a_branchs_own_entries_apply_after_every_merged_one(repo: Repo) -> None:
     # The branch is cut before zulu merges and never rebased.
     repo.checkout("feat/mine", new=True)

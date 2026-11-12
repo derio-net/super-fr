@@ -190,19 +190,19 @@ def _tip_fragments(run: GitRunner, sha: str) -> dict[str, Fragment]:
     }
 
 
-def _amendment_count(text: str | None) -> int:
-    """How many amendments a historical blob carries; lenient, because an old
-    revision is only counted, never validated."""
+def _amendment_list(text: str | None) -> list[object]:
+    """The raw `amendments:` entries of a historical blob; lenient, because an old
+    revision is only compared, never validated."""
     if text is None:
-        return 0
+        return []
     import yaml
 
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError:
-        return 0
+        return []
     amendments = data.get("amendments") if isinstance(data, dict) else None
-    return len(amendments) if isinstance(amendments, list) else 0
+    return amendments if isinstance(amendments, list) else []
 
 
 def _introductions(
@@ -246,13 +246,18 @@ def _introductions(
     amended = [p for p, f in fragments.items() if f.amendments]
     specs = [(path, pos) for path in amended for pos in touched.get(path, [])]
     texts = _cat(run, [f"{commits[pos]}:{path}" for path, pos in specs])
-    counts = [_amendment_count(t) for t in texts]
+    lists = [_amendment_list(t) for t in texts]
     out: dict[tuple[str, int], int] = {}
     last = max(len(commits) - 1, 0)
     for path in amended:
-        history = [(pos, n) for (q, pos), n in zip(specs, counts, strict=True) if q == path]
+        history = [(pos, got) for (q, pos), got in zip(specs, lists, strict=True) if q == path]
+        tip = history[-1][1] if history else []
         for k in range(len(fragments[path].amendments)):
-            out[(path, k)] = next((pos for pos, n in history if n > k), last)
+            # By value, not list position (review pr1408-r8): the (n+1)-th copy of
+            # an entry was introduced by the first commit holding n+1 copies of it.
+            entry = tip[k] if k < len(tip) else None
+            nth = tip[:k].count(entry)
+            out[(path, k)] = next((pos for pos, got in history if got.count(entry) > nth), last)
     return out
 
 
