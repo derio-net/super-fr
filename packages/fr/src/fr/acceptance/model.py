@@ -258,6 +258,21 @@ class Row(BaseModel):
         check_status(v)
         return v
 
+    @field_validator("origin")
+    @classmethod
+    def _logical_origins_are_well_formed(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        # An origin may be logical (`spec:<slug>#R<n>`, `plan:<slug>`; spec
+        # 2026-11-04-repo-feature-settings R18) as well as `<repo>:<path>`.
+        from fr.acceptance.logical import is_logical, parse_logical
+
+        for ref in v:
+            if is_logical(ref):
+                try:
+                    parse_logical(ref)
+                except AcceptanceError as e:
+                    raise ValueError(str(e)) from e
+        return v
+
     @field_validator("verify")
     @classmethod
     def _not_the_v3_spelling(cls, v: str | None) -> str | None:
