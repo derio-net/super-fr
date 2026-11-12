@@ -246,3 +246,10 @@ amendments:
       matrix mutation are removed; rendering is on demand (fr acceptance report --open)
       and published from the folded fragments in CI.'
     why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: archive-retargets-matrix-refs
+    op: reword
+    base: 0
+    acceptance: After a successful archive, every same-repo ref naming a moved spec,
+      plan or journal still resolves, read at its archived location (no fragment is
+      rewritten), so fr acceptance check stays clean after closeout
+    why: the fragments split (R18) leaves archive rewriting no fragment
