@@ -26,9 +26,9 @@ rows:
       is still owed'
   - id: archive-retargets-matrix-refs
     capability: archive
-    acceptance: After a successful archive, every same-repo ref naming a moved spec,
-      plan or journal still resolves, read at its archived location (no fragment is
-      rewritten), so fr acceptance check stays clean after closeout
+    acceptance: After a successful archive, every same-repo matrix ref naming a moved
+      path points at its new location (only those bytes change) and the three reports
+      are regenerated, so fr acceptance check stays clean after closeout
     origin:
     - spec:2026-10-06-archive-followups#R4
     - spec:2026-10-06-archive-followups#R5
@@ -36,16 +36,11 @@ rows:
     - spec:2026-10-06-archive-followups#R7
     levels:
       unit:
-      - super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_rewrites_no_acceptance_fragment
-      - super-fr:tests/unit/test_acceptance_effective_readers.py#test_the_staleness_guard_counts_a_logical_citation
-      - super-fr:tests/unit/test_acceptance_effective_readers.py#test_rows_citing_matches_a_logical_origin_live_and_archived
-      - super-fr:tests/unit/test_acceptance_archive_twin.py#test_check_survives_debug_journal_archive
-      - super-fr:tests/unit/test_acceptance_archive_twin.py#test_a_plan_dir_ref_resolves_at_its_archived_counterpart
+      - super-fr:tests/unit/test_acceptance_retarget.py#test_other_repo_refs_notes_walks_and_comments_stay_byte_identical
+      - super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_retargets_matrix_refs_and_regenerates_the_reports
+      - super-fr:tests/unit/test_archive_followups.py#test_a_moved_then_exit_2_archive_still_retargets
     status: ci
-    notes: 'review p2-r5: archive rewrites no fragment and the retarget step is gone;
-      logical spec/plan refs survive an archive (spec 2026-11-04 R18), and check resolves
-      a pre-archive path ref under docs/superpowers/{specs,journals,plans}/ at its archived
-      counterpart at read time, ci-pinned; the live close-out (verify: live, post-merge)
+    notes: 'unit-pinned in CI by this PR; the live close-out (verify: live, post-merge)
       is still owed'
   - id: archive-files-open-ends
     capability: archive

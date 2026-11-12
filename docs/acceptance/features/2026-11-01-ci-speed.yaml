@@ -17,11 +17,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_yamlio.py#test_loader_falls_back_without_the_c_loader
-      - super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_fragments_equal_plain_pyyaml_builds
+      - super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_matrix_equals_plain_pyyaml_build
     status: ci
     notes: Unit tests in CI pin loader choice + pure fallback parse (test_yamlio), memoized
-      parse with per-caller deep copy, uncached errors and real-fragment equality (test_acceptance_parse_cache;
-      re-pointed after the fragments split renamed the test). Phase 1 of plan 2026-11-01-ci-speed.
+      parse with per-caller deep copy, uncached errors and real-matrix equality (test_acceptance_parse_cache).
+      Phase 1 of plan 2026-11-01-ci-speed.
     verify: none
   - id: ci-shards-complete
     capability: ci
