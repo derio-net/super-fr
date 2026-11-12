@@ -824,3 +824,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: none
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-32 created=2026-11-12T00:17:43+00:00 -->
+### exit-change-32 · decision · exit change: row acceptance-matrix-migration -> strategy candidate
+
+plan 2 (2026-11-12 run, #1379) builds this row; verified by this run's candidate walk with the row's own tests/scenarios/acceptance-matrix-migration.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
