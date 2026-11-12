@@ -353,7 +353,8 @@ def atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bo
             return refs
         detail = (done.stderr or done.stdout).strip()
         listed = run_git(root, ["ls-remote", "--heads", remote, f"refs/heads/{QUIET_BRANCH}"])
-        remote_fr = (listed.stdout.split() or [None])[0]
+        words = listed.stdout.split()
+        remote_fr = words[0] if words else None
         tracking = _sha(root, f"refs/remotes/{remote}/{QUIET_BRANCH}")
         if QUIET_BRANCH not in refs or listed.returncode != 0 or remote_fr == tracking:
             raise PushRefusedError(f"`git {' '.join(argv)}` failed: {detail}")

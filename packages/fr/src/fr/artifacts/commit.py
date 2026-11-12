@@ -635,9 +635,9 @@ def commit_paths(
     # of them is made THERE, never on this product branch. The product-side refusals
     # above still apply first (no fr commit for a detached or default-branch checkout).
     elsewhere = _outside(toplevel, paths)
-    held = _quiet_product_artifacts(repo_root, toplevel, paths, elsewhere)
-    if held is not None:
-        return held
+    refused = _quiet_product_artifacts(repo_root, toplevel, paths, elsewhere)
+    if refused is not None:
+        return refused
     if elsewhere:
         rerouted = _quiet_commit(repo_root, toplevel, paths, elsewhere)
         if isinstance(rerouted, CommitOutcome):
