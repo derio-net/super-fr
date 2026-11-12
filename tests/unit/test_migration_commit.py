@@ -860,3 +860,40 @@ def test_a_v6_cursor_whose_usage_file_is_being_edited_is_held_back(tmp_path: Pat
     assert held and f"{run}.yaml" in held[0].error and "uncommitted" in held[0].error
     assert cursor.read_bytes() == before
     assert usage.read_text().endswith("# the operator, mid-edit\n")
+
+
+def test_a_deleted_tracked_path_is_committed_as_a_removal(tmp_path: Path) -> None:
+    """A retiring migration deletes its artifact (spec 2026-11-04 R19): the
+    removal is staged and committed with the files it wrote instead."""
+    from fr.artifacts.commit import commit_paths
+
+    root = _repo(tmp_path)
+    gone = root / "unrelated-modified.md"
+    gone.unlink()
+    written = root / "docs" / "acceptance" / "features" / "x.yaml"
+    written.parent.mkdir(parents=True)
+    written.write_text("feature: x\n")
+
+    outcome = commit_paths(root, [gone, written], "chore(fr): retire")
+
+    assert outcome.committed, outcome.reason
+    assert _committed_paths(root) == ["docs/acceptance/features/x.yaml", "unrelated-modified.md"]
+    assert "unrelated-modified.md" not in _git(root, "ls-files")
+
+
+def test_a_path_neither_on_disk_nor_in_the_index_never_reaches_git_add(tmp_path: Path) -> None:
+    """Review p2-r1: one hop creates a file and a later hop deletes it, so the
+    report names a path git never saw. It is skipped, not handed to `git add`
+    (which refuses an unknown pathspec and fails the whole commit)."""
+    from fr.artifacts.commit import commit_paths
+
+    root = _repo(tmp_path)
+    ghost = root / "docs" / "acceptance" / "report_linked.md"
+    written = root / "docs" / "acceptance" / "features" / "x.yaml"
+    written.parent.mkdir(parents=True)
+    written.write_text("feature: x\n")
+
+    outcome = commit_paths(root, [ghost, written], "chore(fr): retire")
+
+    assert outcome.committed, outcome.reason
+    assert _committed_paths(root) == ["docs/acceptance/features/x.yaml"]

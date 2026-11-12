@@ -1,0 +1,343 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-08-14-workflow-shapes-and-workitem-dispatch
+repo: derio-net/super-fr
+rows:
+  - id: workflow-shape-selection
+    capability: Workflow shapes
+    acceptance: An operator runs a named workflow shape via 'fr-goal <shape>'; invoking
+      fr-goal with no argument runs today's TDD-feature pipeline unchanged.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      - super-fr:tests/unit/test_skill_validation.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: 'Spec 2026-08-14 4.A. Phase 11 landed the shipped caller: plugins/super-fr/workflows/fr-goal.yaml
+      is now the full spec-§4.A pipeline (not Phase 6''s stub), and plugins/super-fr/skills/fr-goal/SKILL.md
+      is rewritten to accept an optional shape argument, drive the resolved shape''s
+      cursor via `fr run start/advance/resolve`, and default to `fr-goal` with no argument
+      — the load-bearing back-compat half. test_fr_goal_shape.py proves resolve_workflow
+      finds the real shipped manifest, that its step ids match the skill''s numbered
+      narration 1:1 (so the two cannot silently drift), and that a repo-authored docs/superpowers/workflows/fr-goal.yaml
+      overrides it wholesale. Flipped to `ci` rather than the sibling dispatch-granularity
+      rows: this row is specifically about fr-goal/`fr run` selecting a shape, which
+      is now real and CI-covered; it is NOT about fr apply/the bridge deriving dispatch
+      granularity from a resolved shape, which stays hardcoded to fr.workflow.shapes.FR_GOAL_PHASE_DISPATCH
+      (see the sibling rows'' notes). Milestone review r2: resolving the shipped shape
+      was covered; EXECUTING it was not, and it could not be executed -- its first step
+      shelled out to `fr isolation up` (moving run state out from under the run) and
+      its second was a gated agent step nothing could clear. test_fr_goal_shape.py now
+      walks the real manifest through the real CLI past both, so "no argument runs today''s
+      pipeline" is a checked claim rather than a resolution-only one. Review r5-b5/r5-e14:
+      resolution was covered only where a Claude Code marketplace clone exists. The
+      shipped manifests now also travel INSIDE the fr wheel (packages/fr/src/fr/workflows/,
+      reached via importlib.resources), so lookup is repo override > $FR_SHIPPED_WORKFLOWS_DIR
+      > packaged > marketplace clone, and `fr run start fr-goal` resolves on a hermes
+      pod, an OpenCode consumer, or a bare `uv tool install fr` with an empty HOME.
+      test_tripwire_shipped_workflows.py gained three checks (the packaged set matches
+      the plugin set, is byte-identical, and is reachable through importlib.resources);
+      test_workflow_resolve.py pins the precedence.'
+  - id: workflow-repo-authored
+    capability: Workflow shapes
+    acceptance: A consumer repo defines its own workflow shape, or overrides a shipped
+      one of the same name, without modifying the plugin.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_resolve.py
+    status: ci
+    notes: 'Spec 4.A. Resolution repo > shipped, mirroring fr models; override is wholesale
+      (a repo file with fewer steps yields exactly those steps, never merged). Kept
+      at `ci` after the milestone review flagged that the default shipped-root path
+      ($FR_SHIPPED_WORKFLOWS_DIR unset, ~/.claude/plugins/marketplaces/derio-net--super-fr/...)
+      was untested — every prior test injected shipped_root directly, proving the precedence
+      algorithm but not that a real consumer repo''s lookup is findable. Now covered:
+      the env-unset fallback path, and a wiring test proving that resolve_workflow(name,
+      repo_root) with NO shipped_root kwarg actually reaches default_shipped_workflows_dir().
+      Phase 6.'
+  - id: workflow-manifest-validated
+    capability: Workflow shapes
+    acceptance: An invalid shape is rejected by 'fr workflow check' (duplicate step
+      ids, dangling needs, cycles, unknown capabilities, unknown schema version) rather
+      than failing mid-run.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_check.py
+      - super-fr:tests/unit/test_workflow_model.py
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    status: ci
+    notes: Spec 4.A. Guard in code (fr.workflow.check.check_workflow), not prose; every
+      failure named in the acceptance text is pinned, plus a CI tripwire over every
+      shipped manifest. Phase 6.
+  - id: run-cursor-durable
+    capability: Run state
+    acceptance: A run's step cursor and emitted artifacts are durable and reviewable
+      in the PR, so a run can be audited or resumed mid-flight.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_state.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_run_workspace.py
+      - super-fr:tests/unit/test_archive_cmd.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+      - super-fr:tests/integration/test_run_workspace_lifecycle.py
+    status: ci
+    notes: 'Spec 4.B. docs/superpowers/runs/<run-id>.yaml, git-tracked, archives to
+      implemented/runs/ alongside its plan. Durability: byte-stable YAML round-trip
+      (test_run_state.py) plus git mv on archive, mirroring _archive_journal. Resumability
+      is exercised end-to-end, not merely in-memory: every `fr run` CLI test issues
+      separate start/advance/status/resolve/check invocations that each reload state
+      from disk, so a step surviving process exit -- including a gate: operator step
+      left blocked and picked back up later -- is what the tests actually pin. Audit:
+      `fr run status` prints the cursor and every step''s state. `fr run advance` never
+      invokes a model (kind: cli executes directly and captures exit+stdout; kind: agent
+      only emits a dispatch brief and marks itself running), asserted by monkeypatching
+      subprocess.run to raise if called on the agent-step path. `fr run resolve` (added
+      in milestone review, spec amended: the original 4-command CLI could mark an agent
+      step running but never move it to done, wedging every real run on its first agent
+      step) records that step''s outcome via the same done/failed cursor-advance logic
+      advance''s cli branch uses (_complete_step, shared not forked) and is equally
+      non-executing. Archival is keyed on the DATA a run file already carries (the plan
+      step''s emitted.plan path), not on any run-id/plan-slug name convention -- a name-keyed
+      version landed first and silently never matched in real use (run ids are date+branch-derived,
+      plan slugs are authored independently), caught by a fixture using a deliberately
+      unrelated run id and plan slug (test_archive_cmd.py); a same-name fixture would
+      have hidden the bug. Phase 7. Milestone review r2 corrected two claims this row''s
+      notes had already made but nothing proved. (1) "a gate: operator step ... picked
+      back up later" was false: `advance` marked a gated step blocked and `resolve`
+      refused anything not `running`, so the shipped fr-goal shape -- whose SECOND step
+      is agent+gate -- wedged permanently, verified against the real CLI. The old gate
+      tests asserted only that a step BECOMES blocked, never that it can be cleared;
+      `resolve` now clears one (an agent step completes, a cli step''s gate is cleared
+      so the next `advance` still executes it and its exit code is still the verdict),
+      pinned at fixture level in test_run_cli.py AND at shape level in test_fr_goal_shape.py,
+      which walks the SHIPPED manifest start -> blocked brainstorm -> resolve -> the
+      next step''s brief. (2) Durability now means durable IN THE WORKSPACE (spec 4.B
+      amended): `fr run start` ensures isolation itself and writes the run file inside
+      the resulting worktree, so `advance` from the worktree finds its own run and cli
+      steps run with cwd at the workspace root -- test_run_workspace.py covers the marker/reuse/refusal
+      paths, and test_run_workspace_lifecycle.py walks a REAL host-worktree isolation
+      (no docker) asserting the base clone comes away with no run file at all. The shipped
+      shape''s `isolate` step is gone; isolation is a precondition, not a step the run
+      performs on itself.'
+  - id: dispatch-unit-declared-by-shape
+    capability: Dispatch granularity
+    acceptance: The granularity dispatch creates work items at (whole run, per plan
+      phase, or per target repo of a spec) is declared by the workflow shape, not hardcoded
+      by the dispatcher.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_item_graph.py
+      - super-fr:tests/unit/test_no_pr_shape.py
+      int:
+      - super-fr:tests/integration/test_spec_fanout.py
+      - super-fr:tests/integration/test_bridge_shape_binding.py
+    status: not-implemented
+    notes: 'Spec 4.E. Phase 8 landed the mechanism (fr_dispatch.item_graph.build_items
+      is the single builder and honours all three units) and Phase 9 widened tick''s
+      source to Plan | SpecMeta | None. Phase 12 removed the hardcoding this note used
+      to name: the bridge no longer rides tick''s built-in default but resolves each
+      plan''s own shape from _meta.yaml''s `workflow:` key (bridge_cli.py -> workflow_for_plan
+      -> tick(workflow=...)), so the dispatcher genuinely reads granularity off the
+      shape. STAYS not-implemented because only one of the three declared units is reachable
+      that way — unit:phase. A unit:run shape needs a run id that plan discovery has
+      no source for, and a unit:spec shape needs a SpecMeta that no shipped caller ever
+      produces (discover_plans yields Plans, fr apply takes a plan dir; SpecMeta appears
+      in no bridge or CLI call site). An operator therefore still cannot SELECT run-
+      or spec-granularity through a shipped path. The remaining gap is pinned rather
+      than described: tests/integration/test_bridge_shape_binding.py::test_a_plan_naming_a_run_unit_shape_is_refused_for_want_of_a_run_id
+      asserts the loud per-plan failure inside the bridge''s I9 boundary (daemon survives,
+      nothing dispatched at the wrong granularity). Flip when a shipped caller can dispatch
+      a run- or spec-unit shape end to end.'
+  - id: multi-repo-spec-fanout
+    capability: Dispatch granularity
+    acceptance: Dispatching a spec fans out one work item per target repo named in its
+      Implementation Plans table, each carrying a parent reference to the spec.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_item_graph.py
+      int:
+      - super-fr:tests/integration/test_spec_fanout.py
+    status: not-implemented
+    notes: 'Spec 4.E/4.F. Phase 9 landed the fan-out end to end at library level — build_items._spec_items
+      decomposes a SpecMeta into one item per distinct target repo (manual/placeholder
+      rows skipped by design, malformed Repo cells reported as failures), tick accepts
+      a SpecMeta source, and tests/integration/test_spec_fanout.py drives a 3-row fixture
+      through tick with a fake runner, each item parented to the spec-level id. Phase
+      12 added the plan->shape binding this note previously named as the blocker, but
+      that binding does NOT unblock this row: `workflow:` lives in a PLAN''s _meta.yaml,
+      while a unit:spec shape decomposes a SpecMeta. No shipped caller ever produces
+      a SpecMeta dispatch source — the bridge''s discover_plans yields Plans and fr
+      apply takes a plan dir (grep: SpecMeta appears nowhere in bridge_cli.py or packages/fr/src/fr/commands/).
+      Spec fan-out therefore remains fake-runner-only and operator-unobservable. Flip
+      when a shipped entry point dispatches a spec — a spec target for `fr apply --to`,
+      or discovery that yields specs alongside plans.'
+  - id: reachability-derived-from-inputs
+    capability: Dispatch granularity
+    acceptance: A run-unit goal dispatches with no spec or plan on main (they are its
+      outputs), while a phase-unit dispatch still refuses an unmerged plan.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_reachability.py
+      - super-fr:tests/unit/test_plan_workflow_binding.py
+    status: ci
+    notes: 'Spec 4.E. Generalizes the 2026-05-17 reachability gate from a hardcoded
+      refusal to a rule derived from each step''s declared needs. Phase 8 landed required_inputs
+      (needs minus emits) and made fr apply''s gate read it off a manifest; Phase 12
+      makes that manifest the PLAN''s own — fr.commands.apply_cmd._check_plan_reachable_on_origin_head
+      now calls workflow_for_plan(plan, repo_root) instead of the module-level FR_GOAL_PHASE_DISPATCH.
+      Flipped to ci because both halves of the acceptance are now exercised against
+      real git repos through the SHIPPED gate with the shape chosen by the plan rather
+      than by a monkeypatched constant: tests/unit/test_reachability.py::test_a_plan_declaring_a_run_shape_passes_the_gate_with_nothing_on_main
+      (a plan naming a unit:run shape whose spec and plan are its own outputs passes
+      on an unmerged tree) and ::test_a_plan_declaring_no_shape_still_refuses_the_same_unmerged_tree
+      (today''s key-less plans resolve FR_GOAL_PHASE_DISPATCH and are still refused).
+      ::test_a_plan_naming_an_unresolvable_shape_raises_rather_than_defaulting and ::test_apply_refuses_a_plan_whose_shape_cannot_be_resolved
+      pin that an unknown shape is a loud refusal (exit 2, zero gh calls), never a silent
+      fall back to the default gate. NOT claimed here: fr apply''s own GitHub projection
+      is still per-phase — creating a run-unit WORK ITEM belongs to dispatch-unit-declared-by-shape,
+      which stays not-implemented.'
+  - id: runner-capability-refusal
+    capability: Runner and tracker negotiation
+    acceptance: A workflow shape whose required capabilities a runner cannot provide
+      is refused at preflight with one clear message, instead of failing part-way through
+      a run.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_capabilities.py
+      int:
+      - super-fr:tests/integration/test_bridge_shape_binding.py
+    status: ci
+    notes: 'Spec 4.F. Phase 5 landed the mechanism — tick.required_capabilities is checked
+      against Runner.capabilities BEFORE runner.preflight runs, reusing the preflight
+      blocker''s per-item failure path (one message, synced=0, dispatch never called)
+      — but nothing shipped resolved a shape and fed `requires` into it, so it was pinned
+      unit-only. Phase 12 supplies that caller: packages/fr-vk/src/fr_vk/bridge_cli.py
+      resolves each plan''s own shape (fr.workflow.resolve.workflow_for_plan, off _meta.yaml''s
+      optional `workflow:` key) and passes required_capabilities=frozenset(manifest.requires)
+      into tick. Flipped to ci on tests/integration/test_bridge_shape_binding.py::test_a_runner_lacking_the_shapes_capability_refuses_the_dispatch,
+      which drives a whole bridge_cli.main() tick with the REAL tick (not a spy): the
+      plan''s shape requires [git, browser], the runner provides {git, scm}, and the
+      tick reports synced=0 errors=1 skipped=1 with runner.dispatched == [] and runner.preflight
+      never called — the capability short-circuit specifically, not a preflight or dispatch
+      failure. Fixture discipline: that shape''s `requires` deliberately differ from
+      FR_GOAL_PHASE_DISPATCH''s {git, tests, scm}, so the refusal can only come from
+      the plan''s own declaration being read.'
+  - id: tracker-partial-mapping
+    capability: Runner and tracker negotiation
+    acceptance: A tracker instance declares which item states it can express, per project;
+      a shape needing an unsupported state is refused up front rather than erroring
+      against the tracker mid-run.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracker.py
+    status: ci
+    notes: Spec 4.G, Phase 10. Flipped not-implemented -> ci deliberately, not just
+      because a test file exists -- the PROTOCOL-LEVEL claim in `acceptance` above is
+      now genuinely exercised, not merely modeled. fr.tracker.model.state_supported
+      and GithubTracker.supports make "an instance declares which states it can express"
+      real (null or absent means unsupported, per-instance mapping resolved repo-over-user
+      like fr.models); fr_dispatch._tracker_blocker makes "refused up front" real --
+      chained into the SAME preflight short-circuit Phase 5 built for capability negotiation
+      (§4.F), before runner.preflight ever runs, never mid-tick. Two gaps this row does
+      NOT cover, flagged rather than silently claimed -- no Jira adapter is built (GithubTracker
+      is the one concrete Tracker and supports all five states by default; the partial-mapping
+      case is exercised via a fake tracker plus a GithubTracker instance override, not
+      a second real backend), and spec 4.G's "validate against the live server's actually-available
+      transitions" half is unimplemented -- fr.tracker.model.check_tracker_mapping_shape
+      validates config SHAPE only (an unresolvable instance, an unknown state key) and
+      its own docstring says so.
+  - id: vk-dispatch-unchanged-after-cutover
+    capability: Dispatch granularity
+    acceptance: 'After the WorkItem cutover the live VK bridge dispatches an unchanged
+      plan identically: one card per ready phase, no duplicates on a second tick.'
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      int:
+      - super-fr:tests/integration/test_bridge_dispatch_parity.py
+    status: ci
+    notes: 'Spec 4.D/6/8 Test Plan step 3. Executable half: test_bridge_dispatch_parity.py
+      (one card per ready phase, zero new cards on a second tick), in CI. Live half
+      walked 2026-09-07 against the real board with the one-phase fixture plan 2026-09-05-dispatch-walk-toy
+      (super-fr#447): the 06:56 UTC bridge tick (fr 4.0.0) created exactly one VK workspace
+      (FFE-249 -> gh#447) and stamped fr:synced; the 07:04 tick found 0 discoverable
+      plans and created nothing; the 7 pre-cutover cards were fetched for dedup and
+      none duplicated. Two operational faults found on the way were not dispatch regressions:
+      vk-local logged out since 2026-08-01 (relay/host offline, remote calls 401) and
+      a slot budget of 0 from 8 non-archived finished workspaces.'
+  - id: cli-starts-from-a-clean-install
+    capability: Release integrity
+    acceptance: The fr CLI starts from a clean tool install using only its declared
+      dependencies, so a consumer who installs the release can run it.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_no_direct_click_import.py
+    status: unwired
+    notes: Spec 8.0. 4.0.0 shipped a direct import of click - typer's TRANSITIVE dep,
+      not one fr declares - so the installed CLI could not start while the full local
+      suite stayed green; only CI's uv-tool path caught it. The tripwire pins that one
+      import; nothing yet asserts the installed CLI actually runs. Test Plan 8.0 covers
+      it manually until smoke-suite-automated lands.
+  - id: shape-resolution-fails-loud
+    capability: Dispatch granularity
+    acceptance: A plan naming a shape that does not resolve fails that plan loudly rather
+      than silently falling back to the default shape, and never takes the bridge daemon
+      down.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_workflow_binding.py
+      int:
+      - super-fr:tests/integration/test_bridge_shape_binding.py
+    status: ci
+    notes: Spec 4.A.1 and Test Plan 8.2 step 10. A silent fallback would dispatch a
+      plan at the WRONG granularity while reporting success - the failure mode this
+      design produced most often. Resolution sits inside the bridge's existing per-plan
+      I9 boundary, so a bad shape fails that plan and the tick continues.
+  - id: smoke-suite-automated
+    capability: Release integrity
+    acceptance: The post-merge smoke suite runs automatically against a clean install
+      rather than depending on an operator remembering to run it.
+    origin:
+    - spec:2026-08-14-workflow-shapes-and-workitem-dispatch
+    levels: {}
+    status: not-implemented
+    notes: 'Spec 8.0 is written as one scriptable command per step precisely so it can
+      be automated. Not built in this PR - operator-requested follow-up. Each step is
+      currently manual; the class of defect it guards (a release whose CLI cannot start)
+      is invisible to the in-workspace suite. Review r5-b5 sharpened WHY this row matters:
+      step 8.0.3 (`fr workflow check --all`) used to print "no workflow shapes found"
+      and exit 0, so the manual smoke suite REPORTED SUCCESS on a host where no shape
+      was installed at all — the exact state that step exists to detect. `--all` now
+      exits 1 on zero shapes (fr.commands.workflow_cmd, tests/unit/test_workflow_check.py),
+      so automating this row would now catch the defect rather than inherit a green
+      false negative. Until it is automated the whole suite still depends on an operator
+      running it.'

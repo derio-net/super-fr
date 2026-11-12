@@ -1,4 +1,4 @@
-"""The acceptance matrix's shapes BEFORE version 5 — frozen.
+"""The acceptance matrix's shapes, frozen: every version up to 5, the last.
 
 `MatrixV3` reads versions 1 to 3; `MatrixV4` (at the bottom) reads versions 1
 to 4, frozen when 4 -> 5 split the status `skipped` (spec
@@ -239,3 +239,155 @@ def is_v4_body(text: str) -> bool:
     except MatrixV4Error:
         return False
     return not any(r.verify == "post-merge" for r in matrix.rows)
+
+
+# --- version 5 ----------------------------------------------------------------
+#
+# The 5 -> 6 migration (spec `2026-11-04-repo-feature-settings-design.md` R19)
+# RETIRES the matrix: `docs/acceptance/matrix.yaml` is split into per-feature
+# fragments under `docs/acceptance/features/` and deleted. The live `Matrix`
+# survives only as the fold's in-memory result (`fr.acceptance.fold`), whose
+# rows may carry logical origins no v5 matrix held, so the hop reads through
+# `MatrixV5`, never the live model.
+#
+# `MatrixV5` reads version 5 only: 4 -> 5 removed `skipped`, so no single
+# closed model is a superset of 4 and 5, and every earlier hop already reads
+# through `MatrixV4`. Vocabularies are inlined (statuses, levels, the refused
+# v3 `verify` spelling); `VisualV5` does not check its names. Pinned by
+# `FROZEN_V5_CLASS_SHA256` (`tests/unit/test_acceptance_legacy.py`). It must
+# never be edited again.
+
+StatusV5 = Literal[
+    "ci",
+    "scheduled",
+    "unwired",
+    "walk-owed",
+    "walked",
+    "manual",
+    "not-implemented",
+    "failing",
+]
+LEVELS_V5: tuple[str, ...] = ("unit", "api", "int", "ui")
+WalkOutcomeV5 = Literal["pass", "fail"]
+
+
+class MatrixV5Error(Exception):
+    """A file that does not read as an acceptance matrix of version 5."""
+
+
+class VisualV5(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    states: tuple[StrictStr, ...] = ()
+    interactions: tuple[StrictStr, ...] = ()
+
+
+class WalkV5(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    strategy: StrictStr
+    harness: StrictStr
+    model: StrictStr
+    outcome: WalkOutcomeV5
+    at: StrictStr
+    evidence: StrictStr
+
+
+class RowV5(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    id: StrictStr
+    capability: StrictStr
+    acceptance: StrictStr
+    origin: tuple[StrictStr, ...] = ()
+    levels: dict[str, tuple[StrictStr, ...]] = Field(default={}, validate_default=True)
+    status: StatusV5
+    notes: StrictStr = ""
+    verify: StrictStr | None = None
+    visual: VisualV5 | None = None
+    scenario: StrictStr | None = None
+    issues: tuple[StrictStr, ...] = ()
+    harnesses: tuple[StrictStr, ...] = ()
+    walks: tuple[WalkV5, ...] = ()
+
+    @field_validator("verify")
+    @classmethod
+    def _not_the_v3_spelling(cls, v: str | None) -> str | None:
+        if v == "post-merge":
+            raise ValueError("verify: post-merge is the matrix-v3 spelling")
+        return v
+
+    @field_validator("levels")
+    @classmethod
+    def _known_keys_only(cls, v: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+        unknown = set(v) - set(LEVELS_V5)
+        if unknown:
+            raise ValueError(f"unknown level keys {sorted(unknown)} (allowed: {list(LEVELS_V5)})")
+        return {lv: v.get(lv, ()) for lv in LEVELS_V5}
+
+
+class MatrixV5(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    schema_version: Literal[5]
+    org: StrictStr | None = None
+    repo: StrictStr | None = None
+    rows: tuple[RowV5, ...] = ()
+
+    @field_validator("rows", mode="before")
+    @classmethod
+    def _none_is_empty(cls, v: object) -> object:
+        return () if v is None else v
+
+
+FROZEN_V5_CLASS_SHA256: dict[str, str] = {
+    "VisualV5": "21f18c458228b2adb10f67e867972077700c5004a1726dada9edf81fa3db79ec",
+    "WalkV5": "5a139ebd7ccb30290c82bcbc7e60392f1801fa575805fb585ef00a76ff910b25",
+    "RowV5": "045036f75d304e173159ac44aebefe45254dddfe794c3b003256a06ef897f6c6",
+    "MatrixV5": "46432b0f4bf101fe1f3dd92a3da72c1282f0b09050c92ae1f70a6ba4d186719a",
+}
+"""As `FROZEN_CLASS_SHA256`, for the classes version 5 froze."""
+
+
+def parse_matrix_v5(text: str) -> MatrixV5:
+    """Parse + validate `text` as a matrix of version 5, or raise `MatrixV5Error`
+    naming why — never a raw YAML or pydantic error."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise MatrixV5Error(f"not valid YAML: {e}") from e
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise MatrixV5Error(f"top level must be a mapping, got {type(data).__name__}")
+    try:
+        matrix = MatrixV5.model_validate(data)
+    except ValidationError as e:
+        raise MatrixV5Error(str(e)) from e
+    ids = [r.id for r in matrix.rows]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise MatrixV5Error(f"duplicate row ids: {dupes}")
+    return matrix
+
+
+def parse_matrix_v5_body(text: str) -> MatrixV5:
+    """`text` read as a version-5 BODY whatever its stamp says, or `MatrixV5Error`.
+
+    The question the 4 -> 5 hop asks twice (review p2-r3): is a body under a v4
+    stamp already wholly v5 (the crash window), and does its own rewrite read as
+    v5 before it is stamped. The stamp is the runner's to write, so it is not
+    part of the answer; everything else is `MatrixV5`'s."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise MatrixV5Error(f"not valid YAML: {e}") from e
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise MatrixV5Error(f"top level must be a mapping, got {type(data).__name__}")
+    try:
+        matrix = MatrixV5.model_validate({**data, "schema_version": 5})
+    except ValidationError as e:
+        raise MatrixV5Error(str(e)) from e
+    ids = [r.id for r in matrix.rows]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise MatrixV5Error(f"duplicate row ids: {dupes}")
+    return matrix

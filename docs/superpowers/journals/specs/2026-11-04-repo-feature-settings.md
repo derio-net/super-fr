@@ -827,3 +827,92 @@ what: **Stealth.** From a tracking repo, run `/fr-goal mode=stealth` against a s
 why: Stealth: fr settings' loader refuses placement quiet and stealth until plan 3 of R29 (resolver, quiet, stealth, moves) lands; plan 1 (repo-settings-core) shipped the repo placement only. Walk it once plan 3 merges.
 how: fr journal resolve --scope spec --slug 2026-11-04-repo-feature-settings --id test-plan-step-2 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-04-repo-feature-settings#step2
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-31 created=2026-11-12T00:17:40+00:00 -->
+### exit-change-31 · decision · exit change: row acceptance-fragments-amendments -> strategy candidate
+
+plan 2 (2026-11-12 run, #1379) builds this row; verified by this run's candidate walk with the row's own tests/scenarios/acceptance-fragments-amendments.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-32 created=2026-11-12T00:17:43+00:00 -->
+### exit-change-32 · decision · exit change: row acceptance-matrix-migration -> strategy candidate
+
+plan 2 (2026-11-12 run, #1379) builds this row; verified by this run's candidate walk with the row's own tests/scenarios/acceptance-matrix-migration.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-33 created=2026-11-12T00:17:46+00:00 -->
+### exit-change-33 · decision · exit change: row acceptance-reports-derived-published -> strategy candidate
+
+plan 2 (2026-11-12 run, #1379) builds this row; verified by this run's candidate walk with the row's own tests/scenarios/acceptance-reports-derived-published.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-acceptance-fragments-p2 created=2026-11-12T00:28:44+00:00 -->
+### phase-split-2026-11-12-acceptance-fragments-p2 · decision · ask: R19's migration and the cutover of every reader to the fold
+
+Moving the matrix kind's version makes this repo stale until migrated, so the migration, the reader cutover and this repo's own migration land together, apart from the fold library of phase 1.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-acceptance-fragments-p3 created=2026-11-12T00:28:45+00:00 -->
+### phase-split-2026-11-12-acceptance-fragments-p3 · decision · ask: R16's amendments and R17's stale-base rule (the write side)
+
+fr acceptance amend, the record kind's amendment shape and the stale-base refusal at check and deliver are one reviewable ask with its own row, acceptance-fragments-amendments.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-acceptance-fragments-p4 created=2026-11-12T00:28:46+00:00 -->
+### phase-split-2026-11-12-acceptance-fragments-p4 · decision · ask: R20-R22, derived and published reports
+
+Reports, CI publishing, the Pages visibility check and report_comment are one ask with its own row, acceptance-reports-derived-published.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-acceptance-fragments-p1 created=2026-11-12T00:28:48+00:00 -->
+### tier-2026-11-12-acceptance-fragments-p1 · decision · fold semantics are the design judgement every acceptance reader will rely on
+
+Ordering by first-parent introduction, pending vs merged, revisions and contested rows are decided here and read by check, status, debt, self-review, PR body and close-out.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-acceptance-fragments-p2 created=2026-11-12T00:28:49+00:00 -->
+### tier-2026-11-12-acceptance-fragments-p2 · decision · a migration every caller relies on, plus a change to the migration runner
+
+The retiring schema step changes fr/artifacts/runner.py, which every kind's migration uses, and the split must lose no row of 617.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-acceptance-fragments-p3 created=2026-11-12T00:28:50+00:00 -->
+### tier-2026-11-12-acceptance-fragments-p3 · decision · a gate: deliver and CI refuse stale-base amendments
+
+The stale-base refusal is a new deliver/CI gate and the record kind moves 10 -> 11.
+
+<!-- fr:journal kind=decision scope=spec id=fragment-repo-identity created=2026-11-12T00:28:51+00:00 -->
+### fragment-repo-identity · decision · Fragments carry the repo identity as a required repo: <org>/<repo>, agreed across fragments
+
+The retired matrix held org/repo. Code refs keep <repo>:<path>#<test> (R18), so the own-repo check needs the identity without depending on a remote; storing it in each fragment keeps it with the artifacts (philosophy 5) and the validator checks agreement.
+
+<!-- fr:journal kind=decision scope=spec id=logical-ref-forms created=2026-11-12T00:28:53+00:00 -->
+### logical-ref-forms · decision · Only spec: and plan: refs are logical; journal and code origins keep their path form and their rows go to legacy
+
+R18 names spec:<slug>#R<n> and plan:<slug>. Rows citing only debug journals or code have no single origin spec and R19 sends them to the legacy fragment.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-12T09:15:46+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1409 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1409] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at deliver as derio-net/super-fr#1409; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved created=2026-11-12T09:15:53+00:00 state=open resolves=test-plan-step-2 filed_as=derio-net/super-fr#1410 -->
+### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1410] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Filed at deliver as derio-net/super-fr#1410; still owed until discharged.

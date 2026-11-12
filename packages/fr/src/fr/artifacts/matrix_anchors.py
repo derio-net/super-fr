@@ -18,9 +18,8 @@ certify the slide, so a human re-points it). `check` keeps reporting those,
 with the reason.
 
 It rewrites `matrix.yaml` textually — every occurrence of an exact ref string,
-so a note that quotes the ref moves with it — and then regenerates the
-committed reports that render it, when the repo commits them, returning those
-as companions so they land in the same commit.
+so a note that quotes the ref moves with it. It reads through the frozen
+`MatrixV5` and renders no report (review p2-r3): the split deletes them.
 """
 
 from __future__ import annotations
@@ -30,7 +29,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from fr.artifacts.atomic import write_text_atomic
-from fr.artifacts.runner import MIGRATIONS, Repair
+from fr.artifacts.runner import Repair
 
 REPAIR_NAME = "matrix-name-anchors"
 _LINE_ANCHOR_HINT = re.compile(r"\.py#L\d")
@@ -51,9 +50,11 @@ def conversions(path: Path) -> dict[str, str]:
     from fr.acceptance.anchors import collected_node_at, is_python, line_of
     from fr.acceptance.check import resolve_identity
 
-    # Live parser: a pre-v5 matrix still carrying `skipped` fails it, so this
-    # returns {} until the 4 -> 5 hop (`matrix_status_split`) has run.
-    from fr.acceptance.model import AcceptanceError, parse_matrix, same_repo, split_ref
+    # Frozen reader (review p2-r3): the matrix this converts is a v5 file, and the
+    # live `Matrix` is the fold's. A pre-v5 matrix still carrying `skipped` fails
+    # it, so this returns {} until the 4 -> 5 hop (`matrix_status_split`) has run.
+    from fr.acceptance.legacy import LEVELS_V5, MatrixV5Error, parse_matrix_v5_body
+    from fr.acceptance.model import AcceptanceError, Matrix, same_repo, split_ref
 
     root = _root(path)
     try:
@@ -63,14 +64,15 @@ def conversions(path: Path) -> dict[str, str]:
     if not _LINE_ANCHOR_HINT.search(text):
         return {}  # the gate asks before every command: skip the parse and git
     try:
-        matrix = parse_matrix(text)
-        own = resolve_identity(matrix, root)[1]
-    except (AcceptanceError, OSError, ValueError):
+        matrix = parse_matrix_v5_body(text)
+        own = resolve_identity(Matrix(org=matrix.org, repo=matrix.repo), root)[1]
+    except (MatrixV5Error, AcceptanceError, OSError, ValueError):
         return {}
     out: dict[str, str] = {}
     sources: dict[str, str | None] = {}
     for row in matrix.rows:
-        for ref in row.refs():
+        refs = (*row.origin, *(r for lv in LEVELS_V5 for r in row.levels[lv]))
+        for ref in refs:
             try:
                 repo, rel, frag = split_ref(ref)
             except AcceptanceError:
@@ -90,20 +92,12 @@ def conversions(path: Path) -> dict[str, str]:
     return out
 
 
-def _report_paths(path: Path) -> list[Path]:
-    from fr.acceptance.report import tracked_reports
-
-    root = _root(path)
-    return [root / rel for rel in tracked_reports(root)]
-
-
 def _applies(path: Path) -> bool:
     return bool(conversions(path))
 
 
 def _fn(path: Path) -> Iterable[Path]:
-    from fr.acceptance.model import parse_matrix
-    from fr.acceptance.report import render_committed_set
+    from fr.acceptance.legacy import parse_matrix_v5_body
 
     text = path.read_text()
     for old, new in conversions(path).items():
@@ -111,26 +105,11 @@ def _fn(path: Path) -> Iterable[Path]:
         # own repo `fr` must not match inside a sibling's `super-fr:…`.
         pattern = r"(?<![\w.-])" + re.escape(old) + r"(?![\w-])"
         text = re.sub(pattern, new.replace("\\", "\\\\"), text)
-    matrix = parse_matrix(text)  # refuse to write a matrix that no longer reads
-    root = _root(path)
-    # Everything is rendered before a byte moves: a render that fails leaves
-    # the matrix untouched, so the repair still applies and retries next run.
-    reports: dict[Path, str] = {}
-    targets = _report_paths(path)
-    if any(p.exists() for p in targets):
-        reports = {
-            root / rel: html
-            for rel, html in render_committed_set(
-                matrix, root, only=[p.relative_to(root).as_posix() for p in targets]
-            ).items()
-        }
+    parse_matrix_v5_body(text)  # refuse to write a matrix that no longer reads
+    # No committed report is rendered (review p2-r1/p2-r3): the split that follows
+    # deletes them, and rendering would need the live model.
     write_text_atomic(path, text)
-    wrote: list[Path] = []
-    for target, rendered in reports.items():
-        if not target.exists() or target.read_text() != rendered:
-            write_text_atomic(target, rendered)
-            wrote.append(target)
-    return wrote
+    return []
 
 
 MATRIX_NAME_ANCHORS_REPAIR = Repair(
@@ -139,7 +118,9 @@ MATRIX_NAME_ANCHORS_REPAIR = Repair(
     applies=_applies,
     fn=_fn,
     description="matrix: convert `#L<n>` anchors into Python to the test names they sit in",
-    companions=_report_paths,
 )
 
-MIGRATIONS.register(MATRIX_NAME_ANCHORS_REPAIR)
+# Not registered since the matrix kind retired (spec 2026-11-04-repo-feature-settings
+# R19): its last hop deletes the matrix, so no repair could run after it, and the
+# split (`fr.artifacts.matrix_fragments`) applies `conversions` itself. The repair
+# object stays for its own tests and as the definition of the conversion.

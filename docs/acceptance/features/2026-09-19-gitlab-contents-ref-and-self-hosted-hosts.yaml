@@ -1,0 +1,68 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-19-gitlab-contents-ref-and-self-hosted-hosts
+repo: derio-net/super-fr
+rows:
+  - id: gitlab-contents-reads-live
+    capability: Multi-backend git hosting
+    acceptance: An operator's GitLab-backed repo can be read through fr's contents API
+      — file existence, file text, and directory listing — against a live instance whose
+      default branch is not 'main'
+    origin:
+    - spec:2026-09-19-gitlab-contents-ref-and-self-hosted-hosts
+    levels:
+      unit:
+      - super-fr:tests/unit/test_real_glabclient.py
+      - super-fr:tests/unit/test__urls.py
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live half
+      hand-run 2026-09-19 against a self-hosted GitLab (host redacted); request shape
+      unit-pinned in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-09-19T00:00:00Z'
+      evidence: 'hand-run against a self-hosted GitLab (host redacted, default branch
+        master): file_exists, list_dir and read_file all real'
+  - id: gitlab-selfhosted-host-targeting
+    capability: Multi-backend git hosting
+    acceptance: 'An operator whose GitLab is self-hosted reaches it by declaring ''backend:
+      gitlab'' alone; ''host:'' overrides, and a host declared for a backend fr cannot
+      target says so'
+    origin:
+    - spec:2026-09-19-gitlab-contents-ref-and-self-hosted-hosts
+    levels:
+      unit:
+      - super-fr:tests/unit/test__hosts.py
+      - super-fr:tests/unit/test_hostclient.py
+      - super-fr:tests/unit/test_glab.py
+      - super-fr:tests/unit/test_pr_observe.py
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1352
+    issues:
+    - derio-net/super-fr#1352
+  - id: forge-errors-are-not-absence
+    capability: Multi-backend git hosting
+    acceptance: A malformed or unauthorized GitLab request surfaces as an error rather
+      than as 'the file is not there'
+    origin:
+    - spec:2026-09-19-gitlab-contents-ref-and-self-hosted-hosts
+    levels:
+      unit:
+      - super-fr:tests/unit/test_glab.py#TestIsNotFound
+      - super-fr:tests/unit/test_real_glabclient.py#TestContentsApi::test_file_exists_raises_on_a_bad_request
+      - super-fr:tests/unit/test_real_glabclient.py#TestContentsApi::test_list_dir_raises_on_a_bad_request
+      - super-fr:tests/unit/test_v2_migrate.py#test_spec_fully_implemented_degrades_on_a_propagating_glab_error
+      - super-fr:tests/unit/test_spec_status_remote.py#test_a_propagating_glaberror_degrades_the_row_and_reaches_fail_note
+    status: ci
+    notes: 'Phase 3 landed the fix: fr.glab.is_not_found narrows RealGlabClient.file_exists/list_dir
+      to swallow ONLY not-found (fr.glab.GlabError classified via captured stderr/stdout
+      vocabulary); any other GlabError (400, 401, 403, ...) now propagates instead of
+      reading as absence. Both live callers (fr.migrate._spec_fully_implemented, fr.spec.compute_status)
+      proven to already degrade safely rather than crash on the propagated error.'

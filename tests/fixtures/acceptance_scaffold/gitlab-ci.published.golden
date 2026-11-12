@@ -1,0 +1,89 @@
+# The acceptance matrix (docs/acceptance/features/*.yaml, folded) rendered + gated.
+# - `failing` rows FAIL this pipeline (by design — fix or re-classify).
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as
+#   warnings; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - The built report is kept as a pipeline artifact, exposed on the merge request
+#   (`expose_as`) — GitLab CI has no job-summary equivalent (see module comment).
+# - The weekly (scheduled) run upserts one "<repo>: Technical debt" issue and
+#   refreshes a draft PR archiving long-merged plans.
+# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
+# check` warns and verifies them on local runs, where siblings exist.
+# If path filters (`rules:changes:`) are added later, they must include
+# every own-repo path the matrix references — `fr acceptance check` warns
+# when one falls outside them.
+
+stages:
+  - acceptance
+
+acceptance-report:
+  stage: acceptance
+  image: python:3.12
+  variables:
+    GIT_DEPTH: "0" # check judges merged rows against the default branch's history
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+  script:
+    - git fetch origin "+refs/heads/$CI_DEFAULT_BRANCH:refs/remotes/origin/$CI_DEFAULT_BRANCH"
+    - fr acceptance check
+    - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
+  artifacts:
+    expose_as: "Acceptance report" # linked from the merge request
+    paths:
+      - docs/acceptance/report.html
+    expire_in: 90 days
+
+# The HTML report on Pages from the default branch. The site must be no wider than the
+# repo (fr, spec R21): visibility is re-read before EVERY deploy. A refusal fails the job
+# loudly (it was scaffolded only where Pages were allowed, so visibility changed) and
+# cannot unpublish a live site. The check reads the forge, so it needs a token: create a
+# masked CI/CD variable FR_PAGES_TOKEN with the read_api scope.
+pages:
+  stage: acceptance
+  image: python:3.12
+  needs: [acceptance-report]
+  variables:
+    GIT_DEPTH: "0"
+    GITLAB_TOKEN: $FR_PAGES_TOKEN
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+  script:
+    - |
+      fr acceptance pages-check || {
+        echo "Pages deploy refused: visibility not shown to match the repo."
+        echo "A skipped deploy does not unpublish a live site: remove Pages in the"
+        echo "project settings (Deploy > Pages) by hand."
+        exit 1
+      }
+    - mkdir -p public
+    - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA" --out public/index.html
+  artifacts:
+    paths:
+      - public
+
+# Its own job, so a failing `fr acceptance check` above never skips the debt run.
+technical-debt:
+  stage: acceptance
+  image: python:3.12
+  variables:
+    GIT_DEPTH: "0"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web" && $DEBT == "true"
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+  script:
+    - fr debt issue --yes
+    - fr debt archive-pr --yes

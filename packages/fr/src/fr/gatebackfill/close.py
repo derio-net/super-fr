@@ -49,10 +49,11 @@ class EvidenceReader:
     @cached_property
     def statuses(self) -> dict[str, str]:
         """Row id -> status; empty when the matrix is absent or unreadable."""
-        from fr.acceptance.model import AcceptanceError, load_matrix
+        from fr.acceptance.fold import load_effective
+        from fr.acceptance.model import AcceptanceError
 
         try:
-            matrix = load_matrix(self.root / "docs/acceptance/matrix.yaml")
+            matrix = load_effective(self.root)
         except (AcceptanceError, OSError):
             return {}
         return {r.id: r.status for r in matrix.rows}
@@ -108,7 +109,9 @@ class EvidenceReader:
         if report.sources["journals"].why:
             return True
         matrix_read = report.sources["matrix"].state == "read"
-        if not matrix_read and (self.root / "docs/acceptance/matrix.yaml").exists():
+        from fr.acceptance.fold import has_fragments
+
+        if not matrix_read and has_fragments(self.root):
             return True
         if key.startswith("plan:") and report.sources["git"].state != "read":
             return True

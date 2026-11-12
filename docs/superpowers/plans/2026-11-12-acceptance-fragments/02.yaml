@@ -1,0 +1,192 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'Migration and cutover: MatrixV5, the retiring hop, every reader on the fold
+    (R19)'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - acceptance-matrix-migration
+  tier: hard
+  files:
+  - packages/fr/src/fr/acceptance/*
+  - packages/fr/src/fr/artifacts/*
+  - packages/fr/src/fr/commands/*
+  - packages/fr/src/fr/requirements.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/phase_sizing.py
+  - packages/fr/src/fr/proportionality.py
+  - packages/fr/src/fr/archive_followups.py
+  - packages/fr/src/fr/record/*
+  - packages/fr/src/fr/run/*
+  - packages/fr/src/fr/verification/*
+  - packages/fr/src/fr/debt/*
+  - packages/fr/src/fr/gatebackfill/*
+  - packages/fr/src/fr/triage/*
+  - packages/fr/src/fr/ops/*
+  - packages/fr/src/fr/usage/classify.py
+  - plugins/super-fr/hooks/fr-acceptance-nag.sh
+  - packages/fr-opencode-plugin/src/nag.ts
+  - packages/fr-opencode-plugin/test/*
+  - scripts/release.py
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - .claude/rules/acceptance-matrix.md
+  - .claude/rules/artifact-versioning.md
+  - .opencode/*
+  - .hermes/*
+  - AGENTS.md
+  - docs/explainers/fr-acceptance.md
+  - docs/reference/acceptance-matrix.md
+  - docs/explainers/fr-progress.md
+  - docs/acceptance/*
+  - tests/*
+  estimate_lines: 3200
+tasks:
+- number: 1
+  title: The frozen MatrixV5 reader
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_legacy.py gains: parse_matrix_v5 reads a committed fixture, tests/fixtures/acceptance/matrix_v5_excerpt.yaml: a verbatim excerpt of this repo's real v5 matrix (captured, never composed) of about 8 rows covering walks, visual, issues, scenario, a multi-fragment single-spec origin, a two-spec origin and a debug-journal origin; and FROZEN_V5_CLASS_SHA256 pins the source of every V5 class.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/acceptance/legacy.py add VisualV5, WalkV5, RowV5, MatrixV5 with vocabularies INLINED (statuses, levels, verify strategies as of v5 — never imported from model.py), parse_matrix_v5, and the sha pin, following the V4 block's pattern exactly (.claude/rules/artifact-versioning.md "Removing or moving a field freezes the old shape").
+- number: 2
+  title: The runner learns a retiring step
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_migration_runner.py — a SchemaMigration registered with `retires=True` whose fn deletes its artifact and returns the files it wrote: the runner does NOT write a stamp, records the deletion in the PlannedAction (`removed=(path,)`), reports success only if the path is gone afterwards (fails the artifact, nothing stamped, if it still exists), and MigrationReport.changed_paths includes the deleted path so commit_paths stages the removal. A `retires=True` step that is not the kind's last hop is a registry error. A kind marked `retired=True` in the registry: any existing file under its locator is stale (is_stale true) and `fr validate artifacts` reports "retired kind: run fr migrate artifacts --yes".
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement `retires` on SchemaMigration and `retired: bool = False` on ArtifactKind in fr/artifacts/runner.py and registry.py; in fr/artifacts/commit.py add a test-backed guarantee that a deleted tracked path passed to commit_paths is staged as a removal (git add -- <removed path>) and committed. Tests pass.
+- number: 3
+  title: The split migration (R19)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_migration_matrix_fragments.py over a tmp repo holding a v5 matrix built from the excerpt fixture plus the three committed reports: after the migration (a) one fragment per origin spec slug, named <slug>.yaml, each row's origin and level refs converted with fr.acceptance.logical.to_logical; (b) rows whose origins name no spec, or more than one distinct spec, land in legacy.yaml; (c) every fragment carries `repo: <org>/<repo>` from the matrix; (d) the union of fragment rows equals the matrix rows field for field except the converted refs (no row lost, none duplicated) — asserted by fold() over the working tree; (e) docs/acceptance/matrix.yaml and report_local.html, report_linked.html, report_linked.md and the legacy report.github.html are deleted; (f) a body already wholly in the new shape (fragments present, matrix absent) is the crash window: the runner finishes; (g) a matrix the frozen reader refuses is left byte-identical and reported as that artifact's failure; (h) every hop of the matrix chain is asserted, 1→2→3→4→5→6.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/artifacts/matrix_fragments.py — read with parse_matrix_v5 only (never the live model), build every fragment text in memory, validate each with parse_fragment and the whole set with a working-tree fold, then write through write_text_atomic and delete the matrix and reports; register `SchemaMigration(kind="matrix", from_version=5, to_version=6, fn=..., retires=True, companions=...)` and import it in fr/artifacts/__init__.py. Move the matrix kind to current_version 6 with retired=True and a comment naming this spec. Tests pass.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: rows are written with fr.acceptance.edit's line renderer (render_row_block) so fragments are byte-stable across re-renders; assert in a test that re-rendering a migrated fragment changes nothing.
+- number: 4
+  title: Every reader on the fold
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests/unit/test_acceptance_effective_readers.py — one test per reader family, each over a tmp repo with fragments and NO matrix.yaml: `fr acceptance check|status|summary|digest`, `fr debt` (acceptance section), `fr status`, plan self-review's acceptance links and phase sizing, the PR body's pre/post-merge owed sections, verification exit and walk obligation, run visual owed, closeout awaiting-live lines, gatebackfill candidates, triage snapshot rows, proportionality's phase rows, and requirements.rows_citing — each sees the fragment rows, and rows_citing matches a logical `spec:<slug>` origin for both a live and an archived spec.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: add `load_effective(repo_root, *, ref=None) -> Matrix` in fr/acceptance/fold.py (fold(...).matrix) and replace every call site the survey listed: commands/acceptance_cmd._load and _added_since (fold at the ref), requirements.load_spec_matrix/rows_citing/origin_fragment/is_cited (logical-aware, twin-aware), plan_ops, phase_sizing, record/pr_body, verification/exit and walk, run_cmd (_walk_obligation, _refuse_premature_closes, _unrunnable_spec_warnings), run/visual, run/closeout, debt/engine, commands/status_cmd, commands/plan_cmd, gatebackfill (close, render, candidates), triage (snapshot, ledger EXIT_INPUTS, batch_drive.MATRIX_FILES, batch_merge prefix), proportionality (fold at HEAD), archive_followups and archive_cmd identity (from the fragments' repo:), ops/trust and ops/gate (the fragments dir in place of the matrix and reports), run/code_tree prefixes, usage/classify. Delete MATRIX_REL and its re-declarations. Existence checks become "the fragments dir has a fragment". Tests pass.
+  - id: P2.T4.S3
+    text: |-
+      GREEN: archive_cmd's _retarget_matrix step: logical origins survive archiving, so the step becomes a no-op for fragments (remove it from the archive steps and its tests' expectations); a placement move never rewrites a row (R18). Remove acceptance/retarget.py if nothing else reads it.
+- number: 5
+  title: Writers write fragments (in place, own pending rows only)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: tests/unit/test_acceptance_fragment_writes.py — `fr acceptance add --origin spec:<slug>#R1 ...` creates or extends docs/acceptance/features/<slug>.yaml (a path origin is converted to logical; a row whose origins name no single spec is refused unless --feature names the fragment), copying `repo:` from a sibling fragment, else from the origin remote, else refusing with --repo; `set-status` on a row still pending on this branch rewrites it in place in its own fragment; record/apply `_acceptance_writes` does the same through the overlay; the commit holds only the fragment. (Merged rows are phase 3's amendments; until then set-status edits the owning fragment in place and a test marks that interim.)
+  - id: P2.T5.S2
+    text: |-
+      GREEN: move fr/acceptance/edit.py's insert/replace onto a fragment text (rows list), point _apply_rows and record/apply at the fragment path chosen by the row's owner (fold().owners) or the new row's origin slug; `fr acceptance init` (scaffold.init) creates docs/acceptance/features/ with no fragment, the rule and the workflow, and no reports. Tests pass.
+- number: 6
+  title: Test fixture sweep, hooks and scripts
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      GREEN: add `write_fragments(root, rows, *, repo="o/r")` (and a yaml-text variant) to tests/unit/acceptance_helpers.py and convert every test that writes docs/acceptance/matrix.yaml (the ~100 files the survey grouped: acceptance, migrations, record, PR body, archive, debt, plan, verification, run, gates, triage, ops, policy-off, settings, hooks, pages) to it, keeping the matrix-migration tests on the old shape on purpose. Run `uv run pytest -q --no-cov -n auto` and fix until green.
+  - id: P2.T6.S2
+    text: |-
+      GREEN: plugins/super-fr/hooks/fr-acceptance-nag.sh and packages/fr-opencode-plugin/src/nag.ts test for a fragment under docs/acceptance/features/ instead of the matrix file (update tests/unit/test_hooks_acceptance_nag.py and the plugin's bun test; run `bun test` inside packages/fr-opencode-plugin); scripts/release.py LIVE_ARTIFACT_RE names docs/acceptance/features/*.yaml (update tests/unit/test_release_script.py).
+- number: 7
+  title: Migrate this repo, rules, docs, mirrors
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      GREEN: run `uv run fr migrate artifacts --yes` in the workspace; it commits the split as its own `chore(fr): migrate ...` commit. Then `uv run fr validate artifacts` and `uv run fr acceptance check` pass, `uv run fr acceptance status --brief` reports the same counts as before the migration (617 rows: record both figures in the step note), and docs/acceptance/features/legacy.yaml holds the rows with no single spec origin.
+  - id: P2.T7.S2
+    text: |-
+      GREEN: rewrite .claude/rules/acceptance-matrix.md and scaffold.RULE_TEMPLATE for fragments (where rows live, add vs. amend, no committed reports — reports' wording finalised in phase 4), the fr-acceptance skill, AGENTS.md's acceptance/artifact-kind lines and .claude/rules/artifact-versioning.md's kind list (matrix retired, acceptance-fragment added); update docs/explainers/fr-acceptance.md, docs/reference/acceptance-matrix.md and docs/explainers/fr-progress.md (archive no longer retargets the matrix), each with a new `reviewed` stamp. Run scripts/sync-opencode.py, scripts/sync-hermes.py and scripts/sync-readme.py, then `uv run fr docs check --base origin/main`.
+  - id: P2.T7.S3
+    text: |-
+      GREEN: tests/scenarios/acceptance-matrix-migration.sh: a fresh repo with a v5 matrix (built by the installed fr's own `fr acceptance init` on an older shape is not possible, so commit the excerpt fixture as matrix.yaml with its reports), run `fr migrate artifacts --yes`, assert the fragments, the deleted reports and that `fr acceptance status` reports the same row count; add test_acceptance_matrix_migration to tests/integration/test_scenarios.py. Then `uv run fr acceptance set-status --id acceptance-matrix-migration --status ci --scenario tests/scenarios/acceptance-matrix-migration.sh --level unit=super-fr:tests/unit/test_migration_matrix_fragments.py#test_<name> --level int=super-fr:tests/integration/test_scenarios.py#test_acceptance_matrix_migration --notes "matrix split into per-feature fragments with logical refs; matrix kind retired behind MatrixV5; this repo migrated"`; switch phase 1's scenario from python -c to `fr acceptance status`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T6.S1:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T6.S2:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T7.S1:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T7.S2:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+    P2.T7.S3:
+      state: x
+      ticked_at: '2026-11-12T04:08:45+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T04:08:45+00:00'
+    note: null
+    observed_prs: []

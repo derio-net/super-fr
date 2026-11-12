@@ -104,11 +104,9 @@ def exit_for_spec(
     if repo is None:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
     else:
-        from fr.acceptance.model import Matrix, load_matrix
-        from fr.commands.acceptance_cmd import MATRIX_REL
+        from fr.acceptance.fold import load_effective
 
-        path = repo_root / MATRIX_REL
-        matrix = load_matrix(path) if path.exists() else Matrix()
+        matrix = load_effective(repo_root)
         spec_ref = f"{matrix.repo or repo}:{spec_rel}"
     return _build(verification, rows_citing(matrix, spec_ref))
 

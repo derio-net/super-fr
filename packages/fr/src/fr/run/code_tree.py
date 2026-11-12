@@ -24,7 +24,7 @@ FR_ARTIFACT_PREFIXES: tuple[str, ...] = ("docs/superpowers/", "docs/acceptance/"
 """The repo-relative prefixes that are fr's artifact trees, not code.
 
 Runs, step records, journals, plans and specs live under `docs/superpowers/`;
-the acceptance matrix and its three committed reports under `docs/acceptance/`.
+the acceptance fragments under `docs/acceptance/features/`.
 `resolve` writes them after a suite has run, so they are left out of the code
 tree.
 

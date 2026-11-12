@@ -1,0 +1,209 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-11-debt-engine
+repo: derio-net/super-fr
+rows:
+  - id: triage-debt-panel
+    capability: triage
+    acceptance: Triage keeps debt digests and fr:owed issues out of ranking in their
+      own sets, and the board shows a per-repo Debt panel with figures and a trend.
+    origin:
+    - spec:2026-10-11-debt-engine#R14
+    - spec:2026-10-11-debt-engine#R15
+    - spec:2026-10-11-debt-engine#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_debt_panel.py#test_one_collapsed_section_with_status_categories_and_owed
+      - super-fr:tests/unit/test_triage_debt_sets.py#test_either_marker_lands_in_the_debt_set_and_owed_in_its_own
+    status: ci
+    notes: 'Shipped in #1139: sets and panel render unit-tested in CI; the visual states
+      were captured and opened by the executor, the reviewer and at deliver.'
+    visual:
+      states:
+      - panel-with-figures
+      - trend-vs-previous
+      - repo-without-report
+      - legacy-digest-without-figures
+      interactions:
+      - expand-repo-section
+  - id: closeout-step-outcomes
+    capability: closeout
+    acceptance: Every Test Plan step gets an explicit ran / owed / n/a outcome, and
+      `fr archive --branch` holds a close-out with a step missing one (a skipped step
+      is never silently dropped).
+    origin:
+    - spec:2026-10-11-debt-engine#R17
+    - spec:2026-10-11-debt-engine#R18
+    - spec:2026-10-11-debt-engine#R19
+    levels:
+      unit:
+      - super-fr:tests/unit/test_closeout_outcome.py#test_test_plan_steps_numbers_top_level_items_by_position
+      - super-fr:tests/unit/test_closeout_outcome.py#test_owed_writes_an_owed_entry_with_its_key
+      - super-fr:tests/unit/test_closeout_outcome.py#test_a_step_already_recorded_is_refused_and_nothing_is_written
+      - super-fr:tests/unit/test_archive_owed.py#test_plan_dir_archive_holds_a_step_with_no_outcome_and_names_its_command
+      - super-fr:tests/unit/test_archive_owed.py#test_branch_archive_holds_a_step_with_no_outcome
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the Test Plan parser, fr closeout outcome and the archive hold
+      on --branch, plan-dir and --all (--force included) are unit-tested in CI; the
+      candidate scenario closeout-owed runs in CI via test_scenarios'
+    scenario: tests/scenarios/closeout-owed.sh
+  - id: owed-durable-at-archive
+    capability: closeout
+    acceptance: Every owed step and every unticked manual phase at archive leaves an
+      `owed` journal entry plus one fr:owed issue, idempotently, whatever --issues says.
+    origin:
+    - spec:2026-10-11-debt-engine#R20
+    - spec:2026-10-11-debt-engine#R21
+    - spec:2026-10-11-debt-engine#R22
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_owed.py#test_open_finding_ids_ignores_records_naming_an_owed_entry
+      - super-fr:tests/unit/test_journal_owed.py#test_the_journal_kind_is_reachable_from_version_one
+      - super-fr:tests/unit/test_archive_owed.py#test_open_owed_entries_are_filed_even_under_no_issues
+      - super-fr:tests/unit/test_archive_owed.py#test_an_open_issue_with_the_owed_marker_is_reused
+      - super-fr:tests/unit/test_archive_owed.py#test_nothing_is_filed_under_tracking_none
+      - super-fr:tests/unit/test_archive_owed.py#test_a_held_manual_phase_writes_and_files_its_owed_entry_idempotently
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: the owed journal kind (journal 1->2), owed filing outside --issues/--no-issues,
+      reuse by marker, nothing filed under tracking none, and the manual-phase owed
+      entry are unit-tested in CI; the candidate scenario closeout-owed runs in CI via
+      test_scenarios'
+    scenario: tests/scenarios/closeout-owed.sh
+  - id: debt-report
+    capability: debt
+    acceptance: '`fr debt` reports acceptance by status, the three plan categories (archivable,
+      stale, manual-open) and owed actions, as text and JSON, read-only.'
+    origin:
+    - spec:2026-10-11-debt-engine#R1
+    - spec:2026-10-11-debt-engine#R2
+    - spec:2026-10-11-debt-engine#R3
+    - spec:2026-10-11-debt-engine#R4
+    - spec:2026-10-11-debt-engine#R25
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_engine.py#test_archivable_plan_is_listed_with_command_and_merge_age
+      - super-fr:tests/unit/test_debt_cmd.py#test_json_validates_as_a_debt_report
+    status: ci
+    notes: 'Shipped in #1139: engine and CLI unit-tested in CI; candidate walk row debt-report
+      passed (walk log 20261012T013958Z).'
+    scenario: tests/scenarios/debt-report.sh
+  - id: debt-weekly-issue-rename
+    capability: debt
+    acceptance: 'The weekly job keeps one `<repo>: Technical debt` issue, renaming a
+      legacy Acceptance debt issue in place, never duplicating, closing at zero debt.'
+    origin:
+    - spec:2026-10-11-debt-engine#R9
+    - spec:2026-10-11-debt-engine#R10
+    - spec:2026-10-11-debt-engine#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_issue.py#test_creates_the_titled_issue
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1381
+    verify: live
+    issues:
+    - derio-net/super-fr#1381
+  - id: debt-archive-pr-weekly
+    capability: debt
+    acceptance: The weekly job opens or refreshes one draft archive PR for plans merged
+      complete and unarchived beyond the stale threshold, never ready, never merged.
+    origin:
+    - spec:2026-10-11-debt-engine#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_archive_pr_real.py#test_the_real_fr_archive_moves_the_plan_and_the_sweep_opens_a_draft_pr
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1341
+    verify: live
+    issues:
+    - derio-net/super-fr#1341
+  - id: debt-owed-discharge
+    capability: debt
+    acceptance: '`fr debt` lists owed actions from owed/awaiting-live issues, held manual
+      phases, walk-owed rows and unresolved owed entries (archived included), and resolving
+      an owed entry with evidence removes it and closes its issue.'
+    origin:
+    - spec:2026-10-11-debt-engine#R23
+    - spec:2026-10-11-debt-engine#R24
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_owed.py#test_resolve_discharges_an_owed_entry_and_closes_its_issue
+      - super-fr:tests/unit/test_debt_owed.py#test_an_unreachable_forge_prints_the_close_command
+      - super-fr:tests/unit/test_debt_owed.py#test_debt_lists_open_owed_entries_from_live_and_archived_journals_once
+      - super-fr:tests/unit/test_debt_owed.py#test_a_discharged_owed_entry_drops_out_even_while_its_issue_is_open
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_closeout_owed
+    status: ci
+    notes: 'phase 3: resolving an owed entry (live or archived) closes its issue through
+      the forge double or prints the close command, and fr debt folds owed journal entries
+      once, dropping a discharged one; unit-tested in CI, and the candidate scenario
+      closeout-owed shows fr debt listing the filed step'
+    scenario: tests/scenarios/closeout-owed.sh
+  - id: matrix-status-split
+    capability: acceptance
+    acceptance: '`skipped` is replaced by unwired / walk-owed / walked / manual; the
+      matrix migration moves every existing skipped row into exactly one new status
+      and every surface uses the new names.'
+    origin:
+    - spec:2026-10-11-debt-engine#R5
+    - spec:2026-10-11-debt-engine#R6
+    - spec:2026-10-11-debt-engine#R7
+    - spec:2026-10-11-debt-engine#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_matrix_status_split.py#test_skipped_rows_map_by_the_fixed_rule_and_nothing_else_moves
+      - super-fr:tests/unit/test_acceptance_status_split.py#test_a_skipped_row_is_refused_by_name_with_the_migrate_command
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_matrix_status_split
+    status: ci
+    notes: 'phase 1: the 4->5 migration, the refused-by-name validator and every surface
+      renamed, unit-tested in CI; the candidate scenario migrates a fixture matrix and
+      runs in CI via test_scenarios'
+    scenario: tests/scenarios/matrix-status-split.sh
+  - id: debt-ci-scaffold-refresh
+    capability: acceptance
+    acceptance: The CI scaffolds on all three forges call `fr debt`, and `fr acceptance
+      init --refresh-ci` updates an fr-scaffolded workflow while refusing a foreign
+      file.
+    origin:
+    - spec:2026-10-11-debt-engine#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_refresh_ci.py#test_a_legacy_scaffold_is_rewritten_to_the_current_one
+    status: ci
+    notes: 'Shipped in #1139: regenerated goldens and --refresh-ci rewrite/refusal unit-tested
+      in CI.'
+  - id: step-record-status-migration
+    capability: acceptance
+    acceptance: 'An in-flight step record written before the split still applies after
+      upgrade: its `skipped` acceptance status is migrated by the same rule as the matrix.'
+    origin:
+    - spec:2026-10-11-debt-engine#R27
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_v8_skipped_entry_moves_by_the_r6_rule
+      - super-fr:tests/unit/test_migration_record_status_split.py#test_a_migrated_record_then_applies
+    status: ci
+    notes: 'phase 1: the record 8->9 hop (frozen RecordV8, R6''s rule from the entry
+      and its row) and the apply after it are unit-tested in CI'
+  - id: forge-adapter-debt-ops
+    capability: forge
+    acceptance: Every forge adapter edits an issue's title and body, lists open issues
+      with bodies, creates a draft PR, finds the open PR for a head and closes an issue,
+      or raises the unsupported error by name.
+    origin:
+    - spec:2026-10-11-debt-engine#R26
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_adapter_debt_ops.py#test_gh_edit_issue_builds_title_and_body_flags
+    status: ci
+    notes: 'Shipped in #1139: every client''s debt ops unit-tested in CI against recorded-command
+      doubles (glab/tea not live-captured; a live walk of those forges is owed).'

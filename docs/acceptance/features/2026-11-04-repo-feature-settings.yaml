@@ -1,0 +1,333 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-04-repo-feature-settings
+repo: derio-net/super-fr
+rows:
+  - id: repo-settings-file
+    capability: repo-feature-settings
+    acceptance: Settings live with the placement and are read from the default ref;
+      fr settings init/show/paths/check generate a fully commented defaults file, show
+      each key's source, and refuse unknown keys, unservable placements and incoherent
+      combinations
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settings_load.py#test_a_file_on_the_default_branch_is_read_with_source_repo
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_file
+    status: ci
+    notes: 'settings core built: closed schema, default-ref loader, init/show/check;
+      scenario in CI'
+    verify: candidate
+    scenario: tests/scenarios/repo-settings-file.sh
+  - id: repo-settings-policy-off
+    capability: repo-feature-settings
+    acceptance: With acceptance, test_plan or gates off, fr writes none of that feature,
+      refuses what would write it at authoring time, and every surface reports it as
+      disabled by repo setting rather than none
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_policy_off_acceptance.py#test_add_set_status_and_init_are_refused_naming_the_setting
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_policy_off
+    status: ci
+    notes: policy off built; scenario in CI
+    verify: candidate
+    scenario: tests/scenarios/repo-settings-policy-off.sh
+  - id: repo-settings-forge-quiet
+    capability: repo-feature-settings
+    acceptance: With forge labels, comments or issues off, neither fr nor the CI it
+      scaffolds makes such a write; under pr_body minimal the live PR carries no fr
+      marker or section while the full body is kept for the operator
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_quiet_pr_body.py#test_minimal_a_plain_live_body_delivers_and_keeps_the_render_durable
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_forge_quiet
+    status: ci
+    notes: forge quiet built; scenario in CI
+    verify: candidate
+    scenario: tests/scenarios/repo-settings-forge-quiet.sh
+  - id: repo-settings-git-policy
+    capability: repo-feature-settings
+    acceptance: Under push or pr ask nothing reaches the remote without a verified operator
+      answer; squash-unpushed never rewrites pushed history or migration commits; pushed
+      subjects follow the repo's with-issue or without-issue template
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_git_policy_push.py#test_squash_keeps_migration_and_merge_commits_and_squashes_the_segments_between
+      - super-fr:tests/unit/test_git_policy_push.py#test_push_ask_refuses_naming_the_harness_when_the_transcript_is_unobservable
+      - super-fr:tests/unit/test_git_policy_templates.py#test_default_templates_keep_every_fr_subject_byte_identical
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_repo_settings_git_policy
+    status: ci
+    notes: git policy built; scenario in CI
+    verify: candidate
+    scenario: tests/scenarios/repo-settings-git-policy.sh
+  - id: acceptance-fragments-amendments
+    capability: repo-feature-settings
+    acceptance: A later feature changes an earlier feature's rows only by appending
+      amendments in its own fragment; the effective matrix is the fold over merged features,
+      and a stale-base amendment is refused before merge or marks its row contested
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_amend.py#test_set_status_on_a_merged_row_appends_amendments_and_leaves_its_owner_alone
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_fragments_amendments
+    status: ci
+    notes: amend ops, record amendment shape, stale-base refusal at check/deliver, contested
+      rows as debt
+    scenario: tests/scenarios/acceptance-fragments-amendments.sh
+    issues:
+    - derio-net/super-fr#1379
+  - id: acceptance-matrix-migration
+    capability: repo-feature-settings
+    acceptance: An existing repo's single matrix migrates to per-feature fragments with
+      logical refs and no row lost
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R19
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_matrix_fragments.py#test_the_split_writes_one_fragment_per_origin_spec_and_a_legacy_one
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_matrix_migration
+    status: ci
+    notes: matrix split into per-feature fragments with logical refs; matrix kind retired
+      behind MatrixV5; this repo migrated
+    scenario: tests/scenarios/acceptance-matrix-migration.sh
+    issues:
+    - derio-net/super-fr#1379
+  - id: acceptance-reports-derived-published
+    capability: repo-feature-settings
+    acceptance: Acceptance reports are one documented command away and are published
+      per PR and on Pages in repo placement, never on Pages wider than the repo
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R20
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_pages_visibility.py#test_pages_check_exit_0_when_allowed
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_reports_derived_published
+    status: ci
+    notes: reports derived (report --open), CI job summary/exposed artifact, Pages only
+      where no wider than the repo, report_comment
+    scenario: tests/scenarios/acceptance-reports-derived-published.sh
+    issues:
+    - derio-net/super-fr#1379
+  - id: placement-quiet
+    capability: repo-feature-settings
+    acceptance: In a quiet repo no fr file or commit reaches the default or feature
+      branches, the fr branch is append-only and pushed atomically with code, and a
+      missing or changed switch refuses instead of falling back
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R23
+    levels: {}
+    status: not-implemented
+    notes: built by plan 3 of the repo-feature-settings spec (R29), tracked in derio-net/super-fr#1380
+    issues:
+    - derio-net/super-fr#1380
+  - id: placement-stealth
+    capability: repo-feature-settings
+    acceptance: A stealth run leaves only code and one minimal draft PR in the target,
+      fails fast without its tracking repo, and resumes from the tracking repo on any
+      host
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R24
+    levels: {}
+    status: not-implemented
+    notes: built by plan 3 of the repo-feature-settings spec (R29), tracked in derio-net/super-fr#1380
+    issues:
+    - derio-net/super-fr#1380
+  - id: placement-move-and-drift
+    capability: repo-feature-settings
+    acceptance: A repo moves between any two placements with equal folds before and
+      after, and an in-flight branch under the old placement is refused until migrate-branch
+      moves it
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R27
+    levels: {}
+    status: not-implemented
+    notes: built by plan 3 of the repo-feature-settings spec (R29), tracked in derio-net/super-fr#1380
+    issues:
+    - derio-net/super-fr#1380
+  - id: repo-settings-quiet-repo-live
+    capability: repo-feature-settings
+    acceptance: On a real forge, quiet and stealth fr-goal runs leave no fr trace in
+      the product repo or on its forge
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R23
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: acceptance-effective-matrix-fold
+    capability: repo-feature-settings
+    acceptance: 'The effective acceptance matrix is never stored: it is folded from
+      merged features'' fragments in default-ref first-parent order plus the branch''s
+      own pending ones, with logical spec/plan refs resolving to repo paths, and an
+      abandoned feature''s rows and amendments never apply'
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R17
+    - spec:2026-11-04-repo-feature-settings#R18
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_fold.py#test_amendments_apply_in_merge_order_not_name_order
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_effective_matrix_fold
+    status: ci
+    notes: 'fold built: merged first-parent order, pending amendments, revisions and
+      contested; logical spec/plan refs resolve repo-only'
+    verify: candidate
+    scenario: tests/scenarios/acceptance-effective-matrix-fold.sh
+    issues:
+    - derio-net/super-fr#1379
+amendments:
+  - row: acceptance-report-formats
+    op: reword
+    base: 0
+    acceptance: 'The report renders on demand from the folded matrix in three forms:
+      local-link HTML, github-link HTML and github Markdown (fr acceptance report --format
+      md); none is committed.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-report-dual
+    op: reword
+    base: 0
+    acceptance: Every report form is rendered from the same matrix on demand and published
+      from the folded fragments in CI; none is committed or regenerated on matrix mutation.
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-report-drift-gate
+    op: reword
+    base: 0
+    acceptance: 'A committed report cannot drift from the matrix because none is committed:
+      fr acceptance check fails when a report file is tracked.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-report-dual-gate
+    op: retire
+    base: 0
+    notes: 'Retired: Spec 2026-11-04-repo-feature-settings R20: reports are derived,
+      never committed. The committed report set, its drift gate and regeneration on
+      matrix mutation are removed; rendering is on demand (fr acceptance report --open)
+      and published from the folded fragments in CI.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-report-tracked
+    op: retire
+    base: 0
+    notes: 'Retired: Spec 2026-11-04-repo-feature-settings R20: reports are derived,
+      never committed. The committed report set, its drift gate and regeneration on
+      matrix mutation are removed; rendering is on demand (fr acceptance report --open)
+      and published from the folded fragments in CI.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-report-cli-regen
+    op: retire
+    base: 0
+    notes: 'Retired: Spec 2026-11-04-repo-feature-settings R20: reports are derived,
+      never committed. The committed report set, its drift gate and regeneration on
+      matrix mutation are removed; rendering is on demand (fr acceptance report --open)
+      and published from the folded fragments in CI.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-ci-built-reports
+    op: retire
+    base: 0
+    notes: 'Retired: Spec 2026-11-04-repo-feature-settings R20: reports are derived,
+      never committed. The committed report set, its drift gate and regeneration on
+      matrix mutation are removed; rendering is on demand (fr acceptance report --open)
+      and published from the folded fragments in CI.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: archive-retargets-matrix-refs
+    op: reword
+    base: 0
+    acceptance: After a successful archive, every same-repo ref naming a moved spec,
+      plan or journal still resolves, read at its archived location (no fragment is
+      rewritten), so fr acceptance check stays clean after closeout
+    why: the fragments split (R18) leaves archive rewriting no fragment
+  - row: archive-retargets-matrix-refs
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_retarget.py#test_other_repo_refs_notes_walks_and_comments_stay_byte_identical
+    why: the retarget step and its tests are gone
+  - row: archive-retargets-matrix-refs
+    op: drop-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_retargets_matrix_refs_and_regenerates_the_reports
+    why: the retarget step and its tests are gone
+  - row: archive-retargets-matrix-refs
+    op: drop-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_archive_followups.py#test_a_moved_then_exit_2_archive_still_retargets
+    why: the retarget step and its tests are gone
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_rewrites_no_acceptance_fragment
+    why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_effective_readers.py#test_the_staleness_guard_counts_a_logical_citation
+    why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_effective_readers.py#test_rows_citing_matches_a_logical_origin_live_and_archived
+    why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_archive_twin.py#test_check_survives_debug_journal_archive
+    why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_archive_twin.py#test_a_plan_dir_ref_resolves_at_its_archived_counterpart
+    why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: set-status
+    base: 9
+    status: ci
+    notes: 'review p2-r5: archive rewrites no fragment and the retarget step is gone;
+      logical spec/plan refs survive an archive (spec 2026-11-04 R18), and check resolves
+      a pre-archive path ref under docs/superpowers/{specs,journals,plans}/ at its archived
+      counterpart at read time, ci-pinned; the live close-out (verify: live, post-merge)
+      is still owed'
+    why: review p2-r5
+  - row: matrix-parse-libyaml
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_matrix_equals_plain_pyyaml_build
+    why: the fragments split renamed the test
+  - row: matrix-parse-libyaml
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_fragments_equal_plain_pyyaml_builds
+    why: the fragments split renamed the test
+  - row: matrix-parse-libyaml
+    op: set-status
+    base: 2
+    status: ci
+    notes: Unit tests in CI pin loader choice + pure fallback parse (test_yamlio), memoized
+      parse with per-caller deep copy, uncached errors and real-fragment equality (test_acceptance_parse_cache;
+      re-pointed after the fragments split renamed the test). Phase 1 of plan 2026-11-01-ci-speed.
+    why: re-pointed after the fragments split renamed the test

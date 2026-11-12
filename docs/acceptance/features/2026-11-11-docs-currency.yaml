@@ -1,0 +1,198 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-11-docs-currency
+repo: derio-net/super-fr
+rows:
+  - id: docs-check-flags-uncovered-change
+    capability: docs currency
+    acceptance: A pull request that changes a path a page covers without changing that
+      page fails fr docs check, which names the page, the changed paths and both fixes;
+      touching the page or its reviewed stamp passes
+    origin:
+    - spec:2026-11-11-docs-currency#R3
+    - spec:2026-11-11-docs-currency#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_cmd.py#test_a_stale_page_exits_1_with_both_fixes
+      - super-fr:tests/unit/test_docs_cmd.py#test_touching_the_page_passes
+      - super-fr:tests/unit/test_docs_check.py#test_a_covered_change_without_the_page_is_stale
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_docs_check_flags_uncovered_change
+    status: ci
+    notes: Unit tests drive the check and the CLI in CI; the installed-CLI scenario
+      runs in test_scenarios.
+    verify: candidate
+    scenario: tests/scenarios/docs-check-flags-uncovered-change.sh
+  - id: docs-check-structure
+    capability: docs currency
+    acceptance: fr docs check fails a page with no stamp or a coverage glob matching
+      nothing, and a must-cover file no page covers; a repo with no docs config passes;
+      fr docs status lists pages with coverage and stamps
+    origin:
+    - spec:2026-11-11-docs-currency#R1
+    - spec:2026-11-11-docs-currency#R2
+    - spec:2026-11-11-docs-currency#R4
+    - spec:2026-11-11-docs-currency#R5
+    - spec:2026-11-11-docs-currency#R7
+    - spec:2026-11-11-docs-currency#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_model.py#test_a_bad_page_is_a_page_error
+      - super-fr:tests/unit/test_docs_check.py#test_an_uncovered_must_cover_file_is_named
+      - super-fr:tests/unit/test_docs_check.py#test_a_glob_matching_no_tracked_file_is_dead
+      - super-fr:tests/unit/test_docs_cmd.py#test_no_config_is_nothing_to_check
+      - super-fr:tests/unit/test_docs_cmd.py#test_status_lists_pages_and_json_matches
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_docs_check_structure
+    status: ci
+    notes: Unit tests cover config, page parsing, dead globs, must_cover and status;
+      the installed-CLI scenario runs in test_scenarios.
+    verify: candidate
+    scenario: tests/scenarios/docs-check-structure.sh
+  - id: docs-deliver-refuses-stale-docs
+    capability: docs currency
+    acceptance: An fr-goal run cannot deliver its PR while fr docs check fails for its
+      branch; a repo with no docs config delivers as before
+    origin:
+    - spec:2026-11-11-docs-currency#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py#test_deliver_refuses_while_a_covered_page_is_stale
+      - super-fr:tests/unit/test_run_evidence.py#test_deliver_resolves_once_the_stale_page_is_touched
+      - super-fr:tests/unit/test_run_evidence.py#test_deliver_in_a_repo_without_docs_config_stores_none
+      - super-fr:tests/unit/test_run_evidence.py#test_a_caller_supplied_docs_witness_is_refused_as_derived
+    status: ci
+    notes: 'deliver derives docs evidence: refused on a stale page with the check''s
+      findings, resolves once the page changes, none with no .fr/docs.yaml, refused
+      when passed'
+    verify: none
+  - id: docs-currency-every-flow
+    capability: docs currency
+    acceptance: The docs obligation reaches every flow and harness - this repo's CI
+      runs fr docs check on every PR, and a shipped rule plus the fr-goal and fr-debugging
+      skills state it on Claude Code, OpenCode and Hermes
+    origin:
+    - spec:2026-11-11-docs-currency#R10
+    - spec:2026-11-11-docs-currency#R11
+    - spec:2026-11-11-docs-currency#R24
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_currency_flows.py#test_the_delivering_skills_name_fr_docs_check
+      - super-fr:tests/unit/test_docs_currency_flows.py#test_ci_runs_fr_docs_check_on_every_pull_request_inside_ci_ok
+      - super-fr:tests/unit/test_install_copies_rules.py#test_install_ships_the_docs_currency_rule
+      - super-fr:tests/unit/test_tripwire_hermes_rules_sync.py#test_the_soul_block_carries_the_docs_currency_rule
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_no_rendered_html_is_tracked_under_the_explainers
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_every_configured_page_parses_with_fr_docs
+      - super-fr:tests/unit/test_tripwire_fr_goal_question_rounds.py#test_surface_describes_question_rounds
+    status: ci
+    notes: 'R24 evidence added: the explainers-currency rule and its mirrors describe
+      the source-only model, and the tripwires that read rendered HTML now read the
+      Markdown sources (no tracked explainer HTML; every configured page parses with
+      fr.docs).'
+    verify: none
+  - id: docs-check-default-base-readonly
+    capability: docs currency
+    acceptance: fr docs check with no base compares a feature branch against the repository's
+      default branch and runs only structural checks on the default branch itself; it
+      runs on a repository with stale artifacts and changes no file
+    origin:
+    - spec:2026-11-11-docs-currency#R6
+    - spec:2026-11-11-docs-currency#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_cmd.py#test_on_the_default_branch_only_structure_is_checked
+      - super-fr:tests/unit/test_docs_cmd.py#test_the_commands_write_nothing
+      - super-fr:tests/unit/test_docs_cmd.py#test_an_unresolvable_base_exits_2
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_docs_check_default_base_readonly
+    status: ci
+    notes: Unit tests cover base resolution, the default branch and read-only runs;
+      the installed-CLI scenario also runs it over a stale artifact with the gate live.
+    verify: candidate
+    scenario: tests/scenarios/docs-check-default-base-readonly.sh
+  - id: site-builds-from-sources
+    capability: published docs
+    acceptance: The site is built from Markdown sources with a pinned renderer - every
+      configured page renders, links between pages resolve, the index lists every page,
+      and CI fails a pull request whose page does not render
+    origin:
+    - spec:2026-11-11-docs-currency#R12
+    - spec:2026-11-11-docs-currency#R13
+    - spec:2026-11-11-docs-currency#R14
+    - spec:2026-11-11-docs-currency#R15
+    - spec:2026-11-11-docs-currency#R23
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_routes
+      - super-fr:tests/unit/test_build_site.py#test_a_page_source_becomes_its_route_relative_to_the_linking_page
+      - super-fr:tests/unit/test_build_site.py#test_the_pages_marker_becomes_a_list_grouped_by_section
+      - super-fr:tests/unit/test_build_site.py#test_a_rendered_page_without_embedded_fonts_fails
+      - super-fr:tests/unit/test_pages_workflow.py#test_the_pin_is_one_full_sha_and_no_workflow_names_it
+      - super-fr:tests/unit/test_pages_workflow.py#test_ci_builds_the_site_on_every_pull_request
+      - super-fr:tests/unit/test_pages_workflow.py#test_triggers_cover_every_input_of_the_site
+      int:
+      - super-fr:.github/workflows/ci.yml
+    status: ci
+    notes: Unit tests prove the build's pure parts; the real build of every configured
+      page is the CI job site-build (inside ci-ok), which runs scripts/build-site.py
+      against the pinned blog-craft on every PR and passed on this branch.
+    verify: none
+  - id: site-published-from-sources
+    capability: published docs
+    acceptance: The published site serves pages rendered from sources at the existing
+      URLs (/, /01-fr-goal.html, /fr-isolation.html, /acceptance/) plus the guides and
+      reference pages
+    origin:
+    - spec:2026-11-11-docs-currency#R16
+    - spec:2026-11-11-docs-currency#R17
+    - spec:2026-11-11-docs-currency#R18
+    - spec:2026-11-11-docs-currency#R22
+    levels: {}
+    status: walked
+    notes: 'Walked after merge: the Pages deploy from main serves every configured page
+      at its route, and all internal links resolve.'
+    verify: live
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-11T22:29:06Z'
+      evidence: 'Pages deploy ''Deploy explainers to Pages'' succeeded on main at d427d789d
+        (2026-11-11). Fetched over HTTP from the published site: /, /01-fr-goal.html,
+        /fr-isolation.html and /acceptance/ return 200; a crawl of every internal link
+        from the index reached 30 URLs with no non-200; the index links all 28 pages
+        .fr/docs.yaml configures; a guide, a reference page and 01-fr-goal carry their
+        source front-matter titles. Checked by HTTP fetch, not viewed in a browser.'
+  - id: docs-every-skill-has-page
+    capability: published docs
+    acceptance: Every shipped skill is covered by a published page; adding a skill with
+      no page fails the docs check
+    origin:
+    - spec:2026-11-11-docs-currency#R19
+    levels:
+      unit:
+      - super-fr:tests/unit/test_docs_every_skill_page.py#test_every_shipped_skill_has_a_page
+    status: ci
+    notes: must_cover requires a page for every skill; the repo's own docs-check CI
+      job and a unit test enforce it
+    verify: none
+  - id: readme-generated-tables
+    capability: repo documentation
+    acceptance: The README is a short front door whose skills and CLI tables are generated
+      from the skills and the fr command tree, and a stale table fails CI
+    origin:
+    - spec:2026-11-11-docs-currency#R20
+    - spec:2026-11-11-docs-currency#R21
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_readme_sync.py#test_the_repo_is_in_sync
+      - super-fr:tests/unit/test_tripwire_readme_sync.py#test_the_readme_is_a_front_door
+    status: ci
+    notes: scripts/sync-readme.py generates the skills and CLI tables; test_tripwire_readme_sync.py
+      fails a stale block and a README over 200 lines; runs in the CI test job
+    verify: none

@@ -2,6 +2,10 @@
 # the pages and the acceptance report must be assembled and published together.
 # The pages are built from their Markdown sources by scripts/build-site.py with the
 # blog-craft renderer pinned in .github/blog-craft.ref (spec 2026-11-11-docs-currency).
+# The acceptance report is derived from the folded fragments at deploy time (never
+# committed), and the deploy re-reads the site's visibility first: Pages publish only
+# where the site is no wider than the repo, and a check that cannot show it refuses (fails) the
+# deploy (spec 2026-11-04-repo-feature-settings R20, R21).
 name: Deploy explainers to Pages
 on:
   push:
@@ -36,6 +40,8 @@ jobs:
       report: ${{ steps.report.outcome }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Read the renderer pin
         id: pin
         run: echo "sha=$(tr -d '[:space:]' < .github/blog-craft.ref)" >> "$GITHUB_OUTPUT"
@@ -47,7 +53,28 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Install fr
         run: uv tool install ./packages/fr
+      # Re-read before EVERY deploy, never remembered from a scaffold-time answer: the
+      # repo's visibility or the site's access setting may have changed since. A check
+      # that fails or cannot answer refuses the deploy (R21) and fails the run: a skipped deploy
+# cannot unpublish a site that is already live, so a refusal must be loud and name how to
+# unpublish by hand. It gates the whole site (docs and report share one deployment).
+      - name: Re-check that Pages is no wider than the repo
+        id: visibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if fr acceptance pages-check; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Pages deploy refused: visibility not shown to match the repo."
+            echo "A refusal here means visibility changed since this job was scaffolded."
+            echo "A skipped deploy does not unpublish a live site: delete the Pages site"
+            echo "in the repo settings, or DELETE /repos/$GITHUB_REPOSITORY/pages (admin)."
+            exit 1
+          fi
       - name: Build site from sources
+        if: steps.visibility.outputs.allowed == 'true'
         run: uv run --isolated --no-project --with markdown --with pyyaml python scripts/build-site.py _site --ref "$GITHUB_SHA" --blog-craft .blog-craft
       # The migration gate refuses this render while any artifact on main is stale,
       # and that refusal is wanted: a report over unmigrated artifacts would describe
@@ -56,6 +83,7 @@ jobs:
       # the deploy (super-fr#924).
       - name: Render acceptance report
         id: report
+        if: steps.visibility.outputs.allowed == 'true'
         continue-on-error: true
         run: fr acceptance report --link-mode github --ref "$GITHUB_SHA" --out _site/acceptance/index.html
       - name: Publish a placeholder for the unrendered report
@@ -77,16 +105,20 @@ jobs:
           <p>The acceptance report was not rendered for commit <code>${GITHUB_SHA:0:12}</code>:
           <code>fr</code> refused to read this commit's artifacts (see the
           <a href="$repo/actions/runs/$GITHUB_RUN_ID">deploy run</a>).</p>
-          <p>The committed report at that commit is
-          <a href="$repo/blob/$GITHUB_SHA/docs/acceptance/report_linked.md">docs/acceptance/report_linked.md</a>.</p>
+          <p>Reports are derived, never committed: the rows at that commit are the
+          <a href="$repo/tree/$GITHUB_SHA/docs/acceptance/features">acceptance fragments</a>,
+          and <code>fr acceptance report --open</code> renders them locally.</p>
           </body>
           </html>
           HTML
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        if: steps.visibility.outputs.allowed == 'true'
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: steps.visibility.outputs.allowed == 'true'
         with:
           path: _site
       - id: dep
+        if: steps.visibility.outputs.allowed == 'true'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
   # A separate job, so the github-pages deployment record stays green when the
   # site did go live: a failing step inside `deploy` would mark it failed.

@@ -1,0 +1,79 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-24-fr-goal-scope-proportion-cost
+repo: derio-net/super-fr
+rows:
+  - id: fr-goal-out-of-scope-findings
+    capability: fr-goal-methodology
+    acceptance: A review finding the change did not cause is journaled as out-of-scope
+      and offered to the operator as an issue, not fixed in the feature PR; fixing one
+      needs an operator decision
+    origin:
+    - spec:2026-09-24-fr-goal-scope-proportion-cost
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_run_evidence_findings.py
+      - super-fr:tests/unit/test_run_evidence_separate_context.py
+    status: ci
+    notes: Out-of-scope fold state, review_scope render, operator guard (fold + Claude
+      Code verification) pinned in test_journal_model/test_journal_cmd; the review-phase
+      and spec-review findings gates pass out-of-scope and refuse unauthorized fixes
+      (test_run_evidence_findings, test_run_evidence_separate_context). Skill prose
+      (fr-goal §2/§6/§8) shipped in 4.20.0; all run in CI.
+  - id: fr-goal-proportionality-report
+    capability: fr-goal-methodology
+    acceptance: 'The delivered PR carries a proportionality report: unreferenced new
+      files, out-of-plan touches, and diff size against the plan''s estimate'
+    origin:
+    - spec:2026-09-24-fr-goal-scope-proportion-cost
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_proportionality.py
+      - super-fr:tests/unit/test_plan_scope_fields.py
+      - super-fr:tests/unit/test_run_evidence.py
+    status: ci
+    notes: Report sections on fixture repos, no-files and no-base cases, exit 0 (test_plan_proportionality);
+      files/estimate_lines round-trip, fr_version floor and self-review nudge (test_plan_scope_fields);
+      deliver derives and stores <merge-base>:<sha256> and refuses a caller-supplied
+      witness (test_run_evidence). fr-goal §8 pastes the report; all run in CI.
+  - id: fr-goal-main-session-cost
+    capability: fr-goal-cost
+    acceptance: The operator can see what the main session cost per pipeline step, on
+      Claude Code and OpenCode
+    origin:
+    - spec:2026-09-24-fr-goal-scope-proportion-cost
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cost_cmd.py
+      - super-fr:tests/unit/test_usage_capture.py
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1350
+    issues:
+    - derio-net/super-fr#1350
+  - id: fr-goal-independent-spec-review
+    capability: fr-goal-methodology
+    acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
+      cannot complete without that review's evidence
+    origin:
+    - spec:2026-09-24-fr-goal-scope-proportion-cost
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_separate_context.py
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      - super-fr:tests/unit/test_opencode_agent_mirror.py
+      - super-fr:tests/unit/test_ensure_phase_executor_allowlist.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: spec-review evidence gate against the spec journal (review after step opened,
+      open/unauthorized spec findings, dispatch provenance, claimed on opencode/hermes)
+      in test_run_evidence_separate_context; shipped manifest passes fr workflow check
+      (tripwire) and is walked end to end with spec-review evidence (test_fr_goal_shape);
+      read-only agent mirror and worktree-hook allowlist pinned. Live dispatch of fr-spec-reviewer
+      is spec Test Plan 15, post-merge.

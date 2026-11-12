@@ -43,6 +43,7 @@ import yaml
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.structure import (
     validate_agents,
+    validate_fragment,
     validate_journal,
     validate_matrix,
     validate_ops,
@@ -104,6 +105,10 @@ class ArtifactKind:
     """Which of the locator's matches are this kind's, when a glob cannot say it
     exactly; `None` owns every match. The `agents` kind is the two files fr ships, not
     every `fr-*.md` a repo keeps beside them (p7-r5)."""
+    retired: bool = False
+    """No `fr` reads this kind any more: its last migration deleted it (spec
+    `2026-11-04-repo-feature-settings-design` R19, the matrix). Any file still
+    under the locator is stale, and `fr validate artifacts` says so."""
 
     def read_version(self, path: Path) -> int:
         """The version `path` is on — `PRE_FRAMEWORK_VERSION` when unstamped."""
@@ -489,12 +494,30 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `walked`/`manual` (spec `2026-10-11-debt-engine-design` §D),
             # migration `fr.artifacts.matrix_status_split`, every hop reading
             # through the frozen `fr.acceptance.legacy.MatrixV4`.
-            current_version=5,
+            # 5 -> 6 RETIRES the kind: the matrix is split into per-feature
+            # fragments (the `acceptance-fragment` kind below) and deleted, with
+            # its committed reports (spec `2026-11-04-repo-feature-settings-design`
+            # R19), migration `fr.artifacts.matrix_fragments`, read through the
+            # frozen `fr.acceptance.legacy.MatrixV5`. A matrix still on disk is stale.
+            current_version=6,
+            retired=True,
             locator="docs/acceptance/matrix.yaml",
             stamp="`schema_version` in `matrix.yaml`",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_matrix,
+        ),
+        ArtifactKind(
+            name="acceptance-fragment",
+            # One feature's acceptance rows and amendments (spec
+            # `2026-11-04-repo-feature-settings-design` R16, R19, §3.D), folded into
+            # the effective matrix by `fr.acceptance.fold`. Born at 1.
+            current_version=1,
+            locator="docs/acceptance/features/*.yaml",
+            stamp="`schema_version` in the fragment yaml",
+            read_stamp=_read_yaml_stamp,
+            write_version=_write_yaml_stamp,
+            validate=validate_fragment,
         ),
         ArtifactKind(
             name="spec",
@@ -551,8 +574,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # frozen `fr.record.legacy.RecordV8`; 9 -> 10 for `JournalItem.gate`/
             # `narrows`/`filed_as` (spec `2026-10-14-exit-gates-design` §C, R10,
             # R12), migration
-            # `fr.artifacts.record_exit_gates`, stamp only.
-            current_version=10,
+            # `fr.artifacts.record_exit_gates`, stamp only; 10 -> 11 for the
+            # `acceptance:` section's amendment item (spec
+            # `2026-11-04-repo-feature-settings-design` R16, R19, §5), migration
+            # `fr.artifacts.record_amendments`, stamp only.
+            current_version=11,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

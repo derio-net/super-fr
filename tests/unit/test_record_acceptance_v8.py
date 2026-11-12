@@ -12,6 +12,7 @@ import inspect
 from pathlib import Path
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record import legacy
@@ -30,9 +31,8 @@ _WALK = {
 
 
 def _row(root: Path, row_id: str = "target"):
-    from fr.acceptance.model import load_matrix
 
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(root)
     return next(r for r in matrix.rows if r.id == row_id)
 
 
@@ -75,6 +75,7 @@ def test_a_create_writes_every_new_field(tmp_path: Path) -> None:
             "id": "fresh",
             "capability": "Cap",
             "acceptance": "Operator can X",
+            "origin": ["own:docs/superpowers/specs/s.md"],
             "status": "not-implemented",
             "verify": "candidate",
             "scenario": "tests/scenarios/x.sh",

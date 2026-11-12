@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Row matrix-status-split: `fr migrate artifacts --yes` moves every `skipped`
-# row of a version-4 matrix into exactly one of unwired / walk-owed / walked by
+# row of a version-4 matrix (on its way to the per-feature fragments the matrix
+# is split into at 5 -> 6, spec 2026-11-04 R19) into exactly one of unwired /
+# walk-owed / walked by
 # the fixed rule (a passing walk, else a post-merge verify, else unwired),
 # leaves other statuses alone, and `manual` is the operator's explicit move. A
 # matrix that still says `skipped` after the split is refused by name, with the
@@ -19,8 +21,8 @@ run_fr out migrate artifacts --yes
 require_exit 0 "$out"
 expect_grep 'migrated: docs/acceptance/matrix.yaml' "$out" "the matrix is migrated"
 
-matrix="$(cat docs/acceptance/matrix.yaml)"
-expect_grep '^schema_version: 5$' "$matrix" "the matrix is stamped version 5"
+[ ! -e docs/acceptance/matrix.yaml ] || fail "the matrix was not split into fragments"
+matrix="$(cat docs/acceptance/features/*.yaml)"
 refuse_grep 'status: skipped' "$matrix" "no row still says skipped"
 
 run_fr out acceptance status
@@ -39,9 +41,10 @@ run_fr out acceptance status
 expect_grep 'manual: 1' "$out" "manual is the operator's explicit move"
 refuse_grep 'process-row \[' "$out" "a manual row is not debt"
 
-sed -i.bak 's/status: manual/status: skipped/' docs/acceptance/matrix.yaml && rm -f docs/acceptance/matrix.yaml.bak
+frag="$(grep -l 'status: manual' docs/acceptance/features/*.yaml)" || fail "no manual row"
+sed -i.bak 's/status: manual/status: skipped/' "$frag" && rm -f "$frag.bak"
 run_fr out acceptance status
-[ "$RC" -ne 0 ] || fail "a v5 matrix saying skipped must be refused: $out"
+[ "$RC" -ne 0 ] || fail "a fragment saying skipped must be refused: $out"
 expect_grep 'skipped' "$out" "the refusal names the status"
 expect_grep 'fr migrate artifacts --yes' "$out" "the refusal names the way forward"
 echo "ok: matrix-status-split"

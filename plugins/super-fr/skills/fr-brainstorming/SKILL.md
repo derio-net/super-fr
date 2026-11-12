@@ -103,7 +103,7 @@ requirements — an `acceptance:` entry of the brainstorm record (`status:
 not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify:
 live` when only a live run can prove it, or any strategy the §1 question settled), or with no run
 `fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init`
-first if the repo has no matrix; it commits what it writes). A row states what the product does, never how the pipeline runs ("delivered in one phase", "a browser check was done"): a process directive is not a row, and a level ref into `docs/superpowers/` is refused. A UI row also carries `visual`: states and interactions, limits included (ask about any the design leaves unstated). **The brainstorm ENDS by presenting the
+first if the repo has no matrix; it commits what it writes). A requirement that changes a row an earlier feature merged is an amendment of that row, never a new row or an in-place edit: an `acceptance:` entry `{row, op, why, …}` (or `fr acceptance amend`, see `fr-acceptance`). A row states what the product does, never how the pipeline runs ("delivered in one phase", "a browser check was done"): a process directive is not a row, and a level ref into `docs/superpowers/` is refused. A UI row also carries `visual`: states and interactions, limits included (ask about any the design leaves unstated). **The brainstorm ENDS by presenting the
 rows to the operator with a one-line defense each** — the business claim,
 the target verification level, why it is business-level not implementation
 detail. Silent row creation is not acceptance-of-scope; the presentation is.

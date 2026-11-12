@@ -1,0 +1,32 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-06-04-vk-isolation-suite
+repo: derio-net/super-fr
+rows:
+  - id: isolation-suite-lifecycle
+    capability: Isolation
+    acceptance: 'Operator can init a devcontainer profile and run isolated work: up
+      → exec → status → down, with PR-aware down refusal'
+    origin:
+    - spec:2026-06-04-vk-isolation-suite
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/unit/test_init_scaffold.py
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): CLI +
+      scaffold unit-pinned; the live worktree+container walk was proven at the 2.4.0
+      release, dated by that release''s tag.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-06-04T00:00:00Z'
+      evidence: the live worktree+container walk proven at the 2.4.0 release (tag v2.4.0,
+        2026-06-04)

@@ -1023,7 +1023,10 @@ def render_command(
     open_: bool = typer.Option(False, "--open", help="Open the board in a browser."),
     matrix: Annotated[
         Path | None,
-        typer.Option("--matrix", help="Acceptance matrix to track (default: this checkout's)."),
+        typer.Option(
+            "--matrix",
+            help="Checkout whose acceptance fragments to track (default: this checkout).",
+        ),
     ] = None,
 ) -> None:
     """Write triage.html from facts.json and judgements.yaml.
@@ -1031,15 +1034,18 @@ def render_command(
     Also stores a snapshot of what the board shows under `snapshots/` in the state
     directory (the latest 30 are kept; one identical to the latest is not stored); the
     board's "Since last report" is the diff against the last DIFFERENT readable one.
-    The acceptance matrix is read only for a single repo whose checkout you are in, or
-    from --matrix.
+    The effective acceptance matrix is read only for a single repo whose checkout you
+    are in, or from the checkout --matrix names.
     """
     scope = _scope(repo, org)
     target_dir, facts, judgements = _load_state(scope, dir_override, workspace)
     if matrix is not None:
-        if not matrix.is_file():
+        from fr.acceptance.fold import has_fragments
+
+        if not matrix.is_dir() or not has_fragments(matrix):
             err_console.print(
-                f"[red]error:[/red] no matrix at {escape(str(matrix))}", soft_wrap=True
+                f"[red]error:[/red] no acceptance fragments in {escape(str(matrix))}",
+                soft_wrap=True,
             )
             raise typer.Exit(code=2)
         matrix_path: Path | None = matrix

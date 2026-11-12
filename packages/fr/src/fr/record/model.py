@@ -20,14 +20,18 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Discriminator,
     Field,
+    StrictInt,
     StrictStr,
+    Tag,
+    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -41,7 +45,9 @@ from fr.workflow.artifacts import ALWAYS_RECORD_SECTIONS, record_sections
 __all__ = [
     "RECORD_SCHEMA_VERSION",
     "RECORDS_SUFFIX",
+    "AcceptanceEntry",
     "AcceptanceItem",
+    "AmendmentItem",
     "CompleteItem",
     "JournalItem",
     "QuestionRounds",
@@ -59,7 +65,7 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 10
+RECORD_SCHEMA_VERSION = 11
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
@@ -89,7 +95,10 @@ strategy and `scenario`/`issues`/`harnesses`/`walk` (spec
 `JournalItem.narrows`, a decision's Owner gate, and `JournalItem.filed_as`,
 `fr journal file`'s record (spec `2026-10-14-exit-gates-design.md` §C, R10,
 R12). Migration:
-`fr.artifacts.record_exit_gates`, stamp only — nothing is removed or moved."""
+`fr.artifacts.record_exit_gates`, stamp only — nothing is removed or moved.
+Bumped 10 -> 11 for the `acceptance:` section's amendment item (`AmendmentItem`,
+spec `2026-11-04-repo-feature-settings-design.md` R16, R19). Migration:
+`fr.artifacts.record_amendments`, stamp only."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -228,6 +237,70 @@ class AcceptanceItem(_Strict):
         return self
 
 
+AmendmentOp = Literal["reword", "set-status", "add-level", "drop-level", "retire"]
+"""`fr.acceptance.fragment.AMENDMENT_OPS` as a type (pinned equal below)."""
+
+
+class AmendmentItem(_Strict):
+    """An amendment of a row another feature (or an earlier plan of this one) owns
+    (spec 2026-11-04 R16): written to the run's feature fragment, or the verb's.
+    `base` omitted is the row's revision when the record applies (R17). The op's
+    fields are those of `fr.acceptance.fragment`'s amendment of the same op, and
+    validated by it, so an op carrying another op's field is refused."""
+
+    row: StrictStr
+    op: AmendmentOp
+    base: StrictInt | None = Field(default=None, ge=0)
+    why: StrictStr = Field(min_length=1)
+    acceptance: StrictStr | None = None
+    capability: StrictStr | None = None
+    status: StrictStr | None = None
+    notes: StrictStr | None = None
+    walk: Walk | None = None
+    issues: tuple[StrictStr, ...] = ()
+    verify: StrictStr | None = None
+    scenario: StrictStr | None = None
+    level: StrictStr | None = None
+    ref: StrictStr | None = None
+
+    @model_validator(mode="after")
+    def _is_a_fragment_amendment(self) -> AmendmentItem:
+        self.to_amendment(self.base or 0)
+        return self
+
+    def to_amendment(self, base: int) -> Any:
+        """The fragment amendment this item writes, based on *base*; raises
+        `ValueError` naming what the op refuses."""
+        from fr.acceptance.fragment import Amendment
+
+        data = self.model_dump(exclude_none=True)
+        data["base"] = base
+        if not data.get("issues"):
+            data.pop("issues", None)
+        try:
+            return TypeAdapter(Amendment).validate_python(data)
+        except ValidationError as e:
+            problems = "; ".join(
+                f"{'.'.join(str(p) for p in err['loc'][1:]) or self.op}: {err['msg']}"
+                for err in e.errors()
+            )
+            raise ValueError(f"amendment {self.op} of row {self.row}: {problems}") from None
+
+
+def _entry_kind(value: Any) -> str:
+    """An `acceptance:` entry naming an `op` is an amendment; anything else a row."""
+    if isinstance(value, dict):
+        return "amendment" if "op" in value else "row"
+    return "amendment" if isinstance(value, AmendmentItem) else "row"
+
+
+AcceptanceEntry = Annotated[
+    Annotated[AcceptanceItem, Tag("row")] | Annotated[AmendmentItem, Tag("amendment")],
+    Discriminator(_entry_kind),
+]
+"""One `acceptance:` entry: a row to create or move, or an amendment (record 11)."""
+
+
 class VisualShot(_Strict):
     """One screenshot: what it shows, of the row's named states/interactions
     (spec 2026-09-28-ui-visual-evidence-design.md §B)."""
@@ -305,7 +378,7 @@ class StepRecord(_Strict):
     refactor: dict[StrictStr, StrictStr] = {}
     journal: tuple[JournalItem, ...] = ()
     resolves: tuple[Resolution, ...] = ()
-    acceptance: tuple[AcceptanceItem, ...] = ()
+    acceptance: tuple[AcceptanceEntry, ...] = ()
     visual: tuple[VisualEvidence, ...] = ()
     """Per-row visual evidence for this step (spec 2026-09-28-ui-visual-
     evidence-design.md §B): which screenshots were taken and what each shows.
@@ -407,3 +480,14 @@ def load_record(path: Path) -> StepRecord:
     except OSError as e:
         raise RecordError(f"{path}: cannot read: {e}") from e
     return parse_record(text, str(path))
+
+
+def _pin_ops() -> None:
+    from typing import get_args
+
+    from fr.acceptance.fragment import AMENDMENT_OPS
+
+    assert get_args(AmendmentOp) == AMENDMENT_OPS
+
+
+_pin_ops()

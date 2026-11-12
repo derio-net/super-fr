@@ -9,6 +9,7 @@ import yaml
 from fr.gatebackfill.close import EvidenceReader, discharged_evidence
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, owed_body
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.gatebackfill_fixtures import (
     SP,
     commit_at,
@@ -97,7 +98,7 @@ def test_an_unreadable_matrix_discharges_nothing(repo: Path) -> None:
     _write_plan(repo, PLAN, [("manual", True)])
     owed(repo, "row:r1")
     resolve(repo)
-    (repo / "docs/acceptance/matrix.yaml").write_text("rows: [unclosed\n")
+    write_matrix_fragments(repo, "rows: [unclosed\n")
     assert discharged_evidence(repo, "row:r1") is None
     assert discharged_evidence(repo, f"plan:{PLAN}#p1") is None
 

@@ -61,14 +61,25 @@ def _is_v9(data: dict[str, Any]) -> bool:
 
 
 def _matrix_rows(root: Path) -> dict[str, dict[str, Any]]:
-    """The matrix's rows by id, as plain mappings; empty when there is none or
-    it does not read — the entry alone then decides."""
-    try:
-        data = yaml.safe_load((root / "docs" / "acceptance" / "matrix.yaml").read_text())
-    except (OSError, yaml.YAMLError):
-        return {}
-    rows = data.get("rows") if isinstance(data, dict) else None
-    return {r["id"]: r for r in rows or () if isinstance(r, dict) and isinstance(r.get("id"), str)}
+    """The acceptance rows by id, as plain mappings: the retired matrix's, else the
+    fragments' (spec 2026-11-04 R19 splits the matrix before this hop runs: kinds
+    migrate in name order); empty when there are none or they do not read — the
+    entry alone then decides."""
+    acceptance = root / "docs" / "acceptance"
+    files = [acceptance / "matrix.yaml"]
+    if not files[0].is_file():
+        files = sorted((acceptance / "features").glob("*.yaml"))
+    out: dict[str, dict[str, Any]] = {}
+    for path in files:
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (OSError, yaml.YAMLError):
+            continue
+        rows = data.get("rows") if isinstance(data, dict) else None
+        for r in rows or ():
+            if isinstance(r, dict) and isinstance(r.get("id"), str):
+                out[r["id"]] = r
+    return out
 
 
 def _walked(item: dict[str, Any], row: dict[str, Any]) -> bool:

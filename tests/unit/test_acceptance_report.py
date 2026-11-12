@@ -9,12 +9,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fr.acceptance.model import load_matrix
+from fr.acceptance.fold import load_effective
 from fr.acceptance.report import LinkBuilder, render
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, row
+from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, row, write_matrix_fragments
 
 runner = CliRunner()
 
@@ -101,9 +101,11 @@ def test_twin_following_requires_git_for_siblings(tmp_path: Path) -> None:
 
 
 def _render(root: Path, rows_text: str) -> str:
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX_HEADER + rows_text)
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-    return render(matrix, _links(root, "local"), stamp="test-stamp", aggregates=True)
+    """`render` is a pure function of a `Matrix` (the fold's, in use): rows in order."""
+    from fr.acceptance.model import parse_matrix
+
+    matrix = parse_matrix(MATRIX_HEADER + rows_text)
+    return render(matrix, _links(root, "local"), stamp="test-stamp")
 
 
 def test_tiles_computed_from_rows(tmp_path: Path) -> None:
@@ -116,6 +118,19 @@ def test_tiles_computed_from_rows(tmp_path: Path) -> None:
     values = [chunk.split("</div>")[0] for chunk in tiles_line.split('<div class="v">')[1:]]
     # ci, scheduled, walked, manual, unwired, walk-owed, not-impl, failing
     assert values == ["2", "0", "0", "0", "1", "0", "0", "0"]
+
+
+def test_both_renderings_name_the_folded_fragments_as_their_source(tmp_path: Path) -> None:
+    # pr1408-r7: the report is rendered from the fold, not from matrix.yaml.
+    from fr.acceptance.model import parse_matrix
+    from fr.acceptance.report import render_markdown
+
+    root = make_repo(tmp_path, row())
+    matrix = parse_matrix(MATRIX_HEADER + row(id="a"))
+    links = _links(root, "local")
+    for out in (render(matrix, links, stamp="s"), render_markdown(matrix, links, stamp="s")):
+        assert "matrix.yaml" not in out
+        assert "docs/acceptance/features/" in out
 
 
 def test_capabilities_first_seen_order(tmp_path: Path) -> None:
@@ -169,30 +184,6 @@ def test_probe_false_skips_archive_twin(tmp_path: Path) -> None:
     assert after.endswith("/specs/s.md")
 
 
-def test_deterministic_report_reproducible_no_git_stamp(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """`--deterministic` yields byte-identical output across runs and a
-    matrix-derived stamp with no git date/hash."""
-    root = make_repo(tmp_path, row(id="a") + row(id="b"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    out = root / "docs" / "acceptance" / "report_local.html"
-
-    r1 = runner.invoke(app, ["acceptance", "report", "--deterministic"])
-    assert r1.exit_code == 0, r1.output
-    first = out.read_text()
-    r2 = runner.invoke(app, ["acceptance", "report", "--deterministic"])
-    assert r2.exit_code == 0, r2.output
-    second = out.read_text()
-
-    assert first == second
-    assert "links: local" in first
-    assert "matrix @" not in first
-    # §3.I: the row count is a cross-row aggregate, so the committed render
-    # omits it; the ad-hoc render below still carries it.
-    assert "2 rows" not in first
-
-
 def test_adhoc_report_keeps_row_count_and_tiles(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -209,19 +200,15 @@ def test_adhoc_report_keeps_row_count_and_tiles(
     assert '<div class="panel' in adhoc
 
 
-# ── the committed report SET (local html + linked html + linked md) ─────────
-
-LOCAL_HTML = "docs/acceptance/report_local.html"
-LINKED_HTML = "docs/acceptance/report_linked.html"
-LINKED_MD = "docs/acceptance/report_linked.md"
+# ── derived reports: local, ignored, never committed (R20) ─────────────────
 
 
 def test_render_markdown_is_github_flavored(tmp_path: Path) -> None:
     from fr.acceptance.report import render_markdown
 
     root = make_repo(tmp_path, row(id="a") + row(id="b", status="unwired"))
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-    md = render_markdown(matrix, _links(root, "github"), stamp="links: github", aggregates=False)
+    matrix = load_effective(root)
+    md = render_markdown(matrix, _links(root, "github"), stamp="links: github")
     assert md.startswith("# Acceptance coverage")
     assert "| Acceptance |" in md  # a GFM table header
     assert "| --- |" in md or "|---|" in md  # a delimiter row
@@ -235,54 +222,18 @@ def test_markdown_escapes_pipe_in_cells(tmp_path: Path) -> None:
 
     root = make_repo(tmp_path, row(id="a"))
     evil = row(id="a").replace('"Operator can do X"', '"a | b\nc"')
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX_HEADER + evil)
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-    md = render_markdown(matrix, _links(root, "github"), stamp="s", aggregates=False)
+    write_matrix_fragments(root, MATRIX_HEADER + evil)
+    matrix = load_effective(root)
+    md = render_markdown(matrix, _links(root, "github"), stamp="s")
     # the literal cell pipe is escaped and the newline flattened → table stays valid
     assert r"a \| b" in md
     assert "a | b\nc" not in md
 
 
-def test_render_committed_set_three_formats(tmp_path: Path) -> None:
-    from fr.acceptance.report import REPORT_SET, render_committed_set
-
-    root = make_repo(tmp_path, row(id="a") + row(id="b"))
-    files = render_committed_set(load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root)
-    assert set(files) == set(REPORT_SET)
-    assert set(files) == {LOCAL_HTML, LINKED_HTML, LINKED_MD}
-    local, linked, md = files[LOCAL_HTML], files[LINKED_HTML], files[LINKED_MD]
-    assert "links: local" in local and "blob/main/" not in local
-    assert "links: github" in linked and "https://github.com/derio-net/own/blob/main/" in linked
-    assert md.startswith("# Acceptance coverage")  # markdown, not html
-    assert "https://github.com/derio-net/own/blob/main/" in md
-    assert "report.html" not in files and "report.github.html" not in files
-
-
-def test_render_committed_set_is_deterministic(tmp_path: Path) -> None:
-    from fr.acceptance.report import render_committed_set
-
-    root = make_repo(tmp_path, row(id="a") + row(id="b"))
-    m = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-    assert render_committed_set(m, root) == render_committed_set(m, root)
-
-
-def test_report_deterministic_writes_three_files_not_report_html(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    res = runner.invoke(app, ["acceptance", "report", "--deterministic"])
-    assert res.exit_code == 0, res.output
-    for rel in (LOCAL_HTML, LINKED_HTML, LINKED_MD):
-        assert (root / rel).exists(), rel
-    assert not (root / "docs" / "acceptance" / "report.html").exists()
-
-
 def test_report_adhoc_writes_uncommitted_report_html(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`report` with no flags writes the ad-hoc report.html honoring --link-mode;
-    it is NOT part of the committed set."""
+    """`report` with no flags writes the ignored report.html honoring --link-mode."""
     root = make_repo(tmp_path, row(id="a"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     res = runner.invoke(app, ["acceptance", "report", "--link-mode", "github", "--ref", "abc123"])
@@ -290,7 +241,7 @@ def test_report_adhoc_writes_uncommitted_report_html(
     report_html = root / "docs" / "acceptance" / "report.html"
     assert report_html.exists()
     assert "blob/abc123/" in report_html.read_text()
-    assert not (root / LINKED_HTML).exists()  # ad-hoc, not the set
+    assert str(report_html) in res.output  # the path is printed
 
 
 def test_report_out_under_site_dir_is_sha_pinned_and_stamped(
@@ -322,77 +273,94 @@ def test_report_out_under_site_dir_is_sha_pinned_and_stamped(
     assert f"(ref {sha})" in html
 
 
-def test_deterministic_write_deletes_stale_github_html(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A leftover legacy report.github.html is removed on deterministic write."""
+def test_report_format_md_writes_report_md(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row(id="a"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    legacy = root / "docs" / "acceptance" / "report.github.html"
-    legacy.write_text("stale")
-    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    assert not legacy.exists()
-
-
-def test_report_deterministic_out_is_single_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """--out keeps the single-file escape hatch (back-compat)."""
-    root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    res = runner.invoke(
-        app, ["acceptance", "report", "--deterministic", "--out", "docs/acceptance/only.html"]
-    )
+    res = runner.invoke(app, ["acceptance", "report", "--format", "md"])
     assert res.exit_code == 0, res.output
-    assert (root / "docs" / "acceptance" / "only.html").exists()
-    assert not (root / LINKED_HTML).exists()
+    md = root / "docs" / "acceptance" / "report.md"
+    assert md.read_text().startswith("# Acceptance coverage")
+    assert str(md) in res.output
+    assert not (root / "docs" / "acceptance" / "report.html").exists()
 
 
-# ── report --check (drift gate) ─────────────────────────────────────────────
+def test_report_format_rejects_unknown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    assert runner.invoke(app, ["acceptance", "report", "--format", "pdf"]).exit_code == 2
 
 
-def test_report_check_detects_missing_linked_md(
+def test_report_open_goes_through_the_one_opener(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """`--open` opens what it wrote through one injectable opener — never a real browser."""
+    opened: list[Path] = []
+    monkeypatch.setattr("fr.commands.acceptance_cmd._open_report", opened.append)
     root = make_repo(tmp_path, row(id="a"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    (root / LINKED_MD).unlink()
-    res = runner.invoke(app, ["acceptance", "report", "--check"])
-    assert res.exit_code == 3, res.output
-    assert "report_linked.md" in res.output
-
-
-def test_report_check_passes_when_in_sync(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    res = runner.invoke(app, ["acceptance", "report", "--check"])
+    res = runner.invoke(app, ["acceptance", "report", "--open"])
     assert res.exit_code == 0, res.output
-    assert "in sync" in res.output
+    assert opened == [root / "docs" / "acceptance" / "report.html"]
+    opened.clear()
+    assert runner.invoke(app, ["acceptance", "report"]).exit_code == 0
+    assert opened == []  # no flag, no open
 
 
-def test_report_check_detects_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("flag", ["--deterministic", "--check"])
+def test_the_committed_report_flags_are_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
     root = make_repo(tmp_path, row(id="a"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    # Mutate the matrix WITHOUT regenerating (simulates a hand-edited status flip).
-    matrix = root / "docs" / "acceptance" / "matrix.yaml"
-    matrix.write_text(matrix.read_text() + row(id="b"))
-    res = runner.invoke(app, ["acceptance", "report", "--check"])
-    assert res.exit_code == 3, res.output
-    assert "stale" in res.output
-    assert "--deterministic" in res.output
+    assert runner.invoke(app, ["acceptance", "report", flag]).exit_code == 2
 
 
-def test_report_check_missing_report_is_drift(
+def test_the_committed_report_machinery_is_gone() -> None:
+    import fr.acceptance.report as report
+
+    for name in (
+        "REPORT_SET",
+        "render_committed_set",
+        "tracked_reports",
+        "prune_stale_reports",
+        "STALE_LEGACY_REPORTS",
+        "ci_built_reports",
+    ):
+        assert not hasattr(report, name), name
+
+
+def test_check_fails_on_a_tracked_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    root = make_repo(tmp_path, row(id="a"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    tracked = root / "docs" / "acceptance" / "report_linked.md"
+    tracked.write_text("# stale\n")
+    for cmd in (
+        ["init", "-q"],
+        ["add", "-f", str(tracked)],
+        ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "a report"],
+    ):
+        subprocess.run(["git", "-C", str(root), *cmd], check=True, capture_output=True)
+    res = runner.invoke(app, ["acceptance", "check"])
+    assert res.exit_code != 0, res.output
+    assert "reports are derived; remove docs/acceptance/report_linked.md" in res.output
+
+
+def test_check_passes_with_an_untracked_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row(id="a"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    res = runner.invoke(app, ["acceptance", "report", "--check"])
-    assert res.exit_code == 3, res.output
-    assert not (root / "docs" / "acceptance" / "report.html").exists()  # --check writes nothing
+    assert runner.invoke(app, ["acceptance", "report"]).exit_code == 0
+    res = runner.invoke(app, ["acceptance", "check"])
+    assert res.exit_code == 0, res.output
+
+
+def test_fr_help_names_the_local_report() -> None:
+    res = runner.invoke(app, ["--help"])
+    assert res.exit_code == 0
+    assert "fr acceptance report --open" in " ".join(res.output.split())
 
 
 # ── T3: report verb ────────────────────────────────────────────────────────
@@ -432,38 +400,16 @@ _EVERY_PANEL = (
 )
 
 
-def test_committed_set_omits_every_cross_row_aggregate(tmp_path: Path) -> None:
-    import re
-
-    from fr.acceptance.report import render_committed_set
-
-    root = make_repo(tmp_path, _EVERY_PANEL)
-    files = render_committed_set(load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root)
-    for rel, text in files.items():
-        assert not re.search(r"\b\d+ rows\b", text), rel
-        assert '<div class="tiles">' not in text, rel
-        assert "| status | count |" not in text, rel
-        assert "sharp line" not in text, rel
-        assert '<div class="panel' not in text, rel
-        assert "### Not implemented" not in text, rel
-
-
-def test_aggregates_flag_toggles_both_renderers(tmp_path: Path) -> None:
+def test_both_renderers_carry_the_aggregates(tmp_path: Path) -> None:
     from fr.acceptance.report import render_markdown
 
     root = make_repo(tmp_path, _EVERY_PANEL)
-    m = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    m = load_effective(root)
     links = _links(root, "github")
-    md_on = render_markdown(m, links, stamp="s", aggregates=True)
-    md_off = render_markdown(m, links, stamp="s", aggregates=False)
-    assert "| status | count |" in md_on and "| status | count |" not in md_off
-    assert "sharp line" in md_on and "sharp line" not in md_off
-    assert "(4 rows)" in md_on and "rows)" not in md_off
-    html_on = render(m, links, stamp="s", aggregates=True)
-    html_off = render(m, links, stamp="s", aggregates=False)
-    assert '<div class="tiles">' in html_on and '<div class="tiles">' not in html_off
-    assert "sharp line" in html_on and "sharp line" not in html_off
-    assert "(4 rows)" in html_on and "rows)" not in html_off
+    md = render_markdown(m, links, stamp="s")
+    assert "| status | count |" in md and "sharp line" in md and "(4 rows)" in md
+    page = render(m, links, stamp="s")
+    assert '<div class="tiles">' in page and "sharp line" in page and "(4 rows)" in page
 
 
 def test_summary_still_carries_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -9,11 +9,12 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fr.acceptance.fold import load_effective
 from fr.acceptance.model import AcceptanceError, load_matrix
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import fragments_text, make_repo, row
 
 HEADER = "# header comment — must survive\nrows:\n"
 
@@ -142,7 +143,6 @@ def _invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
 def test_add_visual_state_and_interaction_writes_the_field(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.acceptance.model import load_matrix
 
     root = make_repo(tmp_path, row())
     result = _invoke(
@@ -155,18 +155,13 @@ def test_add_visual_state_and_interaction_writes_the_field(
         "20 cap",
     )
     assert result.exit_code == 0, result.output
-    (added,) = [
-        r
-        for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
-        if r.id == "new-row"
-    ]
+    (added,) = [r for r in load_effective(root).rows if r.id == "new-row"]
     assert added.visual is not None
     assert added.visual.states == ("a",)
     assert added.visual.interactions == ("20 cap",)
 
 
 def test_add_visual_state_repeatable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.acceptance.model import load_matrix
 
     root = make_repo(tmp_path, row())
     result = _invoke(
@@ -179,11 +174,7 @@ def test_add_visual_state_repeatable(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "b",
     )
     assert result.exit_code == 0, result.output
-    (added,) = [
-        r
-        for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
-        if r.id == "new-row"
-    ]
+    (added,) = [r for r in load_effective(root).rows if r.id == "new-row"]
     assert added.visual is not None
     assert added.visual.states == ("a", "b")
 
@@ -193,14 +184,14 @@ def test_add_without_visual_writes_no_visual_key(
 ) -> None:
     root = make_repo(tmp_path, row())
     assert _invoke(root, monkeypatch, *ADD_ARGS).exit_code == 0
-    assert "visual" not in (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    assert "visual" not in fragments_text(root)
 
 
 def test_add_visual_refuses_a_name_duplicated_across_state_and_interaction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row())
-    before = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    before = fragments_text(root)
     result = _invoke(
         root,
         monkeypatch,
@@ -211,11 +202,10 @@ def test_add_visual_refuses_a_name_duplicated_across_state_and_interaction(
         "a",
     )
     assert result.exit_code == 2, result.output
-    assert (root / "docs" / "acceptance" / "matrix.yaml").read_text() == before
+    assert fragments_text(root) == before
 
 
 def test_set_status_preserves_visual(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.acceptance.model import load_matrix
 
     root = make_repo(tmp_path, row())
     assert _invoke(root, monkeypatch, *ADD_ARGS, "--visual-state", "a").exit_code == 0
@@ -231,10 +221,6 @@ def test_set_status_preserves_visual(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "verified live once",
     )
     assert moved.exit_code == 0, moved.output
-    (row_after,) = [
-        r
-        for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
-        if r.id == "new-row"
-    ]
+    (row_after,) = [r for r in load_effective(root).rows if r.id == "new-row"]
     assert row_after.visual is not None
     assert row_after.visual.states == ("a",)

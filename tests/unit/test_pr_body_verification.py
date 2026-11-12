@@ -19,6 +19,7 @@ from fr.record.pr_body import (
 )
 from fr.run.model import load_run_state
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.test_verification_walk import RUN, SPEC_REF, _git, _repo
 
 IDENTITY = ("o", "proj")
@@ -181,7 +182,8 @@ def test_the_pre_merge_section_is_required_and_precedes_the_post_merge_one() -> 
 
 def _matrix(root: Path, rows: list[dict[str, object]]) -> None:
     base = {"capability": "c", "origin": [f"{SPEC_REF}#R1"], "status": "not-implemented"}
-    (root / "docs/acceptance/matrix.yaml").write_text(
+    write_matrix_fragments(
+        root,
         yaml.safe_dump(
             {
                 "schema_version": 4,
@@ -189,7 +191,7 @@ def _matrix(root: Path, rows: list[dict[str, object]]) -> None:
                 "repo": "proj",
                 "rows": [{**base, "acceptance": f"{r['id']} works", **r} for r in rows],
             }
-        )
+        ),
     )
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "matrix", "--no-verify")

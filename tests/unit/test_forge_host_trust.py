@@ -121,6 +121,8 @@ def _glab_calls(tmp_path: Path) -> list[tuple[str, tuple[Any, ...], dict[str, An
         ("default_branch", (), {"cwd": tmp_path}),
         ("pr_for_branch", ("feat/x",), {"cwd": tmp_path}),
         ("issues_enabled", ("g/p",), {}),
+        ("repo_visibility", ("g/p",), {}),
+        ("pages_visibility", ("g/p",), {}),
         ("file_exists", ("g/p", "x"), {}),
         ("list_dir", ("g/p", "x"), {}),
         ("read_file", ("g/p", "x"), {}),

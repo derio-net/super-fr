@@ -19,6 +19,7 @@ from fr.journal.model import (
 )
 
 from tests.unit import test_archive_branch as tb
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.fakes import FakeGhClient
 from tests.unit.test_archive_cmd import _add_plan, _invoke, _repo, _seed
 
@@ -99,7 +100,7 @@ def _plan_repo(tmp_path: Path, *, outcomes: list[JournalEntry], test_plan: str =
     _add_plan(repo, PLAN, ticked=True, spec_name=SPEC_NAME)
     (repo / "docs/superpowers/specs" / SPEC_NAME).write_text(_spec_text(test_plan))
     (repo / "docs/acceptance").mkdir(parents=True)
-    (repo / "docs/acceptance/matrix.yaml").write_text(MATRIX)
+    write_matrix_fragments(repo, MATRIX)
     path = journal_path(repo, "spec", SPEC_SLUG)
     for e in outcomes:
         append_journal_entry(path, SPEC_SLUG, e)
@@ -321,7 +322,7 @@ def _manual_repo(tmp_path: Path) -> Path:
     plan = _add_plan(repo, PLAN, ticked=True)
     (plan / "02.yaml").write_text(MANUAL_PHASE)
     (repo / "docs/acceptance").mkdir(parents=True)
-    (repo / "docs/acceptance/matrix.yaml").write_text(MATRIX)
+    write_matrix_fragments(repo, MATRIX)
     _seed(repo)
     _as_github(repo)
     return repo
@@ -382,9 +383,7 @@ def test_a_matrix_naming_another_repo_files_nothing_anywhere(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _plan_repo(tmp_path, outcomes=[_outcome(1), _outcome(2, "owed")])
-    (repo / "docs/acceptance/matrix.yaml").write_text(
-        "schema_version: 5\norg: mallory\nrepo: x\nrows: []\n"
-    )
+    write_matrix_fragments(repo, "schema_version: 5\norg: mallory\nrepo: x\nrows: []\n")
     import subprocess
 
     subprocess.run(

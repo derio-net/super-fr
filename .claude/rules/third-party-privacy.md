@@ -25,7 +25,7 @@ and those transcripts land in artifacts that are **committed and pushed**:
 | journals (`fr journal add`) | findings quoting real URLs |
 | captured test fixtures | error strings carrying the API host |
 | `docs/acceptance/matrix.yaml` notes | "live-verified against `<host>`" |
-| the three generated acceptance reports | whatever the notes said |
+| the derived acceptance report (job summary, artifact, Pages, PR comment) | whatever the notes said |
 | **PR bodies** | the whole transcript |
 | **commit messages** | the hardest to scrub afterwards |
 
@@ -80,7 +80,7 @@ about the instance that proved `ref=HEAD`. Its hostname proves nothing extra.
 Ordered by what actually reduces exposure:
 
 1. **Scrub the working tree** — every tracked file, including generated ones.
-   Regenerate derived artifacts (`fr acceptance report --deterministic`) rather
+   Regenerate derived artifacts (`fr acceptance report`) rather
    than hand-editing them.
 2. **Edit the PR body** (`gh pr edit --body-file`), which is served immediately
    and is usually the most-read surface.

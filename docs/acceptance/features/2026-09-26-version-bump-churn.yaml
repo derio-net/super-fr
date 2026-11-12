@@ -1,0 +1,73 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-26-version-bump-churn
+repo: derio-net/super-fr
+rows:
+  - id: release-on-merge
+    capability: Release integrity
+    acceptance: Merging a PR that carries a change fragment releases it — main gets
+      one bot release commit, tag and GitHub Release listing the fragment summaries,
+      and no CI run starts for that commit
+    origin:
+    - spec:2026-09-26-version-bump-churn
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py
+      - super-fr:tests/unit/test_release_workflow.py
+    status: not-implemented
+    notes: 'Unit half landed (phase 3): release.py against a temp bare origin (aggregate,
+      consume fragments, verified staged diff, lost-race recompute, idempotent tag +
+      Release) and release.yml''s shape. Stays not-implemented: the owed evidence is
+      the live first release on main (plan phase 6, manual) — one bot commit, tag and
+      Release, and no CI run for it.'
+  - id: prs-never-conflict-on-version
+    capability: Release integrity
+    acceptance: Two PRs that both need a release never conflict over the version — the
+      PR gate demands an added change fragment and refuses any edit to a version surface
+    origin:
+    - spec:2026-09-26-version-bump-churn
+    levels:
+      unit:
+      - super-fr:tests/unit/test_change_fragment_gate.py
+      - super-fr:tests/unit/test_change_fragments.py
+    status: ci
+    notes: 'Spec 2026-09-26-version-bump-churn §3.A/§3.B, phase 2: the change-fragment
+      CI job fails a bump-required PR with no added fragment and any PR that changes
+      a version_surfaces() value (added surfaces pass only at the base version); fragments
+      are one file per branch slug, so two PRs never share a path.'
+  - id: version-floor-guard
+    capability: Release integrity
+    acceptance: A hand-written fr_version floor can never silently admit an fr that
+      lacks its feature — it must name the predicted release at PR time and the actual
+      release at tag time, or a failure and issue say so
+    origin:
+    - spec:2026-09-26-version-bump-churn
+    levels:
+      unit:
+      - super-fr:tests/unit/test_version_floors.py
+      - super-fr:tests/unit/test_release_script.py
+    status: ci
+    notes: 'Spec 2026-09-26-version-bump-churn §3.E, phases 2-3: at PR time a new fr_version
+      lower bound above base must equal base + the PR''s highest added fragment bump
+      (test_version_floors.py); at release time release.py still tags, then exits 3
+      and opens an issue naming a floor that differs from the released version (test_release_script.py).'
+  - id: concurrent-acceptance-rows-merge-clean
+    capability: Acceptance matrix
+    acceptance: Two PRs adding acceptance rows to different existing capabilities merge
+      without conflict in matrix.yaml or any of the three committed reports
+    origin:
+    - spec:2026-09-26-version-bump-churn
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_concurrent_merge.py
+      - super-fr:tests/unit/test_acceptance_insert.py
+      - super-fr:tests/unit/test_acceptance_report.py
+    status: ci
+    notes: 'Spec §7 items 6-8, phase 4: add inserts by capability and committed reports
+      carry no cross-row aggregates; a temp-repo test merges two branches that each
+      add a not-implemented row to a different capability with no conflict in matrix.yaml
+      or the three reports.'

@@ -145,14 +145,12 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
     return Report(merge_base, "\n".join(lines) + "\n")
 
 
-MATRIX_REL = "docs/acceptance/matrix.yaml"
-
-
 def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]:
     """The `## Phases` section (§D): agentic phases against the asks they
     serve, all read at HEAD. Report-only, like every other section."""
     from fr._urls import is_cross_repo_spec
-    from fr.acceptance.model import AcceptanceError, parse_matrix
+    from fr.acceptance.fold import fold
+    from fr.acceptance.model import AcceptanceError
     from fr.journal.model import (
         JournalParseError,
         archived_journal_path,
@@ -181,13 +179,12 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
     except RequirementsError:
         return ["spec has no Requirements list; asks cannot be counted."]
 
-    matrix_text = _show_head(repo_root, MATRIX_REL)
-    if matrix_text is None:
-        return ["no acceptance matrix; asks cannot be derived."]
     try:
-        matrix = parse_matrix(matrix_text)
+        matrix = fold(repo_root, ref="HEAD", include_pending=False).matrix
     except AcceptanceError:
         return ["acceptance matrix unreadable at HEAD; asks cannot be derived."]
+    if not matrix.rows and matrix.repo is None:
+        return ["no acceptance matrix; asks cannot be derived."]
     if not matrix.repo:
         return ["matrix names no repo; asks cannot be derived."]
 

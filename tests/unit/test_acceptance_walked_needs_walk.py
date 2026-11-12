@@ -9,11 +9,12 @@ from pathlib import Path
 
 import pytest
 from fr.acceptance.check import check
-from fr.acceptance.model import Matrix, Row, Walk, load_matrix
+from fr.acceptance.fold import load_effective
+from fr.acceptance.model import Matrix, Row, Walk
 
 from tests.unit.test_record_apply import _matrix_repo
 
-MATRIX = Path("docs") / "acceptance" / "matrix.yaml"
+MATRIX = Path("docs") / "acceptance" / "features" / "s.yaml"
 WALK = ("--walk", "walk.log", "--harness", "claude-code", "--model", "opus", "--strategy", "live")
 
 
@@ -32,7 +33,7 @@ def _fr(*args: str):
 
 
 def _status(root: Path) -> str:
-    return next(r for r in load_matrix(root / MATRIX).rows if r.id == "target").status
+    return next(r for r in load_effective(root).rows if r.id == "target").status
 
 
 def _walked(*extra: str):
@@ -56,7 +57,7 @@ def test_walked_with_a_failing_walk_is_refused(repo: Path) -> None:
 def test_walked_recording_a_passing_walk_moves_the_row(repo: Path) -> None:
     out = _walked(*WALK, "--walk-at", "2026-07-09")
     assert out.exit_code == 0, out.output
-    row = next(r for r in load_matrix(repo / MATRIX).rows if r.id == "target")
+    row = next(r for r in load_effective(repo).rows if r.id == "target")
     assert row.status == "walked"
     assert row.walks[-1].at == "2026-07-09T00:00:00Z"
 

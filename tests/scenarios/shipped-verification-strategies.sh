@@ -33,7 +33,7 @@ steps:
       spec: docs/superpowers/specs/s.md
 YAML
 printf '# S\n\n## Verification\n\nstrategy: candidate\n' > docs/superpowers/specs/s.md
-cat > docs/acceptance/matrix.yaml <<'YAML'
+matrix_fragment <<'YAML'
 schema_version: 5
 org: o
 repo: proj

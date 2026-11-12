@@ -1,0 +1,721 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: legacy
+repo: derio-net/super-fr
+rows:
+  - id: cncd-runner-ingest-dispatch
+    capability: CNCD runner
+    acceptance: An operator can dispatch an eligible tracked plan phase to cncd via
+      the cncd runner; the plan folder is posted to /v1/ingest and the phase is stamped
+      synced only after success
+    origin:
+    - super-fr:packages/fr-cncd/src/fr_cncd/runner.py
+    levels:
+      int:
+      - super-fr:tests/integration/test_cncd_stub_server.py
+    status: ci
+    notes: Loopback stub server pins the cncd wire contract, entry-point registration,
+      preflight failure, and fr_dispatch.tick end-to-end path in CI.
+  - id: acceptance-report-dual
+    capability: Acceptance report
+    acceptance: The committed report set is generated together and regenerated on every
+      matrix mutation (fr acceptance add / report --deterministic / init).
+    origin:
+    - spec:2026-07-24-acceptance-dual-reports
+    - spec:2026-07-25-acceptance-report-formats
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_report.py
+      - super-fr:tests/unit/test_acceptance_status_add.py
+    status: ci
+    notes: render_committed_set writes the whole set; add/init regenerate it. File set
+      is report_local.html + report_linked.html + report_linked.md (see acceptance-report-formats).
+  - id: runner-unit-refusal
+    capability: Runner and tracker negotiation
+    acceptance: fr apply --to <runner> refuses, before any forge call, a runner that
+      takes no phase work; and a tick that refuses an item for its unit says so instead
+      of blaming the repo.
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-apply-runner-units.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_apply_runner_units.py
+    status: ci
+    notes: 'super-fr#644. Runner.units is a class attribute read off the registered
+      entry point (fr_dispatch.registry.runner_units) without building the runner, since
+      vk and cncd have no from_env. apply refuses a runner whose units lack phase (herdr:
+      run only) or that declares none, with exit 2 and _make_gh_client never called.
+      vk, cncd and herdr each gate can_dispatch on their own units, so the declaration
+      and the per-item gate cannot drift. tick reports a unit refusal as unit_mismatch
+      naming the units the runner does take; any other can_dispatch refusal is reported
+      as a refusal naming the runner, unit and repo, with the historical unknown_repo
+      metric reason kept.'
+  - id: statusline-shows-bound-workspace
+    capability: isolation-traceability
+    acceptance: The Claude Code status line shows the branch this session works on and
+      its fr-isolation worktree path (or no fr-isolation), green when fr and purple
+      when not, well inside one status-line refresh (0.5 s CI guard).
+    origin:
+    - spec:2026-09-04-worktree-traceability
+    - spec:2026-09-14-statusline-session-branch
+    levels:
+      int:
+      - super-fr:tests/unit/test_statusline_segment.py
+      - super-fr:tests/unit/test_statusline_claude.py
+    status: ci
+    notes: 'Contract v2 (spec 2026-09-14). Golden subprocess tests, filed under int
+      because the matrix has no golden level. Segment plugins/super-fr/scripts/fr-statusline-segment.sh
+      (test_statusline_segment.py): a live binding wins, a stale binding (worktree gone)
+      is ignored, a cwd inside an fr workspace is fr, plain linked and detached agent
+      worktrees are none, non-repo and missing cwd, the plain / ansi / oneline formats
+      and --cwd, a 0.5 s CI timing guard, and a trap fr on PATH proving the fr CLI is
+      never invoked. Reference status line plugins/super-fr/scripts/fr-statusline-claude.sh
+      (test_statusline_claude.py): three lines (model, ctx and rates; branch row and
+      ~/cwd; worktree row), a symlinked script still finds the segment, a missing segment
+      degrades to purple none rows, and float percentages are floored. Measured on the
+      operator Mac (2026-09-14, /bin/bash 3.2, Xcode git first on PATH): bound about
+      77 ms, unbound in a repo about 100 ms, non-repo about 65 ms. Operator-side wiring
+      (~/.claude/statusline.sh) is the manual phase 5. LIVE 2026-09-24 (P7): with ~/.claude/statusline.sh
+      symlinked to the cache''s fr-statusline-claude.sh, the demo2 session showed ''branch:
+      wt/demo2 | ~/.cache/fr/worktrees/super-fr/wt__demo2'' / ''worktree: <that path>'',
+      and a native non-fr worktree showed ''no fr-isolation''.'
+  - id: agent-worktrees-reaped-by-fr
+    capability: isolation-conformity
+    acceptance: A subagent's isolation worktree is cut outside the repo, locked with
+      its Claude session's pid, and every dispatch fires a sweep that reaps it once
+      it is at least 24h old (72h while its session's pid still answers), clean, and
+      every commit on it is reachable from a ref; dirty or unreachable ones are reported,
+      never removed.
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-11-01-agent-worktrees-accumulate.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_agent_worktrees.py
+      - super-fr:tests/unit/test_isolation_gc_hygiene.py#test_gc_runs_the_agent_worktree_sweep
+      int:
+      - super-fr:tests/unit/test_hooks_worktree.py#TestWorktreeCreate::test_agent_worktree_lands_outside_the_repo
+      - super-fr:tests/unit/test_hooks_worktree.py#TestWorktreeCreate::test_agent_worktree_is_locked_with_the_session_pid
+    status: ci
+    notes: 'gh#1270. Hook level filed under int (no hook level). LIVE 2026-11-01, Claude
+      Code 2.1.316, throwaway repo registering this branch''s fr-worktree-create.sh
+      as its only WorktreeCreate hook: the subagent ran in ~/.cache/fr/agent-worktrees/repo/agent-<id>,
+      locked with the Claude pid; WorktreeRemove was never fired (twice observed); the
+      sweep skipped it as young, then with the clock at +25h and the pid dead reaped
+      and logged it. Claude Code accepted the out-of-repo path for a subagent.'
+    issues:
+    - derio-net/super-fr#1270
+    harnesses:
+    - claude-code
+  - id: run-resolve-requires-briefing
+    capability: Run cursor
+    acceptance: A grouped unit cannot be resolved through its own member resolve until
+      fr run advance has briefed it, so that path can no longer leave a done unit with
+      no dispatch record
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_resolve_requires_advance.py#test_a_unit_that_was_never_advanced_cannot_be_resolved
+      - super-fr:tests/unit/test_run_resolve_requires_advance.py#test_once_advanced_it_resolves_and_the_attempt_is_there
+    status: ci
+    notes: 'C3, found live on PR #508''s post-merge Test Plan: review-phase resolved
+      done with no advance, leaving a done unit with no attempt. The member-resolve
+      path now holds the rule the flat path always had. NARROWED in review: a whole-group
+      resolve and an adopted done unit still end done with no attempt, by design, and
+      an unclaimed record names no holder - so this row claims the member path only.'
+  - id: run-model-only-for-dispatched-work
+    capability: Run cursor
+    acceptance: fr resolves a tier's model only for work it dispatched to that tier;
+      a unit the orchestrator runs itself never carries a tier's model - it records
+      the orchestrator's OBSERVED model, or none when unobservable
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_orchestrator_model.py#test_an_orchestrator_run_unit_records_no_model
+      - super-fr:tests/unit/test_run_orchestrator_model.py#test_a_model_the_orchestrator_reports_is_kept
+    status: ci
+    notes: 'C2 of the #508 defects. Refined 2026-09-21 (debug journal 2026-09-21-fr-goal-first-run-contracts,
+      C3): the orchestrator''s model is no longer invisible - its session transcript
+      names it - so an orchestrator-run unit now records the model fr OBSERVES there;
+      what this row forbids, a tier''s model on work the tier never touched, is unchanged.
+      The seven false archived reviews stay as they are (archives are frozen). See run-records-observed-models.'
+  - id: guard-run-start-enters-isolation
+    capability: Isolation
+    acceptance: fr-goal's first action, fr run start, is allowed from the base clone
+      while a pipeline is live, and every other run verb stays gated to the workspace
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py#TestRunStartEntersIsolation::test_fr_run_start_allowed
+      - super-fr:tests/unit/test_hooks_guard.py#TestRunStartEntersIsolation::test_every_other_run_verb_is_still_gated
+    status: ci
+    notes: 'C4. Only bit in a repo that already had some linked worktree; with none
+      the #341 self-heal retires the sentinel first, which is why it hid. That self-heal
+      retiring a FRESH pipeline''s sentinel is a separate open defect, recorded in the
+      debug journal. gh#531: line anchors re-pointed to the tests they were recorded
+      for (they had slid onto other tests as lines moved).'
+  - id: scaffold-uv-env-outside-bind-mount
+    capability: Isolation
+    acceptance: A scaffolded uv profile gives the container its own per-project uv environment,
+      under a different name from the host's, so neither side replaces the other's
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_scaffold.py#test_a_uv_profile_keeps_uvs_environment_out_of_the_bind_mount
+      - super-fr:tests/unit/test_init_scaffold.py#test_this_repos_own_uv_profiles_carry_it
+    status: ci
+    notes: 'C5. CI verifies the profile that is EMITTED (key present, relative, not
+      the host''s name) - not the behaviour. The behaviour was proven live twice, which
+      no CI job repeats: container rebuilt from the committed profile, three host/container
+      alternations, zero deletions. Relative, not absolute, after review: one absolute
+      path is shared by every project in a container, and a probe showed project a importing
+      a package only b declared. Existing containers must be recreated; profiles already
+      scaffolded in consumer repos are not rewritten. gh#531: line anchors re-pointed
+      to the tests they were recorded for (they had slid onto other tests as lines moved).'
+  - id: run-gate-verified-from-transcript
+    capability: Run cursor
+    acceptance: On Claude Code an operator gate clears only with an answered question
+      in the session transcript since it paused, or an explicit recorded bypass with
+      a reason; where the transcript is unreadable the gate announces itself advisory
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#test_advance_degrades_loudly_on_claude_code_when_it_cannot_verify
+      - super-fr:tests/unit/test_run_cli.py#test_a_gate_cleared_with_no_question_in_the_transcript_is_refused
+      - super-fr:tests/unit/test_run_cli.py#test_a_gate_whose_question_was_answered_records_the_operator
+      - super-fr:tests/unit/test_run_cli.py#test_no_questions_needs_a_reason_and_records_it_on_the_spec_journal
+    status: ci
+    notes: 'C1. The first fr-goal run after #508 cleared its brainstorm gate unasked
+      on Claude Code while parity.yaml called the gate enforced - which also suppressed
+      the only warning. Verification reads a captured AskUserQuestion shape (tests/fixtures/transcripts).
+      LIVE, Run C (#592, a real Claude Code fr-goal run on #526, 2026-09-23): brainstorm
+      cleared answered_by=operator with its spec emitted after a real AskUserQuestion
+      answer. Refusal walked 2026-09-24 on a scratch fr-goal run (fr 4.19.2, host-worktree,
+      CLI-level; not mid-way through a model-driven run): resolve before any answer
+      since the gate blocked is refused (''no answered question in this session''s transcript
+      since the gate blocked at <ts>'') and the step stays blocked. gh#531: line anchors
+      re-pointed to the tests they were recorded for (they had slid onto other tests
+      as lines moved).'
+  - id: run-review-by-a-separate-context
+    capability: Run cursor
+    acceptance: A phase review names the separate reviewer that performed it; the phase's
+      own implementer, or a reviewer this session never dispatched, is refused
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_the_implementer_cannot_review_its_own_phase
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_a_reviewer_nobody_dispatched_is_refused
+    status: ci
+    notes: 'C6. The review evidence gate proved an entry existed; on the first post-#508
+      run the orchestrator typed it about work nobody reviewed. Unobservable harnesses
+      record the id as claimed and say so. LIVE, Run C (#592, a real Claude Code fr-goal
+      run on #526, 2026-09-23): each of the three review-phase units names reviewer=<id>,
+      and that id is the unit''s own dispatched and claimed holder; none is an implementer.
+      gh#531: line anchors re-pointed to the tests they were recorded for (they had
+      slid onto other tests as lines moved).'
+  - id: run-deliver-needs-an-orchestrator-test-run
+    capability: Run cursor
+    acceptance: Delivery names the log of a full test run the orchestrator itself performed
+      during delivery; a missing, stale, or someone-else's log is refused
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_a_suite_the_orchestrator_ran_is_accepted_with_its_hash
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#test_a_log_no_command_of_the_orchestrator_produced_is_refused
+    status: ci
+    notes: 'C5. deliver resolved in 28s on a PR url and the executor''s word (''verified
+      locally''). The log is hashed onto the cursor. LIVE, Run C (#592, a real Claude
+      Code fr-goal run on #526, 2026-09-23): deliver resolved with tests=<log>@<hash>,
+      a full suite the orchestrator itself ran during delivery (4980 passed). gh#531:
+      line anchors re-pointed to the tests they were recorded for (they had slid onto
+      other tests as lines moved).'
+  - id: plan-skeleton-is-not-the-whole-plan
+    capability: fr-goal-methodology
+    acceptance: A plan whose only agentic phase carries the walking-skeleton marker
+      no longer fails self-review (superseded by plan-one-phase-is-first-class; the
+      skeleton rule applies only with two or more agentic phases)
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py#test_a_sole_marked_agentic_phase_raises_no_skeleton_error
+    status: ci
+    notes: 'Inverted 2026-09-26 (gh#673): the C2 rule (sole-skeleton is an error) is
+      retired; a one-agentic-phase plan now passes self-review. Kept as the pin for
+      the sole-marked-phase case. gh#531: line anchors re-pointed to the tests they
+      were recorded for (they had slid onto other tests as lines moved).'
+  - id: isolation-session-bound-without-flags
+    capability: isolation-traceability
+    acceptance: Starting a run or entering isolation binds the calling session to the
+      workspace whenever the session is knowable, however fr was launched
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_sessions_cmd.py#test_up_without_session_binds_the_ambient_one
+      - super-fr:tests/unit/test_run_cli.py#test_run_start_binds_the_ambient_session_when_none_is_given
+    status: ci
+    notes: 'C4. The bind hook matched only a leading bare ''fr'', and this repo mandates
+      ''uv run fr'', so fr-goal workspaces read sessions=none and the Stop idle guard
+      was inert. LIVE 2026-09-24, scratch fr-goal run (fr 4.19.2, host-worktree, CLI-level;
+      not mid-way through a model-driven run): fr run start bound the calling session
+      with no flag (isolation status sessions=<uuid>). Run C (#592, a real Claude Code
+      fr-goal run on #526, 2026-09-23)''s orchestrator session is bound in ~/.cache/fr/sessions.
+      gh#531: line anchors re-pointed to the tests they were recorded for (they had
+      slid onto other tests as lines moved).'
+  - id: run-records-observed-models
+    capability: Run cursor
+    acceptance: The run records the model it observed serving each unit - the served
+      model over a claimed alias, the orchestrator's own model for units it ran - and
+      warns when the orchestrator strays from a bound orchestrator model
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#test_advance_records_the_observed_model_of_an_orchestrator_run_step
+      - super-fr:tests/unit/test_run_cli.py#test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): LIVE,
+      Run C (#592, 2026-09-23); unit refs in CI.'
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-09-23T00:00:00Z'
+      evidence: 'Run C (#592): a real Claude Code fr-goal run on #526 recorded the served
+        model id on every attempt'
+  - id: run-deliver-tests-log-opencode
+    capability: Run cursor
+    acceptance: 'On OpenCode, deliver''s tests=<log> is verified against the session
+      database: only a completed, exit-0 bash command in a top-level (orchestrator)
+      session that wrote the log since the unit opened counts; an agent-composed log
+      is refused'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: 'gh#638. Before, OpenCode had no reader and the gate passed any fresh non-empty
+      file. Live-verified 2026-09-26 (OpenCode 1.x): against the real opencode.db a
+      bash-redirect log matched one window containing its mtime and a write-tool log
+      matched none. RE-OBSERVED 2026-10-23 on OpenCode 2.1.3, through _verify_tests_log
+      itself against the real session_message store: a shell-redirect log was accepted
+      (witness live-redirect2.log@2e8007bff073) and a write-tool log refused with ''no
+      command of YOURS wrote it'' — so the 2.x reader answers the gate in both directions
+      (#1224; the 1.x observation is superseded). Hermes is declared unsupported (parity
+      row deliver-tests-provenance, operator decision).'
+  - id: run-records-dir-holds-only-records
+    capability: Run cursor
+    acceptance: 'A run''s .records/ dir holds step records and fr''s pr-body render
+      only: a tests= log inside it is refused at deliver, and fr validate artifacts
+      (CI) flags any other file there'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: gh#638. Two runs committed suite logs under <run>.records/ and they reached
+      main; the record locator matched *.yaml only, so nothing saw them.
+  - id: run-deliver-tests-log-background-command
+    capability: Run cursor
+    acceptance: 'On Claude Code, deliver''s tests=<log> is accepted when the orchestrator
+      wrote it from a backgrounded command that completed: the window runs from the
+      call to its task-notification, not to the launch ack; a still-running, failed
+      or killed background command yields no window'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-26-deliver-gate-background-window.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: 'Live: a full suite run with run_in_background (32 min) was refused because
+      the tool_result window closed at the ~1 s launch ack; captured fixture claude-code-bash-background.jsonl
+      pins the ack/notice shape.'
+  - id: run-deliver-tests-log-opencode-detached
+    capability: Run cursor
+    acceptance: 'On OpenCode, deliver''s tests=<log> is accepted for a suite the long-command
+      rule detached with &: the window runs from the launch to the first later orchestrator
+      command that names the log and prints its exit=0 line; an unobserved, failed,
+      subagent-observed or already-closed detached suite yields no window past its launch'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-opencode-detach-tests-gate.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: gh#719. The launch bash part ends at the &, so the gate saw a zero-length
+      window and refused the log the detached suite wrote. The red test builds its command
+      from the rule text itself, so a rewording the gate cannot window turns it red.
+      Not yet live-verified on OpenCode (the output-carrying part shape was read from
+      a live opencode.db, keys only).
+  - id: opencode-child-claims-open-unit
+    capability: Run cursor
+    acceptance: 'A dispatched OpenCode child names itself as the holder of its unit
+      while it holds it: fr-opencode-plugin runs fr run claim --open-unit on the child''s
+      first tool call, which claims the one open unclaimed unit dispatched to that agent
+      (recording the tier agent that ran) and refuses zero or several'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-opencode-holder-identity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_holder_identity.py
+      - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
+      int:
+      - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    status: ci
+    notes: 'gh#530. CLI half unit-pinned (claims, idempotent, refuses unrelated agents,
+      orchestrator-run work, a unit another child holds, and a non-matching --agent-type);
+      plugin half bun-tested (opencode-plugin-test job). Observed live 2026-09-27 on
+      OpenCode 1.18.32 (int ref): the child''s claim landed 3-6 s after dispatch and
+      its own first fr run status read HELD BY agent ses_... with the tier agent recorded,
+      matching opencode.db. The live run is evidence, not CI; the claim is fail-open,
+      so parity dispatch-holder-identity stays partial.'
+  - id: run-tests-log-claude-code-self-detached
+    capability: Run cursor
+    acceptance: On Claude Code, a suite log written by a command that detached itself
+      with & (with or without run_in_background) is witnessed — for implement-phase
+      evidence.tests from the executor transcript and for deliver tests= from the orchestrator
+      — with the window running from the launch to the first later command that names
+      the log and prints its exit=0 line; a failed, unfinished or other-log exit line
+      yields no extension
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-06-run-evidence-witness.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_witness_detached.py
+    status: ci
+    notes: 'gh#1002. Live: a phase executor started the suite with run_in_background
+      AND a trailing &, the call ended in 0.4 s and the 8.5 min suite log was refused;
+      replayed against that transcript the fixed reader opens a window to the poll that
+      printed exit=0.'
+  - id: agent-skill-instructions-are-executable
+    capability: Conventions
+    acceptance: An agent whose body tells it to use a skill is granted the tool to load
+      one
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_agent_skill_capability.py#test_an_agent_told_to_use_a_skill_is_granted_the_skill_tool
+    status: ci
+    notes: C7. fr-phase-executor was told to implement via superpowers:test-driven-development
+      / fr-execute with no Skill tool; its 79-record transcript shows zero skill loads.
+  - id: opencode-plugin-single-idle-nudge
+    capability: OpenCode adaptation
+    acceptance: When OpenCode loads the plugin twice (global install plus a project-local
+      copy), an idle run still gets one continuation nudge per run position
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
+    status: ci
+    notes: 'gh#563 consequence: global delivery doubles the load wherever a repo also
+      loads the plugin locally (super-fr itself). The once-per-position memory is shared
+      via globalThis; bun test pins one send for two instances (red first: 2 sends).'
+  - id: opencode-plugin-delivered
+    capability: OpenCode adaptation
+    acceptance: An operator who runs scripts/install.sh with OpenCode gets super-fr's
+      OpenCode plugin (edit gate + idle adapter) installed globally in a form OpenCode
+      loads, and --uninstall removes exactly it
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_plugin_delivery.py
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py
+    status: ci
+    notes: 'gh#563. Unit: deliver-opencode-plugin.sh behaviour (top-level loader + sources,
+      wholesale replace, scoped uninstall) and install.sh wiring. Integration, CI (opencode-plugin-test
+      job, opencode-ai@1.18.32, FR_REQUIRE_OPENCODE=1): the real binary registers the
+      delivered loader, and a sentinel plugin loaded by OpenCode''s own runtime imports
+      it and gets a base-clone edit refused / an out-of-repo edit allowed. A mutation
+      deleting one delivered module left registration green and failed the runtime probe.
+      POST-MERGE WALK (2026-09-22, #571 Test Plan): scripts/install.sh re-run from main
+      (fr 4.17.0) on an OpenCode 1.18.32 machine delivered the loader + 3 sources, and
+      opencode debug config listed the loader. Then one model-driven session (github-copilot/gpt-5.6-luna)
+      in a throwaway fr-enabled base clone outside super-fr, so only the global copy
+      was loaded, asked for an edit: the model''s apply_patch was refused with ''fr-isolation:
+      edit to .../README.md blocked'' and the file was unchanged. Control: the same
+      prompt with opencode run --pure (no external plugins) in an identical repo applied
+      the edit. The model-driven path through the DELIVERED copy is therefore live-proven;
+      still live-only, so the CI level is unchanged.'
+  - id: spec-contract-no-input-gates
+    capability: fr-goal-methodology
+    acceptance: 'No fr-goal step after brainstorm reads, receives or is gated on the
+      operator''s raw input: the shipped workflows carry no requirements/coverage/fidelity/requirement-rows
+      evidence, and implement/review briefs and journal handoff carry no operator input'
+    origin:
+    - spec:2026-09-29-spec-is-the-contract#R1
+    - spec:2026-09-28-raw-input-relay
+    - spec:2026-09-29-spec-fidelity-invention
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: Workflows pinned to 4.28 evidence lists; briefs and handoff carry no operator
+      input; the brief is still stored as an input=true entry (test_journal_cmd.py).
+  - id: acceptance-init-no-ci
+    capability: Acceptance matrix
+    acceptance: On a repo with no CI, fr acceptance init writes no pipeline file and
+      edits .gitignore by appending one line; a row reaches ci only in a repo with a
+      CI config
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-28-acceptance-init-no-ci.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_no_ci.py
+    status: ci
+    notes: 'gh#775: pinned per-PR by test_acceptance_init_no_ci.py (scaffold, ci gate
+      on add/set-status, byte-exact gitignore)'
+  - id: acceptance-init-commits-writes
+    capability: Acceptance matrix
+    acceptance: fr acceptance init commits every file it writes on a working branch,
+      and reports each as created or modified, so the worktree is clean afterwards
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-29-acceptance-init-commit.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_commit.py
+    status: ci
+    notes: 'gh#775 (reopened after take 10): pinned per-PR by test_acceptance_init_commit.py
+      — clean tree after init, .gitignore reported modified, no commit on rerun, default
+      branch writes but says not committed'
+  - id: acceptance-refuses-pipeline-evidence
+    capability: Acceptance matrix
+    acceptance: A row whose level evidence is one of fr's own pipeline artifacts (a
+      spec, plan, run or journal) is refused as a process directive when written; existing
+      rows still move
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-29-acceptance-init-commit.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_commit.py
+    status: ci
+    notes: 'gh#775: enforced in the step-record engine (add, set-status --level, brainstorm
+      record); pinned per-PR by test_acceptance_init_commit.py'
+  - id: acceptance-python-refs-name-their-test
+    capability: Acceptance matrix
+    acceptance: 'An evidence ref into a Python file names its test, never a line: check
+      fails a line anchor (naming the test it sits in) and a name that no longer resolves,
+      authoring refuses a new line anchor, and a repair converts existing ones'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_refuses_a_name_anchor_that_names_no_test
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_refuses_a_line_anchor_into_python_and_suggests_the_name
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_refuses_a_new_line_anchor_into_python
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_line_anchors_that_land_in_a_test
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_leaves_what_it_cannot_convert
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_check_accepts_a_unittest_dotted_anchor
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass
+    status: ci
+    notes: 'gh#531. Measured at fix time: 27 of 78 line anchors had slid onto another
+      test or none; all re-pointed to the test git blame shows each was recorded for,
+      the other 48 converted by the repair. gh#965/gh#893: unittest''s spelling of a
+      test identity is read too — a Class.test anchor resolves, and the repair converts
+      a line inside a TestCase subclass not named Test*.'
+  - id: acceptance-add-flush-left-rows
+    capability: Acceptance matrix
+    acceptance: 'fr acceptance add and set-status edit a matrix whose rows are flush-left
+      under rows: (PyYAML default block style) instead of rolling back'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_add_appends_to_a_flush_left_matrix
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_insert_into_flush_left_rows_keeps_the_matrix_valid
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_replace_in_flush_left_rows_keeps_the_matrix_valid
+    status: ci
+    notes: 'gh#470: row blocks take the existing items indentation.'
+  - id: acceptance-set-status-names-the-change
+    capability: Acceptance matrix
+    acceptance: A set-status that keeps the status names what changed (level refs added
+      or removed, notes, verify) instead of logging X → X, and a ref both dropped and
+      added is refused by the CLI and the record engine alike
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-acceptance-integrity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_set_status_with_an_unchanged_status_names_the_added_level
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_describe_move_names_each_kind_of_change
+      - super-fr:tests/unit/test_acceptance_integrity.py#test_the_engine_refuses_a_ref_both_dropped_and_added
+    status: ci
+    notes: gh#769, gh#655.
+  - id: usage-dispatched-model-observed
+    capability: usage capture honesty
+    acceptance: A dispatched unit's recorded model is the one its subagent transcript
+      names, not the tier binding, and a mismatch is reported
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-batch-usage-accuracy.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_executor_model.py
+    status: ci
+    notes: 'gh#637: resolve replaces advance''s tier-binding prediction with the observed
+      model (Claude Code transcripts); unobservable leaves it as recorded.'
+  - id: usage-priced-after-session-exit
+    capability: usage capture honesty
+    acceptance: A session still open when the closeout captured it is named at closeout,
+      and fr usage backfill prices the archived file once the session has exited
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-02-batch-usage-accuracy.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_refresh_after_exit.py
+    status: ci
+    notes: 'gh#756: Claude Code writes cost-state only at session exit; #682''s closeout
+      raced it by a second. Refresh only replaces an unpriced entry with a priced reading,
+      on this host''s capture, appending at: backfill; the recorded isolation mode survives
+      a reaped workspace.'
+  - id: installed-fr-carries-every-runner
+    capability: fr install (host install.sh + devcontainer POST_CREATE)
+    acceptance: An installed fr loads every runner the workspace declares (fr.runners
+      entry points), so dispatch --to herdr/cncd/vk and install.sh --install-bridge
+      work outside uv run
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-batch-package-lists.md
+    levels:
+      int:
+      - super-fr:tests/integration/test_runner_package_lists.py
+      - super-fr:tests/integration/test_install_bridge.py
+    status: ci
+    notes: 'gh#650, gh#645: both installers pass --with for every package runner_packages()
+      derives from packages/*/pyproject.toml, executed against an argv-recording uv
+      stub; test_install_bridge does a real uv tool install of the same set. The git-URL
+      POST_CREATE install was also run live 2026-09-27 into a disposable UV_TOOL_DIR:
+      fr.runners = [cncd, herdr, vk]; fr_vk.bridge imports.'
+  - id: harness-detect-nearest-in-mixed-env
+    capability: Harness detection
+    acceptance: An fr process whose environment carries more than one harness's markers
+      (an OpenCode started from a Claude Code shell) names the harness nearest it in
+      its process ancestry, and records a session only when that harness owns the session
+      key
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-09-27-opencode-holder-identity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_detect.py
+      - super-fr:tests/unit/test_run_holder_identity.py
+      int:
+      - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    status: ci
+    notes: 'gh#537. Unit-pinned: mixed env resolved by CLAUDE_PID/OPENCODE_PID nearness,
+      inconclusive when neither is an ancestor, single-harness env never reads the process
+      tree; advance under OpenCode-inside-Claude records harness opencode and no session.
+      Observed live 2026-09-27 inside a real OpenCode 1.18.32 shell with Claude Code
+      markers exported (int ref): the old fr recorded claude-code plus a borrowed session
+      (the defect), the branch fr detected opencode and advance recorded harness opencode,
+      session None and the OpenCode tier model.'
+  - id: pages-deploy-survives-report-refusal
+    capability: acceptance-matrix
+    acceptance: 'A Pages deploy still publishes the explainers when the acceptance report
+      cannot be rendered (the migration gate refuses over stale artifacts): /acceptance/
+      shows a placeholder naming the commit, the run still goes red, and a newer push
+      queues behind a running deploy instead of cancelling it'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-06-pages-deploy.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pages_workflow.py#test_concurrency_never_cancels_a_running_deploy
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_cannot_skip_the_deploy
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_publishes_a_placeholder_before_upload
+      - super-fr:tests/unit/test_pages_workflow.py#test_a_failed_render_still_fails_the_run_after_deploying
+      - super-fr:tests/unit/test_pages_workflow.py#test_the_placeholder_says_the_report_was_not_rendered
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1385
+    verify: live
+    issues:
+    - derio-net/super-fr#924
+    - derio-net/super-fr#1385
+  - id: glab-host-trust-gate
+    capability: forge-adapter
+    acceptance: 'fr never points glab, or a GITLAB_TOKEN, at a self-hosted GitLab glab
+      is not logged into: the refusal comes before any process, on every adapter method,
+      and is classified by its type (fail fast, never retried)'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-10-06-glab-host-trust.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_host_trust.py#test_every_public_glab_method_refuses_an_unknown_host_before_any_process
+      - super-fr:tests/unit/test_forge_host_trust.py#test_the_bare_glab_helpers_refuse_an_unknown_host_too
+      - super-fr:tests/unit/test_forge_host_trust.py#TestGlabKnownHosts::test_home_dot_config_wins_over_xdg
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refusal_is_classified_by_type_not_by_its_text
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_refused_host_is_never_retried
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_argument_naming_its_own_host_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_mr_url_with_an_embedded_url_never_reaches_glab
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_repo_path_led_by_a_host_glab_knows_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_an_argv_fr_does_not_write_is_refused
+      - super-fr:tests/unit/test_forge_host_trust.py#test_a_branch_glab_would_parse_as_a_flag_never_reaches_it
+    status: ci
+    notes: 'super-fr#1014/#1013: the GitLab twin of #994 gh gate; known hosts read from
+      the config glab itself uses (GLAB_CONFIG_DIR, else ~/.config/glab-cli ahead of
+      XDG, probed against glab 1.89). A GITLAB_TOKEN alone is not a login, as for gh.
+      Every glab argv is checked against an allow-list of what fr writes (its own value-taking
+      flags, a strict GitLab path for --repo not led by a host glab knows, projects/
+      api endpoints), since glab follows a host carried by an argument past GITLAB_HOST.'
+  - id: fr-binary-identity
+    capability: harness-parity
+    acceptance: A shell that reached a different fr through PATH than the harness hooks/plugin
+      run is refused, naming both; an fr chosen from a venv warns and runs
+    origin:
+    - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_binary_identity.py#test_the_cli_refuses_a_path_reached_fr_under_a_disagreeing_pin
+      - super-fr:tests/unit/test_fr_binary_identity.py#test_the_cli_warns_and_runs_a_venv_fr_under_a_disagreeing_pin
+      - super-fr:tests/unit/test_hooks_binary_pin.py#test_the_hook_exports_the_fr_it_resolved
+    status: ci
+    notes: 'super-fr#746: FR_HARNESS_FR pin (Claude Code SessionStart -> CLAUDE_ENV_FILE;
+      OpenCode `ctx.shell.hook("create.before")` (the V2 hook; the 1.x `shell.env` export
+      is gone), bun test/pin.test.ts) + CLI-entry check. Identity is version AND package
+      dir: a branch fr and the global fr share a version until release.'
+  - id: fr-binary-pin-live
+    capability: harness-parity
+    acceptance: In a live Claude Code and OpenCode session the shell tool carries the
+      pin its integrations wrote, and a PATH-skewed bare fr is refused
+    origin:
+    - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    levels: {}
+    status: not-implemented
+    notes: 'Owed after the release installs fr-binary-pin.sh / pin.ts: start a session,
+      check FR_HARNESS_FR in the shell, then reproduce the zsh .zshenv skew. Pieces
+      verified 2026-10-05 on macOS: the pin survives zsh -c .zshenv while fr moves;
+      the refusal fires.'
+  - id: test-plan-heading-near-miss-refused
+    capability: closeout
+    acceptance: 'A spec whose Test Plan heading is a near-miss of "## Test Plan" (numbered,
+      suffixed, other level or case) is never read as having no Test Plan: fr validate
+      artifacts, fr plan self-review, fr archive, fr closeout outcome and the acceptance
+      staleness guard refuse it naming file, line and fix, fr debt reports the specs
+      source unavailable, and a level-two near-miss is renamed by the spec repair; archived
+      specs are never judged.'
+    origin:
+    - super-fr:docs/superpowers/implemented/journals/debug/2026-11-02-test-plan-heading.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_test_plan_heading.py
+      int:
+      - super-fr:tests/unit/test_test_plan_heading.py#test_archive_holds_a_plan_whose_spec_heading_is_a_near_miss
+      - super-fr:tests/unit/test_test_plan_heading.py#test_closeout_outcome_refuses_a_near_miss_naming_the_fix
+      - super-fr:tests/unit/test_test_plan_heading.py#test_the_staleness_guard_refuses_a_live_near_miss
+    status: ci
+    notes: gh#1315. One matcher (fr.spec.find_test_plan_heading); the near-miss error
+      is deliberately not a ValueError.

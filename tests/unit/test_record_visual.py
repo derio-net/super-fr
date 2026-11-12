@@ -8,13 +8,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.record.model import RecordError, parse_record, present_sections
 
 # ── AcceptanceItem.visual — a row carrying `visual` through fr.record.apply ─
 
 
 def test_a_created_row_carries_visual_through_apply_record(tmp_path: Path) -> None:
-    from fr.acceptance.model import load_matrix
     from fr.record.apply import RecordTarget, apply_record
     from fr.record.model import AcceptanceItem, StepRecord
 
@@ -26,6 +26,7 @@ def test_a_created_row_carries_visual_through_apply_record(tmp_path: Path) -> No
             "id": "basket-mode-visual",
             "capability": "Cap",
             "acceptance": "Operator can do X",
+            "origin": ["own:docs/superpowers/specs/s.md"],
             "status": "not-implemented",
             "visual": {"states": ["a"]},
         }
@@ -34,7 +35,7 @@ def test_a_created_row_carries_visual_through_apply_record(tmp_path: Path) -> No
         root, None, StepRecord(acceptance=(item,)), target=RecordTarget(message="add visual row")
     )
 
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(root)
     (added,) = [r for r in matrix.rows if r.id == "basket-mode-visual"]
     assert added.visual is not None
     assert added.visual.states == ("a",)

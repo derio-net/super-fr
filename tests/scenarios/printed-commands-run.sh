@@ -29,7 +29,7 @@ git init -q --bare -b main "$world/origin.git" || fail "bare origin"
 git remote add origin https://github.com/example-org/widgets.git
 git config url."$world/origin.git".insteadOf https://github.com/example-org/widgets.git
 mkdir -p docs/acceptance "docs/superpowers/plans/$plan" docs/superpowers/specs src
-cat > docs/acceptance/matrix.yaml <<YAML
+matrix_fragment <<YAML
 schema_version: 5
 org: example-org
 repo: widgets
@@ -101,10 +101,16 @@ link="$(printf '%s\n' "$out" | grep -E '^ +fr acceptance set-status .* --issue '
 [ -n "$link" ] || fail "the dry run printed no link command: $out"
 refuse_grep ' --(notes|status) ' "$link" "the link command is link-only"
 eval "$link" > "$world/link.out" 2>&1 || fail "the printed link command failed: $link: $(cat "$world/link.out")"
-row="$(sed -n '/id: widget-live/,/^  - id:/p' docs/acceptance/matrix.yaml)"
-expect_grep 'status: walk-owed' "$row" "the linked row kept its status"
-expect_grep 'shipped, walk owed' "$row" "the linked row kept its note"
-expect_grep 'example-org/widgets#' "$row" "the linked row names its tracker"
+# R16: the row is merged, so the link is an amendment in the fragment of the feature whose
+# delivery it closes (the row's origin spec), never in the row owner's legacy fragment.
+expect_grep ' --feature 2026-10-11-widget' "$link" "the link names the feature it closes"
+row="$(sed -n '/id: widget-live/,/^  - id:/p' docs/acceptance/features/legacy.yaml)"
+expect_grep 'status: walk-owed' "$row" "the merged row is not edited in place"
+refuse_grep 'example-org/widgets#' "$(cat docs/acceptance/features/legacy.yaml)" "the link went to legacy"
+amended="$(cat docs/acceptance/features/2026-10-11-widget.yaml)"
+expect_grep 'status: walk-owed' "$amended" "the linked row kept its status"
+expect_grep 'shipped, walk owed' "$amended" "the linked row kept its note"
+expect_grep 'example-org/widgets#' "$amended" "the linked row names its tracker"
 
 # 2. the gate pass prints the discharge command; it runs once its placeholders are filled
 run_fr out gate pass --repo example-org/widgets --pr 12 --gate tester --notes "walked live" --yes
@@ -118,6 +124,6 @@ filled="$(printf '%s\n' "$discharge" | sed -e 's/"<walk log>"/walk.log/' -e 's/"
   -e 's/"<model>"/model-x/' -e 's/"<strategy>"/live/' -e 's/"<what passed>"/"walked live"/')"
 refuse_grep '<' "$filled" "an unfilled placeholder is left"
 eval "$filled" > "$world/discharge.out" 2>&1 || fail "the printed discharge command failed: $filled: $(cat "$world/discharge.out")"
-row="$(sed -n '/id: widget-live/,/^  - id:/p' docs/acceptance/matrix.yaml)"
-expect_grep 'status: walked' "$row" "the discharge moved the row"
+expect_grep ' --feature 2026-10-11-widget' "$discharge" "the discharge names the feature it closes"
+expect_grep 'status: walked' "$(cat docs/acceptance/features/2026-10-11-widget.yaml)" "the discharge moved the row"
 echo "ok: printed-commands-run"

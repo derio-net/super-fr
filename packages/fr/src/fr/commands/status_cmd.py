@@ -371,19 +371,21 @@ def _acceptance_section(root: Path) -> str | None:
     """One-line acceptance nag (2026-07-04 spec, decision 1b). Only when the
     repo has adopted a matrix — unadopted repos are the hook's business, not
     every status call's. Best-effort read-only."""
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
-    if not matrix_path.exists():
+    from fr.acceptance.fold import has_fragments
+
+    if not has_fragments(root):
         return None
     try:
         from collections import Counter
 
         from fr.acceptance.check import open_rows
-        from fr.acceptance.model import load_matrix
+        from fr.acceptance.fold import effective
 
-        matrix = load_matrix(matrix_path)
+        folded = effective(root)
+        matrix = folded.matrix
         counts = Counter(r.status for r in matrix.rows)
         summary = ", ".join(f"{s}: {n}" for s, n in sorted(counts.items())) or "empty"
-        n_open = len(open_rows(matrix))
+        n_open = len(open_rows(matrix, folded.contested, folded.retired))
         return f"\nAcceptance: {summary} — {n_open} open (details: fr acceptance status)"
     except Exception as e:  # noqa: BLE001 — a broken matrix must not break status
         return f"\nAcceptance: matrix unreadable ({e}) — fr acceptance check"

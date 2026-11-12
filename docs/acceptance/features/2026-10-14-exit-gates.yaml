@@ -1,0 +1,213 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-14-exit-gates
+repo: derio-net/super-fr
+rows:
+  - id: exit-gates-declared-exit
+    capability: exit-gates
+    acceptance: A run's exit — the set of verification kinds and the set of gates, from
+      the manifest's gate default, the repo's remap, and the spec's gate line or per-row
+      gate= — is computed once and printed by fr verification exit; a run is held after
+      merge iff a gate is tester or devops.
+    origin:
+    - spec:2026-10-14-exit-gates#R1
+    - spec:2026-10-14-exit-gates#R5
+    - spec:2026-10-14-exit-gates#R2
+    - spec:2026-10-14-exit-gates#R3
+    - spec:2026-10-14-exit-gates#R4
+    - spec:2026-10-14-exit-gates#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_exit.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_exit_gates_declared_exit
+    status: ci
+    notes: scenario drives fr verification exit; unit tests cover the exit model
+    scenario: tests/scenarios/exit-gates-declared-exit.sh
+  - id: exit-gates-set-downgrade
+    capability: exit-gates
+    acceptance: fr verification set rewrites the spec's Verification line, journals
+      the reason and re-syncs the labels; after spec-review a change that makes the
+      exit wait less is refused without a verified operator answer.
+    origin:
+    - spec:2026-10-14-exit-gates#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_verification_set.py
+      - super-fr:tests/unit/test_spec_section_rewrite.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_exit_gates_set_downgrade
+    status: ci
+    notes: fr verification set and the R8 downgrade guard are covered by unit tests
+      and an installed-fr scenario; the transcript-verified operator path is unit-tested
+      with a patched reader
+    scenario: tests/scenarios/exit-gates-set-downgrade.sh
+  - id: exit-gates-verify-without-section
+    capability: exit-gates
+    acceptance: 'A row''s own verify: on a spec with no Verification section is checked
+      like any other (unresolvable, unrunnable install, missing scenario, post-merge
+      or none without a reason).'
+    origin:
+    - spec:2026-10-14-exit-gates#R24
+    levels:
+      unit:
+      - super-fr:tests/unit/test_row_verification_issues.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_exit_gates_verify_without_section
+    status: ci
+    notes: row_verification_issues runs without a section
+    scenario: tests/scenarios/exit-gates-verify-without-section.sh
+  - id: exit-gates-deliver-accounting
+    capability: exit-gates
+    acceptance: deliver refuses an out-of-scope finding, deferred item or owed row that
+      no post-merge gate holds and no filed issue tracks, and refuses Closes over an
+      issue a post-merge gate holds or an agent-decided narrowing names; fr journal
+      file files the issue and defers the finding in one move.
+    origin:
+    - spec:2026-10-14-exit-gates#R9
+    - spec:2026-10-14-exit-gates#R11
+    - spec:2026-10-14-exit-gates#R10
+    - spec:2026-10-14-exit-gates#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_deliver_leftovers.py#test_each_kind_of_leftover_is_listed_with_its_fix
+      - super-fr:tests/unit/test_journal_file.py#test_an_out_of_scope_finding_is_filed_with_follow_up_and_deferred
+      - super-fr:tests/unit/test_deliver_leftovers.py#test_a_close_over_a_gated_rows_issue_is_refused_even_when_pre_merge
+      int:
+      - super-fr:tests/integration/test_exit_gates_deliver.py#test_deliver_refuses_leftovers_then_passes_after_journal_file
+    status: ci
+    notes: deliver's leftovers gate, fr journal file and the widened Closes guard are
+      covered by CI unit tests and a full deliver resolve against a stubbed forge
+  - id: exit-gates-board-lanes
+    capability: exit-gates
+    acceptance: The board shows Needs you · Developer, · Reviewer, · Tester and · DevOps
+      lanes read from the run cursor and the gate labels, and never shows merge ready,
+      nor merges, a CONFLICTING or DIRTY PR.
+    origin:
+    - spec:2026-10-14-exit-gates#R17
+    - spec:2026-10-14-exit-gates#R19
+    - spec:2026-10-14-exit-gates#R18
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_board_lanes.py#test_a_cursor_blocked_on_a_step_gate_is_needs_developer
+      - super-fr:tests/unit/test_triage_board_lanes.py#test_a_conflicting_pr_never_reads_merge_ready
+      - super-fr:tests/unit/test_triage_board_lanes.py#test_needs_you_emits_one_need_per_card_in_a_lane
+    status: ci
+    notes: 'Review p5-r8: the conflicting-hint test and the lane/needs_you agreement
+      test are evidence levels; status unchanged.'
+  - id: exit-gates-install-channels
+    capability: exit-gates
+    acceptance: bootstrap.sh installs the newest release with no argument, the newest
+      RC with --version RC, an exact release or RC by number, main with --version main,
+      and installs nothing for an unknown version while listing the available ones;
+      install.sh accepts a clean checkout at a v* tag.
+    origin:
+    - spec:2026-10-14-exit-gates#R22
+    - spec:2026-10-14-exit-gates#R23
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_channels.py#test_rc_installs_the_newest_rc_numerically
+      - super-fr:tests/integration/test_install_channels.py#test_preflight_passes_on_a_clean_detached_tag
+    status: ci
+    notes: bootstrap.sh --version and install.sh tagged-checkout preflight proven against
+      a fixture remote (phase 8)
+  - id: exit-gates-pr-labels
+    capability: exit-gates
+    acceptance: A run's PR carries one verification:<kind> label per kind and one gate:<gate>
+      label per post-merge gate, kept in sync as the spec changes.
+    origin:
+    - spec:2026-10-14-exit-gates#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_exit_label_sync.py
+      - super-fr:tests/unit/test_exit_label_sync_points.py
+      - super-fr:tests/unit/test_exit_pr_adapter.py
+    status: walked
+    notes: 'Operator accepted live #1204 evidence on 2026-10-30: rehearsal PR https://github.com/derio-net/super-fr-release-rehearsal-20261026/pull/2
+      at c1bdf0b01a65422f7a83ffb0d0ac4bcb65cd920e. Shipped RC11 sync_exit_labels (direct
+      API, not completed CLI delivery) added verification:candidate, verification:live
+      and gate:tester from no labels. One post-review gate-none attempt exited 2 with
+      unchanged tracked bytes/index/HEAD/PR labels. Evidence: docs/acceptance/evidence/2026-10-30-exit-gates-labels-1204.md.
+      No overall #1195 gate pass; other walks remain owed.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: openai/gpt-6.1-sol
+      outcome: pass
+      at: '2026-10-30T04:53:23Z'
+      evidence: super-fr:docs/acceptance/evidence/2026-10-30-exit-gates-labels-1204.md
+  - id: exit-gates-driver-routing
+    capability: exit-gates
+    acceptance: A merged batch held by a post-merge gate is not closed out and keeps
+      its Refs issues open under its Needs-you lane until its rows are walked on main
+      or fr gate pass records the pass, which swaps the label to gate:<g>-passed.
+    origin:
+    - spec:2026-10-14-exit-gates#R13
+    - spec:2026-10-14-exit-gates#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_exit_gates_drive.py
+      - super-fr:tests/unit/test_triage_exit_gates_facts.py
+      - super-fr:tests/unit/test_gate_cmd.py
+    status: walked
+    notes: 'Independently accepted live routing #1205 on 2026-10-31: first native RC15
+      pass 05:10:00–05:10:17Z retained Needs you Tester, OPEN/fr:awaiting-live issue
+      #3 and no closeout; fixture evidence PR #7 merged a1631551d7605503a2c010db88499eecce6ad9dd
+      with the first-hold row walked. Second actual pass 06:34:24–06:34:40Z automatically
+      changed fixture PR #6 from gate:tester to gate:tester-passed and posted comment
+      6540141711 at 06:34:38Z. Reviewer ses_e6fa16643ffewnUs94wY6erI1F accepted the
+      two-pass chain. Issue #3 remained OPEN; zero closeouts executed; subsequent closing=1
+      was a dry-run proposal only. Evidence: docs/acceptance/evidence/2026-10-31-exit-gates-routing-1205.md.
+      Discharges only original Test Plan step 2, not #1206 closeout, completed target
+      delivery, or overall #1195/#1217 gates.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: openai/gpt-6.1-sol
+      outcome: pass
+      at: '2026-10-31T06:34:40Z'
+      evidence: docs/acceptance/evidence/2026-10-31-exit-gates-routing-1205.md
+  - id: exit-gates-collected-closeout
+    capability: exit-gates
+    acceptance: Every landed, not-held batch of a repo closes out in one session with
+      one housekeeping PR that the driver marks ready and merges once clean, closing
+      passed batches' Refs issues; one reconcile attempt, then the operator.
+    origin:
+    - spec:2026-10-14-exit-gates#R15
+    - spec:2026-10-14-exit-gates#R16
+    - spec:2026-10-14-exit-gates#R27
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_closeout.py
+      - super-fr:tests/unit/test_triage_batch_closeout_cmd.py
+      - super-fr:tests/unit/test_triage_collected_closeout_drive.py
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1347
+    issues:
+    - derio-net/super-fr#1206
+    - derio-net/super-fr#1347
+  - id: exit-gates-release-gating
+    capability: exit-gates
+    acceptance: A push to main cuts a vX.Y.Z-rc.N pre-release while any change merged
+      since the last final waits on a post-merge gate, and the final vX.Y.Z once none
+      does; fr release status lists what still waits.
+    origin:
+    - spec:2026-10-14-exit-gates#R20
+    - spec:2026-10-14-exit-gates#R21
+    - spec:2026-10-14-exit-gates#R25
+    - spec:2026-10-14-exit-gates#R26
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_status.py
+      - super-fr:tests/unit/test_release_script.py
+      - super-fr:tests/unit/test_version_rc.py
+      - super-fr:tests/unit/test_release_workflow.py
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1348
+    issues:
+    - derio-net/super-fr#1207
+    - derio-net/super-fr#1348

@@ -192,6 +192,29 @@ GOOD_OPS = (
 """
 )
 
+FRAGMENT_REL = f"docs/acceptance/features/{PLAN_SLUG}.yaml"
+GOOD_FRAGMENT = (
+    f"schema_version: {ARTIFACT_KINDS['acceptance-fragment'].current_version}\n"  # built
+    + f"""feature: {PLAN_SLUG}
+repo: derio-net/super-fr
+rows:
+  - id: a-fragment-row
+    capability: A capability
+    acceptance: It works.
+    origin:
+      - spec:{PLAN_SLUG}#R1
+    status: ci
+  - id: a-row
+    capability: A capability
+    acceptance: It works too.
+    origin:
+      - spec:{PLAN_SLUG}#R2
+    status: ci
+amendments:
+  - {{row: a-row, op: set-status, base: 0, status: unwired, notes: moved, why: it moved}}
+"""
+)
+
 
 def seed_good_repo(root: Path) -> dict[str, Path]:
     """One structurally valid live artifact per registered kind."""
@@ -205,7 +228,7 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
         "journal": _w(root, f"docs/superpowers/journals/plans/{PLAN_SLUG}.md", GOOD_JOURNAL),
         "ops": _w(root, f"docs/superpowers/plans/{PLAN_SLUG}/ops.yaml", GOOD_OPS),
         "run": _w(root, "docs/superpowers/runs/2019-03-04-feat-widget.yaml", GOOD_RUN),
-        "matrix": _w(root, "docs/acceptance/matrix.yaml", GOOD_MATRIX),
+        "acceptance-fragment": _w(root, FRAGMENT_REL, GOOD_FRAGMENT),
         "spec": _w(root, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", GOOD_SPEC),
         "usage": _w(root, "docs/superpowers/usage/2019-03-04-feat-widget.yaml", GOOD_USAGE),
         "record": _w(root, GOOD_RECORD_REL, GOOD_RECORD),
@@ -222,8 +245,12 @@ def _seed_agents(root: Path) -> Path:
     return next(p for p in written if p.stem == "fr-spec-reviewer")
 
 
-SEEDED_COUNT = len(ARTIFACT_KINDS) + 1
-"""One artifact per kind, plus the `agents` kind's second file."""
+LIVE_KINDS = {name for name, kind in ARTIFACT_KINDS.items() if not kind.retired}
+"""Every kind a repo still writes: a retired one (the `matrix`, spec 2026-11-04 R19) has
+no well-formed artifact, only a stale one `fr migrate artifacts --yes` removes."""
+
+SEEDED_COUNT = len(LIVE_KINDS) + 1
+"""One artifact per live kind, plus the `agents` kind's second file."""
 
 
 # --- 1. a well-formed artifact of every kind passes -----------------------
@@ -236,7 +263,7 @@ def test_every_registered_kind_has_a_structure_validator() -> None:
 
 def test_a_well_formed_artifact_of_every_kind_passes(tmp_path: Path) -> None:
     seeded = seed_good_repo(tmp_path)
-    assert set(seeded) == set(ARTIFACT_KINDS), "the fixture must cover every registered kind"
+    assert set(seeded) == LIVE_KINDS, "the fixture must cover every live registered kind"
     report = validate_repo(tmp_path)
     assert report.issues == (), [str(i) for i in report.issues]
     assert report.ok
@@ -302,9 +329,9 @@ MISSING_FIELD_CASES = {
         GOOD_RUN.replace("cursor: implement\n", ""),
         "cursor",
     ),
-    "matrix": (
-        "docs/acceptance/matrix.yaml",
-        GOOD_MATRIX.replace("    status: ci\n", ""),
+    "acceptance-fragment": (
+        FRAGMENT_REL,
+        GOOD_FRAGMENT.replace("    status: ci\n", ""),
         "status",
     ),
     "spec": (
@@ -336,7 +363,17 @@ MISSING_FIELD_CASES = {
 
 
 def test_the_missing_field_cases_cover_every_kind() -> None:
-    assert set(MISSING_FIELD_CASES) == set(ARTIFACT_KINDS)
+    assert set(MISSING_FIELD_CASES) == LIVE_KINDS
+
+
+def test_a_matrix_of_the_retired_kind_is_reported_as_retired(tmp_path: Path) -> None:
+    seed_good_repo(tmp_path)
+    _w(tmp_path, "docs/acceptance/matrix.yaml", GOOD_MATRIX)
+
+    report = validate_repo(tmp_path)
+
+    (issue,) = [i for i in report.issues if i.kind == "matrix"]
+    assert "retired kind: run fr migrate artifacts --yes" in issue.message
 
 
 @pytest.mark.parametrize("kind_name", sorted(MISSING_FIELD_CASES))
@@ -744,20 +781,22 @@ def test_cli_passes_on_a_clean_repo(tmp_path: Path) -> None:
 
 def test_cli_fails_naming_the_file_and_the_field(tmp_path: Path) -> None:
     seed_good_repo(tmp_path)
-    rel, corrupted, field = MISSING_FIELD_CASES["matrix"]
+    rel, corrupted, field = MISSING_FIELD_CASES["acceptance-fragment"]
     _w(tmp_path, rel, corrupted)
     result = _invoke(tmp_path, ["validate", "artifacts"])
     assert result.exit_code == 1, result.output
-    assert "matrix.yaml" in result.output
+    assert Path(rel).name in result.output
     assert field in result.output
 
 
 def test_cli_kind_filter_checks_only_that_kind(tmp_path: Path) -> None:
     seed_good_repo(tmp_path)
-    rel, corrupted, _ = MISSING_FIELD_CASES["matrix"]
+    rel, corrupted, _ = MISSING_FIELD_CASES["acceptance-fragment"]
     _w(tmp_path, rel, corrupted)
     assert _invoke(tmp_path, ["validate", "artifacts", "--kind", "spec"]).exit_code == 0
-    assert _invoke(tmp_path, ["validate", "artifacts", "--kind", "matrix"]).exit_code == 1
+    assert (
+        _invoke(tmp_path, ["validate", "artifacts", "--kind", "acceptance-fragment"]).exit_code == 1
+    )
 
 
 def test_cli_rejects_an_unknown_kind(tmp_path: Path) -> None:
@@ -781,7 +820,7 @@ def test_this_repos_own_artifacts_are_structurally_valid() -> None:
 # --- review r4-f1: a duplicate YAML key is a SILENT drop ------------------
 
 
-def test_a_duplicated_key_in_the_matrix_is_caught_not_silently_dropped(tmp_path: Path) -> None:
+def test_a_duplicated_key_in_a_fragment_is_caught_not_silently_dropped(tmp_path: Path) -> None:
     """This is a bug this repo actually shipped, on this very branch.
 
     `docs/acceptance/matrix.yaml` carried `levels:` twice on one row. PyYAML
@@ -792,11 +831,13 @@ def test_a_duplicated_key_in_the_matrix_is_caught_not_silently_dropped(tmp_path:
     while quietly dropping half of what it claims is worse than a red row.
     """
     seed_good_repo(tmp_path)
-    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
-    matrix.write_text(
-        GOOD_MATRIX.replace(
-            "    status: ci\n",
-            "    levels:\n      integration:\n        - super-fr:tests/x.py\n    status: ci\n",
+    fragment = tmp_path / FRAGMENT_REL
+    fragment.write_text(
+        GOOD_FRAGMENT.replace(
+            "    origin:\n",
+            "    levels:\n      unit:\n        - super-fr:tests/x.py\n"
+            "    levels:\n      int:\n        - super-fr:tests/y.py\n    origin:\n",
+            1,
         )
     )
 
@@ -903,16 +944,16 @@ def test_a_symlinked_artifact_is_followed_and_validated_once(tmp_path: Path) -> 
     seed_good_repo(tmp_path)
     real_dir = tmp_path / "elsewhere"
     real_dir.mkdir()
-    real = real_dir / "matrix.yaml"
-    real.write_text(GOOD_MATRIX.replace("status: ci", "status: not-a-status"))
-    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
-    matrix.unlink()
-    matrix.symlink_to(real)
+    real = real_dir / Path(FRAGMENT_REL).name
+    real.write_text(GOOD_FRAGMENT.replace("status: ci", "status: not-a-status", 1))
+    fragment = tmp_path / FRAGMENT_REL
+    fragment.unlink()
+    fragment.symlink_to(real)
 
     report = validate_repo(tmp_path)
 
-    matrix_issues = [i for i in report.issues if i.kind == "matrix"]
-    assert len(matrix_issues) == 1, matrix_issues
+    fragment_issues = [i for i in report.issues if i.kind == "acceptance-fragment"]
+    assert len(fragment_issues) == 1, fragment_issues
 
 
 def test_an_artifact_path_that_is_a_directory_is_reported(tmp_path: Path) -> None:
@@ -935,29 +976,29 @@ def test_an_unreadable_artifact_is_a_failure_naming_it(tmp_path: Path) -> None:
     import os
 
     seed_good_repo(tmp_path)
-    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
-    os.chmod(matrix, 0o000)
+    fragment = tmp_path / FRAGMENT_REL
+    os.chmod(fragment, 0o000)
     try:
         report = validate_repo(tmp_path)
     finally:
-        os.chmod(matrix, 0o644)
+        os.chmod(fragment, 0o644)
 
     problems = " ".join(str(i) for i in report.issues)
     assert not report.ok
-    assert "matrix.yaml" in problems
+    assert fragment.name in problems
     assert "cannot be read" in problems
 
 
 def test_non_utf8_bytes_are_a_failure_naming_the_file(tmp_path: Path) -> None:
     seed_good_repo(tmp_path)
-    matrix = tmp_path / "docs" / "acceptance" / "matrix.yaml"
-    matrix.write_bytes(b"schema_version: 1\nrows: \xff\xfe\n")
+    fragment = tmp_path / FRAGMENT_REL
+    fragment.write_bytes(b"schema_version: 1\nrows: \xff\xfe\n")
 
     report = validate_repo(tmp_path)
 
     problems = " ".join(str(i) for i in report.issues)
     assert not report.ok
-    assert "matrix.yaml" in problems
+    assert fragment.name in problems
     assert "UTF-8" in problems
 
 
@@ -1001,3 +1042,43 @@ def test_a_valid_repo_authored_shape_does_not_fail_validation(tmp_path: Path) ->
     )
 
     assert validate_repo(tmp_path).ok
+
+
+# --- acceptance fragments (spec 2026-11-04-repo-feature-settings R19) -----
+
+
+def _fragment_problems(tmp_path: Path, text: str, *, sibling: str | None = None) -> str:
+    seed_good_repo(tmp_path)
+    _w(tmp_path, FRAGMENT_REL, text)
+    if sibling is not None:
+        _w(tmp_path, "docs/acceptance/features/2019-03-05-other.yaml", sibling)
+    report = validate_repo(tmp_path)
+    return "\n".join(str(i) for i in report.issues if i.kind == "acceptance-fragment")
+
+
+def test_a_valid_fragment_passes(tmp_path: Path) -> None:
+    sibling = "feature: 2019-03-05-other\nrepo: derio-net/super-fr\nrows: []\n"
+    assert _fragment_problems(tmp_path, GOOD_FRAGMENT, sibling=sibling) == ""
+
+
+def test_a_fragment_with_a_duplicate_key_fails_naming_the_file(tmp_path: Path) -> None:
+    problems = _fragment_problems(tmp_path, GOOD_FRAGMENT + "repo: derio-net/super-fr\n")
+    assert f"{PLAN_SLUG}.yaml" in problems and "duplicate" in problems, problems
+
+
+def test_a_fragment_with_a_bad_op_fails_naming_the_file(tmp_path: Path) -> None:
+    problems = _fragment_problems(tmp_path, GOOD_FRAGMENT.replace("op: set-status", "op: bend"))
+    assert f"{PLAN_SLUG}.yaml" in problems and "bend" in problems, problems
+
+
+def test_fragments_disagreeing_on_repo_fail_naming_the_file(tmp_path: Path) -> None:
+    sibling = "feature: 2019-03-05-other\nrepo: derio-net/elsewhere\nrows: []\n"
+    problems = _fragment_problems(tmp_path, GOOD_FRAGMENT, sibling=sibling)
+    assert "2019-03-05-other.yaml" in problems and "derio-net/elsewhere" in problems, problems
+
+
+def test_a_fragment_whose_feature_is_not_its_name_fails(tmp_path: Path) -> None:
+    problems = _fragment_problems(
+        tmp_path, GOOD_FRAGMENT.replace(f"feature: {PLAN_SLUG}", "feature: 2019-03-05-other")
+    )
+    assert "feature" in problems, problems

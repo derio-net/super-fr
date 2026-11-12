@@ -1,0 +1,60 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-20-phases-file-tier-reaches-dispatch
+repo: derio-net/super-fr
+rows:
+  - id: phase-header-fields-survive-phases-file
+    capability: fr-goal subagent execution
+    acceptance: Every PhaseHeader field an operator writes in a --phases-file survives
+      into the scaffolded plan, and a field left unset is omitted so pre-existing plans
+      stay byte-stable
+    origin:
+    - spec:2026-09-20-phases-file-tier-reaches-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_phases_file_field_coverage.py
+    status: ci
+    notes: 'Phase 1 shipped: PhaseSpec gained tier, --phases-file ingestion passes it
+      through, and _build_phase_doc emits it only when set (byte-stable for pre-tier
+      plans). The regression test is derived from PhaseHeader.model_fields rather than
+      a restated whitelist, so the next added field is covered without an edit -- the
+      class-level claim this row makes.'
+  - id: phase-tier-reaches-the-dispatch-brief
+    capability: fr-goal subagent execution
+    acceptance: A tier declared in a --phases-file reaches the dispatch brief fr run
+      advance emits for that phase, joining plan ingestion to dispatch without an LLM
+      in the path
+    origin:
+    - spec:2026-09-20-phases-file-tier-reaches-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: Phase 3 shipped resolved_tier on the member dispatch brief (tier stays the
+      manifest literal from_phase; resolved_tier carries the phase's actual tier, null
+      when untiered) and phase 4 joined ingestion to dispatch with a single in-repo
+      integration test (test_a_phases_file_tier_reaches_the_dispatch_brief) that scaffolds
+      a tiered plan through the real fr plan create --phases-file CLI and drives fr
+      run advance to the emitted brief. Independently verified to go red on the original
+      gh#434 defect (reverting the one-line ingestion fix) and on a reverted resolved_tier
+      key, not just on phase 3's own addition.
+  - id: plan-self-review-flags-tier-gaps
+    capability: fr-goal subagent execution
+    acceptance: fr plan self-review warns when a plan carries a tier its fr_version
+      constraint cannot support, and when an agentic phase declares no tier at all
+    origin:
+    - spec:2026-09-20-phases-file-tier-reaches-dispatch
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_tier_gates.py
+    status: ci
+    notes: 'Phase 2 shipped both warn-severity gates: an fr_version floor probe for
+      tier (mirrors the acceptance 3.7.0 probe, routed through the shared _version_floor_issue
+      helper) and a warning when an agentic phase declares no tier. Both are severity=warn,
+      matching acceptance/skeleton, and neither changes an exit code.'

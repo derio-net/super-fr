@@ -1,0 +1,20 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-06-09-bridge-pr-state-autoclose-wiring
+repo: derio-net/super-fr
+rows:
+  - id: bridge-pr-autoclose
+    capability: Bridge
+    acceptance: A merged PR without close keywords still lands the card Done, archives
+      the workspace, closes the tracking Issue, and unblocks dependents
+    origin:
+    - spec:2026-06-09-bridge-pr-state-autoclose-wiring
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bridge_pr_state.py
+    status: ci
+    notes: PR-state wiring pinned per-PR; deployed-cron walk done 2026-06-09.

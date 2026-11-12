@@ -1,0 +1,49 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-08-opencode-command-support
+repo: derio-net/super-fr
+rows:
+  - id: opencode-commands-in-repo
+    capability: OpenCode adaptation
+    acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)
+      as a real OpenCode slash command inside a super-fr clone, with no install step
+    origin:
+    - spec:2026-07-08-opencode-command-support
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_opencode_commands_sync.py
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): Test Plan
+      steps 1-2 walked live post-merge 2026-07-08; mirror drift guarded in CI.'
+    walks:
+    - strategy: live
+      harness: opencode
+      model: opencode/north-mini-code-free
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan steps 1-2 post-merge walk: opencode debug config resolved
+        the generated commands; opencode run --command fr-progress invoked one'
+  - id: opencode-commands-installer
+    capability: OpenCode adaptation
+    acceptance: An operator can run scripts/install.sh and get /fr-goal etc. available
+      as OpenCode slash commands globally, with clean --uninstall removal
+    origin:
+    - spec:2026-07-08-opencode-command-support
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_commands.py
+    status: walked
+    notes: 'walk backfilled from the evidence this row''s notes cite (p1-r2): live-verified
+      pre- and post-merge 2026-07-08; install.sh wiring guarded in CI.'
+    walks:
+    - strategy: live
+      harness: unrecorded
+      model: unrecorded
+      outcome: pass
+      at: '2026-07-08T00:00:00Z'
+      evidence: 'Test Plan step 3 post-merge walk: full scripts/install.sh from a fresh
+        clone of merged main delivered all commands'

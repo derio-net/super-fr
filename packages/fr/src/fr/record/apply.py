@@ -54,7 +54,7 @@ from fr.journal.model import (
     resolution_entry,
     spec_journal_slug,
 )
-from fr.record.model import StepRecord, allowed_sections, present_sections
+from fr.record.model import AmendmentItem, StepRecord, allowed_sections, present_sections
 from fr.workflow.artifacts import journal_scope
 
 _SESSION_START = "1970-01-01T00:00:00+00:00"
@@ -70,8 +70,6 @@ __all__ = [
     "RecordTarget",
     "apply_record",
 ]
-
-MATRIX_REL = Path("docs/acceptance/matrix.yaml")
 
 
 class RecordRefusedError(Exception):
@@ -101,6 +99,17 @@ class RecordTarget:
     `fr acceptance set-status --drop-level`. The `record` kind's shape is
     deliberately unchanged (spec d-carrier): an `AcceptanceItem` cannot drop
     refs, so a step that needs a removal runs the verb."""
+    acceptance_features: Mapping[str, str] = field(default_factory=dict)
+    """Row id → the fragment (feature slug) a NEW row is written to, when its
+    origins name no single spec (`fr acceptance add --feature`; spec 2026-11-04
+    R16). Verb-only, like `acceptance_drops`."""
+    acceptance_repo: str | None = None
+    """`<org>/<repo>` for the first fragment of a repo whose fragments name none and
+    whose origin remote does not say (`fr acceptance add --repo`)."""
+    feature: str | None = None
+    """The feature (spec slug) whose fragment a verb record's amendments are written
+    to (`fr acceptance amend|set-status --feature`, else the branch's run; spec
+    2026-11-04 R16). A run record uses the run's spec."""
 
 
 @dataclass
@@ -183,6 +192,9 @@ class _Context:
     """The repo's `(org, repo)` — the Closes guard's — that a bare `#n` in a
     narrowing or a round names; `None` when it cannot be resolved, and then no
     narrowing is stamped."""
+    feature: str | None = None
+    """The run's spec as a fragment slug: the feature a new acceptance row of this
+    record belongs to when its origins name no single spec (spec 2026-11-04 R16)."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -229,6 +241,10 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         )
         if spec_rel is not None:
             slug = spec_journal_slug(Path(spec_rel).stem)
+    run_spec_rel = record.emitted.get("spec") or next(
+        (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
+        None,
+    )
     phase = run_cmd._item_phase(record.item) if record.item else None
     emits_ticks = "plan:ticks" in owner_emits
     current = state.steps.get(record.step)
@@ -250,20 +266,28 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         emits_ticks=emits_ticks,
         gate_answer=gate_answer,
         identity=_repo_identity(repo_root) if gate_answer is not None else None,
+        feature=_feature_of_spec(run_spec_rel),
     )
     return context, state
+
+
+def _feature_of_spec(spec_rel: str | None) -> str | None:
+    if not spec_rel:
+        return None
+    from fr.acceptance.fragment import fragment_slug_for_spec
+
+    return fragment_slug_for_spec(spec_rel)
 
 
 def _repo_identity(repo_root: Path) -> tuple[str, str] | None:
     """The `(org, repo)` the Closes guard resolves (`resolve_identity` over the
     matrix, else the origin remote), or `None` when it cannot be resolved."""
     from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
-    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.acceptance.fold import load_effective
+    from fr.acceptance.model import AcceptanceError
 
     try:
-        path = repo_root / MATRIX_REL
-        return resolve_identity(load_matrix(path) if path.is_file() else Matrix(), repo_root)
+        return resolve_identity(load_effective(repo_root), repo_root)
     except (AcceptanceError, OSError):
         return None
 
@@ -716,7 +740,11 @@ def _check_drops(
             f"a run record never reads them (run {run_id!r})"
         )
     for row_id, levels in drops.items():
-        named = [item for item in record.acceptance if item.id == row_id]
+        named = [
+            item
+            for item in record.acceptance
+            if not isinstance(item, AmendmentItem) and item.id == row_id
+        ]
         if not named:
             raise RecordRefusedError(
                 f"acceptance {row_id}: a drop names a row the record does not move"
@@ -781,12 +809,220 @@ def strategy_error(name: str, repo_root: Path) -> str | None:
     return None
 
 
+class _Amending:
+    """Amendments for one record (spec 2026-11-04 R16, R17): which rows are merged on
+    the default ref, each row's revision (the base an amendment names when the
+    record gives none), and the row each amendment leaves, so a second amendment of
+    one row in the same record builds on the first."""
+
+    def __init__(self, repo_root: Path, feature: str | None) -> None:
+        self.repo_root = repo_root
+        self._feature = feature
+        self._merged: frozenset[str] | None = None
+        self._current: Any = None
+        self.rows: dict[str, Any] = {}
+        from collections import Counter
+
+        self.taken: Counter[str] = Counter()
+
+    def _fold(self) -> Any:
+        if self._current is None:
+            from fr.acceptance.fold import effective
+            from fr.acceptance.model import AcceptanceError
+
+            try:
+                self._current = effective(self.repo_root)
+            except AcceptanceError as e:
+                raise RecordRefusedError(f"the acceptance fragments do not fold: {e}") from e
+            self.rows = {r.id: r for r in self._current.matrix.rows}
+        return self._current
+
+    def is_merged(self, row_id: str) -> bool:
+        """Whether the default ref's fragments define *row_id* (none without one)."""
+        if self._merged is None:
+            from fr.acceptance.fold import default_ref_fold
+            from fr.acceptance.model import AcceptanceError
+
+            try:
+                merged = default_ref_fold(self.repo_root)
+            except AcceptanceError as e:
+                raise RecordRefusedError(f"the default ref's fragments do not fold: {e}") from e
+            self._merged = frozenset(merged.owners) if merged is not None else frozenset()
+        return row_id in self._merged
+
+    def feature(self) -> str:
+        if self._feature is None:
+            from fr.acceptance.amend import NO_FEATURE
+
+            raise RecordRefusedError(NO_FEATURE)
+        return self._feature
+
+    def row(self, row_id: str, *, contested_retired: bool = False) -> Any:
+        """The row an amendment applies to. With *contested_retired*, a retired row the
+        fold marks contested is returned too: R17's next correctly based amendment is
+        the only way to clear it, so `amend` must be able to write one (decision
+        fold-retired-rows-keep-the-base-rule). A retired row that is not contested
+        has nothing to clear and stays refused."""
+        current = self._fold()
+        if row_id not in self.rows:
+            if contested_retired and row_id in current.contested:
+                hit = next((r for r in current.retired if r.id == row_id), None)
+                if hit is not None:
+                    return hit
+            retired = any(r.id == row_id for r in current.retired)
+            raise RecordRefusedError(
+                f"acceptance {row_id}: "
+                + ("the row is retired" if retired else "no such row")
+                + " — an amendment names a row of the effective matrix"
+            )
+        return self.rows[row_id]
+
+    def base(self, row_id: str) -> int:
+        return int(self._fold().revisions.get(row_id, 0)) + self.taken[row_id]
+
+    def amend(self, item: AmendmentItem, write: Any, no_ci: str | None) -> str:
+        from fr.acceptance.anchors import line_anchor_error
+        from fr.acceptance.fold import apply_amendment
+        from fr.acceptance.logical import is_logical, parse_logical
+        from fr.acceptance.model import AcceptanceError, pipeline_ref_error, split_ref, walked_error
+
+        was_retired = item.row not in self.rows
+        old = self.row(item.row, contested_retired=True)
+        base = item.base if item.base is not None else self.base(item.row)
+        try:
+            amendment = item.to_amendment(base)
+        except ValueError as e:
+            raise RecordRefusedError(str(e)) from e
+        where = f"acceptance {item.row}"
+        if amendment.op == "add-level":
+            try:
+                parse_logical(amendment.ref) if is_logical(amendment.ref) else split_ref(
+                    amendment.ref
+                )
+            except AcceptanceError as e:
+                raise RecordRefusedError(f"{where}: {e}") from e
+            for why in (pipeline_ref_error(amendment.ref), line_anchor_error(amendment.ref)):
+                if why is not None:
+                    raise RecordRefusedError(f"{where}: {why}")
+        if amendment.op == "drop-level" and amendment.ref not in old.levels.get(
+            amendment.level, ()
+        ):
+            raise RecordRefusedError(
+                f"{where}: cannot drop {amendment.ref!r} from level {amendment.level!r}: the "
+                f"row does not carry it (current refs: {list(old.levels.get(amendment.level, ()))})"
+            )
+        new = apply_amendment(old, amendment)
+        if amendment.op == "set-status":
+            if amendment.verify is not None and (
+                why := strategy_error(amendment.verify, self.repo_root)
+            ):
+                raise RecordRefusedError(f"{where}: {why}")
+            if (why := walked_error(new)) is not None:
+                raise RecordRefusedError(f"{where}: {why}")
+            if no_ci is not None and new.status == "ci" and old.status != "ci":
+                raise RecordRefusedError(
+                    f"{where}: status `ci` needs a CI run as its evidence, but {no_ci}. "
+                    "Record it as `unwired` (a test exists, not in CI) instead."
+                )
+        write(amendment)
+        if was_retired:
+            pass  # a retired row stays retired: R16 has no op that brings one back
+        elif amendment.op == "retire":
+            self.rows.pop(item.row)
+        else:
+            self.rows[item.row] = new
+        return f"{item.row}: {amendment.op} amendment (base {base}) in {self.feature()}"
+
+    def move(
+        self,
+        item: Any,
+        drops: Mapping[str, tuple[str, ...]],
+        write: Any,
+        no_ci: str | None,
+    ) -> str:
+        """An `AcceptanceItem` move of a merged row, as the amendments it amounts to:
+        a `set-status` for its status, note, walk, issues, verify and scenario, then
+        one `add-level` per ref it adds and one `drop-level` per ref it drops."""
+        from fr.acceptance.edit import describe_move
+
+        old = self.row(item.id)
+        if any(h not in old.harnesses for h in item.harnesses):
+            raise RecordRefusedError(
+                f"acceptance {item.id}: the row is merged, and no amendment op carries "
+                "`harnesses`; a merged row changes only by amendment"
+            )
+        if not item.notes and item.status != old.status:
+            raise RecordRefusedError(
+                f"acceptance {item.id}: moving a row's status needs `notes` — "
+                "a status that moved for no recorded reason is a silent change"
+            )
+        issues = tuple(i for i in dict.fromkeys(item.issues) if i not in old.issues)
+        notes = item.notes or old.notes
+        verify = item.verify if item.verify is not None and item.verify != old.verify else None
+        scenario = (
+            item.scenario if item.scenario is not None and item.scenario != old.scenario else None
+        )
+        why = notes or f"set-status {item.status}"
+        planned: list[AmendmentItem] = []
+        if (
+            item.status != old.status
+            or notes != old.notes
+            or item.walk is not None
+            or issues
+            or verify is not None
+            or scenario is not None
+        ):
+            planned.append(
+                AmendmentItem(
+                    row=item.id,
+                    op="set-status",
+                    status=item.status,
+                    notes=notes,
+                    walk=item.walk,
+                    issues=issues,
+                    verify=verify,
+                    scenario=scenario,
+                    why=why,
+                )  # fmt: skip
+            )
+        for lv, refs in item.levels.items():
+            for ref in refs:
+                if ref not in old.levels.get(lv, ()):
+                    planned.append(
+                        AmendmentItem(row=item.id, op="add-level", level=lv, ref=ref, why=why)
+                    )
+        for lv, refs in drops.items():
+            for ref in dict.fromkeys(refs):
+                planned.append(
+                    AmendmentItem(row=item.id, op="drop-level", level=lv, ref=ref, why=why)
+                )
+        for amendment in planned:
+            self.amend(amendment, write, no_ci)
+        new = self.rows[item.id]
+        return (
+            f"{item.id}: {describe_move(old, new)} "
+            f"({len(planned)} amendment{'s' if len(planned) != 1 else ''} in {self.feature()}"
+            if planned
+            else f"{item.id}: unchanged (no amendment"
+        ) + ")"
+
+
 def _acceptance_writes(
     record: StepRecord,
     overlay: _Overlay,
     repo_root: Path,
     drops: Mapping[str, Mapping[str, tuple[str, ...]]],
+    *,
+    features: Mapping[str, str] | None = None,
+    repo: str | None = None,
+    default_feature: str | None = None,
 ) -> tuple[dict[str, int], list[str]]:
+    """The record's `acceptance:` entries as fragment writes (spec 2026-11-04 R16):
+    a new row into the fragment of its one origin spec (or `features[id]`); a row
+    still pending on this branch rewritten in place in the fragment that holds it;
+    a row merged on the default ref, and every amendment item, appended as
+    amendments to the feature's fragment (*default_feature*). No report is written:
+    reports are derived (R20)."""
     if not record.acceptance:
         return {}, []
     from fr.settings import disabled, disabled_because
@@ -797,43 +1033,98 @@ def _acceptance_writes(
 
     from fr.acceptance.anchors import line_anchor_error
     from fr.acceptance.edit import (
+        append_amendment,
         describe_move,
         drop_levels,
         insert_row,
         merge_levels,
+        render_fragment,
         replace_row,
     )
+    from fr.acceptance.fold import fold_texts
+    from fr.acceptance.fragment import FRAGMENTS_DIR, Fragment, parse_fragment
+    from fr.acceptance.logical import is_logical, parse_logical, to_logical
     from fr.acceptance.model import (
         AcceptanceError,
         Row,
         Status,
-        parse_matrix,
         pipeline_ref_error,
         split_ref,
         walked_error,
     )
-    from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set, tracked_reports
 
-    matrix_path = repo_root / MATRIX_REL
-    text = overlay.read(matrix_path)
-    if text is None:
-        raise RecordRefusedError(f"no {MATRIX_REL} (run `fr acceptance init` to scaffold one)")
+    folder = repo_root / FRAGMENTS_DIR
+    if not folder.is_dir():
+        raise RecordRefusedError(
+            f"no {FRAGMENTS_DIR}/ (run `fr acceptance init` to scaffold acceptance)"
+        )
+    paths = {p for p in folder.glob("*.yaml") if p.is_file()}
+    paths |= {p for p in overlay.writes if p.parent == folder and p.suffix == ".yaml"}
+    texts: dict[Path, str] = {}
+    for p in sorted(paths):
+        t = overlay.read(p)
+        if t is not None:
+            texts[p] = t
+    before = dict(texts)
+
+    def rel(p: Path) -> str:
+        return p.relative_to(repo_root).as_posix()
+
+    def parsed() -> dict[Path, Fragment]:
+        try:
+            return {p: parse_fragment(t, source=rel(p)) for p, t in texts.items()}
+        except AcceptanceError as e:
+            raise RecordRefusedError(f"a fragment does not parse: {e}") from e
+
+    def identity() -> str:
+        known = {f.repo for f in parsed().values()}
+        if known:
+            return sorted(known)[0]
+        if repo:
+            return repo
+        from fr.acceptance.check import resolve_identity
+        from fr.acceptance.model import Matrix
+
+        try:
+            org, name = resolve_identity(Matrix(), repo_root)
+        except AcceptanceError as e:
+            raise RecordRefusedError(
+                "the first fragment needs `repo: <org>/<repo>` and no origin remote names "
+                "it: pass --repo <org>/<repo>"
+            ) from e
+        return f"{org}/{name}"
+
     counts: dict[str, int] = {}
     lines: list[str] = []
     valid = list(get_args(Status))
     no_ci: str | None = (
-        _no_ci_reason(repo_root) if any(item.status == "ci" for item in record.acceptance) else None
+        _no_ci_reason(repo_root)
+        if any(getattr(item, "status", None) == "ci" for item in record.acceptance)
+        else None
     )
+    amending = _Amending(repo_root, default_feature)
+
+    def write_amendment(amendment: Any) -> None:
+        feature = amending.feature()
+        path = folder / f"{feature}.yaml"
+        text = texts.get(path) or render_fragment(feature, identity(), ())
+        texts[path] = append_amendment(text, amendment)
+        amending.taken[amendment.row] += 1
+        counts["amendment"] = counts.get("amendment", 0) + 1
+
     for item in record.acceptance:
+        if isinstance(item, AmendmentItem):
+            lines.append(amending.amend(item, write_amendment, no_ci))
+            continue
         if item.status not in valid:
             raise RecordRefusedError(
                 f"acceptance {item.id}: unknown status {item.status!r} (valid: {' | '.join(valid)})"
             )
-        try:
-            matrix = parse_matrix(text)
-        except AcceptanceError as e:
-            raise RecordRefusedError(f"matrix does not parse: {e}") from e
-        existing = next((r for r in matrix.rows if r.id == item.id), None)
+        frags = parsed()
+        owner = next((p for p, f in frags.items() if any(r.id == item.id for r in f.rows)), None)
+        existing = (
+            next(r for r in frags[owner].rows if r.id == item.id) if owner is not None else None
+        )
         # p3-r5: the entry's shape says which verb it is, as the verbs do —
         # `capability`/`acceptance` present is `fr acceptance add` (create-only),
         # absent is `set-status` (move-only). Existence alone never decides.
@@ -842,11 +1133,21 @@ def _acceptance_writes(
             raise RecordRefusedError(
                 f"acceptance {item.id}: a new row needs both `capability` and `acceptance`"
             )
+        if not creates and amending.is_merged(item.id):
+            # R16: a row merged on the default ref changes only by amendment.
+            lines.append(amending.move(item, drops.get(item.id, {}), write_amendment, no_ci))
+            continue
         if not creates and existing is None:
             raise RecordRefusedError(
                 f"acceptance {item.id}: no such row — moving a status needs an existing id; "
                 "give `capability` and `acceptance` to create it"
             )
+        own = identity().partition("/")[2] if creates else ""
+
+        def logical(refs: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+            # R18: a spec or plan path is written in its logical form.
+            return tuple(to_logical(r, own_repo=own) for r in refs)
+
         try:
             if creates:
                 assert item.capability is not None and item.acceptance is not None
@@ -854,8 +1155,8 @@ def _acceptance_writes(
                     id=item.id,
                     capability=item.capability,
                     acceptance=item.acceptance,
-                    origin=item.origin,
-                    levels=dict(item.levels),
+                    origin=logical(item.origin),
+                    levels={lv: logical(refs) for lv, refs in item.levels.items()},
                     status=item.status,  # type: ignore[arg-type]
                     notes=item.notes or "",
                     verify=item.verify,
@@ -901,7 +1202,10 @@ def _acceptance_writes(
             if item.verify is not None and (why := strategy_error(item.verify, repo_root)):
                 raise RecordRefusedError(f"acceptance {item.id}: {why}")
             for ref in row.refs():
-                split_ref(ref)
+                if is_logical(ref):
+                    parse_logical(ref)
+                else:
+                    split_ref(ref)
             # Only the refs this write adds: refused where written, not where
             # loaded, so a row that already carries one still moves (gh#775).
             added = [ref for refs in item.levels.values() for ref in refs]
@@ -940,31 +1244,38 @@ def _acceptance_writes(
                 "create a row; drop them to move its status"
             )
         if existing is None:
-            text = insert_row(text, row)
-            lines.append(f"added row {row.id} ({row.status})")
+            feature = (features or {}).get(item.id)
+            if feature is None:
+                slugs = {parse_logical(o).slug for o in row.origin if o.startswith("spec:")}
+                if len(slugs) != 1 and default_feature is not None:
+                    slugs = {default_feature}  # a run's row belongs to the run's spec
+                if len(slugs) != 1:
+                    raise RecordRefusedError(
+                        f"acceptance {item.id}: a row is owned by the feature of its one "
+                        f"origin spec, and its origins name {len(slugs) or 'no'} "
+                        f"spec{'s' if len(slugs) > 1 else ''} — pass --feature <slug> to "
+                        "name the fragment (`legacy` for a row with no feature)"
+                    )
+                feature = next(iter(slugs))
+            path = folder / f"{feature}.yaml"
+            text = texts.get(path) or render_fragment(feature, identity(), ())
+            texts[path] = insert_row(text, row)
+            lines.append(f"added row {row.id} ({row.status}) to {rel(path)}")
             counts["row added"] = counts.get("row added", 0) + 1
         else:
-            text = replace_row(text, item.id, row)
+            assert owner is not None
+            # A row still pending on this branch (no default ref defines it) moves in
+            # place in the fragment that holds it; a merged one took the branch above.
+            texts[owner] = replace_row(texts[owner], item.id, row)
             lines.append(f"{row.id}: {describe_move(existing, row)}")
             counts["row moved"] = counts.get("row moved", 0) + 1
     try:
-        final = parse_matrix(text)
+        fold_texts({rel(p): t for p, t in texts.items()})
     except AcceptanceError as e:
-        raise RecordRefusedError(f"the rows would leave an invalid matrix: {e}") from e
-    overlay.put(matrix_path, text)
-    try:
-        for rel, rendered in render_committed_set(
-            final, repo_root, only=tracked_reports(repo_root)
-        ).items():
-            overlay.put(repo_root / rel, rendered)
-        for rel in STALE_LEGACY_REPORTS:
-            if (repo_root / rel).exists():
-                overlay.put(repo_root / rel, None)
-    except Exception as e:  # noqa: BLE001 — a render hiccup never fails a valid write
-        lines.append(
-            f"warning: matrix updated but the reports were not regenerated ({e}); run "
-            "`fr acceptance report --deterministic` and commit them."
-        )
+        raise RecordRefusedError(f"the rows would leave invalid fragments: {e}") from e
+    for p, t in texts.items():
+        if before.get(p) != t:
+            overlay.put(p, t)
     return counts, lines
 
 
@@ -982,6 +1293,7 @@ _COUNT_ORDER = (
     "refactor",
     "row added",
     "row moved",
+    "amendment",
 )
 
 
@@ -1058,6 +1370,7 @@ def apply_record(
             completes_phase=False,
             emits_ticks=target.plan_dir is not None,
             discharges_owed=target.discharges_owed,
+            feature=target.feature,
         )
 
     overlay = _Overlay()
@@ -1065,7 +1378,15 @@ def apply_record(
     entries, journal_counts, journal_notices = _journal_writes(ctx, record, overlay, repo_root)
     counts.update(journal_counts)
     counts.update(_plan_writes(ctx, record, overlay))
-    row_counts, row_lines = _acceptance_writes(record, overlay, repo_root, target.acceptance_drops)
+    row_counts, row_lines = _acceptance_writes(
+        record,
+        overlay,
+        repo_root,
+        target.acceptance_drops,
+        features=target.acceptance_features,
+        repo=target.acceptance_repo,
+        default_feature=ctx.feature,
+    )
     counts.update(row_counts)
     notices = (*journal_notices, *row_lines)
 

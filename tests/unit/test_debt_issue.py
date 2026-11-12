@@ -186,11 +186,11 @@ def test_the_identity_is_the_origin_remote_never_the_matrix(
     env: tuple[Gh, dict], tmp_path: Path
 ) -> None:
     gh, _ = env
-    m = tmp_path / "docs" / "acceptance"
-    m.mkdir(parents=True)
-    (m / "matrix.yaml").write_text("schema_version: 5\norg: evil\nrepo: elsewhere\nrows: []\n")
+    from tests.unit.acceptance_helpers import write_fragments
+
+    write_fragments(tmp_path, [], repo="evil/elsewhere", feature="legacy")
     r = runner.invoke(app, ["debt", "issue", "--yes"])
-    assert r.exit_code == 1 and "matrix names evil/elsewhere" in r.output
+    assert r.exit_code == 1 and "fragments name evil/elsewhere" in r.output
     assert _mutations(gh) == []
 
 

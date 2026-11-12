@@ -1,0 +1,133 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-01-gate-backfill
+repo: derio-net/super-fr
+rows:
+  - id: gate-backfill-dry-run-plan
+    capability: gate-backfill
+    acceptance: fr gate backfill without --yes lists every owed item of the repo (debt
+      fold plus manifest) with its delivering PR, its gate and a decision in a plan
+      file outside the repo, keeps decisions already made on re-run, defaults stale
+      manual phases to review, prints the repo-file commands, and writes nothing to
+      the forge.
+    origin:
+    - spec:2026-11-01-gate-backfill#R1
+    - spec:2026-11-01-gate-backfill#R2
+    - spec:2026-11-01-gate-backfill#R5
+    - spec:2026-11-01-gate-backfill#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_render.py#test_summary_lists_every_candidate_and_parks_under_their_own_heading
+    status: ci
+    notes: dry run covered by unit tests and the gate-backfill-dry-run scenario
+    verify: candidate
+    scenario: tests/scenarios/gate-backfill-dry-run.sh
+  - id: gate-backfill-apply-ledger
+    capability: gate-backfill
+    acceptance: fr gate backfill --yes labels each decided item's merged PR with its
+      gate, files or reuses its owed tracker, links a closed issue to it, sets fr:awaiting-live
+      when only a walk remains, writes labels only under tracking none, and a second
+      run writes nothing.
+    origin:
+    - spec:2026-11-01-gate-backfill#R6
+    - spec:2026-11-01-gate-backfill#R7
+    - spec:2026-11-01-gate-backfill#R10
+    - spec:2026-11-01-gate-backfill#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_apply.py#test_a_second_apply_makes_no_write
+    status: ci
+    notes: apply unit-tested and walked by the gate-backfill-apply scenario
+    verify: candidate
+    scenario: tests/scenarios/gate-backfill-apply.sh
+  - id: gate-backfill-delivering-pr
+    capability: gate-backfill
+    acceptance: An old owed item's delivering PR is found from a manifest override,
+      its run branch, the commit that added its plan or spec, or its issue's linked
+      PR, is used only when the forge says it merged, and an item with none is reported
+      and never written.
+    origin:
+    - spec:2026-11-01-gate-backfill#R3
+    - spec:2026-11-01-gate-backfill#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_delivery.py#test_a_squash_subject_names_the_pr_that_added_the_plan
+      - super-fr:tests/unit/test_gate_cmd.py#test_gh1369_a_manifest_pr_resolves_an_ambiguous_key_fr_debt_holds
+    status: ci
+    notes: 'evidence chain unit-tested over fixture histories; gh#1369: a manifest override
+      settles an ambiguous PR end to end'
+    verify: none
+  - id: gate-backfill-tracker-trust
+    capability: gate-backfill
+    acceptance: Backfill reuses, edits and closes only fr-owned owed trackers; an issue
+      someone else wrote is touched only when the operator adopts it, by a comment and
+      labels; adopting one closes fr's own duplicate tracker for the same item.
+    origin:
+    - spec:2026-11-01-gate-backfill#R8
+    - spec:2026-11-01-gate-backfill#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gatebackfill_apply.py#test_adopting_closes_the_fr_owned_duplicate
+    status: ci
+    notes: adopt/foreign/duplicate unit-tested
+    verify: none
+  - id: gate-pass-closes-backfill-trackers
+    capability: gate-backfill
+    acceptance: fr gate pass --yes on a merged PR also closes the fr-owned owed trackers
+      naming that PR and gate, and lists any adopted tracker with the command that closes
+      it.
+    origin:
+    - spec:2026-11-01-gate-backfill#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_gate_cmd.py#test_a_passed_gate_retries_only_the_close
+      - super-fr:tests/unit/test_triage_exit_gates_drive.py#test_with_yes_the_rows_walked_pass_also_closes_the_prs_trackers
+    status: ci
+    notes: both routes and the retry unit-tested
+    verify: none
+  - id: board-lanes-gated-prs
+    capability: gate-backfill
+    acceptance: The triage board's Needs-you Tester and DevOps lanes list every merged
+      PR whose gate:tester or gate:devops label is held, batch-delivered or not, each
+      once, and a forge that cannot list them is reported rather than shown as an empty
+      lane.
+    origin:
+    - spec:2026-11-01-gate-backfill#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_board_lanes.py#test_a_closed_out_batchs_pr_is_listed_through_gated_prs
+    status: ci
+    notes: collect and lanes unit-tested over fixture facts
+    verify: none
+  - id: gate-backfill-first-real-sweep
+    capability: gate-backfill
+    acceptance: On a real repo's first per-repo sweep, the backfilled PRs show in the
+      board's Needs-you lanes, a re-run writes nothing, and one fr gate pass clears
+      a PR's trackers.
+    origin:
+    - spec:2026-11-01-gate-backfill#R13
+    - spec:2026-11-01-gate-backfill#R12
+    levels: {}
+    status: walked
+    notes: walked on first real use (cross-repo sweep 2026-11-02)
+    verify: live
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-02T21:29:11Z'
+      evidence: 'Walked 2026-11-02 on first real use (cross-repo sweep, fr 6.1.0rc12-rc14)
+        in derio-net/the-typist: fr gate backfill --yes put gate:tester on the delivering
+        PRs (#1, #10) and filed fr-owned trackers (#15, #16, #17, #19); the triage board
+        (fr triage collect/render, throwaway state dir) listed both PRs in Needs-you
+        as held by gate:tester with their pass commands; two further --yes runs wrote
+        nothing (0 changes); after the operator walked live-session-check on the published
+        site, one fr gate pass --pr 10 --gate tester closed exactly that PR''s tracker
+        (#19) and left PR #1''s (#15-#17) open. Sweep findings filed: #1322/#1324 (passed-PR
+        re-gate), #1327 (row-link commands lack --status); a row reconcile can create
+        a new candidate, so the order is reconcile then backfill.'

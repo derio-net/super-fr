@@ -1,45 +1,45 @@
-"""CI tripwire: the committed report SET must stay in sync with matrix.yaml.
+"""CI tripwire: no acceptance report is committed (spec 2026-11-04-repo-feature-settings
+R19, R20).
 
-`docs/acceptance/matrix.yaml` is the source; the committed set —
-`report_local.html` (local HTML), `report_linked.html` (github HTML) and
-`report_linked.md` (github Markdown) — is its deterministic rendering. Any matrix
-change (a `fr acceptance add` row or a hand-edited status flip) must be
-accompanied by regenerated reports. This test fails loud on drift instead of
-shipping a stale artifact, the same posture as
-`test_tripwire_opencode_skills_sync.py`.
-
-The comparison uses `render_committed_set` — the exact function the
-`fr acceptance report --check` CLI and the `fr acceptance check` gate use — so
-they can never disagree about what "in sync" means. It is a pure function of
-`matrix.yaml` (matrix-derived stamp, no git date/hash, no filesystem
-twin-probing), so this only fires on a genuine matrix change. (`report.html` is
-the ad-hoc, uncommitted render and is deliberately NOT covered here.)
+The committed report SET (`report_local.html`, `report_linked.html`,
+`report_linked.md`) used to be the deterministic rendering of
+`docs/acceptance/matrix.yaml`, kept in sync by this test. The matrix is retired: its
+rows live in per-feature fragments (`docs/acceptance/features/`), the effective matrix
+is a fold over them, and reports are derived on demand (`fr acceptance report`). The
+migration to fragments deleted the set, and this test keeps it deleted — a report
+committed again would be a second, drifting copy of the fold.
 """
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
-from fr.acceptance.model import load_matrix
-from fr.acceptance.report import REPORT_SET, render_committed_set
+from fr.acceptance.report import REPORT_PATHS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MATRIX = REPO_ROOT / "docs" / "acceptance" / "matrix.yaml"
 
 
-@pytest.mark.parametrize("rel", list(REPORT_SET))
-def test_report_is_committed_and_tracked(rel: str) -> None:
-    assert (REPO_ROOT / rel).exists(), (
-        f"{rel} must be committed (the report SET is tracked now, not gitignored) — "
-        "run `fr acceptance report --deterministic` and commit the report set."
+def _tracked(rel: str) -> bool:
+    done = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch", "--", rel],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.returncode == 0
+
+
+@pytest.mark.parametrize("rel", list(REPORT_PATHS))
+def test_no_report_is_committed(rel: str) -> None:
+    assert not _tracked(rel), (
+        f"{rel} is tracked, but reports are derived, never committed (R20) — "
+        f"`git rm {rel}`; render one locally with `fr acceptance report`."
     )
 
 
-def test_committed_report_set_matches_matrix() -> None:
-    expected = render_committed_set(load_matrix(MATRIX), REPO_ROOT)
-    for rel, want in expected.items():
-        assert (REPO_ROOT / rel).read_text() == want, (
-            f"{rel} is stale (drifted from docs/acceptance/matrix.yaml).\n"
-            "Run `fr acceptance report --deterministic` and commit the report set."
-        )
+def test_the_retired_matrix_is_not_committed() -> None:
+    assert not _tracked("docs/acceptance/matrix.yaml"), (
+        "docs/acceptance/matrix.yaml is retired (R19): run `fr migrate artifacts --yes`"
+    )

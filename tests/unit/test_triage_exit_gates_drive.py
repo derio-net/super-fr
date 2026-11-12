@@ -412,7 +412,8 @@ def _ledger_repo(tmp_path: Path, *, walked: bool, section: str | None = None,
     _git(clone, "push", "--quiet", "origin", "HEAD:main")
     _git(clone, "fetch", "--quiet", "origin")
     # The working tree moves on: the read is the default branch's, never the checkout's.
-    (clone / "docs/acceptance/matrix.yaml").write_text("not: a matrix\n")
+    for fragment in (clone / "docs/acceptance/features").glob("*.yaml"):
+        fragment.write_text("not: a matrix\n")
     return Checkout(clone)
 
 

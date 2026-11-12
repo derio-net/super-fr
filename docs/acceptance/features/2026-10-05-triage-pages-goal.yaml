@@ -1,0 +1,227 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-05-triage-pages-goal
+repo: derio-net/super-fr
+rows:
+  - id: triage-severity-and-duplicates
+    capability: Backlog triage
+    acceptance: A judgement can carry severity and duplicate_of; triage check lists
+      open issues with no severity and duplicates whose target is unknown, and the board
+      shows severity and lists duplicates under Parked.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_check.py#test_severity_and_duplicate_of_load_on_every_schema
+      - super-fr:tests/unit/test_triage_check.py#test_open_judged_issue_without_severity_is_no_severity
+      - super-fr:tests/unit/test_triage_check.py#test_duplicate_of_a_key_not_in_the_facts_is_duplicate_unknown
+      - super-fr:tests/unit/test_triage_render.py#test_backlog_rows_show_a_severity_pill_or_a_dash
+      - super-fr:tests/unit/test_triage_render.py#test_a_duplicate_leaves_the_tier_sections_and_is_listed_under_parked
+    status: ci
+    notes: severity and duplicate_of load, check sets, board pill and Parked listing
+      (phase 3)
+  - id: triage-state-sync-verbs
+    capability: Backlog triage
+    acceptance: fr triage state export and import copy a scope's durable state between
+      the state directory and a repo directory, never facts or rendered pages, and import
+      keeps a newer local file unless forced.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R12
+    - spec:2026-10-05-triage-pages-goal#R15
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_sync.py#test_export_copies_the_durable_state_and_nothing_else
+      - super-fr:tests/unit/test_triage_state_sync.py#test_import_skips_a_state_file_newer_than_the_repo_copy
+      - super-fr:tests/unit/test_triage_state_sync.py#test_the_import_verb_prints_copied_and_skipped
+      - super-fr:tests/unit/test_triage_state_sync.py#test_an_export_refuses_a_directory_another_scope_exported
+      - super-fr:tests/unit/test_triage_state_sync.py#test_the_export_verb_refuses_another_scopes_directory_until_take_over
+    status: ci
+    notes: 'Unit tests pin the durable file set, facts and pages never copied, import
+      skipping newer files unless --force, symlinks never followed or written through,
+      the CLI''s copied/skipped lists, and (gh#1101) the exported-by scope-id stamp:
+      another scope id''s directory is refused unless --take-over, and import never
+      carries the stamp.'
+  - id: triage-pages-skills-documented
+    capability: Backlog triage
+    acceptance: The fr-triage, fr-origins and fr-audit skills document the page goals,
+      the fragment manifests (hand-written analysis lives in fragments), severity and
+      duplicates, origins schema 2, the history verb, the state verbs and the export
+      key.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_skill_docs.py
+    status: ci
+    notes: Skills edited to document pages, fragments, fields and verbs; test added;
+      mirrors regenerated
+  - id: drive-exports-finished-wave
+    capability: triage-batch-drive
+    acceptance: With export configured, once a wave is finished the driver opens one
+      state-export PR for it and merges it when green, recording the export so it never
+      repeats.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_a_finished_wave_with_no_export_and_no_pr_is_exported
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_export_commits_only_the_scope_dir_force_pushes_and_records_the_pr
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_drive_loop_is_not_done_while_its_export_pr_is_open
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_another_scopes_export_pr_is_never_reused
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_directory_another_scope_exported_is_refused_and_nothing_is_pushed
+    status: ci
+    notes: 'The pure step-3b table and the driver''s execution against a temporary git
+      repo and a fake forge: one export PR per finished wave, adopted after a crash,
+      merged at its live head once green, recorded so it never repeats. Since gh#1101
+      the export head names the scope id, another scope''s export PR is never reused,
+      and a directory another scope exported is refused with nothing pushed.'
+  - id: drive-exports-finished-wave-live
+    capability: triage-batch-drive
+    acceptance: On a real finished wave, the repo copy of the triage state matches the
+      cache with no manual step.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R13
+    levels: {}
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1343
+    verify: live
+    issues:
+    - derio-net/super-fr#1343
+  - id: triage-page-goals
+    capability: triage-views
+    acceptance: Each of the four triage pages (board, origins, architecture, history)
+      opens with the one question it answers and a nav bar to the other three, and no
+      generated section appears on two pages.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R1
+    - spec:2026-10-05-triage-pages-goal#R6
+    - spec:2026-10-05-triage-pages-goal#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py#test_the_board_carries_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_origins.py#test_the_origins_page_carries_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_architecture.py#test_the_page_opens_with_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_architecture.py#test_the_page_no_longer_shows_what_other_pages_own
+      - super-fr:tests/unit/test_triage_history.py#test_the_history_page_opens_with_its_nav_and_goal
+      - super-fr:tests/unit/test_triage_fragments.py#test_pages_registry_lists_the_five_pages
+    status: ci
+    notes: 'Ref re-pointed: the registry test was renamed when the nav gained the Batches
+      page (board-truth R9).'
+    visual:
+      states:
+      - board-page
+      - origins-page
+      - architecture-page
+      - history-page
+      - phone-width
+      - dark-theme
+      interactions:
+      - follow-nav-link
+  - id: triage-board-first-screen
+    capability: triage-views
+    acceptance: The board's first screen is Since last report as a transitions table,
+      Needs you now, Next up and the unfinished waves with a per-batch Tier column;
+      backlog, features, parked, patterns, PRs and batches follow as collapsed sections.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R2
+    - spec:2026-10-05-triage-pages-goal#R3
+    - spec:2026-10-05-triage-pages-goal#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_board_is_ordered_since_needs_next_waves_then_the_folds
+      - super-fr:tests/unit/test_triage_board_views.py#test_since_last_report_is_a_table_of_transitions
+      - super-fr:tests/unit/test_triage_board_views.py#test_the_wave_table_has_a_tier_column_after_batch
+    status: ci
+    notes: 'Board first screen shipped (phase 2): transitions table, Tier column, closed
+      folds; browser-checked headless.'
+    visual:
+      states:
+      - since-table-with-changes
+      - since-table-empty
+      - every-wave-finished
+      - sections-collapsed
+      interactions:
+      - switch-wave-tab
+      - expand-collapsed-section
+  - id: triage-board-batch-filter
+    capability: triage-views
+    acceptance: On the board every batch card starts collapsed, a multi-select stage
+      filter hides cards by stage, and a link to a batch opens its card and the sections
+      around it.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_board.py#test_every_card_is_a_closed_details_with_its_stage_and_a_linkable_id
+      - super-fr:tests/unit/test_triage_batch_board.py#test_the_stage_filter_is_hidden_with_one_checked_box_per_stage_present
+    status: ci
+    notes: Collapsed stage-filtered batch cards and link-opening shipped (phase 2);
+      browser-checked headless.
+    visual:
+      states:
+      - all-stages-on
+      - merged-and-cancelled-off
+      - every-stage-off
+      - no-javascript
+      interactions:
+      - toggle-stage
+      - follow-batch-link
+      - open-card
+  - id: triage-history-page
+    capability: triage-views
+    acceptance: fr triage history render writes a history page with the snapshot timeline,
+      the finished waves (every batch cancelled or archived) and dated fragments, and
+      finished waves leave the board.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_history.py#test_finished_waves_are_tabs_with_the_highest_finished_selected
+      - super-fr:tests/unit/test_triage_render.py#test_a_finished_wave_is_not_a_board_tab_and_the_selected_tab_exists
+      - super-fr:tests/unit/test_triage_render.py#test_when_every_wave_is_finished_the_board_says_so_and_links_history
+    status: ci
+    notes: 'Phase 1: history render, finished waves leave the board; visual evidence
+      captured headless (history finished/none, wave tab, batch link)'
+    visual:
+      states:
+      - no-finished-waves
+      - finished-waves
+      interactions:
+      - switch-wave-tab
+      - follow-batch-link
+  - id: triage-fragments-every-page
+    capability: triage-views
+    acceptance: A fragment listed in any of the four pages' manifests survives every
+      render and is placed exactly at its manifest position, optionally as a collapsed
+      titled section, under the same refusals as before.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_fragments.py#test_a_fragment_between_two_generated_sections_renders_there
+      - super-fr:tests/unit/test_triage_fragments.py#test_a_collapsed_entry_renders_closed_with_its_title
+      - super-fr:tests/unit/test_triage_origins.py#test_a_manifest_fragment_survives_render_at_its_position
+      - super-fr:tests/unit/test_triage_history.py#test_the_command_reads_the_history_manifest
+    status: ci
+    notes: 'Phase 1: shared fr.triage.fragments serves board-less four-page manifests;
+      origins, architecture and history place fragments at their manifest position,
+      optionally collapsed'
+  - id: triage-origins-schema-2
+    capability: triage-views
+    acceptance: origins.yaml schema 2 records duplicate_of, fixed_by and introduced_in;
+      origins check reports a duplicate whose target is outside the window, and the
+      page links a duplicate to its original.
+    origin:
+    - spec:2026-10-05-triage-pages-goal#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_origins.py#test_facts_stay_schema_1_and_origins_yaml_loads_1_and_2
+      - super-fr:tests/unit/test_triage_origins.py#test_duplicate_of_needs_the_duplicate_category
+      - super-fr:tests/unit/test_triage_origins.py#test_check_reports_a_duplicate_target_outside_the_window
+      - super-fr:tests/unit/test_triage_origins.py#test_every_issue_row_has_an_anchor_and_a_duplicate_links_its_original
+    status: ci
+    notes: origins schema 2 loaded, validated, checked and rendered (phase 3)

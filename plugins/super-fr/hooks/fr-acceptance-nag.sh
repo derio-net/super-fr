@@ -6,8 +6,9 @@
 # operator mandated (warnings on a cron run's Actions page reach nobody).
 # Output is capped by `fr acceptance status --brief` (counts + 3 oldest).
 #
-# Fail-open: ANY missing precondition (no cwd, no git, no matrix, no fr, a
-# broken matrix) exits 0 silently — session start must never break on a nag.
+# Fail-open: ANY missing precondition (no cwd, no git, no acceptance fragments,
+# no fr, a broken fragment) exits 0 silently — session start must never break on
+# a nag.
 
 set -eu
 
@@ -18,8 +19,12 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 [ -n "$cwd" ] && [ -d "$cwd" ] || exit 0
 
 repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
-# The cheap early exit, before any `fr` process: no matrix, nothing to nag about.
-[ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
+# The cheap early exit, before any `fr` process: no acceptance fragment
+# (docs/acceptance/features/*.yaml, spec 2026-11-04-repo-feature-settings R16),
+# nothing to nag about. A repo still holding the retired matrix.yaml is let
+# through, so `fr` can say its artifacts are stale (R19).
+set -- "$repo_root"/docs/acceptance/features/*.yaml
+[ -f "$1" ] || [ -f "$repo_root/docs/acceptance/matrix.yaml" ] || exit 0
 command -v fr >/dev/null 2>&1 || exit 0
 
 # Repo setting `artifacts.acceptance: off` (spec 2026-11-04-repo-feature-settings R6): say

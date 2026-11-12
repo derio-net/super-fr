@@ -9,7 +9,7 @@ import pytest
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import FRAGMENTS_REL, make_repo, row, write_matrix_fragments
 
 runner = CliRunner()
 
@@ -135,7 +135,7 @@ ADD_ARGS = [
 
 def test_add_appends_and_preserves_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row())
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix_path = root / FRAGMENTS_REL / "s.yaml"
     before = matrix_path.read_text()
     header = before.split("rows:")[0]
     result = _invoke(root, monkeypatch, *ADD_ARGS)
@@ -148,46 +148,21 @@ def test_add_appends_and_preserves_header(tmp_path: Path, monkeypatch: pytest.Mo
     assert check.exit_code == 0, check.output
 
 
-def test_add_regenerates_report_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`fr acceptance add` creates/updates the whole committed set in the same
-    tree, and a follow-up `report --check` passes (the CLI mutation path stays
-    in sync)."""
+def test_add_writes_no_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reports are derived, never committed (spec 2026-11-04 R20): `add` writes the
+    fragment and no report."""
     root = make_repo(tmp_path, row())
     d = root / "docs" / "acceptance"
-    files = [d / "report_local.html", d / "report_linked.html", d / "report_linked.md"]
-    assert not any(f.exists() for f in files)
     result = _invoke(root, monkeypatch, *ADD_ARGS)
     assert result.exit_code == 0, result.output
-    assert all(f.exists() for f in files), "add must generate the report set"
-    # The row renders in its capability's table (by its acceptance text; the
-    # id appeared only in the sharp-line panel the committed set dropped, §3.I).
-    assert "Operator can add rows" in (d / "report_local.html").read_text()
-    assert "blob/main/" in (d / "report_linked.md").read_text()
-    check = _invoke(root, monkeypatch, "report", "--check")
-    assert check.exit_code == 0, check.output
-
-
-def test_add_render_failure_keeps_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A report-render failure warns but never rolls back the appended row."""
-    import fr.acceptance.report as report_mod
-
-    def boom(*_a: object, **_k: object) -> str:
-        raise RuntimeError("render exploded")
-
-    monkeypatch.setattr(report_mod, "render_deterministic", boom)
-    root = make_repo(tmp_path, row())
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
-    result = _invoke(root, monkeypatch, *ADD_ARGS)
-    assert result.exit_code == 0, result.output
-    assert "new-row" in matrix_path.read_text()  # row survived
-    assert "report" in result.output.lower()  # warned to run report
+    assert not list(d.glob("report*"))
 
 
 def test_add_rejects_bad_status_file_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row())
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix_path = root / FRAGMENTS_REL / "s.yaml"
     before = matrix_path.read_text()
     args = [a if a != "not-implemented" else "sheduled" for a in ADD_ARGS]
     result = _invoke(root, monkeypatch, *args)
@@ -222,9 +197,9 @@ def test_add_accumulates_levels_and_origins(
     ]
     result = _invoke(root, monkeypatch, *ADD_ARGS, *extra)
     assert result.exit_code == 0, result.output
-    from fr.acceptance.model import load_matrix
+    from fr.acceptance.fold import load_effective
 
-    m = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    m = load_effective(root)
     new = next(r for r in m.rows if r.id == "new-row")
     assert len(new.origin) == 2
     assert new.levels["unit"] and new.levels["api"]
@@ -245,7 +220,7 @@ def test_add_rejects_malformed_refs(
     through `add` and only failed at the next `check`. Ref grammar is
     validated at add time, before the file is touched."""
     root = make_repo(tmp_path, row())
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix_path = root / FRAGMENTS_REL / "s.yaml"
     before = matrix_path.read_text()
     result = _invoke(root, monkeypatch, *ADD_ARGS, flag, value)
     assert result.exit_code == 2, result.output
@@ -271,7 +246,7 @@ def _git_repo(tmp_path: Path, rows_text: str) -> Path:
 
 def test_added_since_lists_new_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _git_repo(tmp_path, row(id="a"))
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix_path = root / FRAGMENTS_REL / "s.yaml"
     matrix_path.write_text(matrix_path.read_text() + row(id="b") + row(id="c"))
     result = _invoke(root, monkeypatch, "check", "--added-since", "HEAD")
     assert result.exit_code == 0, result.output
@@ -282,16 +257,16 @@ def test_added_since_lists_new_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 def test_added_since_base_without_matrix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, "", git=False)
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
     _git(root, "init", "-q")
     _git(root, "config", "user.email", "t@t")
     _git(root, "config", "user.name", "t")
-    matrix_path.unlink()
+    for p in (root / FRAGMENTS_REL).glob("*.yaml"):
+        p.unlink()
     (root / "docs" / "superpowers" / "specs" / "s.md").unlink()
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "no matrix", "--allow-empty")
     (root / "docs" / "superpowers" / "specs" / "s.md").write_text("# s\n\n## Test Plan\n\n1. x\n")
-    matrix_path.write_text("org: derio-net\nrepo: own\nrows:\n" + row(id="a"))
+    write_matrix_fragments(root, "org: derio-net\nrepo: own\nrows:\n" + row(id="a"))
     result = _invoke(root, monkeypatch, "check", "--added-since", "HEAD")
     assert result.exit_code == 0, result.output
     assert "a" in result.output.split("added since HEAD")[1]
@@ -331,21 +306,15 @@ def test_digest_zero_debt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 # ── spec 2026-09-28 §F/§H: `--verify post-merge` ───────────────────────────
 
 
-def test_add_verify_post_merge_writes_it_and_regenerates_reports(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from fr.acceptance.model import load_matrix
+def test_add_verify_post_merge_writes_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.acceptance.fold import load_effective
 
     root = make_repo(tmp_path, row())
-    d = root / "docs" / "acceptance"
     result = _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "live")
     assert result.exit_code == 0, result.output
-    assert "verify: live" in (d / "matrix.yaml").read_text()
-    (added,) = [r for r in load_matrix(d / "matrix.yaml").rows if r.id == "new-row"]
+    assert "verify: live" in (root / FRAGMENTS_REL / "s.yaml").read_text()
+    (added,) = [r for r in load_effective(root).rows if r.id == "new-row"]
     assert added.verify == "live"
-    for f in ("report_local.html", "report_linked.html", "report_linked.md"):
-        assert (d / f).exists(), f
-    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
 
 
 def test_add_without_verify_writes_no_verify_key(
@@ -353,20 +322,20 @@ def test_add_without_verify_writes_no_verify_key(
 ) -> None:
     root = make_repo(tmp_path, row())
     assert _invoke(root, monkeypatch, *ADD_ARGS).exit_code == 0
-    assert "verify" not in (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    assert "verify" not in (root / FRAGMENTS_REL / "s.yaml").read_text()
 
 
 def test_add_refuses_an_unknown_verify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, row())
-    before = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    before = (root / FRAGMENTS_REL / "s.yaml").read_text()
     result = _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "someday")
     assert result.exit_code == 2, result.output
     assert "No such option" not in result.output
-    assert (root / "docs" / "acceptance" / "matrix.yaml").read_text() == before
+    assert (root / FRAGMENTS_REL / "s.yaml").read_text() == before
 
 
 def test_set_status_preserves_verify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.acceptance.model import load_matrix
+    from fr.acceptance.fold import load_effective
 
     root = make_repo(tmp_path, row())
     assert _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "live").exit_code == 0
@@ -375,5 +344,5 @@ def test_set_status_preserves_verify(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "--notes", "verified live once",
     )  # fmt: skip
     assert moved.exit_code == 0, moved.output
-    (r,) = [r for r in load_matrix(root / "docs/acceptance/matrix.yaml").rows if r.id == "new-row"]
+    (r,) = [r for r in load_effective(root).rows if r.id == "new-row"]
     assert (r.status, r.verify) == ("unwired", "live")

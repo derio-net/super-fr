@@ -1,4 +1,6 @@
-"""Textual writes into `matrix.yaml` — the ONE place that renders a row block.
+"""Textual writes into an acceptance fragment (`docs/acceptance/features/<slug>.yaml`,
+spec 2026-11-04 R16) — the ONE place that renders a row block. (It wrote the retired
+`matrix.yaml` before R19; a fragment keeps the same `rows:` shape.)
 
 `fr acceptance add` inserts (by capability) and `fr acceptance set-status`
 replaces; both come through here, so the two cannot disagree about the file's
@@ -25,10 +27,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING
 
 import yaml
 
 from fr.acceptance.model import LEVELS, AcceptanceError, Row
+
+if TYPE_CHECKING:
+    from fr.acceptance.fragment import Amendment
 
 _ROWS_KEY_RE = re.compile(r"^rows:\s*(#.*)?$")
 _ITEM_RE = re.compile(r"^(\s*)-\s")
@@ -153,8 +159,14 @@ def insert_row(text: str, row: Row) -> str:
         (s, e) for s, e, parsed in _row_blocks(text) if parsed.get("capability") == row.capability
     ]
     if not same:
-        body = text if text.endswith("\n") else text + "\n"
-        return body + render_row_block(row, _item_indent(text))
+        # A new capability goes at the end of `rows:` — before a later top-level
+        # key (a fragment's `amendments:`), else at the end of the file.
+        lines = text.splitlines(keepends=True)
+        end = _rows_end(lines)
+        head = "".join(lines[:end])
+        if head and not head.endswith("\n"):
+            head += "\n"
+        return head + render_row_block(row, _item_indent(text)) + "".join(lines[end:])
     lines = text.splitlines(keepends=True)
     start, end = same[-1]
     item_indent = len(lines[start]) - len(lines[start].lstrip())
@@ -164,6 +176,18 @@ def insert_row(text: str, row: Row) -> str:
     if not head.endswith("\n"):
         head += "\n"
     return head + render_row_block(row, lines[start][:item_indent]) + "".join(lines[end:])
+
+
+def _rows_end(lines: list[str]) -> int:
+    """The line index `rows:` ends at: the first later top-level key, else the end."""
+    rows_at = next((i for i, ln in enumerate(lines) if _ROWS_KEY_RE.match(ln)), None)
+    if rows_at is None:
+        raise AcceptanceError("matrix has no top-level `rows:` key")
+    for i in range(rows_at + 1, len(lines)):
+        line = lines[i]
+        if line.strip() and not line[:1].isspace() and not line.startswith(("#", "-")):
+            return i
+    return len(lines)
 
 
 def _is_between_rows(line: str, item_indent: int) -> bool:
@@ -302,3 +326,102 @@ def describe_move(old: Row, new: Row) -> str:
     for walk in new.walks[len(old.walks) :]:
         parts.append(f"walk {walk.outcome} on {walk.harness}")
     return f"{new.status} ({', '.join(parts) or 'unchanged'})"
+
+
+FRAGMENT_HEADER = """\
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+"""
+
+
+def render_fragment(feature: str, repo: str, rows: Iterable[Row]) -> str:
+    """A whole fragment's text: the header, its identity, then every row through
+    `render_row_block` — the one renderer, so a fragment re-rendered from its own
+    parse is byte-identical (spec 2026-11-04 R19)."""
+    body = "".join(render_row_block(row) for row in rows)
+    return f"{FRAGMENT_HEADER}schema_version: 1\nfeature: {feature}\nrepo: {repo}\nrows:\n{body}"
+
+
+_AMENDMENTS_KEY_RE = re.compile(r"^amendments:\s*(#.*)?$")
+_AMENDMENT_KEY_ORDER = ("row", "op", "base")
+
+
+def render_amendment_block(amendment: Amendment, indent: str = "  ") -> str:
+    """One amendment as the list item a fragment's `amendments:` stores: `row`, `op`
+    and `base` first, `why` last, unset fields absent (spec 2026-11-04 §3.D)."""
+    data = amendment.model_dump(mode="json", exclude_none=True)
+    if not data.get("issues"):
+        data.pop("issues", None)
+    why = data.pop("why")
+    ordered = {k: data.pop(k) for k in _AMENDMENT_KEY_ORDER}
+    block = yaml.dump(
+        [{**ordered, **data, "why": why}],
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    return "".join(
+        (indent + line if line.strip() else line) + "\n" for line in block.rstrip("\n").split("\n")
+    )
+
+
+def _amendment_starts(lines: list[str]) -> tuple[int | None, list[int], int]:
+    """(the `amendments:` line, each item's first line, where the list ends)."""
+    at = next((i for i, ln in enumerate(lines) if _AMENDMENTS_KEY_RE.match(ln)), None)
+    if at is None:
+        return None, [], len(lines)
+    starts: list[int] = []
+    indent: str | None = None
+    end = len(lines)
+    for i in range(at + 1, len(lines)):
+        line = lines[i]
+        if not line.strip():
+            continue
+        m = _ITEM_RE.match(line)
+        if m and (indent is None or m.group(1) == indent):
+            indent = m.group(1)
+            starts.append(i)
+            continue
+        if not line[:1].isspace() and not line.startswith("#"):
+            end = i
+            break
+    return at, starts, end
+
+
+def append_amendment(text: str, amendment: Amendment) -> str:
+    """*text* with *amendment* appended to its `amendments:` list (created at the end
+    of the file when absent); every existing byte is kept (R16: append-only)."""
+    lines = text.splitlines(keepends=True)
+    at, starts, end = _amendment_starts(lines)
+    if at is None:
+        head = text if not text or text.endswith("\n") else text + "\n"
+        return head + "amendments:\n" + render_amendment_block(amendment)
+    indent = "  "
+    if starts:
+        first = lines[starts[0]]
+        indent = first[: len(first) - len(first.lstrip())]
+    while end - 1 > at and not lines[end - 1].strip():
+        end -= 1
+    head = "".join(lines[:end])
+    if not head.endswith("\n"):
+        head += "\n"
+    return head + render_amendment_block(amendment, indent) + "".join(lines[end:])
+
+
+def rebase_amendment(text: str, index: int, base: int) -> str:
+    """*text* with the `index`-th amendment's `base` set to *base*, every other line
+    kept: how `fr acceptance amend --rebase` answers R17's stale-base refusal."""
+    lines = text.splitlines(keepends=True)
+    at, starts, end = _amendment_starts(lines)
+    if at is None or index >= len(starts):
+        raise AcceptanceError(f"no amendment at index {index}")
+    stop = starts[index + 1] if index + 1 < len(starts) else end
+    for i in range(starts[index], stop):
+        m = re.match(r"^(\s*(?:-\s+)?)base:\s*\d+\s*$", lines[i])
+        if m:
+            lines[i] = f"{m.group(1)}base: {base}\n"
+            return "".join(lines)
+    raise AcceptanceError(f"amendment {index} carries no `base:` line")

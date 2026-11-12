@@ -8,7 +8,7 @@ import fr.yamlio
 import pytest
 import yaml
 from fr.acceptance import model
-from fr.acceptance.model import AcceptanceError, Matrix, parse_matrix
+from fr.acceptance.model import AcceptanceError, parse_matrix
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -73,6 +73,15 @@ def test_duplicate_ids_raise_every_time():
             parse_matrix(text)
 
 
-def test_real_matrix_equals_plain_pyyaml_build():
-    text = (REPO / "docs/acceptance/matrix.yaml").read_text()
-    assert parse_matrix(text) == Matrix.model_validate(yaml.safe_load(text))
+def test_real_fragments_equal_plain_pyyaml_builds():
+    """Every fragment of this repo parses (through the cache) to what a plain PyYAML
+    build validates to (spec 2026-11-04 R16: the rows moved out of matrix.yaml)."""
+    from fr.acceptance.fragment import Fragment, parse_fragment
+
+    paths = sorted((REPO / "docs/acceptance/features").glob("*.yaml"))
+    assert paths
+    for path in paths:
+        text = path.read_text()
+        assert parse_fragment(text, source=path.name) == Fragment.model_validate(
+            yaml.safe_load(text)
+        ), path.name

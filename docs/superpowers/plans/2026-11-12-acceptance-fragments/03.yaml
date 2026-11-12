@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'Amendments: fr acceptance amend, the record shape, stale-base refusal, contested
+    debt (R16, R17)'
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - acceptance-fragments-amendments
+  tier: hard
+  files:
+  - packages/fr/src/fr/acceptance/*
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/*
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/record_amendments.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/debt/*
+  - packages/fr/src/fr/run/*
+  - plugins/super-fr/skills/*
+  - .claude/rules/acceptance-matrix.md
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/*.md
+  - docs/reference/*.md
+  - docs/acceptance/features/*
+  - docs/superpowers/runs/*
+  - tests/*
+  estimate_lines: 1600
+tasks:
+- number: 1
+  title: fr acceptance amend and set-status on a merged row
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_amend.py — on a feature branch (fragment B, row r owned by merged feature A at revision 0): `fr acceptance amend --id r --op reword --acceptance "..." --why "..."` appends {row: r, op: reword, base: 0, ...} to B's fragment (creating it with B's repo:), commits only that file, and the fold shows the new wording at revision 1; each of set-status, add-level, drop-level and retire likewise; `fr acceptance set-status --id r ...` on a MERGED row appends set-status (plus add-level/drop-level for --level/--drop-level) amendments instead of editing A's fragment, while on a row pending on this branch it still edits in place; any edit that changes a row of a fragment as it stands on the default ref is refused by `fr acceptance check` ("rows merged on <ref> change only by amendment"). The feature is --feature, else the branch's run cursor's spec slug, else refused naming --feature.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement `amend` in commands/acceptance_cmd.py through the one engine (a one-entry StepRecord, apply_record), the in-place-vs-amend routing in fr/acceptance/edit.py, and the merged-row immutability check in fr/acceptance/check.py (fold at the default ref vs the working tree, row by row). Tests pass. Remove phase 2's interim in-place test.
+- number: 2
+  title: The record kind's amendment shape (record 10 → 11)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_record_amendments.py — a step record's `acceptance:` section accepts an amendment item {row, op, base?, why, op fields} beside create and move items; base omitted is filled with the row's current revision at apply; apply_record writes it to the run's feature fragment; an unknown op or a missing why is refused; the record kind's current_version is 11 and a v10 record migrates (stamp only) through fr.artifacts.record_amendments; the record template the brief prints shows the amendment shape commented.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: fr/record/model.py gains the amendment item (shared vocabulary AMENDMENT_OPS from fr.acceptance.fragment); add `schema_version` handling per the artifact-versioning rule; registry record current_version 11 with the comment naming this spec; register the stamp-only migration in fr/artifacts/record_amendments.py and import it in fr/artifacts/__init__.py; fr/record/template.py shows the shape. Run `uv run fr migrate artifacts --yes` to restamp this run's live records and commit. Tests pass.
+- number: 3
+  title: Stale base — refused before merge, contested after (R17)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_acceptance_stale_base.py — a branch amendment with base 0 on a row whose default-ref revision is now 1: `fr acceptance check` (which fetches the default ref first; `--no-fetch` for offline tests) exits 2 naming the row, both revisions and the `fr acceptance amend` re-base hint; `deliver`'s acceptance evidence refuses the same (drive _deliver path the way tests/unit/test_deliver_leftovers.py does); a stale amendment that merged anyway marks the row contested and `fr debt` and `fr acceptance status` list it as debt; the next amendment at the current base clears it.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: fold exposes `stale_pending` (pending amendments whose base != revision at apply); check and deliver refuse on it, after a `git fetch origin <default>` (failure to fetch in CI is a refusal, never a pass); debt/engine counts Effective.contested beside DEBT_STATUSES (one definition: a contested row is debt whatever its status). Tests pass.
+- number: 4
+  title: Skills, rule, docs, scenario, row
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      GREEN: fr-acceptance, fr-goal, fr-brainstorming, fr-plan and fr-execute skills say how a row of an earlier feature changes (`fr acceptance amend` or the record's amendment item) wherever they tell an agent to move a row; .claude/rules/acceptance-matrix.md gains the amendment ops and the stale-base rule; docs/explainers/fr-acceptance.md and 01-fr-goal.md updated with new `reviewed` stamps. Run scripts/sync-opencode.py and scripts/sync-hermes.py, then `uv run fr docs check --base origin/main`.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: tests/scenarios/acceptance-fragments-amendments.sh: repo with origin; feature A merged with row r; feature B amends r (set-status) and merges; feature C amends r at the stale base and is refused by `fr acceptance check`; re-based, it passes; an abandoned feature D's amendment never shows. Add test_acceptance_fragments_amendments to tests/integration/test_scenarios.py. Then `uv run fr acceptance set-status --id acceptance-fragments-amendments --status ci --scenario tests/scenarios/acceptance-fragments-amendments.sh --level unit=super-fr:tests/unit/test_acceptance_amend.py#test_<name> --level int=super-fr:tests/integration/test_scenarios.py#test_acceptance_fragments_amendments --notes "amend ops, record amendment shape, stale-base refusal at check/deliver, contested rows as debt"`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T05:58:36+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T05:58:36+00:00'
+    note: null
+    observed_prs: []

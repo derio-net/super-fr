@@ -32,7 +32,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fr import glab as _glab
 from fr.ghclient import CommandRunner, UnsupportedBatchOps, filter_issues_by_body, run_cli
@@ -433,6 +433,37 @@ class RealGlabClient(UnsupportedBatchOps):
             return None
         value = raw.get("issues_enabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None
+
+    @_hosted
+    def repo_visibility(self, repo: str) -> str:
+        """The project's `visibility` (`public`|`internal`|`private`), via `glab api
+        projects/:id`; raises when it cannot be read, as the `GhClient` contract says."""
+        raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
+        value = raw.get("visibility") if isinstance(raw, dict) else None
+        if not isinstance(value, str) or not value:
+            raise _glab.GlabError(f"projects/{repo}: no visibility in the answer")
+        return value.lower()
+
+    @_hosted
+    def pages_visibility(self, repo: str) -> str:
+        """The project's `pages_access_level` and `visibility`, via `glab api projects/:id`."""
+        from fr.acceptance.pages import UNKNOWN, from_gitlab
+
+        try:
+            raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
+            # gitlab.com always enforces Pages access control; a self-managed instance's
+            # setting is not in the API, so it is never assumed. gitlab.com is established
+            # from the answer's own `web_url` host, never inferred from "no host was
+            # threaded" (GITLAB_HOST or glab's default host can contradict that); when it
+            # cannot be shown, access control is not confirmed (fail closed).
+            web_url = raw.get("web_url") if isinstance(raw, dict) else None
+            on_gitlab_com = (
+                isinstance(web_url, str)
+                and (urlparse(web_url).hostname or "").lower() == "gitlab.com"
+            )
+            return from_gitlab(raw, access_control=on_gitlab_com)
+        except (_glab.GlabError, ValueError, OSError):
+            return UNKNOWN
 
     @_hosted
     def file_exists(self, repo: str, path: str) -> bool:

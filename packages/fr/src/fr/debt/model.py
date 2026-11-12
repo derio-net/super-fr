@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from fr.acceptance.model import DEBT_STATUSES
+from fr.acceptance.model import DEBT_STATUSES, is_debt
 
 OwedSource = Literal["journal", "row", "plan", "issue"]
 """Where an owed item came from. When several sources share a key the
@@ -35,6 +35,15 @@ class DebtRow(_Frozen):
     notes: str = ""
     walked_at: str | None = None
     """The latest passing walk of a `walked` row; None renders as undated."""
+    contested: bool = False
+    """A stale amendment merged on it (spec 2026-11-04 R17): debt whatever its status."""
+    retired: bool = False
+    """Retired, yet a merged amendment still names it: contested, so debt, though it has
+    left the matrix (plan journal `fold-merged-stale-targets`)."""
+
+    @property
+    def is_debt(self) -> bool:
+        return is_debt(self.status, contested=self.contested)
 
 
 class AcceptanceDebt(_Frozen):
@@ -44,8 +53,12 @@ class AcceptanceDebt(_Frozen):
     available: bool = True
     """False when the matrix could not be read: unavailable, never zero."""
 
+    contested: int = 0
+    """Contested rows whose status is not itself debt, and every retired contested row
+    (each counted once; `by_status` counts only rows still in the matrix)."""
+
     def debt_count(self) -> int:
-        return sum(n for s, n in self.by_status.items() if s in DEBT_STATUSES)
+        return sum(n for s, n in self.by_status.items() if s in DEBT_STATUSES) + self.contested
 
 
 class ArchivablePlan(_Frozen):

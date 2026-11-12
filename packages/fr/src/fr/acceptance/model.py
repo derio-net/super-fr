@@ -48,6 +48,14 @@ DEBT_STATUSES: frozenset[str] = frozenset({"not-implemented", "unwired", "walk-o
 acceptance debt counts these. `walked` and `manual` are listed, never debt."""
 
 LISTED_STATUSES: frozenset[str] = DEBT_STATUSES | {"walked", "manual"}
+
+
+def is_debt(status: str, *, contested: bool = False) -> bool:
+    """The one definition of a debt row: a `DEBT_STATUSES` status, or a row the fold
+    marks contested whatever its status (spec 2026-11-04 R17)."""
+    return contested or status in DEBT_STATUSES
+
+
 """What `fr debt` lists per row: the debt statuses plus `walked` and `manual`
 (listed with their counts, never debt)."""
 
@@ -256,6 +264,21 @@ class Row(BaseModel):
     @classmethod
     def _not_the_v4_status(cls, v: object) -> object:
         check_status(v)
+        return v
+
+    @field_validator("origin")
+    @classmethod
+    def _logical_origins_are_well_formed(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        # An origin may be logical (`spec:<slug>#R<n>`, `plan:<slug>`; spec
+        # 2026-11-04-repo-feature-settings R18) as well as `<repo>:<path>`.
+        from fr.acceptance.logical import is_logical, parse_logical
+
+        for ref in v:
+            if is_logical(ref):
+                try:
+                    parse_logical(ref)
+                except AcceptanceError as e:
+                    raise ValueError(str(e)) from e
         return v
 
     @field_validator("verify")

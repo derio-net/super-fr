@@ -1,6 +1,6 @@
 name: acceptance-report
 
-# The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
+# The acceptance matrix (docs/acceptance/features/*.yaml, folded) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
 # - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
 #   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
@@ -36,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0 # check judges merged rows against the default branch's history
           persist-credentials: false
       - uses: astral-sh/setup-uv@v5
       - name: Install fr

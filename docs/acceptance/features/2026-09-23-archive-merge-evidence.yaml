@@ -1,0 +1,43 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-23-archive-merge-evidence
+repo: derio-net/super-fr
+rows:
+  - id: status-sweep-merge-evidence
+    capability: Plan lifecycle
+    acceptance: fr status calls a plan merged-but-unarchived only when it is complete
+      on origin/<default>, reports locally-complete plans as waiting for merge, and
+      suggests archiving merged plans one at a time
+    origin:
+    - spec:2026-09-23-archive-merge-evidence
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_evidence.py
+      - super-fr:tests/unit/test_status_sweep.py
+    status: ci
+    notes: 'Unit-pinned in CI; live-verified 2026-09-24 on derio-net/super-fr: pre-merge
+      on the PR branch the plan was not called merged and fr archive refused (exit 2);
+      post-merge on main (a5b83567) it read ''merged, manual phases still open'', then
+      after the manual tick ''merged but not archived'' with its own fr archive line,
+      which archived it.'
+  - id: archive-refuses-unmerged-plan
+    capability: Plan lifecycle
+    acceptance: fr archive refuses a plan whose undispatched phases are not complete
+      on origin/<default>; --force on a single plan still overrides
+    origin:
+    - spec:2026-09-23-archive-merge-evidence
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_gate_landed.py
+      - super-fr:tests/unit/test_archive_cmd.py
+      - super-fr:tests/unit/test_archive_nudge_landed.py
+    status: ci
+    notes: 'Unit-pinned in CI; live-verified 2026-09-24 on derio-net/super-fr: pre-merge
+      on the PR branch the plan was not called merged and fr archive refused (exit 2);
+      post-merge on main (a5b83567) it read ''merged, manual phases still open'', then
+      after the manual tick ''merged but not archived'' with its own fr archive line,
+      which archived it.'

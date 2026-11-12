@@ -1,0 +1,22 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-05-repair-skip-pending-359
+repo: derio-net/super-fr
+rows:
+  - id: repair-quiet-on-pending
+    capability: Archive spec-sweep
+    acceptance: fr repair / repair-in-passing leaves a pending/tbd placeholder row untouched
+      and emits NO unresolved-ref warning — the pending-slice convention is quiet and
+      consistent across sweep, migrate dirs, and repair.
+    origin:
+    - spec:2026-07-05-repair-skip-pending-359
+    levels:
+      unit:
+      - super-fr:tests/unit/test_repair.py
+    status: ci
+    notes: 'issue #359 (follow-up to #351). Pinned by test_repair_quiet_on_pending_row;
+      recognizer promoted to fr.refs (test_refs.py::test_is_pending_placeholder).'

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fr.acceptance.model import AcceptanceError, Matrix, Row, split_ref
+from fr.acceptance.model import Matrix, Row
 from fr.labels import FR_AWAITING_LIVE
 
 __all__ = ["AWAITING_LIVE_LABEL", "holds_open", "issues_now_closable", "walk_verified"]
@@ -31,14 +31,14 @@ def walk_verified(row: Row) -> bool:
     return bool(passing)
 
 
-def _spec_of(row: Row) -> str | None:
-    """The first spec the row's `origin` names (repo-relative), or `None`."""
+def _spec_of(row: Row, repo_root: Path) -> str | None:
+    """The first spec the row's `origin` names (repo-relative), or `None`; a
+    logical `spec:<slug>` origin resolves in *repo_root* (spec 2026-11-04 R18)."""
+    from fr.acceptance.logical import origin_spec_path
+
     for origin in row.origin:
-        try:
-            _, path, _ = split_ref(origin)
-        except AcceptanceError:
-            continue
-        if path.endswith(".md") and path.startswith(_SPECS):
+        path = origin_spec_path(origin, repo_root)
+        if path is not None and path.startswith(_SPECS):
             return path
     return None
 
@@ -55,7 +55,7 @@ def holds_open(row: Row, repo_root: Path) -> bool:
 
     if walk_verified(row):
         return False
-    spec = _spec_of(row)
+    spec = _spec_of(row, repo_root)
     try:
         return spec_verification(repo_root, spec).is_post_merge(row)
     except (StrategyError, SectionError, OSError):

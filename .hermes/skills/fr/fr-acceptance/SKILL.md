@@ -2,7 +2,7 @@
 name: fr-acceptance
 description: >
   Drive the acceptance matrix: backfill an existing repo's business-level
-  acceptance tests into docs/acceptance/matrix.yaml, flip row statuses as
+  acceptance tests into its per-feature fragments (docs/acceptance/features/), flip row statuses as
   evidence lands, and keep the CI gate honest. Use when: "backfill the
   acceptance matrix", "acceptance debt", "add acceptance rows", a session
   starts with an acceptance-debt nag, `fr acceptance check` fails, or a
@@ -11,7 +11,7 @@ description: >
 
 # fr-acceptance
 
-The matrix (`docs/acceptance/matrix.yaml`) is the registry of business-level acceptance tests × verification levels (unit/api/int/ui) × automation status. This skill drives the agent-side work; the mechanics live in the CLI.
+The acceptance matrix is the registry of business-level acceptance tests × verification levels (unit/api/int/ui) × automation status. Its rows live in per-feature **fragments**, `docs/acceptance/features/<spec-slug>.yaml`, each owned by the feature (spec) that created it (`legacy.yaml` for rows with no single origin spec); the matrix every command reads is a fold of them, never a stored file. A repo still holding the old single `docs/acceptance/matrix.yaml` is split by `fr migrate artifacts --yes`. This skill drives the agent-side work; the mechanics live in the CLI.
 
 **Announce at start:** "I'm using fr-acceptance to work the acceptance matrix." Check the setting first: If `fr settings show --json` reports `artifacts.acceptance` as `off`, this repo's matrix is disabled by repo setting: there is nothing to backfill, and `fr acceptance add`, `set-status` and `init` refuse. Stop there.
 
@@ -26,15 +26,16 @@ set-status`, never a hand-edit; when in doubt between ci and unwired,
 
 ## Backfill an existing repo
 
-1. `fr acceptance init` (idempotent) if the repo has no matrix — matrix +
-   rule + gitignore entry; a CI workflow only beside existing CI (or `--with-ci`).
+1. `fr acceptance init` (idempotent) if the repo has no `docs/acceptance/features/` —
+   that directory + rule + gitignore entry; a CI workflow only beside existing CI (or `--with-ci`).
 2. `fr acceptance backfill` — emits the inventory (Test Plan specs not yet
    cited, plans without linked rows, test-tree hints) + this protocol.
 3. DRAFT rows — **one row per business acceptance, not per test** — via
    `fr acceptance add --id <kebab> --capability <group> --acceptance
-   "<operator can X>" --origin <repo>:<path> --level unit=<repo>:<path>
-   --status <honest> --notes "<evidence / backfill owed>"`. Never hand-edit
-   YAML shapes; `add` validates and appends.
+   "<operator can X>" --origin spec:<slug>#R<n> --level unit=<repo>:<path>#<test>
+   --status <honest> --notes "<evidence / backfill owed>"`. The row lands in its
+   origin spec's fragment; a row citing no single spec needs `--feature <slug>`
+   (`legacy` for none). Never hand-edit a fragment; `add` validates and writes.
 4. `fr acceptance check` → fix errors (unresolved refs, staleness, schema),
    re-run until only honest warnings remain.
 5. Open a review PR: the operator audits every status.
@@ -45,10 +46,11 @@ When a plan phase carrying `acceptance: [row-ids]` completes, flip those rows
 up the ladder (`not-implemented` → `unwired` → `ci`/`scheduled`) with
 `fr acceptance set-status --id <row> --status <new> --notes "<why it moved>"
 --level unit=<repo>:<path>` — one command for the whole transition: it moves
-the row in place, adds the test refs that justify the move, and regenerates the
-three committed reports. `--notes` is required, and an unknown id is refused
+the row in place when it is still pending on this branch, and adds the test refs that
+justify the move; reports are derived, never committed. `--notes` is required, and an unknown id is refused
 rather than created (`add`'s job), as is `ci` in a repo with no CI config. Under `ci: none` (see `fr services`) the local suite is the gate: `ci` needs a declared or detected CI service.
 `fr plan edit --complete-phase` warns on unflipped rows — fix or record why in the completion note.
+**A row an earlier feature MERGED** changes only by amendment, appended to YOUR feature's fragment (`--feature <spec-slug>`, else the spec of this branch's run; with neither, `set-status` refuses too; a post-merge walk names the feature whose gate it closes): `fr acceptance amend --id <row> --op <op> --why "<reason>"`, with `reword` (`--acceptance`/`--capability`), `set-status` (`--status --notes`, optional `--issue`/`--verify`/`--scenario`), `add-level`/`drop-level` (`--level <level>=<ref>`) or `retire` (`--notes`); `set-status` on a merged row writes them for you, and a record's `acceptance:` entry `{row, op, why, …}` is one too. Never edit a merged row in place (`check` refuses it). If another feature amended the row first, `check` and `deliver` fetch the default ref and refuse your stale base (exit 2): review the row, then `fr acceptance amend --rebase`. A stale amendment merged anyway marks the row **contested**: debt until the next amendment at its current revision.
 
 ## Live verification on another harness
 
@@ -102,16 +104,15 @@ presented in the PR body ("rows added since brainstorm", generated via
 
 ## Refs, requirement origins and post-merge rows
 
-Refs are `<repo>:<path>[#anchor]` — own repo by its own name, sibling
-repos verified only where a checkout exists (`--sibling-root`, default `..`);
-a `.py` fragment names the test (`#TestX::test_y`), never a rotting `#L<n>`.
-Archived specs auto-resolve (`specs/` ↔ `implemented/specs/`) — `check` warns,
-never errors, on a moved ref. `fr acceptance report` renders the HTML;
-`fr acceptance status` is the terminal nag; `fr acceptance digest` feeds the
-weekly "Acceptance debt" issue upsert.
+fr's own artifacts are cited **logically** — `spec:<slug>[#R<n>]` (the spec's file name
+minus `-design.md`), `plan:<slug>` — so an archive never rewrites a row. Other refs are
+`<repo>:<path>[#anchor]`, siblings verified only where a checkout exists
+(`--sibling-root`, default `..`); a `.py` anchor names the test (`#TestX::test_y`), never
+`#L<n>`. `fr acceptance report [--open] [--format md]` renders the derived report locally (git-ignored, never committed; `check` fails on a tracked one), `pages-check` says whether a Pages site would be no wider than the repo (it fails closed), `comment --pr N --yes` keeps the one PR report comment when `forge.report_comment` is on; `status` is the terminal nag;
+`digest` feeds the weekly "Acceptance debt" issue upsert.
 
 A row born from a spec's `## Requirements` list cites the requirement, not just
-the spec: `--origin <repo>:<spec-path>#R<n>` (repeat `--origin` for several ids).
+the spec: `--origin spec:<slug>#R<n>` (repeat `--origin` for several ids).
 A row only a live, operator-driven run can prove — never a unit test — carries `--verify live` (the old `post-merge` spelling migrates to it); it keeps nagging in `fr acceptance status` whatever its status, and the PR body lists it under `## Post-merge verification owed`. `--verify <strategy|none>` takes any strategy `fr verification list` resolves, or `none` (verified some other way; the spec's `## Verification` says what); `set-status --verify` sets it too, and omitting the flag preserves what the row already carries.
 
 ## Walks, issues and closing on live evidence

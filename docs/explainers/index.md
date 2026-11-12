@@ -24,7 +24,7 @@ facts:
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 rewritten as the landing front page
+reviewed: 2026-11-12 rewritten as the landing front page; still true after acceptance-fragments, the acceptance report is derived and published behind a visibility check
 ---
 
 ## How a run goes

@@ -1,0 +1,22 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-25-writes-dot-dir-prefix
+repo: derio-net/super-fr
+rows:
+  - id: deliver-tests-log-dot-dir
+    capability: fr-goal-methodology
+    acceptance: deliver's tests=<log> gate accepts a log the orchestrator wrote under
+      a dot-directory (e.g. .fr-deliver/tests.log)
+    origin:
+    - spec:2026-09-25-writes-dot-dir-prefix
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: 'gh#606. Unit: test_a_relative_dot_directory_log_is_matched (red→green) and
+      test_writes_matches_relative_targets_segment_wise pin spec §2 in CI; live proof
+      is this change''s own deliver.'

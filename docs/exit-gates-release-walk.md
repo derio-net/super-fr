@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - scripts/release.py
   - packages/fr/src/fr/release_status.py
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
 ---
 
 # Exit-gates release verification

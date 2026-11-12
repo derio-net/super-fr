@@ -406,20 +406,25 @@ def owed_identity(repo_root: Path, *, allow_nested: bool = False) -> tuple[str |
         return None, f"the origin remote {url!r} does not name an owner/repo"
     matrix = _matrix_identity(repo_root)
     if matrix is not None and matrix.lower() != slug.lower():
-        return None, f"the matrix names {matrix} but the origin remote is {slug}"
+        return None, f"the acceptance fragments name {matrix} but the origin remote is {slug}"
     return slug, ""
 
 
 def _matrix_identity(repo_root: Path) -> str | None:
+    """The `repo:` the acceptance fragments carry (spec 2026-11-04, decision
+    `fragment-repo-identity`), or None when there is none to read."""
     import yaml
 
-    path = repo_root / "docs/acceptance/matrix.yaml"
-    try:
-        data = yaml.safe_load(path.read_text()) if path.is_file() else None
-    except (OSError, yaml.YAMLError):
-        return None
-    if isinstance(data, dict) and data.get("org") and data.get("repo"):
-        return f"{data['org']}/{data['repo']}"
+    from fr.acceptance.fragment import FRAGMENTS_DIR
+
+    folder = repo_root / FRAGMENTS_DIR
+    for path in sorted(folder.glob("*.yaml")) if folder.is_dir() else ():
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get("repo"), str) and data["repo"]:
+            return str(data["repo"])
     return None
 
 

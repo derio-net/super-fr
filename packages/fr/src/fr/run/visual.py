@@ -286,8 +286,8 @@ def owed_for_unit(
     """The rows a unit owes (§C): phase `phase`'s header rows, or — for a flat
     unit — the rows citing the run's spec. A missing matrix owes nothing; an
     unreadable plan or matrix raises `VisualRefusedError` (fail-closed)."""
-    from fr.acceptance.model import AcceptanceError, load_matrix
-    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.acceptance.model import AcceptanceError
     from fr.parser import PlanSchemaError, parse
     from fr.requirements import load_spec_matrix
 
@@ -301,14 +301,14 @@ def owed_for_unit(
             except PlanSchemaError as e:
                 raise VisualRefusedError([f"{why} — plan {plan_rel} does not parse: {e}"]) from e
             linked = next((p.phase.acceptance for p in plan.phases if p.phase.number == phase), ())
-            if not linked or not (repo_root / MATRIX_REL).exists():
+            if not linked or not has_fragments(repo_root):
                 return []
             return owed_rows(
-                load_matrix(repo_root / MATRIX_REL),
+                load_effective(repo_root),
                 phase_rows=linked,
                 verification=_verification(repo_root, plan.spec_path or plan.meta.spec, plan),
             )
-        if spec_rel is None or not (repo_root / MATRIX_REL).exists():
+        if spec_rel is None or not has_fragments(repo_root):
             return []
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
         flat_plan: Plan | None = None

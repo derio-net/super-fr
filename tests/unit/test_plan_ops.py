@@ -684,7 +684,6 @@ _GATED = "\n## Verification\n\nstrategy: none\ngate: devops\n\n## Test Plan\n\n"
 
 
 def _gated_plan(tmp_path, monkeypatch, *steps: str, ops_yaml: str | None = None):
-    from fr.artifacts.registry import ARTIFACT_KINDS
     from fr.parser import parse as parse_plan
 
     from tests.unit.test_ops_artifacts import _plan
@@ -692,10 +691,10 @@ def _gated_plan(tmp_path, monkeypatch, *steps: str, ops_yaml: str | None = None)
     plan_dir = _plan(tmp_path, monkeypatch)
     spec = tmp_path / "docs/superpowers/specs/2026-10-22-toy.md"
     spec.write_text(spec.read_text() + _GATED + "\n".join(steps) + "\n")
-    matrix = tmp_path / "docs/acceptance/matrix.yaml"  # names the repo: no origin here
-    matrix.parent.mkdir(parents=True)
-    version = ARTIFACT_KINDS["matrix"].current_version
-    matrix.write_text(f"schema_version: {version}\norg: derio-net\nrepo: own\nrows: []\n")
+    from tests.unit.acceptance_helpers import write_fragments
+
+    # names the repo: no origin here
+    write_fragments(tmp_path, [], repo="derio-net/own", feature="legacy")
     if ops_yaml is not None:
         (plan_dir / "ops.yaml").write_text(ops_yaml)
     return parse_plan(plan_dir)

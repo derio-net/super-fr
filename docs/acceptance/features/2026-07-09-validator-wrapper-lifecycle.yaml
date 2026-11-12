@@ -1,0 +1,27 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-09-validator-wrapper-lifecycle
+repo: derio-net/super-fr
+rows:
+  - id: plan-validator-wrapper-lifecycle
+    capability: Isolation
+    acceptance: Plan repos cannot enter isolated autonomous work unless the tracked
+      plan-validator wrapper exists, and fr init scaffolding installs that wrapper automatically.
+    origin:
+    - spec:2026-07-09-validator-wrapper-lifecycle
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_scaffold.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/integration/test_install_sh.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
+    status: ci
+    notes: 'Scaffold install/refusal, isolation fail-closed behavior, and installer-output
+      cleanup are pinned per-PR. gh#826: the wrapper runs fr validate plans (bundled
+      validator) on any harness, falling back to the marketplace copy (test_closeout_run_clean.py).
+      gh#619: the retired install-validator-wrapper.sh and its integration test are
+      deleted; fr init validator-wrapper is the remedy.'

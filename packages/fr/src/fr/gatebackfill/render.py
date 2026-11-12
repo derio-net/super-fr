@@ -9,6 +9,7 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
+from fr.acceptance.amend import feature_flag
 from fr.gatebackfill.candidates import PLANS_REL, Candidate, find_spec, split_key
 from fr.gatebackfill.model import PlanClose, PlanEntry
 
@@ -74,7 +75,7 @@ def decision_commands(entry: PlanEntry, root: Path) -> tuple[list[str], str | No
     if kind == "na" and k == "row":
         return [
             f"fr acceptance set-status --id {shlex.quote(name)} --status manual "
-            f"--notes {shlex.quote(reason)}"
+            f"--notes {shlex.quote(reason)} {feature_flag(root, name)}"
         ], None
     hint = ""
     if k == "spec" and n is not None:
@@ -113,13 +114,14 @@ def open_issue_refusals(entries: list[PlanEntry], candidates: list[Candidate]) -
 
 def row_reconcile(root: Path) -> list[str]:
     """`not-implemented` rows whose effective strategy is post-merge, moved to `walk-owed`."""
-    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.acceptance.fold import load_effective
+    from fr.acceptance.model import AcceptanceError
     from fr.gatebackfill.candidates import row_spec
     from fr.verification.effective import is_post_merge
     from fr.verification.rows import spec_verification
 
     try:
-        matrix = load_matrix(root / "docs/acceptance/matrix.yaml")
+        matrix = load_effective(root)
     except (AcceptanceError, OSError):
         return []
     out = []
@@ -131,21 +133,24 @@ def row_reconcile(root: Path) -> list[str]:
             if is_post_merge(strategy, root):
                 out.append(
                     f"fr acceptance set-status --id {shlex.quote(r.id)} --status walk-owed "
-                    '--notes "post-merge walk owed (gate backfill)"'
+                    '--notes "post-merge walk owed (gate backfill)" ' + feature_flag(root, r.id)
                 )
         except Exception:  # noqa: BLE001 — an unreadable spec or strategy lists nothing
             continue
     return out
 
 
-def tracked_rows(entries: list[PlanEntry]) -> list[str]:
+def tracked_rows(entries: list[PlanEntry], root: Path) -> list[str]:
     """`set-status --issue` for each `row:` entry that already has a tracker."""
     out = []
     for e in entries:
         k, name, _ = split_key(e.key)
         if k == "row" and e.tracker.ref and e.decision_kind in ("owed", "adopt"):
             ref = shlex.quote(e.tracker.ref)
-            out.append(f"fr acceptance set-status --id {shlex.quote(name)} --issue {ref}")
+            out.append(
+                f"fr acceptance set-status --id {shlex.quote(name)} --issue {ref} "
+                + feature_flag(root, name)
+            )
     return out
 
 
@@ -206,7 +211,7 @@ def summary(
         commands += cmds
         if refusal:
             refusals.append(refusal)
-    commands += tracked_rows(entries)
+    commands += tracked_rows(entries, root)
     reconcile = row_reconcile(root)
     if commands or reconcile:
         lines += ["", "Commands for the repo's own chore PR (nothing was run):"]

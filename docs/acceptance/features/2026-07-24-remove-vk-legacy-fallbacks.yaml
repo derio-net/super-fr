@@ -1,0 +1,26 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-07-24-remove-vk-legacy-fallbacks
+repo: derio-net/super-fr
+rows:
+  - id: vk-legacy-fallbacks-removed
+    capability: vk→fr spelling migration
+    acceptance: The vk-spelling dual-read fallbacks (vk-profiles.yaml, .git/vk/isolation
+      state dir, ~/.config/vk/secrets devcontainer mounts, VK_BRIDGE_* env) no longer
+      resolve; an unmigrated repo fails loudly pointing at 'fr init migrate' instead
+      of warning, and the kept VibeKanban-product names (VK_DERIO_OPS_PROJECT_ID, willikins_vk_bridge_*
+      metrics) are unaffected
+    origin:
+    - spec:2026-07-24-remove-vk-legacy-fallbacks
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_bridge_cli.py
+    status: ci
+    notes: 'Fallback-gone unit tests landed this PR (#276): test_isolation.py pins profiles_config/state-dir
+      fr-only + the legacy-vk-mount hard error; test_bridge_cli.py pins bridge_env reading
+      only FR_BRIDGE_*. Run in CI.'

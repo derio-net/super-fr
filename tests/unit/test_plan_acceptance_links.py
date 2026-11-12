@@ -20,6 +20,7 @@ from fr.plan_ops import PhaseSpec, create, self_review
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.fakes import FakeGhClient
 
 runner = CliRunner()
@@ -53,7 +54,7 @@ def _repo(tmp_path: Path, *, matrix: bool = True) -> Path:
     (tmp_path / "docs" / "superpowers" / "plans").mkdir()
     if matrix:
         (tmp_path / "docs" / "acceptance").mkdir(parents=True)
-        (tmp_path / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX)
+        write_matrix_fragments(tmp_path, MATRIX)
     return tmp_path
 
 
@@ -297,7 +298,7 @@ def test_complete_phase_silent_without_acceptance(tmp_path: Path) -> None:
 
 def test_complete_phase_broken_matrix_does_not_block(tmp_path: Path) -> None:
     repo = _repo(tmp_path, matrix=True)
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: {broken\n")
+    write_matrix_fragments(repo, "rows: {broken\n")
     _spec(repo)
     plan_dir = _create_plan(repo, acceptance=("row-a",))
     runner.invoke(app, ["plan", "edit", str(plan_dir), "--tick", "P1.T1.S1"])
@@ -316,7 +317,7 @@ def _status_repo(tmp_path: Path, *, matrix: bool) -> Path:
     shutil.copytree(FIXTURE, plan_dir)
     if matrix:
         (tmp_path / "docs" / "acceptance").mkdir(parents=True)
-        (tmp_path / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX)
+        write_matrix_fragments(tmp_path, MATRIX)
     for cmd in (
         ["git", "init", "-q"],
         ["git", "add", "-A"],

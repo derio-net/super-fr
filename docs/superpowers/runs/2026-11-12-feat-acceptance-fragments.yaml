@@ -1,0 +1,191 @@
+schema_version: 11
+run: 2026-11-12-feat-acceptance-fragments
+workflow: fr-goal@1
+branch: feat/acceptance-fragments
+started: '2026-11-12T00:15:08+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    emitted:
+      spec: docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md
+  spec-review:
+    state: done
+  plan:
+    state: done
+    at: '2026-11-12T00:29:22+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-12-acceptance-fragments
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-12T00:16:37+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T00:29:22+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-11-12T00:29:24+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-11-12T08:44:04+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T00:29:24+00:00'
+          agent: a29e2744fd5a18581
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T01:33:02+00:00'
+          outcome: done
+        evidence:
+          tests: p1-suite.log@9e7c05a7ba75;tree=bbc2e8b70f642fe166c426e907ac15657c25089161eefe89f71f6bba3079fd02
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T01:33:02+00:00'
+          agent: a925b8c0a4bf4d35e
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T01:41:02+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-1
+          reviewer: a925b8c0a4bf4d35e
+          visual: none
+          findings: docs-check-scenario-gnu-sed,p1-r1,p1-r2
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T01:41:02+00:00'
+          agent: ad4a60202c4fb495a
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T04:08:46+00:00'
+          outcome: done
+        evidence:
+          tests: p2-suite.log@af56e64e20e6;tree=5fd4ed704bd84596ca1a1e77d91c7bbce059b7c290cfc4bc5bd36c2e3358e48d
+          visual: none
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T04:08:47+00:00'
+          agent: aa8acc5c8b736df9b
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T04:41:29+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-2
+          reviewer: aa8acc5c8b736df9b
+          visual: none
+          findings: p2-interim-set-status-on-merged-row,p2-r1,p2-r2,p2-r3,p2-r4,p2-r5
+      phase/3/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T04:41:29+00:00'
+          agent: ad1c9aa5a899b5437
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T05:58:37+00:00'
+          outcome: done
+        evidence:
+          tests: p3-suite.log@f5fa313c1a62;tree=f82e6a658aa258eda4eb75d6518c61ed62c8b7635e0cc494d5552a0615f358c9
+          visual: none
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T05:58:38+00:00'
+          agent: a1f3421a5e28715e3
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T06:40:25+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-3
+          reviewer: a1f3421a5e28715e3
+          visual: none
+          findings: p3-set-status-on-merged-row-is-an-amendment,p3-stray-r1-records-dir,p3-r1,p3-r2,p3-r3,p3-r4
+      phase/4/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T06:40:25+00:00'
+          agent: a486a36f328808793
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5-5
+          tier: standard
+          bound: claude-sonnet-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T07:57:45+00:00'
+          outcome: done
+        evidence:
+          tests: p4-suite.log@f8c05ff6057f;tree=e7afb93ddf2aae3116e36ab245bf7c6000019319b077bf807bdf8d28c25257e4
+          visual: none
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-12T07:57:46+00:00'
+          agent: a7f88953ed11d8c36
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T08:44:04+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-4
+          reviewer: a7f88953ed11d8c36
+          visual: none
+          findings: p4-gitlab-pages-fail-open,p4-comment-marker-hijack,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7
+  journal-check:
+    state: done
+    at: '2026-11-12T08:44:06+00:00'
+    exit: 0
+    stdout: "1 deferred finding(s): p2-interim-set-status-on-merged-row → \nderio-net/super-fr#1379\n\
+      1 out-of-scope finding(s): p3-stray-r1-records-dir\n"
+  deliver:
+    state: done
+    at: '2026-11-12T09:16:49+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1408
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-12T08:44:07+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T09:16:33+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite.log@8a8e41ca2cb5
+          walk: 20261112T084725Z.log@a51a1487160a
+          proportionality: e4cd964b4ded49f03fcf2a365657dfced2100578:8c18c4ca50a49d0597cd4e62f13f9fba4385e57ac326a4bc0ae75effc0f76a4f
+          docs: e4cd964b4ded49f03fcf2a365657dfced2100578:5b1bc9874aa5ae43c3f2368d822f26d0a017727685cd34d0848aa150b57582dd
+          visual: none
+pr: https://github.com/derio-net/super-fr/pull/1408

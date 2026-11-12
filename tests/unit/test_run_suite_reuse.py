@@ -24,6 +24,7 @@ from fr.run.code_tree import (
 )
 from fr.run.model import load_run_state
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.test_run_cli import (
     _invoke,
     _invoke_as_harness,
@@ -86,7 +87,7 @@ def test_code_tree_is_stable_across_a_bookkeeping_only_commit(tmp_path: Path) ->
     before = code_tree(repo)
     (repo / "docs" / "superpowers" / "runs" / "r1.yaml").write_text("run: r1\nstep: x\n")
     (repo / "docs" / "acceptance").mkdir()
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: []\n")
+    write_matrix_fragments(repo, "rows: []\n")
     _commit_all(repo, "bookkeeping")
 
     assert code_tree(repo) == before

@@ -14,17 +14,25 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 repo-feature-settings, acceptance off is disabled, not debt
+reviewed: 2026-11-12 pr1408 review fixes, retired rows keep the base rule, a failed fetch reads the local default ref, ties break by base
 ---
 
 ## Overview: claims, not tests
 
 A green suite can sit on top of a product that does not do what anyone asked, because
-the tests can be about anything. The acceptance matrix, `docs/acceptance/matrix.yaml`,
-is a different kind of list. Each **row** is one business-level claim, written the way an
-operator would say it ("an operator can resume a stopped workspace"), together with where
-it came from, the tests that verify it at each level (unit, api, int, ui), and a
-**status** saying how well it has actually been proven.
+the tests can be about anything. The acceptance matrix is a different kind of list. Each
+**row** is one business-level claim, written the way an operator would say it ("an
+operator can resume a stopped workspace"), together with where it came from, the tests
+that verify it at each level (unit, api, int, ui), and a **status** saying how well it has
+actually been proven.
+
+The rows are kept per feature. Each spec that creates rows owns a **fragment**,
+`docs/acceptance/features/<spec-slug>.yaml`, and the matrix you read is a **fold** of every
+fragment, never a stored file. That is why two branches adding rows for different features
+never conflict: each edits its own fragment. A row cites its spec logically, as
+`spec:<slug>#R<n>`, so archiving the spec moves nothing in the row. (A repo that still has
+the old single `docs/acceptance/matrix.yaml` is split into fragments by
+`fr migrate artifacts --yes`.)
 
 You reach for it in three situations: a repo has behaviour and nobody has written down
 what it promises (backfill); work is shipping and its claims need to move up the scale
@@ -59,8 +67,9 @@ fr acceptance set-status --id webhook-rate-limit --status ci \
     --level unit=example-repo:tests/test_limiter.py#test_rejects_over_budget
 ```
 
-One command rewrites the row in place, adds the test reference that justifies the move,
-and regenerates the three committed reports. `--notes` is required, because a status that
+One command moves the row, adds the test reference that justifies the move, and commits
+only one fragment. A row your own branch created is rewritten in place; a row an earlier
+feature already merged is amended instead (next section). `--notes` is required, because a status that
 moved for no recorded reason is the silent change the matrix forbids. An unknown id is
 refused rather than created; `add` creates.
 
@@ -74,6 +83,46 @@ fr acceptance status
 `check` verifies references resolve, finds stale rows, and exits 2 on any `failing` row.
 `status` is the terminal nag: counts by status plus the open debt, oldest first. A
 `--brief` form exists for session start.
+
+## Changing a row another feature merged
+
+Once a feature merges, its rows are history. A later feature never edits them in place:
+it appends an **amendment** to its own fragment, and the fold applies it. Every amendment
+goes to the fragment of the feature making it, never to the row owner's, so two branches
+amending the same row touch two different files, and the order they merged in decides the
+result.
+
+```bash
+fr acceptance amend --id webhook-rate-limit --op reword \
+    --acceptance "Webhooks over budget are rejected with a 429" \
+    --why "the response code is now part of the contract"
+```
+
+The five ops are `reword`, `set-status`, `add-level`, `drop-level` and `retire`.
+`set-status` on a merged row writes the same amendments for you, so the worked example
+above works either way. The fragment is your branch's feature: `--feature <spec-slug>`, or
+the spec of the run this branch carries. With neither, `set-status` refuses, as `amend`
+does: a walk recorded after the merge belongs to the feature whose gate it closes, so the
+commands fr prints for one (the walk close-out, `fr gate pass --keep`, deliver's issue
+link) name that feature's `--feature` for you. An agent's step record says the same thing with
+an `acceptance:` entry `{row, op, why, ...}`.
+
+Each amendment records the row's **revision** it was written against: how many
+amendments the row had then. If another feature amends the row and merges first, your
+amendment's base is stale. `fr acceptance check` and `deliver` fetch the default branch
+and refuse it (exit 2), naming both revisions. When the fetch fails but the checkout
+already holds the default branch (a CI job that checked out full history without
+credentials, a laptop offline), the check reads that local ref and prints which one,
+`default ref: the local ref origin/main at <sha> (fetch failed)`; with no local copy,
+CI refuses. Look at what the other feature changed, then run
+`fr acceptance amend --rebase`. A stale amendment that merges anyway still applies, but
+it marks the row **contested**: debt in `fr acceptance status` and `fr debt`, whatever
+its status, until the next amendment at the row's current revision settles it. Retired
+rows keep the same rule. A stale amendment that names a row another feature has since
+retired, or a stale `retire` itself, is the same debt: the row stays listed, shown as
+`retired, contested`, though it has left the matrix, until an amendment at its current
+revision settles it. Amendments that land in one commit (a merge commit, a squash) apply
+in order of their base, so a branch's own sequence on one row applies as written.
 
 ## Backfilling a repo that has no matrix
 
@@ -143,11 +192,31 @@ steers a second session in a neighbouring terminal. The rules that matter:
 
 ## Reports and the gate
 
-`fr acceptance report --deterministic` writes the three committed renderings: a local-link
-HTML page, a GitHub-linked HTML page, and a GitHub-linked Markdown page that github.com
-renders inline. `fr acceptance report --check` verifies they are current; `check` fails on a
-stale one. CI runs the gate on every pull request and push to the default branch and keeps
-a weekly "Acceptance debt" issue up to date from `fr acceptance digest`.
+Reports are derived from the fold and never committed: `fr acceptance report --open`
+renders one locally whenever you want to look (it writes `docs/acceptance/report.html`,
+which git ignores, and `--format md` writes Markdown). `fr acceptance check` fails if a
+report file is ever tracked, because a committed copy is a second source that drifts.
+
+CI publishes the same render where people already look. Every pull request gets the
+summary in its job (GitHub and Gitea Actions) or an exposed artifact (GitLab CI). The HTML
+goes to Pages from the default branch, but only where the site can be no more visible than
+the repo: the repo is public, or the forge reports the Pages site as access-controlled.
+`fr acceptance pages-check` makes that call and fails closed: Gitea, a missing token or
+any failed read means no Pages job, and the README badge points at the latest CI run
+instead. The scaffolded job asks again before every deploy and, when the answer is no, fails the
+job with an error that says how to unpublish. The re-check stops new deploys but cannot
+unpublish a site that is already live, so a repo that later turns private keeps its
+published site until you delete it by hand (GitHub: the Pages site in the repo settings, or
+`DELETE /repos/{owner}/{repo}/pages` as an admin; GitLab: remove Pages in the project
+settings). The job exists only where Pages were allowed at init, so a refusal means the
+visibility changed and should be loud. On GitLab the job reads the forge with a masked CI
+variable `FR_PAGES_TOKEN` (`read_api` scope) you create yourself; a self-managed host also
+needs `glab` authenticated in the image. With
+`forge.report_comment: on` (and comments on) CI also keeps one PR comment with the Markdown
+report, found by its marker and edited in place only when this identity wrote it.
+
+CI runs the gate on every pull request and push to the default branch and keeps a weekly
+"Acceptance debt" issue up to date from `fr acceptance digest`.
 
 ## Limits
 

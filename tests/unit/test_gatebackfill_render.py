@@ -72,7 +72,10 @@ def test_na_prints_the_command_of_its_kind_and_needs_a_note(tmp_path: Path) -> N
         "--step 1 --na --reason moot --supersede"
     ]
     row_cmd, _ = decision_commands(_e("row:a", "na", note="manual by nature"), repo)
-    assert row_cmd == ["fr acceptance set-status --id a --status manual --notes 'manual by nature'"]
+    assert row_cmd == [
+        "fr acceptance set-status --id a --status manual --notes 'manual by nature' "
+        "--feature <spec-slug>"
+    ]
 
     _, refusal = decision_commands(_e("row:a", "na"), repo)
     assert refusal is not None and "needs a note" in refusal
@@ -131,11 +134,12 @@ def test_p1_r2_a_spec_tick_is_refused_with_the_command_that_records_it_ran(
     )
 
 
-def test_tracked_rows_print_the_link_only_form() -> None:
+def test_tracked_rows_print_the_link_only_form(tmp_path: Path) -> None:
     from fr.gatebackfill.model import TrackerInfo
     from fr.gatebackfill.render import tracked_rows
 
     e = PlanEntry(key="row:widget-live", tracker=TrackerInfo(ref="example-org/widgets#7"))
-    assert tracked_rows([e]) == [
-        "fr acceptance set-status --id widget-live --issue 'example-org/widgets#7'"
+    assert tracked_rows([e], tmp_path) == [
+        "fr acceptance set-status --id widget-live --issue 'example-org/widgets#7' "
+        "--feature <spec-slug>"
     ]

@@ -9,7 +9,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPEC=docs/superpowers/specs/2026-10-14-toy.md
 RUN=r1
 mkdir -p docs/superpowers/specs docs/superpowers/runs docs/acceptance
-cat > docs/acceptance/matrix.yaml <<'YAML'
+matrix_fragment <<'YAML'
 schema_version: 5
 org: derio-net
 repo: toy

@@ -163,7 +163,22 @@ def parse_requirements(spec_text: str) -> Requirements:
 def origin_fragment(origin: str, spec_ref: str) -> str | None:
     """The fragment (`""` for none) of `origin` when it names the spec
     `spec_ref` (`<repo>:<spec-path>`), else `None`. Twin-aware, so a citation
-    survives `fr archive`."""
+    survives `fr archive`; a logical `spec:<slug>[#R<n>]` origin (spec 2026-11-04
+    R18) names the spec whose slug it carries, live or archived."""
+    from fr.acceptance.logical import SPEC_DIRS, is_logical, parse_logical
+
+    if is_logical(origin):
+        try:
+            logical = parse_logical(origin)
+        except AcceptanceError:
+            return None
+        from fr.acceptance.fragment import fragment_slug_for_spec
+
+        ref_path = spec_ref.partition(":")[2]
+        in_specs = any(ref_path.startswith(d) and "/" not in ref_path[len(d) :] for d in SPEC_DIRS)
+        if logical.kind == "spec" and in_specs and fragment_slug_for_spec(ref_path) == logical.slug:
+            return logical.anchor
+        return None
     try:
         repo, path, frag = split_ref(origin)
     except AcceptanceError:
@@ -213,10 +228,8 @@ def load_spec_matrix(repo_root: Path, spec_rel: str) -> tuple[Matrix, str]:
     """The acceptance matrix (empty when the repo has none) and `spec_rel`'s
     `<repo>:<spec-path>` ref — or `AcceptanceError`."""
     from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import load_matrix
-    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.acceptance.fold import load_effective
 
-    path = repo_root / MATRIX_REL
-    matrix = load_matrix(path) if path.exists() else Matrix()
+    matrix = load_effective(repo_root)
     _, repo = resolve_identity(matrix, repo_root)
     return matrix, f"{repo}:{spec_rel}"

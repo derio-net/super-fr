@@ -70,7 +70,7 @@ _PLACEHOLDER = re.compile(r"<[^<>]+>")
 _FLAG_VALUES = {
     "--walk": "walk.log", "--harness": "claude-code", "--model": "model-x",
     "--strategy": "live", "--notes": "ran it", "--note": "ran it", "--evidence": "ran it",
-    "--reason": "not applicable", "--id": "r-live", "--spec": SPEC_FILE,
+    "--reason": "not applicable", "--id": "r-live", "--spec": SPEC_FILE, "--feature": SPEC,
 }  # fmt: skip
 
 

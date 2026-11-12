@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.acceptance.model import Matrix, Row, Visual
 from fr.verification.rows import SpecVerification, spec_verification
 
@@ -152,12 +153,11 @@ def _set_status(*args: str):
 
 
 def test_set_status_accepts_a_resolving_strategy(matrix_repo: Path) -> None:
-    from fr.acceptance.model import load_matrix
 
     out = _set_status("--verify", "live")
 
     assert out.exit_code == 0, out.output
-    matrix = load_matrix(matrix_repo / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(matrix_repo)
     assert next(r for r in matrix.rows if r.id == "target").verify == "live"
 
 

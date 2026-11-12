@@ -1,0 +1,87 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-06-cost-evidence
+repo: derio-net/super-fr
+rows:
+  - id: cost-evidence-unit-attribution
+    capability: usage
+    acceptance: A run's usage capture records main vs subagent figures per step and
+      executor/reviewer/orchestrator figures per cursor unit, with tokens always and
+      dollars only where priced
+    origin:
+    - spec:2026-10-06-cost-evidence#R1
+    - spec:2026-10-06-cost-evidence#R2
+    - spec:2026-10-06-cost-evidence#R3
+    - spec:2026-10-06-cost-evidence#R4
+    - spec:2026-10-06-cost-evidence#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_split.py#test_steps_by_role_sum_back_to_each_step_priced
+      - super-fr:tests/unit/test_usage_split.py#test_subagent_messages_go_to_executor_reviewer_and_flat_agent_roles
+      - super-fr:tests/unit/test_usage_split.py#test_each_unit_role_dollars_are_the_sum_of_its_messages_dollars
+    status: ci
+    notes: 'Unit-pinned by this PR (batch cost-evidence phase 1): role/step split invariants,
+      real-nesting unit attribution, per-unit dollars.'
+  - id: cost-evidence-usage-v2-migration
+    capability: usage
+    acceptance: A version-1 usage file migrates to version 2 by stamp and validates,
+      its split read as not observed
+    origin:
+    - spec:2026-10-06-cost-evidence#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_usage_split_v2.py#test_a_v1_file_is_stamped_two_and_its_body_is_untouched
+      - super-fr:tests/unit/test_migration_usage_split_v2.py#test_an_unparseable_body_is_refused_and_left_byte_identical
+      - super-fr:tests/unit/test_migration_usage_split_v2.py#test_a_fresh_file_is_born_stamped_with_the_current_version
+    status: ci
+    notes: 'Unit-pinned by this PR: 1->2 stamp-only migration, refusal of an unparseable
+      body, fresh files born at 2.'
+  - id: cost-evidence-usage-compare
+    capability: usage
+    acceptance: fr usage compare reports two sets of runs side by side (phases, turns,
+      tokens, priced dollars, findings per phase, re-opens) with medians and sample
+      sizes, read-only
+    origin:
+    - spec:2026-10-06-cost-evidence#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_compare.py#test_cli_prints_two_tables_deterministically_and_writes_nothing
+      - super-fr:tests/unit/test_usage_compare.py#test_set_summary_takes_medians_and_counts_priced
+      - super-fr:tests/unit/test_usage_compare.py#test_steps_use_the_v2_main_split_where_it_exists
+      - super-fr:tests/unit/test_usage_compare.py#test_a_session_shared_by_two_runs_of_a_set_is_marked
+    status: ci
+    notes: 'R10: --steps, shared-session marker, plan-folder phases and phaseless findings
+      pinned (phase 3 review fixes)'
+  - id: cost-evidence-bound-model
+    capability: run
+    acceptance: A dispatched attempt keeps the tier and the model bound at dispatch
+      beside the model that ran; resolve never overwrites them
+    origin:
+    - spec:2026-10-06-cost-evidence#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_executor_model.py#test_advance_records_tier_and_binding_and_leaves_model_unset
+      - super-fr:tests/unit/test_run_observed_executor_model.py#test_a_new_attempt_warns_against_bound_not_model
+    status: ci
+    notes: 'Unit-pinned by this PR (phase 2): advance records tier/bound on subagent
+      attempts, resolve keeps them and records what ran.'
+  - id: cost-evidence-phase-table
+    capability: run
+    acceptance: fr run cost and the rendered PR body show per phase its tier, bound
+      model, model that ran (mismatch marked) and executor/reviewer/orchestrator figures
+    origin:
+    - spec:2026-10-06-cost-evidence#R8
+    - spec:2026-10-06-cost-evidence#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cost_phases.py#test_the_command_prints_the_role_split_and_the_phase_table
+      - super-fr:tests/unit/test_pr_body_cost.py#test_the_cost_section_carries_the_per_phase_table
+      - super-fr:tests/unit/test_pr_body_cost.py#test_the_phase_markdown_marks_a_mismatch
+    status: ci
+    notes: 'Unit-pinned by this PR (phase 2): fr run cost and the PR body render the
+      per-phase table; the live post-merge run (verify: live) is still owed.'
+    verify: live

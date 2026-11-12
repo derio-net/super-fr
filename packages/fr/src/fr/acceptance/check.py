@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import subprocess
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -83,8 +84,9 @@ def resolve_identity(matrix: Matrix, root: Path) -> tuple[str, str]:
     if m:
         return matrix.org or m.group(1), matrix.repo or m.group(2)
     raise AcceptanceError(
-        "cannot resolve repo identity: set top-level `org:` and `repo:` keys "
-        "in matrix.yaml (fr acceptance init writes them) or add a github origin remote"
+        "cannot resolve repo identity: write a fragment under docs/acceptance/features/ "
+        "(each carries `repo: <org>/<repo>`; `fr acceptance add --repo` writes the first) "
+        "or add a github origin remote"
     )
 
 
@@ -103,14 +105,20 @@ def _age_key(row: Row) -> str:
     return min(dates, default="")
 
 
-def open_rows(matrix: Matrix) -> list[Row]:
-    """The nag set: the `DEBT_STATUSES` rows, oldest origin first.
+def open_rows(
+    matrix: Matrix, contested: frozenset[str] = frozenset(), retired: Sequence[Row] = ()
+) -> list[Row]:
+    """The nag set: the debt rows (`is_debt`: a `DEBT_STATUSES` status, or one of
+    the fold's *contested* rows), oldest origin first. A *retired* row a merged
+    amendment still names is contested too (plan journal `fold-merged-stale-targets`),
+    and debt like any other: it is listed although it left the matrix.
 
     The sort is stable, so rows of the same age keep their matrix order.
     """
-    from fr.acceptance.model import DEBT_STATUSES
+    from fr.acceptance.model import is_debt
 
-    opens = [r for r in matrix.rows if r.status in DEBT_STATUSES]
+    opens = [r for r in matrix.rows if is_debt(r.status, contested=r.id in contested)]
+    opens += [r for r in retired if r.id in contested]
     return sorted(opens, key=_age_key)
 
 
@@ -139,17 +147,40 @@ def _sibling_base(root: Path, sibling_root: str, repo: str) -> Path | None:
     return base if (base / ".git").exists() else None
 
 
+def archived_counterpart(path: str) -> str | None:
+    """Where `fr archive` moves `path`, or None (review p2-r5).
+
+    Refs are not retargeted at archive time any more (spec 2026-11-04 R18), so a
+    path ref into `docs/superpowers/{specs,journals,plans}/` is resolved at READ
+    time against its archived twin. The mapping is the archive's own, not
+    restated: `archive_twin` for specs and journals (derived from
+    `fr.journal.model`), and the plan roots `fr archive` moves between
+    (`fr.archive.PLANS_REL` → `fr.closeout.IMPLEMENTED_PLANS_REL`)."""
+    twin = archive_twin(path)
+    if twin is not None:
+        return twin
+    from fr.archive import PLANS_REL
+    from fr.closeout import IMPLEMENTED_PLANS_REL
+
+    live, done = f"{PLANS_REL.as_posix()}/", f"{IMPLEMENTED_PLANS_REL.as_posix()}/"
+    if path.startswith(live):
+        return done + path[len(live) :]
+    if path.startswith(done):
+        return live + path[len(done) :]
+    return None
+
+
 def _resolve_ref(row_id: str, ref: str, base: Path, result: CheckResult) -> None:
     _, path, frag = split_ref(ref)  # fragment stripped for existence (trap 3)
     if (base / path).exists():
         if frag and is_python(path):
             _check_python_anchor(row_id, ref, base / path, result)
         return
-    twin = archive_twin(path)
+    twin = archived_counterpart(path)
     if twin and (base / twin).exists():
         result.warnings.append(
-            f"row {row_id}: {ref} names an archived path (now {twin}) — it "
-            f"survived an archive fr did not perform; retarget it"
+            f"row {row_id}: {ref} names an archived path, resolved at {twin} — "
+            "refs are read through the archive, so nothing needs to change"
         )
         return
     result.errors.append(f"row {row_id}: ref does not resolve: {ref}")
@@ -225,11 +256,13 @@ def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[st
     globs = pr.get("paths") or []
     if not globs:
         return []
+    from fr.acceptance.logical import as_path_ref
+
     uncovered: list[str] = []
     for r in matrix.rows:
         for ref in r.refs():
             try:
-                repo, path, _ = split_ref(ref)
+                repo, path, _ = split_ref(as_path_ref(ref, root, own))
             except AcceptanceError:
                 continue
             if not same_repo(repo, own):
@@ -249,8 +282,16 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     missing_repos: set[str] = set()
     case_only: set[str] = set()
 
+    from fr.acceptance.logical import candidates, is_logical, parse_logical, resolution_problem
+
     for r in matrix.rows:
         for ref in r.refs():
+            if is_logical(ref):
+                # R18: `spec:<slug>` / `plan:<slug>` name this repo's artifacts.
+                problem = resolution_problem(ref, root)
+                if problem is not None:
+                    result.errors.append(f"row {r.id}: ref does not resolve: {problem}")
+                continue
             try:
                 repo, _, _ = split_ref(ref)
             except AcceptanceError as e:
@@ -281,6 +322,12 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     referenced: set[str] = set()
     for r in matrix.rows:
         for ref in r.origin:
+            if is_logical(ref):
+                try:
+                    referenced.update(candidates(parse_logical(ref)))
+                except AcceptanceError:
+                    pass  # already reported above
+                continue
             try:
                 repo, path, _ = split_ref(ref)
             except AcceptanceError:
@@ -311,28 +358,15 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
 
     result.warnings.extend(_workflow_coverage_warnings(matrix, root, own))
 
-    # Report-set sync (the "every fr-acceptance repo, the moment it touches the
-    # matrix" gate): if the repo has committed ANY report from the set, then
-    # ALL must exist AND match a fresh deterministic render. Existence-gated so
-    # report-less matrices / bare fixtures are untouched. Read-only — renders in
-    # memory, compares bytes. An unresolvable identity can't render, so it is
-    # skipped here (the render CLIs surface that separately).
-    from fr.acceptance.report import render_committed_set, tracked_reports
+    # Reports are derived from the fold, never committed (spec 2026-11-04 R20): a
+    # tracked one is a second copy that drifts, so it is refused, naming the file.
+    from fr.acceptance.report import tracked_report_paths
 
-    tracked = tracked_reports(root)  # CI-built (gitignored) reports are never compared
-    if any((root / rel).exists() for rel in tracked):
-        try:
-            expected_reports = render_committed_set(matrix, root, only=tracked)
-        except AcceptanceError:
-            expected_reports = {}
-        for rel, want in expected_reports.items():
-            report_path = root / rel
-            got = report_path.read_text() if report_path.exists() else None
-            if got != want:
-                result.errors.append(
-                    f"report drift: {rel} is missing or stale vs docs/acceptance/matrix.yaml — "
-                    "run `fr acceptance report --deterministic` and commit the report set"
-                )
+    for rel in tracked_report_paths(root):
+        result.errors.append(
+            f"reports are derived; remove {rel} (`git rm {rel}`) — "
+            "render one locally with `fr acceptance report`"
+        )
 
     from fr.acceptance.model import walked_error
 

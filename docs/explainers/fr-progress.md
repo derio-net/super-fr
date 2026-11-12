@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-12 repo-feature-settings, archive and status gate on settings; the defaults this page describes are unchanged
+reviewed: 2026-11-12 acceptance-fragments phase 2, archive no longer retargets acceptance rows, which cite specs logically
 ---
 
 ## Overview: nothing to sync
@@ -112,7 +112,8 @@ wants every phase complete: a dispatched phase by evidence on GitHub, an agentic
 fully ticked and on the default branch, a manual one ticked locally. `--force` overrides
 for one plan. The owning spec follows once all its rows are implemented. The moves are
 staged, not committed, so you commit them. `--branch <merged-branch>` archives everything
-that branch added, and prints `held:` for anything not yet ready.
+that branch added, and prints `held:` for anything not yet ready. Acceptance rows are not
+touched: they cite a spec as `spec:<slug>`, which names it in either place.
 
 ## Limits
 

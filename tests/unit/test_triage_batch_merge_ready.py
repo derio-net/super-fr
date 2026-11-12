@@ -313,17 +313,17 @@ def test_a_routine_commit_touching_a_file_the_pr_changed_still_updates(
     assert merge_ready(ctx, slot, None).outcome == "updated"
 
 
-def test_an_archive_merge_updates_a_pr_that_changes_the_acceptance_matrix(
+def test_an_archive_merge_no_longer_holds_a_pr_that_changes_an_acceptance_fragment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """gh#937: the matrix cites specs and plans by path, and an archive merge moves
-    them. No path overlaps, yet the PR's refs may now dangle: its CI must re-run."""
+    """gh#937 was the retired matrix's path refs, which an archive merge moved. Rows
+    cite specs and plans logically now (spec 2026-11-04 R18), so an archive dangles no
+    ref: the PR stays routine-mergeable."""
     forge, checkout = _unversioned(tmp_path, monkeypatch)
     checkout.base_commits["head-solo"] = (ARCHIVE,)
-    checkout.pr_paths["head-solo"] = frozenset({"docs/acceptance/matrix.yaml"})
+    checkout.pr_paths["head-solo"] = frozenset({"docs/acceptance/features/f.yaml"})
     ctx, (slot,) = _ctx(tmp_path, forge, checkout)
-    assert merge_ready(ctx, slot, None).outcome == "updated"
-    assert forge.merged == []
+    assert merge_ready(ctx, slot, None).outcome == "merged"
 
 
 def test_a_release_commit_alone_still_merges_a_pr_that_changes_the_matrix(

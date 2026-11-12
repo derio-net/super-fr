@@ -188,6 +188,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
     on_disk = {p.stem for p in SCENARIOS.glob("*.sh") if not p.name.startswith("_")}
     here = {
         "triage-closed-recovery",
+        "acceptance-reports-derived-published",
         "herdr-closed-recovery-live",
         "verification-strategy-resolution",
         "shipped-verification-strategies",
@@ -249,6 +250,9 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "docs-check-flags-uncovered-change",
         "docs-check-structure",
         "docs-check-default-base-readonly",
+        "acceptance-effective-matrix-fold",
+        "acceptance-matrix-migration",
+        "acceptance-fragments-amendments",
     }
     assert on_disk == here
 
@@ -475,3 +479,19 @@ def test_docs_check_structure(installed: Path, tmp_path: Path) -> None:
 
 def test_docs_check_default_base_readonly(installed: Path, tmp_path: Path) -> None:
     _scenario("docs-check-default-base-readonly", installed, tmp_path)
+
+
+def test_acceptance_effective_matrix_fold(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-effective-matrix-fold", installed, tmp_path)
+
+
+def test_acceptance_matrix_migration(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-matrix-migration", installed, tmp_path)
+
+
+def test_acceptance_fragments_amendments(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-fragments-amendments", installed, tmp_path)
+
+
+def test_acceptance_reports_derived_published(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-reports-derived-published", installed, tmp_path)

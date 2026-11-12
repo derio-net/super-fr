@@ -78,7 +78,8 @@ number). The renderer / observer / diff / apply chain depends on this shape.
   header. `fr plan self-review` errors when the spec has a Test Plan but zero linked rows (matrix
   present) and on unknown ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when
   decomposition exposes a missed business acceptance — flagged as an addition, defended at PR time,
-  never ironed over. The phase that builds the UI links the row carrying `visual` too, so fr-execute's browser check knows what to capture. Read `fr settings show --json` first: under `artifacts.acceptance: off` there are no rows, so no `acceptance:` lists and no `fr acceptance add` (it refuses).
+  never ironed over. A phase that changes a row an earlier feature merged says so: that row
+  changes only by amendment (`fr acceptance amend`, see `fr-acceptance`). The phase that builds the UI links the row carrying `visual` too, so fr-execute's browser check knows what to capture. Read `fr settings show --json` first: under `artifacts.acceptance: off` there are no rows, so no `acceptance:` lists and no `fr acceptance add` (it refuses).
 - **Tier:** every agentic phase declares `tier: mechanical | standard | hard` (`fr.types.PHASE_TIERS`;
   manual phases don't — never dispatched). fr-goal resolves it via `fr models resolve`; omit it and
   dispatch is untiered, inheriting the session model — self-review warns when missing.

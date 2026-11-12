@@ -443,6 +443,15 @@ def _has_tracker(repo_root: Path) -> bool:
     return all(forge_allows(repo_root, k, lenient=True) for k in ("issues", "labels"))
 
 
+def _feature_flag(repo_root: Path, row_id: str, state: RunState) -> str:
+    """`--feature <the run's spec slug>`: a leftover's link may run after the merge, with
+    no run on the branch, and R16 writes it to this feature's fragment."""
+    from fr.acceptance.amend import feature_flag
+    from fr.requirements import run_spec
+
+    return feature_flag(repo_root, row_id, spec=run_spec(state))
+
+
 def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Leftover]:
     """R9's unaccounted leftovers, in journal then matrix order. Each kind has
     its own accounting rule:
@@ -502,7 +511,8 @@ def unaccounted(repo_root: Path, state: RunState, exit: Exit | None) -> list[Lef
         )
         issue = (
             f"fr acceptance set-status --id {row.id} --status {row.status} "
-            '--issue <owner/repo#n> --notes "<where the rest is tracked>"'
+            '--issue <owner/repo#n> --notes "<where the rest is tracked>" '
+            + _feature_flag(repo_root, row.id, state)
         )
         fix = f"{gate}  — or —  {issue}" if tracker else gate
         out.append(Leftover("row", row.id, f"{row.status}, neither gated nor tracked", fix))
@@ -679,14 +689,15 @@ def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
     if disabled(repo_root, "acceptance"):
         return disabled_because("acceptance", "no acceptance rows") + "."
 
+    from fr.acceptance.amend import feature_flag
+    from fr.acceptance.fold import has_fragments
     from fr.acceptance.model import AcceptanceError
-    from fr.commands.acceptance_cmd import MATRIX_REL
     from fr.requirements import load_spec_matrix, run_spec
     from fr.verification.rows import shape_default, spec_verification
     from fr.verification.spec_section import SectionError
 
     spec_rel = run_spec(state)
-    if spec_rel is None or not (repo_root / MATRIX_REL).is_file():
+    if spec_rel is None or not has_fragments(repo_root):
         return "None."
     try:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
@@ -698,7 +709,8 @@ def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
         return "None."
     lines.append(
         "- [ ] Ready: the walk above is run and recorded (`fr acceptance set-status "
-        "--walk <log> --harness <h> --model <m> --strategy <s> --notes ...`)"
+        "--walk <log> --harness <h> --model <m> --strategy <s> --notes ... "
+        f"{feature_flag(repo_root, spec=spec_rel)}`)"
     )
     return "\n".join(lines)
 
@@ -748,14 +760,14 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     if disabled(repo_root, "acceptance"):
         return disabled_because("acceptance", "no acceptance rows") + "."
 
+    from fr.acceptance.fold import has_fragments
     from fr.acceptance.model import AcceptanceError
-    from fr.commands.acceptance_cmd import MATRIX_REL
     from fr.requirements import load_spec_matrix, run_spec
     from fr.verification.rows import shape_default, spec_verification
     from fr.verification.spec_section import SectionError
 
     spec_rel = run_spec(state)
-    if spec_rel is None or not (repo_root / MATRIX_REL).is_file():
+    if spec_rel is None or not has_fragments(repo_root):
         return "None."
     try:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)

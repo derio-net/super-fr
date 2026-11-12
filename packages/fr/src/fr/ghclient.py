@@ -540,6 +540,13 @@ class GhClient(Protocol):
         when it cannot be read: the privacy guard refuses on an unreadable answer."""
         ...
 
+    def pages_visibility(self, repo: str) -> str:
+        """Who can read *repo*'s Pages site, as the forge reports it: `controlled` (only
+        people who can read the repo), `public` (anyone) or `unknown` (no site, a backend
+        that cannot ask, a failed read or an unexpected shape). Never raises: the Pages
+        decision fails closed on `unknown` (spec 2026-11-04-repo-feature-settings R21)."""
+        ...
+
 
 class UnsupportedBatchOps:
     """The §3.J batch operations, each declared unsupported for `backend`.
@@ -694,3 +701,6 @@ class UnsupportedBatchOps:
 
     def repo_visibility(self, repo: str) -> str:
         raise self._unsupported("repo_visibility")
+
+    def pages_visibility(self, repo: str) -> str:
+        return "unknown"  # a backend with no route for it (Gitea): fail closed

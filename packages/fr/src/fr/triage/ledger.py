@@ -28,12 +28,13 @@ from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 
 EXIT_INPUTS = (
-    "docs/acceptance/matrix.yaml",
+    "docs/acceptance/features",
     ".fr",
     "docs/superpowers/verifications",
     "docs/superpowers/workflows",
 )
-"""What `run_exit` reads besides the spec and the run's plan: the matrix, the remap and the
+"""What `run_exit` reads besides the spec and the run's plan: the acceptance fragments
+(folded in memory in the snapshot, spec 2026-11-04 R17), the remap and the
 install contract (`.fr/`), and the repo's own strategy and workflow manifests. The plan
 dir (live and archived) is added per run, so the fr-ops R13 promotion reads its ops."""
 

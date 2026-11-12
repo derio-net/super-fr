@@ -15,7 +15,7 @@ covers:
   - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-12 front page is rendered by the build itself; every page has a top bar
+reviewed: 2026-11-12 front page is rendered by the build itself; every page has a top bar; pages.yml's acceptance-fragments visibility gate is still true for this page
 ---
 
 # Docs currency: keeping pages true to the code

@@ -69,6 +69,24 @@ def test_report_comment_needs_comments(repo: Path) -> None:
     assert [p.id for p in check_settings(repo)] == ["report-comment-needs-comments"]
 
 
+@pytest.mark.parametrize("placement", ["quiet", "stealth"])
+def test_report_comment_is_refused_outside_the_repo_placement(
+    tmp_path: Path, placement: str
+) -> None:
+    """R22: dormant data until a quiet/stealth placement can be served (plan 3) — the
+    predicate is exercised on a Settings value, since the loader refuses the placement."""
+    from fr.settings.check import RULES
+    from fr.settings.model import Settings
+
+    settings = Settings.model_validate({"placement": placement, "forge": {"report_comment": "on"}})
+    (rule,) = [r for r in RULES if r[0] == "report-comment-needs-repo-placement"]
+    assert rule[1](tmp_path, settings) == ("forge.report_comment",)
+    assert "quiet" in rule[2] and "stealth" in rule[2]
+    ok = Settings.model_validate({"placement": placement})
+    assert rule[1](tmp_path, ok) == ()
+    assert rule[1](tmp_path, Settings.model_validate({"forge": {"report_comment": "on"}})) == ()
+
+
 def test_a_bad_file_raises_rather_than_listing(repo: Path) -> None:
     _land_on_main(repo, "nope: 1\n")
     with pytest.raises(SettingsError):

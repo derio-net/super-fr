@@ -1,0 +1,21 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-06-08-bridge-dedicated-checkout-self-healing-sync
+repo: derio-net/super-fr
+rows:
+  - id: bridge-checkout-self-heal
+    capability: Bridge
+    acceptance: A desynced bridge checkout self-heals to origin/main, pushes the desync
+      metric, and dispatch resumes
+    origin:
+    - spec:2026-06-08-bridge-dedicated-checkout-self-healing-sync
+    levels:
+      unit:
+      - super-fr:tests/unit/test_bridge_checkout.py
+      - super-fr:tests/unit/test_bridge_metrics.py
+    status: ci
+    notes: Live cluster assert done at the 2026-06-08 deploy; sync logic pinned per-PR.

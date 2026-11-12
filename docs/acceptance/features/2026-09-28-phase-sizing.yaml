@@ -1,0 +1,82 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-28-phase-sizing
+repo: derio-net/super-fr
+rows:
+  - id: phase-sizing-ask-floor
+    capability: fr-goal-methodology
+    acceptance: fr plan self-review fails a plan with an agentic phase that serves no
+      ask of its own (including a standalone walking skeleton), unless a recorded split
+      decision explains it
+    origin:
+    - spec:2026-09-28-phase-sizing#R1
+    - spec:2026-09-28-phase-sizing#R2
+    - spec:2026-09-28-phase-sizing#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_phase_sizing.py
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+    status: ci
+    notes: 'Phase 1 (spec §A/§B, R2/R6): fr.phase_sizing derives each agentic phase''s
+      own asks through its rows; fr plan self-review errors on a phase serving no ask
+      of its own, including the #745 standalone skeleton, unless a tier:/risk-first:/review-size:
+      split decision waives it (CLI exit covered).'
+  - id: phase-sizing-split-reason
+    capability: fr-goal-methodology
+    acceptance: fr plan self-review fails a plan whose agentic phases after the first
+      carry no recorded split reason
+    origin:
+    - spec:2026-09-28-phase-sizing#R1
+    - spec:2026-09-28-phase-sizing#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+    status: ci
+    notes: 'Phase 1 (spec §B, R3): self-review errors on each agentic phase after the
+      first with no phase-split-<plan>-p<N> decision, and on a malformed reason prefix;
+      the folded two-ask plan passes with an ask: decision.'
+  - id: phase-sizing-proportionality
+    capability: fr-goal-methodology
+    acceptance: fr plan proportionality reports agentic phases against the asks they
+      serve and names each phase with no ask of its own, without blocking
+    origin:
+    - spec:2026-09-28-phase-sizing#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_proportionality.py
+    status: ci
+    notes: 'Phase 1 (spec §D, R4): fr plan proportionality gains a ## Phases section,
+      read from HEAD only, counting agentic phases against the requirements they serve
+      and naming each phase with no own ask; report-only, exit 0.'
+  - id: phase-sizing-manual-verification
+    capability: fr-goal-methodology
+    acceptance: 'An operator verification step is steered to a Test Plan line: self-review
+      warns on a single-step trailing manual phase and fr-plan says so'
+    origin:
+    - spec:2026-09-28-phase-sizing#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+      - super-fr:tests/unit/test_fr_plan_sizing_prose.py
+    status: ci
+    notes: 'Phase 1 (spec §C/§E, R5): self-review warns on a single-step trailing manual
+      phase; fr-plan and fr-goal say a verification step is a Test Plan line or verify:
+      post-merge row.'
+  - id: phase-sizing-plan-guidance
+    capability: fr-goal-methodology
+    acceptance: fr-plan's guidance sizes phases to asks, no longer asks for 4-6 phases,
+      and keeps steps bite-sized within a phase
+    origin:
+    - spec:2026-09-28-phase-sizing#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_plan_sizing_prose.py
+      - super-fr:tests/unit/test_skill_tokens.py
+    status: ci
+    notes: 'Phase 1 (spec §E, R7): fr-plan drops ''Prefer 4–6 phases'', states one agentic
+      phase per independently reviewable ask with recorded split reasons, and keeps
+      steps bite-sized per spec design section.'

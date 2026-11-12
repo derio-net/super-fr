@@ -1,0 +1,42 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-27-triage-batch-launch
+repo: derio-net/super-fr
+rows:
+  - id: triage-batch-session-model
+    capability: Backlog triage
+    acceptance: 'An operator can dispatch a batch without giving a model: the run''s
+      session starts on the orchestrator binding of the target harness, and the brief
+      never pins subagent models, so every phase executor and reviewer runs on its configured
+      fr models tier'
+    origin:
+    - spec:2026-09-27-triage-batch-launch#a-the-session-model-704
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_verbs.py
+      - super-fr:tests/unit/test_triage_batch_dispatch.py
+    status: ci
+    notes: resolve_launch now consults the orchestrator binding (fr models, repo-over-user)
+      as its third rung, and the two triage-batch test files exercise batch/defaults/orchestrator
+      precedence, the harness alias, the refusal message, and the dispatch command's
+      repo-checkout override.
+  - id: triage-batch-debug-skill
+    capability: Backlog triage
+    acceptance: An operator can declare a batch of bugs as skill debug, and its dispatch
+      starts /fr-debugging on a fix/batch-<id> branch with fr-debugging's two hard stops
+      stated, warning at create/edit when the members do not share one theme
+    origin:
+    - spec:2026-09-27-triage-batch-launch#b-a-batch-declares-its-skill-687
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_model.py
+      - super-fr:tests/unit/test_triage_batch_dispatch.py
+      - super-fr:tests/unit/test_triage_batch_verbs.py
+    status: ci
+    notes: Batch.skill (goal|debug), batch_branch/batch_workflow, the debug brief's
+      fix/batch-<id> branch and Debugging rules block, --skill on create/edit, and mixed_themes'
+      create/edit warning are exercised by the model, dispatch and verbs test files.

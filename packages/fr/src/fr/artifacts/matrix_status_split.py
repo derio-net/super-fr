@@ -22,14 +22,16 @@ applies:
    decides; no spec or shape default is consulted. A name that does not
    resolve refuses the whole matrix, byte-identical.
 3. **Line surgery, built in memory, written once.** Only the `status:` lines of
-   `skipped` rows change. The result must read as the live v5 `Matrix` with
-   exactly the expected statuses, and the committed reports are rendered from
-   it, all before `write_text_atomic` runs. A body no line rewrite can convert
+   `skipped` rows change. The result must read as the frozen `MatrixV5` with
+   exactly the expected statuses, before `write_text_atomic` runs. No committed
+   report is rendered: the 5 -> 6 hop deletes them all (review p2-r1). A body
+   no line rewrite can convert
    safely (a flow-style row) is left byte-identical and reported as that one
    artifact's failure.
 4. **The crash window.** A body that already reads as v5 under a v4 stamp (the
-   rewrite landed, the stamp did not) is not rewritten — the one legitimate use
-   of the live model here — but its reports are still brought in line.
+   rewrite landed, the stamp did not) is not rewritten. "Already v5" is asked of
+   the frozen `MatrixV5` (`parse_matrix_v5_body`), never the live model: the live
+   `Matrix` is the fold's now, and only the final hop's new shape (review p2-r3).
 """
 
 from __future__ import annotations
@@ -92,12 +94,6 @@ def replace_status_comment(text: str) -> str:
 def _root(path: Path) -> Path:
     """`<root>/docs/acceptance/matrix.yaml` → `<root>` (the kind's locator)."""
     return path.parents[2]
-
-
-def _report_paths(path: Path) -> list[Path]:
-    from fr.acceptance.report import REPORT_SET
-
-    return [_root(path) / rel for rel in REPORT_SET]
 
 
 def split_status(walked: bool, verify: str | None, repo_root: Path | None) -> str:
@@ -174,11 +170,14 @@ def _rewrite_lines(text: str, targets: dict[str, str]) -> tuple[str, set[str]]:
 
 
 def split_skipped(path: Path) -> list[Path]:
-    """Rewrite `path` from v4 to v5 in place (and its committed reports), or
-    raise leaving every file untouched. Returns the reports it wrote."""
-    from fr.acceptance.legacy import MatrixV4Error, parse_matrix_v4
-    from fr.acceptance.model import AcceptanceError, parse_matrix
-    from fr.acceptance.report import render_committed_set
+    """Rewrite `path` from v4 to v5 in place, or raise leaving it untouched.
+    Writes nothing beside it, so returns no companion."""
+    from fr.acceptance.legacy import (
+        MatrixV4Error,
+        MatrixV5Error,
+        parse_matrix_v4,
+        parse_matrix_v5_body,
+    )
     from fr.verification.model import StrategyError
 
     root = _root(path)
@@ -187,9 +186,9 @@ def split_skipped(path: Path) -> list[Path]:
     except OSError as e:
         raise UnreadableMatrixError(f"{path}: cannot read: {e}") from e
     try:
-        parse_matrix(text)
+        parse_matrix_v5_body(text)
         new_text = text  # already v5 in body (crash window): only the stamp is owed
-    except AcceptanceError:
+    except MatrixV5Error:
         try:
             old = parse_matrix_v4(text)
         except MatrixV4Error as e:
@@ -214,8 +213,8 @@ def split_skipped(path: Path) -> list[Path]:
         new_text, done = _rewrite_lines(text, targets)
         expected = {r.id: targets.get(r.id, r.status) for r in old.rows}
         try:
-            got: dict[str, str] = {r.id: r.status for r in parse_matrix(new_text).rows}
-        except AcceptanceError as e:
+            got: dict[str, str] = {r.id: r.status for r in parse_matrix_v5_body(new_text).rows}
+        except MatrixV5Error as e:
             got = {"<unreadable>": str(e)}
         if done != set(targets) or got != expected:
             raise UnconvertibleMatrixError(
@@ -225,26 +224,11 @@ def split_skipped(path: Path) -> list[Path]:
                 "Left on version 4, byte-identical."
             )
     new_text = replace_status_comment(new_text)
-    # Everything is rendered before a byte moves: a render that fails leaves
-    # the matrix untouched, and the hop retries next run.
-    reports: dict[Path, str] = {}
-    if any(p.exists() for p in _report_paths(path)):
-        try:
-            rendered = render_committed_set(parse_matrix(new_text), root)
-        except AcceptanceError as e:
-            raise UnconvertibleMatrixError(
-                f"{path}: the committed reports could not be rendered ({e}). "
-                "Left on version 4, byte-identical."
-            ) from e
-        reports = {root / rel: body for rel, body in rendered.items()}
+    # No committed report is rendered (review p2-r1): the next hop (5 -> 6) deletes
+    # every one, and rendering needs the live model this hop may not read (p2-r3).
     if new_text != text:
         write_text_atomic(path, new_text)
-    wrote: list[Path] = []
-    for target, body in reports.items():
-        if not target.exists() or target.read_text() != body:
-            write_text_atomic(target, body)
-            wrote.append(target)
-    return wrote
+    return []
 
 
 MATRIX_STATUS_SPLIT_MIGRATION = SchemaMigration(
@@ -253,7 +237,6 @@ MATRIX_STATUS_SPLIT_MIGRATION = SchemaMigration(
     to_version=5,
     fn=split_skipped,
     description="matrix: `skipped` splits into unwired / walk-owed / walked (manual by hand)",
-    companions=_report_paths,
 )
 
 MIGRATIONS.register(MATRIX_STATUS_SPLIT_MIGRATION)

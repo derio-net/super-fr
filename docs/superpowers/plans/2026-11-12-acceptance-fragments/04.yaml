@@ -1,0 +1,113 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'Derived reports: report --open, CI publish, Pages behind a visibility check,
+    report_comment (R20-R22)'
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - acceptance-reports-derived-published
+  tier: standard
+  files:
+  - packages/fr/src/fr/acceptance/*
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/settings/check.py
+  - .github/workflows/acceptance-report.yml
+  - .github/workflows/pages.yml
+  - .gitignore
+  - README.md
+  - scripts/build-site.py
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - .claude/rules/acceptance-matrix.md
+  - .claude/rules/third-party-privacy.md
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/*.md
+  - docs/reference/*.md
+  - docs/acceptance/features/*
+  - tests/*
+  estimate_lines: 1400
+tasks:
+- number: 1
+  title: Reports are local and derived (R20)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_report.py — `fr acceptance report` renders the folded matrix to the git-ignored docs/acceptance/report.html (and `--format md` to report.md) and prints the path; `--open` additionally opens it through one injectable opener (never in tests); `--deterministic`/`--check` and the committed REPORT_SET are gone; `fr acceptance check` fails when any report file is tracked ("reports are derived; remove <path>"); `fr --help` names `fr acceptance report --open`. Invert tests/unit/test_tripwire_acceptance_report_sync.py into "no report is tracked".
+  - id: P4.T1.S2
+    text: |-
+      GREEN: remove render_committed_set, tracked_reports, prune_stale_reports, STALE_LEGACY_REPORTS and every writer's report regeneration (record/apply, scaffold, migrations keep their own frozen copies only where a test pins them); add --open and --format; the .gitignore lines; the epilog in fr/cli.py. Tests pass.
+- number: 2
+  title: Pages visibility, failing closed (R21)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_acceptance_pages_visibility.py — `pages_visibility(owner, repo)` on the GhClient protocol: RealGhClient and RealGhRestClient read `GET /repos/{o}/{r}/pages` (a `public: false` on a private repo is access-controlled; 404 or error is unknown), RealGlabClient reads the project's `pages_access_level` (private or enabled = access-controlled, public = not), RealTeaClient and UnsupportedBatchOps return unknown; `pages_allowed(root, client) -> (bool, reason)` is true iff the repo is public or Pages are access-controlled, false on unknown or any read error. Fixtures are captured response shapes with hosts redacted per .claude/rules/third-party-privacy.md.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: implement the readers (GitHub through fr/gh.py's request path, GitLab through glab's api route), `fr acceptance pages-check` (exit 0 allowed, 1 not, 2 usage; prints the reason) in commands/acceptance_cmd.py. Tests pass.
+- number: 3
+  title: Scaffolded CI publishes (R20, R21, R22)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: update tests/fixtures/acceptance_scaffold/{github-actions,gitea-actions,gitlab-ci}.golden and their tests: every template checks out with full history (fetch-depth: 0, GIT_DEPTH: 0 on GitLab) for the fold, runs `fr acceptance check`, writes `fr acceptance summary` to the job summary on GitHub and Gitea Actions and to an `expose_as` artifact on GitLab; when pages_allowed at scaffold time, a Pages job on the default branch renders the HTML report and runs `fr acceptance pages-check` before deploying, skipping the deploy when it fails; when not allowed, no Pages job, and init's README badge (between `<!-- fr:acceptance-badge -->` markers, idempotent, only if a README exists) points to the latest default-branch CI run instead of Pages; with forge.report_comment on (and comments on), a step upserts one marker PR comment carrying the Markdown report (`fr acceptance comment --pr <n> --yes`); settings check refuses report_comment on under quiet/stealth (a rule as data, dormant until plan 3).
+  - id: P4.T3.S2
+    text: |-
+      GREEN: implement in fr/acceptance/scaffold.py (templates, badge, pages decision through pages_allowed) and `fr acceptance comment` (one marker comment, updated in place, through the forge client; refused without --yes, under forge.comments off, and when report_comment is off). Tests pass.
+- number: 4
+  title: This repo, README, docs, scenario, row
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      GREEN: .github/workflows/acceptance-report.yml: fetch-depth 0, summary to the job summary, the report artifact; .github/workflows/pages.yml: the acceptance report renders from the fold, `fr acceptance pages-check` gates the deploy, the placeholder link no longer names report_linked.md (update tests/unit/test_pages_workflow.py); README gains a short "Viewing the acceptance report" section naming `fr acceptance report --open` and the Pages link (README stays under 200 lines: test_tripwire_readme_sync); rules (.claude/rules/acceptance-matrix.md, third-party-privacy's report rows), the fr-acceptance skill, docs/explainers/fr-acceptance.md, docs/reference/acceptance-matrix.md, docs/explainers/index.md and 01-fr-goal.md updated with new `reviewed` stamps. Run scripts/sync-opencode.py, scripts/sync-hermes.py, scripts/sync-readme.py and `uv run fr docs check --base origin/main`.
+  - id: P4.T4.S2
+    text: |-
+      GREEN: tests/scenarios/acceptance-reports-derived-published.sh: fresh repo, `fr acceptance init` with a GitHub-shaped remote and no forge token → workflow written without a Pages job (visibility unknown, fail closed) and the README badge pointing at CI runs; `fr acceptance report` writes the ignored report and git status stays clean. Add test_acceptance_reports_derived_published to tests/integration/test_scenarios.py. Then `uv run fr acceptance set-status --id acceptance-reports-derived-published --status ci --scenario tests/scenarios/acceptance-reports-derived-published.sh --level unit=super-fr:tests/unit/test_acceptance_pages_visibility.py#test_<name> --level int=super-fr:tests/integration/test_scenarios.py#test_acceptance_reports_derived_published --notes "reports derived (report --open), CI job summary/exposed artifact, Pages only where no wider than the repo, report_comment"`.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+    P4.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T07:57:44+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T07:57:45+00:00'
+    note: null
+    observed_prs: []

@@ -1,0 +1,84 @@
+name: acceptance-report
+
+# The acceptance matrix (docs/acceptance/features/*.yaml, folded) rendered + gated.
+# - `failing` rows FAIL this workflow (by design — fix or re-classify).
+# - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
+#   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - A Markdown summary is written to each Actions run (branch, PR, main) —
+#   Gitea Actions supports GITHUB_STEP_SUMMARY (aliased GITEA_STEP_SUMMARY,
+#   confirmed against Gitea's own Actions-variables docs).
+# - The built report is uploaded as an artifact.
+# - The weekly run (and a dispatch with `debt`) upserts one "<repo>: Technical debt"
+#   issue (closed at zero debt) and refreshes a draft PR archiving long-merged plans.
+#
+# IMPORTANT: Gitea Actions must be enabled for this repo (Settings ->
+# Enable Repository Actions) even if the instance has Actions on globally,
+# and needs a self-hosted act_runner registered — there is no SaaS-hosted
+# runner the way GitHub/GitLab provide. This file lives at
+# .gitea/workflows/, not .github/workflows/. `timeout-minutes` below is
+# kept for forward-compat but is currently a no-op — Gitea Actions ignores
+# jobs.<job_id>.timeout-minutes (confirmed against Gitea's own
+# Compared-to-GitHub-Actions docs).
+# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
+# check` warns and verifies them on local runs, where siblings exist.
+# If PR-time path filters are added later, they must include every
+# own-repo path the matrix references — `fr acceptance check` warns when
+# one falls outside them.
+
+on:
+  pull_request: {}
+  push:
+    branches: ["**"]
+  schedule:
+    - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
+  workflow_dispatch:
+    inputs:
+      debt:
+        description: Run the technical-debt steps now
+        type: boolean
+        default: false
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # check judges merged rows against the default branch's history
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+      - name: Check matrix (gate — failing rows fail here)
+        run: fr acceptance check
+      - name: Write Actions summary (branch / PR / main)
+        if: always()
+        run: fr acceptance summary >> "$GITHUB_STEP_SUMMARY"
+      - name: Build report
+        env:
+          REF: ${{ gitea.sha }}
+        run: fr acceptance report --link-mode github --ref "$REF"
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-report
+          path: docs/acceptance/report.html
+          retention-days: 90
+
+  debt:
+    if: gitea.event_name == 'schedule' || inputs.debt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+      - name: Technical debt issue (weekly)
+        run: fr debt issue --yes
+      - name: Archive sweep PR (weekly)
+        env:
+          FR_DEBT_TOKEN: ${{ secrets.FR_DEBT_TOKEN }}
+        run: fr debt archive-pr --yes

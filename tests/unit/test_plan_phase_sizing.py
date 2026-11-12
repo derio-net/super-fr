@@ -26,6 +26,8 @@ from fr.plan_ops import PhaseSpec, ReviewIssue, _phase_sizing_issues, create
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
+
 runner = CliRunner()
 
 SPEC_REL = "docs/superpowers/specs/2026-09-28-toy-design.md"
@@ -75,7 +77,7 @@ def _repo(tmp_path: Path, *, matrix: bool = True, requirements: str | None = REQ
     (tmp_path / "docs" / "superpowers" / "plans").mkdir()
     if matrix:
         (tmp_path / "docs" / "acceptance").mkdir(parents=True)
-        (tmp_path / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX)
+        write_matrix_fragments(tmp_path, MATRIX)
     body = "# Toy\n\n"
     if requirements is not None:
         body += requirements + "\n"
@@ -331,7 +333,7 @@ def test_no_matrix_keeps_the_ceiling_and_warns_the_ask_is_unverifiable(tmp_path:
     assert errors[0].startswith("phase 3 is agentic phase #3")
     warns = _warns(issues)
     assert len(warns) == 1
-    assert "unverifiable without docs/acceptance/matrix.yaml" in warns[0]
+    assert "unverifiable without acceptance fragments" in warns[0]
 
 
 # ── CLI (Test Plan item 4) ──────────────────────────────────────────────────
@@ -395,7 +397,7 @@ def test_r1_a_malformed_decision_superseded_by_a_valid_one_no_longer_errors(
 
 def test_r3_an_unloadable_matrix_warns_instead_of_reading_as_absent(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: [unclosed\n")
+    write_matrix_fragments(repo, "rows: [unclosed\n")
     plan = _plan(repo, P(("row-r1",), skeleton=True), P(("row-none",)))
     _decide(repo, 2, "ask: cannot be checked")
     issues = _phase_sizing_issues(plan)
@@ -404,18 +406,22 @@ def test_r3_an_unloadable_matrix_warns_instead_of_reading_as_absent(tmp_path: Pa
     assert len(warns) == 1
     assert warns[0].startswith("acceptance matrix unreadable (")
     assert warns[0].endswith("ask floor not checked.")
-    assert "without docs/acceptance/matrix.yaml" not in warns[0]
+    assert "without acceptance fragments" not in warns[0]
 
 
-def test_r3_a_matrix_whose_repo_identity_cannot_be_resolved_warns(tmp_path: Path) -> None:
+def test_r3_a_fragment_naming_no_repo_warns(tmp_path: Path) -> None:
+    """Every fragment carries the repo's identity (`repo:`); one without it does not
+    fold, and the ask floor says it was not checked."""
+    from tests.unit.acceptance_helpers import FRAGMENTS_REL
+
     repo = _repo(tmp_path)
-    matrix = repo / "docs" / "acceptance" / "matrix.yaml"
-    matrix.write_text(matrix.read_text().replace("org: derio-net\nrepo: own\n", ""))
+    for fragment in (repo / FRAGMENTS_REL).glob("*.yaml"):
+        fragment.write_text(fragment.read_text().replace("repo: derio-net/own\n", ""))
     plan = _plan(repo, P(("row-r1",)))
     warns = _warns(_phase_sizing_issues(plan))
     assert len(warns) == 1
     assert warns[0].startswith("acceptance matrix unreadable (")
-    assert "cannot resolve repo identity" in warns[0]
+    assert "repo" in warns[0]
 
 
 def test_r6_a_decision_naming_no_agentic_phase_is_an_orphan_warning(tmp_path: Path) -> None:

@@ -1,0 +1,40 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-09-22-triage-open-prs
+repo: derio-net/super-fr
+rows:
+  - id: triage-open-prs
+    capability: Backlog triage
+    acceptance: triage shows every open PR with CI and merge state, including issue-less
+      PRs anchored to spec or journal
+    origin:
+    - spec:2026-09-22-triage-open-prs
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_open_prs.py
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: 'Render and PR collection tests pass in phase 4. LIVE 2026-09-22..24 on both
+      harnesses. Claude Code: collect + check + render --open on derio-net/super-fr;
+      after #567 the PRs section lists every open unlinked PR with CI/merge badges (before
+      it, main rendered ''No unranked pull requests''). OpenCode (fr 4.19.3, fresh --dir):
+      the same walk rendered #476/#474/#314 with badges and anchors. Hermes not walked
+      (not installed).'
+  - id: triage-pr-judgement
+    capability: Backlog triage
+    acceptance: triage judges PRs against intent anchor with delivery verdict delivers|partial|drift|unanchored
+    origin:
+    - spec:2026-09-22-triage-open-prs
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_open_prs.py
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: 'PR delivery verdict rendering and skill workflow are covered by phase 4
+      tests. LIVE 2026-09-22..24: Claude Code judged issue-less PRs (#560, #536, #567,
+      #571) and OpenCode judged #476/#474/#314, each with an anchor, a delivers|partial|drift
+      verdict and a delivery_note, rendered on the board. Hermes not walked.'

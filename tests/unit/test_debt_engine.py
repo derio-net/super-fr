@@ -177,9 +177,11 @@ def test_config_stale_days_drives_compute(repo: Path) -> None:
 
 
 def _matrix(repo: Path, rows: list[dict[str, Any]], version: int = 5) -> None:
-    p = repo / "docs" / "acceptance" / "matrix.yaml"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(yaml.safe_dump({"schema_version": version, "org": "o", "repo": "r", "rows": rows}))
+    from tests.unit.acceptance_helpers import write_matrix_fragments
+
+    write_matrix_fragments(
+        repo, yaml.safe_dump({"schema_version": version, "org": "o", "repo": "r", "rows": rows})
+    )
 
 
 def _row(i: str, status: str, **kw: Any) -> dict[str, Any]:

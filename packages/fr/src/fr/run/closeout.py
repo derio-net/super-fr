@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.acceptance.amend import feature_flag
 from fr.git import GitUnavailableError, git_answer
 from fr.journal.model import (
     JournalParseError,
@@ -364,8 +365,8 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     forge labels are off (`forge.labels: off` or `tracking: none`); an unreadable PR
     or matrix is said, never read as "nothing owed"."""
     from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import AcceptanceError, load_matrix
-    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.acceptance.model import AcceptanceError
     from fr.hostclient import FORGE_ERRORS, client_for, issue_command, label_command
     from fr.labels import FR_AWAITING_LIVE
     from fr.record.pr_body import holds_open_for_run, normalize_issue_ref, referenced_refs
@@ -373,11 +374,14 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     from fr.settings import forge_allows
 
     header = "  issues the PR Refs whose post-merge row still awaits its walk:"
-    path = repo_root / MATRIX_REL
-    if pr is None or not path.is_file() or not forge_allows(repo_root, "labels", lenient=True):
+    if (
+        pr is None
+        or not has_fragments(repo_root)
+        or not forge_allows(repo_root, "labels", lenient=True)
+    ):
         return []
     try:
-        matrix = load_matrix(path)
+        matrix = load_effective(repo_root)
         if not any(row.issues for row in matrix.rows):
             return []
         identity = resolve_identity(matrix, repo_root)
@@ -432,10 +436,11 @@ def awaiting_live_lines(repo_root: Path, state: RunState, pr: str | None) -> lis
     if walked:
         strategy_of = _effective_strategy_of(repo_root, state)
         lines.append("  after each row's walk, record it (the row moves to `walked`):")
+        feature = feature_flag(repo_root, spec=spec_rel)
         lines.extend(
             f"    fr acceptance set-status --id {row.id} --status walked --walk <log> "
             f"--harness <harness> --model <model> --strategy {strategy_of(row)} "
-            '--walk-outcome pass --notes "<what the walk proved>"'
+            f'--walk-outcome pass --notes "<what the walk proved>" {feature}'
             for row in walked
         )
     return lines

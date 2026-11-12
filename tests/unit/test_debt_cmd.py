@@ -15,18 +15,20 @@ from fr.commands import debt_cmd
 from fr.debt.model import DebtReport
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
+
 runner = CliRunner()
 
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    m = tmp_path / "docs" / "acceptance" / "matrix.yaml"
-    m.parent.mkdir(parents=True)
     rows = [
         {"id": "a", "capability": "c", "acceptance": "does a", "status": "unwired"},
         {"id": "b", "capability": "c", "acceptance": "does b", "status": "ci"},
     ]
-    m.write_text(yaml.safe_dump({"schema_version": 5, "org": "o", "repo": "r", "rows": rows}))
+    write_matrix_fragments(
+        tmp_path, yaml.safe_dump({"schema_version": 5, "org": "o", "repo": "r", "rows": rows})
+    )
     monkeypatch.setenv("VK_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
     monkeypatch.setattr(debt_cmd, "_now", lambda: datetime(2026, 10, 11, tzinfo=UTC))
@@ -131,7 +133,7 @@ def test_an_unreadable_matrix_does_not_drop_the_forge(
 ) -> None:
     import types
 
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("not: [valid")
+    write_matrix_fragments(repo, "not: [valid")
     monkeypatch.setattr(
         "fr.services.resolve.resolve_tracking",
         lambda *_a, **_k: types.SimpleNamespace(type="github"),

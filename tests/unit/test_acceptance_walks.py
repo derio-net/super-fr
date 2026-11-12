@@ -12,12 +12,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fr.acceptance.model import Matrix, Row, Walk, load_matrix
+from fr.acceptance.fold import load_effective
+from fr.acceptance.model import Matrix, Row, Walk
 from fr.acceptance.walks import issues_now_closable, walk_verified
 
 from tests.unit.test_record_apply import _matrix_repo
 
-MATRIX = Path("docs") / "acceptance" / "matrix.yaml"
+MATRIX = Path("docs") / "acceptance" / "features" / "s.yaml"
 
 
 def _walk(harness: str = "claude-code", outcome: str = "pass") -> Walk:
@@ -99,7 +100,7 @@ def _fr(*args: str):
 
 
 def _target(root: Path, rid: str = "target") -> Row:
-    return next(r for r in load_matrix(root / MATRIX).rows if r.id == rid)
+    return next(r for r in load_effective(root).rows if r.id == rid)
 
 
 def _set(*args: str):
@@ -111,7 +112,7 @@ def test_add_takes_issue_scenario_harness_and_verify(repo: Path) -> None:
         "add", "--id", "fresh", "--capability", "Cap", "--acceptance", "X",
         "--status", "not-implemented", "--issue", "o/r#1",
         "--scenario", "tests/scenarios/x.sh", "--harness", "claude-code",
-        "--verify", "candidate",
+        "--verify", "candidate", "--feature", "s",
     )  # fmt: skip
 
     assert out.exit_code == 0, out.output

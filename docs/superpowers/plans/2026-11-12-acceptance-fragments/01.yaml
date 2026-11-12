@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Fragments and the fold: acceptance-fragment kind, logical refs, fold() (R17,
+    R18)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - acceptance-effective-matrix-fold
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/acceptance/fragment.py
+  - packages/fr/src/fr/acceptance/fold.py
+  - packages/fr/src/fr/acceptance/logical.py
+  - packages/fr/src/fr/acceptance/__init__.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - tests/unit/test_acceptance_fragment*.py
+  - tests/unit/test_acceptance_fold*.py
+  - tests/unit/test_acceptance_logical*.py
+  - tests/unit/test_artifact_registry.py
+  - tests/unit/test_validate_artifacts.py
+  - tests/scenarios/acceptance-effective-matrix-fold.sh
+  - tests/integration/test_scenarios.py
+  - .changes/feat-acceptance-fragments.yaml
+  - docs/acceptance/*
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Smoke — the fragment module exists and the suite sees it
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_fragment_smoke.py asserting `from fr.acceptance.fragment import parse_fragment, FRAGMENTS_DIR` imports, that FRAGMENTS_DIR == Path("docs/acceptance/features"), and that `from fr.acceptance.fold import fold` imports. Run `uv run pytest tests/unit/test_acceptance_fragment_smoke.py -q --no-cov`; confirm it fails (no module).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/acceptance/fragment.py and fold.py with the names stubbed (parse_fragment raising NotImplementedError, fold returning an empty result) so the smoke passes. Add .changes/feat-acceptance-fragments.yaml with `bump: minor` and summary "acceptance rows live in per-feature fragments folded from git history; reports are derived, never committed". Smoke evidence is the local suite on this trivial test (CI runs only on pull_request; the PR opens at deliver).
+- number: 2
+  title: The fragment model (R16's carrier, spec §3.D)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_acceptance_fragment.py — parse_fragment(text, *, source) over the §3.D shape: `schema_version: 1`, `feature: <spec-slug>` (or the literal `legacy`), `repo: <org>/<repo>` (identity travels with the fragments: the retired matrix's org/repo moves here), `rows:` (each a full fr.acceptance.model.Row, the same fields and validators), `amendments:` (each {row, op, base, why} plus op-specific fields: reword → acceptance and/or capability; set-status → status, notes, optional walk/issues; add-level / drop-level → level, ref; retire → notes). Refusals, each naming the file and key: unknown top-level key, unknown op, an op carrying another op's field, base < 0, a missing why, duplicate row ids in one fragment, `feature` that does not match the file stem (except legacy.yaml), a `repo` that is not owner/repo. A file with only rows and `amendments: []` parses; `amendments` absent reads as empty.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement in fragment.py with pydantic models `Fragment`, `Amendment` (discriminated on `op`, extra="forbid"), `AMENDMENT_OPS = ("reword","set-status","add-level","drop-level","retire")` as the one vocabulary, `schema_version: int = 1`, and the same lru-cached deep-copy parse pattern as fr.acceptance.model.parse_matrix. Also `fragment_slug_for_spec(path) -> str` (spec file stem minus a trailing `-design`, identical for a live and an archived twin) and `FRAGMENTS_DIR`. Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: Row stays the one row model (fr.acceptance.model.Row); Fragment.rows reuses it rather than copying fields, so a later Row change cannot drift between the two carriers. Note in the module docstring which spec section each field comes from.
+- number: 3
+  title: Logical references (R18, interim repo-only resolution)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_acceptance_logical.py — `spec:<slug>#R<n>` and `plan:<slug>` parse; resolve_logical(ref, repo_root) returns the repo path of a live spec (docs/superpowers/specs/<slug>-design.md, falling back to <slug>.md) and of its archived twin under implemented/ when only that exists, and a plan folder (docs/superpowers/plans/<slug>/ or the implemented twin); an unknown slug resolves to None with a reason; `<repo>:<path>#<test>` code refs are not logical and pass through untouched; to_logical("super-fr:docs/superpowers/implemented/specs/2026-07-04-acceptance-matrix-design.md#R3") == "spec:2026-07-04-acceptance-matrix#R3" and the live-path form gives the same answer; a journal path (docs/superpowers/implemented/journals/debug/...) has no logical form and to_logical returns it unchanged.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: packages/fr/src/fr/acceptance/logical.py — `LOGICAL_KINDS = ("spec","plan")`, `is_logical`, `parse_logical`, `to_logical`, `resolve_logical(ref, repo_root) -> Path | None` reading only `repo` paths (plan 3 swaps in the R1 resolver behind this one function; say so in its docstring). Extend fr.acceptance.model.split_ref callers' grammar check so an origin may be logical (Row origin validation accepts `spec:`/`plan:`). Tests pass.
+- number: 4
+  title: The fold — merged order, pending amendments, revisions, contested (R17)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_acceptance_fold.py over a tmp repo with a bare origin (helpers create commits on main, merge feature branches with --no-ff so first-parent order is controlled): (a) two features' fragments merged in order A then B yield the union of rows; (b) B's amendment `set-status` on A's row applies, revision of the row becomes 1; (c) amendments from two features apply in the order of the first-parent commit of the default ref that introduced each, not file or name order, ties inside one commit broken by feature slug then list index; (d) on a feature branch, the branch's own fragment rows and amendments not yet on the default ref are applied after every merged one (pending); (e) a branch that was never merged contributes nothing when folding from another branch; (f) an amendment whose base != the row's revision at the moment it applies still applies but marks the row contested, and the next amendment whose base equals the then-current revision clears it; (g) a row id defined by two fragments is an error naming both files; an amendment naming an unknown row is an error; (h) `retire` removes the row from the effective rows and keeps it in a `retired` list; (i) with no remote the fold uses HEAD's first-parent history as the merged history and says so in a notice.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/acceptance/fold.py — `fold(repo_root, *, ref: str | None = None, include_pending: bool = True) -> Effective` where Effective carries `matrix: Matrix` (org/repo from the fragments' agreed `repo:`, rows in a stable order: capability then fragment then row order), `revisions: dict[str,int]`, `contested: frozenset[str]`, `owners: dict[str,str]` (row → feature), `retired`, `pending: tuple[Amendment,...]`, `notices`. Default ref via the same helper fr.settings.load uses. Ordering in one `git log --first-parent --reverse --format=%H --name-only <ref> -- docs/acceptance/features/` call; read historical blobs (`git show <sha>:<file>`) only for fragments whose tip carries amendments, counting the amendment list length at each commit to find where amendment k first appeared. All git through one injectable runner so tests can count calls. Tests pass.
+  - id: P1.T4.S3
+    text: |-
+      RED then GREEN: a shallow clone (`git rev-parse --is-shallow-repository` true) with any amendment present raises FoldHistoryError naming `fetch-depth: 0`; with no amendments it folds rows without history. Add the test, then the guard.
+  - id: P1.T4.S4
+    text: |-
+      REFACTOR: memoise per process on (repo_root, ref sha, pending tree hash); measure the fold over 120 synthetic fragments with 20 amendments in a test that asserts the git call count stays O(fragments-with-amendments + 1), not O(commits x fragments).
+- number: 5
+  title: The acceptance-fragment kind and its validator (R19, kind half)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_artifact_registry.py gains a case that `acceptance-fragment` is registered at current_version 1 with locator docs/acceptance/features/*.yaml and a yaml stamp; tests/unit/test_validate_artifacts.py gains: a valid fragment passes, a fragment with a duplicate yaml key, a bad op, or a `repo:` disagreeing with a sibling fragment fails with a message naming the file.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: register the kind in packages/fr/src/fr/artifacts/registry.py (ARTIFACT_KINDS, the only enumeration — test_tripwire_artifact_kinds) with `validate_fragment` in fr/artifacts/structure.py using the strict duplicate-key loader and parse_fragment, plus the cross-fragment `repo:` agreement. The matrix kind is untouched in this phase. Tests pass.
+- number: 6
+  title: Scenario and row
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      GREEN: tests/scenarios/acceptance-effective-matrix-fold.sh (sourcing _common.sh): a fresh repo with a bare origin, two hand-written fragments merged on main in order, a feature branch with a pending amendment and an abandoned branch with another; drive the INSTALLED fr through `python -P -c` calling fr.acceptance.fold.fold and assert the rows, the order, the revision and that the abandoned amendment is absent (phase 2 swaps this for `fr acceptance status`). Add test_acceptance_effective_matrix_fold to tests/integration/test_scenarios.py via _scenario(...). Run it.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: `uv run fr acceptance set-status --id acceptance-effective-matrix-fold --status ci --scenario tests/scenarios/acceptance-effective-matrix-fold.sh --level unit=super-fr:tests/unit/test_acceptance_fold.py#test_<name> --level int=super-fr:tests/integration/test_scenarios.py#test_acceptance_effective_matrix_fold --notes "fold built: merged first-parent order, pending amendments, revisions and contested; logical spec/plan refs resolve repo-only"` (a real test name in place of <name>).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T4.S4:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-12T01:33:01+00:00'
+      note: null
+  completion:
+    at: '2026-11-12T01:33:01+00:00'
+    note: null
+    observed_prs: []

@@ -25,13 +25,9 @@ from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, row
 
 runner = CliRunner()
 
-MATRIX = "docs/acceptance/matrix.yaml"
-FILES = (
-    MATRIX,
-    "docs/acceptance/report_local.html",
-    "docs/acceptance/report_linked.html",
-    "docs/acceptance/report_linked.md",
-)
+MATRIX = "docs/acceptance/features/s.yaml"
+FILES = (MATRIX,)
+"""Every file an `add` changes: the one fragment (spec 2026-11-04 R16, no reports)."""
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -86,7 +82,6 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     _ok(root, "config", "user.email", "t@example.com")
     _ok(root, "config", "user.name", "t")
     _ok(root, "config", "commit.gpgsign", "false")
-    _fr("report", "--deterministic")
     _ok(root, "add", "-A")
     _ok(root, "commit", "-qm", "base")
     return root
@@ -99,7 +94,7 @@ def test_adds_to_different_capabilities_merge_without_conflict(repo: Path) -> No
     _ok(repo, "checkout", "-q", "-b", "b")
     _add(repo, "beta-2", "Beta")
 
-    # Both sides really did change every one of the four files.
+    # Both sides really did change the fragment.
     for branch in ("a", "b"):
         changed = set(_ok(repo, "diff", "--name-only", "main", branch).split())
         assert set(FILES) <= changed, (branch, changed)
@@ -111,7 +106,4 @@ def test_adds_to_different_capabilities_merge_without_conflict(repo: Path) -> No
 
     matrix = (repo / MATRIX).read_text()
     assert "alpha-2" in matrix and "beta-2" in matrix
-    # The merged reports are exactly what a fresh render of the merged matrix
-    # produces — `check` gates their freshness.
-    _fr("report", "--check")
     _fr("check")

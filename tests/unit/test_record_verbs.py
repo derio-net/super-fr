@@ -15,6 +15,8 @@ from fr.record import apply as engine
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import fragments_text, write_matrix_fragments
+
 SLUG = "2026-09-25-verbs"
 PLAN_REL = f"docs/superpowers/plans/{SLUG}"
 
@@ -58,9 +60,7 @@ def repo(tmp_path: Path) -> Path:
         prose="# p\n",
     )
     (root / "docs" / "acceptance").mkdir()
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(
-        "# the registry\norg: derio-net\nrepo: super-fr\nrows:\n"
-    )
+    write_matrix_fragments(root, "# the registry\norg: derio-net\nrepo: super-fr\nrows:\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "plan", "--no-verify")
     return root
@@ -177,7 +177,7 @@ def test_plan_edit_rewrites_only_the_state_block_it_changes(repo: Path) -> None:
 def test_acceptance_add_and_set_status_are_one_entry_records(repo: Path, spy) -> None:
     add = [
         "acceptance", "add", "--id", "row-a", "--capability", "c", "--acceptance", "a",
-        "--origin", "super-fr:docs/spec.md", "--status", "not-implemented",
+        "--origin", "super-fr:docs/superpowers/specs/spec.md", "--status", "not-implemented",
     ]  # fmt: skip
     line = _one_line(_fr(repo, add))
     assert line == "added row row-a (not-implemented)"
@@ -229,21 +229,21 @@ def _row_record(**fields: object):
 def test_a_record_acceptance_entry_with_capability_is_create_only(repo: Path) -> None:
     create = {
         "id": "row-a", "capability": "c", "acceptance": "a",
-        "origin": ("super-fr:docs/spec.md",), "status": "not-implemented",
+        "origin": ("super-fr:docs/superpowers/specs/spec.md",), "status": "not-implemented",
     }  # fmt: skip
     target = engine.RecordTarget(message="m")
     engine.apply_record(repo, None, _row_record(**create), target=target)
-    matrix = (repo / "docs" / "acceptance" / "matrix.yaml").read_text()
+    matrix = fragments_text(repo)
 
     # The same entry again is a no-op (a retry heals, p3-r3) …
     engine.apply_record(repo, None, _row_record(**create), target=target)
-    assert (repo / "docs" / "acceptance" / "matrix.yaml").read_text() == matrix
+    assert fragments_text(repo) == matrix
     # … but a create naming an existing id with anything different is refused.
     with pytest.raises(engine.RecordRefusedError, match="already exists"):
         engine.apply_record(
             repo, None, _row_record(**{**create, "capability": "other"}), target=target
         )
-    assert (repo / "docs" / "acceptance" / "matrix.yaml").read_text() == matrix
+    assert fragments_text(repo) == matrix
 
 
 def test_a_record_acceptance_entry_without_capability_is_move_only(repo: Path) -> None:
@@ -252,7 +252,7 @@ def test_a_record_acceptance_entry_without_capability_is_move_only(repo: Path) -
         engine.apply_record(
             repo, None, _row_record(id="nope", status="unwired", notes="why"), target=target
         )
-    assert "nope" not in (repo / "docs" / "acceptance" / "matrix.yaml").read_text()
+    assert "nope" not in fragments_text(repo)
 
 
 # --- p3-r8: completing a phase runs the refactor gate, verb or record --------

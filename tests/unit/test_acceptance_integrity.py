@@ -20,11 +20,18 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fr.acceptance.fold import load_effective
 from fr.acceptance.model import AcceptanceError, Row, load_matrix, parse_matrix
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import (
+    FRAGMENTS_REL,
+    RETIRED_MATRIX_REL,
+    make_matrix_repo,
+    make_repo,
+    row,
+)
 
 runner = CliRunner()
 
@@ -35,11 +42,17 @@ def _invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
 
 
 def _matrix(root: Path) -> Path:
-    return root / "docs" / "acceptance" / "matrix.yaml"
+    """The fragment `make_repo`'s rows land in (their origin spec is `s`)."""
+    return root / FRAGMENTS_REL / "s.yaml"
 
 
 def _row(root: Path, row_id: str) -> Row:
-    return next(r for r in load_matrix(_matrix(root)).rows if r.id == row_id)
+    return next(r for r in load_effective(root).rows if r.id == row_id)
+
+
+def _retired(root: Path) -> Path:
+    """The retired matrix a repair test holds (`make_matrix_repo`)."""
+    return root / RETIRED_MATRIX_REL
 
 
 def _new(id: str, capability: str = "demo") -> Row:
@@ -102,7 +115,10 @@ def test_add_appends_to_a_flush_left_matrix(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, "", header="")
-    _matrix(root).write_text(FLUSH)
+    _matrix(root).parent.mkdir(parents=True, exist_ok=True)
+    _matrix(root).write_text(
+        "schema_version: 1\nfeature: s\nrepo: derio-net/own\n" + FLUSH.split("repo: own\n", 1)[1]
+    )
     result = _invoke(
         root,
         monkeypatch,
@@ -121,7 +137,7 @@ def test_add_appends_to_a_flush_left_matrix(
         "n",
     )
     assert result.exit_code == 0, result.output
-    assert [r.id for r in load_matrix(_matrix(root)).rows] == ["r1", "probe"]
+    assert [r.id for r in load_effective(root).rows] == ["r1", "probe"]
 
 
 # --- gh#531: name anchors, not line anchors, into Python --------------------
@@ -201,7 +217,7 @@ def test_line_anchor_error_refuses_only_line_anchors_into_python(ref: str, refus
 def _check_errors(root: Path) -> list[str]:
     from fr.acceptance.check import check
 
-    return check(load_matrix(_matrix(root)), root).errors
+    return check(load_effective(root), root).errors
 
 
 def test_check_accepts_a_name_anchor_that_resolves(tmp_path: Path) -> None:
@@ -282,15 +298,18 @@ def _repair():
     return MATRIX_NAME_ANCHORS_REPAIR
 
 
-def test_the_repair_is_registered_for_the_matrix_kind() -> None:
+def test_the_repair_is_no_longer_registered_the_split_converts_instead() -> None:
+    """The matrix kind retired (spec 2026-11-04 R19): its last hop deletes the matrix,
+    so a repair could never run after it; the split applies `conversions` itself
+    (`test_migration_matrix_fragments.py::test_the_split_converts_line_anchors`)."""
     import fr.artifacts  # noqa: F401  (registration rides on the package import)
     from fr.artifacts.runner import MIGRATIONS
 
-    assert _repair() in MIGRATIONS.repairs("matrix")
+    assert _repair() not in MIGRATIONS.repairs("matrix")
 
 
 def test_the_repair_converts_line_anchors_that_land_in_a_test(tmp_path: Path) -> None:
-    root = make_repo(
+    root = make_matrix_repo(
         tmp_path,
         row(id="r1", unit='"own:tests/test_a.py#L1", "own:tests/test_b.py#L10"')
         + row(id="r2", unit='"own:tests/test_b.py#L1"'),
@@ -298,7 +317,7 @@ def test_the_repair_converts_line_anchors_that_land_in_a_test(tmp_path: Path) ->
     (root / "tests" / "test_b.py").write_text(
         "def test_b1(): pass\n" + "\n" * 8 + "def test_b10(): pass\n"
     )
-    path = _matrix(root)
+    path = _retired(root)
     assert _repair().applies(path)
 
     _repair().fn(path)
@@ -315,7 +334,7 @@ def test_the_repair_converts_line_anchors_that_land_in_a_test(tmp_path: Path) ->
 
 
 def test_the_repair_leaves_what_it_cannot_convert(tmp_path: Path) -> None:
-    root = make_repo(
+    root = make_matrix_repo(
         tmp_path,
         row(
             id="r1",
@@ -325,7 +344,7 @@ def test_the_repair_leaves_what_it_cannot_convert(tmp_path: Path) -> None:
     (root / "tests" / "test_c.py").write_text(
         "import os\n\ndef _helper():\n    return 1\n\ndef test_c(): pass\n"
     )
-    path = _matrix(root)
+    path = _retired(root)
 
     assert not _repair().applies(path), (
         "a module-level line, a sibling repo, and a line inside a helper (an anchor that "
@@ -359,23 +378,6 @@ def test_check_does_not_suggest_a_helper_as_the_anchor(tmp_path: Path) -> None:
     assert any("sits in no test" in e for e in errors), errors
 
 
-def test_the_repair_regenerates_committed_reports(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = make_repo(tmp_path, row(id="r1", unit='"own:tests/test_a.py#L1"'))
-    assert _invoke(root, monkeypatch, "report", "--deterministic").exit_code == 0
-
-    wrote = list(_repair().fn(_matrix(root)) or ())
-
-    assert {p.name for p in wrote} == {
-        "report_local.html",
-        "report_linked.html",
-        "report_linked.md",
-    }
-    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
-    assert "test_a.py#test_a" in (root / "docs/acceptance/report_linked.md").read_text()
-
-
 # --- gh#769: set-status names what changed ----------------------------------
 
 
@@ -389,9 +391,9 @@ def test_set_status_with_an_unchanged_status_names_the_added_level(
     messages: list[str] = []
     real = cmd._apply_rows
 
-    def spy(root_: Path, item: object, message: str, drops: object = None) -> None:
+    def spy(root_: Path, item: object, message: str, drops: object = None, **kw: object) -> None:
         messages.append(message)
-        real(root_, item, message, drops)  # type: ignore[arg-type]
+        real(root_, item, message, drops, **kw)  # type: ignore[arg-type]
 
     monkeypatch.setattr(cmd, "_apply_rows", spy)
     result = _invoke(
@@ -498,7 +500,7 @@ def test_replace_keeps_a_section_comment_between_flush_left_rows() -> None:
 
 def test_the_repair_never_rewrites_inside_a_longer_repo_name(tmp_path: Path) -> None:
     header = "org: derio-net\nrepo: fr\nrows:\n"
-    root = make_repo(
+    root = make_matrix_repo(
         tmp_path,
         row(id="r1", origin='"fr:docs/superpowers/specs/s.md"', unit='"fr:tests/test_a.py#L1"')
         + row(
@@ -508,31 +510,13 @@ def test_the_repair_never_rewrites_inside_a_longer_repo_name(tmp_path: Path) -> 
         header=header,
     )
 
-    _repair().fn(_matrix(root))
+    _repair().fn(_retired(root))
 
-    rows = {r.id: r for r in load_matrix(_matrix(root)).rows}
+    rows = {r.id: r for r in load_matrix(_retired(root)).rows}
     assert rows["r1"].levels["unit"] == ("fr:tests/test_a.py#test_a",)
     assert rows["r2"].levels["unit"] == ("super-fr:tests/test_a.py#L1",), (
         "a sibling's ref is not ours"
     )
-
-
-def test_the_repair_writes_nothing_when_the_reports_cannot_render(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import fr.acceptance.report as report
-
-    root = make_repo(tmp_path, row(id="r1", unit='"own:tests/test_a.py#L1"'))
-    assert _invoke(root, monkeypatch, "report", "--deterministic").exit_code == 0
-    before = _matrix(root).read_bytes()
-
-    def boom(*_a: object, **_k: object) -> dict[str, str]:
-        raise RuntimeError("render failed")
-
-    monkeypatch.setattr(report, "render_committed_set", boom)
-    with pytest.raises(RuntimeError):
-        _repair().fn(_matrix(root))
-    assert _matrix(root).read_bytes() == before, "the repair retries next run, not half-done"
 
 
 # --- gh#965 / gh#893: unittest's spelling of a test identity ---------------
@@ -600,13 +584,15 @@ def test_collection_recognises_unittest_testcase_subclasses(line: int, name: str
 
 
 def test_the_repair_converts_a_line_anchor_inside_a_testcase_subclass(tmp_path: Path) -> None:
-    root = make_repo(tmp_path, row(id="r1", unit='"own:tests/test_u.py#L9"'))
+    root = make_matrix_repo(tmp_path, row(id="r1", unit='"own:tests/test_u.py#L9"'))
     (root / "tests" / "test_u.py").write_text(UNITTEST_SOURCE)
-    path = _matrix(root)
+    path = _retired(root)
 
     _repair().fn(path)
 
-    assert _row(root, "r1").levels["unit"] == ("own:tests/test_u.py#FooTests::test_x",)
+    assert next(r for r in load_matrix(_retired(root)).rows if r.id == "r1").levels["unit"] == (
+        "own:tests/test_u.py#FooTests::test_x",
+    )
 
 
 def test_collection_reads_a_base_where_python_resolves_it() -> None:

@@ -20,6 +20,8 @@ from fr.cli import app
 from fr.run.model import RunState, StepRecord, save_run_state
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
+
 runner = CliRunner()
 RUN = "w1"
 SPEC = "docs/superpowers/specs/s.md"
@@ -87,8 +89,8 @@ def _repo(
             row["scenario"] = f"scenarios/{rid}.sh"
         matrix_rows.append(row)
     (root / "docs/acceptance").mkdir(parents=True)
-    (root / "docs/acceptance/matrix.yaml").write_text(
-        yaml.safe_dump({"schema_version": 4, "org": "o", "repo": "proj", "rows": matrix_rows})
+    write_matrix_fragments(
+        root, yaml.safe_dump({"schema_version": 4, "org": "o", "repo": "proj", "rows": matrix_rows})
     )
     save_run_state(
         root,

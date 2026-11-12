@@ -1,0 +1,173 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-10-09-herdr-opencode-replacement
+repo: derio-net/super-fr
+rows:
+  - id: herdr-opencode-launch
+    capability: herdr OpenCode batch lifecycle
+    acceptance: OpenCode batches launch autonomously with the selected model from the
+      stable checkout and retain status, messaging, focus, conflict and close-out identity.
+    origin:
+    - spec:2026-10-09-herdr-opencode-replacement#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_dispatch_creates_the_tab_starts_the_agent_then_prompts_it
+      - super-fr:tests/unit/test_herdr_stable_checkout.py#test_linked_worktree_uses_primary_checkout
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_initial_dispatch_waits_for_rendered_prompt_before_single_submission
+      - super-fr:tests/unit/test_fr_herdr_runner.py#test_managed_handback_rechecks_idle_snapshot_under_lock_before_prompt
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_persists_explicit_model_and_location
+      - super-fr:tests/unit/test_herdr_replacement.py#test_opencode_target_uses_api_pinned_session_and_interactive_auto
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_real_v2_2_1_4_blank_prompt_is_ready
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_prompt_refuses_overlay_busy_and_malformed_screens
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_permission_overlay_is_refused_even_when_herdr_reports_idle
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_v2_capture_passes_full_managed_readiness_gate
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_accepts_v214_default_variant_response
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_refuses_wrong_or_malformed_confirmation
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_dispatch_waits_for_captured_startup_metadata_before_single_submission
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_permanent_captured_startup_metadata_times_out_without_submission
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_grey_startup_with_draft_or_overlay_is_a_refusal
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_metadata_wait_revalidates_guards_after_each_pending_observation
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_incomplete_metadata_is_not_active_restart_admission
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_pending_then_overslept_deadline_never_starts_another_observation
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_observation_at_or_after_deadline_never_admits_ready
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_expired_deadline_before_first_observation_sends_nothing
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_ready_just_before_deadline_is_admitted
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_native_observations_each_receive_only_remaining_budget
+      - super-fr:tests/unit/test_opencode_startup_deadline.py#test_native_observation_timeout_never_proceeds_to_next_call
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_launch
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1353
+    verify: candidate
+    scenario: tests/scenarios/herdr-opencode.sh
+    issues:
+    - derio-net/super-fr#1353
+  - id: herdr-batch-replace
+    capability: audited batch harness replacement
+    acceptance: An operator replaces an idle unmerged batch harness/model without a
+      second dispatch, preserving identity and obtaining recoverable audited failure
+      or repair.
+    origin:
+    - spec:2026-10-09-herdr-opencode-replacement#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_success_preserves_dispatch_identity_and_lock_order
+      - super-fr:tests/unit/test_herdr_replacement.py#test_repair_never_replays_or_certifies_uncertain_submission
+      - super-fr:tests/unit/test_herdr_replacement.py#test_interleaved_pane_owner_loser_sends_and_writes_nothing
+      - super-fr:tests/unit/test_herdr_replacement_observer.py#test_scope_lock_excludes_independent_writer_and_releases
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_activation_failure_repairs_both_stores_without_second_success
+      - super-fr:tests/unit/test_file_lock.py#test_exclusive_file_lock_refuses_nested_owner_and_releases
+      - super-fr:tests/unit/test_file_lock.py#test_acknowledged_but_unenforced_lock_never_yields
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_malformed_opencode_model_refuses_before_operation_or_audit
+      - super-fr:tests/unit/test_triage_batch_replace.py#test_failure_activation_retry_finishes_both_stores_without_duplicate_event
+      - super-fr:tests/unit/test_herdr_replacement.py#test_source_restoration_write_fault_remains_repairable_and_idempotent
+      - super-fr:tests/unit/test_triage_replace_state.py#test_preview_and_lock_loser_leave_remote_updated_state_and_exclude_untouched
+      - super-fr:tests/unit/test_triage_replace_state.py#test_act_fetches_fresh_state_and_pushes_only_while_scope_owned
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_replacement_target_waits_for_rendered_prompt
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_startup_readiness_refuses_unsafe_or_unrendered_target_without_prompt
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_real_wide_session_sidebar_is_outside_empty_input
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_real_wide_session_draft_remains_a_refusal
+      - super-fr:tests/unit/test_claude_mcp_foreground.py#test_captured_native_mcp_sidecar_does_not_hide_the_unique_claude_root
+      - super-fr:tests/unit/test_claude_mcp_foreground.py#test_claude_target_waits_until_unknown_startup_workers_are_gone
+      - super-fr:tests/unit/test_claude_mcp_foreground.py#test_read_only_post_uptake_identity_allows_target_task_workers_but_not_input
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_batch_replace
+    status: ci
+    notes: Installed candidate and live disposable sessions exposed and fixed rendered
+      readiness, captured wide sidebar geometry, native Claude MCP root recognition,
+      cold startup settling and busy post-uptake identity confirmation. Named regressions
+      preserve strict unsafe source checks and no replay; complete client-live acceptance
+      is withheld because a native unknown-model fallback and positive conflict/closeout
+      fixture prerequisites remain unproven.
+    verify: candidate
+    scenario: tests/scenarios/herdr-batch-replace.sh
+    issues:
+    - derio-net/super-fr#1089
+  - id: herdr-opencode-restart
+    capability: OpenCode session upkeep
+    acceptance: Managed idle OpenCode sessions restart fresh from durable branch state
+      with their identity/model and delivered-draft HOLD preserved.
+    origin:
+    - spec:2026-10-09-herdr-opencode-replacement#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_captured_input_contract
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_fresh_restart_preserves_pane_name_model_and_hold
+      - super-fr:tests/unit/test_herdr_managed.py#test_current_handback_precedes_hold_but_obsolete_does_not
+      - super-fr:tests/unit/test_herdr_managed.py#test_pane_lock_excludes_an_independent_process
+      - super-fr:tests/unit/test_herdr_managed.py#test_unenforced_os_lock_is_refused_before_entering
+      - super-fr:tests/unit/test_opencode_rendered_readiness.py#test_managed_restart_waits_for_new_rendered_prompt
+      - super-fr:tests/unit/test_herdr_opencode_restart.py#test_create_session_persists_explicit_model_and_location
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_restart
+    status: ci
+    notes: Managed restart creates and verifies a fresh model-pinned session through
+      OpenCode v2 API, then launches the interactive root with --session and --auto.
+      Synthetic tests pin the API body, response model, and fresh session identity;
+      actual client-live evidence remains a separate owed walk.
+    verify: candidate
+    scenario: tests/scenarios/herdr-opencode-restart.sh
+  - id: herdr-opencode-live
+    capability: interactive herdr OpenCode migration
+    acceptance: Real herdr sessions demonstrate replacement, restart, stable-checkout
+      HOLD and recoverable failure, with read-only current-conflict hand-back selection
+      against an actual conflicting PR.
+    origin:
+    - spec:2026-10-09-herdr-opencode-replacement#R12
+    levels:
+      unit:
+      - super-fr:tests/integration/test_scenarios.py#test_herdr_opencode_live_instructions
+      - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_documented_no_argument_walk_and_explicit_mode_use_tty_with_captured_output
+      - super-fr:tests/unit/test_herdr_live_walk_tty.py#test_noninteractive_default_still_reports_owed_and_never_passes
+    status: walked
+    notes: 'Scoped pre-merge walk recorded under explicit operator proxy-verdict and
+      Ready authorization. Actual native candidate observations and real read-only #1107
+      current-head/conflict recovery proof supplied; runtime packages unchanged from
+      observed candidate aa48026f. PASS covers revised pre-merge statement only: no
+      conflict instructions sent/executed, no resolution/push or merged-PR closeout
+      claimed. Actual merged-PR closeout remains herdr-opencode-closeout-live immediately
+      post-merge; external effective-model limitation tracked #1116.'
+    verify: client-live
+    scenario: tests/scenarios/herdr-opencode-live.sh
+    issues:
+    - derio-net/super-fr#1089
+    walks:
+    - strategy: client-live
+      harness: opencode
+      model: openai/gpt-6.1-sol
+      outcome: pass
+      at: '2026-10-10T05:14:05Z'
+      evidence: /Users/derio/.cache/fr/walks/2026-10-09-feat-1089/20261010T051349Z.log
+  - id: herdr-opencode-closeout-live
+    capability: interactive herdr OpenCode migration
+    acceptance: After its PR actually merges, an OpenCode-backed batch completes the
+      real pickup/verify-merge/archive flow from the stable primary checkout and its
+      disposable workspace/session are safely cleaned up.
+    origin:
+    - spec:2026-10-09-herdr-opencode-replacement#R12
+    levels: {}
+    status: walked
+    notes: 'Live post-merge walk on 2026-10-10: new OpenCode 1.18.35 / openai/gpt-6.1-sol
+      control session stayed in stable primary checkout through real pickup, merge verification,
+      scoped archive and delivered feature-session/tab cleanup. Initial stale-record
+      failure stopped the walk; after operator reconciliation the reaped-workspace merge
+      gate passed. Feature isolation state, container and session index absent; old
+      named agent absent after exact-tab closure. Evidence: docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md.
+      Real walk, not CI automation; #1116 remains deferred and unchanged. Archive storage
+      finding tracked separately as #1117.'
+    verify: live
+    issues:
+    - derio-net/super-fr#1089
+    harnesses:
+    - opencode
+    walks:
+    - strategy: live
+      harness: opencode
+      model: openai/gpt-6.1-sol
+      outcome: pass
+      at: '2026-10-10T08:32:43Z'
+      evidence: super-fr:docs/acceptance/evidence/2026-10-10-herdr-opencode-closeout-1089.md

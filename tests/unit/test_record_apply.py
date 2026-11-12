@@ -8,11 +8,13 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.journal.model import effective_finding_states, journal_path, parse_journal
 from fr.parser import parse
 from fr.run import units
 from fr.run.model import load_run_state
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.record_support import (
     PLAN_REL,
     RUN,
@@ -293,9 +295,8 @@ def _move(row_id: str = "target", **fields: object):
 
 
 def _unit_refs(root: Path, row_id: str = "target") -> tuple[str, ...]:
-    from fr.acceptance.model import load_matrix
 
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(root)
     return next(r for r in matrix.rows if r.id == row_id).levels.get("unit", ())
 
 
@@ -331,9 +332,8 @@ def test_a_drop_and_an_addition_re_point_the_row_in_one_pass(tmp_path: Path) -> 
 
 
 def _verify(root: Path, row_id: str = "target") -> str | None:
-    from fr.acceptance.model import load_matrix
 
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(root)
     return next(r for r in matrix.rows if r.id == row_id).verify
 
 
@@ -368,10 +368,7 @@ def test_an_absent_ref_drop_is_refused_and_changes_nothing(tmp_path: Path) -> No
 
     root = _matrix_repo(tmp_path)
     before, sha, files = _acceptance_files(root), head(root), snapshot(root)
-    assert {
-        f"docs/acceptance/{n}"
-        for n in ("report_local.html", "report_linked.html", "report_linked.md")
-    } <= set(before)
+    assert "docs/acceptance/features/s.yaml" in set(before)
     target = RecordTarget(
         message="m", acceptance_drops={"target": {"unit": ("own:tests/nope.py",)}}
     )
@@ -673,7 +670,7 @@ def _at_spec_review_with_acceptance(tmp_path: Path) -> Path:
     (root / "docs").mkdir(parents=True, exist_ok=True)
     (root / "docs" / "spec.md").write_text("# spec\n")
     (root / "docs" / "acceptance").mkdir(parents=True, exist_ok=True)
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text("org: t\nrepo: t\nrows:\n")
+    write_matrix_fragments(root, "org: t\nrepo: t\nrows:\n")
     commit_all(root, "spec, matrix and manifest override")
     for argv in (
         ["run", "start", "fr-goal", "--branch", "feat/rec2", "--run-id", RUN],
@@ -736,8 +733,6 @@ def test_a_spec_review_record_applies_input_post_merge_and_a_resolve_together(
     assert resolution.state == "fixed"
     assert resolution.body == "Y removed from the spec"
 
-    from fr.acceptance.model import load_matrix
-
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(root)
     (row,) = [r for r in matrix.rows if r.id == "trace-row"]
     assert row.verify == "live"

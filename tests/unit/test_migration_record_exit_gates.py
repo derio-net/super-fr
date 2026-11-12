@@ -47,14 +47,15 @@ def test_journal_item_accepts_gate_and_narrows() -> None:
     assert item.narrows == ("derio-net/super-fr#1", "#2")
 
 
-def test_the_record_kind_is_at_version_ten() -> None:
-    assert RECORD_SCHEMA_VERSION == 10
-    assert artifact_kind("record").current_version == 10
+def test_the_record_kind_is_at_least_version_ten() -> None:
+    # 10 -> 11 follows; test_record_amendments pins the current version and chain.
+    assert RECORD_SCHEMA_VERSION >= 10
+    assert artifact_kind("record").current_version >= 10
 
 
 def test_the_chain_from_one_reaches_ten_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert [s.to_version for s in chain][:9] == [2, 3, 4, 5, 6, 7, 8, 9, 10]
     hop = MIGRATIONS.chain("record", 9)[0]
     assert (hop.from_version, hop.to_version) == (9, 10)
 
@@ -65,8 +66,9 @@ def test_a_v9_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == _V9.replace("schema_version: 9\n", "schema_version: 10\n")
-    assert parse_record(path.read_text()).schema_version == 10
+    want = f"schema_version: {RECORD_SCHEMA_VERSION}\n"
+    assert path.read_text() == _V9.replace("schema_version: 9\n", want)
+    assert parse_record(path.read_text()).schema_version == RECORD_SCHEMA_VERSION
 
 
 def test_an_unreadable_v9_record_is_refused_and_left_alone(tmp_path: Path) -> None:
@@ -198,7 +200,7 @@ def test_p3_r8_the_migration_names_every_field_it_adds() -> None:
 
 
 def test_the_validator_accepts_both_fields(tmp_path: Path) -> None:
-    text = _V9.replace("schema_version: 9", "schema_version: 10").replace(
+    text = _V9.replace("schema_version: 9", f"schema_version: {RECORD_SCHEMA_VERSION}").replace(
         "{kind: decision, id: d1, title: plain decision}",
         "{kind: decision, id: d1, title: t, gate: owner, narrows: ['#1'], answered_by: operator}",
     )

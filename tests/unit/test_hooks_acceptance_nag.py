@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import make_repo, row, write_fragments, write_matrix_fragments
 
 pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq")
 
@@ -120,7 +120,7 @@ def test_a_stale_artifact_refusal_is_reported_not_swallowed(tmp_path, monkeypatc
 
     repo = tmp_path / "repo"
     (repo / "docs" / "acceptance").mkdir(parents=True)
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: []\n")
+    write_fragments(repo, [], feature="legacy")
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
 
     bin_dir = tmp_path / "bin"
@@ -153,7 +153,7 @@ def test_a_stale_artifact_refusal_is_reported_not_swallowed(tmp_path, monkeypatc
 def _run_with_fake_fr(tmp_path: Path, script: str) -> subprocess.CompletedProcess[str]:
     repo = tmp_path / "repo"
     (repo / "docs" / "acceptance").mkdir(parents=True)
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: []\n")
+    write_fragments(repo, [], feature="legacy")
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -228,7 +228,7 @@ def test_nag_says_acceptance_is_disabled_when_the_repo_setting_is_off(tmp_path: 
     land_on_main(root, "artifacts:\n  acceptance: off\n")
     assert run_hook(root).stdout == ""  # no matrix: the cheap early exit (p2-r6)
     (root / "docs" / "acceptance").mkdir(parents=True)
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text("org: o\nrepo: r\nrows: []\n")
+    write_matrix_fragments(root, "org: o\nrepo: r\nrows: []\n")
     result = run_hook(root)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "acceptance disabled by repo setting"

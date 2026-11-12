@@ -19,6 +19,10 @@ from fr.acceptance.model import AcceptanceError, load_matrix, parse_matrix
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 
+from tests.unit.acceptance_helpers import matrix_registry_up_to_v5
+
+V5 = matrix_registry_up_to_v5()
+
 _WALK = """\
     walks:
       - strategy: live
@@ -92,19 +96,20 @@ def _matrix(root: Path, text: str = _V4) -> Path:
     return path
 
 
-def test_the_matrix_kind_is_at_version_five() -> None:
-    assert artifact_kind("matrix").current_version == 5
+def test_the_matrix_kind_reached_version_five_before_it_retired() -> None:
+    assert artifact_kind("matrix").current_version == 6
+    assert V5.kind("matrix").current_version == 5
 
 
 def test_the_chain_from_one_reaches_five_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("matrix", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4, 5]
+    assert [s.to_version for s in chain][:4] == [2, 3, 4, 5]
 
 
 def test_skipped_rows_map_by_the_fixed_rule_and_nothing_else_moves(tmp_path: Path) -> None:
     path = _matrix(tmp_path)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     expected = (
@@ -140,7 +145,7 @@ def test_the_rewrite_is_written_once_and_atomically(
     monkeypatch.setattr(mod, "write_text_atomic", _spy)
     path = _matrix(tmp_path)
 
-    run_migrations(tmp_path, dry_run=False)
+    run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert calls == [path]
 
@@ -153,28 +158,30 @@ def _git_repo(root: Path) -> None:
     )
 
 
-def test_the_committed_reports_are_regenerated_in_the_same_write(tmp_path: Path) -> None:
-    from fr.acceptance.report import REPORT_SET, render_committed_set
+def test_the_hop_renders_no_report_and_leaves_existing_ones_alone(tmp_path: Path) -> None:
+    """Review p2-r1: the 5 -> 6 hop deletes every committed report, so this hop
+    renders none — not even when one of the set exists (it used to write all three)."""
+    from fr.acceptance.report import LEGACY_REPORT_PATHS as REPORT_SET
 
     _git_repo(tmp_path)
-    path = _matrix(tmp_path)
-    for rel in REPORT_SET:
-        (tmp_path / rel).write_text("stale\n")
+    _matrix(tmp_path)
+    first, *rest = REPORT_SET
+    (tmp_path / first).write_text("stale\n")
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
-    want = render_committed_set(load_matrix(path), tmp_path)
-    for rel in REPORT_SET:
-        assert (tmp_path / rel).read_text() == want[rel]
-    assert "walked live" in (tmp_path / "docs/acceptance/report_linked.md").read_text()
+    assert (tmp_path / first).read_text() == "stale\n"
+    for rel in rest:
+        assert not (tmp_path / rel).exists(), rel
+    assert [p.name for p in report.changed_paths] == ["matrix.yaml"]
 
 
 def test_an_unresolvable_verify_leaves_the_matrix_byte_identical(tmp_path: Path) -> None:
     path = _matrix(tmp_path, _V4.replace("verify: candidate", "verify: no-such-strategy"))
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert "no-such-strategy" in report.failed[0].error
@@ -186,7 +193,7 @@ def test_an_unconvertible_flow_row_is_left_byte_identical(tmp_path: Path) -> Non
     path = _matrix(tmp_path, flow)
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert path.read_bytes() == before
@@ -196,7 +203,7 @@ def test_an_unreadable_v4_matrix_is_refused_byte_identical(tmp_path: Path) -> No
     path = _matrix(tmp_path, _V4.replace("status: ci", "status: sheduled"))
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert path.read_bytes() == before
@@ -207,7 +214,7 @@ def test_a_wholly_v5_body_under_a_v4_stamp_lets_the_runner_finish(tmp_path: Path
     body = _HEAD + _ROWS["ci-row"] + _ROWS["plain-row"].replace("skipped", "manual")
     path = _matrix(tmp_path, body)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert path.read_text() == body.replace("schema_version: 4\n", "schema_version: 5\n")
@@ -224,7 +231,7 @@ def test_a_v1_matrix_with_skipped_rows_climbs_the_whole_chain(tmp_path: Path) ->
     )
     path = _matrix(tmp_path, v1)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     m = load_matrix(path)
@@ -259,14 +266,27 @@ def test_the_frozen_v4_reader_is_pinned() -> None:
         assert hashlib.sha256(source.encode()).hexdigest() == sha, name
 
 
-def test_no_matrix_migration_reads_with_the_live_parser() -> None:
-    """Every matrix hop's body check goes through a frozen reader; the live
-    parser only answers the crash-window question of the newest hop."""
-    import fr.artifacts.matrix_strategies as strategies
-    import fr.artifacts.matrix_verify as verify
+def test_no_matrix_migration_names_the_live_parser() -> None:
+    """Review p2-r3, the rule in `.claude/rules/artifact-versioning.md`: no matrix
+    hop validates an old file against the live model. Every module under
+    `fr/artifacts/matrix_*.py` reads through the frozen `fr.acceptance.legacy`
+    readers (`parse_matrix_v3/v4/v5`, `is_v5_body`). The final hop's crash-window
+    question is answered by the fold over fragments — its new shape — never by
+    the live `parse_matrix`/`load_matrix`, so no module is allowlisted."""
+    import re
 
-    assert "parse_matrix(" not in inspect.getsource(strategies).replace("parse_matrix_v", "")
-    assert "parse_matrix(" not in inspect.getsource(verify).replace("parse_matrix_v", "")
+    import fr.artifacts as artifacts_pkg
+
+    live = re.compile(r"\b(?:parse_matrix|load_matrix)\b(?!_v)")
+    assert live.search("from fr.acceptance.model import parse_matrix"), "the pattern is blind"
+    assert live.search("matrix = load_matrix(path)"), "the pattern is blind"
+    assert not live.search("from fr.acceptance.legacy import parse_matrix_v5")
+
+    src = Path(artifacts_pkg.__file__).parent
+    modules = sorted(src.glob("matrix_*.py"))
+    assert len(modules) >= 6, [m.name for m in modules]
+    offenders = {m.name for m in modules if live.search(m.read_text())}
+    assert offenders == set()
     # The 4 -> 5 hop reads the OLD body with the frozen reader (p1-r5).
     import fr.artifacts.matrix_status_split as split
 
@@ -292,7 +312,7 @@ def test_the_old_scaffold_status_comment_is_replaced_by_the_current_one(tmp_path
     head = "# Row schema:\n" + _OLD_STATUS_COMMENT + "#   notes:      evidence detail\n"
     path = _matrix(tmp_path, head + _V4)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     text = path.read_text()
@@ -305,7 +325,7 @@ def test_a_customised_status_comment_is_left_alone(tmp_path: Path) -> None:
     custom = "#   status: our own words, skipped included\n"
     path = _matrix(tmp_path, custom + _V4)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert path.read_text().startswith(custom)
@@ -323,29 +343,8 @@ def test_the_current_status_comment_is_the_scaffolds() -> None:
 # --- review p1-r5 ----------------------------------------------------------------
 
 
-def test_a_report_render_failure_leaves_matrix_and_reports_byte_identical(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import fr.acceptance.report as report_mod
-    from fr.acceptance.report import REPORT_SET
-
-    def _boom(*_a: object, **_k: object) -> dict[str, str]:
-        raise AcceptanceError("identity does not resolve")
-
-    monkeypatch.setattr(report_mod, "render_committed_set", _boom)
-    path = _matrix(tmp_path)
-    for rel in REPORT_SET:
-        (tmp_path / rel).write_text("stale\n")
-    before = {p: p.read_bytes() for p in [path, *(tmp_path / rel for rel in REPORT_SET)]}
-
-    report = run_migrations(tmp_path, dry_run=False)
-
-    assert [f.path for f in report.failed] == [path]
-    assert {p: p.read_bytes() for p in before} == before
-
-
-def test_the_crash_window_still_regenerates_the_reports(tmp_path: Path) -> None:
-    from fr.acceptance.report import REPORT_SET, render_committed_set
+def test_the_crash_window_only_owes_the_stamp(tmp_path: Path) -> None:
+    from fr.acceptance.report import LEGACY_REPORT_PATHS as REPORT_SET
 
     _git_repo(tmp_path)
     body = _HEAD + _ROWS["ci-row"] + _ROWS["plain-row"].replace("skipped", "unwired")
@@ -353,13 +352,12 @@ def test_the_crash_window_still_regenerates_the_reports(tmp_path: Path) -> None:
     for rel in REPORT_SET:
         (tmp_path / rel).write_text("stale\n")
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert path.read_text() == body.replace("schema_version: 4\n", "schema_version: 5\n")
-    want = render_committed_set(load_matrix(path), tmp_path)
     for rel in REPORT_SET:
-        assert (tmp_path / rel).read_text() == want[rel]
+        assert (tmp_path / rel).read_text() == "stale\n"
 
 
 def test_a_skipped_row_whose_only_walk_failed_is_not_walked(tmp_path: Path) -> None:
@@ -371,7 +369,7 @@ def test_a_skipped_row_whose_only_walk_failed_is_not_walked(tmp_path: Path) -> N
     )  # fmt: skip
     path = _matrix(tmp_path, body)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert {r.id: r.status for r in load_matrix(path).rows} == {

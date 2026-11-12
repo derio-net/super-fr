@@ -1734,7 +1734,8 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     matrix-less repos get an adoption nudge, not a broken self-review.
     Cross-repo specs are exempt in v1 (the matrix lives with the spec's repo,
     which this checkout cannot see)."""
-    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.acceptance.model import AcceptanceError
 
     root = plan.repo_root
     if root is None:
@@ -1764,8 +1765,7 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
                 message=disabled_because("acceptance", "no matrix rows to link to the Test Plan"),
             )
         ]
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
-    if not matrix_path.exists():
+    if not has_fragments(root):
         return [
             ReviewIssue(
                 severity="warn",
@@ -1777,7 +1777,7 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
             )
         ]
     try:
-        matrix = load_matrix(matrix_path)
+        matrix = load_effective(root)
     except AcceptanceError as e:
         return [ReviewIssue(severity="warn", message=f"acceptance matrix unreadable: {e}")]
 
@@ -1801,7 +1801,7 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
                     severity="error",
                     message=(
                         f"phase {phase_n} links unknown acceptance row id {rid!r} "
-                        f"(not in docs/acceptance/matrix.yaml)"
+                        f"(no fragment under docs/acceptance/features/ defines it)"
                     ),
                 )
             )
@@ -2203,7 +2203,9 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
     matrix: Matrix | None = None
     matrix_unreadable = False
     spec_ref = ""
-    if (root / "docs" / "acceptance" / "matrix.yaml").is_file():
+    from fr.acceptance.fold import has_fragments
+
+    if has_fragments(root):
         try:
             matrix, spec_ref = load_spec_matrix(root, spec_rel)
         except AcceptanceError as e:
@@ -2282,7 +2284,7 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
                         severity="warn",
                         message=(
                             f"phase {n}'s ask split reason is accepted as recorded but "
-                            "is unverifiable without docs/acceptance/matrix.yaml."
+                            "is unverifiable without acceptance fragments."
                         ),
                     )
                 )

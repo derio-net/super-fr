@@ -9,6 +9,7 @@ from pathlib import Path
 from fr.run.closeout import closeout_brief
 from fr.run.model import RunState, StepRecord, save_run_state
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.requirements_support import row, write_matrix
 from tests.unit.test_pickup_cmd import _invoke
 
@@ -75,7 +76,7 @@ def test_every_other_run_prints_todays_brief_byte_for_byte(tmp_path: Path) -> No
 
 def test_a_plan_with_ops_gets_it_even_when_the_matrix_is_unreadable(tmp_path: Path) -> None:
     _run(tmp_path, ops=True)
-    (tmp_path / "docs/acceptance/matrix.yaml").write_text("rows: [\n")
+    write_matrix_fragments(tmp_path, "rows: [\n")
     result = _invoke(tmp_path, ["pickup", "--run", "r1"])
     assert "fr ops gate --run r1" in result.output, result.output
 

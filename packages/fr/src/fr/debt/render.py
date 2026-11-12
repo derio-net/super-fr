@@ -13,8 +13,7 @@ import json
 import re
 from typing import Any
 
-from fr.acceptance.model import DEBT_STATUSES
-from fr.debt.model import AcceptanceDebt, DebtReport, SourceStatus
+from fr.debt.model import AcceptanceDebt, DebtReport, DebtRow, SourceStatus
 from fr.settings import DISABLED
 
 MARKER = "<!-- fr-technical-debt -->"
@@ -162,6 +161,20 @@ def _acceptance_off(report: DebtReport) -> bool:
     return matrix is not None and DISABLED in matrix.why
 
 
+def _status(r: DebtRow) -> str:
+    """A row's status, with `contested` beside it when a stale amendment merged on it
+    (and `retired` before that when the row has left the matrix)."""
+    return status_tag(r.status, retired=r.retired, contested=r.contested)
+
+
+def status_tag(status: str, *, retired: bool = False, contested: bool = False) -> str:
+    """`<status>[, retired][, contested]`: the one rendering `fr debt`, the digest and
+    `fr acceptance status` share."""
+    return ", ".join(
+        [status, *(["retired"] if retired else []), *(["contested"] if contested else [])]
+    )
+
+
 def acceptance_section(acc: AcceptanceDebt, *, off: bool = False) -> str:
     """`## Acceptance debt`: the section `fr acceptance digest` re-renders."""
     lines = ["## Acceptance debt", ""]
@@ -172,13 +185,13 @@ def acceptance_section(acc: AcceptanceDebt, *, off: bool = False) -> str:
         lines.append("Acceptance debt is unavailable: the matrix could not be read.")
         return "\n".join(lines)
     lines += [f"Counts: {_counts_line(acc.by_status)}.", ""]
-    debt = [r for r in acc.rows if r.status in DEBT_STATUSES]
+    debt = [r for r in acc.rows if r.is_debt]
     if not debt:
         lines.append("No open acceptance debt.")
     else:
         lines += _table(
             ["id", "status", "acceptance", "notes"],
-            [[r.id, r.status, r.acceptance, r.notes] for r in debt],
+            [[r.id, _status(r), r.acceptance, r.notes] for r in debt],
         )
     return "\n".join(lines)
 
@@ -283,11 +296,7 @@ def text(report: DebtReport) -> str:
         out.append("  unavailable (the matrix could not be read)")
     else:
         out.append(f"  {_counts_line(acc.by_status)}")
-        out += [
-            f"  {r.id} [{r.status}] {_cell(r.acceptance)}"
-            for r in acc.rows
-            if r.status in DEBT_STATUSES
-        ]
+        out += [f"  {r.id} [{_status(r)}] {_cell(r.acceptance)}" for r in acc.rows if r.is_debt]
         out += [f"  {r.id} [{_walked(r.walked_at)}]" for r in acc.rows if r.status == "walked"]
     out.append("Plans:")
     p = report.plans

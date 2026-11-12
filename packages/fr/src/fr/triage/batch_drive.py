@@ -1029,21 +1029,18 @@ def closeout_handback_decision(
 
 
 ARCHIVE_DIRS = ("plans", "specs", "journals", "runs", "usage")
-MATRIX_FILES = frozenset({
-    "docs/acceptance/matrix.yaml", "docs/acceptance/report_local.html",
-    "docs/acceptance/report_linked.html", "docs/acceptance/report_linked.md",
-})  # fmt: skip
 
 
 def archive_allowed(entry: str) -> bool:
     """Whether one `<status>\t<path>` change is what an archive makes (R15's auto-merge
     allowlist): anything under `docs/superpowers/implemented/`, a deletion out of a live
-    artifact directory, or the acceptance matrix and its three reports. Never a workflow
-    or verification manifest, nor anything else."""
+    artifact directory. Never an acceptance fragment (an archive rewrites no row: rows
+    cite fr artifacts logically, spec 2026-11-04 R18), a workflow or verification
+    manifest, nor anything else."""
     status, _, path = entry.partition("\t")
     if not path or ".." in PurePosixPath(path).parts:
         return False
-    if path.startswith("docs/superpowers/implemented/") or path in MATRIX_FILES:
+    if path.startswith("docs/superpowers/implemented/"):
         return True
     return status == "D" and path.startswith(tuple(f"docs/superpowers/{d}/" for d in ARCHIVE_DIRS))
 

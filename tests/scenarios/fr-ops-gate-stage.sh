@@ -37,14 +37,11 @@ forge: {type: github}
 tracking: {type: none}
 YAML
 printf 'env_passthrough: [MARKS]\n' > .fr/ops.yaml
-"$py" - <<'PY' || fail "could not write the matrix"
-from pathlib import Path
-from fr.artifacts.registry import ARTIFACT_KINDS
-path = Path("docs/acceptance/matrix.yaml")
-path.parent.mkdir(parents=True, exist_ok=True)
-version = ARTIFACT_KINDS["matrix"].current_version
-path.write_text(f"schema_version: {version}\norg: derio-net\nrepo: fixture\nrows: []\n")
-PY
+matrix_fragment <<'YAML'
+org: derio-net
+repo: fixture
+rows: []
+YAML
 run_fr out init validator-wrapper
 require_exit 0 "$out"
 git add -A && git commit -qm base && git push -q origin main || fail "seed main"

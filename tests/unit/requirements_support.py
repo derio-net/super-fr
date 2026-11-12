@@ -15,10 +15,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-import yaml
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, spec_journal_slug
 
-MATRIX_REL = "docs/acceptance/matrix.yaml"
 ORG = "t"
 REPO = "t"
 
@@ -38,21 +36,13 @@ def spec_ref(spec_rel: str) -> str:
 
 
 def write_matrix(repo: Path, rows: list[dict[str, object]]) -> Path:
-    """The matrix as `fr acceptance init` + `add` leave it: a stamped head,
-    then one `render_row_block` per row under a bare `rows:`."""
-    from fr.acceptance.edit import render_row_block
-    from fr.acceptance.model import Row
-    from fr.artifacts.registry import ARTIFACT_KINDS
+    """The rows as `fr acceptance add` leaves them: one fragment
+    (`fr.acceptance.edit.render_fragment`) per origin spec, `legacy` for the rest.
+    Returns the fragments directory."""
+    from tests.unit.acceptance_helpers import FRAGMENTS_REL, write_fragments
 
-    path = repo / MATRIX_REL
-    path.parent.mkdir(parents=True, exist_ok=True)
-    head = yaml.safe_dump(
-        {"schema_version": ARTIFACT_KINDS["matrix"].current_version, "org": ORG, "repo": REPO},
-        sort_keys=False,
-    )
-    body = "".join(render_row_block(Row.model_validate(r)) for r in rows)
-    path.write_text(f"{head}rows:\n{body}")
-    return path
+    write_fragments(repo, rows, repo=f"{ORG}/{REPO}", feature=None if rows else "legacy")
+    return repo / FRAGMENTS_REL
 
 
 def row(

@@ -9,10 +9,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.cli import app
 from fr.settings import DISABLED
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import fragments_text, write_matrix_fragments
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
 runner = CliRunner()
@@ -67,10 +69,10 @@ def test_a_record_acceptance_section_is_refused_and_bytes_restored(tmp_path: Pat
     git(root, "checkout", "-q", "main")
     land_on_main_local(root, OFF)
     git(root, "checkout", "-q", "feat/drops")
-    before = (root / "docs" / "acceptance" / "matrix.yaml").read_bytes()
+    before = fragments_text(root).encode()
     with pytest.raises(RecordRefusedError, match=DISABLED):
         apply_record(root, None, _move(), target=RecordTarget(message="m"))
-    assert (root / "docs" / "acceptance" / "matrix.yaml").read_bytes() == before
+    assert fragments_text(root).encode() == before
 
 
 def land_on_main_local(root: Path, text: str) -> None:
@@ -142,9 +144,7 @@ def test_self_review_and_proportionality_say_disabled(repo: Path) -> None:
 
 def _with_matrix(root: Path) -> None:
     (root / "docs" / "acceptance").mkdir(parents=True, exist_ok=True)
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(
-        "org: derio-net\nrepo: own\nrows: []\n"
-    )
+    write_matrix_fragments(root, "org: derio-net\nrepo: own\nrows: []\n")
 
 
 @pytest.mark.parametrize("with_matrix", [False, True], ids=["no-matrix", "matrix"])
@@ -164,13 +164,12 @@ def test_p2_r6_check_and_summary_say_disabled_and_exit_0(
 def test_p2_r6_the_staleness_guard_demands_no_rows_under_acceptance_off(repo: Path) -> None:
     """acceptance: off with test_plan: on: a Test Plan spec cited by no row is not stale."""
     from fr.acceptance.check import check
-    from fr.acceptance.model import load_matrix
 
     _with_matrix(repo)
     spec = repo / "docs" / "superpowers" / "specs" / "2026-11-07-x-design.md"
     spec.parent.mkdir(parents=True, exist_ok=True)
     spec.write_text("# S\n\n## Test Plan\n\n1. x\n")
-    result = check(load_matrix(repo / "docs" / "acceptance" / "matrix.yaml"), repo)
+    result = check(load_effective(repo), repo)
     assert not [e for e in result.errors if e.startswith("staleness")], result.errors
 
 
@@ -179,8 +178,8 @@ def test_p2_r5_digest_says_disabled_and_report_backfill_are_refused(repo: Path) 
     digest = runner.invoke(app, ["acceptance", "digest"])
     assert digest.exit_code == 0, digest.output
     assert DISABLED in digest.output
-    for argv in (["acceptance", "report", "--deterministic"], ["acceptance", "backfill"]):
+    for argv in (["acceptance", "report"], ["acceptance", "backfill"]):
         result = runner.invoke(app, argv)
         _refused(result)
     d = repo / "docs" / "acceptance"
-    assert not any((d / n).exists() for n in ("report_local.html", "report_linked.md"))
+    assert not any((d / n).exists() for n in ("report.html", "report.md"))

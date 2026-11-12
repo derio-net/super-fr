@@ -1,0 +1,116 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-01-ci-speed
+repo: derio-net/super-fr
+rows:
+  - id: matrix-parse-libyaml
+    capability: acceptance-matrix
+    acceptance: fr parses an acceptance matrix with libyaml when PyYAML has it (pure-Python
+      otherwise) to the same Matrix, and reuses one parse of identical text within a
+      process
+    origin:
+    - spec:2026-11-01-ci-speed#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_yamlio.py#test_loader_falls_back_without_the_c_loader
+      - super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_matrix_equals_plain_pyyaml_build
+    status: ci
+    notes: Unit tests in CI pin loader choice + pure fallback parse (test_yamlio), memoized
+      parse with per-caller deep copy, uncached errors and real-matrix equality (test_acceptance_parse_cache).
+      Phase 1 of plan 2026-11-01-ci-speed.
+    verify: none
+  - id: ci-shards-complete
+    capability: ci
+    acceptance: CI splits every leg's tests across 6 shards by one CI-derived durations
+      file per run, and fails when the shards together did not run exactly the collected
+      test set once each
+    origin:
+    - spec:2026-11-01-ci-speed#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_split_check.py
+      - super-fr:tests/unit/test_ci_split_workflow.py#test_split_check_covers_every_test_leg
+      int:
+      - super-fr:tests/integration/test_split_durations_xdist.py#test_each_groups_file_is_the_controllers_and_the_groups_partition
+    status: ci
+    notes: 'split-check job runs on every CI run (both legs: 13770 tests, 6 shards,
+      complete on PR run 41340117422); shape and pure check/merge pinned by unit tests;
+      xdist writer pinned by integration test.'
+    verify: none
+  - id: ci-coverage-newest-leg
+    capability: ci
+    acceptance: The combined coverage gate (fail-under 75) is measured on the 3.14 leg;
+      the 3.11 floor leg runs the same tests without coverage
+    origin:
+    - spec:2026-11-01-ci-speed#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_only_the_newest_leg_feeds_coverage
+    status: ci
+    notes: Coverage measured and uploaded on the 3.14 leg only, 3.11 runs --no-cov;
+      coverage job (fail-under 75) unchanged and green on PR run 41340117422.
+    verify: none
+  - id: ci-budget-watcher-files-breach
+    capability: ci
+    acceptance: The CI budget watcher reads the run's workflow file at its commit and
+      files or updates a ci-budget issue when the run is over budget
+    origin:
+    - spec:2026-11-01-ci-speed#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_budget.py#test_fetch_workflow_text_sends_the_ref_as_a_get_query_parameter
+    status: walk-owed
+    notes: GET fix unit-pinned (argv test); the live proof is the watcher's first workflow_run
+      after merge (Test Plan 3).
+    verify: live
+  - id: release-staged-suite-sharded
+    capability: release
+    acceptance: A release proves its exact staged commit with the full suite in 6 token-free
+      shards, each checking the new fr version, and pushes only when all are green;
+      every existing release outcome still happens
+    origin:
+    - spec:2026-11-01-ci-speed#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_materialise_refuses_a_bundle_whose_head_is_not_the_planned_commit
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_probes_the_version_before_pytest_and_refuses_a_wrong_number
+      - super-fr:tests/unit/test_release_script.py#test_test_shard_runs_its_split_credential_free_with_the_durations_options
+      int:
+      - super-fr:tests/integration/test_release_shard_ids.py#test_a_shard_with_its_durations_file_outside_the_checkout_reports_collects_ids
+    status: walked
+    notes: 'Walked on the first Release run after #1304 fixed shard node ids (run 41394832265,
+      275 s, v6.1.0-rc.4). Job graph and gate also pinned by unit tests; real-pytest
+      shard/collect id parity by the int test.'
+    verify: live
+    walks:
+    - strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-02T05:39:16Z'
+      evidence: 'Release run 41394832265 (merge of #1304, 2026-11-02): prepare -> collect
+        + 6 test shards -> split-check (pass) -> publish; tagged and published v6.1.0-rc.4
+        (pre-release, gate:tester held). Wall clock 275 s (05:34:41-05:39:16 UTC) vs
+        the 600-1000 s single-job baseline. The first attempt, run 41389896526, failed
+        split-check on the shard rootdir bug fixed by #1304.'
+  - id: release-superseded-not-retried
+    capability: release
+    acceptance: When main moved past the commit a release was staged on, the release
+      exits green as superseded without pushing, and the run that push triggered releases
+      instead
+    origin:
+    - spec:2026-11-01-ci-speed#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_a_race_at_the_push_itself_is_superseded
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_with_an_explicit_version_exits_non_zero_naming_the_redispatch
+      - super-fr:tests/unit/test_release_script.py#test_a_superseded_run_tests_once_and_never_retests
+    status: walk-owed
+    notes: tracked by derio-net/super-fr#1360
+    verify: live
+    issues:
+    - derio-net/super-fr#1360

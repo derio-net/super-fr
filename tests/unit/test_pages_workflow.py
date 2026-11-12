@@ -52,8 +52,17 @@ def test_triggers_cover_every_input_of_the_site() -> None:
     assert "workflow_dispatch" in on
 
 
+def test_the_checkout_is_full_history_and_a_refused_recheck_is_loud() -> None:
+    # p4-r5: the fold raises on shallow history once any fragment has amendments
+    first = next(s for s in _steps() if s.get("uses", "").startswith(CHECKOUT))
+    assert first["with"]["fetch-depth"] == 0
+    # p4-r1: the re-check refusing cannot unpublish a live site, so it fails the job
+    check = next(s["run"] for s in _steps() if "pages-check" in s.get("run", ""))
+    assert "::error::" in check and "exit 1" in check and "::warning::" not in check
+
+
 def test_render_step_is_sha_pinned_into_the_site() -> None:
-    runs = [r for r in _runs() if "fr acceptance report" in r]
+    runs = [r for r in _runs() if r.startswith("fr acceptance report")]
     assert len(runs) == 1
     run = runs[0]
     assert "--link-mode github" in run
@@ -169,8 +178,13 @@ def _index(pred) -> int:
     return hits[0]
 
 
+def _is_render(step: dict) -> bool:
+    """The render step: its command IS `fr acceptance report` (the placeholder only names it)."""
+    return step.get("run", "").startswith("fr acceptance report")
+
+
 def _render() -> dict:
-    return _steps()[_index(lambda s: "fr acceptance report" in s.get("run", ""))]
+    return _steps()[_index(_is_render)]
 
 
 def _on_render_failure() -> list[tuple[int, dict]]:
@@ -188,12 +202,13 @@ def test_a_failed_render_cannot_skip_the_deploy() -> None:
     assert render.get("continue-on-error") is True
     for action in ("configure-pages", "upload-pages-artifact", "deploy-pages"):
         step = _steps()[_index(lambda s, a=action: f"actions/{a}" in s.get("uses", ""))]
-        assert "if" not in step, action
+        # the one condition a publishing step carries is the visibility gate, never the render's
+        assert step["if"] == VISIBLE, action
 
 
 def test_a_failed_render_publishes_a_placeholder_before_upload() -> None:
     upload = _index(lambda s: "actions/upload-pages-artifact" in s.get("uses", ""))
-    render = _index(lambda s: "fr acceptance report" in s.get("run", ""))
+    render = _index(_is_render)
     before = [s for i, s in _on_render_failure() if render < i < upload]
     assert len(before) == 1
     assert "_site/acceptance/index.html" in before[0]["run"]
@@ -233,7 +248,45 @@ def test_the_placeholder_says_the_report_was_not_rendered(tmp_path: Path) -> Non
     assert "not rendered" in page
     assert "0123456789ab" in page
     assert "https://github.com/derio-net/super-fr/actions/runs/42" in page
+    # reports are derived: the placeholder names the fragments, never a committed report
+    assert "report_linked" not in page
     assert (
-        "https://github.com/derio-net/super-fr/blob/"
-        "0123456789abcdef0123456789abcdef01234567/docs/acceptance/report_linked.md" in page
+        "https://github.com/derio-net/super-fr/tree/"
+        "0123456789abcdef0123456789abcdef01234567/docs/acceptance/features" in page
     )
+    assert "fr acceptance report --open" in page
+
+
+# spec 2026-11-04 R21: the site publishes only where it is no wider than the repo, and the
+# deploy re-checks that before every run.
+
+VISIBLE = "steps.visibility.outputs.allowed == 'true'"
+
+
+def test_the_deploy_rechecks_visibility_before_building_or_publishing() -> None:
+    check = _index(lambda s: "fr acceptance pages-check" in s.get("run", ""))
+    step = _steps()[check]
+    assert step["id"] == "visibility"
+    assert 'echo "allowed=true" >> "$GITHUB_OUTPUT"' in step["run"]
+    assert 'echo "allowed=false" >> "$GITHUB_OUTPUT"' in step["run"]
+    # loud (p4-r1): a refused check cannot unpublish a live site, so it fails the step
+    assert "exit 1" in step["run"] and "::error::" in step["run"]
+    install = _index(lambda s: s.get("run", "").strip() == "uv tool install ./packages/fr")
+    assert install < check
+    for i, s in enumerate(_steps()):
+        if i <= check:
+            continue
+        built_or_published = (
+            "scripts/build-site.py" in s.get("run", "")
+            or _is_render(s)
+            or any(
+                a in s.get("uses", "") for a in ("configure-pages", "upload-pages", "deploy-pages")
+            )
+        )
+        if built_or_published:
+            assert s["if"] == VISIBLE, s
+
+
+def test_the_placeholder_does_not_name_a_committed_report() -> None:
+    assert "report_linked" not in WORKFLOW.read_text()
+    assert "report_local" not in WORKFLOW.read_text()

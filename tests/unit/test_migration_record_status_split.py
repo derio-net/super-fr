@@ -12,6 +12,7 @@ import inspect
 from pathlib import Path
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record import legacy
@@ -85,7 +86,6 @@ def test_a_v8_skipped_entry_moves_by_the_r6_rule(
 
 
 def test_a_migrated_record_then_applies(tmp_path: Path) -> None:
-    from fr.acceptance.model import load_matrix
     from fr.record.apply import RecordTarget, apply_record
 
     from tests.unit.test_record_apply import _matrix_repo
@@ -105,7 +105,7 @@ def test_a_migrated_record_then_applies(tmp_path: Path) -> None:
         target=RecordTarget(message="m"),
     )
 
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(root)
     assert next(r for r in matrix.rows if r.id == "target").status == "unwired"
 
 

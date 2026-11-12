@@ -58,11 +58,14 @@ one artifact kind.
 - `fr services`: Read-only: the resolved forge / ci / tracking services.
 - `fr acceptance`: Acceptance matrix: business-level acceptance tests × verification levels.
   - `fr acceptance check`: The gate: refs resolve, staleness, exit 2 on failing rows.
-  - `fr acceptance report`: Render the report set (or, with --check, verify it is in sync).
+  - `fr acceptance report`: Render the report from the folded matrix, to a file git ignores.
+  - `fr acceptance comment`: Keep ONE comment on a PR carrying the Markdown report (forge.report_comment: on).
+  - `fr acceptance pages-check`: Exit 0 when a Pages site for the report would be no wider than the repo, 1 when not.
   - `fr acceptance status`: Terminal nag: counts by status + the open acceptance debt rows.
   - `fr acceptance summary`: GitHub Actions-friendly Markdown summary: compact counts + collapsible debt.
-  - `fr acceptance set-status`: Move an existing row's status, in place, with a reason.
-  - `fr acceptance add`: Insert a schema-validated row after its capability's last row (agents never hand-edit YAML shapes); a new capability appends at the end.
+  - `fr acceptance set-status`: Move an existing row's status, with a reason.
+  - `fr acceptance amend`: Append an amendment of a row to this feature's fragment.
+  - `fr acceptance add`: Insert a schema-validated row into the fragment of the feature that owns it (its one origin spec, or --feature), after its capability's last row (agents never hand-edit YAML shapes); a new capability goes at the end of `rows:`.
   - `fr acceptance init`: Scaffold matrix + CI workflow + backfill rule + gitignore (idempotent).
   - `fr acceptance backfill`: Emit the agent backfill protocol + deterministic inventory (markdown).
   - `fr acceptance digest`: Markdown for the upserted "Acceptance debt" issue (idempotence marker included; zero debt prints a closable body).
