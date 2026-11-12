@@ -269,6 +269,52 @@ def _stealth_request(
     return repo, {}
 
 
+def _prepare_resume(repo: Path, extra: dict[str, Any], run_id: str, branch: str) -> tuple[Any, str]:
+    """R24 "resume": the run's branch from the tracking repo, reconciled with the target's
+    pushed code BEFORE any worktree is made (a state ahead of the code refuses here)."""
+    from fr.placement.stealth import prepare_resume
+    from fr.settings import SettingsError
+
+    if "stealth" not in extra:
+        raise IsolationError("--resume resumes a stealth run: name it with --stealth or --target")
+    try:
+        found = prepare_resume(repo, extra["stealth"], run_id)
+    except SettingsError as e:
+        raise IsolationError(str(e)) from e
+    if branch != DEFAULT_BRANCH and branch != found.branch:
+        raise IsolationError(
+            f"run {run_id} works on {found.branch!r}, not {branch!r}; omit --branch to resume it"
+        )
+    return found, found.branch
+
+
+def _finish_resume(state: IsolationState, found: Any, run_id: str) -> None:
+    """Equal: resume as is. The branch ahead: redo the last step's bookkeeping, i.e.
+    record the product head the state now describes (idempotent), committed and pushed
+    to the tracking repo like every state write."""
+    from fr.placement import stealth
+    from fr.records_commit import commit_records
+
+    verdict = found.reconciled
+    if verdict.verdict == "equal":
+        typer.echo(f"resume {run_id}: the state and origin/{found.branch} agree", err=True)
+        return
+    written = stealth.write_placement_file(
+        state.worktree, found.placement_file.parent, run_id, found.branch
+    )
+    commit_records(
+        state.worktree,
+        [written],
+        f"chore(fr): run {run_id} — resume, product head {(verdict.branch_head or '')[:12]}",
+    )
+    typer.echo(
+        f"resume {run_id}: origin/{found.branch} is ahead of the state "
+        f"({(verdict.recorded or 'none')[:12]} -> {(verdict.branch_head or '')[:12]}); the "
+        "last step's bookkeeping was redone",
+        err=True,
+    )
+
+
 @isolation_app.command()
 def up(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
@@ -317,6 +363,12 @@ def up(
         help="Run from the tracking repo: the local target checkout to isolate (stealth; "
         "the tracking ref defaults to this checkout's origin and branch).",
     ),
+    resume: str | None = typer.Option(
+        None,
+        "--resume",
+        help="Resume stealth run <run-id> from its tracking repo (any host): its branch "
+        "comes from the tracking repo, reconciled with the target's pushed code.",
+    ),
 ) -> None:
     """Create worktree + start the profile's devcontainer against it.
 
@@ -329,9 +381,14 @@ def up(
     """
     try:
         repo, extra = _stealth_request(repo, stealth, target_repo)
+        resumed = None
+        if resume is not None:
+            resumed, branch = _prepare_resume(repo, extra, resume, branch)
         state = _target(repo).up(
             profile=profile, branch=branch, path=path, base=base, no_fetch=no_fetch, **extra
         )
+        if resumed is not None and resume is not None:
+            _finish_resume(state, resumed, resume)
         if session:
             state = _sessions.attach(state.repo_root, state.branch, session, harness=harness)
     except IsolationError as err:

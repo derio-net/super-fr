@@ -117,14 +117,15 @@ def _cursor_branch_line(name: str) -> re.Pattern[str]:
 
 def plan_rename(repo_root: Path, worktree: Path, old: str, new: str) -> RenamePlan:
     """Read every key and refuse before anything is written (spec §B, R9, R10)."""
-    from fr.placement.quiet import read_switch
+    from fr.artifacts.paths import outside_repo
 
-    if read_switch(Path(repo_root)) is not None:
-        # p3-r1: under quiet a branch rename moves the feature id, i.e. its path on the
-        # `fr` branch, which needs its own design; refused before any write.
+    placement = outside_repo(Path(worktree)) or outside_repo(Path(repo_root))
+    if placement is not None:
+        # p3-r1: under quiet (and stealth) a branch rename moves the feature id, i.e. its
+        # path below the placement's root, which needs its own design; refused first.
         raise IsolationError(
-            f"renaming {old} is not available under placement quiet yet: the branch name is "
-            "the feature's path on the `fr` branch. Nothing was written"
+            f"renaming {old} is not available under placement {placement} yet: the branch "
+            "name is the feature's path below the placement's root. Nothing was written"
         )
     wt = Path(worktree)
     if _git_path(wt, "rebase-merge").exists() or _git_path(wt, "rebase-apply").exists():

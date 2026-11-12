@@ -247,6 +247,10 @@ class _RunWrites:
                 for path in guard.before_commit():
                     self.note(root, path)
         pending, self.paths = self.paths, {}
+        for root in pending:
+            extra = self._stealth_head(root)
+            if extra is not None:
+                pending[root].append(extra)
         outcome: CommitOutcome | None = None
         for root, paths in pending.items():
             outcome = commit_records(root, paths, self.message(), quiet=self.quiet)
@@ -255,6 +259,21 @@ class _RunWrites:
         if outcome is not None:
             self.last_outcome = outcome
         return outcome
+
+    def _stealth_head(self, root: Path) -> Path | None:
+        """Under stealth, every run write records the product head it describes beside
+        the cursor (`<run-id>.stealth.json`, R24 "resume"): the pushed head of the
+        product branch, so the state never describes code that is not pushed yet."""
+        from fr.artifacts.paths import STEALTH, outside_repo
+        from fr.placement import stealth
+        from fr.run.model import run_path
+
+        if self.last is None or outside_repo(root) != STEALTH:
+            return None
+        runs = run_path(root, self.last.run).parent
+        path = stealth.placement_file(runs, self.last.run)
+        self.remember(path)
+        return stealth.write_placement_file(root, runs, self.last.run, self.last.branch)
 
 
 _RUN_WRITES: ContextVar[_RunWrites | None] = ContextVar("fr_run_writes", default=None)

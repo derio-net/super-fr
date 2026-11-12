@@ -696,13 +696,15 @@ def quiet_leaves_uncommitted(repo_root: Path, paths: list[str]) -> bool:
     """Under quiet, fr makes no commit on a product branch (R23), and repo configuration
     (a devcontainer profile, `.claude/agents`) is written there for the OPERATOR to
     commit. Says so on stderr and returns True; False (commit as usual) otherwise."""
-    from fr.placement.quiet import read_switch
+    from fr.artifacts.paths import outside_repo
 
-    if read_switch(repo_root) is None:
+    placement = outside_repo(repo_root)
+    if placement is None:
         return False
     print(
-        f"fr: placement quiet: wrote {', '.join(paths)} (repo configuration) but made no "
-        "commit: fr never commits on a product branch under quiet (R23); commit them "
+        f"fr: placement {placement}: wrote {', '.join(paths)} (repo configuration) but made no "
+        "commit: fr never commits on a product branch under quiet or stealth (R23, R24); "
+        "commit them "
         "yourself",
         file=sys.stderr,
     )

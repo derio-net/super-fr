@@ -459,20 +459,19 @@ def _do_mutations(
 def _refuse_dispatch_outside_repo() -> None:
     """R23 "not available here": a runner works from its own checkout of the default
     branch, where a quiet repo keeps no plan, so `--to` is refused naming the placement."""
-    from fr.artifacts.paths import QUIET, REPO
-    from fr.placement.quiet import read_switch
+    from fr.artifacts.paths import REPO, outside_repo
     from fr.settings import SettingsError
 
-    # The switch alone (review p3-r10): no fr worktree is created and no feature id is
-    # checked just to refuse.
+    # The switch or the stealth marker alone (review p3-r10): no fr worktree is created
+    # and no feature id is checked just to refuse (R23, R24 "runner dispatch is refused").
     try:
-        placement = QUIET if read_switch(resolve_repo_root()) is not None else REPO
+        placement = outside_repo(resolve_repo_root()) or REPO
     except SettingsError as e:
         err_console.print(str(e), soft_wrap=True)
         raise typer.Exit(2) from e
     if placement != REPO:
         err_console.print(
-            f"`fr apply --to` is not available under placement {placement} (R23): a runner "
+            f"`fr apply --to` is not available under placement {placement} (R23, R24): a runner "
             "dispatches from the default branch, where this repo keeps no plan. Run the plan "
             "in a session (fr-goal) instead",
             soft_wrap=True,

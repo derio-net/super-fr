@@ -159,19 +159,25 @@ def refuse_under_quiet(root: Path, command: str, why: str) -> None:
     """Refuse *command* BEFORE it writes anything when the repo is quiet (review p3-r1):
     a writer that cannot yet put its files on the `fr` branch must not leave them in the
     product checkout, where a plain `git add -A` carries them to the feature branch.
-    Reads the switch alone (no fr worktree is created to refuse)."""
-    if read_switch(Path(root)) is not None:
+    Reads the switch alone (no fr worktree is created to refuse); a stealth workspace
+    refuses the same way (R24: no fr file reaches the target)."""
+    from fr.artifacts.paths import outside_repo
+
+    placement = outside_repo(Path(root))
+    if placement is not None:
         raise SettingsError(
-            f"`{command}` is not available under placement quiet yet: {why}. Nothing was "
-            "written (R23: no fr file reaches a product branch)"
+            f"`{command}` is not available under placement {placement} yet: {why}. Nothing "
+            "was written (R23, R24: no fr file reaches a product branch)"
         )
 
 
 def worktree_path(root: Path) -> Path:
     """`~/.cache/fr/worktrees/<repo>/fr`, beside isolation's own worktrees (same `<repo>`
-    as `fr.isolation.types.repo_cache_name`, read without a subprocess)."""
-    common = paths._common_dir(Path(root))
-    name = common.parent.name if common is not None and common.name == ".git" else Path(root).name
+    as `fr.isolation.types.repo_cache_name`, read without a subprocess). A relative *root*
+    (`.`) is resolved first: its name would otherwise be empty."""
+    root = Path(root).resolve()
+    common = paths._common_dir(root)
+    name = common.parent.name if common is not None and common.name == ".git" else root.name
     home = Path(os.environ.get("HOME", str(Path.home())))
     return home / ".cache" / "fr" / "worktrees" / name / QUIET_BRANCH
 

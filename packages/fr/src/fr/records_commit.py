@@ -81,7 +81,7 @@ def commit_records(
             if quiet:
                 return outcome
             print(
-                f"fr: committed {_short_head(repo_root)} "
+                f"fr: committed {(outcome.sha or '')[:7] or _short_head(repo_root)} "
                 f"{(outcome.message or message).splitlines()[0]}",
                 file=sys.stderr,
                 flush=True,

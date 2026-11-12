@@ -128,8 +128,8 @@ def target_dir(root: Path) -> str:
     """The target checkout's directory name in the tracking worktree."""
     from fr.isolation.types import _git_common_dir
 
-    common = _git_common_dir(Path(root))
-    main = common.parent if common.name == ".git" else Path(root)
+    common = _git_common_dir(Path(root).resolve())
+    main = common.parent if common.name == ".git" else Path(root).resolve()
     return dir_name(origin_url(root), main)
 
 
@@ -138,7 +138,7 @@ def worktree_path(root: Path, ref: StealthRef) -> Path:
     worktrees (the same `<repo>` as the quiet `fr` worktree)."""
     from fr.placement.quiet import worktree_path as quiet_path
 
-    return quiet_path(root).parent / f"{WORKTREE_PREFIX}{tracking_slug(ref)}"
+    return quiet_path(Path(root).resolve()).parent / f"{WORKTREE_PREFIX}{tracking_slug(ref)}"
 
 
 def _default_network(argv: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -644,3 +644,56 @@ def reconcile(root: Path, recorded: str | None, branch: str) -> Reconciled:
 
 def note(message: str) -> None:
     print(f"fr: placement stealth: {message}", file=sys.stderr)
+
+
+@dataclass(frozen=True)
+class Resume:
+    """What `fr isolation up --stealth … --resume <run-id>` found in the tracking repo."""
+
+    branch: str
+    placement_file: Path
+    reconciled: Reconciled
+
+
+def find_run(root: Path, ref: StealthRef, run_id: str) -> Path:
+    """The `<run-id>.stealth.json` of *run_id* in this target's directory of the tracking
+    worktree (any feature), or refuse naming where fr looked."""
+    wt = worktree_path(root, ref)
+    base = wt / target_dir(root) / paths.FEATURES_DIR
+    found = sorted(base.glob(f"*/{paths.KIND_DIRS['run']}/{run_id}{PLACEMENT_SUFFIX}"))
+    if len(found) != 1:
+        raise SettingsError(
+            f"placement stealth: {ref.text} holds {len(found) or 'no'} run {run_id!r} for "
+            f"this target (looked below {base}); nothing to resume"
+        )
+    return found[0]
+
+
+def prepare_resume(root: Path, ref: StealthRef, run_id: str) -> Resume:
+    """R24 "resume", before any worktree of the target is made: the tracking repo checked
+    (reachable, private enough), the run found, the product branch fetched from the
+    target's remote, and the recorded product head reconciled with it. A state that is
+    ahead of the code refuses here, naming the missing commit."""
+    root = Path(root)
+    check_reachable(ref, root)
+    check_privacy(ref, origin_url(root))
+    ensure_worktree(root, ref)
+    _REACHED.add(ref.text)
+    path = find_run(root, ref, run_id)
+    data = read_placement_file(path)
+    branch = data.get("target_branch")
+    if not isinstance(branch, str) or not branch:
+        raise SettingsError(f"{path}: records no target_branch; cannot resume {run_id}")
+    fetched = network(
+        ["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{branch}:"
+         f"refs/remotes/origin/{branch}"],
+        root,
+    )  # fmt: skip
+    if fetched.returncode != 0:
+        raise SettingsError(
+            f"placement stealth: cannot fetch {branch!r} from the target's origin "
+            f"({(fetched.stderr or 'git fetch failed').strip()}); resume needs the code"
+        )
+    recorded = data.get("product_head")
+    verdict = reconcile(root, recorded if isinstance(recorded, str) else None, branch)
+    return Resume(branch, path, verdict)

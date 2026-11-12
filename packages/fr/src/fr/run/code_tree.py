@@ -54,9 +54,9 @@ def is_code_path(path: str, prefixes: tuple[str, ...] = FR_ARTIFACT_PREFIXES) ->
 def _artifact_prefixes(repo: Path) -> tuple[str, ...]:
     """The artifact prefixes to leave out of *repo*'s code tree: none under quiet, where
     fr's artifacts live on the `fr` branch, so every product path is code (R23)."""
-    from fr.placement.quiet import read_switch
+    from fr.artifacts.paths import outside_repo
 
-    return () if read_switch(repo) is not None else FR_ARTIFACT_PREFIXES
+    return () if outside_repo(repo) is not None else FR_ARTIFACT_PREFIXES
 
 
 def _out(repo: Path, *args: str) -> str:

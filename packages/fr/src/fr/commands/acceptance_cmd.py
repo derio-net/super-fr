@@ -1163,10 +1163,10 @@ def _init_quiet(root: Path, *, refresh_ci: bool) -> bool:
     on the `fr` branch (p3-r1). The CI gate, the rule file, the `.gitignore` lines and
     the badge are product-branch files, and a quiet product branch holds no row for them
     to read (R23). False (nothing done) when the repo is not quiet."""
-    from fr.placement.quiet import read_switch
+    from fr.artifacts.paths import outside_repo
     from fr.records_commit import commit_records
 
-    if read_switch(root) is None:
+    if outside_repo(root) is None:  # quiet, and stealth alike (R24: nothing in the target)
         return False
     if refresh_ci:
         err_console.print(
