@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-12 repo-feature-settings, acceptance off
+reviewed: 2026-11-12 acceptance-fragments phase 1 adds the fragment model and fold, which no reader uses yet; the matrix described here is unchanged
 ---
 
 # The acceptance matrix

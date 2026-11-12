@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 repo-feature-settings, acceptance off is disabled, not debt
+reviewed: 2026-11-12 acceptance-fragments phase 1 adds the fragment model and fold, which no reader uses yet; the matrix described here is unchanged
 ---
 
 ## Overview: claims, not tests
