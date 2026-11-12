@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 moved from the front page; content unchanged
+reviewed: 2026-11-12 moved from the front page; still true after acceptance-fragments (rows in per-feature fragments, reports derived), which also touched the fr-goal skill
 ---
 
 ## The premise
