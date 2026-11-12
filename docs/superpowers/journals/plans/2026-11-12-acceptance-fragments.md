@@ -729,3 +729,8 @@ dd2b99806: merged ties and pending amendments both order by (base, feature slug,
 ### pr1408-r7-resolved · finding [fixed] · resolves pr1408-r7: Rendered reports still say 'from docs/acceptance/matrix.yaml'
 
 df844f367: render and render_markdown say 'from the folded fragments in docs/acceptance/features/'. Red: test_both_renderings_name_the_folded_fragments_as_their_source
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r8-resolved created=2026-11-12T09:43:37+00:00 state=fixed resolves=pr1408-r8 -->
+### pr1408-r8-resolved · finding [fixed] · resolves pr1408-r8: Merged amendment order is inferred from list position and counts in _introductions, so a list with a later amendment above an earlier one folds in the wrong order
+
+7f72df065: _introductions matches each tip amendment by value (n-th copy -> first commit holding n+1 copies) instead of by index/count. Red: test_an_amendment_inserted_above_a_merged_one_takes_its_own_merge_position
