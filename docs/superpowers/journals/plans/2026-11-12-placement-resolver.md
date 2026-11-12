@@ -155,3 +155,48 @@ Same defect as p1-r2, fixed by bc85621d4.
 ### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: branch_slug is not injective (feat/a__b and feat__a/b share a slug), now reused as the quiet/stealth feature id (phase 1)
 
 branch_slug predates this plan and its collision already exists for isolation worktrees; tracked as derio-net/super-fr#1419.
+
+<!-- fr:journal kind=decision scope=plan id=placement-callers-lazy-import-in-refs created=2026-11-12T14:36:21+00:00 phase=2 -->
+### placement-callers-lazy-import-in-refs · decision · fr.refs imports the resolver inside its functions (phase 2) (phase 2)
+
+`import fr` runs fr.parser, which imports fr.refs; a top-level `from fr.artifacts.paths import ...` there runs fr/artifacts/__init__.py, which reaches fr.spec and fr.parser while both are half-initialised (ImportError on _PHASE_FILE_RE). refs.py therefore imports kind_dir/space_for inside _resolve and the one other function that needs them. Every other converted module imports at the top and was checked with a fresh `import <module>`.
+
+<!-- fr:journal kind=decision scope=plan id=placement-callers-scaffold-placeholders created=2026-11-12T14:36:21+00:00 phase=2 -->
+### placement-callers-scaffold-placeholders · decision · scaffold templates take their directories from placeholders filled at import (phase 2) (phase 2)
+
+The CI workflow and rule templates are full of braces, `${{ }}` and @@MARKERS@@, so f-strings are unusable. They now carry @@ACC_FRAGMENTS@@ / @@ACC_REPORT@@ and `_render_paths` fills them from KIND_DIRS once, at import; the rendered text is byte-identical (the scaffold tests are unchanged).
+
+<!-- fr:journal kind=decision scope=plan id=placement-callers-row-spec-resolver created=2026-11-12T14:36:21+00:00 phase=2 -->
+### placement-callers-row-spec-resolver · decision · gatebackfill.row_spec follows the resolver (phase 2) (phase 2)
+
+Phase 1's review found row_spec checked `root / rel`, so a spec in a feature root outside the repo was missed. A logical spec origin now resolves through resolve_logical_at; a path origin is looked up in every feature_roots entry. The result is repo-relative under the repo and absolute elsewhere (as resolve_logical does). A new test pins the out-of-repo case.
+
+<!-- fr:journal kind=discovery scope=plan id=placement-callers-validate-plans-shell created=2026-11-12T14:36:21+00:00 phase=2 -->
+### placement-callers-validate-plans-shell · discovery · validate-plans.sh reads its directories from `fr settings paths --shell` with literal fallbacks (phase 2) (phase 2)
+
+Both copies (scripts/ and packages/fr/src/fr/data/) changed identically: the script evals the resolver's FR_* lines when `fr` is on PATH and answers, else uses the repo layout's own literals (commented as such). The tripwire scans .py only; phase 6 owns the remaining shell surfaces. The script's pre-existing BSD-sed incompatibility on macOS is untouched.
+
+<!-- fr:journal kind=discovery scope=plan id=placement-callers-registry-tripwire created=2026-11-12T14:36:21+00:00 phase=2 -->
+### placement-callers-registry-tripwire · discovery · a kind-name tuple in batch_drive tripped the artifact-kinds tripwire (phase 2) (phase 2)
+
+`tuple(KIND_DIRS[k] for k in ("plan", "spec", ...))` is a second enumeration of kinds. ARCHIVE_DIRS is now five subscripts, which the detector does not read as a list of names.
+
+<!-- fr:journal kind=discovery scope=plan id=placement-callers-red-order created=2026-11-12T14:36:21+00:00 phase=2 -->
+### placement-callers-red-order · discovery · the tripwire's RED was taken after the conversion, not before (phase 2) (phase 2)
+
+The plan's steps remove modules from PENDING first and watch the tripwire name them. Here the 64 modules were converted in one sweep and PENDING emptied after, so the detector (which still fails a module with a literal left, as the scaffold and isolation/local.py leftovers showed) was the proof. PENDING's machinery is kept (empty): the stale-entry test and the 'only shrinks' contract are what the next exemption would need.
+
+<!-- fr:journal kind=discovery scope=plan id=placement-callers-pages-restamped created=2026-11-12T14:36:21+00:00 phase=2 -->
+### placement-callers-pages-restamped · discovery · twelve docs pages were restamped, none edited (phase 2) (phase 2)
+
+The sweep touched modules covered by twelve pages (`fr docs check` said so); none describes a path or behaviour that changed, so each reviewed stamp names this phase and says so.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-12T14:36:21+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+pure literal-to-resolver rewrites; each module was touched once and the result is the shortest spelling (KIND_DIRS constant or kind_dir(space_for(root))), nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-12T14:36:21+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+same mechanical rewrites as T1; the per-module constants became derivations of the table, no duplicate left behind
