@@ -206,7 +206,7 @@ def validate_journal(path: Path) -> list[str]:
         version: int | None = _read_journal_stamp(path) or 1
     except Exception:  # noqa: BLE001 — the stamp check reports an unreadable stamp
         version = None
-    for kind, needs in (("owed", 2), ("op", 3)):
+    for kind, needs in (("owed", 2), ("op", 3), ("lens", 4)):
         ids = [e.id for e in entries if e.kind == kind]
         if ids and version is not None and version < needs:
             problems.append(

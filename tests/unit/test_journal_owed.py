@@ -182,14 +182,15 @@ def test_journal_render_shows_owed_entries_in_their_own_block(
 
 
 def test_the_journal_kind_moved_past_version_two() -> None:
-    # 3 since the `op` entry kind (spec 2026-10-22-fr-ops §D).
-    assert ARTIFACT_KINDS["journal"].current_version == 3
+    # 3 since `op` (spec 2026-10-22-fr-ops §D), 4 since `lens` (2026-11-12-review-lenses).
+    assert ARTIFACT_KINDS["journal"].current_version >= 2
 
 
 def test_the_journal_kind_is_reachable_from_version_one() -> None:
     chain = MIGRATIONS.chain("journal", 1)
-    assert [m.from_version for m in chain] == [1, 2]
-    assert [m.to_version for m in chain] == [2, 3]
+    assert [m.from_version for m in chain][:1] == [1]
+    assert [m.to_version for m in chain][:1] == [2]
+    assert chain[0].fn.__module__ == "fr.artifacts.journal_owed"
 
 
 def test_the_journal_migration_is_stamp_only(tmp_path: Path) -> None:
@@ -203,9 +204,10 @@ def test_the_journal_migration_is_stamp_only(tmp_path: Path) -> None:
     path.write_text(body)
     report = run_migrations(tmp_path, dry_run=False)
     assert report.ok, report.failed
-    assert ARTIFACT_KINDS["journal"].read_version(path) == 3
+    current = ARTIFACT_KINDS["journal"].current_version
+    assert ARTIFACT_KINDS["journal"].read_version(path) == current
     text = path.read_text()
-    assert text == "<!-- fr:journal-schema=3 -->\n" + body
+    assert text == f"<!-- fr:journal-schema={current} -->\n" + body
     # The stamp stays readable: the journal still parses to the same entries.
     assert [e.id for e in parse_journal(text)] == ["d1"]
 

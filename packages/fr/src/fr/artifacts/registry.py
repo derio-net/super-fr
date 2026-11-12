@@ -418,7 +418,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # R20), migration `fr.artifacts.journal_owed` — stamp-only.
             # 3: the `op` entry kind (spec `2026-10-22-fr-ops-design` §D, R17),
             # migration `fr.artifacts.journal_op` — stamp-only.
-            current_version=3,
+            # 4: the `lens` entry kind (spec `2026-11-12-review-lenses-design`
+            # §3.B, R4), migration `fr.artifacts.journal_lens` — stamp-only.
+            current_version=4,
             locator="docs/superpowers/journals/**/*.md",
             stamp="`<!-- fr:journal-schema=N -->` header comment",
             read_stamp=_read_journal_stamp,
