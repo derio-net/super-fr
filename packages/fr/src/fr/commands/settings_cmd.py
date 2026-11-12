@@ -1,7 +1,8 @@
 """`fr settings` — the repo's feature settings (spec 2026-11-04-repo-feature-settings, R3).
 
 Read-only for the artifact-migration gate (`fr.artifacts.trigger.READ_ONLY_COMMANDS`):
-`init` writes `.fr/settings.yaml`, which is not a registered artifact, and never commits it.
+`init` writes `.fr/settings.yaml`, which is not a registered artifact, and never commits it;
+`init --quiet` writes a remote branch (the quiet switch), which is not an artifact either.
 """
 
 from __future__ import annotations
@@ -46,13 +47,34 @@ def _refuse(error: Exception) -> typer.Exit:
 @settings_app.command("init")
 def init_cmd(
     force: bool = typer.Option(False, "--force", help="Overwrite an existing file."),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help="Switch the repo to the quiet placement: create the orphan `fr` branch with "
+        "its root settings.yaml and push it to origin (plain push; refused if it exists).",
+    ),
 ) -> None:
     """Write `.fr/settings.yaml` with every key commented out at its default.
 
-    Writes only; commit it (and land it on the default branch) yourself.
+    Writes only; commit it (and land it on the default branch) yourself. With
+    `--quiet`, create and push the `fr` branch instead (R3, R23).
     """
     from fr.settings.render import render_init
 
+    if quiet:
+        if force:
+            typer.echo(
+                "--force is not offered with --quiet: the `fr` branch is append-only and fr "
+                "never overwrites it",
+                err=True,
+            )
+            raise typer.Exit(2)
+        try:
+            pushed = init_quiet(resolve_repo_root())
+        except SettingsError as e:
+            raise _refuse(e) from e
+        typer.echo(pushed)
+        return
     path = resolve_repo_root() / SETTINGS_PATH
     if path.exists() and not force:
         typer.echo(f"{SETTINGS_PATH} already exists; pass --force to overwrite it", err=True)
@@ -60,6 +82,61 @@ def init_cmd(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_init())
     typer.echo(f"wrote {path}")
+
+
+def init_quiet(root: Path) -> str:
+    """Create the orphan `fr` branch (one commit, root `settings.yaml` from
+    `render_init("quiet")`) with git plumbing, so the checkout is never touched, and push
+    it with a plain push. Refuses with no origin, or when origin already has `fr`."""
+    from fr.git import GitUnavailableError, git_answer
+    from fr.placement.quiet import FETCH_REFSPEC, QUIET_REF, unreachable
+    from fr.settings.render import QUIET_LIMITATION, render_init
+
+    def git(*args: str, stdin: str | None = None) -> str:
+        try:
+            if stdin is None:
+                done = git_answer(root, *args)
+            else:
+                import subprocess
+
+                from fr.git import git_argv
+
+                done = subprocess.run(
+                    git_argv(root, *args), input=stdin, capture_output=True, text=True
+                )
+        except GitUnavailableError as e:
+            raise SettingsError(f"fr settings init --quiet: {e}") from e
+        if done.returncode != 0:
+            raise SettingsError(
+                f"fr settings init --quiet: `git {' '.join(args)}` failed: {done.stderr.strip()}"
+            )
+        return done.stdout
+
+    if git_answer(root, "config", "--get", "remote.origin.url").returncode != 0:
+        raise SettingsError(
+            "fr settings init --quiet: this repository has no `origin`; quiet keeps the `fr` "
+            "branch on origin, so add one first"
+        )
+    probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF)
+    if probe.returncode == 0:
+        raise SettingsError(
+            "fr settings init --quiet: origin already has an `fr` branch; fr never overwrites "
+            "it (edit its settings.yaml there instead)"
+        )
+    if probe.returncode != 2:
+        raise unreachable(probe.stderr.strip() or "git ls-remote failed")
+    blob = git("hash-object", "-w", "--stdin", stdin=render_init("quiet")).strip()
+    tree = git("mktree", stdin=f"100644 blob {blob}\tsettings.yaml\n").strip()
+    commit = git(
+        "commit-tree", tree, "-m", "chore(fr): switch this repo to the quiet placement"
+    ).strip()
+    git("push", "origin", f"{commit}:{QUIET_REF}")
+    git("fetch", "--no-tags", "origin", FETCH_REFSPEC)
+    return (
+        f"pushed the `fr` branch ({commit[:12]}) to origin: this repo is now quiet.\n"
+        f"{QUIET_LIMITATION}\n"
+        "The policy keys are read from `fr`: protect it as you protect the default branch."
+    )
 
 
 @settings_app.command("show")

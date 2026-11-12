@@ -456,6 +456,27 @@ def _do_mutations(
     return 0, "\n".join(parts), json_out
 
 
+def _refuse_dispatch_outside_repo() -> None:
+    """R23 "not available here": a runner works from its own checkout of the default
+    branch, where a quiet repo keeps no plan, so `--to` is refused naming the placement."""
+    from fr.artifacts.paths import REPO, space_for
+    from fr.settings import SettingsError
+
+    try:
+        placement = space_for(resolve_repo_root()).placement
+    except SettingsError as e:
+        err_console.print(str(e), soft_wrap=True)
+        raise typer.Exit(2) from e
+    if placement != REPO:
+        err_console.print(
+            f"`fr apply --to` is not available under placement {placement} (R23): a runner "
+            "dispatches from the default branch, where this repo keeps no plan. Run the plan "
+            "in a session (fr-goal) instead",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
 def apply_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(False, "--all", help="Walk all plans in current repo."),
@@ -504,6 +525,7 @@ def apply_command(
         raise typer.Exit(2)
 
     if to is not None:
+        _refuse_dispatch_outside_repo()
         # The one documented soft point (super-fr split design): dispatching
         # to a runner needs the fr-dispatch package; the base never imports
         # it otherwise.

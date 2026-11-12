@@ -55,13 +55,47 @@ def _emit(model: type[BaseModel], instance: BaseModel, depth: int, out: list[str
             out.append(f"#{pad}{key}: {_scalar(value)}")
 
 
-def render_init() -> str:
-    """The commented defaults file."""
-    out = [
-        "## fr settings for this repo (spec 2026-11-04-repo-feature-settings).",
-        "## Read from the default branch: an edit has no effect until it lands there.",
-        "## Every key is commented out at its default; to change one, drop the single leading",
-        "## `#` of its line (lines starting `##` are prose).",
-    ]
+QUIET_LIMITATION = (
+    "Known limitation: a host whose fr predates quiet support (plan 3 of spec "
+    "2026-11-04-repo-feature-settings) never looks for this switch, and writes its "
+    "artifacts on the feature branch as under `repo`."
+)
+"""R23's known limitation, stated in the file and by `fr settings init --quiet`."""
+
+QUIET_PROTECTION = (
+    "The policy keys below are read from this branch (R2), so whoever can push `fr` can "
+    "change them: give `fr` the same branch protection as the default branch."
+)
+
+
+def render_init(placement: str = "repo") -> str:
+    """The commented defaults file: `.fr/settings.yaml`, or (quiet) the root
+    `settings.yaml` of the `fr` branch, which says `placement: quiet` and nothing else."""
+    if placement == "quiet":
+        out = [
+            "## fr settings for this repo's QUIET placement (spec "
+            "2026-11-04-repo-feature-settings R2, R23).",
+            "## This is the root settings.yaml of the orphan `fr` branch, read from origin/fr:",
+            "## an edit has no effect until it is pushed there.",
+            *(f"## {line}" for line in _wrap(QUIET_PROTECTION)),
+            *(f"## {line}" for line in _wrap(QUIET_LIMITATION)),
+            "## Every other key is commented out at its default; to change one, drop the single",
+            "## leading `#` of its line (lines starting `##` are prose).",
+        ]
+    else:
+        out = [
+            "## fr settings for this repo (spec 2026-11-04-repo-feature-settings).",
+            "## Read from the default branch: an edit has no effect until it lands there.",
+            "## Every key is commented out at its default; to change one, drop the single leading",
+            "## `#` of its line (lines starting `##` are prose).",
+        ]
     _emit(Settings, Settings.model_validate({}), 0, out)
+    if placement == "quiet":
+        out = ["placement: quiet" if line == "#placement: repo" else line for line in out]
     return "\n".join(out) + "\n"
+
+
+def _wrap(text: str, width: int = 84) -> list[str]:
+    import textwrap
+
+    return textwrap.wrap(text, width)

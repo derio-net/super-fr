@@ -14,7 +14,7 @@ from typing import Final
 
 import yaml
 
-from fr.artifacts.paths import kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, feature_roots, space_for
 from fr.settings import SettingsError, load_settings
 from fr.settings.load import read_at_default
 from fr.settings.model import Settings
@@ -35,10 +35,13 @@ def _live_plans_with_ops(root: Path, settings: Settings) -> tuple[str, ...]:
         return ()
     from fr.ops.load import plan_has_ops
 
-    plans = kind_dir("plan", space_for(root))
-    if not plans.is_dir():
-        return ()
-    return tuple(sorted(d.name for d in plans.iterdir() if d.is_dir() and plan_has_ops(root, d)))
+    # Every feature's live plans: under quiet each feature has its own plans directory.
+    found: set[str] = set()
+    for froot in feature_roots(space_for(root)):
+        plans = froot / KIND_DIRS["plan"]
+        if plans.is_dir():
+            found |= {d.name for d in plans.iterdir() if d.is_dir() and plan_has_ops(root, d)}
+    return tuple(sorted(found))
 
 
 DRIVEN_TRIAGE_KEYS: Final = ("post_merge", "export", "version", "post_merge_restart")
