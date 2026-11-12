@@ -86,7 +86,10 @@ So, when a change removes or moves a field:
    runner finish — the one legitimate use of the live model in a migration,
    because "is this already v5?" is a question only the v5 model can answer.
 5. **Assert every hop of the chain**, not just its endpoint
-   (`test_the_run_kind_is_reachable_all_the_way_from_version_one_to_eleven`). It is this repo's only guard against two branches allocating
+   (`test_the_run_kind_is_reachable_all_the_way_from_version_one_to_eleven`; for the record
+   kind `test_record_lens.py::test_the_record_chain_from_one_reaches_twelve_hop_by_hop`, for the
+   journal kind `test_journal_lens.py::test_the_journal_chain_from_one_reaches_four_hop_by_hop`).
+   It is this repo's only guard against two branches allocating
    the same version number, which has now happened twice.
 
 ## Retiring a kind — its last hop deletes it
