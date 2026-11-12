@@ -317,3 +317,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_matrix_equals_plain_pyyaml_build
     why: the fragments split renamed the test
+  - row: matrix-parse-libyaml
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_fragments_equal_plain_pyyaml_builds
+    why: the fragments split renamed the test
