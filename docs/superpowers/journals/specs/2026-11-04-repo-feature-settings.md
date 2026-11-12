@@ -951,3 +951,8 @@ Its own requirements and row placement-move-and-drift.
 ### tier-2026-11-12-placement-resolver-p1 · decision · hard: the resolver is the path seam every artifact reader and writer relies on
 
 A wrong layout or precedence decision here propagates to every caller and to both later placements.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p3 created=2026-11-12T11:57:19+00:00 -->
+### tier-2026-11-12-placement-resolver-p3 · decision · hard: quiet moves fr's own commit seam and the push
+
+A wrong root writes artifacts onto product branches, which R23 forbids; the atomic push and replay loop are concurrency paths.
