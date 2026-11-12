@@ -11182,9 +11182,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-11-12-landing-front-page-design.md#R10
     - super-fr:docs/superpowers/specs/2026-11-12-landing-front-page-design.md#R11
     - super-fr:docs/superpowers/specs/2026-11-12-landing-front-page-design.md#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve
+      - super-fr:tests/unit/test_build_site.py#test_guarantee_sections_are_numbered_in_order
+    status: ci
+    notes: Unit tests parse this repo's index.md as a landing (six to eight numbered
+      sections, links resolve) and render every kind; the site-build CI job renders
+      it on every PR; screenshots taken at implement.
     verify: none
     visual:
       states:
