@@ -226,3 +226,91 @@ the fixture sweep went through one helper module (acceptance_helpers.write_fragm
 ### no-refactor-p2-t7 · discovery · no-refactor-because P2.T7 (phase 2)
 
 data migration, rule and doc prose, and a scenario script; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-12T04:41:29+00:00 phase=2 -->
+### review-phase-2 · review · Phase 2 review (migration and cutover): five in-scope findings, all fixed (phase 2)
+
+Independent reviewer over `git diff ac0a524af..c9d21686f`. Frozen MatrixV5, the
+retiring step, write-once, crash window, edge repos, the chain, and this repo's data
+(617 rows in, 617 out, each placed once by the one-spec rule, every fragment
+`repo: derio-net/super-fr`) all held; no code reader is left on matrix.yaml.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-12T04:41:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · A v4 matrix with a partial committed report set fails the migration commit (4->5 writes reports 5->6 deletes; git add of a vanished path) (phase 2)
+
+Reproduced with only report_local.html tracked.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-12T04:41:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · The split deletes an untracked report.github.html and lists it as changed, failing the commit (phase 2)
+
+Also silently removed an uncommitted user file.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-12T04:41:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · The matrix 4->5 hop still validates with the live parse_matrix instead of the frozen MatrixV5 (phase 2)
+
+artifact-versioning rule point 2; no tripwire existed for the matrix hops.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-12T04:41:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · An in-flight branch still editing matrix.yaml has no way forward after this merges (phase 2)
+
+The split refused over existing fragments and the gate then blocked every command; open PRs #1107, #1080, #1079, #476 affected.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-12T04:41:29+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · With the archive retarget removed, archived journal path refs dangle and check's warning names a removed fix (phase 2)
+
+Only spec:/plan: refs are logical; the archive-retargets-matrix-refs row text was also false.
+
+<!-- fr:journal kind=decision scope=plan id=matrix-split-carries-in-flight-rows created=2026-11-12T04:41:29+00:00 phase=2 -->
+### matrix-split-carries-in-flight-rows · decision · An in-flight matrix.yaml is carried over onto existing fragments, never merged silently (phase 2)
+
+When fragments already exist, the 5→6 split adds only the rows whose id their fold lacks,
+each to its spec's fragment (or legacy.yaml) by the one-spec rule, and drops rows the fold
+holds identically. A row the fold holds with different content refuses the matrix,
+byte-identical, naming each id: restore or delete the row, migrate, then re-apply the
+change with `fr acceptance set-status` (later `amend`). The crash window is the same rule:
+nothing to carry, so the matrix is just deleted.
+
+<!-- fr:journal kind=decision scope=plan id=archived-refs-resolve-at-read-time created=2026-11-12T04:41:29+00:00 phase=2 -->
+### archived-refs-resolve-at-read-time · decision · Path refs under specs/journals/plans resolve at their archived twin at read time (phase 2)
+
+Replaces the removed archive retarget: `check.archived_counterpart` (reusing archive_twin
+and the plans mapping) accepts a same-repo ref whose `implemented/` counterpart exists;
+no fragment is rewritten, so merged rows stay immutable.
+
+<!-- fr:journal kind=finding scope=plan id=p3-set-status-on-merged-row-is-an-amendment created=2026-11-12T04:41:29+00:00 phase=3 state=open review_scope=in -->
+### p3-set-status-on-merged-row-is-an-amendment · finding [open] (reviewer: in scope) · Refiled from p2-interim-set-status-on-merged-row: set-status on a merged row must become an amendment (phase 3)
+
+Phase 2's interim set-status rewrites a merged row in place, which the fold ignores
+(keeps the merged copy, adds a notice). This is phase 3's deliverable (R16: set-status
+on a merged row becomes an amendment); filed against phase 3 so it gates that review
+and this PR, rather than phase 2's.
+
+<!-- fr:journal kind=finding scope=plan id=p2-interim-set-status-on-merged-row-resolved created=2026-11-12T04:41:29+00:00 phase=2 state=open resolves=p2-interim-set-status-on-merged-row tracked_by=derio-net/super-fr#1379 -->
+### p2-interim-set-status-on-merged-row-resolved · finding [deferred → derio-net/super-fr#1379] · resolves p2-interim-set-status-on-merged-row: Interim in-place set-status on a merged row is invisible to the fold (phase 2)
+
+Refiled against phase 3 of this same PR as p3-set-status-on-merged-row-is-an-amendment, which gates phase 3's review; #1379 tracks the acceptance-fragments-amendments row.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-12T04:41:29+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: A v4 matrix with a partial committed report set fails the migration commit (4->5 writes reports 5->6 deletes; git add of a vanished path) (phase 2)
+
+2c4d75fd2: the 4->5 hop renders no reports; commit_paths drops paths neither on disk nor in the index. Test red on old code.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-12T04:41:29+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: The split deletes an untracked report.github.html and lists it as changed, failing the commit (phase 2)
+
+2ac63080e: the split deletes and lists only reports git tracks (ls-files). Test red on old code.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-12T04:41:29+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: The matrix 4->5 hop still validates with the live parse_matrix instead of the frozen MatrixV5 (phase 2)
+
+e9eacca8a: legacy.parse_matrix_v5_body used by every 4->5 check; tripwire forbids parse_matrix/load_matrix in fr/artifacts/matrix_*.py.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-12T04:41:29+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: An in-flight branch still editing matrix.yaml has no way forward after this merges (phase 2)
+
+89435b564: carry-over per decision matrix-split-carries-in-flight-rows; documented in docs/reference/acceptance-matrix.md and the acceptance-matrix rule.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-12T04:41:29+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: With the archive retarget removed, archived journal path refs dangle and check's warning names a removed fix (phase 2)
+
+764cb9c19 (read-time archived twin, warning reworded), c98958648 + 1dfba07cd (row refs, notes and text).
