@@ -120,6 +120,19 @@ def test_tiles_computed_from_rows(tmp_path: Path) -> None:
     assert values == ["2", "0", "0", "0", "1", "0", "0", "0"]
 
 
+def test_both_renderings_name_the_folded_fragments_as_their_source(tmp_path: Path) -> None:
+    # pr1408-r7: the report is rendered from the fold, not from matrix.yaml.
+    from fr.acceptance.model import parse_matrix
+    from fr.acceptance.report import render_markdown
+
+    root = make_repo(tmp_path, row())
+    matrix = parse_matrix(MATRIX_HEADER + row(id="a"))
+    links = _links(root, "local")
+    for out in (render(matrix, links, stamp="s"), render_markdown(matrix, links, stamp="s")):
+        assert "matrix.yaml" not in out
+        assert "docs/acceptance/features/" in out
+
+
 def test_capabilities_first_seen_order(tmp_path: Path) -> None:
     root = make_repo(tmp_path, row())
     r_b = row(id="b").replace('"Cap"', '"Zeta"')
