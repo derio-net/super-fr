@@ -1,0 +1,6 @@
+schema_version: 10
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+step: deliver
+outcome: done
+emitted: {pr: "https://github.com/derio-net/super-fr/pull/1411"}
+evidence: {tests: ci}
