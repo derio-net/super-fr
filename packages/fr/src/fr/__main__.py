@@ -1,4 +1,4 @@
-"""Allow `python -m vk`."""
+"""Allow `python -m fr`."""
 
 from fr.cli import app
 

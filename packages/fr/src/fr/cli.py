@@ -1,4 +1,4 @@
-"""VK CLI — main entry point.
+"""fr CLI — main entry point.
 
 Exit code conventions (uniform across every subcommand):
   0 = success
@@ -172,7 +172,7 @@ def main(
         help="Show which fr this is (version and package directory) and exit.",
     ),
 ) -> None:
-    """VK toolchain: v2 plan-as-folder, render → observe → diff → apply."""
+    """fr toolchain: v2 plan-as-folder, render → observe → diff → apply."""
     # The cloud remedy block (spec 2026-10-07-cloud-triage R23, §H), once, after fr's own
     # error: failures note their items instead of appending it (p7-r3).
     ctx.call_on_close(_print_cloud_remedy)

@@ -60,7 +60,7 @@ anything else.
    ```bash
    fr apply <plan-dir>
    ```
-   The output lists the mutations `vk` would perform: ensure-labels, create
+   The output lists the mutations `fr apply --yes` would perform: ensure-labels, create
    Issue, edit labels, edit body, set state.
 2. **Present the preview to the operator verbatim.** Ask: *"Proceed? (yes/no)"*
 3. **On approval:**

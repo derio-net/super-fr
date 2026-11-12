@@ -1,9 +1,9 @@
 """Production GhClient — wraps the `gh` CLI for v2's read/write surface.
 
-Conforms to `vk.ghclient.GhClient`. Read methods (`view_issue`,
+Conforms to `fr.ghclient.GhClient`. Read methods (`view_issue`,
 `list_linked_prs`) shape gh's JSON output into the contract that
 `observe`/`diff` expect. Write methods (`edit_issue_*`, `create_issue`,
-`ensure_labels`) delegate to the same `vk.gh` helpers v1 uses, so
+`ensure_labels`) delegate to the same `fr.gh` helpers v1 uses, so
 existing retry / auth behaviour comes along for free.
 
 Intentionally thin — no caching, no batching, no rate-limit
@@ -87,7 +87,7 @@ def _comment_id(url: object) -> int | None:
 
 
 class RealGhClient:
-    """Wraps `vk.gh` to satisfy the `GhClient` Protocol.
+    """Wraps `fr.gh` to satisfy the `GhClient` Protocol.
 
     `host` names a GitHub Enterprise instance: every `gh` this client runs
     gets `GH_HOST=<host>`. None (the default) leaves gh's own host resolution
@@ -784,7 +784,7 @@ def _gh_runner(run: CommandRunner | None) -> Callable[..., subprocess.CompletedP
 
 
 def _coerce_ci_state(rollup: str) -> str:
-    """Map GraphQL StatusState → vk's PASS/FAIL/PENDING/NONE."""
+    """Map GraphQL StatusState → fr's PASS/FAIL/PENDING/NONE."""
     if rollup in _CI_PASS:
         return "PASS"
     if rollup in _CI_FAIL:
