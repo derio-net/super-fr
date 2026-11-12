@@ -679,14 +679,14 @@ def _pre_merge_owed(repo_root: Path, state: RunState) -> str:
     if disabled(repo_root, "acceptance"):
         return disabled_because("acceptance", "no acceptance rows") + "."
 
+    from fr.acceptance.fold import has_fragments
     from fr.acceptance.model import AcceptanceError
-    from fr.commands.acceptance_cmd import MATRIX_REL
     from fr.requirements import load_spec_matrix, run_spec
     from fr.verification.rows import shape_default, spec_verification
     from fr.verification.spec_section import SectionError
 
     spec_rel = run_spec(state)
-    if spec_rel is None or not (repo_root / MATRIX_REL).is_file():
+    if spec_rel is None or not has_fragments(repo_root):
         return "None."
     try:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
@@ -748,14 +748,14 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     if disabled(repo_root, "acceptance"):
         return disabled_because("acceptance", "no acceptance rows") + "."
 
+    from fr.acceptance.fold import has_fragments
     from fr.acceptance.model import AcceptanceError
-    from fr.commands.acceptance_cmd import MATRIX_REL
     from fr.requirements import load_spec_matrix, run_spec
     from fr.verification.rows import shape_default, spec_verification
     from fr.verification.spec_section import SectionError
 
     spec_rel = run_spec(state)
-    if spec_rel is None or not (repo_root / MATRIX_REL).is_file():
+    if spec_rel is None or not has_fragments(repo_root):
         return "None."
     try:
         matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)

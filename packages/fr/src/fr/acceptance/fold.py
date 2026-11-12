@@ -326,10 +326,38 @@ def fold_texts(working: dict[str, str]) -> Effective:
     return _fold(no_git, "", dict(sorted(working.items())))
 
 
+def has_fragments(repo_root: Path) -> bool:
+    """Whether *repo_root*'s working tree holds at least one fragment: the one
+    "this repo keeps acceptance rows" test every reader and hook shares (R19)."""
+    folder = Path(repo_root) / FRAGMENTS_DIR
+    return folder.is_dir() and any(p.is_file() for p in folder.glob("*.yaml"))
+
+
 def load_effective(repo_root: Path, *, ref: str | None = None) -> Matrix:
     """The effective matrix of *repo_root* (`fold(...).matrix`): what every reader of
-    acceptance rows reads (spec 2026-11-04 R17)."""
-    return fold(repo_root, ref=ref).matrix
+    acceptance rows reads (spec 2026-11-04 R17). Every failure is an `AcceptanceError`.
+
+    With *ref*, the fold of that ref's history alone (no pending entries). Without
+    it: an empty `Matrix` when the working tree has no fragment; the working tree's
+    fragments folded in memory when *repo_root* is not the top of a git work tree
+    (a bare fixture, an exported tree); else the full fold."""
+    root = Path(repo_root)
+    if ref is not None:
+        return fold(root, ref=ref, include_pending=False).matrix
+    working = _working_fragments(root)
+    if not working:
+        return Matrix()
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        top = git_answer(root, "rev-parse", "--show-toplevel")
+    except GitUnavailableError:
+        return fold_texts(working).matrix
+    if top.returncode != 0 or Path(top.stdout.strip()).resolve() != root.resolve():
+        # Not a work tree, or a directory inside another repo's: the working tree's
+        # fragments are all there is.
+        return fold_texts(working).matrix
+    return fold(root).matrix
 
 
 def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:

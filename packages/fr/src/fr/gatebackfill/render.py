@@ -113,13 +113,14 @@ def open_issue_refusals(entries: list[PlanEntry], candidates: list[Candidate]) -
 
 def row_reconcile(root: Path) -> list[str]:
     """`not-implemented` rows whose effective strategy is post-merge, moved to `walk-owed`."""
-    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.acceptance.fold import load_effective
+    from fr.acceptance.model import AcceptanceError
     from fr.gatebackfill.candidates import row_spec
     from fr.verification.effective import is_post_merge
     from fr.verification.rows import spec_verification
 
     try:
-        matrix = load_matrix(root / "docs/acceptance/matrix.yaml")
+        matrix = load_effective(root)
     except (AcceptanceError, OSError):
         return []
     out = []

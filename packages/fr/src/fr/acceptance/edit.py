@@ -1,4 +1,6 @@
-"""Textual writes into `matrix.yaml` — the ONE place that renders a row block.
+"""Textual writes into an acceptance fragment (`docs/acceptance/features/<slug>.yaml`,
+spec 2026-11-04 R16) — the ONE place that renders a row block. (It wrote the retired
+`matrix.yaml` before R19; a fragment keeps the same `rows:` shape.)
 
 `fr acceptance add` inserts (by capability) and `fr acceptance set-status`
 replaces; both come through here, so the two cannot disagree about the file's
@@ -153,8 +155,14 @@ def insert_row(text: str, row: Row) -> str:
         (s, e) for s, e, parsed in _row_blocks(text) if parsed.get("capability") == row.capability
     ]
     if not same:
-        body = text if text.endswith("\n") else text + "\n"
-        return body + render_row_block(row, _item_indent(text))
+        # A new capability goes at the end of `rows:` — before a later top-level
+        # key (a fragment's `amendments:`), else at the end of the file.
+        lines = text.splitlines(keepends=True)
+        end = _rows_end(lines)
+        head = "".join(lines[:end])
+        if head and not head.endswith("\n"):
+            head += "\n"
+        return head + render_row_block(row, _item_indent(text)) + "".join(lines[end:])
     lines = text.splitlines(keepends=True)
     start, end = same[-1]
     item_indent = len(lines[start]) - len(lines[start].lstrip())
@@ -164,6 +172,18 @@ def insert_row(text: str, row: Row) -> str:
     if not head.endswith("\n"):
         head += "\n"
     return head + render_row_block(row, lines[start][:item_indent]) + "".join(lines[end:])
+
+
+def _rows_end(lines: list[str]) -> int:
+    """The line index `rows:` ends at: the first later top-level key, else the end."""
+    rows_at = next((i for i, ln in enumerate(lines) if _ROWS_KEY_RE.match(ln)), None)
+    if rows_at is None:
+        raise AcceptanceError("matrix has no top-level `rows:` key")
+    for i in range(rows_at + 1, len(lines)):
+        line = lines[i]
+        if line.strip() and not line[:1].isspace() and not line.startswith(("#", "-")):
+            return i
+    return len(lines)
 
 
 def _is_between_rows(line: str, item_indent: int) -> bool:

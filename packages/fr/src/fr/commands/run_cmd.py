@@ -6597,8 +6597,8 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     not answer. A repo whose matrix cites no issue and whose journals narrow none
     is never asked (the reference's repo identity needs a remote or matrix keys)."""
     from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
-    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.acceptance.model import AcceptanceError
     from fr.record.pr_body import (
         PrematureClose,
         holds_open_for_run,
@@ -6608,17 +6608,16 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     from fr.requirements import load_spec_matrix, run_spec
     from fr.verification.exit import run_exit
 
-    path = repo_root / MATRIX_REL
     narrowings = _gate_journals(lambda: run_narrowings(repo_root, state))
     try:
-        matrix = load_matrix(path) if path.is_file() else Matrix()
+        matrix = load_effective(repo_root)
         if not any(row.issues for row in matrix.rows) and not narrowings:
             return
         identity = resolve_identity(matrix, repo_root)
         spec_rel = run_spec(state)
         spec_ref = (
             load_spec_matrix(repo_root, spec_rel)[1]
-            if spec_rel is not None and path.is_file()
+            if spec_rel is not None and has_fragments(repo_root)
             else None
         )
     except AcceptanceError as e:

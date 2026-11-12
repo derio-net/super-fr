@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from fr.acceptance.model import AcceptanceError, same_repo, split_ref
+from fr.acceptance.model import AcceptanceError, Matrix, same_repo, split_ref
 
 LOGICAL_KINDS: tuple[str, ...] = ("spec", "plan")
 
@@ -81,7 +81,7 @@ def to_logical(ref: str, *, own_repo: str | None = None) -> str:
     return ref
 
 
-def _candidates(ref: LogicalRef) -> tuple[str, ...]:
+def candidates(ref: LogicalRef) -> tuple[str, ...]:
     if ref.kind == "spec":
         return tuple(
             f"{base}{ref.slug}{suffix}" for base in SPEC_DIRS for suffix in ("-design.md", ".md")
@@ -95,11 +95,11 @@ def _resolve(ref: str, repo_root: Path) -> tuple[Path | None, str | None]:
     except AcceptanceError as e:
         return None, str(e)
     root = Path(repo_root)
-    for rel in _candidates(logical):
+    for rel in candidates(logical):
         target = root / rel
         if target.is_dir() if logical.kind == "plan" else target.is_file():
             return Path(PurePosixPath(rel)), None
-    tried = ", ".join(_candidates(logical))
+    tried = ", ".join(candidates(logical))
     return None, f"{ref}: no {logical.kind} {logical.slug!r} in this repo (looked for {tried})"
 
 
@@ -116,3 +116,60 @@ def resolve_logical(ref: str, repo_root: Path) -> Path | None:
 def resolution_problem(ref: str, repo_root: Path) -> str | None:
     """Why *ref* does not resolve, or None when it does."""
     return _resolve(ref, repo_root)[1]
+
+
+def as_path_ref(ref: str, repo_root: Path, own_repo: str) -> str:
+    """*ref* as a `<own_repo>:<path>[#anchor]` path ref when it is logical, else *ref*.
+
+    For readers that link or open the file a ref names (reports, the link checks):
+    the resolved path when the artifact exists, else the first place it was looked
+    for, so an existence check reports it missing rather than skipping it."""
+    if not is_logical(ref):
+        return ref
+    try:
+        logical = parse_logical(ref)
+    except AcceptanceError:
+        return ref
+    found = resolve_logical(ref, repo_root)
+    rel = found.as_posix() if found is not None else candidates(logical)[0]
+    return f"{own_repo}:{rel}" + (f"#{logical.anchor}" if logical.anchor else "")
+
+
+def path_view(matrix: Matrix, repo_root: Path, own_repo: str) -> Matrix:
+    """*matrix* with every logical ref replaced by `as_path_ref`'s path ref — an
+    in-memory view for path-shaped readers, never written back (R18: a placement
+    move never rewrites a row)."""
+    from fr.acceptance.model import LEVELS
+
+    def conv(refs: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(as_path_ref(r, repo_root, own_repo) for r in refs)
+
+    rows = tuple(
+        row.model_copy(
+            update={
+                "origin": conv(row.origin),
+                "levels": {lv: conv(tuple(row.levels.get(lv, ()))) for lv in LEVELS},
+            }
+        )
+        for row in matrix.rows
+    )
+    return matrix.model_copy(update={"rows": rows})
+
+
+def origin_spec_path(origin: str, repo_root: Path) -> str | None:
+    """The repo-relative spec file *origin* names when it names one, or None: a
+    logical `spec:<slug>` resolved in this repo (live, else archived), or a path
+    origin's own `.md` path (not checked for existence)."""
+    if is_logical(origin):
+        try:
+            if parse_logical(origin).kind != "spec":
+                return None
+        except AcceptanceError:
+            return None
+        found = resolve_logical(origin, repo_root)
+        return found.as_posix() if found is not None else None
+    try:
+        _, path, _ = split_ref(origin)
+    except AcceptanceError:
+        return None
+    return path if path.endswith(".md") else None

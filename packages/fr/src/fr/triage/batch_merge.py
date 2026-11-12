@@ -44,9 +44,6 @@ FAILING_BUCKETS = frozenset({"fail", "cancel"})
 BaseCommit = tuple[str, tuple[tuple[str, str], ...]]
 # Close-out and archive merges move a run's artifacts and nothing else (gh#927).
 ARCHIVE_PREFIX = "docs/superpowers/"
-# The acceptance matrix cites specs and plans by path, which an archive merge moves:
-# a PR changing it overlaps every archive merge, though no path is shared (gh#937).
-CITES_ARCHIVE_PREFIX = "docs/acceptance/"
 # Change fragments: a release commit deletes the ones it consumed.
 FRAGMENT_PREFIX = ".changes/"
 # Update-push-wait rounds per PR before merge gives up on a moving main.
@@ -397,17 +394,14 @@ def _behind_only_routinely(ctx: MergeContext, head: str) -> bool:
     if not commits:
         return False
     touched = ctx.checkout.changed_paths(ctx.main, head)
-    cites = any(path.startswith(CITES_ARCHIVE_PREFIX) for path in touched)
+    # An archive merge no longer overlaps an acceptance edit: rows cite specs and plans
+    # logically, so `fr archive` rewrites no fragment (spec 2026-11-04 R18; gh#937 was
+    # the retired matrix's path refs).
     return all(
         routine_commit(changes, ctx.checkout.show, sha)
         and not touched.intersection(path for _, path in changes)
-        and not (cites and _is_archive(changes))
         for sha, changes in commits
     )
-
-
-def _is_archive(changes: Sequence[tuple[str, str]]) -> bool:
-    return bool(changes) and all(path.startswith(ARCHIVE_PREFIX) for _, path in changes)
 
 
 MergeReadiness = Literal[
@@ -677,3 +671,7 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
     wt.push(pr.head_ref)
     ctx.say(f"PR #{pr.number}: pushed {new[:12]} ({message}); waiting for its checks")
     return new
+
+
+def _is_archive(changes: Sequence[tuple[str, str]]) -> bool:
+    return bool(changes) and all(path.startswith(ARCHIVE_PREFIX) for _, path in changes)

@@ -169,10 +169,11 @@ def spec_plans(root: Path, spec_rel: str) -> tuple[str, ...]:
 
 def row_spec(root: Path, origins: tuple[str, ...]) -> str | None:
     """The spec file a row's `origin` refs name, when this repo holds it (live or archived)."""
+    from fr.acceptance.logical import origin_spec_path
+
     for origin in origins:
-        _, _, rest = origin.partition(":")
-        path = rest.partition("#")[0]
-        if not path.endswith(".md"):
+        path = origin_spec_path(origin, root)
+        if path is None:
             continue
         for cand in (Path(path), IMPLEMENTED_SPECS_REL / Path(path).name):
             if (root / cand).is_file():
@@ -283,7 +284,8 @@ def collect_candidates(
 ) -> tuple[list[Candidate], list[str]]:
     """`(candidates, notes)` for the whole repo, sorted by key. *notes* are degradations that
     stay out of the candidates (an unreadable issue list, a dropped tracker)."""
-    from fr.acceptance.model import AcceptanceError, load_matrix
+    from fr.acceptance.fold import load_effective
+    from fr.acceptance.model import AcceptanceError
     from fr.archive import merge_evidence
     from fr.debt.engine import compute
     from fr.verification.exit import exit_for_spec
@@ -296,7 +298,7 @@ def collect_candidates(
     days = report.stale_days
     git = Git(repo_root)
     try:
-        matrix = load_matrix(repo_root / "docs/acceptance/matrix.yaml")
+        matrix = load_effective(repo_root)
         origins = {r.id: tuple(r.origin) for r in matrix.rows}
     except (AcceptanceError, OSError):
         origins = {}

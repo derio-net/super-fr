@@ -414,6 +414,14 @@ def _identity(matrix: Matrix, root: Path) -> tuple[str, str]:
     return resolve_identity(matrix, root)
 
 
+def _path_view(matrix: Matrix, root: Path, own_repo: str) -> Matrix:
+    """Logical refs (`spec:<slug>`, R18) as the own-repo paths they resolve to, so
+    every link below is built from a path."""
+    from fr.acceptance.logical import path_view
+
+    return path_view(matrix, root, own_repo)
+
+
 def render_deterministic(
     matrix: Matrix,
     root: Path,
@@ -435,6 +443,7 @@ def render_deterministic(
     root = root.resolve()
     out_dir = out_dir.resolve()
     org, own_repo = _identity(matrix, root)
+    matrix = _path_view(matrix, root, own_repo)
     links = LinkBuilder(
         mode=link_mode,
         ref="main",
@@ -548,6 +557,7 @@ def render_report(
     import subprocess
 
     org, own_repo = _identity(matrix, root)
+    matrix = _path_view(matrix, root, own_repo)
     links = LinkBuilder(
         mode=link_mode,
         ref=ref,

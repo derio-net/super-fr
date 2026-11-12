@@ -167,14 +167,15 @@ def take_snapshot(
     )
 
 
-def acceptance_rows(matrix: Path | None) -> dict[str, str] | None:
-    """Matrix row id -> status for *matrix*; None when there is none or it will not load."""
-    if matrix is None or not matrix.is_file():
-        return None
-    from fr.acceptance.model import load_matrix
+def acceptance_rows(checkout: Path | None) -> dict[str, str] | None:
+    """Effective-matrix row id -> status for the *checkout*; None when it keeps no
+    fragment or they will not fold (spec 2026-11-04 R17)."""
+    from fr.acceptance.fold import has_fragments, load_effective
 
+    if checkout is None or not has_fragments(checkout):
+        return None
     try:
-        return {r.id: str(r.status) for r in load_matrix(matrix).rows}
+        return {r.id: str(r.status) for r in load_effective(checkout).rows}
     except Exception:  # an unreadable matrix is "no matrix": the board never fails on it
         return None
 
@@ -246,8 +247,9 @@ def previous_snapshot(state_dir: Path, new: Snapshot) -> Snapshot | None:
 
 
 def matrix_for_scope(scope_repo: str | None, cwd: Path) -> Path | None:
-    """The acceptance matrix to read for a scope: the checkout containing *cwd*'s
-    `docs/acceptance/matrix.yaml`, but only when the scope is the single repo
+    """The checkout whose acceptance fragments to read for a scope: the one containing
+    *cwd*, when it keeps fragments (`docs/acceptance/features/`), but only when the
+    scope is the single repo
     *scope_repo* (OWNER/REPO) and that checkout's `origin` names it. A matrix is one
     repo's; reading it for any other scope would record unrelated rows."""
     if scope_repo is None:
@@ -261,8 +263,9 @@ def matrix_for_scope(scope_repo: str | None, cwd: Path) -> Path | None:
         return None
     if origin is None or origin.lower() != scope_repo.lower():
         return None
-    matrix = top / "docs" / "acceptance" / "matrix.yaml"
-    return matrix if matrix.is_file() else None
+    from fr.acceptance.fold import has_fragments
+
+    return top if has_fragments(top) else None
 
 
 # ---------------------------------------------------------------------- diffing

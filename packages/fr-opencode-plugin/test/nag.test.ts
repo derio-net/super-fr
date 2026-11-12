@@ -12,8 +12,11 @@ let repo: string;
 beforeEach(() => {
   repo = realpathSync(mkdtempSync(join(tmpdir(), "fr-nag-")));
   mkdirSync(join(repo, ".git"));
-  mkdirSync(join(repo, "docs", "acceptance"), { recursive: true });
-  writeFileSync(join(repo, "docs", "acceptance", "matrix.yaml"), "rows: []\n");
+  mkdirSync(join(repo, "docs", "acceptance", "features"), { recursive: true });
+  writeFileSync(
+    join(repo, "docs", "acceptance", "features", "f.yaml"),
+    "schema_version: 1\nfeature: f\nrepo: o/r\nrows:\n",
+  );
 });
 
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
@@ -84,13 +87,21 @@ describe("acceptance nag", () => {
     expect(calls.length).toBe(0);
   });
 
-  test("no matrix: returns before spawning anything", async () => {
-    rmSync(join(repo, "docs", "acceptance", "matrix.yaml"));
+  test("no fragment: returns before spawning anything", async () => {
+    rmSync(join(repo, "docs", "acceptance", "features", "f.yaml"));
     const { calls, runFr } = stub({ code: 0, stdout: "debt\n" });
     const event = ctxEvent();
     await createNagHandler({ session: topLevel, directory: repo, runFr })(event);
     expect(calls.length).toBe(0);
     expect(event.system).toEqual([]);
+  });
+
+  test("the retired matrix still spawns fr, so a stale repo hears why", async () => {
+    rmSync(join(repo, "docs", "acceptance", "features", "f.yaml"));
+    writeFileSync(join(repo, "docs", "acceptance", "matrix.yaml"), "rows: []\n");
+    const { calls, runFr } = stub({ code: 0, stdout: "debt\n" });
+    await createNagHandler({ session: topLevel, directory: repo, runFr })(ctxEvent());
+    expect(calls.length).toBe(1);
   });
 
   test("no debt, empty output, failure and a timeout are all silent", async () => {

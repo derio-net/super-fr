@@ -53,14 +53,16 @@ TRUST_EXCLUDED: tuple[str, ...] = (
     "docs/superpowers/runs/<run-id>.records/*.yaml",
     "docs/superpowers/runs/<run-id>.records/pr-body.md",
     "docs/superpowers/runs/<run-id>.pr-body.md",
+    "docs/acceptance/features/<feature>.yaml",
     "docs/acceptance/matrix.yaml",
     "docs/acceptance/report_local.html",
     "docs/acceptance/report_linked.html",
     "docs/acceptance/report_linked.md",
 )
 """Exactly the file SHAPES fr writes as evidence while a plan runs: a journal one level
-under specs|plans|debug, a run cursor, a step record, a PR body, the acceptance matrix
-and its reports. Never a whole prefix, and never an executable or a symlink."""
+under specs|plans|debug, a run cursor, a step record, a PR body, an acceptance fragment
+(spec 2026-11-04 R16), and the retired matrix and its reports, which the migration to
+fragments deletes (R19). Never a whole prefix, and never an executable or a symlink."""
 FILE_PREFIX = "file:"
 PROBE_FIELDS = ("check", "na_if", "ready", "escalate", "apply", "undo")
 """The op fields whose text runs (or is offered to run), shown by `fr ops trust`."""
@@ -183,6 +185,8 @@ def is_trust_excluded(path: str, mode: str | None = None) -> bool:
     if path in _ACCEPTANCE:
         return True
     parts = path.split("/")
+    if parts[:3] == ["docs", "acceptance", "features"] and len(parts) == 4:
+        return parts[3].endswith(".yaml")
     if (
         parts[:3] == ["docs", "superpowers", "implemented"]
         and len(parts) == 6

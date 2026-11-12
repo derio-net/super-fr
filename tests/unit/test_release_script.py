@@ -996,14 +996,14 @@ def test_a_migration_beyond_a_live_stamp_refuses(
     assert world.origin_version() == BASE
 
 
-MATRIX = "docs/acceptance/matrix.yaml"
+FRAGMENT = "docs/acceptance/features/2026-11-04-repo-feature-settings.yaml"
 RECORD = "docs/superpowers/runs/2026-10-06-feat-x.records/deliver.yaml"
 
 
 @pytest.mark.parametrize(
     ("rel", "before", "after"),
     [
-        (MATRIX, "schema_version: 3\nrows: []\n", "schema_version: 4\nrows: []\n"),
+        (FRAGMENT, "schema_version: 1\nrows: []\n", "schema_version: 2\nrows: []\n"),
         (RECORD, "schema_version: 7\nstep: deliver\n", "schema_version: 8\nstep: deliver\n"),
         (
             USAGE_FILE,
@@ -1011,7 +1011,7 @@ RECORD = "docs/superpowers/runs/2026-10-06-feat-x.records/deliver.yaml"
             "---\n# usage\nschema_version: 2\nrun: x\n",
         ),  # inserted after the leading document marker and comments, as the writer does
     ],
-    ids=["matrix", "record", "insert-after-header"],
+    ids=["fragment", "record", "insert-after-header"],
 )
 def test_more_live_stamp_moves_ride_the_release_commit(
     world: World, rel: str, before: str, after: str
@@ -2491,3 +2491,10 @@ def test_r18_a_second_untagged_rc_is_tagged_with_an_older_rc_tag_below_it(world:
 
 def test_the_old_any_commit_check_is_gone() -> None:
     assert not hasattr(release, "_merged_since")
+
+
+def test_the_live_artifacts_are_the_fragments_not_the_retired_matrix() -> None:
+    """Spec 2026-11-04-repo-feature-settings R19: the matrix kind is retired."""
+    assert release.LIVE_ARTIFACT_RE.match(FRAGMENT)
+    assert not release.LIVE_ARTIFACT_RE.match("docs/acceptance/matrix.yaml")
+    assert not release.LIVE_ARTIFACT_RE.match("docs/acceptance/features/sub/x.yaml")

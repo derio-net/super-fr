@@ -739,10 +739,11 @@ LIVE_ARTIFACT_RE = re.compile(
     r"^(?!.*(?:^|/)implemented/)"
     r"(?:docs/superpowers/(?:runs/[^/]+\.yaml|runs/[^/]+\.records/[^/]+\.yaml"
     r"|usage/[^/]+\.yaml|journals/.+\.md)"
-    r"|docs/acceptance/matrix\.yaml)$"
+    r"|docs/acceptance/features/[^/]+\.yaml)$"
 )
 """Live artifacts whose stamp a release may move: `fr.artifacts.registry`'s run,
-record, usage, journal and matrix locators. Plans have their own ceiling rule;
+record, usage, journal and acceptance-fragment locators (the matrix kind is retired,
+spec 2026-11-04-repo-feature-settings R19). Plans have their own ceiling rule;
 specs (`fr_schema:` front matter) and `.devcontainer/fr-profiles.yaml` carry their
 stamp elsewhere and are left out, so their migrations still refuse. No path under
 an `implemented/` segment matches: archives are frozen."""

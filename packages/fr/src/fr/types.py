@@ -107,7 +107,7 @@ class PhaseHeader(BaseModel):
     # Acceptance-matrix row ids this phase advances (2026-07-04 spec,
     # decision 2). Optional and omitted when empty, so pre-acceptance plans
     # stay byte-stable; `fr plan self-review` validates the ids against
-    # docs/acceptance/matrix.yaml.
+    # the effective acceptance matrix (the fragments, docs/acceptance/features/).
     acceptance: tuple[str, ...] = ()
     # Harness-neutral complexity hint used by fr-goal to pick a subagent model
     # at dispatch (2026-07-22 fr-goal-subagent-execution spec §B.2). The plan

@@ -12,13 +12,16 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
-from fr.acceptance.model import AcceptanceError, Matrix, Row, Walk, load_matrix
+from fr.acceptance.fragment import FRAGMENTS_DIR
+from fr.acceptance.model import AcceptanceError, Matrix, Row, Walk
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
 
-MATRIX_REL = Path("docs/acceptance/matrix.yaml")
+RETIRED_MATRIX_REL = Path("docs/acceptance/matrix.yaml")
+"""The retired matrix (spec 2026-11-04-repo-feature-settings R19): read only from a
+base ref older than the split, never written."""
 
 acceptance_app = typer.Typer(
     help="Acceptance matrix: business-level acceptance tests × verification levels.",
@@ -51,44 +54,60 @@ def _say_if_off(root: Path) -> bool:
 
 
 def _load(root: Path) -> Matrix:
-    matrix_path = root / MATRIX_REL
-    if not matrix_path.exists():
-        err_console.print(f"no {MATRIX_REL} (run `fr acceptance init` to scaffold one)")
+    """The effective matrix (`fr.acceptance.fold.load_effective`). A repo with no
+    fragment and no `docs/acceptance/features/` directory has no acceptance: exit 1."""
+    from fr.acceptance.fold import has_fragments, load_effective
+
+    if not has_fragments(root) and not (root / FRAGMENTS_DIR).is_dir():
+        err_console.print(
+            f"no acceptance fragments under {FRAGMENTS_DIR}/ "
+            "(run `fr acceptance init` to scaffold, then `fr acceptance add`)"
+        )
         raise typer.Exit(1)
     try:
-        return load_matrix(matrix_path)
+        return load_effective(root)
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(1) from e
 
 
-def _added_since(root: Path, ref: str, matrix: Matrix) -> list[str]:
-    """Row ids present now but absent from `<ref>`'s matrix (spec decision 6:
-    mid-flight additions are defended at PR time, and this diff feeds the
-    PR-body section). A base without a matrix means every row is new."""
+def _ids_at(root: Path, ref: str) -> set[str]:
+    """Every row id `<ref>` defines: its fold, or — for a base from before the
+    split (R19) — its retired matrix's ids. A ref with neither defines none."""
     import subprocess
 
     import yaml
 
+    from fr.acceptance.fold import fold
+
+    effective = fold(root, ref=ref, include_pending=False)
+    ids = {r.id for r in effective.matrix.rows} | {r.id for r in effective.retired}
+    if ids:
+        return ids
     out = subprocess.run(
-        ["git", "show", f"{ref}:{MATRIX_REL}"],
+        ["git", "show", f"{ref}:{RETIRED_MATRIX_REL}"],
         cwd=root,
         capture_output=True,
         text=True,
         check=False,
     )
     if out.returncode != 0:
-        stderr = out.stderr.strip()
-        if "does not exist" in stderr or "exists on disk, but not in" in stderr:
-            old_ids: set[str] = set()
-        else:
-            raise AcceptanceError(f"--added-since {ref}: {stderr}")
-    else:
-        try:
-            old = yaml.safe_load(out.stdout) or {}
-        except yaml.YAMLError as e:
-            raise AcceptanceError(f"--added-since {ref}: base matrix unparseable: {e}") from e
-        old_ids = {str(r["id"]) for r in old.get("rows") or [] if isinstance(r, dict) and "id" in r}
+        return set()
+    try:
+        old = yaml.safe_load(out.stdout) or {}
+    except yaml.YAMLError as e:
+        raise AcceptanceError(f"--added-since {ref}: base matrix unparseable: {e}") from e
+    return {str(r["id"]) for r in old.get("rows") or [] if isinstance(r, dict) and "id" in r}
+
+
+def _added_since(root: Path, ref: str, matrix: Matrix) -> list[str]:
+    """Row ids present now but absent from `<ref>`'s effective matrix (spec decision
+    6: mid-flight additions are defended at PR time, and this diff feeds the PR-body
+    section). A base without fragments or a matrix means every row is new."""
+    try:
+        old_ids = _ids_at(root, ref)
+    except AcceptanceError as e:
+        raise AcceptanceError(f"--added-since {ref}: {e}") from e
     return [r.id for r in matrix.rows if r.id not in old_ids]
 
 
@@ -162,7 +181,7 @@ def report_cmd(
     deterministic: bool = typer.Option(
         False,
         "--deterministic",
-        help="Render as a pure function of matrix.yaml (matrix-derived stamp, no git "
+        help="Render as a pure function of the effective matrix (no git "
         "date/hash, no filesystem twin-probing) — the committed-report / drift-check path.",
     ),
     check: bool = typer.Option(
@@ -218,7 +237,7 @@ def report_cmd(
                 stale.append(rel)
         if not stale:
             line = (
-                f"{', '.join(expected)} in sync with matrix.yaml"
+                f"{', '.join(expected)} in sync with the acceptance fragments"
                 if expected
                 else "no tracked reports to check"
             )
@@ -227,7 +246,7 @@ def report_cmd(
             typer.echo(line)
             return
         typer.echo(
-            f"ERROR: stale (drifted from docs/acceptance/matrix.yaml): {', '.join(stale)} — "
+            f"ERROR: stale (drifted from the acceptance fragments): {', '.join(stale)} — "
             "run `fr acceptance report --deterministic` and commit the result.",
             err=True,
         )
@@ -474,11 +493,12 @@ def _validate_refs(row: Row) -> None:
     """Ref grammar checked BEFORE the file is touched — a shell-mangled ref
     (zsh's `$VAR:t` modifier eating "…:tests/…") must not land and surface
     only at the next `check`."""
+    from fr.acceptance.logical import is_logical, parse_logical
     from fr.acceptance.model import split_ref
 
     for ref in row.refs():
         try:
-            split_ref(ref)
+            parse_logical(ref) if is_logical(ref) else split_ref(ref)
         except AcceptanceError as e:
             err_console.print(f"[red]error:[/red] {escape(str(e))}")
             raise typer.Exit(2) from e
@@ -489,12 +509,16 @@ def _apply_rows(
     item: object,
     message: str,
     drops: dict[str, dict[str, tuple[str, ...]]] | None = None,
+    *,
+    feature: str | None = None,
+    repo: str | None = None,
 ) -> None:
     """A one-entry record through the step-record engine (spec 2026-09-25
-    §5.C.6): the matrix edit, the three reports regenerated once, one commit.
+    §5.C.6): the fragment edit, one commit holding only the fragment.
 
     `drops` (row id → level → refs to remove, gh#624) is passed only when it
-    names something: the engine refuses an empty per-row mapping."""
+    names something: the engine refuses an empty per-row mapping. `feature` names
+    a new row's fragment and `repo` the first fragment's identity (`add`)."""
     from fr.record import apply as engine
     from fr.record.model import StepRecord
 
@@ -503,7 +527,12 @@ def _apply_rows(
             root,
             None,
             StepRecord(acceptance=(item,)),  # type: ignore[arg-type]
-            target=engine.RecordTarget(message=message, acceptance_drops=drops or {}),
+            target=engine.RecordTarget(
+                message=message,
+                acceptance_drops=drops or {},
+                acceptance_features={item.id: feature} if feature else {},  # type: ignore[attr-defined]
+                acceptance_repo=repo,
+            ),
         )
     except engine.RecordRefusedError as e:
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
@@ -640,7 +669,7 @@ def set_status_cmd(
     same rewrite; omitting the flag preserves whatever the
     row already carries (`add`'s create-only, and there is no delete verb, so
     this is the only way to set it on an existing row without hand-editing
-    matrix.yaml).
+    its fragment).
     """
     from typing import get_args
 
@@ -766,7 +795,10 @@ def add_cmd(
     capability: str = typer.Option(..., "--capability", help="Grouping heading."),
     acceptance: str = typer.Option(..., "--acceptance", help="The business-level statement."),
     origin: list[str] = typer.Option(
-        [], "--origin", help="'<repo>:<path>[#anchor]' ref (repeatable)."
+        [],
+        "--origin",
+        help="'spec:<slug>[#R<n>]', 'plan:<slug>' or '<repo>:<path>[#anchor]' ref "
+        "(repeatable; a spec or plan path is written as its logical ref).",
     ),
     level: list[str] = typer.Option(
         [], "--level", help="'<level>=<repo>:<path>[#test_name]' test ref (repeatable)."
@@ -808,9 +840,22 @@ def add_cmd(
         "--harness",
         help="A harness the row's promise covers (repeatable; spec 2026-10-06 R14).",
     ),
+    feature: str | None = typer.Option(
+        None,
+        "--feature",
+        help="The fragment (docs/acceptance/features/<feature>.yaml) to write the row "
+        "to, when its origins name no single spec (`legacy` for none).",
+    ),
+    repo: str | None = typer.Option(
+        None,
+        "--repo",
+        help="'<org>/<repo>' for the repo's first fragment, when the origin remote does "
+        "not name it.",
+    ),
 ) -> None:
-    """Insert a schema-validated row after its capability's last row (agents
-    never hand-edit YAML shapes); a new capability appends at the end.
+    """Insert a schema-validated row into the fragment of the feature that owns it
+    (its one origin spec, or --feature), after its capability's last row (agents
+    never hand-edit YAML shapes); a new capability goes at the end of `rows:`.
 
     `add` CREATES rows; moving an existing row's status is
     `fr acceptance set-status` (re-adding an id is refused below, by design).
@@ -875,6 +920,8 @@ def add_cmd(
             harnesses=new_row.harnesses,
         ),
         f"chore(fr): acceptance — add {new_row.id}",
+        feature=feature,
+        repo=repo,
     )
     typer.echo(f"added row {new_row.id} ({new_row.status})")
 

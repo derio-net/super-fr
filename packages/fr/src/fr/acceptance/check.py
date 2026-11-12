@@ -83,8 +83,9 @@ def resolve_identity(matrix: Matrix, root: Path) -> tuple[str, str]:
     if m:
         return matrix.org or m.group(1), matrix.repo or m.group(2)
     raise AcceptanceError(
-        "cannot resolve repo identity: set top-level `org:` and `repo:` keys "
-        "in matrix.yaml (fr acceptance init writes them) or add a github origin remote"
+        "cannot resolve repo identity: write a fragment under docs/acceptance/features/ "
+        "(each carries `repo: <org>/<repo>`; `fr acceptance add --repo` writes the first) "
+        "or add a github origin remote"
     )
 
 
@@ -225,11 +226,13 @@ def _workflow_coverage_warnings(matrix: Matrix, root: Path, own: str) -> list[st
     globs = pr.get("paths") or []
     if not globs:
         return []
+    from fr.acceptance.logical import as_path_ref
+
     uncovered: list[str] = []
     for r in matrix.rows:
         for ref in r.refs():
             try:
-                repo, path, _ = split_ref(ref)
+                repo, path, _ = split_ref(as_path_ref(ref, root, own))
             except AcceptanceError:
                 continue
             if not same_repo(repo, own):
@@ -249,8 +252,16 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     missing_repos: set[str] = set()
     case_only: set[str] = set()
 
+    from fr.acceptance.logical import candidates, is_logical, parse_logical, resolution_problem
+
     for r in matrix.rows:
         for ref in r.refs():
+            if is_logical(ref):
+                # R18: `spec:<slug>` / `plan:<slug>` name this repo's artifacts.
+                problem = resolution_problem(ref, root)
+                if problem is not None:
+                    result.errors.append(f"row {r.id}: ref does not resolve: {problem}")
+                continue
             try:
                 repo, _, _ = split_ref(ref)
             except AcceptanceError as e:
@@ -281,6 +292,12 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
     referenced: set[str] = set()
     for r in matrix.rows:
         for ref in r.origin:
+            if is_logical(ref):
+                try:
+                    referenced.update(candidates(parse_logical(ref)))
+                except AcceptanceError:
+                    pass  # already reported above
+                continue
             try:
                 repo, path, _ = split_ref(ref)
             except AcceptanceError:
@@ -330,7 +347,7 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
             got = report_path.read_text() if report_path.exists() else None
             if got != want:
                 result.errors.append(
-                    f"report drift: {rel} is missing or stale vs docs/acceptance/matrix.yaml — "
+                    f"report drift: {rel} is missing or stale vs the acceptance fragments — "
                     "run `fr acceptance report --deterministic` and commit the report set"
                 )
 

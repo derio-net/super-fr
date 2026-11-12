@@ -393,13 +393,14 @@ class _ArchiveOpts:
 def _after_moves(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
     """The follow-ups an archive that staged a move owes (spec 2026-10-06 §0).
 
-    The usage refresh and matrix retarget are no-ops on an empty log; the open
+    The usage refresh is a no-op on an empty log (acceptance rows cite fr artifacts
+    logically, so an archive rewrites no row: spec 2026-11-04 R18); the open
     ends step also runs for an explicit `--issues <qids>` with nothing moved
     (R9). Each step runs in its own try: one failure never stops the next, and
     none of them changes the exit code the body chose."""
     steps: list[tuple[str, Callable[[Path, MoveLog, _ArchiveOpts], None]]] = []
     if log:
-        steps += [("usage refresh", _refresh_usage), ("matrix retarget", _retarget_matrix)]
+        steps.append(("usage refresh", _refresh_usage))
     if log or opts.issues is not None:
         steps.append(("open ends", _open_ends_step))
     if log or log.owed_journals:
@@ -452,53 +453,6 @@ def _refresh_usage(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
         err_console.print(f"note: usage for {run_id} has uncommitted changes — not refreshed")
     for run_id, why in report.failed:
         err_console.print(f"note: usage for {run_id} not refreshed — {escape(why)}")
-
-
-def _retarget_matrix(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
-    """§B: matrix refs follow what this invocation moved; the three committed
-    reports are regenerated and everything is staged. Every render happens in
-    memory before the first write, so a refusal touches no file."""
-    import subprocess
-
-    from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import parse_matrix
-    from fr.acceptance.report import render_committed_set, tracked_reports
-    from fr.acceptance.retarget import retarget_text
-    from fr.artifacts.atomic import write_text_atomic
-    from fr.commands.acceptance_cmd import MATRIX_REL
-
-    matrix_path = repo_root / MATRIX_REL
-    if not matrix_path.is_file():
-        return
-    try:
-        text = matrix_path.read_text()
-        own = resolve_identity(parse_matrix(text), repo_root)[1]
-        new_text, changes = retarget_text(text, own, log.moves)
-        if not changes:
-            return
-        renders = render_committed_set(
-            parse_matrix(new_text), repo_root, only=tracked_reports(repo_root)
-        )
-    except Exception as e:  # noqa: BLE001 — a refusal is a warning, never a failure
-        err_console.print(f"[yellow]warning:[/yellow] matrix retarget skipped — {escape(str(e))}")
-        return
-    targets = {str(MATRIX_REL): new_text, **renders}
-    dirty = [rel for rel in targets if _edited_in_worktree(repo_root, repo_root / rel)]
-    if dirty:
-        err_console.print(
-            f"[yellow]warning:[/yellow] matrix retarget skipped — {', '.join(dirty)} "
-            "has uncommitted changes"
-        )
-        return
-    for rel, content in targets.items():
-        write_text_atomic(repo_root / rel, content)
-    subprocess.run(
-        ["git", "-C", str(repo_root), "add", "--", *targets],
-        check=True,
-        capture_output=True,
-    )
-    for row_id, old, new in changes:
-        typer.echo(f"  retargeted: {row_id} · {old} → {new}")
 
 
 def _open_ends_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
@@ -667,15 +621,11 @@ def _owed_step(repo_root: Path, log: MoveLog, opts: _ArchiveOpts) -> None:
 
 
 def _repo_slug(repo_root: Path) -> str:
-    """`org/repo` — the identity the matrix retarget uses (explicit matrix keys,
-    else the origin remote)."""
+    """`org/repo` — the acceptance fragments' `repo:`, else the origin remote."""
     from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import Matrix, parse_matrix
-    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.acceptance.fold import load_effective
 
-    path = repo_root / MATRIX_REL
-    matrix = parse_matrix(path.read_text()) if path.is_file() else Matrix()
-    return "/".join(resolve_identity(matrix, repo_root))
+    return "/".join(resolve_identity(load_effective(repo_root), repo_root))
 
 
 def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:

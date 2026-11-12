@@ -576,7 +576,7 @@ def apply_phase(gate: Gate, phase: str) -> None:
 def _head_paths(t: GateTarget, spec_rel: str) -> list[str]:
     """What the ops-gap check reads at the PR head (spec 2026-11-01-ops-gate-probes §A),
     plus the run's own spec when it lives elsewhere."""
-    paths = ["docs/superpowers/specs", t.plan_rel, "docs/acceptance/matrix.yaml", ".fr"]
+    paths = ["docs/superpowers/specs", t.plan_rel, "docs/acceptance/features", ".fr"]
     return paths if spec_rel.startswith("docs/superpowers/specs/") else [*paths, spec_rel]
 
 

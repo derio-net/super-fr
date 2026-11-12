@@ -12,16 +12,32 @@
 //     failing `fr` is not retried on every request);
 //   - child sessions are skipped, and a session that cannot be looked up is not
 //     assumed to be top-level;
-//   - a repo with no docs/acceptance/matrix.yaml returns BEFORE any process
-//     spawn (the repo root is found on the filesystem, not via git);
+//   - a repo with no acceptance fragment (docs/acceptance/features/*.yaml) and
+//     no retired docs/acceptance/matrix.yaml returns BEFORE any process spawn
+//     (the repo root is found on the filesystem, not via git);
 //   - bounded (a short timeout), silent on every failure — except the stale
 //     artifact refusal, which says why the nag is missing;
 //   - NEVER THROWS.
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { run, type RunAnswer } from "./spawn";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+
+/** Whether the repo keeps acceptance rows: a fragment under docs/acceptance/features/
+ * (spec 2026-11-04-repo-feature-settings R16), or the retired matrix still waiting
+ * for its migration (R19), so `fr` can say it is stale. Never throws. */
+export function hasAcceptance(root: string): boolean {
+  try {
+    const features = join(root, "docs", "acceptance", "features");
+    if (existsSync(features) && readdirSync(features).some((name) => name.endsWith(".yaml"))) {
+      return true;
+    }
+    return existsSync(join(root, "docs", "acceptance", "matrix.yaml"));
+  } catch {
+    return false;
+  }
+}
 
 /** The artifact gate's commit notice (`fr.artifacts.trigger.COMMIT_NOTICE_PREFIX`). */
 const COMMIT_NOTICE = "fr: migrated and committed";
@@ -88,7 +104,7 @@ export function createNagHandler(options: NagHandlerOptions) {
       if (typeof sessionID !== "string" || sessionID === "" || served.has(sessionID)) return;
 
       const root = repoRootOf(options.directory);
-      if (!root || !existsSync(join(root, "docs", "acceptance", "matrix.yaml"))) return;
+      if (!root || !hasAcceptance(root)) return;
 
       served.add(sessionID); // before any await: one attempt per session
       if (!(await isTopLevel(options.session, sessionID))) return;

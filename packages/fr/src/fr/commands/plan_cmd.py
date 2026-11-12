@@ -335,12 +335,11 @@ def _acceptance_flip_nudge(plan_dir: Path, phase_n: int) -> None:
         ids = phase.phase.acceptance
         if not ids or plan.repo_root is None:
             return
-        from fr.acceptance.model import load_matrix
+        from fr.acceptance.fold import has_fragments, load_effective
 
-        matrix_path = plan.repo_root / "docs" / "acceptance" / "matrix.yaml"
-        if not matrix_path.exists():
+        if not has_fragments(plan.repo_root):
             return
-        status_by_id = {r.id: r.status for r in load_matrix(matrix_path).rows}
+        status_by_id = {r.id: r.status for r in load_effective(plan.repo_root).rows}
         unflipped = [rid for rid in ids if status_by_id.get(rid) == "not-implemented"]
         if unflipped:
             typer.echo(

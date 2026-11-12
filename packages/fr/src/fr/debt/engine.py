@@ -23,7 +23,6 @@ from fr.acceptance.model import (
     AcceptanceError,
     Matrix,
     latest_passing_walk_at,
-    load_matrix,
 )
 from fr.archive import MergeEvidence, merge_evidence
 from fr.closeout import plan_sweep
@@ -41,7 +40,6 @@ from fr.debt.model import (
 
 DEFAULT_STALE_DAYS = 14
 CONFIG_REL = Path(".fr/debt.yaml")
-MATRIX_REL = Path("docs/acceptance/matrix.yaml")
 PLANS_REL = "docs/superpowers/plans"
 SPECS_REL = "docs/superpowers/specs"
 RUNS_REL = Path("docs/superpowers/runs")
@@ -368,9 +366,13 @@ def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, Sou
 
     if disabled(repo_root, "acceptance"):
         return AcceptanceDebt(available=False), None, SourceStatus(state="read", why=DISABLED)
-    path = repo_root / MATRIX_REL
+    from fr.acceptance.fold import has_fragments, load_effective
+    from fr.acceptance.fragment import FRAGMENTS_DIR
+
     try:
-        matrix = load_matrix(path)
+        if not has_fragments(repo_root) and not (repo_root / FRAGMENTS_DIR).is_dir():
+            raise AcceptanceError(f"no acceptance fragments under {FRAGMENTS_DIR}/")
+        matrix = load_effective(repo_root)
     except (AcceptanceError, OSError) as e:
         why = " ".join(str(e).split())
         return AcceptanceDebt(available=False), None, SourceStatus(state="unavailable", why=why)

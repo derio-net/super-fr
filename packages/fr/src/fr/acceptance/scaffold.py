@@ -1,4 +1,4 @@
-"""`fr acceptance init` — scaffold the matrix, CI workflow, rule, HTML report.
+"""`fr acceptance init` — scaffold the fragments directory, CI workflow and rule.
 
 Write-if-missing semantics throughout: re-running init never touches a file
 the operator (or a previous run) already owns. The one file init edits rather
@@ -15,11 +15,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr._hosts import HostBackend
+from fr.acceptance.fragment import FRAGMENTS_DIR
 
 # `report.html` is the ad-hoc / uncommitted render (git-stamped, CI/local);
 # the committed set is report_local.html / report_linked.html / report_linked.md.
 GITIGNORE_LINE = "docs/acceptance/report.html"
 
+# The retired matrix's header (spec 2026-11-04 R19): no longer written by init, kept
+# because the matrix 4 -> 5 hop rewrites an old header's status comment to it.
 MATRIX_TEMPLATE = """\
 # Acceptance matrix — the registry of business-level acceptance tests and
 # where each is verified. Rendered by `fr acceptance report`; {ci_gate}
@@ -62,9 +65,12 @@ RULE_TEMPLATE = """\
 
 ## Rule
 
-`docs/acceptance/matrix.yaml` is the registry of business-level acceptance
-tests × verification levels × automation status. **Any PR that does one of
-the following updates the matrix in the SAME PR:**
+The acceptance matrix is the registry of business-level acceptance tests ×
+verification levels × automation status. Its rows live in **per-feature
+fragments**, `docs/acceptance/features/<spec-slug>.yaml`: each row is owned by
+the feature (spec) that created it, and `legacy.yaml` holds rows with no single
+origin spec. The effective matrix is never stored — `fr` folds the fragments.
+**Any PR that does one of the following updates the rows in the SAME PR:**
 
 - adds or changes a spec `## Test Plan` (new spec ⇒ new rows; the CI
   staleness guard fails a spec with a Test Plan that no row cites)
@@ -85,25 +91,20 @@ debt) · `walk-owed` (a live or post-merge walk is owed — debt) ·
 ## How
 
 - Add rows: `fr acceptance add --id ... --capability ... --acceptance ...
-  --origin <repo>:<path> --level unit=<repo>:<path> --status ... --notes ...`
+  --origin spec:<slug>#R<n> --level unit=<repo>:<path>#<test> --status ...
+  --notes ...` — the row lands in its origin spec's fragment (`--feature` names
+  one for a row with no single origin spec). fr artifacts are cited logically
+  (`spec:<slug>[#R<n>]`, `plan:<slug>`), so archiving never rewrites a row; code
+  keeps `<repo>:<path>[#test]`.
+- Move a row: `fr acceptance set-status --id ... --status ... --notes "<why>"`.
+  Never hand-edit a fragment.
 - Check: `fr acceptance check` (refs, staleness, statuses; exit 2 on
   `failing`). Nag: `fr acceptance status` — **any agent session in this repo
   runs `fr acceptance status --brief` at session start** (Claude Code does it
   automatically via the super-fr SessionStart hook; other harnesses honor
   this line).
-- Reports: THREE **committed, tracked** renderings of `matrix.yaml`, kept in
-  sync — `docs/acceptance/report_local.html` (local links, viewable from a
-  checkout), `docs/acceptance/report_linked.html` (github.com blob links), and
-  `docs/acceptance/report_linked.md` (the linked report as **Markdown**, which
-  github.com renders inline — committed `.html` is shown as source, not
-  rendered). `fr acceptance add` regenerates **all three**; drift (incl.
-  hand-edited status flips) is gated by `fr acceptance check` itself — it fails
-  when any committed report is missing or stale. Regenerate by hand with `fr
-  acceptance report --deterministic` (writes all three) and commit them.
-  `docs/acceptance/report.html` is a separate **ad-hoc, gitignored** render: `fr
-  acceptance report` (no flag) writes it git-stamped honoring `--link-mode`
-  (github in CI, local otherwise); links resolve relative to sibling checkouts
-  (`--sibling-root`, default `..`).
+- Reports are derived, never committed: `fr acceptance report` renders one
+  locally.
 {ci_bullet}
 """
 
@@ -470,10 +471,8 @@ def refresh_ci(root: Path, ci_type: str, *, debt: bool) -> RefreshOutcome:
     return RefreshOutcome("rewritten", rel)
 
 
-# The matrix header's gate line, and the rule's CI bullet. GitHub's wording is
-# the one every GitHub repo was scaffolded with, kept byte-for-byte.
-_CI_GATE = "gated in CI by\n# {path} (`fr acceptance check`)."
-_NO_CI_GATE = "no CI is configured,\n# so `fr acceptance check` runs locally and no row is `ci`."
+# The rule's CI bullet. GitHub's wording is the one every GitHub repo was
+# scaffolded with, kept byte-for-byte.
 _CI_BULLET_GITHUB = """\
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
   writes a Markdown summary to each Actions run (branch, PR, main), uploads the
@@ -557,10 +556,6 @@ def init(
         path.write_text(content)
         created.append(rel)
 
-    from fr.artifacts.registry import artifact_kind
-
-    # Born at the kind's current version, so a fresh matrix is never stale.
-    stamp = artifact_kind("matrix").current_version
     # Decided before anything is written: a pipeline only for a repo whose ci
     # service is active (a declared type, or the forge's own CI already
     # present / asked for with --with-ci).
@@ -575,17 +570,17 @@ def init(
     debt, debt_off = debt_steps(root, ci_type, tracking_type) if has_ci else (False, None)
     if has_ci:
         scaffold_path = SCAFFOLD_PATHS[ci_type]
-        ci_gate = _CI_GATE.format(path=scaffold_path)
         if ci_type == "github-actions":
             ci_bullet = _CI_BULLET_GITHUB.format(debt=_DEBT_TAIL_GITHUB if debt else "")
         else:
             ci_bullet = _CI_BULLET.format(path=scaffold_path, debt=_DEBT_TAIL if debt else "")
     else:
-        ci_gate, ci_bullet = _NO_CI_GATE, _NO_CI_BULLET
-    write_if_missing(
-        "docs/acceptance/matrix.yaml",
-        MATRIX_TEMPLATE.format(org=org, repo=repo, schema_version=stamp, ci_gate=ci_gate),
-    )
+        ci_bullet = _NO_CI_BULLET
+    # Rows live in per-feature fragments (R16): init creates their directory and
+    # no fragment — `fr acceptance add` writes the first. The `.gitkeep` keeps the
+    # directory in a clone, where it tells fr this repo keeps acceptance rows.
+    del org, repo  # the identity lives in each fragment's `repo:` (`fr acceptance add`)
+    write_if_missing(f"{FRAGMENTS_DIR.as_posix()}/.gitkeep", "")
     write_if_missing(
         ".claude/rules/acceptance-matrix.md", RULE_TEMPLATE.replace("{ci_bullet}", ci_bullet)
     )
@@ -607,43 +602,13 @@ def init(
             "pass --with-ci to scaffold one"
         )
 
-    # The committed report SET (report_local.html + report_linked.html +
-    # report_linked.md) are TRACKED artifacts kept in lockstep with the matrix
-    # (enforced by `fr acceptance check`). Generate them so a freshly scaffolded
-    # repo carries the committed matrix→report correspondence from row zero. The
-    # ad-hoc `report.html` stays gitignored (github doesn't render committed
-    # HTML; report.html is a throwaway local/CI render).
-    from fr.acceptance.model import load_matrix
-    from fr.acceptance.report import (
-        ci_built_reports,
-        prune_stale_reports,
-        render_committed_set,
-        tracked_reports,
-    )
+    # No report is written: reports are derived, never committed (spec
+    # 2026-11-04-repo-feature-settings R20). The committed set's ci-built probe is
+    # still reported, so an operator sees which paths CI builds.
+    from fr.acceptance.report import ci_built_reports
 
-    # Degrade, don't crash: an unresolvable identity (hand-rolled matrix with no
-    # org/repo keys AND no git remote) must not abort the whole scaffold after
-    # the other files are written — mirrors add_cmd's warn-don't-roll-back
-    # policy. The scaffolded matrix always carries the keys, so this only guards
-    # a pre-existing partial state; re-running init (write-if-missing) recovers.
     ci_built = ci_built_reports(root)
-    tracked = tracked_reports(root, ci_built)
-    try:
-        rendered = render_committed_set(
-            load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root, only=tracked
-        )
-    except Exception:  # noqa: BLE001 — a render hiccup never fails init
-        rendered = None
-    for report_rel in tracked:
-        report_path = root / report_rel
-        if report_path.exists():
-            skipped.append(report_rel)
-        elif rendered is not None:
-            report_path.write_text(rendered[report_rel])
-            created.append(report_rel)
-        else:
-            skipped.append(report_rel)
-    removed = prune_stale_reports(root) if rendered is not None else []
+    removed: list[str] = []
 
     # `report.html` is the ad-hoc / uncommitted render — gitignore it.
     gitignore = root / ".gitignore"
