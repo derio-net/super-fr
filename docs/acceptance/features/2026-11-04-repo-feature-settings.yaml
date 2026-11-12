@@ -203,7 +203,9 @@ rows:
     - spec:2026-11-04-repo-feature-settings#R1
     levels: {}
     status: not-implemented
-    notes: 'added at planning (plan 3): R1 had no row of its own'
+    notes: added at planning (plan 3); scenario tests/scenarios/placement-resolver.sh
+      is built by plan 2026-11-12-placement-resolver
+    scenario: tests/scenarios/placement-resolver.sh
   - id: placement-merged-status
     capability: repo-feature-settings
     acceptance: Under quiet and stealth a feature's merged status and order come from
