@@ -704,3 +704,8 @@ b9475854b: retire no longer discards contested unconditionally; a stale retire t
 ### pr1408-r3-resolved · finding [fixed] · resolves pr1408-r3: Scaffolded GitHub matrix job checks out with persist-credentials: false, so check's default-ref fetch fails in CI on a private repo and every run is refused
 
 bb30cc024: a failed fetch reads refs/remotes/<default> when the checkout holds it, BranchCheck.source + check's 'default ref:' line name the source; CI with no local ref still refuses. Red: test_a_failed_fetch_in_ci_reads_the_checkouts_local_default_ref_and_says_so
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r4-resolved created=2026-11-12T09:33:44+00:00 state=fixed resolves=pr1408-r4 -->
+### pr1408-r4-resolved · finding [fixed] · resolves pr1408-r4: An in-flight branch whose matrix.yaml holds a row this PR retired gets 'duplicate row ids' with no fix named
+
+2eccfadea: split_texts refuses a matrix row the on-disk fold retired, naming the ids and the fix (delete from matrix.yaml, re-run fr migrate artifacts --yes; new id via fr acceptance add if still needed). Red: test_an_in_flight_matrix_holding_a_retired_row_names_it_and_the_fix
