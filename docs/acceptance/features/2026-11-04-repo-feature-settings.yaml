@@ -385,3 +385,12 @@ amendments:
     scenario: tests/scenarios/placement-stealth.sh
     why: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
       spec (R29), tracked in derio-net/super-fr#1380
+  - row: placement-move-and-drift
+    op: set-status
+    base: 0
+    status: not-implemented
+    notes: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+    scenario: tests/scenarios/placement-move-and-drift.sh
+    why: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
