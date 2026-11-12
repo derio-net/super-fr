@@ -1001,6 +1001,17 @@ class RealGhRestClient:
         conditional read sharing `fr.gh`'s module-level ETag map (quota-pacing R12)."""
         return _gh.repo_visibility(self._gh, self._host, repo)
 
+    def pages_visibility(self, repo: str) -> str:
+        """`public` of `GET repos/{repo}/pages`; `unknown` on a 404 (no site) or any failure."""
+        from fr.acceptance.pages import UNKNOWN, from_github
+
+        try:
+            return from_github(self._api(f"repos/{repo}/pages"))
+        except (GhError, ValueError, OSError) as exc:
+            if isinstance(exc, HostRefusedError):
+                raise
+            return UNKNOWN
+
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         """`allowed` from the repo's `allow_*` flags. Gap: REST has no
         `viewerDefaultMergeMethod`, so `default` is None."""

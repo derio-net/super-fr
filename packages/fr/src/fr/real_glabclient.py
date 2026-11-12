@@ -435,6 +435,26 @@ class RealGlabClient(UnsupportedBatchOps):
         return value if isinstance(value, bool) else None
 
     @_hosted
+    def repo_visibility(self, repo: str) -> str:
+        """The project's `visibility` (`public`|`internal`|`private`), via `glab api
+        projects/:id`; raises when it cannot be read, as the `GhClient` contract says."""
+        raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
+        value = raw.get("visibility") if isinstance(raw, dict) else None
+        if not isinstance(value, str) or not value:
+            raise _glab.GlabError(f"projects/{repo}: no visibility in the answer")
+        return value.lower()
+
+    @_hosted
+    def pages_visibility(self, repo: str) -> str:
+        """The project's `pages_access_level`, via `glab api projects/:id`."""
+        from fr.acceptance.pages import UNKNOWN, from_gitlab
+
+        try:
+            return from_gitlab(json.loads(self._api(f"projects/{quote(repo, safe='')}")))
+        except (_glab.GlabError, ValueError, OSError):
+            return UNKNOWN
+
+    @_hosted
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
         projects/:id/repository/files/:path?ref=HEAD`. A NOT-FOUND reads

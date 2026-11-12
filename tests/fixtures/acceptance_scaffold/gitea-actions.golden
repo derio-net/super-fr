@@ -1,6 +1,6 @@
 name: acceptance-report
 
-# The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
+# The acceptance matrix (docs/acceptance/features/*.yaml, folded) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
 # - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
 #   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.

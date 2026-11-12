@@ -541,3 +541,11 @@ def _no_approval_label_from_scaffold(monkeypatch: pytest.MonkeyPatch) -> None:
     from fr.commands import init_cmd
 
     monkeypatch.setattr(init_cmd, "approval_label_target", lambda repo_root: None)
+
+
+@pytest.fixture(autouse=True)
+def _init_reads_no_forge_for_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fr acceptance init` asks the forge whether Pages may publish (R21). A unit test is
+    never the place to reach one: the answer is None (not asked), which scaffolds no Pages
+    job. A test of the decision patches `pages_allowed` or `_pages_decision` itself."""
+    monkeypatch.setattr("fr.commands.acceptance_cmd._pages_decision", lambda root, ci_type: None)

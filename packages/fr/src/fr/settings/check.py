@@ -77,6 +77,13 @@ def _report_without_comments(_root: Path, settings: Settings) -> tuple[str, ...]
     return ()
 
 
+def _report_comment_outside_repo(_root: Path, settings: Settings) -> tuple[str, ...]:
+    """R22: a PR comment is a forge write the quiet and stealth placements do not make."""
+    if settings.forge.report_comment == "on" and settings.placement in ("quiet", "stealth"):
+        return ("forge.report_comment",)
+    return ()
+
+
 RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
     (
         "gates-off-with-ops",
@@ -95,6 +102,11 @@ RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
         "report-comment-needs-comments",
         _report_without_comments,
         "{detail}: on needs forge.comments: on",
+    ),
+    (
+        "report-comment-needs-repo-placement",
+        _report_comment_outside_repo,
+        "{detail}: on is refused under placement quiet and stealth (reports are local only)",
     ),
 )
 

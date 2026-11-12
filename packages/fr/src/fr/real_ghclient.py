@@ -618,6 +618,16 @@ class RealGhClient:
         return _gh.repo_visibility(_gh._run_gh, self._host, repo)
 
     @_hosted
+    def pages_visibility(self, repo: str) -> str:
+        """`public` of `GET repos/{repo}/pages`; `unknown` on a 404 (no site) or any failure."""
+        from fr.acceptance.pages import UNKNOWN, from_github
+
+        try:
+            return from_github(json.loads(_gh._run_gh(["api", f"repos/{repo}/pages"])))
+        except (_gh.GhError, ValueError, OSError):
+            return UNKNOWN
+
+    @_hosted
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
         out = _gh._run_gh(
             [

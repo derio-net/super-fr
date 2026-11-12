@@ -250,6 +250,95 @@ def report_cmd(
         _open_report(out_path)
 
 
+COMMENT_MARKER = "<!-- fr:acceptance-report -->"
+COMMENT_LIMIT = 60_000
+"""Characters kept of the report in the PR comment: GitHub refuses a comment over 65,536."""
+
+
+@acceptance_app.command("comment")
+def comment_cmd(
+    pr: int = typer.Option(..., "--pr", help="The pull request to comment on."),
+    yes: bool = typer.Option(False, "--yes", help="Write the comment (without it: refused)."),
+    ref: str = typer.Option("HEAD", "--ref", help="Own-repo ref for the report's links."),
+) -> None:
+    """Keep ONE comment on a PR carrying the Markdown report (forge.report_comment: on).
+
+    The comment is found by its marker and edited in place, so a PR never collects a
+    stack of them. Refused without `--yes`, when `forge.report_comment` is off and when
+    `forge.comments` is off (spec 2026-11-04 R22). A report over the forge's size limit
+    is cut at a line and says so."""
+    from fr._hosts import origin_slug
+    from fr.acceptance.report import render_report
+    from fr.hostclient import FORGE_ERRORS, client_for
+    from fr.settings import SettingsError, forge_block, load_settings
+
+    root = resolve_repo_root()
+    _refuse_if_off(root, "`fr acceptance comment` posts no report")
+    try:
+        if load_settings(root).settings.forge.report_comment != "on":
+            err_console.print("[red]refused:[/red] forge.report_comment: off (the default)")
+            raise typer.Exit(2)
+        why = forge_block(root, "comments")
+    except SettingsError as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(2) from e
+    if why is not None:
+        err_console.print(f"[red]refused:[/red] {escape(why)}")
+        raise typer.Exit(2)
+    slug = origin_slug(root)
+    if slug is None:
+        err_console.print("[red]error:[/red] no origin remote to name the repository")
+        raise typer.Exit(2)
+    matrix = _load(root)
+    out_dir = root / "docs" / "acceptance"
+    try:
+        report = render_report(matrix, root, out_dir, "..", "github", ref, "md")
+    except AcceptanceError as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(1) from e
+    body = f"{COMMENT_MARKER}\n{report}"
+    if len(body) > COMMENT_LIMIT:
+        note = (
+            "\n\n_Report truncated to fit the comment limit; the full report is the CI artifact._"
+        )
+        cut = body[: COMMENT_LIMIT - len(note)]
+        body = cut[: cut.rfind("\n")] + note
+    if not yes:
+        err_console.print(
+            f"[red]refused:[/red] would write the acceptance report ({len(body)} chars) on "
+            f"{slug}#{pr}; pass --yes to write it"
+        )
+        raise typer.Exit(2)
+    try:
+        client = client_for(root)
+        mine = [c for c in client.list_issue_comments(slug, pr) if COMMENT_MARKER in c["body"]]
+        if mine:
+            client.edit_issue_comment(slug, int(mine[0]["id"]), body)
+            typer.echo(f"updated the acceptance report comment on {slug}#{pr}")
+        else:
+            client.comment_pr(slug, pr, body)
+            typer.echo(f"posted the acceptance report comment on {slug}#{pr}")
+    except FORGE_ERRORS as e:
+        err_console.print(f"[red]error:[/red] {escape(str(e))}")
+        raise typer.Exit(1) from e
+
+
+@acceptance_app.command("pages-check")
+def pages_check_cmd() -> None:
+    """Exit 0 when a Pages site for the report would be no wider than the repo, 1 when not.
+
+    Allowed only for a public repo or forge-reported access-controlled Pages; an unreadable
+    visibility (Gitea, no token, a failed read) fails closed. The scaffolded Pages job runs
+    this before every deploy and skips the deploy on 1 (spec R21)."""
+    from fr.acceptance.pages import pages_allowed
+    from fr.hostclient import client_for
+
+    root = resolve_repo_root()
+    allowed, reason = pages_allowed(root, client_for(root))
+    typer.echo(reason)
+    raise typer.Exit(0 if allowed else 1)
+
+
 @acceptance_app.command("status")
 def status_cmd(
     brief: bool = typer.Option(
@@ -1096,6 +1185,7 @@ def init_cmd(
         ci_type=ci_type,
         tracking_type=services.tracking.type,
         no_ci_reason=reason,
+        pages_decision=_pages_decision(root, ci_type),
     )
     for rel in outcome.created:
         typer.echo(f"created {rel}")
@@ -1116,11 +1206,23 @@ def init_cmd(
         commit_records(root, [Path(rel) for rel in paths], "chore(fr): acceptance init")
 
 
+def _pages_decision(root: Path, ci_type: str) -> tuple[bool, str] | None:
+    """`pages_allowed`'s answer for a CI type that can publish Pages (GitHub Actions,
+    GitLab CI); None for the others, which never do. The one forge read init makes."""
+    from fr.acceptance.pages import pages_allowed
+    from fr.acceptance.scaffold import PAGES_STEP
+    from fr.hostclient import client_for
+
+    if ci_type not in PAGES_STEP:
+        return None
+    return pages_allowed(root, client_for(root))
+
+
 def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
     """`init --refresh-ci`: exit 0 rewritten/current, 1 refused (foreign file,
     nothing to refresh, or GitLab's shared file with the job to paste)."""
     from fr.acceptance.ci import SCAFFOLD_PATHS
-    from fr.acceptance.scaffold import debt_steps, refresh_ci
+    from fr.acceptance.scaffold import debt_steps, publish_plan, refresh_ci
     from fr.records_commit import commit_records
 
     if with_ci:
@@ -1135,7 +1237,10 @@ def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
     debt, debt_off = debt_steps(root, ci_type, services.tracking.type)
     if debt_off is not None:
         typer.echo(f"no debt  {debt_off}; see `fr settings show`")
-    out = refresh_ci(root, ci_type, debt=debt)
+    plan = publish_plan(root, ci_type, _pages_decision(root, ci_type))
+    for notice in plan.notices:
+        typer.echo(notice)
+    out = refresh_ci(root, ci_type, debt=debt, pages=plan.pages, comment=plan.comment)
     if out.status == "missing":
         err_console.print(f"[red]error:[/red] {out.path} does not exist; run `fr acceptance init`")
         raise typer.Exit(1)
