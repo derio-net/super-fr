@@ -1,0 +1,2 @@
+bump: minor
+summary: Review lenses - any agent can add a lens to a feature, and a lens review before deliver examines the whole change under each one
