@@ -141,12 +141,26 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
     # over only what their fold lacks: a row it does not know is added, one it
     # holds identically is dropped, one it holds DIFFERENTLY is refused by id.
     try:
-        known = {r.id: r.model_dump() for r in fold_texts(on_disk).matrix.rows} if on_disk else {}
+        here = fold_texts(on_disk) if on_disk else None
     except AcceptanceError as e:
         raise UnconvertibleMatrixError(
             f"the fragments already here do not fold ({e}), so fr cannot tell which rows of "
             "matrix.yaml they lack. Left on version 5, byte-identical."
         ) from e
+    known = {r.id: r.model_dump() for r in here.matrix.rows} if here else {}
+    # Review pr1408-r4: a row the fragments RETIRED (an amendment on the default
+    # branch) that matrix.yaml still holds would be carried over as a new row and
+    # collide with its own definition. Name it and the fix instead.
+    retired_ids = {r.id for r in here.retired} if here else set()
+    stale_rows = sorted(r.id for rows in by_feature.values() for r in rows if r.id in retired_ids)
+    if stale_rows:
+        raise UnconvertibleMatrixError(
+            f"matrix.yaml still holds {len(stale_rows)} row(s) the fragments already here "
+            f"retired: {', '.join(stale_rows)}. A retired row is never carried back. Delete "
+            "those rows from matrix.yaml, then run `fr migrate artifacts --yes` (`uv run fr …` "
+            "inside an fr checkout); if the branch still needs one, add it as a new row under "
+            "a new id with `fr acceptance add`. Left on version 5, byte-identical."
+        )
     differing = sorted(
         r.id
         for rows in by_feature.values()

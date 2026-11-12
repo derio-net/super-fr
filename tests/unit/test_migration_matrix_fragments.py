@@ -244,6 +244,32 @@ def test_an_in_flight_matrix_whose_row_differs_from_the_fold_is_refused(tmp_path
     assert _fragments(root) == before
 
 
+def test_an_in_flight_matrix_holding_a_retired_row_names_it_and_the_fix(tmp_path: Path) -> None:
+    # pr1408-r4: main retired a row by amendment; a branch's matrix.yaml still holds it.
+    # The refusal names the retired row and what to do, never "duplicate row ids".
+    root, _ = _merged_main(tmp_path)
+    eff = fold(root)
+    gone = eff.matrix.rows[0].id
+    repo = f"{eff.matrix.org}/{eff.matrix.repo}"
+    (root / FEATURES / "2026-12-01-retirer.yaml").write_text(
+        f"schema_version: 1\nfeature: 2026-12-01-retirer\nrepo: {repo}\nrows: []\n"
+        f"amendments:\n  - row: {gone}\n    op: retire\n    base: 0\n"
+        "    notes: superseded\n    why: gone\n"
+    )
+    clear_fold_cache()
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    held = matrix.read_bytes()
+
+    report = run_migrations(root, dry_run=False)
+
+    (failure,) = report.failed
+    assert "duplicate row ids" not in failure.error
+    assert gone in failure.error and "retired" in failure.error
+    assert "Delete those rows from matrix.yaml" in failure.error
+    assert "fr migrate artifacts --yes" in failure.error
+    assert matrix.read_bytes() == held
+
+
 def test_a_matrix_the_frozen_reader_refuses_is_left_byte_identical(tmp_path: Path) -> None:
     text = FIXTURE.read_text().replace("status: ci", "status: sheduled", 1)
     root = _repo(tmp_path, text)
