@@ -267,8 +267,8 @@ class TestMcpConfig:
 # ── Stale skill cleanup ─────────────────────────────────────────────
 
 
-class TestStaleSkillCleanup:
-    def test_preserves_non_vk_skills(self, fake_home: Path) -> None:
+class TestUserSkillsUntouched:
+    def test_preserves_user_skills(self, fake_home: Path) -> None:
         """Other user-level skills should not be touched."""
         skills_dir = fake_home / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
@@ -280,8 +280,8 @@ class TestStaleSkillCleanup:
 
         assert other.exists()
 
-    def test_no_error_when_no_stale_skills(self, fake_home: Path) -> None:
-        """Should not fail when there are no stale skills to clean."""
+    def test_installs_with_no_skills_dir(self, fake_home: Path) -> None:
+        """A home with no user-level skills directory installs cleanly."""
         _run_install(fake_home)  # no skills dir pre-existing
 
 

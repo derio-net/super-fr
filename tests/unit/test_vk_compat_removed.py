@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import importlib.util
+import re
+from pathlib import Path
 
-
-def test_smoke() -> None:
-    assert True
+import pytest
+import yaml
+from typer.testing import CliRunner
 
 
 def test_init_has_no_migrate_command() -> None:
@@ -23,12 +25,6 @@ def test_isolation_migrate_module_is_gone() -> None:
 
 
 # --- Task 2: `fr isolation up` requires --branch ---------------------------------
-
-import re  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-import pytest  # noqa: E402
-from typer.testing import CliRunner  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -72,6 +68,48 @@ def test_no_bare_isolation_up_remedy(rel: str) -> None:
     text = (REPO / rel).read_text()
     bare = [m.group(0) for m in re.finditer(r"fr isolation up(?=[`'\")]|$)", text, re.M)]
     assert bare == []
+
+
+# The hooks' comments describe `fr isolation up` in passing; only the text a hook
+# EMITS is a remedy, so these are read line by line with comments left out.
+EMITTING_HOOKS = [
+    "plugins/super-fr/hooks/fr-isolation-required.sh",
+    "plugins/super-fr/hooks/fr-isolation-guard.sh",
+    "plugins/super-fr/hooks/fr-phase-executor-guard.sh",
+    "packages/fr-opencode-plugin/src/guard.ts",
+]
+_UP = re.compile(r"fr isolation up(?!( --repo \S+)? --branch)")
+
+
+def _bare_ups(text: str) -> list[str]:
+    return [text[m.start() : m.start() + 60] for m in _UP.finditer(text)]
+
+
+@pytest.mark.parametrize("rel", EMITTING_HOOKS)
+def test_no_hook_emits_a_bare_isolation_up(rel: str) -> None:
+    code = [
+        line
+        for line in (REPO / rel).read_text().splitlines()
+        if not line.lstrip().startswith(("#", "//", "*", "/*"))
+    ]
+    assert _bare_ups("\n".join(code)) == []
+
+
+def test_no_captured_guard_reason_names_a_bare_isolation_up() -> None:
+    rows = yaml.safe_load((REPO / "tests/fixtures/hooks/guard-verdicts.yaml").read_text())
+    reasons = [r["reason"] for r in rows["rows"] if r.get("reason")]
+    assert reasons
+    assert [b for reason in reasons for b in _bare_ups(reason)] == []
+
+
+@pytest.mark.parametrize(
+    "rel",
+    ["plugins/super-fr/rules/fr-isolation-required.md", ".claude/rules/fr-isolation-required.md"],
+)
+def test_the_rule_gives_no_isolation_up_command_that_would_refuse(rel: str) -> None:
+    text = " ".join((REPO / rel).read_text().split())
+    assert "fr isolation up --repo <path> --branch <branch>" in text
+    assert "fr isolation up --repo <path>`" not in text
 
 
 # --- Task 3: FR_REPO_ROOT, FR_INSTALL_SKIP_PREFLIGHT -------------------------------

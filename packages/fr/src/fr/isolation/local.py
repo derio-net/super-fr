@@ -294,15 +294,15 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
     return "\n".join(lines)
 
 
+# The one remedy every "no workspace" message offers (`--branch` is required).
+_UP_REMEDY = "`fr isolation up --branch <branch>`"
+
 # `fr archive` (fr/archive.py) `git mv`s a finished run's fr artifacts from
 # docs/superpowers/<kind>/<rest> to docs/superpowers/implemented/<kind>/<rest>
 # (plans/<dir>, specs/<file>, journals/<scope-dir>/<file>, runs/<id>.yaml,
 # usage/<id>.yaml — every destination is the source path with `implemented/`
 # spliced in after `docs/superpowers/`). Kept as a local constant, not imported
 # from fr.archive: this module must not depend on the archive command.
-# The one remedy every "no workspace" message offers (`--branch` is required).
-_UP_REMEDY = "`fr isolation up --branch <branch>`"
-
 _ARCHIVED_KINDS = ("plans", "specs", "journals", "runs", "usage")
 _SUPERPOWERS = "docs/superpowers/"
 
