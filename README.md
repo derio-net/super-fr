@@ -65,7 +65,7 @@ its own. Each name links to the page that covers it.
 | [`fr-devops-gate`](https://derio-net.github.io/super-fr/fr-devops-gate.html) | super-fr | Apply a delivered PR's manual operations (deploys, secrets, checks), record each result, then merge. |
 | [`fr-dispatch`](https://derio-net.github.io/super-fr/fr-dispatch.html) | super-fr-dispatch | Queue a plan's phases to an autonomous runner and keep its tracking issues in step. |
 | [`fr-execute`](https://derio-net.github.io/super-fr/fr-brainstorming-and-plan.html) | super-fr | Implement one phase of a plan, test-first, then stop. |
-| [`fr-goal`](https://derio-net.github.io/super-fr/01-fr-goal.html) | super-fr | Take a feature from a sentence to a reviewed pull request, with one question round and no other approval gates. |
+| [`fr-goal`](https://derio-net.github.io/super-fr/index.html) | super-fr | Take a feature from a sentence to a reviewed pull request, with one question round and no other approval gates. |
 | [`fr-init`](https://derio-net.github.io/super-fr/fr-init.html) | super-fr | Interview you about a repo once and scaffold the devcontainer profiles its isolated runs use. |
 | [`fr-isolation`](https://derio-net.github.io/super-fr/fr-isolation.html) | super-fr | Run work in a throwaway worktree and container so your checkout is never touched. |
 | [`fr-origins`](https://derio-net.github.io/super-fr/fr-triage.html) | super-fr | Classify where a repo's recent bugs came from and which process change would have prevented them. |
