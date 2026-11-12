@@ -679,3 +679,8 @@ PR #1408 review item 7, report.py:218,324.
 ### pr1408-r8 · finding [open] (reviewer: in scope) · Merged amendment order is inferred from list position and counts in _introductions, so a list with a later amendment above an earlier one folds in the wrong order (phase 1)
 
 PR #1408 review item 8. merged_row_edits refuses that shape before merge, so reaching it needs a check bypass. Fix if small, else defer with an issue.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r9 created=2026-11-12T09:19:00+00:00 phase=2 state=open review_scope=in -->
+### pr1408-r9 · finding [open] (reviewer: in scope) · _companions swallows the frozen reader's failure for a pre-v5 matrix, so the uncommitted-changes veto covers only the reports (phase 2)
+
+PR #1408 review item 9 (read only), matrix_fragments.py:213-222. Fix if small, else defer with an issue.
