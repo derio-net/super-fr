@@ -376,3 +376,133 @@ init --quiet is one function over git plumbing; render_init gained a placement a
 ### no-refactor-p3-t6 · discovery · no-refactor-because P3.T6 (phase 3)
 
 a scenario script, its one-line wiring, docs and the row move; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-12T20:49:49+00:00 phase=3 -->
+### review-phase-3 · review · Phase 3 (quiet) review, range 42f8384b8..317d6b75e (phase 3)
+
+Reviewer adfe80570b07de75c (opus) raised eleven findings, all in scope. p3-r1 was reproduced end to end (a git add -A commit plus fr push put fr paths on origin's feature branch under quiet). Ten were fixed by the fixer at 79e6272ab..fabd2a27f; p3-r2 is closed by resolving the misclassified implement finding as this plan's debt, fixed in the same range.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Unconverted writers leak fr files into the product tree under quiet (phase 3)
+
+init_cmd, isolation/scaffold, ops/gate, isolation/rename and ~40 root-joined artifact paths bypassed the resolver, so a git add -A commit and fr push carried fr paths to origin with exit 0.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · quiet-unconverted-writers was misclassified as out of scope (phase 3)
+
+The unconverted writers are this plan's debt (R23), not a pre-existing defect.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · placement-quiet at ci overstated its evidence (phase 3)
+
+The row's acceptance text claimed more than the scenario and unit levels proved.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · registry.iter_paths_of globs only repo_root (phase 3)
+
+Migrate and validate never saw artifacts in the fr worktree.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · A missing placement key skips the sticky check (phase 3)
+
+A marker or state written before quiet existed bypassed the sticky-placement refusal.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · Feature-id collision check compares live branches only (phase 3)
+
+Two branches mapping to one feature id across clones were not caught.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · fr run start lacks --no-fetch and names the wrong remedy (phase 3)
+
+The unreachable-origin refusal named up's flag for a command that had none.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · The shared fr worktree has no lock (phase 3)
+
+Concurrent rerouted commits or pushes from two workspaces could interleave.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · A pre-existing local fr branch is adopted without an ancestry check (phase 3)
+
+An unrelated local fr branch would be used as the artifact branch.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r10 · finding [open] (reviewer: in scope) · The apply --to refusal has side effects (phase 3)
+
+It called space_for, creating the fr worktree before refusing.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-11-12T20:49:49+00:00 phase=3 state=open review_scope=in -->
+### p3-r11 · finding [open] (reviewer: in scope) · The scenario's deletion check is weak (phase 3)
+
+Deleting origin's fr branch was not exercised as the spec's refusal case.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-placement-bound-vs-repo-config created=2026-11-12T20:49:49+00:00 phase=3 -->
+### quiet-placement-bound-vs-repo-config · decision · Under quiet, only fr's artifacts move; repo configuration stays on the product branch uncommitted (phase 3)
+
+Placement-bound means everything under docs/superpowers/** and docs/acceptance/** except the repo-config kinds (workflows, verifications, models.yaml, trackers.yaml, plan-config.yaml). Everything else fr writes (.devcontainer profiles, .claude/agents, .claude/rules, .gitignore, CI workflows, the README badge, .fr/, scripts/validate-plans.sh) is repo configuration; under quiet fr writes it but never commits it, because R23 forbids a chore(fr) commit on a product branch. Commands that can only act on the product branch (fr archive, fr debt archive-pr, fr ops gate, branch rename) refuse with exit 2 before writing.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-migration-own-feature-only created=2026-11-12T20:49:49+00:00 phase=3 -->
+### quiet-migration-own-feature-only · decision · Under quiet, a migration rewrites and commits only the caller's own feature root (phase 3)
+
+Raised by an automated security review of the p3-r4 fix. The root whose OWNER names the current branch is migrated and committed; other features' stale artifacts are reported and migrate when their own workspace next runs fr. validate artifacts still checks every root. Keeps R23's one-feature-per-commit and never rewrites another live workspace's files (8dca20601).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Unconverted writers leak fr files into the product tree under quiet (phase 3)
+
+79e6272ab: writers route through artifact_root/paths.below, a tripwire forbids raw-root joins, QuietProductWriteError exits 2, placement-quiet.sh asserts origin carries no fr path or chore(fr) subject after git add -A and fr push.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: quiet-unconverted-writers was misclassified as out of scope (phase 3)
+
+Reclassified as this plan's debt; quiet-unconverted-writers is resolved fixed by the p3-r1 work.
+
+<!-- fr:journal kind=finding scope=plan id=quiet-unconverted-writers-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=quiet-unconverted-writers -->
+### quiet-unconverted-writers-resolved · finding [fixed] · resolves quiet-unconverted-writers: Writers not yet on artifact_root are refused under quiet instead of writing to the fr branch (phase 3)
+
+Fixed in 79e6272ab with p3-r1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: placement-quiet at ci overstated its evidence (phase 3)
+
+d74938af9: acceptance text made true, edge and migrate tests added as unit levels.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: registry.iter_paths_of globs only repo_root (phase 3)
+
+63b174f6d: iter_paths_of walks every feature root; 8dca20601 restricts migration commits to the caller's own root.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: A missing placement key skips the sticky check (phase 3)
+
+71cc6cdaf: a missing placement key counts as repo, so the sticky refusal fires.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: Feature-id collision check compares live branches only (phase 3)
+
+bc9042248: features/<id>/OWNER records the branch; space_for refuses a foreign owner.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: fr run start lacks --no-fetch and names the wrong remedy (phase 3)
+
+440a69b39: fr run start --no-fetch; the refusal names the remedy of the refusing command.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: The shared fr worktree has no lock (phase 3)
+
+cd57c673d: fr-worktree.lock held around rerouted commits and fr push, bounded wait, in-progress operations reported.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: A pre-existing local fr branch is adopted without an ancestry check (phase 3)
+
+52ee4b338 (+ quiet.py part in 440a69b39): unrelated local fr refused; init --quiet refuses while a local fr exists.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r10 -->
+### p3-r10-resolved · finding [fixed] · resolves p3-r10: The apply --to refusal has side effects (phase 3)
+
+1f8ae4539: apply --to decides from read_switch alone, before any worktree is created.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-11-12T20:49:49+00:00 phase=3 state=fixed resolves=p3-r11 -->
+### p3-r11-resolved · finding [fixed] · resolves p3-r11: The scenario's deletion check is weak (phase 3)
+
+79e6272ab: the scenario deletes origin's fr and asserts run start and run status refuse naming both placements.
