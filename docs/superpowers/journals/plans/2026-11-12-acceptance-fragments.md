@@ -86,3 +86,44 @@ the validator reuses _load_mapping, _model_problems, parse_fragment and _matrix_
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 a scenario script and one row move; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-11-12T01:41:02+00:00 phase=1 -->
+### review-phase-1 · review · Phase 1 review (fold library): two in-scope findings, both fixed (phase 1)
+
+Independent reviewer over `git diff 7358c8b21..e9f35cfa4`. Ordering, pending
+subtraction, contested, the shallow refusal, git call count, op semantics, the
+validator, logical refs, the scenario's portability and fixture privacy all held
+(279 targeted tests passed). Two findings, both in scope, fixed in 4ec919d15.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-12T01:41:02+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · A merged amendment naming a retired or unknown row raised FoldError for the whole fold (phase 1)
+
+fold.py raised on any amendment naming a retired/unknown row. R17 says a stale
+amendment that merged anyway applies in order and marks its row contested; a
+merged entry is immutable, so raising would break every default-ref reader with
+no legal fix (B retires X, C's concurrent set-status on X merges after it).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-12T01:41:02+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · The fold memo key omitted the merged-ref source, so the cached notice could be wrong (phase 1)
+
+With no remote, fold(root) cached "HEAD stands in"; fold(root, ref="HEAD") at the
+same sha then returned that notice, and a later fetched origin/main at the same sha
+still claimed no default ref.
+
+<!-- fr:journal kind=decision scope=plan id=fold-merged-stale-targets created=2026-11-12T01:41:02+00:00 phase=1 -->
+### fold-merged-stale-targets · decision · Supersedes part of fold-op-semantics: only a PENDING amendment on a retired/unknown row is an error (phase 1)
+
+A merged amendment naming a retired row is not applied, bumps the row's revision
+and marks it contested (debt, R17 "merged anyway"); one naming an unknown row is
+not applied and yields a notice. A pending one still raises, so the branch is
+refused before it merges. The merged-ref notice is added per call, outside the memo.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-12T01:41:02+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: A merged amendment naming a retired or unknown row raised FoldError for the whole fold (phase 1)
+
+4ec919d15: merged entries become contested/notice; pending ones still raise. Tests test_a_merged_amendment_to_a_row_retired_meanwhile_marks_it_contested, test_a_merged_amendment_naming_an_unknown_row_is_a_notice_not_an_error, test_a_pending_amendment_to_a_retired_row_is_an_error (red on the old code).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-12T01:41:02+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: The fold memo key omitted the merged-ref source, so the cached notice could be wrong (phase 1)
+
+4ec919d15: the notice is applied outside the cached value. Test test_the_no_default_ref_notice_is_not_served_from_the_cache_to_an_explicit_ref (red on the old code).
