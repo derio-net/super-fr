@@ -3,8 +3,13 @@ together with the branch's, so a branch can add a rule and never drop one."""
 
 from __future__ import annotations
 
-from fr.lenses.model import PathRule
-from fr.lenses.rules import matched, rules_in_force
+from pathlib import Path
+
+import pytest
+from fr.lenses.model import LensError, PathRule
+from fr.lenses.rules import base_config_text, matched, rules_in_force
+
+from tests.unit.lens_repo import lens_repo
 
 AUTH = "require:\n  - paths: ['src/auth/**']\n    lenses: [security]\n"
 SQL = "require:\n  - paths: ['**/migrations/*.sql']\n    lenses: [security, errors]\n"
@@ -51,3 +56,21 @@ def test_star_spans_slashes_as_in_proportionality() -> None:
 
 def test_nothing_matched_is_empty() -> None:
     assert matched(rules_in_force(AUTH, None), ["docs/readme.md"]) == {}
+
+
+def test_the_base_text_is_the_default_branchs_file_or_none_when_it_has_none(
+    tmp_path: Path,
+) -> None:
+    with_file = lens_repo(tmp_path / "a", base_config=AUTH)
+    without = lens_repo(tmp_path / "b")
+
+    assert base_config_text(with_file, "origin/main") == AUTH
+    assert base_config_text(without, "origin/main") is None
+
+
+def test_a_default_ref_git_cannot_read_is_refused_not_read_as_no_file(tmp_path: Path) -> None:
+    """Review p2-r4: any failed read used to mean "the base has no rules"."""
+    root = lens_repo(tmp_path, base_config=AUTH)
+
+    with pytest.raises(LensError, match="origin/gone"):
+        base_config_text(root, "origin/gone")

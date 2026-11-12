@@ -174,8 +174,10 @@ branch's `require:` and HEAD's, so one PR can add a repo's first rule and use
 it, and no PR can remove a rule from under itself. `fr lenses check` refuses a
 HEAD config that disables a lens a rule in force requires. A branch may still
 replace a lens's instruction text; R12 states any change to the file on the
-pull request. With no resolvable default ref (a repo with no remote), HEAD's
-rules are the rules in force.
+pull request. With no remote, HEAD's rules are the rules in force, and
+because there is then no feature diff to match, every one of them applies. A
+remote whose default branch ref, its `.fr/lenses.yaml` or the merge-base cannot
+be read in this checkout is a refusal that says what to fetch, never "no rules".
 
 A lens id matches `^[a-z][a-z0-9-]*$`, so it is safe as a journal header token
 and inside an entry or finding id.
@@ -218,7 +220,8 @@ of every `lens` entry in the run's spec and plan journals, plus the lenses of
 every rule in force matched by a file in the feature's diff (the
 proportionality diff, same exemptions), restricted to effective lenses. A
 journalled lens the repo has since disabled is dropped with a warning naming
-it; a lens a rule requires cannot be disabled (§3.A).
+it; a lens a rule requires cannot be disabled (§3.A), so `lens_set` refuses,
+naming the rule, the lens and the file, when such a lens is not effective.
 
 ### 3.C The lens review
 

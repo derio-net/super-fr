@@ -4,7 +4,9 @@
 run's spec and plan journals, plus the lenses every path rule in force requires for
 a file in the feature's diff (`fr.proportionality.feature_diff`: merge-base..HEAD,
 fr's own artifacts exempt), restricted to effective lenses. A journalled lens the
-repo has since disabled is dropped with a warning naming it. Computed from the
+repo has since disabled is dropped with a warning naming it; a lens a rule requires
+that is not effective is a `LensError`, as is a default branch or a merge-base that
+cannot be read. With no remote there is no diff, and every rule applies. Computed from the
 branch as it stands when it is read; nothing is stored.
 """
 
@@ -20,6 +22,7 @@ from fr.lenses.resolve import effective_lenses
 from fr.lenses.rules import (
     base_config_text,
     default_ref,
+    every_rule,
     head_config_text,
     matched,
     rules_in_force,
@@ -110,7 +113,12 @@ def _changed(root: Path, ref: str | None) -> list[str] | None:
         return None
     try:
         base = feature_merge_base(root, ref)
-        return None if base is None else [c.path for c in feature_diff(root, base)]
+        if base is None:
+            raise LensError(
+                f"no merge-base between HEAD and {ref}, so the feature's diff and the "
+                "path rules it matches cannot be told (a shallow clone needs more history)"
+            )
+        return [c.path for c in feature_diff(root, base)]
     except GitUnavailableError as e:
         raise LensError(f"git could not read the feature's diff: {e}") from e
 
@@ -123,20 +131,35 @@ def lens_set_for(root: Path, *, spec_slug: str | None, plan_slug: str | None) ->
     rules = rules_in_force(base_config_text(root, ref), head_config_text(root))
     changed = _changed(root, ref)
     warnings: list[str] = []
-    if rules and changed is None:
-        warnings.append(
-            "no default branch to diff against, so no path rule was applied "
-            "(fetch the remote, or set its HEAD)"
-        )
-    required = matched(rules, changed or [])
+    if changed is None:
+        # No remote: there is no diff to match, and skipping the rules would be
+        # the fail-open reading. Every rule applies.
+        required = every_rule(rules)
+        if rules:
+            warnings.append(
+                "no remote to diff against, so every path rule is applied "
+                "whatever the feature changed"
+            )
+    else:
+        required = matched(rules, changed)
     out: list[LensEntry] = []
     for lens in sorted(set(added) | set(required)):
         reasons = tuple(added.get(lens, ()))
-        if lens not in effective:
-            why = "a path rule requires it" if lens in required else "an agent added it"
-            warnings.append(f"lens {lens} is not effective in this repo and is dropped ({why})")
-            continue
         hit = required.get(lens)
+        if lens not in effective:
+            if hit is not None:
+                # §3.A: a lens a rule requires cannot be disabled. Dropping it here
+                # would let a branch switch off a rule its base holds.
+                where = f" for {hit.file}" if hit.file else ""
+                raise LensError(
+                    f"a path rule ({', '.join(hit.paths)}) requires lens {lens}{where}, and "
+                    f"{lens} is not an effective lens of this repo: remove it from "
+                    "`disable` in .fr/lenses.yaml, or define it under `lenses`"
+                )
+            warnings.append(
+                f"lens {lens} is not effective in this repo and is dropped (an agent added it)"
+            )
+            continue
         out.append(
             LensEntry(
                 lens=lens,

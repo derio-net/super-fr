@@ -312,7 +312,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     the default branch's `require:` together with the branch's, read like `.fr/ci.yaml`) and
     `accumulate.py` (`lens_set`, the ONE definition of a feature's lens set: `lens` entries in
     the run's spec and plan journals plus rule-required lenses for the files
-    `fr.proportionality.feature_diff` names). CLI: `fr lenses list|show|check|status`
+    `fr.proportionality.feature_diff` names; fail-closed: a rule-required lens that is not
+    effective, or a remote whose default branch or merge-base cannot be read, is a `LensError`). CLI: `fr lenses list|show|check|status`
     (`commands/lenses_cmd.py`), read-only, so `lenses` is in `READ_ONLY_COMMANDS`.
   - **Cloud triage** (2026-10-07 spec, `cloud-triage`) — the wave driver and its
     workers in Claude Code cloud sessions. `fr.forgeapi` resolves the one host

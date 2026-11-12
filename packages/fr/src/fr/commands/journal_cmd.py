@@ -378,10 +378,26 @@ def add(
         scope=scope,
         slug=slug,
         path=path,
-        message=f"chore(fr): journal {scope}/{slug} — {entry.kind} {entry.id}",
+        message=_add_message(root, path, scope, slug, entry),
     )
+    if kind == "lens" and not outcome.entries:
+        typer.echo(f"already recorded: lens {lens} with that reason in {scope}/{slug}")
+        return
     added = outcome.entries[0].id if outcome.entries else entry.id
     typer.echo(f"added {entry.kind} {added} to {scope}/{slug}")
+
+
+def _add_message(root: Path, path: Path, scope: str, slug: str, entry: JournalEntry) -> str:
+    """The commit subject of an `add`. A lens entry's id is the engine's to assign
+    (`fr.record.apply.next_lens_id`), so the subject asks it rather than naming the
+    placeholder the entry was validated under."""
+    eid = entry.id
+    if entry.kind == "lens" and entry.lens is not None:
+        from fr.record.apply import next_lens_id
+
+        prior = parse_journal(path.read_text()) if path.is_file() else []
+        eid = next_lens_id(entry.lens, prior)
+    return f"chore(fr): journal {scope}/{slug} — {entry.kind} {eid}"
 
 
 def _apply(

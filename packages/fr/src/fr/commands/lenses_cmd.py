@@ -100,7 +100,8 @@ def _line(entry: LensEntry) -> str:
         for r in entry.reasons
     ]
     if entry.rule is not None:
-        parts.append(f"rule {', '.join(entry.rule)} matches {entry.file}")
+        match = f"matches {entry.file}" if entry.file else "applies (no remote to diff against)"
+        parts.append(f"rule {', '.join(entry.rule)} {match}")
     return f"{entry.lens}: " + "; ".join(parts)
 
 

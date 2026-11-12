@@ -7,6 +7,7 @@ open.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -32,7 +33,6 @@ def _slugs_need_no_artifact(request: pytest.FixtureRequest, monkeypatch) -> None
 
 def _init_repo(tmp_path: Path) -> Path:
     # `fr journal` resolves the repo root via git; make tmp_path a repo.
-    import subprocess
 
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     return tmp_path
@@ -2277,7 +2277,6 @@ def test_the_operator_guard_owns_a_parity_row_and_its_notice_quotes_it(
 
 
 def _feature_repo(tmp_path: Path) -> Path:
-    import subprocess
 
     def git(*args: str) -> None:
         subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
@@ -2293,7 +2292,6 @@ def _feature_repo(tmp_path: Path) -> Path:
 
 
 def _git_out(root: Path, *args: str) -> str:
-    import subprocess
 
     return subprocess.run(
         ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
@@ -2443,6 +2441,35 @@ class TestAddLens:
             ("lens-security-1", "security", None, 2),
             ("lens-security-2", "security", None, 2),
         ]
+
+    def test_the_same_lens_and_reason_twice_says_so_and_names_no_placeholder(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Review p2-r6: the retry printed "added lens lens-security"."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._lens(root, "--lens", "security")
+        again = self._lens(root, "--lens", "security")
+
+        assert again.exit_code == 0, again.output
+        assert "already recorded" in again.output
+        assert "added" not in again.output
+
+    def test_the_commit_subject_names_the_assigned_id(self, tmp_path: Path, monkeypatch) -> None:
+        from fr.commands.journal_cmd import _add_message
+        from fr.journal.model import JournalEntry
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._lens(root, "--lens", "security")
+        entry = JournalEntry(
+            kind="lens", scope="plan", id="lens-security", created="2026-11-12T00:00:00+00:00",
+            phase=2, title="another reason", lens="security",
+        )  # fmt: skip
+
+        subject = _add_message(root, _journal_file(root, "S"), "plan", "S", entry)
+
+        assert subject.endswith("lens lens-security-2")
 
     def test_an_unknown_lens_is_refused_with_exit_two(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)

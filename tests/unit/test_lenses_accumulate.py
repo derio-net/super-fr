@@ -4,12 +4,15 @@ requires for the files the feature changed, restricted to effective lenses."""
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
+import pytest
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path
 from fr.lenses.accumulate import lens_set, lens_set_for
+from fr.lenses.model import LensError
 
-from tests.unit.lens_repo import commit_all, lens_repo
+from tests.unit.lens_repo import commit_all, git, lens_repo
 
 AUTH_RULE = "require:\n  - paths: ['src/auth/**']\n    lenses: [security]\n"
 SPEC, PLAN = "2026-11-12-x", "2026-11-12-x"
@@ -133,3 +136,54 @@ def test_lens_set_reads_the_runs_spec_and_plan_journals(tmp_path: Path) -> None:
     run = SimpleNamespace(steps=steps)
 
     assert [e.lens for e in lens_set(root, run).lenses] == ["simplicity", "tests"]  # type: ignore[arg-type]
+
+
+def _touch_auth(root: Path) -> None:
+    (root / "src" / "auth").mkdir(parents=True)
+    (root / "src" / "auth" / "x.py").write_text("x = 1\n")
+    commit_all(root, "feature")
+
+
+def test_a_branch_cannot_disable_a_lens_a_rule_requires_for_its_diff(tmp_path: Path) -> None:
+    """Review p2-r1: dropping it with a warning let a branch escape the base's rule."""
+    root = lens_repo(tmp_path, base_config=AUTH_RULE)
+    (root / ".fr" / "lenses.yaml").write_text("disable: [security]\n")
+    _touch_auth(root)
+
+    with pytest.raises(LensError, match="security.*src/auth/x.py"):
+        _set(root)
+
+
+def test_a_remote_with_no_default_ref_here_is_refused(tmp_path: Path) -> None:
+    """Review p2-r2: the base's rules cannot be read, so nothing may be concluded."""
+    root = lens_repo(tmp_path, base_config=AUTH_RULE)
+    _touch_auth(root)
+    git(root, "remote", "set-head", "origin", "--delete")
+    git(root, "update-ref", "-d", "refs/remotes/origin/main")
+
+    with pytest.raises(LensError, match="default branch"):
+        _set(root)
+
+
+def test_a_branch_with_no_merge_base_is_refused(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path, base_config=AUTH_RULE)
+    git(root, "switch", "-q", "--orphan", "feat/orphan")
+    (root / "a.py").write_text("a = 1\n")
+    commit_all(root, "unrelated history")
+
+    with pytest.raises(LensError, match="merge-base"):
+        _set(root)
+
+
+def test_with_no_remote_every_rule_of_the_branch_applies(tmp_path: Path) -> None:
+    """Review p2-r3: there is no diff to match, so no rule may be skipped either."""
+    root = tmp_path / "local"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
+    (root / ".fr").mkdir()
+    (root / ".fr" / "lenses.yaml").write_text(AUTH_RULE)
+    commit_all(root, "base")
+
+    got = _set(root)
+
+    assert [(e.lens, e.rule, e.file) for e in got.lenses] == [("security", ("src/auth/**",), None)]
+    assert len(got.warnings) == 1 and "every path rule" in got.warnings[0]

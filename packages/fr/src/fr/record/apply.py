@@ -609,15 +609,12 @@ def _lens_entry(
             + (", ".join(sorted(effective)) or "none")
         )
     same = [e for e in prior if e.kind == "lens" and e.lens == item.lens]
-    taken = {e.id for e in prior}
-    n = len(same) + 1
-    while f"lens-{item.lens}-{n}" in taken:
-        n += 1
+    eid = next_lens_id(item.lens, prior)
     try:
         entry = JournalEntry(
             kind="lens",
             scope=scope,  # type: ignore[arg-type]
-            id=f"lens-{item.lens}-{n}",
+            id=eid,
             created=created,
             phase=phase if scope == "plan" else None,
             title=item.title,
@@ -641,6 +638,16 @@ def _lens_entry(
     if any(_same_entry(e, entry, ignore=_STAMP_AND_ID) for e in same):
         return None
     return entry
+
+
+def next_lens_id(lens: str, prior: list[JournalEntry]) -> str:
+    """The id the next `lens` entry for `lens` takes in a journal holding `prior`:
+    `lens-<id>-<n>`, n counting that lens's entries and skipping any id in use."""
+    n = sum(1 for e in prior if e.kind == "lens" and e.lens == lens) + 1
+    taken = {e.id for e in prior}
+    while f"lens-{lens}-{n}" in taken:
+        n += 1
+    return f"lens-{lens}-{n}"
 
 
 def _unique_id(base: str, taken: set[str]) -> str:
