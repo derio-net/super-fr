@@ -238,3 +238,11 @@ amendments:
       matrix mutation are removed; rendering is on demand (fr acceptance report --open)
       and published from the folded fragments in CI.'
     why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-ci-built-reports
+    op: retire
+    base: 0
+    notes: 'Retired: Spec 2026-11-04-repo-feature-settings R20: reports are derived,
+      never committed. The committed report set, its drift gate and regeneration on
+      matrix mutation are removed; rendering is on demand (fr acceptance report --open)
+      and published from the folded fragments in CI.'
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
