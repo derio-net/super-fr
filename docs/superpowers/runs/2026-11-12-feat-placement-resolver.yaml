@@ -1,0 +1,26 @@
+schema_version: 11
+run: 2026-11-12-feat-placement-resolver
+workflow: fr-goal@1
+branch: feat/placement-resolver
+started: '2026-11-12T11:47:04+00:00'
+cursor: plan
+steps:
+  brainstorm:
+    state: done
+    emitted:
+      spec: docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md
+  spec-review:
+    state: done
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
