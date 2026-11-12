@@ -367,3 +367,12 @@ amendments:
       parse with per-caller deep copy, uncached errors and real-fragment equality (test_acceptance_parse_cache;
       re-pointed after the fragments split renamed the test). Phase 1 of plan 2026-11-01-ci-speed.
     why: re-pointed after the fragments split renamed the test
+  - row: placement-quiet
+    op: set-status
+    base: 0
+    status: not-implemented
+    notes: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
+    scenario: tests/scenarios/placement-quiet.sh
+    why: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
+      spec (R29), tracked in derio-net/super-fr#1380
