@@ -249,6 +249,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "auto-migrate-ci-in-place",
         "docs-check-flags-uncovered-change",
         "docs-check-structure",
+        "review-lenses-effective-set",
         "docs-check-default-base-readonly",
         "acceptance-effective-matrix-fold",
         "acceptance-matrix-migration",
