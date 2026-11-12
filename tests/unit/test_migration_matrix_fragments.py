@@ -402,6 +402,22 @@ def test_a_v4_matrix_with_a_partial_report_set_migrates_and_commits(tmp_path: Pa
     assert _git(root, "status", "--porcelain") == ""
 
 
+def test_a_pre_v5_matrix_still_names_every_fragment_the_split_may_touch(tmp_path: Path) -> None:
+    # pr1408-r9: the frozen v5 reader refuses a v4 body, so the split's own names are
+    # unknown before the 4 -> 5 hop runs; every fragment already here is named instead,
+    # so the uncommitted-changes veto still covers them.
+    from fr.artifacts.matrix_fragments import _companions
+
+    root = _repo(tmp_path, _V4_PLAIN)
+    here = root / FEATURES / "2026-07-04-acceptance-matrix.yaml"
+    here.parent.mkdir(parents=True)
+    here.write_text("schema_version: 1\n")
+
+    named = _companions(root / "docs" / "acceptance" / "matrix.yaml")
+
+    assert here in named
+
+
 def test_an_untracked_report_is_left_alone_and_not_listed(tmp_path: Path) -> None:
     """Review p2-r2: only a report git tracks is the repo's committed report. An
     untracked one (the ad-hoc render) is the user's file: not deleted, not listed,

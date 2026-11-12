@@ -226,13 +226,17 @@ def _deleted(path: Path) -> list[Path]:
 
 def _companions(path: Path) -> list[Path]:
     """Every file the split may write or delete beside the matrix, named before it
-    runs so the uncommitted-changes veto covers them (an unreadable matrix names
-    only the reports: the split will refuse it anyway)."""
+    runs so the uncommitted-changes veto covers them. When the split cannot name its
+    own (a pre-v5 body the frozen reader refuses until the earlier hops run, or one
+    it will refuse anyway), every fragment already here is named instead (review
+    pr1408-r9): a fragment that does not exist yet holds no uncommitted change."""
+    from fr.acceptance.fragment import FRAGMENTS_DIR
+
     root = _root(path)
     try:
         written = [root / rel for rel in split_texts(path.read_text(), root)]
     except Exception:
-        written = []
+        written = sorted((root / FRAGMENTS_DIR).glob("*.yaml"))
     return [*written, *_deleted(path)]
 
 
