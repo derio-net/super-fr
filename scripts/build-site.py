@@ -44,7 +44,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
 
@@ -301,12 +301,20 @@ def drop_leading_h1(text: str) -> str:
 
 # -- the landing source (spec 2026-11-12-landing-front-page R1, R3, R4, R9) -----------
 
-SECTION_KINDS = ("prose", "flow", "guarantee", "pages", "cta")
+SECTION_KINDS = ("prose", "flow", "guarantee", "act", "grid", "pages", "cta")
+TERMINAL_KINDS = ("prompt", "out", "you", "ok")
+CARDS = (3, 8)
+_NO_FIGURE = ("act", "grid", "pages", "cta")
 GUARANTEES = (6, 8)
 _KIND = re.compile(r"^<!--\s*landing:([A-Za-z0-9_-]*)\s*-->\s*$")
 _ONE_LINK = re.compile(r"^\[([^\]]+)\]\(([^)\s]+)\)$")
 _ORDERED = re.compile(r"^\d+[.)]\s+")
 _FENCE = re.compile(r"^\s*(```|~~~)")
+_FIGURE_MARKER = re.compile(r"^<!--\s*site:figure\s+(\S+)\s*-->\s*$")
+_FIGURE_NAME = re.compile(r"^[a-z0-9-]+$")
+_BULLET = re.compile(r"^\s{0,3}[-*+]\s+")
+_CARD = re.compile(r"^\*\*(.+?)\*\*\s*(.*)$", re.DOTALL)
+_MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 
 
 @dataclass(frozen=True)
@@ -322,6 +330,23 @@ class Fact:
 
 
 @dataclass(frozen=True)
+class TerminalLine:
+    """One line of the hero's terminal: a typed command, output, an operator point or a success."""
+
+    kind: str
+    text: str
+
+
+@dataclass(frozen=True)
+class Card:
+    """One card of the "also included" grid: a title, one sentence and exactly one link."""
+
+    title: str
+    text: str
+    link: Link
+
+
+@dataclass(frozen=True)
 class Hero:
     eyebrow: str
     headline: str
@@ -329,6 +354,7 @@ class Hero:
     command: str
     primary: Link
     secondary: tuple[Link, ...]
+    terminal: tuple[TerminalLine, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -343,8 +369,10 @@ class Step:
 class Section:
     """A `## ` section: its kind, headline and Markdown body.
 
-    `problem`, `link` (guarantee) and `steps` (flow) are set only for their kind;
-    for a guarantee `body` is the gain and how, without the problem and the link.
+    `problem`, `link` (guarantee), `steps` (flow) and `cards` (grid) are set only for their
+    kind; for a guarantee `body` is the gain and how, without the problem and the link. `act`
+    is an act's number, or for a guarantee the act it belongs to (0: none). `figure` is the
+    name of the figure placed in the section, lifted out of its body.
     """
 
     kind: str
@@ -353,6 +381,9 @@ class Section:
     problem: str = ""
     link: Link | None = None
     steps: tuple[Step, ...] = ()
+    cards: tuple[Card, ...] = ()
+    act: int = 0
+    figure: str = ""
 
 
 @dataclass(frozen=True)
@@ -429,7 +460,28 @@ def _parse_hero(fm: dict, page: str) -> Hero:
         command=str(hero.get("command") or ""),
         primary=Link(str(primary["label"]), str(primary["href"])),
         secondary=tuple(_link(item, "hero.secondary[]", page) for item in secondary),
+        terminal=_parse_terminal(hero.get("terminal"), page),
     )
+
+
+def _parse_terminal(value: object, page: str) -> tuple[TerminalLine, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise BuildError(f"{page}: hero.terminal must be a list of {{kind, text}}")
+    out = []
+    for item in value:
+        kind = item.get("kind") if isinstance(item, dict) else None
+        text = item.get("text") if isinstance(item, dict) else None
+        if kind not in TERMINAL_KINDS:
+            raise BuildError(
+                f"{page}: hero.terminal has a line of kind {kind!r} "
+                f"(known: {', '.join(TERMINAL_KINDS)})"
+            )
+        if not isinstance(text, str) or not text.strip():
+            raise BuildError(f"{page}: a hero.terminal {kind} line has no text")
+        out.append(TerminalLine(kind, text.strip()))
+    return tuple(out)
 
 
 def _parse_facts(fm: dict, page: str) -> tuple[Fact, ...]:
@@ -484,6 +536,72 @@ def _parse_guarantee(heading: str, body: str, page: str) -> Section:
     )
 
 
+def _lift_figure(heading: str, kind: str, raw: str, page: str) -> tuple[str, str]:
+    """`raw` without its figure-marker blocks, and the one figure name they held ("" if none)."""
+    keep: list[str] = []
+    names: list[str] = []
+    for block in split_blocks(raw):
+        found = _FIGURE_MARKER.match(block.strip())
+        if found is None:
+            keep.append(block)
+        else:
+            names.append(found.group(1))
+    if not names:
+        return raw, ""
+    if kind in _NO_FIGURE:
+        raise BuildError(f"{page}: the {kind} section {heading!r} cannot hold a figure")
+    if len(names) > 1:
+        raise BuildError(f"{page}: the section {heading!r} holds more than one figure marker")
+    if not _FIGURE_NAME.match(names[0]):
+        raise BuildError(f"{page}: figure name {names[0]!r} is not [a-z0-9-]+")
+    return "\n\n".join(keep), names[0]
+
+
+def _parse_card(item: str, heading: str, page: str) -> Card:
+    found = _CARD.match(item)
+    if found is None:
+        raise BuildError(
+            f"{page}: a card of the grid {heading!r} must read '**Title.** sentence [label](href)'"
+        )
+    title, rest = found.group(1).strip().rstrip("."), found.group(2)
+    links = _MD_LINK.findall(rest)
+    if len(links) != 1:
+        raise BuildError(
+            f"{page}: the card {title!r} of the grid {heading!r} needs exactly one link, "
+            f"found {len(links)}"
+        )
+    text = " ".join(_MD_LINK.sub("", rest).split())
+    return Card(title, text, Link(links[0][0], links[0][1]))
+
+
+def _parse_grid(heading: str, body: str, page: str) -> Section:
+    blocks = split_blocks(body)
+    if not blocks or not _BULLET.match(blocks[-1]) or any(_BULLET.match(b) for b in blocks[:-1]):
+        raise BuildError(f"{page}: the grid {heading!r} must be optional prose, then one list")
+    items: list[list[str]] = []
+    for line in blocks[-1].splitlines():
+        if _BULLET.match(line):
+            items.append([_BULLET.sub("", line, count=1)])
+        else:
+            items[-1].append(line.strip())
+    cards = tuple(_parse_card(" ".join(x for x in lines if x), heading, page) for lines in items)
+    if not CARDS[0] <= len(cards) <= CARDS[1]:
+        raise BuildError(
+            f"{page}: the grid {heading!r} has three to eight cards, found {len(cards)}"
+        )
+    return Section("grid", heading, "\n\n".join(blocks[:-1]), cards=cards)
+
+
+def _check_acts(sections: list[Section], page: str) -> None:
+    for i, sec in enumerate(sections):
+        if sec.kind != "act":
+            continue
+        after = sections[i + 1 :]
+        until = next((j for j, x in enumerate(after) if x.kind == "act"), len(after))
+        if not any(x.kind == "guarantee" for x in after[:until]):
+            raise BuildError(f"{page}: the act {sec.heading!r} has no numbered section")
+
+
 def parse_landing(text: str, page: str) -> Landing:
     """The landing page source as data; every R9 defect raises a `BuildError`.
 
@@ -494,6 +612,7 @@ def parse_landing(text: str, page: str) -> Landing:
     found = _FRONT.match(text)
     body = text[found.end() :] if found else text
     sections: list[Section] = []
+    acts = 0
     for heading, raw in _split_sections(body, page):
         lines = raw.splitlines()
         first = next((i for i, ln in enumerate(lines) if ln.strip()), None)
@@ -506,14 +625,24 @@ def parse_landing(text: str, page: str) -> Landing:
                 f"{page}: the section {heading!r} names an unknown kind {kind!r} "
                 f"(known: {', '.join(SECTION_KINDS)})"
             )
+        raw, figure = _lift_figure(heading, kind, raw, page)
         if kind == "flow":
-            sections.append(Section(kind, heading, raw, steps=_parse_flow(heading, raw, page)))
+            sec = Section(kind, heading, raw, steps=_parse_flow(heading, raw, page))
         elif kind == "guarantee":
-            sections.append(_parse_guarantee(heading, raw, page))
+            sec = _parse_guarantee(heading, raw, page)
+        elif kind == "grid":
+            sec = _parse_grid(heading, raw, page)
         elif kind == "pages" and MARKER not in raw:
             raise BuildError(f"{page}: the pages section {heading!r} lacks {MARKER}")
         else:
-            sections.append(Section(kind, heading, raw))
+            sec = Section(kind, heading, raw)
+        if kind == "act":
+            acts += 1
+            sec = replace(sec, act=acts)
+        elif kind == "guarantee":
+            sec = replace(sec, act=acts)
+        sections.append(replace(sec, figure=figure) if figure else sec)
+    _check_acts(sections, page)
     hero = _parse_hero(fm, page)
     count = sum(s.kind == "guarantee" for s in sections)
     if not GUARANTEES[0] <= count <= GUARANTEES[1]:
@@ -749,8 +878,6 @@ def check_rendered(html: str, route_name: str) -> None:
 # -- figures (spec 2026-11-12-front-page-second-pass B, R6, R10) -------------------------
 
 FIGURES_DIR = SITE_DIR / "figures"
-_FIGURE_MARKER = re.compile(r"^<!--\s*site:figure\s+(\S+)\s*-->\s*$")
-_FIGURE_NAME = re.compile(r"^[a-z0-9-]+$")
 _SVG_OPEN = re.compile(r"<svg\b[^>]*>")
 _PAINT_PROPS = frozenset({"fill", "stroke", "stop-color", "flood-color", "color"})
 _CSS_DECL = re.compile(r"(?<![\w-])([\w-]+)\s*:\s*([^;}]*)")

@@ -406,6 +406,193 @@ def test_a_pages_section_without_the_marker_is_refused() -> None:
     _refused(text, "site:pages")
 
 
+# -- acts, the grid, terminal lines and figure markers (spec 2026-11-12-front-page-second-pass A, B)
+
+
+def act(n: int, intro: str = "Intro paragraph.") -> str:
+    return f"## Act {n} title\n<!-- landing:act -->\n\n{intro}\n\n"
+
+
+def cards(n: int = 4) -> str:
+    return "".join(f"- **Card {i}.** Sentence {i}. [Go {i}](fr-isolation.md)\n" for i in range(1, n + 1))
+
+
+def grid(body: str | None = None) -> str:
+    body = cards() if body is None else body
+    return f"## Also included\n<!-- landing:grid -->\n\nSome prose.\n\n{body}\n"
+
+
+def acts_text(first: int = 3, second: int = 3, tail: str = "", front: str = FRONT) -> str:
+    return (
+        front
+        + "\n"
+        + FLOW
+        + act(1)
+        + "".join(guarantee(i) for i in range(1, first + 1))
+        + act(2)
+        + "".join(guarantee(i) for i in range(first + 1, first + second + 1))
+        + grid()
+        + PAGES
+        + tail
+        + CTA
+    )
+
+
+def test_the_act_and_grid_kinds_are_known() -> None:
+    assert {"act", "grid"} <= set(bs.SECTION_KINDS)
+
+
+def test_an_act_exposes_its_title_and_introduction_and_is_numbered_in_order() -> None:
+    secs = parse(acts_text()).sections
+    acts = [s for s in secs if s.kind == "act"]
+    assert [(a.heading, a.act) for a in acts] == [("Act 1 title", 1), ("Act 2 title", 2)]
+    assert acts[0].body.strip() == "Intro paragraph."
+
+
+def test_each_guarantee_records_its_act_and_none_before_the_first_act() -> None:
+    gs = [s for s in parse(acts_text()).sections if s.kind == "guarantee"]
+    assert [g.act for g in gs] == [1, 1, 1, 2, 2, 2]
+    assert all(g.act == 0 for g in parse(landing_text()).sections if g.kind == "guarantee")
+    early = FRONT + "\n" + FLOW + guarantee(1) + act(1) + "".join(guarantee(i) for i in (2, 3))
+    early += "".join(guarantee(i) for i in (4, 5, 6)) + PAGES + CTA
+    assert [g.act for g in parse(early).sections if g.kind == "guarantee"] == [0, 1, 1, 1, 1, 1]
+
+
+def test_a_landing_with_no_act_still_parses() -> None:
+    assert len(parse(landing_text()).sections) == 10
+
+
+def test_an_act_with_no_guarantee_before_the_next_act_or_the_end_is_refused() -> None:
+    mid = FRONT + "\n" + FLOW + act(1) + act(2) + "".join(guarantee(i) for i in range(1, 7)) + PAGES + CTA
+    _refused(mid, r"act.*no numbered section|no numbered section.*act")
+    end = FRONT + "\n" + FLOW + "".join(guarantee(i) for i in range(1, 7)) + act(1) + PAGES + CTA
+    _refused(end, r"no numbered section")
+
+
+def test_a_grid_exposes_its_cards_with_title_text_and_one_link() -> None:
+    sec = next(s for s in parse(acts_text()).sections if s.kind == "grid")
+    assert sec.body.strip() == "Some prose."
+    assert [(c.title, c.text, c.link.label, c.link.href) for c in sec.cards][:2] == [
+        ("Card 1", "Sentence 1.", "Go 1", "fr-isolation.md"),
+        ("Card 2", "Sentence 2.", "Go 2", "fr-isolation.md"),
+    ]
+    assert len(sec.cards) == 4
+
+
+def test_a_grid_with_no_prose_is_accepted() -> None:
+    text = acts_text().replace("Some prose.\n\n", "")
+    assert len(next(s for s in parse(text).sections if s.kind == "grid").cards) == 4
+
+
+@pytest.mark.parametrize("n", [3, 8])
+def test_three_and_eight_cards_are_accepted(n: int) -> None:
+    text = acts_text().replace(cards(), cards(n))
+    assert len(next(s for s in parse(text).sections if s.kind == "grid").cards) == n
+
+
+@pytest.mark.parametrize("n", [0, 2, 9])
+def test_fewer_than_three_or_more_than_eight_cards_is_refused(n: int) -> None:
+    text = acts_text().replace(cards(), cards(n) if n else "")
+    _refused(text, r"grid|card")
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        "- **No link.** A sentence with no link.\n",
+        "- **Two.** One [a](fr-isolation.md) and [b](fr-isolation.md).\n",
+        "- Untitled sentence. [a](fr-isolation.md)\n",
+    ],
+)
+def test_a_card_that_is_not_a_title_a_sentence_and_exactly_one_link_is_refused(item: str) -> None:
+    _refused(acts_text().replace(cards(), cards(3) + item), r"card")
+
+
+def test_a_grid_that_is_not_prose_then_one_unordered_list_is_refused() -> None:
+    _refused(acts_text().replace(cards(), cards() + "\nTrailing prose.\n"), r"grid")
+    _refused(acts_text().replace(cards(), "1. **A.** b [c](fr-isolation.md)\n" * 3), r"grid")
+
+
+TERMINAL = (
+    "terminal:\n"
+    "    - {kind: prompt, text: \"/fr-goal do a thing\"}\n"
+    "    - {kind: out, text: \"workspace ready\"}\n"
+    "    - {kind: you, text: \"answer the round\"}\n"
+    "    - {kind: ok, text: \"pull request opened\"}\n"
+)
+
+
+def with_terminal(block: str) -> str:
+    return FRONT.replace("  primary:", "  " + block.replace("\n    ", "\n    ") + "  primary:", 1)
+
+
+def test_hero_terminal_is_an_optional_list_of_kind_and_text() -> None:
+    assert parse(landing_text()).hero.terminal == ()
+    term = parse(landing_text(front=with_terminal(TERMINAL))).hero.terminal
+    assert [(t.kind, t.text) for t in term] == [
+        ("prompt", "/fr-goal do a thing"),
+        ("out", "workspace ready"),
+        ("you", "answer the round"),
+        ("ok", "pull request opened"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        'terminal:\n    - {kind: banner, text: "x"}\n',
+        "terminal:\n    - {kind: out}\n",
+        'terminal:\n    - {text: "x"}\n',
+        'terminal: "not a list"\n',
+    ],
+)
+def test_an_unknown_terminal_kind_or_a_missing_text_is_refused(block: str) -> None:
+    _refused(landing_text(front=with_terminal(block)), r"terminal")
+
+
+def marker(name: str = "gate-ledger") -> str:
+    return f"<!-- site:figure {name} -->\n\n"
+
+
+def test_a_figure_marker_is_lifted_out_of_a_flow_guarantee_or_prose_section() -> None:
+    flow = FLOW.replace("1. {you}", marker("run-pipeline") + "1. {you}")
+    g1 = guarantee(1).replace("**What", marker("isolation-boundary") + "**What")
+    prose = "## Read\n\nText.\n\n" + marker("gate-ledger")
+    text = FRONT + "\n" + flow + g1 + "".join(guarantee(i) for i in range(2, 7)) + prose + PAGES + CTA
+    secs = parse(text).sections
+    assert secs[0].figure == "run-pipeline" and secs[0].steps
+    assert secs[1].figure == "isolation-boundary" and "site:figure" not in secs[1].body
+    assert secs[7].kind == "prose" and secs[7].figure == "gate-ledger"
+    assert "site:figure" not in secs[7].body
+    assert all(s.figure == "" for s in secs[2:7])
+
+
+def test_a_second_figure_marker_in_one_section_is_refused() -> None:
+    g1 = guarantee(1).replace("**What", marker() + marker("run-pipeline") + "**What")
+    text = FRONT + "\n" + FLOW + g1 + "".join(guarantee(i) for i in range(2, 7)) + PAGES + CTA
+    _refused(text, r"one figure|second figure|more than one")
+
+
+@pytest.mark.parametrize("kind", ["act", "grid", "pages", "cta"])
+def test_a_figure_marker_in_a_section_that_cannot_place_one_is_refused(kind: str) -> None:
+    text = acts_text()
+    if kind == "act":
+        text = text.replace("Intro paragraph.", "Intro paragraph.\n\n" + marker(), 1)
+    elif kind == "grid":
+        text = text.replace("Some prose.", "Some prose.\n\n" + marker())
+    elif kind == "pages":
+        text = text.replace("Intro.\n", "Intro.\n\n" + marker())
+    else:
+        text = text.replace("[Go](01-fr-goal.md)", marker() + "[Go](01-fr-goal.md)")
+    _refused(text, r"figure")
+
+
+def test_a_figure_marker_with_an_invalid_name_is_refused_in_the_landing() -> None:
+    g1 = guarantee(1).replace("**What", marker("Bad_Name") + "**What")
+    text = FRONT + "\n" + FLOW + g1 + "".join(guarantee(i) for i in range(2, 7)) + PAGES + CTA
+    _refused(text, r"Bad_Name")
+
+
 # -- rendering the landing (R1-R6, R10) -----------------------------------------------
 
 LANDING_TRACKED = [
@@ -421,8 +608,6 @@ LANDING_ENTRIES = [
     bs.Entry("docs/ops.md", "Ops", "Manual operations."),
     bs.Entry("docs/reference/cli.md", "CLI", "Every command."),
 ]
-FONT_CSS = "@font-face{src:url(data:font/woff2;base64,AAAA)}"
-THEME_CSS = ":root{--ink:#000;--paper:#fff}"
 
 
 def fake_html(md: str) -> str:
@@ -435,12 +620,10 @@ def render_landing(text: str | None = None, **kw) -> str:
     args = {
         "title": "Front <page>",
         "entries": LANDING_ENTRIES,
-        "font_css": FONT_CSS,
         "patterns": PATTERNS,
         "tracked": LANDING_TRACKED,
         "ref": REF,
         "repo_url": bs.DEFAULT_REPO_URL,
-        "theme_css": THEME_CSS,
         "to_html": fake_html,
     }
     args.update(kw)
@@ -471,8 +654,8 @@ def test_an_untracked_front_matter_href_fails_the_build() -> None:
 
 def test_guarantee_sections_are_numbered_in_order() -> None:
     html = render_landing()
-    nums = re.findall(r"0\d / 07", html)
-    assert nums == [f"0{i} / 07" for i in range(1, 8)]
+    nums = re.findall(r'class="num">(\d\d)</span> / (\d\d)', html)
+    assert nums == [(f"0{i}", "07") for i in range(1, 8)]
     assert html.index("Headline 1") < html.index("Headline 7")
     assert 'href="fr-isolation.html"' in html
 
@@ -510,50 +693,23 @@ def test_a_cta_paragraph_of_links_becomes_buttons() -> None:
     assert 'class="btn' in tail and 'href="01-fr-goal.html"' in tail
 
 
-def test_the_page_embeds_the_given_css_and_carries_no_script_or_foreign_request() -> None:
+def test_the_landing_embeds_no_font_no_script_and_no_foreign_request() -> None:
     html = render_landing()
-    assert FONT_CSS in html and THEME_CSS in html
-    assert html.index(THEME_CSS) < html.index("prefers-color-scheme: light")
+    assert "@font-face" not in html
     assert 'name="color-scheme" content="dark light"' in html
     assert "<script" not in html
-    assert not re.search(r"(?:src=|url\()\s*[\"']?https?:", html)
-    assert not re.search(r"<link[^>]*href=[\"']?https?:", html)
+    assert not re.search(r"(?:src=|url\()\s*[\"']?(?:https?:)?//", html)
+    assert not re.search(r"<link[^>]*href=", html)
     assert re.search(r"@media \(prefers-color-scheme: light\)", html)
 
 
-def test_font_css_is_every_font_face_rule_of_a_rendered_page() -> None:
-    page = "<style>@font-face{a:1}@font-face{b:url(data:x)}body{}</style>"
-    assert bs.extract_font_css(page) == "@font-face{a:1}\n@font-face{b:url(data:x)}"
-    with pytest.raises(bs.BuildError, match="font"):
-        bs.extract_font_css("<style>body{}</style>")
+def test_render_landing_takes_neither_fonts_nor_a_theme_block() -> None:
+    import inspect
 
-
-def test_theme_css_is_the_rendered_pages_root_block() -> None:
-    block = ":root{\n" + ";".join(f"{name}:#0b0c10" for name in bs.THEME_PROPERTIES) + "}"
-    page = f"<style>{block}\nbody{{color:red}}</style>"
-    assert bs.extract_theme_css(page) == block
-    with pytest.raises(bs.BuildError, match=":root"):
-        bs.extract_theme_css("<style>body{}</style>")
-    with pytest.raises(bs.BuildError, match="--ink"):
-        bs.extract_theme_css("<style>:root{--bg:#fff}</style>")
-
-
-@pytest.mark.parametrize("missing", ["--paper", "--ink-2", "--brass", "--display", "--mono"])
-def test_a_theme_missing_a_property_the_landing_uses_is_refused(missing: str) -> None:
-    """A renamed renderer property must fail the build, not ship an unstyled landing."""
-    names = [n for n in bs.THEME_PROPERTIES if n != missing]
-    page = "<style>:root{" + ";".join(f"{n}:#0b0c10" for n in names) + "}</style>"
-    with pytest.raises(bs.BuildError, match=re.escape(missing) + r"\b"):
-        bs.extract_theme_css(page)
-
-
-def test_every_property_the_site_stylesheets_use_is_a_required_theme_property() -> None:
-    used: set[str] = set()
-    for sheet in bs.SITE_DIR.glob("*.css"):
-        if sheet.name == "figures.css":  # its own --fig-* vocabulary, tested below
-            continue
-        used |= set(re.findall(r"var\((--[a-z0-9-]+)", sheet.read_text(encoding="utf-8")))
-    assert used == set(bs.THEME_PROPERTIES)
+    params = set(inspect.signature(bs.render_landing).parameters)
+    assert not params & {"font_css", "theme_css"}
+    for gone in ("extract_font_css", "extract_theme_css", "THEME_PROPERTIES"):
+        assert not hasattr(bs, gone)
 
 
 # -- the top bar (R8, R9, R11) ---------------------------------------------------------
@@ -700,18 +856,53 @@ def test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve() -> N
     text = (REPO / page).read_text(encoding="utf-8")
     assert bs.is_landing(bs.parse_front_matter(text))
     land = bs.parse_landing(text, page)
+    assert land.hero.headline == "Give an agent a goal. Merge a PR you trust."
     guarantees = [s for s in land.sections if s.kind == "guarantee"]
-    assert 6 <= len(guarantees) <= 8
-    assert len(land.hero.headline.split()) <= 10
+    acts = [s for s in land.sections if s.kind == "act"]
+    assert len(acts) == 2 and len(guarantees) == 6
+    assert [g.act for g in guarantees] == [1, 1, 1, 1, 2, 2]
+    assert [g.link.href for g in guarantees if g.link] == [
+        "fr-isolation.md",
+        "fr-brainstorming-and-plan.md",
+        "01-fr-goal.md",
+        "01-fr-goal.md",
+        "fr-exit-gates.md",
+        "fr-wave-driver.md",
+    ]
+    grid = next(s for s in land.sections if s.kind == "grid")
+    links = {c.link.href for c in grid.cards}
+    assert {
+        "fr-acceptance.md",
+        "fr-audit.md",
+        "fr-debugging.md",
+        "fr-triage.md",
+        "../reference/install.md",
+    } <= links
+    kinds = {t.kind for t in land.hero.terminal}
+    assert {"prompt", "you"} <= kinds
+    figures = [(s.kind, s.figure) for s in land.sections if s.figure]
+    assert ("flow", "run-pipeline") in figures
+    assert sorted(f for k, f in figures if k == "guarantee") == [
+        "gate-ledger",
+        "isolation-boundary",
+        "wave-of-batches",
+    ]
+    assert any(s.kind == "pages" for s in land.sections) and any(
+        s.kind == "cta" for s in land.sections
+    )
+    assert "](./acceptance/)" in text
     tracked = bs.tracked_files(REPO)
     patterns = bs.load_config(REPO / ".fr" / "docs.yaml")
     hrefs = [land.hero.primary.href, *(x.href for x in land.hero.secondary)]
-    hrefs += [s.link.href for s in guarantees if s.link]
+    hrefs += [s.link.href for s in guarantees if s.link] + [c.link.href for c in grid.cards]
     for h in hrefs:
         bs.rewrite_href(h, page, patterns, tracked, REF)
     for sec in land.sections:
         bs.rewrite_markdown(sec.body, page, patterns, tracked, REF)
     assert bs.rewrite_href("01-fr-goal.md", page, patterns, tracked, REF) == "01-fr-goal.html"
+    # every figure the page names is a real, checked file
+    for _, name in figures:
+        bs.load_figure(name)
 
 
 # -- figures (spec 2026-11-12-front-page-second-pass B, R6, R10) ---------------------------
@@ -1035,10 +1226,15 @@ def test_every_animation_in_figures_css_sits_under_no_preference_with_a_reduce_b
     assert "animation" not in outside, outside
 
 
-def test_every_shipped_figure_passes_the_checks_and_the_two_new_ones_exist() -> None:
+def test_every_shipped_figure_passes_the_checks_and_all_four_exist() -> None:
     files = sorted(FIGURES.glob("*.svg"))
     names = {f.name for f in files}
-    assert {"gate-ledger.svg", "wave-of-batches.svg"} <= names
+    assert {
+        "gate-ledger.svg",
+        "wave-of-batches.svg",
+        "run-pipeline.svg",
+        "isolation-boundary.svg",
+    } <= names
     for f in files:
         bs.check_figure(f.read_text(encoding="utf-8"), f.name.removesuffix(".svg"))
         bs.load_figure(f.name.removesuffix(".svg").removesuffix(".narrow"))
@@ -1052,3 +1248,183 @@ def test_each_new_explainer_has_exactly_one_figure_marker_naming_a_real_figure(
     markers = re.findall(r"^<!-- site:figure ([a-z0-9-]+) -->$", text, re.MULTILINE)
     assert len(markers) == 1
     assert (FIGURES / f"{markers[0]}.svg").is_file()
+
+# -- the second-pass landing: acts, grid, terminal, figures (R4-R9, spec B, C) ----------
+
+
+def test_numbering_runs_across_acts_and_an_act_opener_carries_its_label() -> None:
+    html = render_landing(acts_text())
+    assert re.findall(r'class="num">(\d\d)</span> / (\d\d)', html) == [
+        (f"0{i}", "06") for i in range(1, 7)
+    ]
+    assert html.index("Act one") < html.index("Headline 1") < html.index("Act two")
+    assert html.index("Act two") < html.index("Headline 4")
+    assert "Act 1 title" in html and "Intro paragraph." in html
+
+
+def test_the_grid_renders_one_card_per_item_with_its_rewritten_link() -> None:
+    html = render_landing(acts_text())
+    assert html.count('class="card') >= 4
+    section = html[html.index("Also included") :]
+    section = section[: section.index("</section>")]
+    assert section.count('href="fr-isolation.html"') == 4
+    assert "Card 1" in section and "Sentence 3." in section
+
+
+def test_the_terminal_renders_a_line_per_entry_with_a_class_per_kind_and_chars() -> None:
+    html = render_landing(landing_text(front=with_terminal(TERMINAL)))
+    lines = re.findall(r'<p class="tl tl-(\w+)[^"]*"([^>]*)>', html)
+    assert [k for k, _ in lines] == ["prompt", "out", "you", "ok"]
+    n = len("/fr-goal do a thing")
+    assert f"--chars:{n}" in lines[0][1]
+    assert all("--chars" not in attrs for _, attrs in lines[1:])
+    assert "workspace ready" in html and "/fr-goal do a thing" in html
+    assert html.count("tl-prompt") == 1 and "caret" in html
+
+
+def test_without_a_terminal_the_single_command_line_is_the_fallback() -> None:
+    html = render_landing()
+    assert 'class="command"' in html and "/fr-goal do a thing" in html
+    assert "tl-prompt" not in html
+
+
+def test_a_headline_of_two_sentences_puts_the_second_in_the_accent_gradient() -> None:
+    front = FRONT.replace('headline: "A headline"', 'headline: "First part. Second part."')
+    h1 = re.search(r"<h1[^>]*>(.*?)</h1>", render_landing(landing_text(front=front)), re.S)
+    assert h1 is not None
+    assert re.sub(r"<[^>]+>", "", h1.group(1)).split() == ["First", "part.", "Second", "part."]
+    assert 'class="accent"' in h1.group(1)
+
+
+def test_a_figure_is_emitted_where_its_section_kind_places_it() -> None:
+    flow = FLOW.replace("1. {you}", marker("gate-ledger") + "1. {you}")
+    g1 = guarantee(1).replace("**What", marker("gate-ledger") + "**What")
+    prose = "## Read\n\nText before.\n\n" + marker("wave-of-batches")
+    text = FRONT + "\n" + flow + g1 + "".join(guarantee(i) for i in range(2, 7)) + prose + PAGES + CTA
+    html = render_landing(text)
+    assert html.count("<figure") == 3
+    flow_html = html[html.index('class="band flow'):]
+    assert flow_html.index("<figure") < flow_html.index('<ol class="steps"')
+    g = html[html.index("Headline 1") :]
+    g = g[: g.index("</section>")]
+    assert g.index("Gain 1.") < g.index("<figure") < g.index('class="more"')
+    p = html[html.index("Text before.") :]
+    assert p.index("Text before.") < p.index("<figure")
+
+
+def test_figures_css_is_in_the_head_only_when_a_section_has_a_figure() -> None:
+    plain = render_landing()
+    assert "fig-dash" not in plain and "<figure" not in plain
+    g1 = guarantee(1).replace("**What", marker("gate-ledger") + "**What")
+    text = FRONT + "\n" + FLOW + g1 + "".join(guarantee(i) for i in range(2, 7)) + PAGES + CTA
+    html = render_landing(text)
+    assert html.index("fig-dash") < html.index("<body")
+
+
+# -- the landing's own stylesheet: tokens, contrast, motion (R7, R8) --------------------
+
+LANDING_CSS = (REPO / "scripts" / "site" / "landing.css").read_text(encoding="utf-8")
+_LIGHT = "@media (prefers-color-scheme: light)"
+
+
+def _tokens(block: str) -> dict[str, str]:
+    return dict(re.findall(r"(--[a-z0-9-]+)\s*:\s*([^;}]+)", block))
+
+
+def scheme_tokens() -> tuple[dict[str, str], dict[str, str]]:
+    dark_part, _, light_part = LANDING_CSS.partition(_LIGHT)
+    dark = re.search(r":root\s*\{([^}]*)\}", dark_part)
+    light = re.search(r":root\s*\{([^}]*)\}", light_part)
+    assert dark is not None and light is not None
+    return _tokens(dark.group(1)), _tokens(light.group(1))
+
+
+def _luminance(hex6: str) -> float:
+    chans = [int(hex6[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in chans]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def contrast(a: str, b: str) -> float:
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_every_property_the_site_stylesheets_use_is_defined_in_both_schemes() -> None:
+    dark, light = scheme_tokens()
+    sheets = {
+        "landing.css": LANDING_CSS,
+        "bar.css": (bs.SITE_DIR / "bar.css").read_text(encoding="utf-8"),
+        "figures.css": (bs.SITE_DIR / "figures.css").read_text(encoding="utf-8"),
+    }
+    for name, css in sheets.items():
+        if name == "landing.css":
+            # only a use without a fallback; the landing defines what it reads
+            used = set(re.findall(r"var\((--[a-z0-9-]+)\s*\)", css))
+        else:
+            used = set(re.findall(r"var\((--[a-z0-9-]+)", css))
+        for prop in sorted(used):
+            assert prop in dark, f"{name} uses {prop}, which the dark block does not define"
+            assert prop in light, f"{name} uses {prop}, which the light block does not define"
+    assert {"--display", "--serif", "--mono"} <= set(dark) & set(light)
+
+
+def test_text_tokens_meet_4_5_to_1_on_both_surfaces_in_both_schemes() -> None:
+    for tokens in scheme_tokens():
+        for name in ("--text", "--text-muted", "--link", "--canvas", "--surface"):
+            assert re.fullmatch(r"#[0-9a-fA-F]{6}", tokens[name].strip()), name
+        for text in ("--text", "--text-muted", "--link"):
+            for surface in ("--canvas", "--surface"):
+                ratio = contrast(tokens[text].strip(), tokens[surface].strip())
+                assert ratio >= 4.5, f"{text} on {surface}: {ratio:.2f}"
+        for stop in ("--accent-a", "--accent-b"):
+            assert re.fullmatch(r"#[0-9a-fA-F]{6}", tokens[stop].strip()), stop
+            assert contrast(tokens[stop].strip(), tokens["--canvas"].strip()) >= 3, stop
+
+
+def test_every_motion_in_landing_css_sits_under_no_preference_with_a_reduce_block() -> None:
+    reduce_blocks = re.findall(
+        r"@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)\s*\{(.*)", LANDING_CSS, re.DOTALL
+    )
+    assert reduce_blocks, "landing.css needs a prefers-reduced-motion: reduce block"
+    squashed = reduce_blocks[0].replace(" ", "")
+    assert "animation:none" in squashed and "transition:none" in squashed
+    outside = _strip_media(
+        _strip_media(LANDING_CSS, r"prefers-reduced-motion:\s*no-preference"),
+        r"prefers-reduced-motion:\s*reduce",
+    )
+    assert "animation" not in outside and "transition" not in outside, outside
+
+
+def test_the_landing_is_built_without_a_renderer_page_or_an_embedded_font(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, craft = _mini_repo(tmp_path)
+    only = tmp_path / "only"
+    (only / ".fr").mkdir(parents=True)
+    (only / "docs" / "explainers").mkdir(parents=True)
+    (only / ".fr" / "docs.yaml").write_text("pages:\n  - docs/explainers/*.md\n")
+    (only / "docs" / "explainers" / "index.md").write_text(acts_text())
+    for name in ("fr-isolation", "01-fr-goal"):
+        (only / "docs" / "explainers" / f"{name}.md").write_text("---\ntitle: t\n---\n\nB\n")
+    subprocess.run(["git", "init", "-q"], cwd=only, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=only, check=True)
+    monkeypatch.setattr(bs, "_markdown_converter", lambda: fake_html)
+    seen: list[str] = []
+
+    def render(renderer, fonts, source, out):
+        seen.append(source.name)
+        html = "<html><head></head><body>no font</body></html>"  # no @font-face
+        out.write_text(html, encoding="utf-8")
+        return html
+
+    monkeypatch.setattr(bs, "render_page", render)
+    # renderer pages still need their embedded font ...
+    with pytest.raises(bs.BuildError, match="@font-face"):
+        bs.build(only, tmp_path / "bad", craft, REF, "https://github.com/o/r")
+    # ... but the landing never does
+    monkeypatch.setattr(bs, "render_page", _fake_renderer(None))
+    out = tmp_path / "out"
+    bs.build(only, out, craft, REF, "https://github.com/o/r")
+    index = (out / "index.html").read_text()
+    assert "@font-face" not in index and 'class="site-bar"' in index
