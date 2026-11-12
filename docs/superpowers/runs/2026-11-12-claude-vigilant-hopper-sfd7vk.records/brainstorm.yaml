@@ -1,0 +1,74 @@
+schema_version: 11
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+step: brainstorm
+outcome: done
+journal:
+  - kind: discovery
+    input: true
+    id: brief
+    title: Operator brief for the second pass on the front page
+    body: |
+      "check the published site once the Pages deploy finishes. I'm looking at it but I'm not sure whether the front page is up to date. The DevOps and Tester Gates are relatively new features that are missing. As is the Wave Driver and its pages. I guess that's alright as we didn't discuss further than the one frontpage, which features matter and for whom but I think we could do a better job here. Also, use more diagrams and visualizations. I also find the first page not so catchy, it's pretty generic. I guess that's on me as I confirmed to use the blog-fr's layout but for a front-page we should get a bit more flashy and modern"
+
+      Then: "merged. Let's start with the second pass".
+  - {kind: decision, id: q1-audience, title: "Audience: both, in two acts", body: "Act one sells a single trustworthy run to a developer; act two sells running a whole backlog (waves, gates, release) to a lead or operator. decider: operator."}
+  - {kind: decision, id: q2-lineup, title: "First-class sections added: exit gates (Tester + DevOps) and the wave driver", body: "Isolation, question round and spec, and independent review stay. Acceptance matrix and cost audit were not picked. decider: operator."}
+  - {kind: decision, id: q3-visual, title: "Visual direction: dark, technical, glowing", body: "Near-black canvas, one vivid accent gradient, large tight sans headline, monospace details, terminal-style hero, glassy cards; light variant follows the visitor's setting. Article pages keep broadsheet. decider: operator."}
+  - {kind: decision, id: q4-demoted, title: "Acceptance matrix and cost audit move to a compact 'also included' grid", body: "One row of small cards (acceptance matrix, cost audit, debugging, triage board, harnesses), each a line and a link. decider: operator."}
+  - {kind: decision, id: q5-motion, title: "Motion: CSS-only animation", body: "Animated diagrams and a typed-out terminal hero in CSS and SVG, off under reduced motion. No JavaScript. decider: operator."}
+  - {kind: decision, id: q6-diagrams, title: "Diagrams: run pipeline, gate ledger, wave of batches, isolation boundary", body: "All four, hand-authored inline SVG kept in this repo. decider: operator."}
+  - {kind: decision, id: q7-pages, title: "New explainer pages: wave driver and exit gates", body: "Two new pages; the exit-gates page links to the existing DevOps gate page for detail. decider: operator."}
+  - {kind: decision, id: q8-headline, title: "Headline kept; the rest of the copy rewritten", body: "Subline, facts and section copy are rewritten for the two-act story. decider: operator."}
+  - {kind: decision, id: q9-verification, title: "Verification as in the first pass; gate developer", body: "Unit tests in CI plus browser screenshots (dark, light, phone width, reduced motion) at implement, review and deliver. One post-merge row for the published site. Gate: developer, which holds nothing. decider: operator."}
+acceptance:
+  - id: site-landing-two-acts
+    capability: published docs
+    acceptance: "The front page tells its story in two acts with six numbered sections, exit gates and the wave driver among them, an 'also included' card grid and a terminal-style hero"
+    origin: ["super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R1", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R2", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R3", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R4", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R9", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R12", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R13"]
+    status: not-implemented
+    verify: none
+    visual:
+      states: [desktop-dark, desktop-light, phone-width-390]
+      interactions: [follow-exit-gates-section-link, follow-wave-driver-section-link, follow-grid-card-link, jump-to-explainers-anchor]
+  - id: site-landing-figures
+    capability: published docs
+    acceptance: "The front page draws four diagrams (run pipeline, isolation boundary, gate ledger, wave of batches) that are named for assistive technology and readable in dark, in light and at phone width; the two new pages each show one"
+    origin: ["super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R5", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R6"]
+    status: not-implemented
+    verify: none
+    visual:
+      states: [each-figure-desktop-dark, each-figure-desktop-light, each-figure-phone-width-390, figure-on-article-page]
+      interactions: []
+  - id: site-landing-look-and-motion
+    capability: published docs
+    acceptance: "The front page has a dark, modern look of its own with a light variant, readable contrast, CSS-only motion that is off for visitors who prefer reduced motion, no script and no request to another host; article pages keep the broadsheet look"
+    origin: ["super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R7", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R8", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R9"]
+    status: not-implemented
+    verify: none
+    visual:
+      states: [desktop-dark, desktop-light, phone-width-390, reduced-motion, article-page-unchanged]
+      interactions: [hover-card]
+  - id: site-landing-refuses-malformed-figures-and-acts
+    capability: published docs
+    acceptance: "The site build fails, naming the page and the defect, on a missing or unsafe diagram file, an act with no section, a malformed card grid or an unknown terminal line kind"
+    origin: ["super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R10"]
+    status: not-implemented
+    verify: none
+  - id: site-wave-driver-and-exit-gates-pages
+    capability: published docs
+    acceptance: "The site explains the wave driver and the exit gates each on a page of its own, linked from the front page"
+    origin: ["super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R11"]
+    status: not-implemented
+    verify: none
+  - id: site-front-page-second-pass-published
+    capability: published docs
+    acceptance: "The published site serves the second-pass front page, its diagrams are drawn, and the exit-gates and wave-driver sections lead to their new pages"
+    origin: ["super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R1", "super-fr:docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md#R11"]
+    status: not-implemented
+    verify: live
+  - row: site-front-page-landing
+    op: reword
+    why: "The second pass replaces the broadsheet identity on the front page and fixes the numbered sections at six across two acts"
+    acceptance: "The site's front page is a landing page: a hero with a call to action to the fr-goal explainer, a how-a-run-goes strip, six to eight numbered sections each linking the page that explains it, every other page listed by group, and a closing call to action, in light and dark"
+emitted: {spec: docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md}
+evidence: {}
