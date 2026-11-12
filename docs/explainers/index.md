@@ -12,9 +12,9 @@ hero:
   eyebrow: "super-fr"
   headline: "Give an agent a goal. Merge a PR you trust."
   subline: "fr turns one goal into one reviewed pull request, built in an isolated workspace and checked by a separate reviewer at every stage. You answer one question round up front, and the merge stays yours. Then it carries a whole backlog through gates and waves."
-  command: "/fr-goal add rate limiting to the webhook receiver"
+  command: "/fr-goal add rate limiting to webhooks"
   terminal:
-    - {kind: prompt, text: "/fr-goal add rate limiting to the webhook receiver"}
+    - {kind: prompt, text: "/fr-goal add rate limiting to webhooks"}
     - {kind: out, text: "workspace ready: private worktree, sealed container"}
     - {kind: you, text: "answer the design questions, once"}
     - {kind: out, text: "spec and plan written, both reviewed"}
@@ -181,6 +181,6 @@ The [acceptance report](./acceptance/) lists every business-level promise and ho
 
 In any repo, this is the entry point to everything above. fr sets up the isolated workspace itself the first time.
 
-`/fr-goal add rate limiting to the webhook receiver`
+`/fr-goal add rate limiting to webhooks`
 
 [See how a run works](01-fr-goal.md) [Install](../reference/install.md)

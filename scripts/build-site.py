@@ -837,7 +837,7 @@ class _LandingRenderer:
     def grid(self, sec: Section) -> str:
         esc = html.escape
         cards = "".join(
-            f'<li class="card"><h3>{esc(c.title)}</h3><p>{esc(c.text)}</p>'
+            f'<li class="card"><h3>{esc(c.title)}</h3><p>{_inline(self.to_html, c.text)}</p>'
             f'<a class="more" href="{self.href(c.link.href)}">{esc(c.link.label)}</a></li>'
             for c in sec.cards
         )

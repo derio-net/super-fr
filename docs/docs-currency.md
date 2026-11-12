@@ -15,7 +15,7 @@ covers:
   - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-12 front-page-second-pass phase 1 added the figures section (a marker, a checked SVG file and figures.css); the rest of this page is unchanged
+reviewed: 2026-11-12 front-page-second-pass phase 2, the front page is rendered with its own look and no embedded font, and takes acts, a grid, terminal lines and figures
 ---
 
 # Docs currency: keeping pages true to the code
@@ -162,8 +162,9 @@ to the default branch that touches a page, the config, the build script or the r
 2. renders each page with the `blog-craft` renderer, checked out at the one commit named in
    `.github/blog-craft.ref`, using the broadsheet style with embedded fonts. The one exception is
    the front page: `docs/explainers/index.md` carries `layout: landing`, and the build renders it
-   itself from `scripts/site/`, copying the fonts and the dark palette from a page the renderer
-   produced in the same build;
+   itself from `scripts/site/`, with its own dark and light look and no embedded font (acts, a
+   card grid and a terminal of `hero.terminal` lines are kinds of that source; the rules for
+   writing it are in the explainers-currency rule);
 3. writes each page to its route: `docs/explainers/x.md` at the site root, `docs/x.md` under
    `guides/`, `docs/reference/x.md` under `reference/`;
 4. rewrites relative links: a link to another page's source becomes that page's route, a link to
@@ -181,7 +182,7 @@ or links to nothing, fails before merge.
 ### Figures
 
 A diagram is an SVG file in `scripts/site/figures/`, placed by a line of its own,
-`<!-- site:figure <name> -->`, in a page's Markdown (`<name>` is `[a-z0-9-]+`; a marker inside a
+`<!-- site:figure <name> -->`, in a page's Markdown, including the front page's sections (`<name>` is `[a-z0-9-]+`; a marker inside a
 fenced block is left alone). The build inlines the file as a `<figure class="site-figure">` before the
 renderer runs, and fails the page if the renderer changes the SVG or the file is missing. Each file
 carries `role="img"` and a non-empty `<title>` as its first child, runs no script, refers to nothing
