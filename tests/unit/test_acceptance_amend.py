@@ -337,3 +337,59 @@ def test_check_passes_an_amendment_of_a_merged_row(
     res = invoke(root, monkeypatch, "check", "--no-fetch")
 
     assert res.exit_code == 0, res.output
+
+
+SLUG_C = "2026-01-15-gamma"
+
+
+def _contested_retired_repo(tmp_path: Path) -> Path:
+    """Feature C merged a set-status and a stale retire of `r` (both base 0): `r` is
+    retired AND contested on main (decision fold-retired-rows-keep-the-base-rule)."""
+    root = merged_repo(tmp_path, branch="feat/c")
+    (root / FRAGMENTS_REL / f"{SLUG_C}.yaml").write_text(
+        f"schema_version: 1\nfeature: {SLUG_C}\nrepo: acme/widget\nrows: []\n"
+        "amendments:\n"
+        "  - {row: r, op: set-status, base: 0, status: ci, notes: wired, why: wired}\n"
+        "  - {row: r, op: retire, base: 0, notes: superseded, why: superseded}\n"
+    )
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "feat: gamma")
+    git(root, "checkout", "-q", "main")
+    git(root, "merge", "-q", "--no-ff", "feat/c", "-m", "Merge feat/c")
+    git(root, "push", "-q", "origin", "main")
+    git(root, "fetch", "-q", "origin")
+    git(root, "checkout", "-q", "-b", "feat/b")
+    clear_fold_cache()
+    eff = fold(root)
+    assert [r.id for r in eff.retired] == ["r"] and eff.contested == {"r"}
+    return root
+
+
+def test_amend_clears_a_contested_retired_row_with_a_correctly_based_amendment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # pr1408-r1: the fold accepts the clearing amendment; the writer must let it be written.
+    root = _contested_retired_repo(tmp_path)
+
+    res = amend(root, monkeypatch, "reword", "--acceptance", "r is retired, on purpose")
+
+    assert res.exit_code == 0, res.output
+    (entry,) = fragment(root, SLUG_B)["amendments"]
+    assert entry["base"] == 2
+    clear_fold_cache()
+    eff = fold(root)
+    assert eff.contested == frozenset()
+    assert [r.id for r in eff.retired] == ["r"]
+    assert eff.matrix.rows == ()
+
+
+def test_amend_still_refuses_a_retired_row_that_is_not_contested(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = merged_repo(tmp_path)
+    assert amend(root, monkeypatch, "retire", "--notes", "superseded").exit_code == 0
+
+    res = amend(root, monkeypatch, "reword", "--acceptance", "again")
+
+    assert res.exit_code == 2
+    assert "retired" in res.output

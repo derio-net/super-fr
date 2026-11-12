@@ -857,9 +857,18 @@ class _Amending:
             raise RecordRefusedError(NO_FEATURE)
         return self._feature
 
-    def row(self, row_id: str) -> Any:
+    def row(self, row_id: str, *, contested_retired: bool = False) -> Any:
+        """The row an amendment applies to. With *contested_retired*, a retired row the
+        fold marks contested is returned too: R17's next correctly based amendment is
+        the only way to clear it, so `amend` must be able to write one (decision
+        fold-retired-rows-keep-the-base-rule). A retired row that is not contested
+        has nothing to clear and stays refused."""
         current = self._fold()
         if row_id not in self.rows:
+            if contested_retired and row_id in current.contested:
+                hit = next((r for r in current.retired if r.id == row_id), None)
+                if hit is not None:
+                    return hit
             retired = any(r.id == row_id for r in current.retired)
             raise RecordRefusedError(
                 f"acceptance {row_id}: "
@@ -877,7 +886,8 @@ class _Amending:
         from fr.acceptance.logical import is_logical, parse_logical
         from fr.acceptance.model import AcceptanceError, pipeline_ref_error, split_ref, walked_error
 
-        old = self.row(item.row)
+        was_retired = item.row not in self.rows
+        old = self.row(item.row, contested_retired=True)
         base = item.base if item.base is not None else self.base(item.row)
         try:
             amendment = item.to_amendment(base)
@@ -915,7 +925,9 @@ class _Amending:
                     "Record it as `unwired` (a test exists, not in CI) instead."
                 )
         write(amendment)
-        if amendment.op == "retire":
+        if was_retired:
+            pass  # a retired row stays retired: R16 has no op that brings one back
+        elif amendment.op == "retire":
             self.rows.pop(item.row)
         else:
             self.rows[item.row] = new
