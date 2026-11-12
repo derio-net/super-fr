@@ -7,6 +7,18 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ERRORS=()
 PROFILE=""
 
+# Artifact directories come from the path resolver (`fr settings paths --shell`, spec
+# 2026-11-04 R1) when `fr` is on PATH, so they follow the repo's placement. The literals
+# below are the `repo` layout's own and the fallback for a PATH without `fr`, or with one
+# too old to answer; phase 6 of the placement plan owns the rest of the shell surfaces.
+if command -v fr >/dev/null 2>&1 && FR_PATHS="$(cd "$REPO_ROOT" && fr settings paths --shell 2>/dev/null)"; then
+  eval "$FR_PATHS"
+fi
+: "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/docs/superpowers/plan-config.yaml}"
+: "${FR_PLANS_DIR:=$REPO_ROOT/docs/superpowers/plans}"
+: "${FR_ARCHIVED_PLANS_DIR:=$REPO_ROOT/docs/superpowers/implemented/plans}"
+: "${FR_LEGACY_ARCHIVED_PLANS_DIR:=$REPO_ROOT/docs/superpowers/archived-plans}"
+
 FILES=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,7 +28,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$PROFILE" ]; then
-  PROFILE="$REPO_ROOT/docs/superpowers/plan-config.yaml"
+  PROFILE="$FR_PLAN_CONFIG_FILE"
 fi
 
 if [ -f "$PROFILE" ]; then
@@ -118,10 +130,10 @@ if [ ${#FILES[@]} -gt 0 ]; then
     [ -f "$f" ] && validate_file "$f"
   done
 else
-  PLANS_DIR="$REPO_ROOT/docs/superpowers/plans"
+  PLANS_DIR="$FR_PLANS_DIR"
   # Canonical archive (2026-06-05 spec) + legacy fallback for unmigrated repos.
-  IMPLEMENTED_DIR="$REPO_ROOT/docs/superpowers/implemented/plans"
-  LEGACY_ARCHIVE_DIR="$REPO_ROOT/docs/superpowers/archived-plans"
+  IMPLEMENTED_DIR="$FR_ARCHIVED_PLANS_DIR"
+  LEGACY_ARCHIVE_DIR="$FR_LEGACY_ARCHIVED_PLANS_DIR"
   for f in "$PLANS_DIR"/*.md "$IMPLEMENTED_DIR"/*.md "$LEGACY_ARCHIVE_DIR"/*.md; do
     [ -e "$f" ] && validate_file "$f"
   done

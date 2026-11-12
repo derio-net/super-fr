@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 from fr import plan_ops
 from fr.apply import apply
+from fr.artifacts.paths import kind_dir, space_for
 from fr.diff import Diff, IssueLabelChange, Mutation, RepoLabelEnsure, diff
 from fr.ghclient import GhClient
 from fr.item_state import DISPATCH_STAMP, ItemState, state_from_labels
@@ -167,7 +168,7 @@ def discover_plans(
     """
     m = metrics if metrics is not None else NullMetrics()
     repo_root = _repo_checkout_root(repo)
-    plans_dir = repo_root / "docs" / "superpowers" / "plans"
+    plans_dir = kind_dir("plan", space_for(repo_root))
     if not plans_dir.is_dir():
         return []
     out: list[Plan] = []

@@ -10,8 +10,9 @@ join that puts `docs` straight before `superpowers` or `acceptance` — a `/` ch
 `.joinpath("docs", ...)`, any call's positional arguments, and a tuple or list of
 segments. Docstrings and comments are prose, not paths.
 
-`PENDING` lists the modules still carrying a literal, which plan 3's phase 2 converts.
-It may only shrink: an entry with no violation left fails, so it is removed with the fix.
+`PENDING` lists the modules still allowed a literal. It is empty: plan 3's phase 2 moved
+every caller onto the resolver. It may only shrink: an entry with no violation left fails,
+so a future exemption is named here, with its reason, and removed with its fix.
 """
 
 from __future__ import annotations
@@ -24,73 +25,8 @@ RESOLVER = "fr/artifacts/paths.py"
 _NEEDLES = ("docs/superpowers", "docs/acceptance")
 _SEGMENTS = ("superpowers", "acceptance")
 
-# Modules (relative to their package's `src/`) that phase 2 moves onto the resolver.
-PENDING: tuple[str, ...] = (
-    "fr/acceptance/check.py",
-    "fr/acceptance/model.py",
-    "fr/acceptance/report.py",
-    "fr/acceptance/scaffold.py",
-    "fr/acceptance/walks.py",
-    "fr/archive.py",
-    "fr/archive_followups.py",
-    "fr/artifacts/matrix_fragments.py",
-    "fr/artifacts/record_status_split.py",
-    "fr/artifacts/trigger.py",
-    "fr/artifacts/validate.py",
-    "fr/closeout.py",
-    "fr/commands/acceptance_cmd.py",
-    "fr/commands/apply_cmd.py",
-    "fr/commands/archive_cmd.py",
-    "fr/commands/common.py",
-    "fr/commands/debt_cmd.py",
-    "fr/commands/isolation_cmd.py",
-    "fr/commands/journal_cmd.py",
-    "fr/commands/repair_cmd.py",
-    "fr/commands/repos_cmd.py",
-    "fr/commands/run_cmd.py",
-    "fr/commands/spec_cmd.py",
-    "fr/debt/engine.py",
-    "fr/gatebackfill/candidates.py",
-    "fr/gatebackfill/close.py",
-    "fr/gatebackfill/render.py",
-    "fr/git_policy/ask.py",
-    "fr/isolation/local.py",
-    "fr/isolation/preserve.py",
-    "fr/isolation/rename.py",
-    "fr/journal/model.py",
-    "fr/migrate.py",
-    "fr/models.py",
-    "fr/ops/evidence.py",
-    "fr/ops/gate.py",
-    "fr/ops/profile.py",
-    "fr/ops/trust.py",
-    "fr/plan_ops.py",
-    "fr/plan_validator_wrapper.py",
-    "fr/proportionality.py",
-    "fr/record/model.py",
-    "fr/refs.py",
-    "fr/repair.py",
-    "fr/run/adopt.py",
-    "fr/run/code_tree.py",
-    "fr/run/model.py",
-    "fr/settings/check.py",
-    "fr/tracker/model.py",
-    "fr/triage/batch_drive.py",
-    "fr/triage/batch_merge.py",
-    "fr/triage/collect.py",
-    "fr/triage/cursor.py",
-    "fr/triage/drift.py",
-    "fr/triage/ledger.py",
-    "fr/usage/backfill.py",
-    "fr/usage/classify.py",
-    "fr/usage/compare.py",
-    "fr/usage/file.py",
-    "fr/verification/exit.py",
-    "fr/verification/resolve.py",
-    "fr/workflow/resolve.py",
-    "fr_dispatch/__init__.py",
-    "fr_herdr/managed.py",
-)
+# Modules (relative to their package's `src/`) still allowed a literal. Empty by design.
+PENDING: tuple[str, ...] = ()
 
 
 def _docstring_ids(tree: ast.AST) -> set[int]:

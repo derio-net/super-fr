@@ -16,10 +16,11 @@ from pathlib import Path
 
 from fr._hosts import HostBackend
 from fr.acceptance.fragment import FRAGMENTS_DIR
+from fr.artifacts.paths import KIND_DIRS
 
 # Reports are derived, never committed (spec 2026-11-04 R20): `fr acceptance report`
 # writes these two, and init keeps git from ever tracking them.
-GITIGNORE_LINES = ("docs/acceptance/report.html", "docs/acceptance/report.md")
+GITIGNORE_LINES = (f"{KIND_DIRS['acceptance']}/report.html", f"{KIND_DIRS['acceptance']}/report.md")
 
 # The retired matrix's header (spec 2026-11-04 R19): no longer written by init, kept
 # because the matrix 4 -> 5 hop rewrites an old header's status comment to it.
@@ -67,7 +68,7 @@ RULE_TEMPLATE = """\
 
 The acceptance matrix is the registry of business-level acceptance tests ×
 verification levels × automation status. Its rows live in **per-feature
-fragments**, `docs/acceptance/features/<spec-slug>.yaml`: each row is owned by
+fragments**, `@@ACC_FRAGMENTS@@/<spec-slug>.yaml`: each row is owned by
 the feature (spec) that created it, and `legacy.yaml` holds rows with no single
 origin spec. The effective matrix is never stored — `fr` folds the fragments.
 **Any PR that does one of the following updates the rows in the SAME PR:**
@@ -111,7 +112,7 @@ debt) · `walk-owed` (a live or post-merge walk is owed — debt) ·
 WORKFLOW_TEMPLATE = """\
 name: acceptance-report
 
-# The acceptance matrix (docs/acceptance/features/*.yaml, folded) rendered + gated.
+# The acceptance matrix (@@ACC_FRAGMENTS@@/*.yaml, folded) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
 # - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
 #   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
@@ -158,7 +159,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: acceptance-report
-          path: docs/acceptance/report.html
+          path: @@ACC_REPORT@@
           retention-days: 90
 @@COMMENT_STEP@@@@PAGES_STEP@@@@DEBT_STEP@@"""
 
@@ -187,7 +188,7 @@ jobs:
 WORKFLOW_TEMPLATE_GITEA = """\
 name: acceptance-report
 
-# The acceptance matrix (docs/acceptance/features/*.yaml, folded) rendered + gated.
+# The acceptance matrix (@@ACC_FRAGMENTS@@/*.yaml, folded) rendered + gated.
 # - `failing` rows FAIL this workflow (by design — fix or re-classify).
 # - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as warning
 #   annotations; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
@@ -242,7 +243,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: acceptance-report
-          path: docs/acceptance/report.html
+          path: @@ACC_REPORT@@
           retention-days: 90
 @@COMMENT_STEP@@@@PAGES_STEP@@@@DEBT_STEP@@"""
 
@@ -257,7 +258,7 @@ jobs:
 # so `fr acceptance summary` is only wired into the GitHub/Gitea templates and the
 # report is published here as an `artifacts:expose_as` link on the merge request.
 WORKFLOW_TEMPLATE_GITLAB = """\
-# The acceptance matrix (docs/acceptance/features/*.yaml, folded) rendered + gated.
+# The acceptance matrix (@@ACC_FRAGMENTS@@/*.yaml, folded) rendered + gated.
 # - `failing` rows FAIL this pipeline (by design — fix or re-classify).
 # - debt rows (`unwired` / `walk-owed` / `not-implemented`) surface as
 #   warnings; the backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
@@ -293,7 +294,7 @@ acceptance-report:
   artifacts:
     expose_as: "Acceptance report" # linked from the merge request
     paths:
-      - docs/acceptance/report.html
+      - @@ACC_REPORT@@
     expire_in: 90 days
 @@PAGES_STEP@@@@DEBT_STEP@@"""
 
@@ -522,6 +523,21 @@ DEBT_STEP = {
     "gitea-actions": DEBT_STEP_GITEA,
     "gitlab-ci": DEBT_STEP_GITLAB,
 }
+
+
+def _render_paths(template: str) -> str:
+    """Fill the artifact directories a template names from the path resolver, so the
+    rendered file is the `repo` layout's text and moves with the table (spec R1)."""
+    return template.replace("@@ACC_FRAGMENTS@@", KIND_DIRS["acceptance-fragment"]).replace(
+        "@@ACC_REPORT@@", f"{KIND_DIRS['acceptance']}/report.html"
+    )
+
+
+RULE_TEMPLATE = _render_paths(RULE_TEMPLATE)
+WORKFLOW_TEMPLATE = _render_paths(WORKFLOW_TEMPLATE)
+WORKFLOW_TEMPLATE_GITEA = _render_paths(WORKFLOW_TEMPLATE_GITEA)
+WORKFLOW_TEMPLATE_GITLAB = _render_paths(WORKFLOW_TEMPLATE_GITLAB)
+
 WORKFLOW_TEMPLATES = {
     "github-actions": WORKFLOW_TEMPLATE,
     "gitea-actions": WORKFLOW_TEMPLATE_GITEA,

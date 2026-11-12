@@ -20,6 +20,7 @@ from typing import Any, Literal
 
 import yaml
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import kind_dir, space_for
 from fr.git import git_answer
 from fr.hostclient import client_for
 from fr.run.model import RunStateError, parse_run_state, validate_run_id
@@ -233,7 +234,7 @@ def reconstruct(d: Descriptor) -> str:
         return d.conflict_brief
     workspace = branch_workspace(d)
     runs = []
-    for path in sorted((workspace / "docs/superpowers/runs").glob("*.yaml")):
+    for path in sorted(kind_dir("run", space_for(workspace)).glob("*.yaml")):
         data = yaml.safe_load(path.read_text())
         if not isinstance(data, dict):
             raise ManagedError(f"unreadable cursor {path}")
@@ -271,7 +272,7 @@ def recovery_cursor(d: Descriptor) -> tuple[Path, dict[str, Any]]:
     workspace = branch_workspace(d)
     runs = []
     try:
-        for path in sorted((workspace / "docs/superpowers/runs").glob("*.yaml")):
+        for path in sorted(kind_dir("run", space_for(workspace)).glob("*.yaml")):
             text = path.read_text()
             data = yaml.safe_load(text)
             if not isinstance(data, dict):
