@@ -916,3 +916,8 @@ Filed at deliver as derio-net/super-fr#1409; still owed until discharged.
 ### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1410] · resolves test-plan-step-2: Test Plan step 2 owed
 
 Filed at deliver as derio-net/super-fr#1410; still owed until discharged.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p2 created=2026-11-12T11:57:09+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p2 · decision · review-size: ~115 mechanical call-site rewrites onto the resolver
+
+Phase 1 builds the resolver and its tripwire; converting every caller in the same phase would bury the resolver's design in a ~2400-line mechanical diff. The tripwire's shrinking allowlist joins them.
