@@ -1,4 +1,4 @@
-"""Acceptance fragments: one feature's rows and amendments (spec 2026-11-04-repo-feature-settings).
+"""Acceptance fragments: one feature's rows and amendments (spec 2026-11-04 R16).
 
 A fragment lives at `docs/acceptance/features/<spec-slug>.yaml` (§3.D). Where each
 field comes from:

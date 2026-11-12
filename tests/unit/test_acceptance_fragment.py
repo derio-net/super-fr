@@ -7,7 +7,6 @@ created, plus the amendments it makes to rows other features own.
 from __future__ import annotations
 
 import pytest
-
 from fr.acceptance.fragment import (
     AMENDMENT_OPS,
     FRAGMENTS_DIR,
@@ -109,7 +108,10 @@ def test_set_status_takes_an_optional_walk() -> None:
             "base",
         ),
         (_text(amendments=_amend("op: retire, notes: n").replace(", why: because", "")), "why"),
-        (_text(amendments=_amend("op: retire, notes: n").replace("why: because", "why: ''")), "why"),
+        (
+            _text(amendments=_amend("op: retire, notes: n").replace("why: because", "why: ''")),
+            "why",
+        ),
         (_text(rows=ROW + ROW), "widget-spins"),
         (_text().replace("feature: 2026-11-04-widget", "feature: 2026-11-04-gadget"), "feature"),
         (_text().replace("repo: derio-net/super-fr", "repo: super-fr"), "repo"),

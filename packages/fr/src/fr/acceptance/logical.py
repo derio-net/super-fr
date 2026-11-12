@@ -97,7 +97,7 @@ def _resolve(ref: str, repo_root: Path) -> tuple[Path | None, str | None]:
     root = Path(repo_root)
     for rel in _candidates(logical):
         target = root / rel
-        if (target.is_dir() if logical.kind == "plan" else target.is_file()):
+        if target.is_dir() if logical.kind == "plan" else target.is_file():
             return Path(PurePosixPath(rel)), None
     tried = ", ".join(_candidates(logical))
     return None, f"{ref}: no {logical.kind} {logical.slug!r} in this repo (looked for {tried})"

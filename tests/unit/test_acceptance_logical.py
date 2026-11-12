@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from fr.acceptance.logical import (
     LOGICAL_KINDS,
     LogicalRef,
