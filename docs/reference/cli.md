@@ -200,9 +200,10 @@ one artifact kind.
 - `fr debt`: What this repo owes: acceptance, plans and owed actions (read-only).
   - `fr debt issue`: Keep the one open `<repo>: Technical debt` issue current.
   - `fr debt archive-pr`: Open or refresh the one draft PR archiving long-merged plans.
-- `fr settings`: Per-repo feature settings: init, show, check.
+- `fr settings`: Per-repo feature settings: init, show, paths, check.
   - `fr settings init`: Write `.fr/settings.yaml` with every key commented out at its default.
   - `fr settings show`: Print the effective settings and each key's source.
+  - `fr settings paths`: Print the artifact path resolver's answers, for hooks and plugins.
   - `fr settings check`: Validate the settings: schema, servable placement, coherence.
 - `fr docs`: Docs currency: pages must keep up with the code they cover (read-only).
   - `fr docs check`: Fail when a covered path changed and its page did not (exit 1).

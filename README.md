@@ -112,7 +112,7 @@ The skills drive `fr`, and every step they take is a command you can run yoursel
 | `fr triage` | Backlog triage: collect forge facts, check judgements, render a board. |
 | `fr usage` | What harness sessions and runs cost, split by activity and step (read-only). |
 | `fr debt` | What this repo owes: acceptance, plans and owed actions (read-only). |
-| `fr settings` | Per-repo feature settings: init, show, check. |
+| `fr settings` | Per-repo feature settings: init, show, paths, check. |
 | `fr docs` | Docs currency: pages must keep up with the code they cover (read-only). |
 | `fr gate` | Post-merge gates: record that a gate passed on its PR (the gate ledger). |
 | `fr ops` | Manual operations of a plan: check, apply, attest. |
