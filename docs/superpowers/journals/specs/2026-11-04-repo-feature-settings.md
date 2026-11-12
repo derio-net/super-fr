@@ -966,3 +966,8 @@ Changes the record-apply failure path every step relies on and a privacy guard.
 ### tier-2026-11-12-placement-resolver-p5 · decision · hard: changes the acceptance fold's merge-order source
 
 The fold is read by check, status, debt, self-review, the PR body and close-out.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p7 created=2026-11-12T11:57:24+00:00 -->
+### tier-2026-11-12-placement-resolver-p7 · decision · hard: a restartable move and a new CLI-entry refusal in the migration trigger
+
+The trigger gates every fr command; the move rewrites where every artifact lives.
