@@ -347,8 +347,8 @@ def stealth_space(root: Path) -> paths.ArtifactSpace:
             f"placement stealth: {root} has a detached HEAD and no marker branch; a stealth "
             "feature is named by its branch"
         )
-    fid = check_feature_id(root, branch)
-    check_owner(wt / target, fid, branch)
+    fid = check_feature_id(root, branch, STEALTH)
+    check_owner(wt / target, fid, branch, STEALTH)
     return paths.ArtifactSpace(STEALTH, wt / target, fid)
 
 
@@ -421,10 +421,10 @@ def enter(root: Path, branch: str, ref: StealthRef) -> dict[str, str]:
     root = Path(root)
     check_reachable(ref, root)
     check_privacy(ref, origin_url(root))
-    fid = check_feature_id(root, branch)
+    fid = check_feature_id(root, branch, STEALTH)
     target = target_dir(root)
     wt = ensure_worktree(root, ref)
-    check_owner(wt / target, fid, branch)
+    check_owner(wt / target, fid, branch, STEALTH)
     _REACHED.add(ref.text)
     return marker_entry(ref, target)
 

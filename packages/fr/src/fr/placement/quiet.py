@@ -217,7 +217,14 @@ def _branch_names(common: Path) -> set[str]:
     return names
 
 
-def check_feature_id(root: Path, branch: str) -> str:
+def _where(placement: str) -> tuple[str, str]:
+    """(refusal prefix, where a feature path lives) for the shared quiet/stealth checks."""
+    if placement == "stealth":
+        return "placement stealth", "the tracking repo's directory for this target"
+    return "placement quiet", f"the `{QUIET_BRANCH}` branch"
+
+
+def check_feature_id(root: Path, branch: str, placement: str = "quiet") -> str:
     """*branch*'s feature id, refusing one another branch already holds (gh#1419)."""
     if branch == QUIET_BRANCH:
         raise SettingsError(
@@ -233,9 +240,9 @@ def check_feature_id(root: Path, branch: str) -> str:
     )
     if others:
         raise SettingsError(
-            f"placement quiet: branch {branch!r} and {', '.join(map(repr, others))} share the "
-            f"feature id {fid!r} (the branch name with `/` as `__`), which is one path on "
-            f"the `{QUIET_BRANCH}` branch. Rename one of them"
+            f"{_where(placement)[0]}: branch {branch!r} and {', '.join(map(repr, others))} "
+            f"share the feature id {fid!r} (the branch name with `/` as `__`), which is one "
+            f"path in {_where(placement)[1]}. Rename one of them"
         )
     return fid
 
@@ -352,14 +359,14 @@ def owner_of(fr_root: Path, fid: str) -> str | None:
     return text.strip() or None
 
 
-def check_owner(fr_root: Path, fid: str, branch: str) -> None:
+def check_owner(fr_root: Path, fid: str, branch: str, placement: str = "quiet") -> None:
     """Refuse when *fid*'s feature root is owned by a branch other than *branch*: the id
     is not injective, and the other branch may live only in another clone (p3-r6)."""
     owner = owner_of(fr_root, fid)
     if owner is not None and owner != branch:
         raise SettingsError(
-            f"placement quiet: branch {branch!r} has the feature id {fid!r}, whose path on the "
-            f"`{QUIET_BRANCH}` branch is owned by {owner!r} "
+            f"{_where(placement)[0]}: branch {branch!r} has the feature id {fid!r}, whose path "
+            f"in {_where(placement)[1]} is owned by {owner!r} "
             f"({paths.FEATURES_DIR}/{fid}/{paths.FEATURE_OWNER}). Rename the branch"
         )
 
