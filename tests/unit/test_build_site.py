@@ -529,12 +529,29 @@ def test_font_css_is_every_font_face_rule_of_a_rendered_page() -> None:
 
 
 def test_theme_css_is_the_rendered_pages_root_block() -> None:
-    page = "<style>:root{\n--ink:#0b0c10;--paper:#e7e1d3}\nbody{color:red}</style>"
-    assert bs.extract_theme_css(page) == ":root{\n--ink:#0b0c10;--paper:#e7e1d3}"
+    block = ":root{\n" + ";".join(f"{name}:#0b0c10" for name in bs.THEME_PROPERTIES) + "}"
+    page = f"<style>{block}\nbody{{color:red}}</style>"
+    assert bs.extract_theme_css(page) == block
     with pytest.raises(bs.BuildError, match=":root"):
         bs.extract_theme_css("<style>body{}</style>")
     with pytest.raises(bs.BuildError, match="--ink"):
         bs.extract_theme_css("<style>:root{--bg:#fff}</style>")
+
+
+@pytest.mark.parametrize("missing", ["--paper", "--ink-2", "--brass", "--display", "--mono"])
+def test_a_theme_missing_a_property_the_landing_uses_is_refused(missing: str) -> None:
+    """A renamed renderer property must fail the build, not ship an unstyled landing."""
+    names = [n for n in bs.THEME_PROPERTIES if n != missing]
+    page = "<style>:root{" + ";".join(f"{n}:#0b0c10" for n in names) + "}</style>"
+    with pytest.raises(bs.BuildError, match=re.escape(missing) + r"\b"):
+        bs.extract_theme_css(page)
+
+
+def test_every_property_the_site_stylesheets_use_is_a_required_theme_property() -> None:
+    used: set[str] = set()
+    for sheet in bs.SITE_DIR.glob("*.css"):
+        used |= set(re.findall(r"var\((--[a-z0-9-]+)", sheet.read_text(encoding="utf-8")))
+    assert used == set(bs.THEME_PROPERTIES)
 
 
 # -- the top bar (R8, R9, R11) ---------------------------------------------------------

@@ -545,13 +545,45 @@ def extract_font_css(html: str) -> str:
     return "\n".join(rules)
 
 
+#: Every custom property `scripts/site/*.css` reads. A renderer that stops defining
+#: one would otherwise ship a landing with unset colours or fonts (review p1-r2).
+THEME_PROPERTIES = (
+    "--ink",
+    "--ink-2",
+    "--paper",
+    "--paper-dim",
+    "--muted",
+    "--faint",
+    "--panel",
+    "--line",
+    "--line-2",
+    "--brass",
+    "--display",
+    "--serif",
+    "--mono",
+)
+
+
+def _defines(block: str, name: str) -> bool:
+    return re.search(rf"(?<![\w-]){re.escape(name)}\s*:", block) is not None
+
+
 def extract_theme_css(html: str) -> str:
-    """The `:root{...}` custom-property block of a page the renderer produced."""
+    """The `:root{...}` custom-property block of a page the renderer produced.
+
+    Refused unless it defines every property the site's own stylesheets use.
+    """
     blocks = _ROOT_BLOCK.findall(html)
     if not blocks:
         raise BuildError("the rendered page carries no :root block to copy for the landing")
     for block in blocks:
-        if "--ink" in block:
+        if _defines(block, "--ink"):
+            missing = [name for name in THEME_PROPERTIES if not _defines(block, name)]
+            if missing:
+                raise BuildError(
+                    "the rendered page's :root block does not define "
+                    f"{', '.join(missing)}, which the landing styles use"
+                )
             return block
     raise BuildError("the rendered page's :root block defines no --ink to copy for the landing")
 

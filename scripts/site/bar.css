@@ -6,4 +6,4 @@
 .site-bar .site-name{margin-right:auto;font:600 1rem/1.4 var(--display,Georgia,serif);color:var(--paper,#e7e1d3)}
 .site-bar .site-name:hover{color:var(--brass,#e0a24e)}
 .landing .site-bar{margin:0}
-@media (max-width:480px){.site-bar{gap:.1rem .9rem;font-size:.8rem}}
+@media (max-width:480px){.site-bar{gap:.1rem .7rem;font-size:.74rem}.site-bar .site-name{font-size:.94rem}}
