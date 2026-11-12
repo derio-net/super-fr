@@ -215,7 +215,9 @@ rows:
     - spec:2026-11-04-repo-feature-settings#R25
     levels: {}
     status: not-implemented
-    notes: 'added at planning (plan 3): R25 and R17''s quiet/stealth clause had no row'
+    notes: added at planning (plan 3); scenario tests/scenarios/placement-merged-status.sh
+      is built by plan 2026-11-12-placement-resolver
+    scenario: tests/scenarios/placement-merged-status.sh
   - id: placement-fr-enabled
     capability: repo-feature-settings
     acceptance: A quiet fr-branch switch and a stealth workspace count as fr-enabled
