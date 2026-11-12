@@ -3,7 +3,7 @@ run: 2026-11-12-claude-vigilant-hopper-sfd7vk
 workflow: fr-goal@1
 branch: claude/vigilant-hopper-sfd7vk
 started: '2026-11-12T13:43:31+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-12-front-page-second-pass-design.md
   spec-review:
-    state: running
-    at: '2026-11-12T13:49:34+00:00'
+    state: done
+    at: '2026-11-12T13:55:23+00:00'
     units:
       step/spec-review:
         attempts:
@@ -21,10 +21,16 @@ steps:
           agent: a9a24ff89cfd27d18
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
-          model: opus
+          model: claude-opus-5-5
           tier: hard
           bound: opus
           session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T13:55:22+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a9a24ff89cfd27d18
+          findings: r1,r2,r3,r4,r5,r6,r7,r8,r9,r10
   plan:
     state: pending
   plan-review:
