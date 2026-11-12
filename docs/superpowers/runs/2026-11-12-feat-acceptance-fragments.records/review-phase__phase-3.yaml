@@ -1,0 +1,39 @@
+schema_version: 11
+run: 2026-11-12-feat-acceptance-fragments
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: review
+    id: review-phase-3
+    phase: 3
+    title: "Phase 3 review (amendments): four in-scope findings, all fixed"
+    body: |
+      Independent reviewer over `git diff 378340641..4856be6d0`. Amendment bases, --rebase,
+      in-place edits of pending rows, the stale-base refusal's network behaviour, the record
+      10->11 migration and the scenario held; check on this branch is clean (617 rows).
+  - {kind: finding, id: p3-r1, phase: 3, review_scope: in, title: "set-status owner fallback wrote into another feature's merged fragment, contradicting R16 ('its own fragment')", body: "Reintroduced shared-file conflicts (legacy.yaml hotspot); the explainer's 'two different files' sentence became false."}
+  - {kind: finding, id: p3-r2, phase: 3, review_scope: in, title: "check compared merged amendments as a multiset, so reordering or inserting above them passed and changed the post-merge fold", body: "Reproduced: walk-owed became unwired, contested after merge."}
+  - {kind: finding, id: p3-r3, phase: 3, review_scope: in, title: "branch_refusals silently skipped fetch, immutability and stale checks when the default ref could not be resolved, so CI passed", body: "Contrary to R17 and the CI fail-closed decision."}
+  - {kind: finding, id: p3-r4, phase: 3, review_scope: in, title: "Retired-but-contested rows were counted by acceptance status but by no debt reader", body: "status said contested: 1 while fr debt and the digest counted 0."}
+  - kind: decision
+    id: p3-set-status-feature-required
+    phase: 3
+    title: "Supersedes p3-set-status-owner-fallback: set-status with no feature refuses; printed post-merge commands name the feature they close"
+    body: |
+      R16 writes an amendment to the fragment of the feature making it, so the owner fallback
+      is gone: `set-status` with no `--feature` and no run refuses, as `amend` does. A
+      post-merge walk or issue link belongs to the feature whose gate or delivery it closes,
+      so every command fr prints for one carries `--feature` (the run's spec, else the row's
+      one origin spec, else a `<spec-slug>` placeholder). legacy.yaml never takes amendments
+      by default.
+resolves:
+  - {id: p3-r1, state: fixed, body: "992e9515f: fallback removed; feature_flag() adds --feature to every printed post-merge command; printed-commands scenario asserts the link lands in the feature's own fragment."}
+  - {id: p3-r2, state: fixed, body: "ecf32e7dc: merged amendments (at the merge base) must be an exact prefix of the working list; tests for swap, insert-above, append-after."}
+  - {id: p3-r3, state: fixed, body: "0cd01545d: a remote with no resolvable default ref is refused in CI, warned elsewhere; this repo's acceptance-report.yml and the scaffold templates check out full history."}
+  - {id: p3-r4, state: fixed, body: "dcb086cff: retired contested rows are debt in status, open_rows, fr debt, the digest, fr status and summary (DebtRow.retired)."}
+  - {id: p3-stray-r1-records-dir, state: out-of-scope, body: "An empty untracked dir that predates phase 3 (created 02:05, before any phase ran), likely from a test run in the workspace; nothing in this change writes it. Removed locally (empty, never tracked)."}
+evidence:
+  review: review-phase-3
+  reviewer: a1f3421a5e28715e3
+  model: claude-opus-5-5
