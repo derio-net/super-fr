@@ -55,9 +55,9 @@ rows:
       - super-fr:tests/unit/test_lenses_check.py#test_a_head_config_disabling_a_lens_a_base_only_rule_requires_is_a_problem
       int:
       - super-fr:tests/integration/test_scenarios.py#test_review_lenses_path_rules
-    status: unwired
-    notes: Unit tests and the first scenario cases exist; the row is complete once the
-      lens review step lands in phase 3
+    status: not-implemented
+    notes: 'Partial: the cited unit tests and the first scenario cases run in CI; the
+      row''s claim is complete only once the lens-review step lands in phase 3'
     verify: candidate
     scenario: tests/scenarios/review-lenses-path-rules.sh
   - id: review-lenses-reviewer-return-checked
