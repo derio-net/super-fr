@@ -314,3 +314,114 @@ e9eacca8a: legacy.parse_matrix_v5_body used by every 4->5 check; tripwire forbid
 ### p2-r5-resolved · finding [fixed] · resolves p2-r5: With the archive retarget removed, archived journal path refs dangle and check's warning names a removed fix (phase 2)
 
 764cb9c19 (read-time archived twin, warning reworded), c98958648 + 1dfba07cd (row refs, notes and text).
+
+<!-- fr:journal kind=decision scope=plan id=p3-merged-means-on-the-default-ref created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-merged-means-on-the-default-ref · decision · A row is merged when the default ref's fragments define it; with no default ref nothing is merged (phase 3) (phase 3)
+
+`set-status` routes to amendments only for a row the fragments at the default
+ref's tip define (`fold.default_ref_fold`, the remote-tracking default ref).
+A repo with no default ref (no remote, or none fetched) has no merged row, so
+set-status edits in place there, and `check`'s immutability rule has nothing to
+hold (the fold still orders by HEAD's history, as phase 1 decided).
+
+<!-- fr:journal kind=decision scope=plan id=p3-set-status-amendment-verify-scenario created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-set-status-amendment-verify-scenario · decision · The set-status amendment carries optional verify and scenario; harnesses on a merged row are refused (phase 3) (phase 3)
+
+`set-status --verify/--scenario` must still work on a merged row, so the
+fragment's SetStatus amendment gains optional `verify` and `scenario`, replaced
+when given. The acceptance-fragment kind is new in this unreleased PR, so no
+released fr reads it and no stamp moves. No op carries `harnesses`; a record
+move adding one to a merged row is refused, naming the rule.
+
+<!-- fr:journal kind=decision scope=plan id=p3-set-status-owner-fallback created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-set-status-owner-fallback · decision · set-status with no feature in play appends a merged row's amendments to the row's own fragment; amend refuses (phase 3) (phase 3)
+
+The plan said the feature is --feature, else the branch's run's spec, else
+refused. That refused every command fr itself prints after a merge (`fr gate
+pass --keep`'s walk line, deliver's `set-status --issue` link, the walk close-out),
+which run on a branch with no run: tests/unit/test_printed_commands_run.py and
+the printed-commands-run scenario went red. So `set-status` falls back to the
+row's owning feature: the change is still an appended amendment (never an
+in-place edit), ordered by its first-parent introduction. `amend`, the
+authoring verb, keeps the plan's refusal naming --feature. Worth the reviewer's
+eye: R16 says "its own fragment" of a later feature, and a post-merge walk has none.
+
+<!-- fr:journal kind=decision scope=plan id=p3-rebase-verb created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-rebase-verb · decision · The stale-base fix is `fr acceptance amend --rebase` (phase 3) (phase 3)
+
+R17 names the refusal, not the fix. `amend --rebase` sets each stale pending
+amendment's `base` to its row's revision when it applies (the fold's
+`stale_pending.revision`), line surgery on the `base:` line only, one commit
+holding the fragments. The refusal tells the operator to review the row first.
+
+<!-- fr:journal kind=decision scope=plan id=p3-immutability-judged-against-the-merge-base created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-immutability-judged-against-the-merge-base · decision · check's merged-row rule skips entries equal to the merge base, so a branch behind main is not an edit (phase 3) (phase 3)
+
+A row (or amendment) on the default ref that the working tree lacks or holds
+differently is refused only when the working tree also differs from the merge
+base of HEAD and the default ref: an entry merged after the branch forked is
+the branch being behind, not an in-place edit.
+
+<!-- fr:journal kind=decision scope=plan id=p3-fetch-failure-refuses-in-ci-only created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-fetch-failure-refuses-in-ci-only · decision · A failed fetch of the default ref refuses in CI and warns elsewhere (phase 3) (phase 3)
+
+`check` and `deliver` fetch `+refs/heads/<b>:refs/remotes/<remote>/<b>` first.
+Under a CI marker (`fr.artifacts.trigger.in_ci`) a failed fetch is a refusal,
+never a pass; on an operator's machine it is a warning and the last fetched
+ref is judged, so an offline laptop still checks. `check --no-fetch` skips it.
+
+<!-- fr:journal kind=decision scope=plan id=p3-debt-report-contested-fields created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-debt-report-contested-fields · decision · DebtReport gains defaulted contested fields; is_debt is the one definition (phase 3) (phase 3)
+
+`AcceptanceDebt.contested` (rows contested whose status is not already debt)
+and `DebtRow.contested` are optional and defaulted; `debt_total` counts them.
+The issue figures (`parse_figures`) carry counts only and are unchanged.
+`fr.acceptance.model.is_debt(status, contested=)` is what debt, status and
+`open_rows` share.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-no-live-records-to-migrate created=2026-11-12T05:58:36+00:00 phase=3 -->
+### p3-no-live-records-to-migrate · discovery · `fr migrate artifacts --yes` found every artifact current: this run had no live record when the record kind moved (phase 3) (phase 3)
+
+The record kind moved 10 -> 11, but no record file was live under
+docs/superpowers/runs/*.records/ at the time, so the migration wrote nothing and
+there was no migration commit to make. This record is written at stamp 11.
+
+<!-- fr:journal kind=finding scope=plan id=p3-stray-r1-records-dir created=2026-11-12T05:58:36+00:00 phase=3 state=open review_scope=out -->
+### p3-stray-r1-records-dir · finding [open] (reviewer: out of scope) · An empty untracked docs/superpowers/runs/r1.records/ sits in the workspace, created before phase 3 (phase 3) (phase 3)
+
+Created 2026-11-12 02:05, before this phase started, untracked and empty, so
+nothing commits it. `r1` is the run id several record tests use, which suggests
+a test once created a records dir under the repo instead of its tmp path. Not
+reproduced in this phase's runs.
+
+<!-- fr:journal kind=finding scope=plan id=p3-set-status-on-merged-row-is-an-amendment-resolved created=2026-11-12T05:58:36+00:00 phase=3 state=fixed resolves=p3-set-status-on-merged-row-is-an-amendment -->
+### p3-set-status-on-merged-row-is-an-amendment-resolved · finding [fixed] · resolves p3-set-status-on-merged-row-is-an-amendment: Refiled from p2-interim-set-status-on-merged-row: set-status on a merged row must become an amendment (phase 3)
+
+`set-status` on a row merged on the default ref now appends set-status,
+add-level and drop-level amendments to this feature's fragment and leaves the
+owner's fragment untouched; a row pending on this branch is still edited in
+place, and `check` refuses an in-place edit of a merged row. Tests:
+tests/unit/test_acceptance_amend.py#test_set_status_on_a_merged_row_appends_amendments_and_leaves_its_owner_alone,
+#test_set_status_on_a_row_pending_on_this_branch_still_edits_in_place and
+#test_check_refuses_an_in_place_edit_of_a_merged_row. Phase 2's interim
+in-place test is removed.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-12T05:58:36+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the in-place-vs-amend routing is one branch in _acceptance_writes calling the one _Amending helper, which both the record's amendment item and set-status's merged-row move go through; no second copy to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-12T05:58:36+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+a stamp-only migration that reuses record_exit_gates' guard and an AmendmentItem that delegates validation to the fragment's own Amendment union; nothing duplicated to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-12T05:58:36+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+stale_pending is recorded inside the fold's existing apply loop and both check and deliver read the one branch_refusals; is_debt is the one contested-or-debt-status test that debt, status and open_rows share
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-11-12T05:58:36+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+skill, rule and explainer prose, regenerated mirrors and a scenario script; no code to clean
