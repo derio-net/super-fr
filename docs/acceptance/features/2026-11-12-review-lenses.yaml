@@ -80,6 +80,22 @@ rows:
     notes: ''
     verify: candidate
     scenario: tests/scenarios/review-lenses-shown-on-pr.sh
+  - id: review-lenses-accumulate
+    capability: review lenses
+    acceptance: Any agent at any step of a run can add a lens to the feature with a
+      reason; additions are kept in the run's journals, never removed, and listed by
+      fr lenses status; an unknown lens or a missing reason is refused, the phase reviews
+      are given no lens text, and a run started before this feature picks the lens review
+      up through fr run reshape
+    origin:
+    - spec:2026-11-12-review-lenses#R4
+    - spec:2026-11-12-review-lenses#R5
+    - spec:2026-11-12-review-lenses#R13
+    levels: {}
+    status: not-implemented
+    notes: Born with the rewritten spec
+    verify: candidate
+    scenario: tests/scenarios/review-lenses-accumulate.sh
 amendments:
   - row: review-lenses-path-rules
     op: reword
