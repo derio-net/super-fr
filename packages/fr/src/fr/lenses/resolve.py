@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr import _shipped
-from fr.lenses.model import Lens, LensConfig, parse_config, parse_lens
+from fr.lenses.model import Lens, LensConfig, LensError, parse_config, parse_lens, read_text
 
 REPO_CONFIG_REL = Path(".fr") / "lenses.yaml"
 PLUGIN_LENSES_REL = Path("plugins") / "super-fr" / "lenses"
@@ -34,13 +34,19 @@ def shipped_lens_dir() -> Path | None:
 
 
 def shipped_lenses() -> dict[str, Lens]:
-    """The shipped lenses by id, `source == "shipped"`."""
+    """The shipped lenses by id, `source == "shipped"`. Raises `LensError`.
+
+    A manifest is named for its lens, as a shipped verification strategy is: a
+    copy that kept another lens's id would otherwise replace that lens silently.
+    """
     found = shipped_lens_dir()
     if found is None:
         return {}
     out: dict[str, Lens] = {}
     for path in sorted(found.glob("*.yaml")):
-        lens = parse_lens(path.read_text(), source=str(path))
+        lens = parse_lens(read_text(path, str(path)), source=str(path))
+        if lens.id != path.stem:
+            raise LensError(f"{path}: the file is named {path.name} but its lens is {lens.id!r}")
         out[lens.id] = lens.model_copy(update={"source": "shipped"})
     return out
 
@@ -50,7 +56,8 @@ def load_config(root: Path) -> LensConfig:
     path = root / REPO_CONFIG_REL
     if not path.is_file():
         return LensConfig()
-    return parse_config(path.read_text(), source=str(REPO_CONFIG_REL))
+    source = str(REPO_CONFIG_REL)
+    return parse_config(read_text(path, source), source=source)
 
 
 def apply_config(shipped: dict[str, Lens], config: LensConfig) -> dict[str, Lens]:

@@ -40,6 +40,10 @@ def test_a_valid_file_is_no_problem(tmp_path: Path) -> None:
             "disable: [security]\nrequire:\n  - paths: ['x']\n    lenses: [security]\n",
             "disables",
         ),
+        (
+            "disable: [security]\nlenses:\n  security:\n    title: T\n    brief: b\n",
+            "disables and also defines security",
+        ),
     ],
 )
 def test_one_named_problem_each(tmp_path: Path, text: str, needle: str) -> None:
@@ -49,3 +53,28 @@ def test_one_named_problem_each(tmp_path: Path, text: str, needle: str) -> None:
 
     assert len(problems) == 1, problems
     assert needle in problems[0]
+
+
+def test_an_undecodable_file_is_one_problem(tmp_path: Path) -> None:
+    (tmp_path / ".fr").mkdir()
+    (tmp_path / ".fr" / "lenses.yaml").write_bytes(b"\xff\xfe\x00bad")
+
+    problems = check_config(tmp_path)
+
+    assert len(problems) == 1, problems
+    assert ".fr/lenses.yaml" in problems[0]
+
+
+def test_a_malformed_shipped_manifest_is_a_problem_not_a_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shipped = tmp_path / "shipped"
+    shipped.mkdir()
+    (shipped / "security.yaml").write_text("lens: [\n")
+    monkeypatch.setenv("FR_SHIPPED_LENSES_DIR", str(shipped))
+    _write(tmp_path, "disable: []\n")
+
+    problems = check_config(tmp_path)
+
+    assert len(problems) == 1, problems
+    assert "invalid YAML" in problems[0]

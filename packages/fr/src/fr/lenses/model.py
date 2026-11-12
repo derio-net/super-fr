@@ -9,6 +9,7 @@ entry or finding id, hence `LENS_ID_RE`.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -78,6 +79,13 @@ class PathRule(BaseModel):
             raise ValueError("must not be empty")
         return v
 
+    @field_validator("paths")
+    @classmethod
+    def _globs(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        for item in v:
+            _non_empty(item)
+        return v
+
     @field_validator("lenses")
     @classmethod
     def _ids(cls, v: tuple[str, ...]) -> tuple[str, ...]:
@@ -106,6 +114,14 @@ class LensConfig(BaseModel):
         for key in v:
             _require_id(key)
         return v
+
+
+def read_text(path: Path, source: str) -> str:
+    """A lens file's text; an unreadable or undecodable file is a `LensError` too."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise LensError(f"{source}: cannot read: {e}") from e
 
 
 def _load(text: str, source: str) -> Any:

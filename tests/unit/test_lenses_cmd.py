@@ -98,6 +98,18 @@ def test_an_unreadable_config_makes_list_and_show_exit_2(repo: Path) -> None:
     assert runner.invoke(app, ["lenses", "show", "security"]).exit_code == 2
 
 
+def test_an_undecodable_config_makes_list_and_show_exit_2_without_a_traceback(
+    repo: Path,
+) -> None:
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "lenses.yaml").write_bytes(b"\xff\xfe\x00bad")
+
+    for args in (["lenses", "list"], ["lenses", "show", "security"]):
+        r = runner.invoke(app, args)
+        assert r.exit_code == 2, r.output
+        assert not isinstance(r.exception, UnicodeDecodeError)
+
+
 def test_none_of_the_three_writes(repo: Path) -> None:
     _config(repo, "disable: [errors]\n")
     git(repo, "add", "-A")

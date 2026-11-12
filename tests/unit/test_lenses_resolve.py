@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fr.lenses.resolve import effective_lenses
+import pytest
+from fr.lenses.model import LensError
+from fr.lenses.resolve import effective_lenses, shipped_lenses
 
 
 def _write(root: Path, text: str) -> None:
@@ -35,3 +37,21 @@ def test_disable_replace_and_add(tmp_path: Path) -> None:
     assert got["security"].source == "repo (replaces shipped)"
     assert got["security"].brief == "mine"
     assert got["accessibility"].source == "repo"
+
+
+def test_a_shipped_manifest_named_for_another_lens_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "tests.yaml").write_text("lens: security\ntitle: T\nbrief: b\n")
+    monkeypatch.setenv("FR_SHIPPED_LENSES_DIR", str(tmp_path))
+
+    with pytest.raises(LensError, match="tests.yaml.*security"):
+        shipped_lenses()
+
+
+def test_an_undecodable_config_is_a_lens_error(tmp_path: Path) -> None:
+    (tmp_path / ".fr").mkdir()
+    (tmp_path / ".fr" / "lenses.yaml").write_bytes(b"\xff\xfe\x00bad")
+
+    with pytest.raises(LensError, match="lenses.yaml"):
+        effective_lenses(tmp_path)

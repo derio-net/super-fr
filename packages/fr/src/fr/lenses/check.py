@@ -8,25 +8,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fr.lenses.model import LensError, parse_config
-from fr.lenses.resolve import REPO_CONFIG_REL, shipped_lenses
+from fr.lenses.model import LensError
+from fr.lenses.resolve import REPO_CONFIG_REL, load_config, shipped_lenses
 
 
 def check_config(root: Path) -> list[str]:
     """Every problem with `<root>/.fr/lenses.yaml`; no file, no problem."""
-    path = root / REPO_CONFIG_REL
-    if not path.is_file():
+    if not (root / REPO_CONFIG_REL).is_file():
         return []
     try:
-        config = parse_config(path.read_text(), source=str(REPO_CONFIG_REL))
-    except (LensError, OSError, UnicodeDecodeError) as e:
+        config = load_config(root)
+        shipped = set(shipped_lenses())
+    except LensError as e:
         return [str(e)]
-    shipped = set(shipped_lenses())
     known = shipped | set(config.lenses)
     problems: list[str] = []
     for lens_id in config.disable:
         if lens_id not in shipped:
             problems.append(f"disable names a lens that does not exist: {lens_id}")
+        elif lens_id in config.lenses:
+            problems.append(
+                f"the file disables and also defines {lens_id}: "
+                "drop it from disable to replace the shipped lens"
+            )
     for rule in config.require:
         for lens_id in rule.lenses:
             if lens_id not in known:

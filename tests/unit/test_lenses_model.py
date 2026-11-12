@@ -60,6 +60,8 @@ def test_parse_config_accepts_every_key_optional() -> None:
         "bogus: 1\n",
         "require:\n  - paths: []\n    lenses: [a]\n",
         "require:\n  - paths: ['x']\n    lenses: []\n",
+        "require:\n  - paths: ['']\n    lenses: [a]\n",
+        "require:\n  - paths: ['x', '  ']\n    lenses: [a]\n",
         "- a list\n",
         "lenses:\n  Bad:\n    title: T\n    brief: b\n",
         "lenses:\n  ok:\n    title: T\n    brief: ''\n",
