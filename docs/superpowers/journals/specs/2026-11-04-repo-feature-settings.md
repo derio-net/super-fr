@@ -961,3 +961,8 @@ A wrong root writes artifacts onto product branches, which R23 forbids; the atom
 ### tier-2026-11-12-placement-resolver-p4 · decision · hard: stealth makes a failed state push fatal inside resolve and adds the resume reconciliation
 
 Changes the record-apply failure path every step relies on and a privacy guard.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p5 created=2026-11-12T11:57:22+00:00 -->
+### tier-2026-11-12-placement-resolver-p5 · decision · hard: changes the acceptance fold's merge-order source
+
+The fold is read by check, status, debt, self-review, the PR body and close-out.
