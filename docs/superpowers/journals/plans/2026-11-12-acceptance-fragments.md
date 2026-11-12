@@ -734,3 +734,8 @@ df844f367: render and render_markdown say 'from the folded fragments in docs/acc
 ### pr1408-r8-resolved · finding [fixed] · resolves pr1408-r8: Merged amendment order is inferred from list position and counts in _introductions, so a list with a later amendment above an earlier one folds in the wrong order
 
 7f72df065: _introductions matches each tip amendment by value (n-th copy -> first commit holding n+1 copies) instead of by index/count. Red: test_an_amendment_inserted_above_a_merged_one_takes_its_own_merge_position
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r9-resolved created=2026-11-12T09:44:29+00:00 state=fixed resolves=pr1408-r9 -->
+### pr1408-r9-resolved · finding [fixed] · resolves pr1408-r9: _companions swallows the frozen reader's failure for a pre-v5 matrix, so the uncommitted-changes veto covers only the reports
+
+d060bb715: _companions falls back to every fragment on disk when split_texts cannot name its own. Red: test_a_pre_v5_matrix_still_names_every_fragment_the_split_may_touch
