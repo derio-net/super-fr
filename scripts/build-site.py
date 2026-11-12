@@ -11,6 +11,13 @@ writes `<out-dir>/<route>.html`. Routes: a page under `docs/explainers/` keeps i
 basename at the site root; `docs/x.md` goes to `guides/x.html` and
 `docs/reference/x.md` to `reference/x.html`.
 
+The front page (`layout: landing` on the page routed to `index.html`) is rendered
+here, not by blog-craft, from `scripts/site/` (spec 2026-11-12-landing-front-page);
+its fonts and dark palette are copied from a page blog-craft rendered in the same
+build. Every page, the landing included, gets the top bar of `scripts/site/bar.css`,
+and no page is written until every page has rendered, passed `check_rendered` and
+taken the bar.
+
 Relative links are rewritten by one rule: a link to another page's source becomes
 that page's route, relative to the linking page; a link to any other tracked file
 or directory becomes a github.com blob (or tree) URL at `--ref` (default `HEAD`);
@@ -706,6 +713,45 @@ def check_rendered(html: str, route_name: str) -> None:
         raise BuildError(f"{route_name}: rendered with no embedded @font-face data URI")
 
 
+# -- the top bar (R8, R9) --------------------------------------------------------------
+
+_BODY_OPEN = re.compile(r"<body\b[^>]*>")
+
+
+def insert_bar(page_html: str, route_name: str, repo_url: str, bar_css: str) -> str:
+    """`page_html` with the site's top bar: its style before `</head>`, its nav after `<body>`.
+
+    Both anchors must occur exactly once, so a renderer change cannot silently drop
+    the bar (R9). Links are relative to `route_name`.
+    """
+    bodies = _BODY_OPEN.findall(page_html)
+    if len(bodies) != 1:
+        raise BuildError(
+            f"{route_name}: expected one <body> to insert the top bar, found {len(bodies)}"
+        )
+    if page_html.count("</head>") != 1:
+        raise BuildError(
+            f"{route_name}: expected one </head> to insert the top bar, "
+            f"found {page_html.count('</head>')}"
+        )
+    home = "../" * route_name.count("/") + "index.html"
+    links = "".join(
+        f'<a href="{html.escape(h, quote=True)}">{label}</a>'
+        for label, h in (
+            ("Explainers", f"{home}#explainers"),
+            ("Guides", f"{home}#guides"),
+            ("Reference", f"{home}#reference"),
+            ("GitHub", repo_url),
+        )
+    )
+    nav = (
+        f'<nav class="site-bar" aria-label="Site"><a class="site-name" href="{home}">super-fr</a>'
+        f"{links}</nav>"
+    )
+    with_style = page_html.replace("</head>", f"<style>{bar_css}</style></head>", 1)
+    return _BODY_OPEN.sub(lambda m: m.group(0) + "\n" + nav, with_style, count=1)
+
+
 def load_config(path: Path) -> list[str]:
     """The `pages` globs of `.fr/docs.yaml`."""
     try:
@@ -756,37 +802,89 @@ def render_page(renderer: Path, fonts: Path, source: Path, out: Path) -> str:
     return out.read_text(encoding="utf-8")
 
 
+def _markdown_converter() -> Callable[[str], str]:
+    """python-markdown with the renderer's extensions, imported only when a landing needs it."""
+    try:
+        import markdown
+    except ImportError as e:
+        raise BuildError("the landing page needs `markdown` (run with --with markdown)") from e
+    return lambda text: markdown.markdown(
+        text, extensions=["fenced_code", "codehilite", "tables", "sane_lists"]
+    )
+
+
 def build(root: Path, out_dir: Path, blog_craft: Path, ref: str, repo_url: str) -> list[str]:
-    """Render every configured page into `out_dir`; return the routes written."""
+    """Render every configured page into `out_dir`; return the routes written.
+
+    Three passes: select and parse (every source-level refusal), render into a
+    temporary directory and check and decorate in memory, and only then write. No
+    page reaches `out_dir` while a refusal for any page can still fire.
+    """
     renderer = blog_craft / "tools" / "render_explainer.py"
     if not renderer.is_file():
         raise BuildError(f"{renderer} not found: pass --blog-craft DIR (or set BLOG_CRAFT_DIR)")
     fonts = blog_craft / FONTS_SUBDIR
     if not fonts.is_dir():
         raise BuildError(f"{fonts} not found: the renderer would fall back to system fonts")
+    # 1. select and parse
     patterns = load_config(root / ".fr" / "docs.yaml")
     tracked = tracked_files(root)
     pages = select_pages(patterns, tracked)
     if not pages:
         raise BuildError("the config selects no tracked page")
     texts = {p: (root / p).read_text(encoding="utf-8") for p in pages}
+    fronts = {p: parse_front_matter(texts[p]) for p in pages}
     entries = [
-        Entry(p, str(fm.get("title") or p), str(fm.get("tldr") or ""))
-        for p in pages
-        for fm in [parse_front_matter(texts[p])]
+        Entry(p, str(fronts[p].get("title") or p), str(fronts[p].get("tldr") or "")) for p in pages
     ]
-    written: list[str] = []
+    landing_pages = [p for p in pages if is_landing(fronts[p])]
+    for p in landing_pages:
+        if route(p) != "index.html":
+            raise BuildError(f"{p}: layout: landing is only for the page routed to index.html")
+    landing = parse_landing(texts[landing_pages[0]], landing_pages[0]) if landing_pages else None
+    # 2. render
+    pages_html: dict[str, str] = {}
     with tempfile.TemporaryDirectory() as tmp:
         for path in pages:
+            if path in landing_pages:
+                continue
             text = fill_pages(drop_leading_h1(texts[path]), path, entries)
             text = rewrite_markdown(text, path, patterns, tracked, ref, repo_url)
             source = Path(tmp) / posixpath.basename(path)
             source.write_text(text, encoding="utf-8")
-            target = out_dir / route(path)
+            target = Path(tmp) / "out" / route(path)
             target.parent.mkdir(parents=True, exist_ok=True)
-            check_rendered(render_page(renderer, fonts, source, target), route(path))
-            written.append(route(path))
-    return written
+            pages_html[route(path)] = render_page(renderer, fonts, source, target)
+    if landing is not None:
+        if not pages_html:
+            raise BuildError("the landing page has no rendered page to take its fonts from")
+        first = pages_html[sorted(pages_html)[0]]
+        front = fronts[landing_pages[0]]
+        pages_html["index.html"] = render_landing(
+            landing,
+            title=str(front.get("title") or landing_pages[0]),
+            description=str(front.get("tldr") or ""),
+            entries=entries,
+            font_css=extract_font_css(first),
+            theme_css=extract_theme_css(first),
+            patterns=patterns,
+            tracked=tracked,
+            ref=ref,
+            repo_url=repo_url,
+            to_html=_markdown_converter(),
+            page=landing_pages[0],
+        )
+    # 3. decorate, then write
+    bar_css = site_file("bar.css")
+    final: dict[str, str] = {}
+    for route_name, page_html in pages_html.items():
+        check_rendered(page_html, route_name)
+        final[route_name] = insert_bar(page_html, route_name, repo_url, bar_css)
+    for route_name, page_html in final.items():
+        target = out_dir / route_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(page_html, encoding="utf-8")
+    return sorted(final)
 
 
 def main(argv: list[str]) -> int:

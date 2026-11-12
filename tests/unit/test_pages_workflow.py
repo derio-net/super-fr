@@ -45,6 +45,7 @@ def test_triggers_cover_every_input_of_the_site() -> None:
         "docs/acceptance/**",
         ".fr/docs.yaml",
         "scripts/build-site.py",
+        "scripts/site/**",
         ".github/blog-craft.ref",
         "packages/fr/src/fr/acceptance/**",
     }

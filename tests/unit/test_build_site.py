@@ -498,7 +498,7 @@ def test_the_page_list_has_anchored_groups_and_every_entry_but_the_index() -> No
 def test_body_links_are_rewritten_like_any_other_page() -> None:
     extra = "## Read\n\nSee [iso](fr-isolation.md) and [the report](./acceptance/).\n\n"
     html = render_landing(landing_text(extra=extra))
-    assert 'iso](fr-isolation.html)' in html or 'href="fr-isolation.html">iso' in html
+    assert "iso](fr-isolation.html)" in html or 'href="fr-isolation.html">iso' in html
     assert "(./acceptance/)" in html or 'href="./acceptance/"' in html
     with pytest.raises(bs.BuildError, match="nope.md"):
         render_landing(landing_text(extra="## R\n\n[x](nope.md)\n\n"))
@@ -535,3 +535,142 @@ def test_theme_css_is_the_rendered_pages_root_block() -> None:
         bs.extract_theme_css("<style>body{}</style>")
     with pytest.raises(bs.BuildError, match="--ink"):
         bs.extract_theme_css("<style>:root{--bg:#fff}</style>")
+
+
+# -- the top bar (R8, R9, R11) ---------------------------------------------------------
+
+PAGE_HTML = "<html><head><title>x</title></head><body>\n<article>a</article></body></html>"
+
+
+@pytest.mark.parametrize(
+    ("route_name", "home"),
+    [
+        ("index.html", "index.html"),
+        ("x.html", "index.html"),
+        ("guides/x.html", "../index.html"),
+        ("reference/x.html", "../index.html"),
+    ],
+)
+def test_the_bar_links_are_right_from_every_route_depth(route_name: str, home: str) -> None:
+    out = bs.insert_bar(PAGE_HTML, route_name, "https://github.com/o/r", "/*bar*/")
+    nav = re.search(r'<nav class="site-bar".*?</nav>', out, re.DOTALL)
+    assert nav is not None
+    hrefs = re.findall(r'href="([^"]+)"', nav.group(0))
+    assert hrefs == [
+        home,
+        f"{home}#explainers",
+        f"{home}#guides",
+        f"{home}#reference",
+        "https://github.com/o/r",
+    ]
+    assert "super-fr" in nav.group(0)
+
+
+def test_the_bar_sits_right_after_the_body_tag_and_its_style_before_the_head_closes() -> None:
+    out = bs.insert_bar(PAGE_HTML, "x.html", "https://github.com/o/r", "/*bar*/")
+    assert re.search(r'<body>\s*<nav class="site-bar"', out)
+    assert "<style>/*bar*/</style></head>" in out
+    assert out.count('site-bar"') == 1
+    out2 = bs.insert_bar(
+        PAGE_HTML.replace("<body>", '<body class="a">'), "x.html", "https://x/y", "/**/"
+    )
+    assert re.search(r'<body class="a">\s*<nav class="site-bar"', out2)
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<html><head></head><p>no body</p></html>",
+        "<html><head></head><body><body></body></html>",
+        "<html><body>no head close</body></html>",
+        "<html><head></head><head></head><body></body></html>",
+    ],
+)
+def test_a_page_that_cannot_take_the_bar_exactly_once_is_refused(html: str) -> None:
+    with pytest.raises(bs.BuildError, match="y/x.html"):
+        bs.insert_bar(html, "y/x.html", "https://github.com/o/r", "/**/")
+
+
+def _mini_repo(tmp_path: Path) -> tuple[Path, Path]:
+    root = tmp_path / "repo"
+    (root / ".fr").mkdir(parents=True)
+    (root / "docs").mkdir()
+    (root / ".fr" / "docs.yaml").write_text("pages:\n  - docs/*.md\n")
+    for name in ("a", "b"):
+        (root / "docs" / f"{name}.md").write_text(f"---\ntitle: {name}\n---\n\nBody {name}\n")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    craft = tmp_path / "craft"
+    (craft / "tools").mkdir(parents=True)
+    (craft / "tools" / "render_explainer.py").write_text("")
+    (craft / bs.FONTS_SUBDIR).mkdir(parents=True)
+    return root, craft
+
+
+def _fake_renderer(bad: str | None):
+    good = (
+        "<html><head><style>@font-face{src:url(data:font/woff2;base64,AA)}</style></head>"
+        "<body><article>x</article></body></html>"
+    )
+
+    def render(renderer, fonts, source, out):
+        html = good
+        if bad and source.name == f"{bad}.md":
+            html = "<html><head></head><p>no body at all</p></html>"
+        out.write_text(html, encoding="utf-8")
+        return html
+
+    return render
+
+
+def test_a_page_that_cannot_take_the_bar_leaves_no_file_in_the_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fake_renderer("b"))
+    with pytest.raises(bs.BuildError, match="guides/b.html"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not (out / "guides" / "b.html").exists()
+    assert not list(out.rglob("*.html"))
+
+
+def test_a_page_with_no_embedded_font_leaves_no_file_in_the_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    out = tmp_path / "out"
+
+    def render(renderer, fonts, source, target):
+        html = "<html><head></head><body>x</body></html>"
+        target.write_text(html, encoding="utf-8")
+        return html
+
+    monkeypatch.setattr(bs, "render_page", render)
+    with pytest.raises(bs.BuildError, match="@font-face"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not list(out.rglob("*.html"))
+
+
+def test_a_good_build_writes_every_page_with_its_bar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fake_renderer(None))
+    written = bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert sorted(written) == ["guides/a.html", "guides/b.html"]
+    assert 'href="../index.html"' in (out / "guides" / "a.html").read_text()
+
+
+def test_layout_landing_on_a_page_not_routed_to_index_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    (root / "docs" / "a.md").write_text("---\ntitle: a\nlayout: landing\n---\n\nBody\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    monkeypatch.setattr(bs, "render_page", _fake_renderer(None))
+    out = tmp_path / "out"
+    with pytest.raises(bs.BuildError, match=r"docs/a.md.*landing"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not list(out.rglob("*.html"))
