@@ -1,0 +1,104 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-12-landing-front-page
+repo: derio-net/super-fr
+rows:
+  - id: site-front-page-landing
+    capability: published docs
+    acceptance: 'The site''s front page is a landing page: a hero with a call to action
+      to the fr-goal explainer, a how-a-run-goes strip, six to eight numbered sections
+      each linking the page that explains it, every other page listed by group, and
+      a closing call to action, in the broadsheet identity in light and dark'
+    origin:
+    - spec:2026-11-12-landing-front-page#R1
+    - spec:2026-11-12-landing-front-page#R2
+    - spec:2026-11-12-landing-front-page#R3
+    - spec:2026-11-12-landing-front-page#R4
+    - spec:2026-11-12-landing-front-page#R5
+    - spec:2026-11-12-landing-front-page#R6
+    - spec:2026-11-12-landing-front-page#R10
+    - spec:2026-11-12-landing-front-page#R11
+    - spec:2026-11-12-landing-front-page#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve
+      - super-fr:tests/unit/test_build_site.py#test_guarantee_sections_are_numbered_in_order
+    status: ci
+    notes: Unit tests parse this repo's index.md as a landing (six to eight numbered
+      sections, links resolve) and render every kind; the site-build CI job renders
+      it on every PR; screenshots taken at implement.
+    verify: none
+    visual:
+      states:
+      - desktop-dark
+      - desktop-light
+      - phone-width-390
+      interactions:
+      - follow-primary-button
+      - follow-numbered-section-link
+      - jump-to-explainers-anchor
+  - id: site-landing-build-refuses-malformed
+    capability: published docs
+    acceptance: The site build fails, naming the page and the defect, rather than publish
+      a degraded front page or a page without its top bar
+    origin:
+    - spec:2026-11-12-landing-front-page#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_an_unknown_section_kind_is_refused
+      - super-fr:tests/unit/test_build_site.py#test_a_page_that_cannot_take_the_bar_leaves_no_file_in_the_output
+    status: ci
+    notes: 'Unit tests drive each refusal over fixture sources: hero keys, unknown kind,
+      guarantee problem and link, section count, flow list, pages marker, misplaced
+      layout, bar anchors, missing fonts; none leaves a file.'
+    verify: none
+  - id: site-top-bar-every-page
+    capability: published docs
+    acceptance: Every built page carries the same top bar, whose links to the front
+      page, its Explainers, Guides and Reference lists and GitHub work from every route
+    origin:
+    - spec:2026-11-12-landing-front-page#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_the_bar_links_are_right_from_every_route_depth
+      - super-fr:tests/unit/test_build_site.py#test_a_good_build_writes_every_page_with_its_bar
+    status: ci
+    notes: Unit tests insert the bar at each route depth and check its links; the site-build
+      CI job fails when a page cannot take it; screenshots taken at implement.
+    verify: none
+    visual:
+      states:
+      - explainer-page
+      - guide-page
+      - reference-page
+      - phone-width-390
+      interactions:
+      - bar-home-link-from-guide
+  - id: site-why-fr-essay-kept
+    capability: published docs
+    acceptance: The former front-page essay is published as its own explainer, linked
+      from the front page
+    origin:
+    - spec:2026-11-12-landing-front-page#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_every_configured_page_parses_with_fr_docs
+    status: ci
+    notes: fr docs check and the page-parsing tripwire (which now lists why-fr.md) run
+      in CI; the question-round tripwire covers it too.
+    verify: none
+  - id: site-front-page-published
+    capability: published docs
+    acceptance: The published site serves the landing front page, and its buttons, top
+      bar and page list lead to working pages
+    origin:
+    - spec:2026-11-12-landing-front-page#R1
+    - spec:2026-11-12-landing-front-page#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
