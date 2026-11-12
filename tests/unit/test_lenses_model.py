@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
+from fr.lenses.model import LensError, parse_config, parse_lens
+
 
 def test_the_package_imports() -> None:
     import fr.lenses
 
     assert fr.lenses.__doc__
-
-
-import pytest  # noqa: E402
-
-from fr.lenses.model import LensError, parse_config, parse_lens  # noqa: E402
 
 
 def test_parse_lens_accepts_a_manifest() -> None:
