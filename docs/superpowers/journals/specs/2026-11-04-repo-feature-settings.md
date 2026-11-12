@@ -881,3 +881,8 @@ fr acceptance amend, the record kind's amendment shape and the stale-base refusa
 ### phase-split-2026-11-12-acceptance-fragments-p4 · decision · ask: R20-R22, derived and published reports
 
 Reports, CI publishing, the Pages visibility check and report_comment are one ask with its own row, acceptance-reports-derived-published.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-acceptance-fragments-p1 created=2026-11-12T00:28:48+00:00 -->
+### tier-2026-11-12-acceptance-fragments-p1 · decision · fold semantics are the design judgement every acceptance reader will rely on
+
+Ordering by first-parent introduction, pending vs merged, revisions and contested rows are decided here and read by check, status, debt, self-review, PR body and close-out.
