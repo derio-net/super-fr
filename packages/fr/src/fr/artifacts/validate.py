@@ -88,6 +88,10 @@ def validate_artifact(kind: ArtifactKind, path: Path) -> tuple[ValidationIssue, 
     def issue(message: str) -> tuple[ValidationIssue, ...]:
         return (ValidationIssue(kind=kind.name, path=path, message=message),)
 
+    if kind.retired:
+        return issue(
+            f"retired kind: run fr migrate artifacts --yes (no fr reads {kind.locator} any more)"
+        )
     try:
         version = kind.read_version(path)
     except ArtifactStampError as e:

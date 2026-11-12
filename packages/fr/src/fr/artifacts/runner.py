@@ -100,6 +100,13 @@ class SchemaMigration:
     fn: Callable[[Path], Iterable[Path] | None]
     description: str = ""
     companions: Callable[[Path], Iterable[Path]] | None = None
+    retires: bool = False
+    """The kind's LAST hop, which deletes the artifact (spec
+    `2026-11-04-repo-feature-settings-design` R19: the matrix split into
+    fragments). Its `fn` removes `path` and returns what it wrote instead; the
+    runner writes no stamp, records the removal (`PlannedAction.removed`) and
+    fails the artifact if the path is still there. Only the last hop may retire:
+    `MigrationRegistry.register` refuses anything else."""
 
     def __post_init__(self) -> None:
         if self.to_version <= self.from_version:
@@ -154,6 +161,8 @@ class PlannedAction:
     repair: str | None = None
     also_wrote: tuple[Path, ...] = ()
     """Companion files the migration wrote beside `path` (`SchemaMigration.fn`)."""
+    removed: tuple[Path, ...] = ()
+    """Paths the step deleted (a retiring step's own artifact), staged as removals."""
 
     @property
     def is_repair(self) -> bool:
@@ -193,7 +202,7 @@ class MigrationReport:
         seen: dict[Path, None] = {}
         for a in self.applied:
             seen[a.path] = None
-            for companion in a.also_wrote:
+            for companion in (*a.also_wrote, *a.removed):
                 seen[companion] = None
         return tuple(seen)
 
@@ -231,9 +240,21 @@ class MigrationRegistry:
 
     def register(self, migration: SchemaMigration | Repair) -> SchemaMigration | Repair:
         """Register `migration`. Returns it, so it can be used as a decorator target."""
-        self.kind(migration.kind)  # unknown kind fails at import, not at run time
+        kind = self.kind(migration.kind)  # unknown kind fails at import, not at run time
         if isinstance(migration, SchemaMigration):
             existing = self._schema.setdefault(migration.kind, [])
+            if migration.retires and migration.to_version != kind.current_version:
+                raise ValueError(
+                    f"{migration.kind}: a retiring migration must be the kind's last hop "
+                    f"(to version {kind.current_version}), got "
+                    f"{migration.from_version} -> {migration.to_version}"
+                )
+            for m in existing:
+                if m.retires and migration.from_version >= m.to_version:
+                    raise ValueError(
+                        f"{migration.kind}: {m.from_version} -> {m.to_version} retires the "
+                        f"kind, so no migration may start at {migration.from_version}"
+                    )
             for m in existing:
                 if m.from_version == migration.from_version:
                     raise DuplicateMigrationError(
@@ -408,6 +429,17 @@ def _actions_for(
     chain, failure = _chain_for(reg, name, kind, path)
     if failure is not None:
         return actions, [failure]
+    if kind.retired and not chain:
+        # A file of a retired kind is never current: nothing reads it any more.
+        return actions, [
+            FailedAction(
+                name,
+                path,
+                f"{name} retired",
+                f"retired kind: no fr reads {kind.locator} any more, and no migration moves "
+                f"a file already at version {kind.current_version}; remove it by hand",
+            )
+        ]
     for m in chain:
         actions.append(
             PlannedAction(
@@ -599,6 +631,32 @@ def _apply_to_one(
             # Unstamped on purpose: the artifact stays stale, so the next run
             # retries it instead of skipping a half-migration forever.
             failed.append(FailedAction(name, path, step.summary, f"{type(e).__name__}: {e}"))
+            return applied, failed
+        if step.retires:
+            # The last hop deleted the artifact: there is nothing to stamp, and
+            # no repair can run over a file that is gone.
+            if path.exists():
+                failed.append(
+                    FailedAction(
+                        name,
+                        path,
+                        step.summary,
+                        f"the retiring step returned but {path.name} still exists",
+                        also_wrote=also_wrote,
+                    )
+                )
+                return applied, failed
+            applied.append(
+                PlannedAction(
+                    kind=name,
+                    path=path,
+                    summary=step.summary,
+                    from_version=step.from_version,
+                    to_version=step.to_version,
+                    also_wrote=also_wrote,
+                    removed=(path,),
+                )
+            )
             return applied, failed
         try:
             kind.write_version(path, step.to_version)

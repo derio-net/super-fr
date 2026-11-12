@@ -315,6 +315,23 @@ def fold(
     return result
 
 
+def fold_texts(working: dict[str, str]) -> Effective:
+    """The fold of *working* (repo-relative fragment path → text) alone, as pending
+    entries over no merged history: no git, no disk. What a migration validates the
+    fragments it is about to write against (R19)."""
+
+    def no_git(args: Sequence[str], stdin: bytes | None) -> subprocess.CompletedProcess[bytes]:
+        raise FoldError(f"an in-memory fold runs no git (asked for `git {' '.join(args)}`)")
+
+    return _fold(no_git, "", dict(sorted(working.items())))
+
+
+def load_effective(repo_root: Path, *, ref: str | None = None) -> Matrix:
+    """The effective matrix of *repo_root* (`fold(...).matrix`): what every reader of
+    acceptance rows reads (spec 2026-11-04 R17)."""
+    return fold(repo_root, ref=ref).matrix
+
+
 def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
     notices: list[str] = []
     merged = _tip_fragments(run, sha) if sha else {}

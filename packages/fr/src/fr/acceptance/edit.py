@@ -302,3 +302,20 @@ def describe_move(old: Row, new: Row) -> str:
     for walk in new.walks[len(old.walks) :]:
         parts.append(f"walk {walk.outcome} on {walk.harness}")
     return f"{new.status} ({', '.join(parts) or 'unchanged'})"
+
+
+FRAGMENT_HEADER = """\
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+"""
+
+
+def render_fragment(feature: str, repo: str, rows: Iterable[Row]) -> str:
+    """A whole fragment's text: the header, its identity, then every row through
+    `render_row_block` — the one renderer, so a fragment re-rendered from its own
+    parse is byte-identical (spec 2026-11-04 R19)."""
+    body = "".join(render_row_block(row) for row in rows)
+    return f"{FRAGMENT_HEADER}schema_version: 1\nfeature: {feature}\nrepo: {repo}\nrows:\n{body}"

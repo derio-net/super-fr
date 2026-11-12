@@ -443,7 +443,6 @@ def _seed_closed_world(root: Path) -> dict[str, Path]:
 
 
 def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Path) -> None:
-    from fr.acceptance.model import load_matrix
     from fr.run.model import parse_run_state
 
     paths = _seed_closed_world(tmp_path)
@@ -467,17 +466,10 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
     # named. For the run cursor this is now the load-bearing assertion: it WAS
     # written to, and it must still parse afterwards.
     parse_run_state(paths["run"].read_text())
-    from fr.artifacts import artifact_kind
-
-    matrix_current = artifact_kind("matrix").current_version
-    assert load_matrix(paths["matrix"]).schema_version == matrix_current
-    stamped = paths["matrix"].read_text().splitlines(keepends=True)
-    stamp_line = f"schema_version: {matrix_current}\n"
-    assert [ln for ln in stamped if ln != stamp_line] == [
-        "org: derio-net\n",
-        "repo: super-fr\n",
-        "rows:\n",
-    ], "the matrix body is untouched — only the stamp line was added"
+    # The matrix kind is retired (spec 2026-11-04-repo-feature-settings R19): an
+    # empty matrix is split into no fragment at all and deleted.
+    assert not paths["matrix"].exists()
+    assert not (tmp_path / "docs" / "acceptance" / "features").exists()
 
 
 def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> None:
@@ -921,3 +913,95 @@ def test_a_stamp_write_that_raises_is_that_artifacts_failure_not_the_runs(
     assert [f.path for f in report.failed] == [meta]
     assert "disk full" in report.failed[0].error
     assert report.failed[0].also_wrote == (companion,)
+
+
+# --- a retiring step (spec 2026-11-04-repo-feature-settings R19) ---------
+#
+# The runner stamps the path it migrated once `fn` returns, so a migration could
+# never delete its own artifact. A `retires=True` step is the kind's last hop:
+# its `fn` deletes the artifact (and returns what it wrote instead), and the
+# runner writes no stamp, records the removal, and checks the path is gone.
+
+
+def _retiring(companion: Path, *, delete: bool = True):
+    def fn(path: Path) -> list[Path]:
+        companion.parent.mkdir(parents=True, exist_ok=True)
+        companion.write_text("moved\n")
+        if delete:
+            path.unlink()
+        return [companion]
+
+    return fn
+
+
+def test_a_retiring_step_deletes_its_artifact_and_writes_no_stamp(tmp_path: Path) -> None:
+    reg = _registry(current_version=2)
+    companion = tmp_path / "docs" / "moved.yaml"
+    reg.register(SchemaMigration("plan", 1, 2, _retiring(companion), retires=True))
+    meta = _plan(tmp_path, "a", version=1)
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg)
+
+    assert report.ok, report.failed
+    assert not meta.exists()
+    (action,) = report.applied
+    assert action.removed == (meta,)
+    assert action.also_wrote == (companion,)
+    assert set(report.changed_paths) == {meta, companion}
+
+
+def test_a_retiring_step_whose_artifact_survives_fails_and_stamps_nothing(
+    tmp_path: Path,
+) -> None:
+    reg = _registry(current_version=2)
+    companion = tmp_path / "docs" / "moved.yaml"
+    reg.register(SchemaMigration("plan", 1, 2, _retiring(companion, delete=False), retires=True))
+    meta = _plan(tmp_path, "a", version=1)
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg)
+
+    assert not report.applied
+    (failure,) = report.failed
+    assert "still exists" in failure.error
+    assert failure.also_wrote == (companion,)
+    assert read_version("plan", meta) == 1
+
+
+def test_a_retiring_step_that_is_not_the_last_hop_is_a_registry_error() -> None:
+    reg = _registry(current_version=3)
+    with pytest.raises(ValueError, match="last hop"):
+        reg.register(SchemaMigration("plan", 1, 2, lambda p: None, retires=True))
+    reg = _registry(current_version=3)
+    reg.register(SchemaMigration("plan", 2, 3, lambda p: None, retires=True))
+    with pytest.raises(ValueError, match="retires"):
+        reg.register(SchemaMigration("plan", 3, 4, lambda p: None))
+
+
+def test_a_file_of_a_retired_kind_is_stale_even_at_its_last_version(tmp_path: Path) -> None:
+    kind = replace(ARTIFACT_KINDS["plan"], current_version=2, retired=True)
+    reg = MigrationRegistry(kinds={kind.name: kind})
+    _plan(tmp_path, "a", version=2)
+
+    assert is_stale(tmp_path, registry=reg)
+
+
+def test_a_file_of_a_retired_kind_fails_validation_naming_the_migration(tmp_path: Path) -> None:
+    from fr.artifacts.validate import validate_artifact
+
+    kind = replace(ARTIFACT_KINDS["plan"], current_version=2, retired=True)
+    meta = _plan(tmp_path, "a", version=2)
+
+    (issue,) = validate_artifact(kind, meta)
+    assert "retired kind: run fr migrate artifacts --yes" in issue.message
+
+
+def test_every_shipped_schema_migration_but_the_matrix_split_keeps_stamping() -> None:
+    """The retiring flag is new; every hop that existed before it is unchanged."""
+    retiring = [
+        (m.kind, m.from_version, m.to_version)
+        for name in ARTIFACT_KINDS
+        for m in MIGRATIONS.schema_migrations(name)
+        if m.retires
+    ]
+    assert retiring == [("matrix", 5, 6)]
+    assert [k for k, kind in ARTIFACT_KINDS.items() if kind.retired] == ["matrix"]

@@ -105,6 +105,10 @@ class ArtifactKind:
     """Which of the locator's matches are this kind's, when a glob cannot say it
     exactly; `None` owns every match. The `agents` kind is the two files fr ships, not
     every `fr-*.md` a repo keeps beside them (p7-r5)."""
+    retired: bool = False
+    """No `fr` reads this kind any more: its last migration deleted it (spec
+    `2026-11-04-repo-feature-settings-design` R19, the matrix). Any file still
+    under the locator is stale, and `fr validate artifacts` says so."""
 
     def read_version(self, path: Path) -> int:
         """The version `path` is on — `PRE_FRAMEWORK_VERSION` when unstamped."""
@@ -490,7 +494,13 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `walked`/`manual` (spec `2026-10-11-debt-engine-design` §D),
             # migration `fr.artifacts.matrix_status_split`, every hop reading
             # through the frozen `fr.acceptance.legacy.MatrixV4`.
-            current_version=5,
+            # 5 -> 6 RETIRES the kind: the matrix is split into per-feature
+            # fragments (the `acceptance-fragment` kind below) and deleted, with
+            # its committed reports (spec `2026-11-04-repo-feature-settings-design`
+            # R19), migration `fr.artifacts.matrix_fragments`, read through the
+            # frozen `fr.acceptance.legacy.MatrixV5`. A matrix still on disk is stale.
+            current_version=6,
+            retired=True,
             locator="docs/acceptance/matrix.yaml",
             stamp="`schema_version` in `matrix.yaml`",
             read_stamp=_read_yaml_stamp,
