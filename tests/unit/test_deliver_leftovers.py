@@ -20,6 +20,7 @@ from fr.run.model import load_run_state
 from fr.verification.exit import Exit as RunExit
 from fr.verification.exit import run_exit
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.test_verification_walk import RUN, SPEC, SPEC_REF, _git, _repo
 
 IDENTITY = ("o", "proj")
@@ -28,7 +29,8 @@ STAMP = "2026-10-14T00:00:00+00:00"
 
 def _rows(root: Path, rows: list[dict[str, object]]) -> None:
     base = {"capability": "c", "origin": [f"{SPEC_REF}#R1"]}
-    (root / "docs/acceptance/matrix.yaml").write_text(
+    write_matrix_fragments(
+        root,
         yaml.safe_dump(
             {
                 "schema_version": 4,
@@ -36,7 +38,7 @@ def _rows(root: Path, rows: list[dict[str, object]]) -> None:
                 "repo": "proj",
                 "rows": [{**base, "acceptance": f"{r['id']} works", **r} for r in rows],
             }
-        )
+        ),
     )
 
 

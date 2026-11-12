@@ -21,6 +21,7 @@ from fr.journal.model import (
 )
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.fakes import FakeGhClient, FakeGhError
 from tests.unit.test_debt_engine import NOW, FakeForge
 from tests.unit.test_merge_evidence import _add_remote, _init
@@ -90,9 +91,7 @@ def _repo(tmp_path: Path) -> Path:
         check=True,
     )
     (tmp_path / "docs/acceptance").mkdir(parents=True)
-    (tmp_path / "docs/acceptance/matrix.yaml").write_text(
-        "schema_version: 5\norg: acme\nrepo: widgets\nrows: []\n"
-    )
+    write_matrix_fragments(tmp_path, "schema_version: 5\norg: acme\nrepo: widgets\nrows: []\n")
     return tmp_path
 
 
@@ -383,9 +382,7 @@ def test_a_matrix_naming_another_repo_closes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _repo(tmp_path)
-    (root / "docs/acceptance/matrix.yaml").write_text(
-        "schema_version: 5\norg: mallory\nrepo: x\nrows: []\n"
-    )
+    write_matrix_fragments(root, "schema_version: 5\norg: mallory\nrepo: x\nrows: []\n")
     owed = _owed()
     _journal(root, [owed, _filed(owed, "#12")])
     gh = OwnedGh()

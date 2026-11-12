@@ -15,6 +15,8 @@ from fr.record import apply as engine
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
+
 SLUG = "2026-09-25-verbs"
 PLAN_REL = f"docs/superpowers/plans/{SLUG}"
 
@@ -58,9 +60,7 @@ def repo(tmp_path: Path) -> Path:
         prose="# p\n",
     )
     (root / "docs" / "acceptance").mkdir()
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(
-        "# the registry\norg: derio-net\nrepo: super-fr\nrows:\n"
-    )
+    write_matrix_fragments(root, "# the registry\norg: derio-net\nrepo: super-fr\nrows:\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "plan", "--no-verify")
     return root

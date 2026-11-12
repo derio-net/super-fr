@@ -212,6 +212,7 @@ import pytest  # noqa: E402
 from fr.commands import archive_cmd  # noqa: E402
 from fr.ghclient import UnsupportedForgeOperation  # noqa: E402
 
+from tests.unit.acceptance_helpers import write_matrix_fragments  # noqa: E402
 from tests.unit.fakes import FakeGhClient, FakeGhError  # noqa: E402
 from tests.unit.test_archive_cmd import _add_plan, _commit, _invoke, _repo, _seed  # noqa: E402
 
@@ -254,7 +255,7 @@ def _open_ends_repo(tmp_path: Path, *, extra: list[JournalEntry] | None = None) 
     repo = _repo(tmp_path)
     _add_plan(repo, SLUG, ticked=True)
     (repo / "docs/acceptance").mkdir(parents=True)
-    (repo / "docs/acceptance/matrix.yaml").write_text(MATRIX)
+    write_matrix_fragments(repo, MATRIX)
     _journal(
         repo,
         "plan",
@@ -568,7 +569,7 @@ def test_each_issue_names_only_its_own_plan_with_two_plans_archived(
         _add_plan(repo, slug, ticked=True)
         _journal(repo, "plan", slug, [_entry("plan", fid, f"finding {fid}")])
     (repo / "docs/acceptance").mkdir(parents=True)
-    (repo / "docs/acceptance/matrix.yaml").write_text(MATRIX)
+    write_matrix_fragments(repo, MATRIX)
     _seed(repo)
     gh = DedupGh()
     result = _invoke(monkeypatch, repo, gh, ["archive", "--all", "--issues", "all"])

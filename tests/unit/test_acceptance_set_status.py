@@ -19,7 +19,7 @@ import yaml
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import FRAGMENTS_REL, make_repo, row
 
 runner = CliRunner()
 
@@ -32,13 +32,14 @@ def _invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
 
 
 def _matrix(root: Path) -> Path:
-    return root / "docs" / "acceptance" / "matrix.yaml"
+    """The fragment `make_repo`'s rows land in (their origin spec is `s`)."""
+    return root / FRAGMENTS_REL / "s.yaml"
 
 
 def _row(root: Path, row_id: str):
-    from fr.acceptance.model import load_matrix
+    from fr.acceptance.fold import load_effective
 
-    return next(r for r in load_matrix(_matrix(root)).rows if r.id == row_id)
+    return next(r for r in load_effective(root).rows if r.id == row_id)
 
 
 def test_set_status_moves_the_row_in_place(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,11 +87,9 @@ def test_set_status_requires_notes(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert _matrix(root).read_text() == before
 
 
-def test_set_status_keeps_the_reports_in_sync(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """`check` gates report drift, so a flip that did not regenerate the set
-    would turn the next check red — the hand-edit trap, one layer on."""
+def test_set_status_writes_no_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reports are derived, never committed (spec 2026-11-04 R20): a flip writes
+    the fragment and nothing else, and the next check is green."""
     root = make_repo(tmp_path, TWO_ROWS)
     result = _invoke(
         root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "why"
@@ -98,25 +97,9 @@ def test_set_status_keeps_the_reports_in_sync(
     assert result.exit_code == 0, result.output
     d = root / "docs" / "acceptance"
     for name in ("report_local.html", "report_linked.html", "report_linked.md"):
-        assert (d / name).exists(), f"set-status must regenerate {name}"
+        assert not (d / name).exists(), f"set-status wrote {name}"
     check = _invoke(root, monkeypatch, "check")
     assert check.exit_code == 0, check.output
-
-
-def test_set_status_refreshes_reports_that_already_existed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = make_repo(tmp_path, TWO_ROWS)
-    assert _invoke(root, monkeypatch, "report", "--deterministic").exit_code == 0
-    stale = (root / "docs" / "acceptance" / "report_linked.md").read_text()
-    assert "not-implemented" in stale
-    result = _invoke(
-        root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "why"
-    )
-    assert result.exit_code == 0, result.output
-    fresh = (root / "docs" / "acceptance" / "report_linked.md").read_text()
-    assert fresh != stale
-    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
 
 
 def test_unknown_id_creates_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,9 +113,9 @@ def test_unknown_id_creates_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert result.exit_code != 0
     assert "targett" in result.output
     assert _matrix(root).read_text() == before
-    from fr.acceptance.model import load_matrix
+    from fr.acceptance.fold import load_effective
 
-    assert [r.id for r in load_matrix(_matrix(root)).rows] == ["first", "target"]
+    assert [r.id for r in load_effective(root).rows] == ["first", "target"]
 
 
 def test_unknown_status_is_refused_with_the_valid_set(
@@ -289,7 +272,7 @@ def test_a_row_id_quoted_inside_another_rows_notes_does_not_hijack_the_span(
     """`alpha`'s notes contain a literal `- id: beta` at deeper indent. Flipping
     `beta` must edit `beta`, leaving `alpha` byte-identical."""
     root = make_repo(tmp_path, _HOSTILE)
-    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix = _matrix(root)
     before = matrix.read_text()
 
     result = _invoke(
@@ -316,7 +299,7 @@ def test_an_id_that_is_a_prefix_of_another_edits_only_the_exact_match(
     (`acceptance-nag-channels` beside `acceptance-nag-*`), so a substring match
     would silently edit the wrong row — or both."""
     root = make_repo(tmp_path, _PREFIX_PAIR)
-    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix = _matrix(root)
 
     result = _invoke(
         root, monkeypatch, "set-status", "--id", "foo-2", "--status", "ci", "--notes", "moved"
@@ -386,20 +369,17 @@ def test_drop_levels_removes_every_copy_of_a_duplicated_existing_ref() -> None:
 
 _A = "own:tests/test_a.py"
 _B = "own:tests/test_b.py"
-_REPORTS = ("report_local.html", "report_linked.html", "report_linked.md")
 
 
 def _two_ref_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str = "unwired") -> Path:
     root = make_repo(tmp_path, row(id="target", status=status, unit=f'"{_A}", "{_B}"'))
     (root / "tests" / "test_b.py").write_text("def test_b(): pass\n")
     (root / "tests" / "test_c.py").write_text("def test_c(): pass\n")
-    assert _invoke(root, monkeypatch, "report", "--deterministic").exit_code == 0
     return root
 
 
 def _snapshot(root: Path) -> dict[str, bytes]:
-    d = root / "docs" / "acceptance"
-    return {name: (d / name).read_bytes() for name in ("matrix.yaml", *_REPORTS)}
+    return {p.name: p.read_bytes() for p in sorted((root / FRAGMENTS_REL).glob("*.yaml"))}
 
 
 def _set_status(root: Path, monkeypatch: pytest.MonkeyPatch, *extra: str):
@@ -428,11 +408,7 @@ def test_drop_level_removes_the_ref_and_keeps_the_other(
     assert target.levels["unit"] == (_A,)
     assert target.status == "ci"
     assert target.notes == "re-pointed"
-    after = _snapshot(root)
-    for name in _REPORTS:
-        assert (root / "docs" / "acceptance" / name).exists()
-        assert after[name] != before[name], f"{name} was not regenerated"
-    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+    assert _snapshot(root) != before
 
 
 def test_drop_level_of_an_absent_ref_changes_nothing(
@@ -540,11 +516,6 @@ def test_set_status_verify_post_merge_sets_it_on_an_existing_row(
     )
     assert result.exit_code == 0, result.output
     assert _row(root, "target").verify == "live"
-    # the report set regenerates in the same call, as every other flip does
-    d = root / "docs" / "acceptance"
-    for name in ("report_local.html", "report_linked.html", "report_linked.md"):
-        assert (d / name).exists()
-    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
 
 
 def test_set_status_without_verify_preserves_the_existing_value(
@@ -617,6 +588,7 @@ def _empty_note_repo(tmp_path: Path) -> Path:
     root = make_repo(tmp_path, LINK_ROWS)
     path = _matrix(root)
     path.write_text(path.read_text().replace('notes: "n"', 'notes: ""', 1))
+    assert 'notes: ""' in path.read_text()
     return root
 
 

@@ -237,3 +237,19 @@ def test_a_dry_run_writes_nothing(tmp_path: Path, version: int) -> None:
     ]
     assert (root / "docs" / "acceptance" / "matrix.yaml").exists()
     assert not (root / FEATURES).exists()
+
+
+def test_the_split_converts_line_anchors(tmp_path: Path) -> None:
+    """gh#531's conversion rides on the split now that no repair can run after it."""
+    text = FIXTURE.read_text().replace(
+        "super-fr:tests/unit/test_hooks_acceptance_nag.py", "super-fr:tests/unit/test_w.py#L1", 1
+    )
+    assert "test_w.py#L1" in text, "fixture drift: pick another ref to re-point"
+    root = _repo(tmp_path, text)
+    (root / "tests" / "unit").mkdir(parents=True)
+    (root / "tests" / "unit" / "test_w.py").write_text("def test_w(): pass\n")
+
+    run_migrations(root, dry_run=False)
+
+    rows = {r.id: r for r in fold(root).matrix.rows}
+    assert "super-fr:tests/unit/test_w.py#test_w" in rows["acceptance-nag-channels"].refs()

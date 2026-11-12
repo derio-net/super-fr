@@ -37,6 +37,24 @@ def fragment_text(feature: str, rows_text: str, *, repo: str = "o/r") -> str:
     return f"schema_version: 1\nfeature: {feature}\nrepo: {repo}\nrows:\n{rows_text}"
 
 
+def _raw_blocks(text: str) -> list[str]:
+    """*text*'s top-level list items, each verbatim (the first item's indent)."""
+    import re
+
+    lines = text.splitlines(keepends=True)
+    first = next((ln for ln in lines if re.match(r"^\s*- ", ln)), None)
+    if first is None:
+        return []
+    indent = first[: len(first) - len(first.lstrip())]
+    blocks: list[str] = []
+    for ln in lines:
+        if ln.startswith(indent + "- ") and (not indent or not ln[len(indent)].isspace()):
+            blocks.append(ln)
+        elif blocks:
+            blocks[-1] += ln
+    return blocks
+
+
 def write_fragments(
     root: Path,
     rows: str | Iterable[Mapping[str, Any]],
@@ -44,48 +62,66 @@ def write_fragments(
     repo: str = "o/r",
     feature: str | None = None,
 ) -> list[Path]:
-    """Write *rows* (YAML list-item text, or row mappings) as fragments under *root*,
-    one per origin spec (`legacy` for the rest) unless *feature* names the one.
+    """Write *rows* as fragments under *root*, one per origin spec (`legacy` for the
+    rest) unless *feature* names the one.
 
-    Returns the fragment paths written. With no rows, nothing is written unless
-    *feature* is given (an empty fragment carries the repo's identity)."""
-    if isinstance(rows, str):
-        parsed = yaml.safe_load(rows) if rows.strip() else []
-        items: list[Mapping[str, Any]] = list(parsed or [])
-    else:
-        items = list(rows)
+    *rows* is YAML list-item text (each item kept byte for byte, as a hand-shaped
+    fixture means it) or row mappings (dumped). Returns the fragment paths written.
+    With no rows, nothing is written unless *feature* is given (an empty fragment
+    carries the repo's identity)."""
     folder = root / FRAGMENTS_REL
     folder.mkdir(parents=True, exist_ok=True)
-    groups: dict[str, list[Mapping[str, Any]]] = {}
-    if feature is not None:
-        groups[feature] = items
+    groups: dict[str, list[str]] = {}
+    if isinstance(rows, str):
+        blocks = _raw_blocks(rows)
+        items = [(yaml.safe_load(b) or [{}])[0] for b in blocks]
+        texts = [b if b.endswith("\n") else b + "\n" for b in blocks]
     else:
-        for item in items:
-            groups.setdefault(_feature_of(item), []).append(item)
+        items = [dict(r) for r in rows]
+        texts = []
+        for r in items:
+            dumped = yaml.safe_dump([r], default_flow_style=False, sort_keys=False)
+            texts.append("".join(f"  {ln}\n" if ln else "\n" for ln in dumped.splitlines()))
+    if feature is not None:
+        groups[feature] = texts
+    else:
+        for item, text in zip(items, texts, strict=True):
+            groups.setdefault(_feature_of(item), []).append(text)
     written: list[Path] = []
     for name, group in sorted(groups.items()):
-        body = (
-            yaml.safe_dump([dict(r) for r in group], default_flow_style=False, sort_keys=False)
-            if group
-            else ""
-        )
-        text = fragment_text(
-            name, "".join(f"  {ln}\n" if ln else "\n" for ln in body.splitlines()), repo=repo
-        )
         path = folder / f"{name}.yaml"
-        path.write_text(text)
+        path.write_text(fragment_text(name, "".join(group), repo=repo))
         written.append(path)
     return written
 
 
 def write_matrix_fragments(root: Path, matrix_text: str) -> list[Path]:
     """*matrix_text* in the retired `matrix.yaml` shape (`org`/`repo`/`rows`), written
-    as fragments: what a fixture that used to write the matrix writes now."""
-    data = yaml.safe_load(matrix_text) or {}
+    as fragments with each row's text kept verbatim: what a fixture that used to write
+    the matrix writes now."""
+    import re
+
+    try:
+        data = yaml.safe_load(matrix_text) or {}
+    except yaml.YAMLError:
+        data = None
+    if not isinstance(data, dict) or set(data) - {"schema_version", "org", "repo", "rows"}:
+        # A fixture that means "an unreadable matrix" is an unreadable fragment now.
+        broken = root / FRAGMENTS_REL / "broken.yaml"
+        broken.parent.mkdir(parents=True, exist_ok=True)
+        broken.write_text(matrix_text)
+        return [broken]
     org, name = data.get("org"), data.get("repo")
     repo = f"{org}/{name}" if org and name else "o/r"
-    rows = data.get("rows") or []
-    return write_fragments(root, rows, repo=repo, feature=None if rows else "legacy")
+    found = re.search(r"(?m)^rows:[^\n]*\n", matrix_text)
+    rows_text = matrix_text[found.end() :] if found else ""
+    later = re.search(r"(?m)^[A-Za-z_][\w-]*\s*:", rows_text)  # a key after `rows:`
+    if later:
+        rows_text = rows_text[: later.start()]
+    if not data.get("rows"):
+        # An empty matrix that named its repo keeps that identity in an empty fragment.
+        return write_fragments(root, [], repo=repo, feature="legacy") if org and name else []
+    return write_fragments(root, rows_text, repo=repo)
 
 
 def fragment_rows(root: Path) -> dict[str, dict[str, Any]]:
@@ -155,4 +191,21 @@ def make_repo(
     if ci:
         (root / ".github" / "workflows").mkdir(parents=True)
         (root / ".github" / "workflows" / "ci.yml").write_text("on: push\n")
+    return root
+
+
+RETIRED_MATRIX_REL = "docs/acceptance/matrix.yaml"
+
+
+def make_matrix_repo(
+    tmp_path: Path, matrix_rows: str, *, header: str = MATRIX_HEADER, **kwargs: Any
+) -> Path:
+    """`make_repo`, but holding the RETIRED v5 `matrix.yaml` instead of fragments: for
+    the tests of the matrix kind's own migrations and repairs, which keep that shape on
+    purpose (spec 2026-11-04 R19)."""
+    root = make_repo(tmp_path, matrix_rows, header=header, **kwargs)
+    for path in (root / FRAGMENTS_REL).glob("*.yaml"):
+        path.unlink()
+    stamp = "" if "schema_version" in header else "schema_version: 5\n"
+    (root / RETIRED_MATRIX_REL).write_text(stamp + header + matrix_rows)
     return root

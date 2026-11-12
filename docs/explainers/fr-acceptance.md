@@ -14,17 +14,25 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 acceptance-fragments phase 1 adds the fragment model and fold, which no reader uses yet; the matrix described here is unchanged
+reviewed: 2026-11-12 acceptance-fragments phase 2: rows live in per-feature fragments folded into the matrix, matrix.yaml and its committed reports are retired
 ---
 
 ## Overview: claims, not tests
 
 A green suite can sit on top of a product that does not do what anyone asked, because
-the tests can be about anything. The acceptance matrix, `docs/acceptance/matrix.yaml`,
-is a different kind of list. Each **row** is one business-level claim, written the way an
-operator would say it ("an operator can resume a stopped workspace"), together with where
-it came from, the tests that verify it at each level (unit, api, int, ui), and a
-**status** saying how well it has actually been proven.
+the tests can be about anything. The acceptance matrix is a different kind of list. Each
+**row** is one business-level claim, written the way an operator would say it ("an
+operator can resume a stopped workspace"), together with where it came from, the tests
+that verify it at each level (unit, api, int, ui), and a **status** saying how well it has
+actually been proven.
+
+The rows are kept per feature. Each spec that creates rows owns a **fragment**,
+`docs/acceptance/features/<spec-slug>.yaml`, and the matrix you read is a **fold** of every
+fragment, never a stored file. That is why two branches adding rows for different features
+never conflict: each edits its own fragment. A row cites its spec logically, as
+`spec:<slug>#R<n>`, so archiving the spec moves nothing in the row. (A repo that still has
+the old single `docs/acceptance/matrix.yaml` is split into fragments by
+`fr migrate artifacts --yes`.)
 
 You reach for it in three situations: a repo has behaviour and nobody has written down
 what it promises (backfill); work is shipping and its claims need to move up the scale
@@ -59,8 +67,8 @@ fr acceptance set-status --id webhook-rate-limit --status ci \
     --level unit=example-repo:tests/test_limiter.py#test_rejects_over_budget
 ```
 
-One command rewrites the row in place, adds the test reference that justifies the move,
-and regenerates the three committed reports. `--notes` is required, because a status that
+One command rewrites the row in place in the fragment that holds it, adds the test
+reference that justifies the move, and commits only that fragment. `--notes` is required, because a status that
 moved for no recorded reason is the silent change the matrix forbids. An unknown id is
 refused rather than created; `add` creates.
 
@@ -143,11 +151,10 @@ steers a second session in a neighbouring terminal. The rules that matter:
 
 ## Reports and the gate
 
-`fr acceptance report --deterministic` writes the three committed renderings: a local-link
-HTML page, a GitHub-linked HTML page, and a GitHub-linked Markdown page that github.com
-renders inline. `fr acceptance report --check` verifies they are current; `check` fails on a
-stale one. CI runs the gate on every pull request and push to the default branch and keeps
-a weekly "Acceptance debt" issue up to date from `fr acceptance digest`.
+Reports are derived from the fold and never committed: `fr acceptance report` renders one
+locally whenever you want to look. CI runs the gate on every pull request and push to the
+default branch and keeps a weekly "Acceptance debt" issue up to date from
+`fr acceptance digest`.
 
 ## Limits
 

@@ -9,10 +9,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.cli import app
 from fr.settings import DISABLED
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
 runner = CliRunner()
@@ -142,9 +144,7 @@ def test_self_review_and_proportionality_say_disabled(repo: Path) -> None:
 
 def _with_matrix(root: Path) -> None:
     (root / "docs" / "acceptance").mkdir(parents=True, exist_ok=True)
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(
-        "org: derio-net\nrepo: own\nrows: []\n"
-    )
+    write_matrix_fragments(root, "org: derio-net\nrepo: own\nrows: []\n")
 
 
 @pytest.mark.parametrize("with_matrix", [False, True], ids=["no-matrix", "matrix"])
@@ -164,13 +164,12 @@ def test_p2_r6_check_and_summary_say_disabled_and_exit_0(
 def test_p2_r6_the_staleness_guard_demands_no_rows_under_acceptance_off(repo: Path) -> None:
     """acceptance: off with test_plan: on: a Test Plan spec cited by no row is not stale."""
     from fr.acceptance.check import check
-    from fr.acceptance.model import load_matrix
 
     _with_matrix(repo)
     spec = repo / "docs" / "superpowers" / "specs" / "2026-11-07-x-design.md"
     spec.parent.mkdir(parents=True, exist_ok=True)
     spec.write_text("# S\n\n## Test Plan\n\n1. x\n")
-    result = check(load_matrix(repo / "docs" / "acceptance" / "matrix.yaml"), repo)
+    result = check(load_effective(repo), repo)
     assert not [e for e in result.errors if e.startswith("staleness")], result.errors
 
 

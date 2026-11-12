@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 NOW = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
 REPO = "example-org/widgets"
 SP = "docs/superpowers"
@@ -57,10 +55,12 @@ def publish(repo: Path) -> None:
 
 
 def write_matrix(repo: Path, rows: list[dict[str, Any]]) -> None:
-    org, name = REPO.split("/")
-    p = repo / "docs" / "acceptance" / "matrix.yaml"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(yaml.safe_dump({"schema_version": 5, "org": org, "repo": name, "rows": rows}))
+    """The rows as acceptance fragments (spec 2026-11-04 R16), one per origin spec."""
+    from tests.unit.acceptance_helpers import FRAGMENTS_REL, write_fragments
+
+    for old in (repo / FRAGMENTS_REL).glob("*.yaml"):
+        old.unlink()
+    write_fragments(repo, rows, repo=REPO, feature=None if rows else "legacy")
 
 
 def row(i: str, status: str, **kw: Any) -> dict[str, Any]:

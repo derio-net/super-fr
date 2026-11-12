@@ -68,7 +68,7 @@ def test_init_without_ci_names_no_pipeline_in_the_matrix_or_rule(
 ) -> None:
     root = _repo(tmp_path, remote)
     init(root, "example-org", "demo", backend=backend)  # type: ignore[arg-type]
-    for rel in ("docs/acceptance/matrix.yaml", ".claude/rules/acceptance-matrix.md"):
+    for rel in (".claude/rules/acceptance-matrix.md",):
         text = (root / rel).read_text()
         assert ".github/workflows" not in text, rel
         assert ".gitlab-ci.yml" not in text, rel
@@ -90,8 +90,8 @@ def test_init_scaffolds_the_workflow_beside_an_existing_github_ci(tmp_path: Path
     (root / ".github" / "workflows" / "ci.yml").write_text("on: push\n")
     outcome = init(root, "derio-net", "demo", backend="github")
     assert ".github/workflows/acceptance-report.yml" in outcome.created
-    matrix = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
-    assert ".github/workflows/acceptance-report.yml" in matrix
+    rule = (root / ".claude" / "rules" / "acceptance-matrix.md").read_text()
+    assert ".github/workflows/acceptance-report.yml" in rule
 
 
 def test_init_leaves_an_existing_gitlab_ci_untouched(tmp_path: Path) -> None:
@@ -109,7 +109,7 @@ def test_set_status_ci_refused_in_a_repo_without_ci(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row(id="target", status="unwired"), ci=False)
-    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    matrix = root / "docs" / "acceptance" / "features" / "s.yaml"
     before = matrix.read_text()
     result = _invoke(
         root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "n"

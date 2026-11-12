@@ -13,6 +13,7 @@ from fr.verification.exit import exit_for_spec
 from fr.verification.rows import load_remap
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.requirements_support import row, write_matrix
 from tests.unit.test_plan_acceptance_links import _create_plan, _repo
 from tests.unit.test_plan_self_review_verification import SPEC_REL, _row, _setup
@@ -109,8 +110,8 @@ def _review_warnings(tmp_path: Path, triage: str) -> list[str]:
     repo = _repo(tmp_path, matrix=True)
     (repo / ".fr").mkdir(exist_ok=True)
     (repo / ".fr" / "triage.yaml").write_text(triage)
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text(
-        "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + _row("a")
+    write_matrix_fragments(
+        repo, "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + _row("a")
     )
     (repo / SPEC_REL).write_text(
         "# Toy\n\n## Requirements\n\nR1. x\n\n## Implementation Plans\n\n"

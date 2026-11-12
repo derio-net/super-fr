@@ -68,7 +68,7 @@ def test_init_commits_every_file_it_writes(tmp_path: Path, monkeypatch: pytest.M
     committed = set(_git(root, "show", "--name-only", "--format=", "HEAD").split())
     assert ".claude/rules/acceptance-matrix.md" in committed
     assert ".gitignore" in committed
-    assert "docs/acceptance/matrix.yaml" in committed
+    assert "docs/acceptance/features/.gitkeep" in committed
 
 
 def test_init_reports_an_appended_gitignore_as_modified_not_created(
@@ -98,7 +98,7 @@ def test_init_commits_the_rest_when_one_path_is_gitignored(
     assert result.exit_code == 0, result.output
     assert _git(root, "status", "--porcelain") == ""
     committed = set(_git(root, "show", "--name-only", "--format=", "HEAD").split())
-    assert "docs/acceptance/matrix.yaml" in committed
+    assert "docs/acceptance/features/.gitkeep" in committed
     assert ".claude/rules/acceptance-matrix.md" not in committed
     assert "ignored .claude/rules/acceptance-matrix.md" in result.output
 
@@ -148,7 +148,7 @@ def test_init_on_the_default_branch_writes_but_says_it_did_not_commit(
     _git(root, "checkout", "-q", "main")
     result = _init(root, monkeypatch)
     assert result.exit_code == 0, result.output  # losing the commit never loses the write
-    assert (root / "docs/acceptance/matrix.yaml").is_file()
+    assert (root / "docs/acceptance/features/.gitkeep").is_file()
     assert "not committed" in result.output
 
 
@@ -171,7 +171,7 @@ def test_add_refuses_a_level_ref_into_the_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ref: str
 ) -> None:
     root = make_repo(tmp_path, "")
-    before = (root / "docs/acceptance/matrix.yaml").read_text()
+    before = (root / "docs/acceptance/features/legacy.yaml").read_text()
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     result = runner.invoke(
         app,
@@ -184,7 +184,8 @@ def test_add_refuses_a_level_ref_into_the_pipeline(
     )  # fmt: skip
     assert result.exit_code == 2, result.output
     assert "process directive" in " ".join(result.output.split())  # rich wraps
-    assert (root / "docs/acceptance/matrix.yaml").read_text() == before
+    assert (root / "docs/acceptance/features/legacy.yaml").read_text() == before
+    assert not (root / "docs/acceptance/features/s.yaml").exists()
 
 
 def test_set_status_refuses_adding_a_pipeline_level_ref(

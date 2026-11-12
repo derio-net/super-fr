@@ -30,7 +30,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from fr.artifacts.atomic import write_text_atomic
-from fr.artifacts.runner import MIGRATIONS, Repair
+from fr.artifacts.runner import Repair
 
 REPAIR_NAME = "matrix-name-anchors"
 _LINE_ANCHOR_HINT = re.compile(r"\.py#L\d")
@@ -142,4 +142,7 @@ MATRIX_NAME_ANCHORS_REPAIR = Repair(
     companions=_report_paths,
 )
 
-MIGRATIONS.register(MATRIX_NAME_ANCHORS_REPAIR)
+# Not registered since the matrix kind retired (spec 2026-11-04-repo-feature-settings
+# R19): its last hop deletes the matrix, so no repair could run after it, and the
+# split (`fr.artifacts.matrix_fragments`) applies `conversions` itself. The repair
+# object stays for its own tests and as the definition of the conversion.

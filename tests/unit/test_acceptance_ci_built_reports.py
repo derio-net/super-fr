@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from fr.acceptance.check import check
-from fr.acceptance.model import load_matrix
+from fr.acceptance.fold import load_effective
 from fr.acceptance.report import (
     REPORT_SET,
     ci_built_reports,
@@ -44,13 +44,13 @@ def _repo(tmp_path: Path, gitignore: str) -> Path:
 
 
 def _write_reports(root: Path, *rels: str, stale: bool = False) -> None:
-    rendered = render_committed_set(load_matrix(root / "docs/acceptance/matrix.yaml"), root)
+    rendered = render_committed_set(load_effective(root), root)
     for rel in rels:
         (root / rel).write_text(rendered[rel] + ("<!-- stale -->\n" if stale else ""))
 
 
 def _drift(root: Path) -> list[str]:
-    result = check(load_matrix(root / "docs/acceptance/matrix.yaml"), root)
+    result = check(load_effective(root), root)
     return [e for e in result.errors if "report drift" in e]
 
 

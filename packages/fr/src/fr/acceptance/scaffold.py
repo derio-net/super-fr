@@ -605,10 +605,10 @@ def init(
     # No report is written: reports are derived, never committed (spec
     # 2026-11-04-repo-feature-settings R20). The committed set's ci-built probe is
     # still reported, so an operator sees which paths CI builds.
-    from fr.acceptance.report import ci_built_reports
+    from fr.acceptance.report import ci_built_reports, prune_stale_reports
 
     ci_built = ci_built_reports(root)
-    removed: list[str] = []
+    removed = prune_stale_reports(root)  # a pre-formats `report.github.html`
 
     # `report.html` is the ad-hoc / uncommitted render — gitignore it.
     gitignore = root / ".gitignore"

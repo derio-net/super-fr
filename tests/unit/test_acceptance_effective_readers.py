@@ -198,7 +198,8 @@ def test_plan_self_review_links_rows_from_the_fragments(tmp_path: Path) -> None:
     from fr.parser import parse as parse_plan
     from fr.plan_ops import self_review
 
-    from tests.unit.test_plan_acceptance_links import _create_plan, _repo as plan_repo, _spec
+    from tests.unit.test_plan_acceptance_links import _create_plan, _spec
+    from tests.unit.test_plan_acceptance_links import _repo as plan_repo
 
     def review(where: Path, row_id: str) -> list:
         where.mkdir()

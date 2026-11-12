@@ -28,6 +28,7 @@ from fr.triage.batch_drive import (
 from fr.triage.ledger import LedgerRead
 from fr.triage.views import drive_snapshot
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.test_triage_batch_dispatch import FakeRunner
 from tests.unit.test_triage_batch_drive import NOW, _dispatched, _kinds, _snap
 from tests.unit.test_triage_batch_drive_cmd import (
@@ -412,7 +413,7 @@ def _ledger_repo(tmp_path: Path, *, walked: bool, section: str | None = None,
     _git(clone, "push", "--quiet", "origin", "HEAD:main")
     _git(clone, "fetch", "--quiet", "origin")
     # The working tree moves on: the read is the default branch's, never the checkout's.
-    (clone / "docs/acceptance/matrix.yaml").write_text("not: a matrix\n")
+    write_matrix_fragments(clone, "not: a matrix\n")
     return Checkout(clone)
 
 

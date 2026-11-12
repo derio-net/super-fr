@@ -26,6 +26,8 @@ from fr.plan_ops import PhaseSpec, ReviewIssue, _phase_sizing_issues, create
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
+
 runner = CliRunner()
 
 SPEC_REL = "docs/superpowers/specs/2026-09-28-toy-design.md"
@@ -75,7 +77,7 @@ def _repo(tmp_path: Path, *, matrix: bool = True, requirements: str | None = REQ
     (tmp_path / "docs" / "superpowers" / "plans").mkdir()
     if matrix:
         (tmp_path / "docs" / "acceptance").mkdir(parents=True)
-        (tmp_path / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX)
+        write_matrix_fragments(tmp_path, MATRIX)
     body = "# Toy\n\n"
     if requirements is not None:
         body += requirements + "\n"
@@ -395,7 +397,7 @@ def test_r1_a_malformed_decision_superseded_by_a_valid_one_no_longer_errors(
 
 def test_r3_an_unloadable_matrix_warns_instead_of_reading_as_absent(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: [unclosed\n")
+    write_matrix_fragments(repo, "rows: [unclosed\n")
     plan = _plan(repo, P(("row-r1",), skeleton=True), P(("row-none",)))
     _decide(repo, 2, "ask: cannot be checked")
     issues = _phase_sizing_issues(plan)

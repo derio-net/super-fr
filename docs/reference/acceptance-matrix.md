@@ -6,15 +6,36 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 1 adds the fragment model and fold, which no reader uses yet; the matrix described here is unchanged
+reviewed: 2026-11-12 acceptance-fragments phase 2 moves the rows into per-feature fragments read through a fold, and retires matrix.yaml and its committed reports
 ---
 
 # The acceptance matrix
 
 Passing unit tests do not tell you whether the product does what you promised. The
-acceptance matrix, `docs/acceptance/matrix.yaml`, does: one row per business-level promise
-("an operator can X"), the tests at each level that verify it, and a status that says how
-much you can trust it. The skill that drives it is [fr-acceptance](../explainers/fr-acceptance.md).
+acceptance matrix does: one row per business-level promise ("an operator can X"), the
+tests at each level that verify it, and a status that says how much you can trust it. The
+skill that drives it is [fr-acceptance](../explainers/fr-acceptance.md).
+
+## Where the rows live
+
+Each row belongs to the feature that created it, and lives in that feature's
+**fragment**, `docs/acceptance/features/<spec-slug>.yaml`. A fragment names its feature
+(the file stem), the repo (`repo: <org>/<repo>`) and its rows; `legacy.yaml` holds the
+rows that cite no single spec, such as those born from a debug journal. The matrix you
+read is never stored: fr **folds** every fragment, in the order the default branch's
+history introduced them, and every reader (`check`, `status`, `fr debt`, plan
+self-review, the PR body, close-out) reads that fold. Two features editing their own
+fragments no longer touch the same file.
+
+Rows cite fr's own artifacts **logically**: `spec:<slug>#R<n>` for a spec requirement,
+`plan:<slug>` for a plan. The slug is the spec's file name without `-design.md`, so it is
+the same before and after `fr archive` moves the spec, and an archive never rewrites a
+row. Code keeps its path form, `<repo>:<path>#<test>`.
+
+A repo that still has the single `docs/acceptance/matrix.yaml` of earlier fr versions is
+migrated by `fr migrate artifacts --yes`: the rows are split by origin spec, path
+references to specs and plans become logical, and the matrix and its committed reports
+are deleted.
 
 A repo can turn the matrix off with `artifacts.acceptance: off` in `.fr/settings.yaml`
 (`fr settings show`). fr then writes no rows, reports or matrix CI. `fr acceptance add` and
@@ -44,19 +65,20 @@ lists it, and the PR body defends it.
 ## Commands
 
 ```bash
-fr acceptance init                   # scaffold the matrix, the backfill rule and (with CI present) the workflow
+fr acceptance init                   # scaffold docs/acceptance/features/, the backfill rule and (with CI present) the workflow
 fr acceptance backfill               # print an inventory and the protocol for an existing repo
-fr acceptance add --id ... --capability ... --acceptance ... --status ...   # append a row
+fr acceptance add --id ... --capability ... --acceptance ... --origin spec:<slug>#R1 --status ...   # a row, in its spec's fragment
 fr acceptance set-status --id ... --status ... --notes "why"                 # move a row, with a reason
 fr acceptance check                  # refs, staleness, statuses; exit 2 on any failing row
 fr acceptance status                 # the open debt, briefly (a session-start hook shows it)
-fr acceptance report --deterministic # re-render the committed reports
+fr acceptance report                 # render a report locally (reports are never committed)
 ```
 
-Never edit the YAML by hand: `add` and `set-status` validate the row and regenerate the
-three committed reports (two HTML, one Markdown). Test references are anchored on a test's
-name, for example `repo:tests/unit/test_x.py#test_y`, never a line number, because a line
-number slides onto whatever test lands there next.
+Never edit a fragment by hand: `add` and `set-status` validate the row and commit only the
+fragment they changed. A row whose origins name no single spec needs `--feature <slug>`
+(`legacy` for none). Test references are anchored on a test's name, for example
+`repo:tests/unit/test_x.py#test_y`, never a line number, because a line number slides onto
+whatever test lands there next.
 
 The per-PR gate is `.github/workflows/acceptance-report.yml`, which on a weekly
 schedule also runs `fr debt issue`, keeping one "Technical debt" issue up to date (its

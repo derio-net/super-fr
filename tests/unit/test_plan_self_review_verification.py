@@ -11,6 +11,7 @@ from pathlib import Path
 from fr.parser import parse as parse_plan
 from fr.plan_ops import self_review
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.test_plan_acceptance_links import _create_plan, _repo
 
 SPEC_REL = "docs/superpowers/specs/2026-07-04-toy.md"
@@ -37,8 +38,8 @@ def _setup(
         program.parent.mkdir(parents=True, exist_ok=True)
         program.write_text("#!/bin/sh\n")
         program.chmod(0o755)
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text(
-        "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + "".join(rows)
+    write_matrix_fragments(
+        repo, "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + "".join(rows)
     )
     body = "# Toy\n\n## Requirements\n\nR1. x\n\n"
     if section is not None:

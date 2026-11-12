@@ -10,7 +10,7 @@ import yaml
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import make_repo, row, write_fragments
 
 runner = CliRunner()
 
@@ -36,39 +36,27 @@ def _invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
 
 
 def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fragments directory (no fragment: `add` writes the first; spec 2026-11-04
+    R16), the rule, the workflow, the gitignore line — and no matrix, no report (R19,
+    R20)."""
     root = _repo(tmp_path)
     result = _invoke(root, monkeypatch, "init", "--with-ci")
     assert result.exit_code == 0, result.output
 
-    matrix = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
-    assert matrix.startswith("#")  # schema-comment header
-    assert "org: derio-net" in matrix
-    assert "repo: own" in matrix
-    from fr.artifacts import artifact_kind
-
-    kind = artifact_kind("matrix")
-    assert f"schema_version: {kind.current_version}\n" in matrix, "born current, never stale"
-    assert matrix.rstrip().endswith("rows:"), "rows: stays the last top-level key"
+    features = root / "docs" / "acceptance" / "features"
+    assert features.is_dir() and (features / ".gitkeep").is_file()
+    assert not list(features.glob("*.yaml"))
+    assert not (root / "docs" / "acceptance" / "matrix.yaml").exists()
 
     rule = (root / ".claude" / "rules" / "acceptance-matrix.md").read_text()
     assert "SAME PR" in rule
     assert "not-implemented" in rule and "unwired" in rule  # the status ladder
+    assert "docs/acceptance/features/" in rule
 
-    # The committed SET (report_local.html + report_linked.html +
-    # report_linked.md) is generated; ad-hoc report.html is gitignored.
     d = root / "docs" / "acceptance"
-    assert (d / "report_local.html").exists() and "links: local" in (
-        d / "report_local.html"
-    ).read_text()
-    assert (d / "report_linked.html").exists() and "links: github" in (
-        d / "report_linked.html"
-    ).read_text()
-    assert (d / "report_linked.md").exists() and (d / "report_linked.md").read_text().startswith(
-        "# Acceptance coverage"
-    )
+    assert not list(d.glob("report*")), "reports are derived, never committed"
     gi = (root / ".gitignore").read_text()
     assert "docs/acceptance/report.html" in gi  # ad-hoc report.html is gitignored
-    assert "docs/acceptance/report_linked.md" not in gi  # committed set is NOT gitignored
 
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 
@@ -87,11 +75,8 @@ def test_init_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     snapshot = {
         p: (root / p).read_text()
         for p in (
-            "docs/acceptance/matrix.yaml",
+            "docs/acceptance/features/.gitkeep",
             ".claude/rules/acceptance-matrix.md",
-            "docs/acceptance/report_local.html",
-            "docs/acceptance/report_linked.html",
-            "docs/acceptance/report_linked.md",
             ".gitignore",
             ".github/workflows/acceptance-report.yml",
         )
@@ -102,18 +87,17 @@ def test_init_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         assert (root / p).read_text() == text, f"{p} changed on re-run"
 
 
-def test_init_leaves_user_matrix_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_leaves_user_fragments_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _repo(tmp_path)
     assert _invoke(root, monkeypatch, "init").exit_code == 0
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
-    edited = matrix_path.read_text() + row(id="user-row")
-    matrix_path.write_text(edited)
+    (matrix_path,) = write_fragments(root, row(id="user-row"), repo="derio-net/own")
+    edited = matrix_path.read_text()
     assert _invoke(root, monkeypatch, "init").exit_code == 0
     assert matrix_path.read_text() == edited
 
 
 def test_add_works_on_fresh_skeleton(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`rows:` (implicit null) in the skeleton must accept the first append."""
+    """The first `add` after init writes the repo's first fragment."""
     root = _repo(tmp_path)
     assert _invoke(root, monkeypatch, "init").exit_code == 0
     result = _invoke(
@@ -128,31 +112,11 @@ def test_add_works_on_fresh_skeleton(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "A",
         "--status",
         "not-implemented",
+        "--feature",
+        "legacy",
     )
     assert result.exit_code == 0, result.output
     assert _invoke(root, monkeypatch, "status").output.count("first") == 1
-
-
-def test_init_degrades_when_report_identity_unresolvable(tmp_path: Path) -> None:
-    """A pre-existing keyless matrix with no git remote must not crash the
-    scaffold on report render — the report is skipped, everything else stands."""
-    from fr.acceptance.scaffold import init
-
-    root = tmp_path / "norepo"
-    (root / "docs" / "acceptance").mkdir(parents=True)
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text("rows:\n")  # no org/repo, no .git
-
-    outcome = init(root, "acme", "widget", backend="github", with_ci=True)
-
-    for rel in (
-        "docs/acceptance/report_local.html",
-        "docs/acceptance/report_linked.html",
-        "docs/acceptance/report_linked.md",
-    ):
-        assert rel in outcome.skipped
-        assert not (root / rel).exists()
-    # The rest of the scaffold still landed.
-    assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
 
 
 # ── T2: workflow content + trap-7 coverage gate ────────────────────────────

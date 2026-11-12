@@ -15,6 +15,8 @@ from fr.commands import debt_cmd
 from fr.debt.model import DebtReport
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
+
 runner = CliRunner()
 
 
@@ -131,7 +133,7 @@ def test_an_unreadable_matrix_does_not_drop_the_forge(
 ) -> None:
     import types
 
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("not: [valid")
+    write_matrix_fragments(repo, "not: [valid")
     monkeypatch.setattr(
         "fr.services.resolve.resolve_tracking",
         lambda *_a, **_k: types.SimpleNamespace(type="github"),

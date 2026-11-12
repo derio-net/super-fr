@@ -2,9 +2,18 @@
 
 ## Rule
 
-`docs/acceptance/matrix.yaml` is the registry of business-level acceptance
-tests × verification levels × automation status. **Any PR that does one of
-the following updates the matrix in the SAME PR:**
+The acceptance matrix is the registry of business-level acceptance tests ×
+verification levels × automation status. Its rows live in **per-feature
+fragments**, `docs/acceptance/features/<spec-slug>.yaml` (spec
+`2026-11-04-repo-feature-settings` R16): each row is owned by the feature (spec)
+that created it, `legacy.yaml` holds the rows with no single origin spec, and
+every fragment carries the repo's identity as `repo: <org>/<repo>`. The
+effective matrix is never stored — `fr` folds the fragments over git history
+(`fr.acceptance.fold`, R17), and every reader (`check`, `status`, `debt`,
+self-review, the PR body, close-out) reads that fold. The single
+`docs/acceptance/matrix.yaml` is retired: `fr migrate artifacts --yes` splits an
+old one (R19). **Any PR that does one of the following updates the rows in the
+SAME PR:**
 
 - adds or changes a spec `## Test Plan` (new spec ⇒ new rows; the CI
   staleness guard fails a spec with a Test Plan that no row cites)
@@ -30,12 +39,19 @@ artifacts --yes` splits it.
 ## How
 
 - Add rows: `fr acceptance add --id ... --capability ... --acceptance ...
-  --origin <repo>:<path> --level unit=<repo>:<path> --status ... --notes ...`
-  (`add` CREATES; re-adding an existing id is refused, exit 2.)
+  --origin spec:<slug>#R<n> --level unit=<repo>:<path>#<test> --status ...
+  --notes ...` (`add` CREATES; re-adding an existing id is refused, exit 2.)
+  The row lands in its origin spec's fragment; a row whose origins name no
+  single spec needs `--feature <slug>` (`legacy` for none). fr's own artifacts
+  are cited **logically** — `spec:<slug>[#R<n>]`, `plan:<slug>` (R18) — so an
+  archive or a placement move never rewrites a row; a spec or plan path given to
+  `add` is written in that form. Code and debug journals keep
+  `<repo>:<path>[#anchor]`.
 - Move a status: `fr acceptance set-status --id ... --status ...
   --notes "<why it moved>" [--level unit=<repo>:<path>]` — the whole
-  documented transition in one command: it rewrites the row in place, adds
-  the evidence refs, and regenerates all three committed reports. `--notes`
+  documented transition in one command: it rewrites the row in place in the
+  fragment that holds it and adds the evidence refs; the commit holds only that
+  fragment. `--notes`
   is required (a status that moved for no recorded reason is the silent
   change this rule forbids), and an unknown id or status is refused rather
   than created. `--drop-level <level>=<ref>` (repeatable) removes a stale
@@ -62,20 +78,11 @@ artifacts --yes` splits it.
   runs `fr acceptance status --brief` at session start** (Claude Code does it
   automatically via the super-fr SessionStart hook; other harnesses honor
   this line).
-- Reports: THREE **committed, tracked** renderings of `matrix.yaml`, kept in
-  sync — `docs/acceptance/report_local.html` (local links, viewable from a
-  checkout), `docs/acceptance/report_linked.html` (github.com blob links), and
-  `docs/acceptance/report_linked.md` (the linked report as **Markdown**, which
-  github.com renders inline — committed `.html` is shown as source, not
-  rendered). `fr acceptance add` regenerates **all three**; drift (incl.
-  hand-edited status flips) is gated by `fr acceptance check` itself — it fails
-  when any committed report is missing or stale — plus `fr acceptance report
-  --check` and the report-sync tripwire. Regenerate by hand with `fr acceptance
-  report --deterministic` (writes all three) and commit them. `docs/acceptance/
-  report.html` is a separate **ad-hoc, gitignored** render: `fr acceptance
-  report` (no flag) writes it git-stamped honoring `--link-mode` (github in CI,
-  local otherwise); links resolve relative to sibling checkouts
-  (`--sibling-root`, default `..`).
+- Reports are derived from the fold, never committed: `fr acceptance report`
+  renders one locally (`docs/acceptance/report.html`, gitignored), and the
+  migration to fragments deleted the committed set. (Plan
+  `2026-11-12-acceptance-fragments` phase 4 finalises the report surfaces.)
+- Never hand-edit a fragment: `add` and `set-status` are the writers.
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and every push to main,
   writes a Markdown summary to each Actions run (PR, main), uploads the
   GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.

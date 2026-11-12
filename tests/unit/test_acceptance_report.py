@@ -9,12 +9,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fr.acceptance.model import load_matrix
+from fr.acceptance.fold import load_effective
 from fr.acceptance.report import LinkBuilder, render
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, row
+from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, row, write_matrix_fragments
 
 runner = CliRunner()
 
@@ -101,8 +101,8 @@ def test_twin_following_requires_git_for_siblings(tmp_path: Path) -> None:
 
 
 def _render(root: Path, rows_text: str) -> str:
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX_HEADER + rows_text)
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    write_matrix_fragments(root, MATRIX_HEADER + rows_text)
+    matrix = load_effective(root)
     return render(matrix, _links(root, "local"), stamp="test-stamp", aggregates=True)
 
 
@@ -220,7 +220,7 @@ def test_render_markdown_is_github_flavored(tmp_path: Path) -> None:
     from fr.acceptance.report import render_markdown
 
     root = make_repo(tmp_path, row(id="a") + row(id="b", status="unwired"))
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    matrix = load_effective(root)
     md = render_markdown(matrix, _links(root, "github"), stamp="links: github", aggregates=False)
     assert md.startswith("# Acceptance coverage")
     assert "| Acceptance |" in md  # a GFM table header
@@ -235,8 +235,8 @@ def test_markdown_escapes_pipe_in_cells(tmp_path: Path) -> None:
 
     root = make_repo(tmp_path, row(id="a"))
     evil = row(id="a").replace('"Operator can do X"', '"a | b\nc"')
-    (root / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX_HEADER + evil)
-    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    write_matrix_fragments(root, MATRIX_HEADER + evil)
+    matrix = load_effective(root)
     md = render_markdown(matrix, _links(root, "github"), stamp="s", aggregates=False)
     # the literal cell pipe is escaped and the newline flattened → table stays valid
     assert r"a \| b" in md
@@ -247,7 +247,7 @@ def test_render_committed_set_three_formats(tmp_path: Path) -> None:
     from fr.acceptance.report import REPORT_SET, render_committed_set
 
     root = make_repo(tmp_path, row(id="a") + row(id="b"))
-    files = render_committed_set(load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root)
+    files = render_committed_set(load_effective(root), root)
     assert set(files) == set(REPORT_SET)
     assert set(files) == {LOCAL_HTML, LINKED_HTML, LINKED_MD}
     local, linked, md = files[LOCAL_HTML], files[LINKED_HTML], files[LINKED_MD]
@@ -262,7 +262,7 @@ def test_render_committed_set_is_deterministic(tmp_path: Path) -> None:
     from fr.acceptance.report import render_committed_set
 
     root = make_repo(tmp_path, row(id="a") + row(id="b"))
-    m = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    m = load_effective(root)
     assert render_committed_set(m, root) == render_committed_set(m, root)
 
 
@@ -438,7 +438,7 @@ def test_committed_set_omits_every_cross_row_aggregate(tmp_path: Path) -> None:
     from fr.acceptance.report import render_committed_set
 
     root = make_repo(tmp_path, _EVERY_PANEL)
-    files = render_committed_set(load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root)
+    files = render_committed_set(load_effective(root), root)
     for rel, text in files.items():
         assert not re.search(r"\b\d+ rows\b", text), rel
         assert '<div class="tiles">' not in text, rel
@@ -452,7 +452,7 @@ def test_aggregates_flag_toggles_both_renderers(tmp_path: Path) -> None:
     from fr.acceptance.report import render_markdown
 
     root = make_repo(tmp_path, _EVERY_PANEL)
-    m = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    m = load_effective(root)
     links = _links(root, "github")
     md_on = render_markdown(m, links, stamp="s", aggregates=True)
     md_off = render_markdown(m, links, stamp="s", aggregates=False)

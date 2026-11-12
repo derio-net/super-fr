@@ -239,7 +239,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
   - **`fr/debt`** (2026-10-11 spec, `debt-engine`) — what a repo owes, as one
     `DebtReport` (`model.py`; `schema_version: 1`, frozen). `engine.compute(repo_root,
     *, forge, now, stale_days)` is pure given the forge and the clock: acceptance from
-    `load_matrix` (an unreadable matrix is `available: false`, never zero), plans from
+    `fr.acceptance.fold.load_effective` (an unreadable fold is `available: false`, never
+    zero), plans from
     `fr.closeout.plan_sweep` (archivable with merge age from `git log` on the default ref,
     stale when the plan dir, its run branch and its PR's `updatedAt` are all older than
     `stale_days`), and owed items folded by `fold_owed(OwedSources)`, one per key
@@ -744,11 +745,16 @@ exists and how it's checked, not a restatement:
   Tripwire: `tests/unit/test_tripwire_claude_p.py` (fails on `claude -p` in
   `packages/*/src/**`).
 - **`fr-isolation-required`** — see above.
-- **acceptance matrix** (2026-07-04) — business-level acceptance tests live
-  in `docs/acceptance/matrix.yaml`; any PR that changes a spec's Test Plan,
-  adds tests for an existing row, or ships a surface a `not-implemented` row
-  waits on updates the matrix in the *same* PR. Gate: `fr acceptance check`
-  via `.github/workflows/acceptance-report.yml`. Driver skill: `fr-acceptance`.
+- **acceptance matrix** (2026-07-04; fragments 2026-11-04 R16–R19) — business-level
+  acceptance tests live in per-feature fragments, `docs/acceptance/features/<spec-slug>.yaml`
+  (artifact kind `acceptance-fragment`; the old `matrix` kind is retired, its last hop
+  `fr.artifacts.matrix_fragments` splitting `matrix.yaml` behind the frozen
+  `fr.acceptance.legacy.MatrixV5`). The effective matrix is `fr.acceptance.fold`'s fold
+  of them (`load_effective`), never stored; rows cite specs and plans logically
+  (`spec:<slug>#R<n>`, `fr.acceptance.logical`). Any PR that changes a spec's Test Plan,
+  adds tests for an existing row, or ships a surface a `not-implemented` row waits on
+  updates the rows in the *same* PR. Gate: `fr acceptance check` via
+  `.github/workflows/acceptance-report.yml`. Driver skill: `fr-acceptance`.
 - **third-party-privacy** (2026-09-19) — live-verification evidence is
   redacted at capture time: hostnames, orgs, repo names and usernames outside
   the `derio-net` org never reach a spec, journal, fixture, matrix note, PR body

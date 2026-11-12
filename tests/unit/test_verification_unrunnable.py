@@ -8,12 +8,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fr.acceptance.fold import load_effective
 from fr.verification.effective import effective_shape_default, install_problem
 from fr.verification.model import StrategyManifest
 from fr.verification.resolve import resolve_strategy
 from fr.verification.rows import shape_default, unrunnable_strategies
 from fr.verification.spec_section import Section, SectionError, parse_section
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.record_support import RUN, commit_all, fr, write_record
 from tests.unit.requirements_support import row, seed_requirements
 
@@ -105,10 +107,9 @@ def test_a_missing_install_program_is_what_the_walk_contract_said(tmp_path: Path
 
 
 def _matrix(tmp_path: Path, spec_rel: str):
-    from fr.acceptance.model import load_matrix
 
     seed_requirements(tmp_path, spec_rel)
-    return load_matrix(tmp_path / "docs/acceptance/matrix.yaml")
+    return load_effective(tmp_path)
 
 
 def test_walk_owed_owes_nothing_from_the_default_when_every_row_says_none(
@@ -260,8 +261,8 @@ def _shape_default_plan(tmp_path: Path, install: bool):
     if install:
         _install(repo)
     other = _row("other")
-    (repo / "docs" / "acceptance" / "matrix.yaml").write_text(
-        "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + other + _row("c")
+    write_matrix_fragments(
+        repo, "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + other + _row("c")
     )
     (repo / SPEC_REL).write_text(
         "# Toy\n\n## Requirements\n\nR1. x\n\n## Verification\n\n- other: none — covered\n\n"
