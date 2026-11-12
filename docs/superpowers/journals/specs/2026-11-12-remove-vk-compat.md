@@ -207,3 +207,8 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-remove-vk-compat-p2 created=2026-11-12T15:53:43+00:00 -->
+### phase-split-2026-11-12-remove-vk-compat-p2 · decision · ask: the vk_version plan key and its archive-reaching repair (R9-R13) are a separate ask from the removals and renames, and change the migration runner
+
+Phase 1 is deletions and mechanical renames; phase 2 changes PlanMeta, adds a repair and a runner seam every command's gate passes through. They are reviewable independently.
