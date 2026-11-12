@@ -47,6 +47,8 @@ GATED: dict[str, str] = {
         "archive_cmd / journal_cmd file / run.closeout: require_forge(issues, labels)",
     "fr/src/fr/archive_followups.py::file_owed_ends":
         "archive_cmd / journal_cmd file / run.closeout: require_forge(issues, labels)",
+    "fr/src/fr/commands/acceptance_cmd.py::comment_cmd":
+        "forge.report_comment must be on, and forge_block(comments) refuses; --yes writes",
     "fr/src/fr/commands/debt_cmd.py::issue_cmd":
         "forge_block(issues) refuses; forge_block(comments) makes the zero-debt close bare",
     "fr/src/fr/commands/journal_cmd.py::_close_owed_issue":
