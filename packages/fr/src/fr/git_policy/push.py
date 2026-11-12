@@ -287,3 +287,78 @@ def squash(
 def push(root: Path, remote: str, branch: str) -> None:
     """`git push -u <remote> <branch>`: a fast-forward, never forced."""
     _git(root, "push", "-u", remote, branch)
+
+
+MAX_PUSH_ATTEMPTS = 3
+"""Quiet's replay bound (R23): this many rejected pushes of `fr`, then a refusal."""
+
+QUIET_BRANCH = "fr"
+
+
+def _sha(root: Path, ref: str) -> str | None:
+    done = run_git(root, ["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"])
+    if done.returncode != 0:
+        return None
+    return done.stdout.strip() or None
+
+
+def fr_pending(root: Path, remote: str) -> bool:
+    """Local `fr` holds commits `<remote>/fr` (as last fetched) does not."""
+    local = _sha(root, f"refs/heads/{QUIET_BRANCH}")
+    if local is None:
+        return False
+    tracking = _sha(root, f"refs/remotes/{remote}/{QUIET_BRANCH}")
+    if tracking is None:
+        return True
+    return _git(root, "rev-list", "--count", f"{tracking}..{local}").strip() != "0"
+
+
+def _replay(fr_root: Path, remote: str) -> None:
+    """Fetch `<remote>/fr` and replay this checkout's own unpushed fr commits onto it.
+    Features write disjoint paths, so the replay is clean; a conflict means the same
+    path, which is refused naming it, with the worktree put back as it was."""
+    tracking = f"refs/remotes/{remote}/{QUIET_BRANCH}"
+    _git(fr_root, "fetch", "--no-tags", remote, f"+refs/heads/{QUIET_BRANCH}:{tracking}")
+    done = run_git(fr_root, ["rebase", "--no-autostash", tracking])
+    if done.returncode == 0:
+        return
+    conflicted = run_git(fr_root, ["diff", "--name-only", "--diff-filter=U"]).stdout.split()
+    run_git(fr_root, ["rebase", "--abort"])
+    where = ", ".join(conflicted) or (done.stderr or done.stdout).strip()
+    raise PushRefusedError(
+        f"cannot replay this feature's `{QUIET_BRANCH}` commits onto {remote}/{QUIET_BRANCH}: "
+        f"another push changed the same path ({where}). Each feature writes only its own "
+        "path; resolve it on the fr worktree and push again"
+    )
+
+
+def atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:
+    """Quiet's push (R23): the feature branch and `fr` in ONE `git push --atomic` when
+    code moved, `fr` alone when only bookkeeping did. When `fr` is rejected because
+    another feature moved it, fetch, replay, retry, at most `MAX_PUSH_ATTEMPTS` times.
+    Never forced. The refs pushed, in order (empty: nothing was pending)."""
+    for _ in range(MAX_PUSH_ATTEMPTS):
+        refs = ([branch] if code else []) + ([QUIET_BRANCH] if fr_pending(root, remote) else [])
+        if not refs:
+            return []
+        argv = (
+            ["push", "--atomic", "-u", remote, *refs]
+            if len(refs) > 1
+            else ["push", "-u", remote, *refs]
+        )
+        if any(a in FORCE_FLAGS for a in argv):  # unreachable; a last line of defence
+            raise PushRefusedError(f"refusing a forced git call: git {' '.join(argv)}")
+        done = run_git(root, argv)
+        if done.returncode == 0:
+            return refs
+        detail = (done.stderr or done.stdout).strip()
+        listed = run_git(root, ["ls-remote", "--heads", remote, f"refs/heads/{QUIET_BRANCH}"])
+        remote_fr = (listed.stdout.split() or [None])[0]
+        tracking = _sha(root, f"refs/remotes/{remote}/{QUIET_BRANCH}")
+        if QUIET_BRANCH not in refs or listed.returncode != 0 or remote_fr == tracking:
+            raise PushRefusedError(f"`git {' '.join(argv)}` failed: {detail}")
+        _replay(fr_root, remote)
+    raise PushRefusedError(
+        f"{remote} rejected refs/heads/{QUIET_BRANCH} {MAX_PUSH_ATTEMPTS} times: it kept "
+        "moving under other features' pushes. Nothing was forced; run `fr push` again"
+    )

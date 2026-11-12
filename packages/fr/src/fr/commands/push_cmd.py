@@ -150,11 +150,29 @@ def refuse_closed_pr(repo_root: Path) -> None:
             )
 
 
+def _code_pending(rng: object) -> bool:
+    """The feature branch has something to push: unpushed commits, or no remote branch."""
+    return bool(getattr(rng, "commits", ())) or getattr(rng, "remote_sha", None) is None
+
+
+def _push_placement(repo_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:
+    """The push itself: `repo` pushes the branch; quiet pushes the branch and `fr`
+    together, atomically, or `fr` alone (R23). The refs pushed."""
+    from fr.artifacts.paths import QUIET, space_for
+    from fr.git_policy.push import atomic_push, push
+
+    space = space_for(repo_root)
+    if space.placement != QUIET:
+        push(repo_root, remote, branch)
+        return [branch]
+    return atomic_push(repo_root, space.root, remote, branch, code=code)
+
+
 def push_cmd() -> None:
     """Push this run's feature branch, under the repo's git policy (`git.*`)."""
     from fr.artifacts.commit import on_default_branch
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
-    from fr.git_policy.push import PushRefusedError, check_subjects, push, squash, unpushed
+    from fr.git_policy.push import PushRefusedError, check_subjects, squash, unpushed
     from fr.git_policy.templates import run_issue
     from fr.settings import SettingsError, load_settings
 
@@ -178,6 +196,7 @@ def push_cmd() -> None:
                 still_current=push_still_current(repo_root, git_dir, branch, head),
             )
         rng = unpushed(repo_root, remote, branch)
+        # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
         check_subjects(settings, rng.commits, issue)
         if settings.git.history == "squash-unpushed":
             new = squash(repo_root, settings, branch, rng.commits, issue)
@@ -187,9 +206,9 @@ def push_cmd() -> None:
                     "(git.history: squash-unpushed)",
                     soft_wrap=True,
                 )
-        push(repo_root, remote, branch)
+        pushed = _push_placement(repo_root, remote, branch, code=_code_pending(rng))
         if settings.git.push == "ask":
             consume(git_dir, "push", branch)
     except (SettingsError, PushRefusedError, AskRefusedError) as e:
         raise _fail(f"fr push: {e}") from e
-    console.print(f"pushed {branch} to {remote}", soft_wrap=True)
+    console.print(f"pushed {' and '.join(pushed) or 'nothing'} to {remote}", soft_wrap=True)
