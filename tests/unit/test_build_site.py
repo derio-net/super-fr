@@ -227,3 +227,179 @@ def test_the_cli_refuses_a_missing_renderer(tmp_path: Path) -> None:
     )
     assert done.returncode != 0
     assert "render_explainer.py" in done.stderr
+
+
+# -- the landing source (spec 2026-11-12-landing-front-page R1, R3, R4, R9) -----------
+
+FRONT = """---
+title: "T"
+tldr: "A tldr."
+layout: landing
+hero:
+  eyebrow: "super-fr"
+  headline: "A headline"
+  subline: "A subline."
+  command: "/fr-goal do a thing"
+  primary: {label: "Go", href: "01-fr-goal.md"}
+  secondary:
+    - {label: "Install", href: "../reference/cli.md"}
+    - {label: "GitHub", href: "https://github.com/derio-net/super-fr"}
+facts:
+  - {figure: "1", caption: "round"}
+---
+"""
+
+FLOW = (
+    "## How a run goes\n<!-- landing:flow -->\n\n"
+    "1. {you} Answer the round.\n2. The agent builds.\n3. {you} You merge.\n\n"
+)
+PAGES = "## Every page\n<!-- landing:pages -->\n\nIntro.\n\n<!-- site:pages -->\n\n"
+CTA = "## Try it\n<!-- landing:cta -->\n\n[Go](01-fr-goal.md)\n"
+
+
+def guarantee(n: int, *, problem: bool = True, link: bool = True) -> str:
+    out = f"## Headline {n}\n<!-- landing:guarantee -->\n\n"
+    if problem:
+        out += f"> Problem {n}.\n\n"
+    out += f"**What you gain.** Gain {n}.\n\n- how one\n- how two\n\n"
+    if link:
+        out += f"[Read more {n}](fr-isolation.md)\n\n"
+    return out
+
+
+def landing_text(n: int = 7, front: str = FRONT, extra: str = "") -> str:
+    return (
+        front + "\n" + FLOW + "".join(guarantee(i) for i in range(1, n + 1)) + PAGES + extra + CTA
+    )
+
+
+def parse(text: str):
+    return bs.parse_landing(text, "docs/explainers/index.md")
+
+
+def test_only_layout_landing_is_a_landing() -> None:
+    assert bs.is_landing({"layout": "landing"}) is True
+    assert bs.is_landing({"layout": "other"}) is False
+    assert bs.is_landing({}) is False
+
+
+def test_a_landing_parses_into_hero_facts_and_ordered_sections() -> None:
+    land = parse(landing_text())
+    assert land.hero.eyebrow == "super-fr"
+    assert land.hero.headline == "A headline"
+    assert land.hero.subline == "A subline."
+    assert land.hero.command == "/fr-goal do a thing"
+    assert (land.hero.primary.label, land.hero.primary.href) == ("Go", "01-fr-goal.md")
+    assert [(s.label, s.href) for s in land.hero.secondary] == [
+        ("Install", "../reference/cli.md"),
+        ("GitHub", "https://github.com/derio-net/super-fr"),
+    ]
+    assert [(f.figure, f.caption) for f in land.facts] == [("1", "round")]
+    assert [s.kind for s in land.sections] == ["flow"] + ["guarantee"] * 7 + ["pages", "cta"]
+    assert land.sections[1].heading == "Headline 1"
+
+
+def test_the_optional_hero_keys_may_be_absent() -> None:
+    front = (
+        "---\ntitle: T\nlayout: landing\nhero:\n  headline: H\n  subline: S\n"
+        "  primary: {label: Go, href: x.md}\n---\n"
+    )
+    land = parse(landing_text(front=front))
+    assert land.hero.eyebrow == "" and land.hero.command == ""
+    assert land.hero.secondary == () and land.facts == ()
+
+
+def test_a_guarantee_section_exposes_problem_link_and_body() -> None:
+    sec = parse(landing_text()).sections[1]
+    assert sec.problem == "Problem 1."
+    assert (sec.link.label, sec.link.href) == ("Read more 1", "fr-isolation.md")
+    assert "Gain 1." in sec.body and "how two" in sec.body
+    assert "Problem 1" not in sec.body and "Read more" not in sec.body
+
+
+def test_a_flow_section_marks_the_operators_steps() -> None:
+    sec = parse(landing_text()).sections[0]
+    assert [(s.text, s.yours) for s in sec.steps] == [
+        ("Answer the round.", True),
+        ("The agent builds.", False),
+        ("You merge.", True),
+    ]
+
+
+def test_a_section_without_a_marker_is_prose_and_a_heading_inside_a_fence_is_not_one() -> None:
+    text = landing_text(extra="## Long read\n\n```md\n## not a heading\n```\n\nText.\n\n")
+    secs = parse(text).sections
+    prose = [s for s in secs if s.kind == "prose"]
+    assert len(prose) == 1 and prose[0].heading == "Long read"
+    assert "## not a heading" in prose[0].body
+    assert len(secs) == 11
+
+
+def _refused(text: str, match: str) -> None:
+    with pytest.raises(bs.BuildError, match=match) as err:
+        parse(text)
+    assert "docs/explainers/index.md" in str(err.value)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "match"),
+    [
+        ("hero:\n", "nothero:\n", "hero"),
+        ('  headline: "A headline"\n', "", "hero.headline"),
+        ('  subline: "A subline."\n', "", "hero.subline"),
+        ('{label: "Go", href: "01-fr-goal.md"}', '{href: "01-fr-goal.md"}', "primary.label"),
+        ('{label: "Go", href: "01-fr-goal.md"}', '{label: "Go"}', "primary.href"),
+    ],
+)
+def test_a_missing_hero_key_is_refused_naming_the_key(old: str, new: str, match: str) -> None:
+    assert old in FRONT
+    _refused(landing_text(front=FRONT.replace(old, new)), match)
+
+
+def test_an_unknown_section_kind_is_refused() -> None:
+    _refused(landing_text(extra="## X\n<!-- landing:carousel -->\n\ntext\n\n"), "carousel")
+
+
+def test_a_guarantee_without_its_problem_or_its_link_is_refused() -> None:
+    base = FRONT + "\n" + FLOW + "".join(guarantee(i) for i in range(2, 8))
+    tail = PAGES + CTA
+    _refused(base + guarantee(1, problem=False) + tail, "problem")
+    _refused(base + guarantee(1, link=False) + tail, "link")
+
+
+def test_a_guarantee_whose_last_paragraph_is_not_exactly_one_link_is_refused() -> None:
+    bad = guarantee(1).replace(
+        "[Read more 1](fr-isolation.md)", "See [Read more 1](fr-isolation.md) now"
+    )
+    base = FRONT + "\n" + FLOW + "".join(guarantee(i) for i in range(2, 8))
+    _refused(base + bad + PAGES + CTA, "link")
+
+
+@pytest.mark.parametrize("n", [0, 5, 9])
+def test_fewer_than_six_or_more_than_eight_guarantees_is_refused(n: int) -> None:
+    _refused(landing_text(n), "six to eight")
+
+
+@pytest.mark.parametrize("n", [6, 8])
+def test_six_and_eight_guarantees_are_accepted(n: int) -> None:
+    assert len([s for s in parse(landing_text(n)).sections if s.kind == "guarantee"]) == n
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "- a\n- b\n",
+        "1. a\n\nProse after.\n",
+        "Prose first.\n\n1. a\n",
+        "",
+    ],
+)
+def test_a_flow_that_is_not_exactly_one_ordered_list_is_refused(body: str) -> None:
+    bad = f"## Flow\n<!-- landing:flow -->\n\n{body}\n"
+    text = FRONT + "\n" + bad + "".join(guarantee(i) for i in range(1, 7)) + PAGES + CTA
+    _refused(text, "ordered list")
+
+
+def test_a_pages_section_without_the_marker_is_refused() -> None:
+    text = landing_text().replace("<!-- site:pages -->", "")
+    _refused(text, "site:pages")
