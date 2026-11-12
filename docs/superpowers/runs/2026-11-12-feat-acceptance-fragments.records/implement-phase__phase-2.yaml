@@ -1,0 +1,95 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-11-12-feat-acceptance-fragments --step implement-phase --item phase/2 --record docs/superpowers/runs/2026-11-12-feat-acceptance-fragments.records/implement-phase__phase-2.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 10
+run: 2026-11-12-feat-acceptance-fragments
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2, P2.T4.S3, P2.T5.S1, P2.T5.S2, P2.T6.S1, P2.T6.S2, P2.T7.S1, P2.T7.S2, P2.T7.S3]
+refactor:
+  P2.T1: "a frozen reader is a verbatim copy of the V4 pattern by rule; nothing may be factored out of a sha-pinned class"
+  P2.T2: "the retiring branch is one early return beside the stamp path; folding it into the stamp path would make every existing hop take the new branch"
+  P2.T4: "the reader cutover replaced each call site in place through load_effective / has_fragments / path_view; the duplication left (fragment existence checks) is already one helper"
+  P2.T5: "the writer reuses edit.insert_row/replace_row unchanged on fragment text; the one new renderer (render_fragment) is shared with the migration"
+  P2.T6: "the fixture sweep went through one helper module (acceptance_helpers.write_fragments, write_matrix_fragments, fragments_text) and one scenario helper (matrix_fragment); no second copy to fold"
+  P2.T7: "data migration, rule and doc prose, and a scenario script; no code to clean"
+journal:
+  - kind: discovery
+    id: p2-row-count-before-after
+    phase: 2
+    title: This repo's migration kept all 617 rows, by status, in 121 fragments
+    body: |
+      Before (docs/acceptance/matrix.yaml at v5): 617 rows: ci 513, walk-owed 40, walked 40,
+      not-implemented 21, manual 1, scheduled 1, unwired 1. After `fr migrate artifacts --yes`
+      (commit "chore(fr): migrate artifacts"): `fr acceptance status --brief` reports the same
+      617 by status, from 120 spec fragments plus legacy.yaml (the rows citing no single spec:
+      debug journals, two-spec origins, code). `fr validate artifacts` and `fr acceptance check`
+      pass; the three committed reports were deleted. One row
+      (archive-retargets-matrix-refs) cited the deleted retarget tests and was re-pointed with
+      `fr acceptance set-status`.
+  - kind: decision
+    id: p2-anchor-repair-folded-into-split
+    phase: 2
+    title: The matrix name-anchor repair is unregistered; the split applies its conversion
+    body: |
+      The runner runs repairs after schema steps, and the 5 -> 6 hop deletes the matrix, so the
+      `matrix-name-anchors` Repair could never run again (and would be reported "skipped",
+      i.e. already done, when it had not run). It is no longer registered; the split
+      (`fr.artifacts.matrix_fragments.split_texts`) maps every ref through its `conversions`
+      before converting refs to logical. Pinned by
+      test_migration_matrix_fragments.py#test_the_split_converts_line_anchors.
+  - kind: decision
+    id: p2-new-row-feature-resolution
+    phase: 2
+    title: A new row's fragment is its one origin spec, else --feature, else the run's spec
+    body: |
+      `fr acceptance add` writes a new row to the fragment of its one origin spec (a spec path
+      origin is converted to `spec:<slug>` first); a row naming no single spec is refused unless
+      `--feature <slug>` names the fragment (`legacy` for none). The record kind's shape is
+      unchanged (phase 3 owns the 10 -> 11 bump), so `--feature` and `--repo` ride on
+      `RecordTarget`, and a run record's new row with no single-spec origin goes to the run's
+      spec fragment. `repo:` comes from a sibling fragment, else the origin remote, else
+      `--repo`. `fr acceptance init` writes `docs/acceptance/features/.gitkeep` so the
+      directory survives a clone; an empty matrix splits into no fragment.
+  - kind: decision
+    id: p2-reports-not-written
+    phase: 2
+    title: Writers and init write no report now; check's drift gate and report --deterministic stay for phase 4
+    body: |
+      add / set-status / record apply / init write only fragments (R20). The committed set is
+      deleted by the migration, so check's existence-gated report-drift gate is inert in a
+      migrated repo; `fr acceptance report --deterministic` still renders the set, through
+      `fr.acceptance.logical.path_view` (logical refs shown as the paths they resolve to).
+      Phase 4 finalises the report surfaces. test_tripwire_acceptance_report_sync now asserts
+      no report (and no matrix) is tracked.
+  - kind: finding
+    id: p2-interim-set-status-on-merged-row
+    phase: 2
+    review_scope: in
+    title: Interim in-place set-status on a merged row is invisible to the fold
+    body: |
+      phase-1's fold keeps a merged row's merged definition and adds a notice when the working
+      tree edits it in place (decision fold-pending-is-the-working-tree). Until phase 3's
+      amendments land, `set-status` on a merged row rewrites the owning fragment in place
+      (test_acceptance_fragment_writes.py#test_interim_set_status_on_a_merged_row_edits_its_owning_fragment_in_place
+      pins only the file), so every reader keeps the old status. With no default ref, HEAD
+      stands in for merged history, so the same holds for rows committed on the branch
+      (tests/scenarios/exit-gates-verify-without-section.sh now commits each rewrite).
+      In this repo no fragment is on origin/main yet, so every row is pending and set-status
+      is visible. Phase 3 (set-status on a merged row becomes an amendment) must land before
+      this PR merges.
+  - kind: discovery
+    id: p2-suite-slower
+    phase: 2
+    title: The acceptance-heavy tests got slower because every reader now folds over git
+    body: |
+      load_effective runs a handful of git calls per fold (memoised per ref sha and
+      working-tree digest, but the default-ref and toplevel probes run on every call), so
+      tests that seed a fresh repo per case and call several readers pay for it. The full
+      suite took 22 min on this host under a load average near 60 from other processes; it
+      was not measured against a baseline, so the fold's share is unknown. Worth a timing
+      pass (and maybe memoising the default-ref probe per root) before CI's time budget
+      notices.
+resolves: []
+evidence: {tests: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/31d40c59-91eb-4b4d-ab0c-fcbf9d042106/scratchpad/p2-suite.log}
