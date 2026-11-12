@@ -1191,7 +1191,7 @@ class LocalWorktreeDevcontainerTarget:
                     f"profile {name!r} is written in the base repo but not committed, so the "
                     f"worktree can't see it — run `fr init scaffold --profile {name} --force` "
                     "(which commits; add `--tracking none` if the repo has no recognised "
-                    "remote) or commit .devcontainer/ yourself, then retry `fr isolation up`."
+                    "remote) or commit .devcontainer/ yourself, then retry `fr isolation up --branch <branch>`."
                 )
         # Record BEFORE the side effect that can fail (gh#578): a failing
         # postCreate used to leave a worktree and a container that neither
@@ -1452,7 +1452,7 @@ class LocalWorktreeDevcontainerTarget:
             )
         return (
             f"{state.branch} stopped ({container}) — worktree, state and bindings kept; "
-            "`fr isolation up`, `restart` or the next `exec` resumes it."
+            "`fr isolation up --branch <branch>`, `restart` or the next `exec` resumes it."
         )
 
     def _ps_parts_strict(self, state: IsolationState) -> list[str]:
@@ -1489,7 +1489,7 @@ class LocalWorktreeDevcontainerTarget:
         parts = self._ps_parts_strict(state)
         if not parts:
             raise IsolationError(
-                f"no container for {state.branch} — {nothing} (run `fr isolation up` first)."
+                f"no container for {state.branch} — {nothing} (run `fr isolation up --branch <branch>` first)."
             )
         return parts[0], parts[1]
 
@@ -2564,7 +2564,7 @@ class LocalWorktreeDevcontainerTarget:
     def _ensure_validator_wrapper_in_ref(self, ref: str) -> None:
         """Plan repos need the wrapper in the ref used for worktree add.
 
-        `fr isolation up` creates/reuses a linked worktree from git state, not
+        `fr isolation up --branch <branch>` creates/reuses a linked worktree from git state, not
         the base checkout's uncommitted files. A filesystem-only wrapper check
         would let an untracked wrapper pass, then the isolated worktree would
         still lack the validator entry point.
@@ -2584,14 +2584,14 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"plan repo has docs/superpowers/plans in {ref} but no "
                 f"scripts/validate-plans.sh there; run `{REPAIR_COMMAND}` from the repo "
-                "root, commit it to the isolation start ref, then retry `fr isolation up`."
+                "root, commit it to the isolation start ref, then retry `fr isolation up --branch <branch>`."
             )
         mode = line.split(maxsplit=1)[0]
         if mode != "100755":
             raise IsolationError(
                 f"plan repo has scripts/validate-plans.sh in {ref} but it is not executable; "
                 "run `chmod +x scripts/validate-plans.sh`, commit it to the isolation "
-                "start ref, then retry `fr isolation up`."
+                "start ref, then retry `fr isolation up --branch <branch>`."
             )
 
     def _ensure_validator_wrapper_in_worktree(self, worktree: Path) -> None:
@@ -2603,7 +2603,7 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"existing isolation worktree {worktree} is missing executable "
                 f"scripts/validate-plans.sh; run `{REPAIR_COMMAND}`, commit it on the worktree "
-                "branch, then retry `fr isolation up`."
+                "branch, then retry `fr isolation up --branch <branch>`."
             )
 
     def _git_worktree_add(
