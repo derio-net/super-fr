@@ -194,6 +194,16 @@ rows:
     scenario: tests/scenarios/acceptance-effective-matrix-fold.sh
     issues:
     - derio-net/super-fr#1379
+  - id: placement-resolver
+    capability: repo-feature-settings
+    acceptance: Every artifact path comes from one resolver keyed by kind and placement,
+      across the Python modules, hooks, OpenCode plugin, Hermes hook and CI templates;
+      a hardcoded artifact path anywhere else fails CI
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R1
+    levels: {}
+    status: not-implemented
+    notes: 'added at planning (plan 3): R1 had no row of its own'
 amendments:
   - row: acceptance-report-formats
     op: reword
