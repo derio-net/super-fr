@@ -92,9 +92,14 @@ rows:
       of its own, linked from the front page
     origin:
     - spec:2026-11-12-front-page-second-pass#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_explainers_fresh.py#test_every_configured_page_parses_with_fr_docs
+    status: ci
+    notes: fr docs check and the page-parsing tripwire cover both new pages in CI; test_build_site.py
+      asserts each carries one figure marker naming a real figure; a real build with
+      the pinned renderer wrote both pages with the figure intact and figures.css in
+      the head; reviewers check the claims against the code
     verify: none
   - id: site-front-page-second-pass-published
     capability: published docs
