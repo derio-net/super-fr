@@ -208,9 +208,10 @@ rows:
       - super-fr:tests/unit/test_settings_paths.py#test_shell_prints_the_placement_root_feature_and_every_kind
       int:
       - super-fr:tests/integration/test_scenarios.py#test_placement_resolver
-    status: ci
-    notes: resolver, locators, logical refs and fr settings paths built; tripwire (allowlist
-      shrinks in phase 2, shell side in phase 6); scenario in CI
+    status: not-implemented
+    notes: phase 1 built the Python resolver and the tripwire; phase 2 empties its allowlist
+      and phase 6 moves hooks, the OpenCode plugin and the Hermes hook onto fr settings
+      paths; the row moves to ci when both land
     scenario: tests/scenarios/placement-resolver.sh
   - id: placement-merged-status
     capability: repo-feature-settings
