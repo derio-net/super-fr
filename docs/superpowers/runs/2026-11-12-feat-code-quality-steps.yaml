@@ -3,7 +3,7 @@ run: 2026-11-12-feat-code-quality-steps
 workflow: fr-goal@1
 branch: feat/code-quality-steps
 started: '2026-11-12T14:45:47+00:00'
-cursor: plan
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -32,8 +32,10 @@ steps:
           reviewer: a0fbabbaae8aa2534
           findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14
   plan:
-    state: running
-    at: '2026-11-12T17:13:25+00:00'
+    state: done
+    at: '2026-11-12T17:18:59+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-12-review-lenses
     units:
       step/plan:
         attempts:
@@ -41,6 +43,8 @@ steps:
           harness: claude-code
           model: claude-fable-5-2
           session: 53caef76-43cb-41fc-aa7f-cc6f18a0acb5
+          returned: '2026-11-12T17:18:59+00:00'
+          outcome: done
   plan-review:
     state: pending
   implement:
