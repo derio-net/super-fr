@@ -936,3 +936,8 @@ Stealth is its own requirement and row with its own scenario.
 ### phase-split-2026-11-12-placement-resolver-p5 · decision · ask: merged status and archive outside repo (R25, R17's quiet/stealth clause)
 
 Shared by quiet and stealth, with its own row placement-merged-status.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p6 created=2026-11-12T11:57:15+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p6 · decision · ask: hooks, OpenCode and Hermes are fr-enabled for quiet and stealth (R26)
+
+A different surface (bash, TypeScript, Hermes) with its own row placement-fr-enabled and parity rows.
