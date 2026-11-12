@@ -253,4 +253,6 @@ gate: none
 
 ## Implementation Plans
 
-(none yet)
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-12-remove-vk-compat | `derio-net/super-fr` | `2026-11-12-remove-vk-compat` | — |

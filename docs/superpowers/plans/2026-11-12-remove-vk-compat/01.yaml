@@ -1,0 +1,130 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Remove the old-install paths, require --branch, rename the env vars (R1-R8,
+    R15, R17-R19)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - init-migrate-removed
+  - isolation-up-requires-branch
+  - fr-repo-root-override
+  - installer-names-no-vk-residue
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/*
+  - packages/fr/src/fr/commands/*
+  - packages/fr/src/fr/artifacts/trigger.py
+  - packages/fr/src/fr/plan_validator_wrapper.py
+  - packages/fr/src/fr/labels.py
+  - packages/fr/src/fr/render.py
+  - packages/fr-opencode-plugin/*
+  - plugins/super-fr/hooks/*
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - scripts/install.sh
+  - scripts/bump-version.py
+  - tests/*
+  - .opencode/*
+  - .hermes/*
+  - README.md
+  - docs/reference/*
+  - docs/explainers/*
+  - docs/*.md
+  - docs/acceptance/*
+  - .test_durations
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke, then remove fr init migrate and the legacy secrets error (R1, R2,
+    R18)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      SMOKE + RED: add `tests/unit/test_vk_compat_removed.py` with one trivial passing test (`assert True`) plus these failing tests: the `init` typer group (`fr.commands.init_cmd.init_app`) registers no command named `migrate`; `importlib.util.find_spec("fr.isolation.migrate")` is `None`. In `tests/unit/test_isolation.py` replace the test that expects `IsolationError` matching `fr init migrate` for a config mounting `~/.config/vk/secrets/x.env` with one asserting the env file is created at that mounted path and nothing raises. Run the file; see the trivial test pass and the new ones fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: delete `packages/fr/src/fr/isolation/migrate.py` and `tests/unit/test_init_migrate.py`; remove the `migrate` command and its imports (`migrate_repo`, `SECRETS_BLOCK`) from `packages/fr/src/fr/commands/init_cmd.py`; in `packages/fr/src/fr/isolation/local.py::_ensure_mounted_env_file` remove the `/.config/vk/secrets/` branch and the docstring sentence about it; in `packages/fr/src/fr/artifacts/trigger.py` remove the sentence that begins "`fr init migrate` renames vk-profiles.yaml". Grep `packages/ plugins/ scripts/ docs/*.md docs/explainers docs/reference tests/` for `init migrate` and remove or reword each remaining live mention (not `CHANGELOG.md`, not `docs/superpowers/implemented/`). Amend the merged row: `uv run fr acceptance amend --id vk-legacy-fallbacks-removed --op reword --feature 2026-11-12-remove-vk-compat --acceptance "<the row's current statement with the 'fails loudly pointing at fr init migrate' clause replaced by 'vk spellings are not read'>" --why "fr init migrate and the legacy-secrets error are removed (spec 2026-11-12-remove-vk-compat R1, R2)"` after reading the row's current text in `docs/acceptance/features/2026-07-24-remove-vk-legacy-fallbacks.yaml`; if a level ref on that row names the deleted test, drop or re-point it with `fr acceptance amend --op drop-level` / `add-level`. Run the new test file, `tests/unit/test_isolation.py` and `uv run fr acceptance check --no-fetch`; see them pass. Record `refactor: {P1.T1: "deletions only"}`.
+- number: 2
+  title: fr isolation up requires --branch, and every remedy names it (R3, R17)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_vk_compat_removed.py`: invoking `isolation up` through typer's `CliRunner` with no `--branch` exits 2, its output names `--branch`, and the runner seam (`isolation_cmd._runner`) was never called; `fr.commands.isolation_cmd` has no attribute `DEFAULT_BRANCH`; a test that reads each of `packages/fr/src/fr/commands/isolation_cmd.py`, `packages/fr/src/fr/isolation/sessions.py`, `packages/fr/src/fr/isolation/local.py`, `plugins/super-fr/hooks/hermes/fr-isolation-guard.sh`, `plugins/super-fr/hooks/hermes/fr-isolation-required.sh` and `packages/fr-opencode-plugin/src/index.ts` and asserts every occurrence of `fr isolation up` that is followed by a backtick, quote, closing parenthesis or end of line (a bare command offered as a remedy) is absent, i.e. each `fr isolation up` is followed by ` --` or ` <`. See them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in `isolation_cmd.py` make `up`'s `branch` a required option (`typer.Option(..., help="Branch for the worktree.")`), delete `DEFAULT_BRANCH`, and reword the `exec` comment that mentions `vk-iso/work` to say only that an omitted `--branch` resolves to the single active workspace. Change every bare-remedy message found by the RED test to `fr isolation up --branch <branch>` (keep each message's other words). Update `tests/fixtures/hooks/guard-verdicts.yaml` and any other fixture or test that quotes the old text (grep `tests/` and `packages/fr-opencode-plugin/` for `fr isolation up`), then regenerate mirrors if a hook text is mirrored. Run the new tests, `tests/unit/test_isolation_cmd.py`, the hook verdict tests (`uv run pytest -q --no-cov -n auto -k "guard or hook or parity"`) and, inside `packages/fr-opencode-plugin/`, `bun test`; see them pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: if the remedy string now appears three or more times in one Python module, bind it once to a module constant there; otherwise record `refactor: {P1.T2: "no repetition worth a constant"}`.
+- number: 3
+  title: FR_REPO_ROOT and FR_INSTALL_SKIP_PREFLIGHT (R4, R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in `tests/unit/test_vk_compat_removed.py`: with `FR_REPO_ROOT` set to a tmp dir `resolve_repo_root()` returns it resolved; with only `VK_REPO_ROOT` set (and `FR_REPO_ROOT` unset) it does not return that dir; `FR_REPO_ROOT=""` falls through to git; a test asserting no file under `packages/`, `plugins/`, `scripts/` or `tests/` (excluding this test file) contains `VK_REPO_ROOT` or `VK_INSTALL_SKIP_PREFLIGHT`. See them fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: rename `VK_REPO_ROOT` to `FR_REPO_ROOT` in `packages/fr/src/fr/commands/common.py` (code and docstring), `packages/fr/src/fr/artifacts/trigger.py`'s docstring, `plugins/super-fr/skills/fr-acceptance/SKILL.md`, and every file under `tests/` (a mechanical whole-word replace; `tests/conftest.py` included). Rename `VK_INSTALL_SKIP_PREFLIGHT` to `FR_INSTALL_SKIP_PREFLIGHT` in `scripts/install.sh` and every test that sets it. Do NOT touch `VK_MCP_BINARY`, `VK_BRIDGE_WRAPPER_PATH`, `VK_BRIDGE_*`, `VK_DERIO_OPS_PROJECT*`, `VK_MAX_CONCURRENT_EXECUTIONS` or `VK_MCP_ENTRY`. Run `uv run python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`. Run the new tests and `uv run pytest -q --no-cov -n auto tests/unit -k "repo_root or common or trigger"`; see them pass. Record `refactor: {P1.T3: "mechanical rename"}`.
+- number: 4
+  title: Installer, validator wrapper, bump-version (R6, R7, R8)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in `tests/unit/test_vk_compat_removed.py`: `scripts/install.sh` contains none of `vk-plan`, `vk-dispatch`, `vk-execute`, `vk-progress`, `vk-plan-override`, `superpowers-for-vk`, `RETIRED_CLAUDE_RULES`, `SKILL_NAMES`; `scripts/bump-version.py` does not contain `"vk"` or the word `rebrand`; `is_super_fr_validator_wrapper` is False for a wrapper whose text holds a known delegate path and `superpowers-for-vk` but not `super-fr`, and True for the old `marketplaces/derio-net/` delegate path with `super-fr`. See them fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in `scripts/install.sh` remove `RETIRED_CLAUDE_RULES` and its `--uninstall` loop (and reword the echo that mentions the retired rule), `SKILL_NAMES` and both loops that consume it (uninstall, and install step 6's legacy-copy removal), the `rm -f "$RULES_DIR/vk-plan-override.md"` line with its comment, the `\|^superpowers-for-vk@` alternative in the sibling-repo grep, and both comments naming `superpowers-for-vk` (reword the settings comment to say only that both plugins are enabled). Leave the bare-org purge itself unchanged. In `packages/fr/src/fr/plan_validator_wrapper.py` the name condition becomes `"super-fr" in text`. In `scripts/bump-version.py` probe `fr` only: no loop, the comment says the entry point reports the new number, the error names `fr` alone. In `tests/integration/test_install_sh.py` delete the cases that pin the retired rule and the legacy `vk-*` skill copies; in `tests/integration/test_install_marketplace_namespace.py` replace the seeded `superpowers-for-vk@derio-net` id with `retired-plugin@derio-net` (the bare-org purge still drops it); in `tests/unit/test_plan_validator_wrapper_rename.py` invert the `PRE_SWEEP_WRAPPER` case (such a wrapper is foreign, `ensure_validator_wrapper` refuses to overwrite it). Run `bash -n scripts/install.sh`, the new tests, and `uv run pytest -q --no-cov -n auto tests/integration -k install tests/unit/test_plan_validator_wrapper_rename.py tests/unit/test_install_copies_rules.py`; see them pass. Record `refactor: {P1.T4: "deletions only"}`.
+- number: 5
+  title: Label wording, mirrors, docs currency (R15 in part, R19)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      In `packages/fr/src/fr/labels.py`'s module docstring write `fr:ready` and `fr:synced` (set by the dispatch bridge) for `vk-ready` / `vk-synced` / "the vk-issue-bridge"; in `packages/fr/src/fr/render.py` write `fr:ready` for the `vk-ready` mention. Leave `packages/fr-vk/**`, `tests/conftest.py::_fresh_vk_repo_cache` and `AGENTS.md`'s mention of it untouched. Run `uv run python scripts/sync-opencode.py`, `uv run --no-project python scripts/sync-hermes.py`, `uv run python scripts/sync-readme.py` (the CLI reference loses `fr init migrate`), then `uv run fr docs check --base origin/main`: for each page it names, edit the page where it describes removed behaviour (`fr init migrate`, a bare `fr isolation up`, `VK_REPO_ROOT`), otherwise bump its `reviewed:` stamp to `2026-11-12` with a note saying which change was checked. Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src`, then the full suite `uv run pytest -q --no-cov -n auto` into a host-visible log; see it pass. Single-step task.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
