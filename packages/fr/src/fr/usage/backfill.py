@@ -32,6 +32,7 @@ from typing import Any
 
 import yaml
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.usage.file import (
     NO_SESSION_FOUND,
     Capture,
@@ -52,7 +53,7 @@ from fr.usage.model import unavailable
 from fr.usage.rollup import windows_from_cursor
 from fr.usage.sources import read_session, sessions_of
 
-ARCHIVED_RUNS_REL = Path("docs") / "superpowers" / "implemented" / "runs"
+ARCHIVED_RUNS_REL = Path(KIND_DIRS["run-archived"])
 
 
 @dataclass

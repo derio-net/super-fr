@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fr.archive_followups import OWED_ISSUE_FIELDS, owned_owed_key
+from fr.artifacts.paths import KIND_DIRS
 from fr.gatebackfill import trackers
 from fr.gatebackfill.model import Manifest, PlanClose
 from fr.ghclient import GhClient, UnsupportedForgeOperation
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 OPEN_LIMIT = 500
 _FAILURES: tuple[type[Exception], ...] = (*FORGE_ERRORS, UnsupportedForgeOperation)
 _LIST_FIELDS = f"{OWED_ISSUE_FIELDS},title"  # the tracked-only body restates the item's title
-_EVIDENCE_TREES = (Path("docs/acceptance"), Path("docs/superpowers"))
+_EVIDENCE_TREES = (Path(KIND_DIRS["acceptance"]), Path(KIND_DIRS["superpowers"]))
 
 
 # --- the evidence (R14) ---------------------------------------------------------------------

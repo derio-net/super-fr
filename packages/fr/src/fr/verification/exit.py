@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.gates import POST_MERGE_GATES
 from fr.verification.model import RESERVED, StrategyError
 from fr.verification.resolve import resolve_strategy
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 
 __all__ = ["Exit", "exit_for_spec", "kind_rank", "run_exit"]
 
-IMPLEMENTED_PLANS_REL = Path("docs/superpowers/implemented/plans")
+IMPLEMENTED_PLANS_REL = Path(KIND_DIRS["plan-archived"])
 
 
 def kind_rank(kind: str, repo_root: Path | None) -> int:

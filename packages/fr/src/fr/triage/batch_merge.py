@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import APPROVED_FR
@@ -43,7 +44,7 @@ FAILING_BUCKETS = frozenset({"fail", "cancel"})
 # (status, path) changes against its first parent, a rename split into D + A.
 BaseCommit = tuple[str, tuple[tuple[str, str], ...]]
 # Close-out and archive merges move a run's artifacts and nothing else (gh#927).
-ARCHIVE_PREFIX = "docs/superpowers/"
+ARCHIVE_PREFIX = f"{KIND_DIRS['superpowers']}/"
 # Change fragments: a release commit deletes the ones it consumed.
 FRAGMENT_PREFIX = ".changes/"
 # Update-push-wait rounds per PR before merge gives up on a moving main.

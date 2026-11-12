@@ -47,6 +47,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -114,7 +115,7 @@ The two defaults are contrasted in full at
 distinction cannot be half-remembered in two (review r5-e3).
 """
 
-PLANS_REL = Path("docs") / "superpowers" / "plans"
+PLANS_REL = Path(KIND_DIRS["plan"])
 
 PrStateFn = Callable[[str], str | None]
 """`url -> "OPEN" | "CLOSED" | "MERGED" | None`, the vocabulary of
@@ -969,7 +970,7 @@ def _owning_old_cursor(repo_root: Path, run_id: str, plan_rel: str) -> RunState:
     except RunStateError as e:
         raise AdoptError(
             f"the run file that names {plan_rel} records an invalid run id {run_id!r} "
-            f"({e}) — fr will not build a path from it. Inspect docs/superpowers/runs/ "
+            f"({e}) — fr will not build a path from it. Inspect {KIND_DIRS['run']}/ "
             "by hand."
         ) from e
     mismatch = AdoptError(

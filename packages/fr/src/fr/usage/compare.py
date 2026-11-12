@@ -31,6 +31,7 @@ from typing import Any
 
 import yaml
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.journal.model import (
     JournalEntry,
     finding_states_and_reopens,
@@ -45,8 +46,8 @@ from fr.usage.split import MAIN, SUBAGENT
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?)?$")
 _PHASE_KEY = re.compile(r"^phase/(\d+)(/|$)")
 _PHASE_FILE = re.compile(r"^(\d+)\.yaml$")
-_PLANS_REL = (Path("docs/superpowers/plans"), Path("docs/superpowers/implemented/plans"))
-_RUN_DIRS = (Path("docs/superpowers/runs"), Path("docs/superpowers/implemented/runs"))
+_PLANS_REL = (Path(KIND_DIRS["plan"]), Path(KIND_DIRS["plan-archived"]))
+_RUN_DIRS = (Path(KIND_DIRS["run"]), Path(KIND_DIRS["run-archived"]))
 
 
 @dataclass(frozen=True)

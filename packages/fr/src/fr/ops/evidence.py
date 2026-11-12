@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.journal.model import (
     IMPLEMENTED_JOURNALS_REL,
     JOURNALS_REL,
@@ -36,7 +37,7 @@ from fr.ops.mask import passthrough_values, sanitise_reason
 if TYPE_CHECKING:
     from fr.ops.load import LoadedOp
 
-PLANS_REL = Path("docs/superpowers/plans")
+PLANS_REL = Path(KIND_DIRS["plan"])
 WITHHELD = "reason withheld: it looked like a response body"
 
 

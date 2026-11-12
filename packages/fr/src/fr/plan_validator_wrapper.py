@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PLANS_REL = Path("docs") / "superpowers" / "plans"
+from fr.artifacts.paths import KIND_DIRS
+
+PLANS_REL = Path(KIND_DIRS["plan"])
 # Harness-neutral: `fr init validator-wrapper` (below) runs identically on
 # Claude Code, OpenCode, Hermes, or a bare CLI shell — unlike the retired
 # `bash ~/.claude/plugins/marketplaces/.../install-validator-wrapper.sh`

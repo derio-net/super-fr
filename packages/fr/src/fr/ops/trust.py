@@ -28,6 +28,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.journal.model import (
     OP_TRUST_ID_RE,
     JournalEntry,
@@ -46,18 +47,19 @@ names — `make check`, `python -m pkg`, a sourced script, even a script under
 `docs/superpowers/` — so any committed change outside fr's evidence files
 invalidates trust. Deliberately NOT `fr.run.code_tree.code_tree`, which drops all of
 `docs/superpowers/` and `docs/acceptance/`."""
+_ACC = KIND_DIRS["acceptance"]
 TRUST_EXCLUDED: tuple[str, ...] = (
-    "docs/superpowers/journals/<scope>/<slug>.md",
-    "docs/superpowers/implemented/journals/<scope>/<slug>.md",
-    "docs/superpowers/runs/<run-id>.yaml",
-    "docs/superpowers/runs/<run-id>.records/*.yaml",
-    "docs/superpowers/runs/<run-id>.records/pr-body.md",
-    "docs/superpowers/runs/<run-id>.pr-body.md",
-    "docs/acceptance/features/<feature>.yaml",
-    "docs/acceptance/matrix.yaml",
-    "docs/acceptance/report_local.html",
-    "docs/acceptance/report_linked.html",
-    "docs/acceptance/report_linked.md",
+    f"{KIND_DIRS['journal']}/<scope>/<slug>.md",
+    f"{KIND_DIRS['journal-archived']}/<scope>/<slug>.md",
+    f"{KIND_DIRS['run']}/<run-id>.yaml",
+    f"{KIND_DIRS['run']}/<run-id>.records/*.yaml",
+    f"{KIND_DIRS['run']}/<run-id>.records/pr-body.md",
+    f"{KIND_DIRS['run']}/<run-id>.pr-body.md",
+    f"{KIND_DIRS['acceptance-fragment']}/<feature>.yaml",
+    f"{_ACC}/matrix.yaml",
+    f"{_ACC}/report_local.html",
+    f"{_ACC}/report_linked.html",
+    f"{_ACC}/report_linked.md",
 )
 """Exactly the file SHAPES fr writes as evidence while a plan runs: a journal one level
 under specs|plans|debug, a run cursor, a step record, a PR body, an acceptance fragment
@@ -167,12 +169,15 @@ class Trusted:
 
 _ACCEPTANCE = frozenset(
     {
-        "docs/acceptance/matrix.yaml",
-        "docs/acceptance/report_local.html",
-        "docs/acceptance/report_linked.html",
-        "docs/acceptance/report_linked.md",
+        f"{_ACC}/matrix.yaml",
+        f"{_ACC}/report_local.html",
+        f"{_ACC}/report_linked.html",
+        f"{_ACC}/report_linked.md",
     }
 )
+_FRAGMENT_PARTS = KIND_DIRS["acceptance-fragment"].split("/")
+_ARCHIVE_PARTS = KIND_DIRS["archive"].split("/")
+_SUPERPOWERS_PARTS = KIND_DIRS["superpowers"].split("/")
 _JOURNAL_SCOPES = frozenset({"specs", "plans", "debug"})
 _RISKY_MODES = frozenset({"120000", "100755"})
 
@@ -185,17 +190,17 @@ def is_trust_excluded(path: str, mode: str | None = None) -> bool:
     if path in _ACCEPTANCE:
         return True
     parts = path.split("/")
-    if parts[:3] == ["docs", "acceptance", "features"] and len(parts) == 4:
+    if parts[:3] == _FRAGMENT_PARTS and len(parts) == 4:
         return parts[3].endswith(".yaml")
     if (
-        parts[:3] == ["docs", "superpowers", "implemented"]
+        parts[:3] == _ARCHIVE_PARTS
         and len(parts) == 6
         and parts[3] == "journals"
         and parts[4] in _JOURNAL_SCOPES
         and parts[5].endswith(".md")
     ):
         return True
-    if parts[:2] == ["docs", "superpowers"] and len(parts) >= 4:
+    if parts[:2] == _SUPERPOWERS_PARTS and len(parts) >= 4:
         if parts[2] == "journals":
             return len(parts) == 5 and parts[3] in _JOURNAL_SCOPES and parts[4].endswith(".md")
         if parts[2] == "runs":
@@ -379,7 +384,7 @@ def grant_trust(
         raise ValueError(f"no plan {plan_slug!r} to record trust against")
 
     plan_dir = resolution.path
-    plan_root = plan_dir.parent.relative_to(root / "docs/superpowers").as_posix()
+    plan_root = plan_dir.parent.relative_to(kind_dir("superpowers", space_for(root))).as_posix()
     archived = plan_root != "plans"
     path = (
         archived_journal_path(root, "plan", plan_slug)

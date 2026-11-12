@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import yaml
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.item_state import ITEM_STATES, ItemState
 
 if TYPE_CHECKING:
@@ -161,7 +162,7 @@ def default_trackers_path() -> Path:
     return base / "fr" / "trackers.yaml"
 
 
-REPO_TRACKERS_REL = Path("docs/superpowers/trackers.yaml")
+REPO_TRACKERS_REL = Path(KIND_DIRS["trackers"])
 """Repo-level override path (spec §4.G), read the same way `fr.models`
 reads `docs/superpowers/models.yaml` — resolution is repo over user."""
 

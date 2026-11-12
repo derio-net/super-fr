@@ -16,11 +16,12 @@ from typing import Any
 
 import yaml
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.model import CursorPosition, PullRequest
 
-RUNS_DIR = "docs/superpowers/runs"
+RUNS_DIR = KIND_DIRS["run"]
 DELIVER = "deliver"
 
 

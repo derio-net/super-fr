@@ -10,6 +10,7 @@ import shlex
 from pathlib import Path
 
 from fr.acceptance.amend import feature_flag
+from fr.artifacts.paths import KIND_DIRS
 from fr.gatebackfill.candidates import PLANS_REL, Candidate, find_spec, split_key
 from fr.gatebackfill.model import PlanClose, PlanEntry
 
@@ -27,7 +28,7 @@ def _unticked(root: Path, name: str, phase: int) -> tuple[list[str], str | None]
 
     d = root / PLANS_REL / name
     if not d.is_dir():
-        archived = (root / "docs/superpowers/implemented/plans" / name).is_dir()
+        archived = (root / KIND_DIRS["plan-archived"] / name).is_dir()
         return (
             [],
             "an archived plan is frozen" if archived else f"plan {name} is not in this checkout",

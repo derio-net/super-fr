@@ -54,6 +54,7 @@ from typing import Any, TypeGuard
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import KIND_DIRS
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -64,8 +65,8 @@ from fr.isolation.types import (
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
-RECORDS_PREFIX = "docs/superpowers/"
-RUNS_DIR = Path("docs") / "superpowers" / "runs"
+RECORDS_PREFIX = f"{KIND_DIRS['superpowers']}/"
+RUNS_DIR = Path(KIND_DIRS["run"])
 TOMBSTONE = "teardown.json"
 STAGE_JSON = "stage.json"
 VERSION = 1
@@ -333,7 +334,7 @@ def _porcelain(run: Runner, worktree: Path) -> list[tuple[str, str, str | None]]
         )
     except UnicodeDecodeError as e:
         raise IsolationError(
-            f"could not read {worktree}'s changes under docs/superpowers/ (a path git "
+            f"could not read {worktree}'s changes under {KIND_DIRS['superpowers']}/ (a path git "
             f"reports is not UTF-8: {e}) — nothing was torn down. Rename it and retry, or "
             "discard fr's records with `fr isolation down --force --no-preserve`."
         ) from e
@@ -515,7 +516,8 @@ def stage(
         _write_stage(record, removal_attempted=retry)
     except OSError as e:
         raise IsolationError(
-            f"could not preserve {state.branch}'s records under docs/superpowers/ ({e}) — "
+            f"could not preserve {state.branch}'s records under "
+            f"{KIND_DIRS['superpowers']}/ ({e}) — "
             "nothing was torn down. Free the space or fix the tree and retry, or discard "
             f"them with `fr isolation down --branch {state.branch} --force --no-preserve`."
         ) from e
@@ -873,7 +875,7 @@ def restore(
         path = entry.get("path") if isinstance(entry, dict) else None
         if not _safe(path):
             print(
-                f"isolation: ignoring preserved path outside docs/superpowers/: {path!r}",
+                f"isolation: ignoring preserved path outside {KIND_DIRS['superpowers']}/: {path!r}",
                 file=sys.stderr,
             )
             continue
@@ -904,7 +906,7 @@ def restore(
     for path in tomb.get("deleted", []):
         if not _safe(path):
             print(
-                f"isolation: ignoring preserved path outside docs/superpowers/: {path!r}",
+                f"isolation: ignoring preserved path outside {KIND_DIRS['superpowers']}/: {path!r}",
                 file=sys.stderr,
             )
             continue

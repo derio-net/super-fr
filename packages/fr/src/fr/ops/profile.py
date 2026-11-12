@@ -12,6 +12,7 @@ import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.isolation.where import container_evidence
 
 PROFILE_ENV = "FR_PROFILE"
@@ -51,7 +52,7 @@ def refusal_route(repo_root: Path, *, slug: str = "<slug>", base: str = "<ref>")
     profile = names[0] if names else "<ops-profile>"
     branch = f"chore/ops-{slug}"
     # The ops branch carries no run of its own, so the plan must be named.
-    plan = f" --plan docs/superpowers/plans/{slug}" if slug != "<slug>" else ""
+    plan = f" --plan {KIND_DIRS['plan']}/{slug}" if slug != "<slug>" else ""
     return (
         "not inside an ops profile; run it in an ops workspace:\n"
         f"  fr isolation up --profile {profile} --branch {branch} --base {base}\n"

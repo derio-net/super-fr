@@ -30,6 +30,7 @@ from typing import Any, Literal
 import yaml
 from packaging.version import InvalidVersion, Version
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.triage.errors import TriageError
 
 __all__ = ["TriageError"]  # re-exported: a corrupt ledger raises it
@@ -39,7 +40,7 @@ FR_RELEASE_REPO = "derio-net/super-fr"
 run (R17, R18)."""
 
 REHOMES_FILE = "rehomes.yaml"
-RUNS_DIR = "docs/superpowers/runs"
+RUNS_DIR = KIND_DIRS["run"]
 DRIVER_REQUEST_PREFIX = "driver:rehome:"
 """A self-re-home request's id is this plus the release; `drive record` routes its result
 here rather than to the runner's mailbox."""

@@ -27,6 +27,7 @@ from fr.acceptance.model import (
     latest_passing_walk_at,
 )
 from fr.archive import MergeEvidence, merge_evidence
+from fr.artifacts.paths import KIND_DIRS
 from fr.closeout import plan_sweep
 from fr.debt.model import (
     AcceptanceDebt,
@@ -42,9 +43,9 @@ from fr.debt.model import (
 
 DEFAULT_STALE_DAYS = 14
 CONFIG_REL = Path(".fr/debt.yaml")
-PLANS_REL = "docs/superpowers/plans"
-SPECS_REL = "docs/superpowers/specs"
-RUNS_REL = Path("docs/superpowers/runs")
+PLANS_REL = KIND_DIRS["plan"]
+SPECS_REL = KIND_DIRS["spec"]
+RUNS_REL = Path(KIND_DIRS["run"])
 OWED_MARKER = re.compile(r"<!--\s*fr-owed:(\S+?)\s*-->")
 _CONFIG_KEYS = frozenset({"stale_days"})
 

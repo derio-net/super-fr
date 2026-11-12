@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.artifacts.paths import KIND_DIRS
 
 from .sessions import _write_index, read_session_index
 from .types import IsolationError, delete_state, load_state, save_state
@@ -35,7 +36,7 @@ from .types import IsolationError, delete_state, load_state, save_state
 __all__ = ["IsolationError", "RenamePlan", "plan_rename", "rename_branch"]
 
 MARKER = ".fr-isolation"
-RUNS_REL = Path("docs") / "superpowers" / "runs"
+RUNS_REL = Path(KIND_DIRS["run"])
 
 
 @dataclass(frozen=True)

@@ -38,6 +38,7 @@ from pydantic import (
 )
 
 from fr.acceptance.model import Visual, Walk, check_issue_refs, check_status, check_verify
+from fr.artifacts.paths import KIND_DIRS
 from fr.journal.model import FindingState, JournalKind, ReviewScope
 from fr.run.model import AnsweredBy
 from fr.workflow.artifacts import ALWAYS_RECORD_SECTIONS, record_sections
@@ -100,7 +101,7 @@ Bumped 10 -> 11 for the `acceptance:` section's amendment item (`AmendmentItem`,
 spec `2026-11-04-repo-feature-settings-design.md` R16, R19). Migration:
 `fr.artifacts.record_amendments`, stamp only."""
 RECORDS_SUFFIX = ".records"
-RUNS_REL = Path("docs") / "superpowers" / "runs"
+RUNS_REL = Path(KIND_DIRS["run"])
 
 Outcome = Literal["done", "failed", "blocked"]
 ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope"]

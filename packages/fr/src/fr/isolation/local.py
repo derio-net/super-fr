@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import IO, Any, ClassVar, cast
 
 from fr._hosts import detect_backend
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.ghclient import CommandRunner
 from fr.hostclient import FORGE_ERRORS, client_for
 from fr.isolation import preserve as _preserve
@@ -288,7 +289,7 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
         f"Or reap it anyway with `fr isolation down --branch {branch} --force`, "
         "which removes the worktree and fr's record of it (the branch and any "
         "commits on it remain in the repo; uncommitted changes do not survive, except "
-        "fr's own records under `docs/superpowers/`, which are preserved and restored "
+        f"fr's own records under `{KIND_DIRS['superpowers']}/`, which are preserved and restored "
         "by the next `up`)."
     )
     return "\n".join(lines)
@@ -301,7 +302,7 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
 # spliced in after `docs/superpowers/`). Kept as a local constant, not imported
 # from fr.archive: this module must not depend on the archive command.
 _ARCHIVED_KINDS = ("plans", "specs", "journals", "runs", "usage")
-_SUPERPOWERS = "docs/superpowers/"
+_SUPERPOWERS = f"{KIND_DIRS['superpowers']}/"
 
 # Files only fr's own tooling writes into a workspace, appended to the shared
 # `info/exclude` on `up` so they never make a worktree dirty — which would make
@@ -1960,7 +1961,7 @@ class LocalWorktreeDevcontainerTarget:
         if not preserve and not force:
             raise IsolationError(
                 "--no-preserve is only valid with --force — it discards fr's records "
-                "under docs/superpowers/, an explicit per-call decision."
+                f"under {KIND_DIRS['superpowers']}/, an explicit per-call decision."
             )
         runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
@@ -2570,7 +2571,7 @@ class LocalWorktreeDevcontainerTarget:
         still lack the validator entry point.
         """
         plans = self.run(
-            ["git", "ls-tree", ref, "--", "docs/superpowers/plans"],
+            ["git", "ls-tree", ref, "--", KIND_DIRS["plan"]],
             cwd=self.repo_root,
         )
         if plans.returncode != 0 or not plans.stdout.strip():
@@ -2582,7 +2583,7 @@ class LocalWorktreeDevcontainerTarget:
         line = result.stdout.strip()
         if result.returncode != 0 or not line:
             raise IsolationError(
-                f"plan repo has docs/superpowers/plans in {ref} but no "
+                f"plan repo has {KIND_DIRS['plan']} in {ref} but no "
                 f"scripts/validate-plans.sh there; run `{REPAIR_COMMAND}` from the repo "
                 "root, commit it to the isolation start ref, then retry `fr isolation up`."
             )
@@ -2595,7 +2596,7 @@ class LocalWorktreeDevcontainerTarget:
             )
 
     def _ensure_validator_wrapper_in_worktree(self, worktree: Path) -> None:
-        plans = worktree / "docs" / "superpowers" / "plans"
+        plans = kind_dir("plan", space_for(worktree))
         if not plans.is_dir():
             return
         wrapper = worktree / "scripts" / "validate-plans.sh"

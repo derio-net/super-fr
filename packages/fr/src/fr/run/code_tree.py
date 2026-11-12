@@ -18,9 +18,13 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.git import GitUnavailableError, git_answer, remote_default_ref
 
-FR_ARTIFACT_PREFIXES: tuple[str, ...] = ("docs/superpowers/", "docs/acceptance/")
+FR_ARTIFACT_PREFIXES: tuple[str, ...] = (
+    f"{KIND_DIRS['superpowers']}/",
+    f"{KIND_DIRS['acceptance']}/",
+)
 """The repo-relative prefixes that are fr's artifact trees, not code.
 
 Runs, step records, journals, plans and specs live under `docs/superpowers/`;

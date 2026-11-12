@@ -22,6 +22,13 @@ from __future__ import annotations
 import re
 from typing import Literal, NamedTuple
 
+from fr.artifacts.paths import KIND_DIRS
+
+_SP = re.escape(KIND_DIRS["superpowers"])
+_SPECS = re.escape(KIND_DIRS["spec"])
+_PLANS = re.escape(KIND_DIRS["plan"])
+_ACC = re.escape(KIND_DIRS["acceptance"])
+
 Activity = Literal["paperwork", "implementation", "other"]
 
 PAPERWORK_SUBS = frozenset(
@@ -132,7 +139,7 @@ _BASH_RULES: tuple[tuple[str, str], ...] = (
     # a shell write (heredoc / redirect / tee) is classified by the path it writes
     (r"__WRITE__", "__write__"),
     # any other touch of the paper trail by path
-    (r"docs/superpowers/|docs/acceptance", "paper_read"),
+    (rf"{_SP}/|{_ACC}", "paper_read"),
     # version control
     (r"^(git|gh)\b|&& (git|gh) |; (git|gh) ", "vcs"),
     # isolation lifecycle
@@ -181,15 +188,15 @@ def _path(path: str, write: bool) -> Classification:
         # deliver's `tests=<log>` evidence: the suite's own output, so touching
         # it is verification — the same answer the shell rule gives
         return _of("verify")
-    if re.search(r"(^|/)docs/superpowers/specs/", p):
+    if re.search(rf"(^|/){_SPECS}/", p):
         return _of("spec_write" if write else "paper_read")
-    if re.search(r"(^|/)docs/superpowers/plans/", p):
+    if re.search(rf"(^|/){_PLANS}/", p):
         return _of("plan_write" if write else "paper_read")
-    if re.search(r"(^|/)docs/superpowers/(journals|runs)/", p):
+    if re.search(rf"(^|/){_SP}/(journals|runs)/", p):
         return _of("journal_write" if write else "paper_read")
-    if re.search(r"(^|/)docs/superpowers/", p):
+    if re.search(rf"(^|/){_SP}/", p):
         return _of("paper_read")
-    if re.search(r"(^|/)docs/acceptance/", p):
+    if re.search(rf"(^|/){_ACC}/", p):
         return _of("acceptance" if write else "paper_read")
     if re.search(r"(^|/)(\.opencode|\.hermes|docs/explainers)/|CHANGELOG", p):
         return _of("chores")

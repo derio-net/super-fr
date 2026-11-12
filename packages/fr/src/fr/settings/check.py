@@ -14,6 +14,7 @@ from typing import Final
 
 import yaml
 
+from fr.artifacts.paths import kind_dir, space_for
 from fr.settings import SettingsError, load_settings
 from fr.settings.load import read_at_default
 from fr.settings.model import Settings
@@ -34,7 +35,7 @@ def _live_plans_with_ops(root: Path, settings: Settings) -> tuple[str, ...]:
         return ()
     from fr.ops.load import plan_has_ops
 
-    plans = root / "docs" / "superpowers" / "plans"
+    plans = kind_dir("plan", space_for(root))
     if not plans.is_dir():
         return ()
     return tuple(sorted(d.name for d in plans.iterdir() if d.is_dir() and plan_has_ops(root, d)))

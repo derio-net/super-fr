@@ -22,9 +22,11 @@ from pathlib import Path
 
 import yaml
 
+from fr.artifacts.paths import KIND_DIRS
+
 ModelsConfig = dict[str, dict[str, str]]
 
-REPO_MODELS_REL = Path("docs/superpowers/models.yaml")
+REPO_MODELS_REL = Path(KIND_DIRS["models"])
 """A repo's own tier→model bindings, relative to its root — read wherever a
 command needs the repo-over-user rule: `fr models`'s own commands, `fr run`'s
 tier resolution, and triage batch dispatch's orchestrator fallback (spec

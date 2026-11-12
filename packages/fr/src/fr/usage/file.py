@@ -29,6 +29,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.run.telemetry import parse_timestamp
 from fr.usage.model import UsageRecord
 from fr.usage.readers.hermes import ACP_ZERO_TOKENS
@@ -43,8 +44,8 @@ from fr.usage.split import (
     tokens_by_step,
 )
 
-USAGE_REL = Path("docs") / "superpowers" / "usage"
-IMPLEMENTED_USAGE_REL = Path("docs") / "superpowers" / "implemented" / "usage"
+USAGE_REL = Path(KIND_DIRS["usage"])
+IMPLEMENTED_USAGE_REL = Path(KIND_DIRS["usage-archived"])
 
 Mode = Literal["host-worktree", "devcontainer", "external"]
 UsdSource = Literal["exact", "estimated", "none"]

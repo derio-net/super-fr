@@ -49,6 +49,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref
 from fr.plan_validator_wrapper import WRAPPER_REL
 
@@ -57,7 +58,11 @@ if TYPE_CHECKING:
     from fr.parser import Plan
     from fr.types import PhaseHeader
 
-EXEMPT_PREFIXES = ("docs/superpowers/", "docs/acceptance/", WRAPPER_REL.as_posix())
+EXEMPT_PREFIXES = (
+    f"{KIND_DIRS['superpowers']}/",
+    f"{KIND_DIRS['acceptance']}/",
+    WRAPPER_REL.as_posix(),
+)
 """fr's own artifacts: spec, plan, journals, runs, acceptance matrix + reports,
 and the validator wrapper `fr plan create` installs on a repo's first plan."""
 
@@ -254,7 +259,7 @@ def _spec_at_head(repo_root: Path, ref: str) -> tuple[str, str] | None:
     candidates: list[str] = []
     if slug:
         name = slug if slug.endswith(".md") else f"{slug}.md"
-        candidates += [f"docs/superpowers/{root}/{name}" for root in SPEC_ROOTS]
+        candidates += [f"{KIND_DIRS['superpowers']}/{root}/{name}" for root in SPEC_ROOTS]
     candidates.append(ref.strip())
     for rel in candidates:
         text = _show_head(repo_root, rel)

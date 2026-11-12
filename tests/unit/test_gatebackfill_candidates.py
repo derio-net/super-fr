@@ -423,3 +423,22 @@ def test_r7_a_manifest_named_issue_still_matches_when_it_carries_a_marker(tmp_pa
     cands, _ = _collect(repo, forge, manifest=manifest)
 
     assert cands["row:gap"].tracker_candidates == (f"{REPO}#73",)
+
+
+def test_row_spec_finds_a_spec_in_a_feature_root_outside_the_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 1's review: `row_spec` must follow the resolver, not `root / rel` alone."""
+    from fr.artifacts import paths
+    from fr.gatebackfill.candidates import row_spec
+
+    outside = tmp_path / "elsewhere" / "features" / "feat__x"
+    spec = outside / "docs/superpowers/specs/2026-01-01-thing-design.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("# spec\n")
+    repo = tmp_path / "product"
+    repo.mkdir()
+    monkeypatch.setattr(paths, "feature_roots", lambda _space: iter([outside]))
+
+    assert row_spec(repo, ("spec:2026-01-01-thing#R1",)) == str(spec)
+    assert row_spec(repo, ("spec:2026-01-01-absent",)) is None
