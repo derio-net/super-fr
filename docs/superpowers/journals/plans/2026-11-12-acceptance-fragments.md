@@ -754,3 +754,8 @@ Additive today; freezing the ~500-line StepRecord is far beyond a review fix, an
 ### pr1408-r1-resolved-2 · finding [fixed] · resolves pr1408-r1: A retired row that became contested can never be cleared: every pending amendment naming a retired row raises FoldError, whatever its base
 
 b9475854b fixed the fold; 55614d9d2 lets fr acceptance amend write the clearing amendment to a contested retired row (red: test_amend_clears_a_contested_retired_row_with_a_correctly_based_amendment, exit 2 before); a non-contested retired row is still refused.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r4-resolved-2 created=2026-11-12T11:00:09+00:00 state=fixed resolves=pr1408-r4 -->
+### pr1408-r4-resolved-2 · finding [fixed] · resolves pr1408-r4: An in-flight branch whose matrix.yaml holds a row this PR retired gets 'duplicate row ids' with no fix named
+
+6319de748: merging main (#1411) into this PR showed the dead end was wider than the message. Every open branch's matrix.yaml holds the untouched pre-split copy of rows the fragments since retired or reworded, and the split compared it with the folded row, so it refused all of them. A copy equal to the row's definition in its fragment is now accounted for (the amendments still apply); only a branch's own edit is refused. Red: test_an_in_flight_matrix_holding_an_untouched_retired_row_migrates, test_an_in_flight_matrix_holding_an_untouched_amended_row_migrates.
