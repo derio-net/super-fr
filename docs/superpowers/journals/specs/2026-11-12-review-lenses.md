@@ -292,3 +292,6 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-review-lenses-p2 created=2026-11-12T17:16:46+00:00 -->
+### phase-split-2026-11-12-review-lenses-p2 · decision · ask: adding lenses and path rules (R4-R7) is its own ask, with two artifact migrations reviewed apart from the lens set
