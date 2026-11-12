@@ -35,3 +35,8 @@ Asked what the reviewer returns per lens. Operator chose one line per declared l
 ### d6-verification-candidate · decision · Verified on a candidate build, all rows, no post-merge walk
 
 The standing verification question. Operator chose the candidate strategy for every row, with a stubbed reviewer return in the scenarios; no gate holds the close-out.
+
+<!-- fr:journal kind=decision scope=spec id=d7-feature-level-review created=2026-11-12T16:44:48+00:00 decided_by=operator -->
+### d7-feature-level-review · decision · Lenses are reviewed once, at feature level before deliver; supersedes d2 and d3
+
+The operator asked whether concrete lenses would limit the phase reviewer's autonomy, then proposed a separate feature-level review before deliver that looks for the chosen lenses, with any agent able to add a lens at any step and the lenses accumulating. The per-phase review stays general. The usual in-scope fix and out-of-scope filing rules apply. This replaces per-phase lens declarations (d2) and waivers (d3); path rules are kept.
