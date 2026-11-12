@@ -311,3 +311,9 @@ amendments:
       counterpart at read time, ci-pinned; the live close-out (verify: live, post-merge)
       is still owed'
     why: review p2-r5
+  - row: matrix-parse-libyaml
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_parse_cache.py#test_real_matrix_equals_plain_pyyaml_build
+    why: the fragments split renamed the test
