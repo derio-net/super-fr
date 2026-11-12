@@ -125,3 +125,64 @@ file-list tripwire reads those files whole.
 ### p1-r7-resolved · finding [fixed] · resolves p1-r7: .test_durations not refreshed (phase 1)
 
 Refreshed by the full-suite run made after these fixes (`--store-durations`).
+
+<!-- fr:journal kind=decision scope=plan id=p2-unrepairable-is-its-own-report-field created=2026-11-12T19:22:30+00:00 phase=2 -->
+### p2-unrepairable-is-its-own-report-field · decision · An unrewritable archived file is reported in MigrationReport.unrepairable, not failed (phase 2)
+
+R12 says an archived file the repair cannot read or rewrite is reported and never holds the
+CLI-entry gate, but the gate refuses on any `report.failed` after it migrates. So such paths go
+to a new `MigrationReport.unrepairable` field, which leaves `ok` true: `fr migrate artifacts`
+prints each one (stderr, "not repaired (archived, left as it is)") and keeps its exit code, and
+the gate prints the same line and proceeds. A vetoed (uncommitted) archived file is still a
+`failed` hold, as for any path.
+
+<!-- fr:journal kind=decision scope=plan id=p2-repair-check-field created=2026-11-12T19:22:30+00:00 phase=2 -->
+### p2-repair-check-field · decision · Repair gained a second optional field, check, for the dry rewrite check (phase 2)
+
+The runner's `_scan_extra` needs the dry rewrite check the plan describes without knowing
+`plan_vk_version`, so `Repair` gained `check: Callable[[Path], object] | None = None` beside
+`extra_locators`; the vk repair passes `rewritten_text`, the same function `drop_vk_version`
+writes, so repairable and rewritten cannot disagree. `CEILING_REPAIR` sets neither.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-plan-migrations-has-no-failure-channel created=2026-11-12T19:22:30+00:00 phase=2 -->
+### p2-plan-migrations-has-no-failure-channel · discovery · plan_migrations returns actions only, so the preview's failure is in run_migrations(dry_run=True) (phase 2)
+
+`plan_migrations` returns a tuple of PlannedAction and has never carried failures for any
+path. It lists the live and repairable archived carriers; the unrewritable archived file is
+reported by `run_migrations(dry_run=True)` (what `fr migrate artifacts` previews with) in
+`unrepairable`. Both are tested.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-three-archived-plans-number-phase-zero created=2026-11-12T19:22:30+00:00 phase=2 -->
+### p2-three-archived-plans-number-phase-zero · discovery · Three archived plans do not parse on origin/main either (phase 0) (phase 2)
+
+2026-04-11-plugin-canonical-skills, 2026-04-13-workspace-lifecycle-skill-hook and
+2026-04-14-archive-and-unified-descriptions have a `00.yaml`; `PhaseHeader.number` is ge=1 on
+origin/main too. They are allowlisted by slug with that reason in
+ARCHIVED_PLANS_THAT_DO_NOT_PARSE; every other archived v2 plan parses.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-runner-repo-test-names-the-exception created=2026-11-12T19:22:30+00:00 phase=2 -->
+### p2-runner-repo-test-names-the-exception · discovery · test_this_repos_own_artifacts_plan_only_safe_actions now admits the one archive repair (phase 2)
+
+The existing runner test asserted no planned action touches the archive; it now allows an
+archived action only when its repair is `drop-vk-version`. After this repo's migration no such
+action remains, so it is the same assertion in practice.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-migration-preview-33 created=2026-11-12T19:22:30+00:00 phase=2 -->
+### p2-migration-preview-33 · discovery · The repo's own migration rewrote exactly 33 archived _meta.yaml files (phase 2)
+
+`fr migrate artifacts` previewed 33 actions, all archived `_meta.yaml` drop-vk-version repairs,
+no failures; `--yes` applied them (33 files, 33 deletions, 0 additions). `fr migrate
+artifacts` never commits, so the commit was made with the subject and trailer it printed.
+`fr validate artifacts` passes (151 artifacts).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-skill-lists-fr-version created=2026-11-12T19:22:30+00:00 phase=2 -->
+### p2-skill-lists-fr-version · discovery · The fr-plan skill's field list names fr_version where vk_version stood (phase 2)
+
+`fr_version` is a real `_meta.yaml` field the list omitted, so it replaced the removed key
+rather than leaving a gap. The fragment summary also names the VK_INSTALL_SKIP_PREFLIGHT
+rename, which the plan's suggested text left out.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-12T19:22:30+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+single-step task: rule paragraph, fragment and page stamps, nothing to clean
