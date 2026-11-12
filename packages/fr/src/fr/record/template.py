@@ -186,6 +186,23 @@ def _phase_steps(
     return ids, refactor_gaps(plan, phase)
 
 
+def _owed_evidence(repo_root: Path, state: RunState, step: Step) -> list[str]:
+    """The step's evidence, less `review`/`reviewer` on a lens review whose set is
+    empty (spec 2026-11-12-review-lenses R11). A set that cannot be computed keeps
+    the full list: the brief that carries this template refuses on its own."""
+    from fr.lenses.accumulate import lens_set
+    from fr.lenses.model import LensError
+    from fr.lenses.review import LENS_EVIDENCE, owed_evidence
+
+    if LENS_EVIDENCE not in step.evidence:
+        return list(step.evidence)
+    try:
+        ids = lens_set(repo_root, state).ids
+    except LensError:
+        return list(step.evidence)
+    return owed_evidence(step.evidence, ids)
+
+
 def record_brief(
     repo_root: Path,
     state: RunState,
@@ -228,7 +245,7 @@ def record_brief(
         allowed=allowed,
         tick_ids=ticks,
         refactor_tasks=gaps,
-        evidence=list(step.evidence),
+        evidence=_owed_evidence(repo_root, state, step),
         emitted=[n for n in _EMITTED_NAMES if n in emits],
         resolve=resolve,
         gated=step.gate == "operator",

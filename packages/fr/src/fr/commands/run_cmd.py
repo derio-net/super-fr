@@ -116,7 +116,9 @@ from fr.run.model import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from fr.lenses.accumulate import LensSet
     from fr.record.model import QuestionRounds, VisualEvidence
+    from fr.run.observed import ChildDispatch
     from fr.run.telemetry import Round
     from fr.verification.walk import WalkOwed
 from fr.run.provenance import cleared_gates, gates
@@ -1618,6 +1620,7 @@ _VERIFIABLE_EVIDENCE = (
     "visual",
     "single-phase",
     "walk",
+    "lenses",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1635,7 +1638,7 @@ _DERIVED_EVIDENCE = DERIVED_EVIDENCE
 # `step/<id>` unit with no target (`_evidence_target`) refuses them rather than
 # recording them unchecked. `tests` is not one: it is delivery's evidence, on
 # the flat `deliver` unit (debug journal C5).
-_PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings"})
+_PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings", "lenses"})
 # OFFERED evidence (2026-09-29-fr-goal-light-path §D, R6): a name a unit of a
 # `for_each: phase` group member may carry WITHOUT its step declaring it, and
 # that is never counted missing there. `tests` is the phase holder's own suite
@@ -1660,6 +1663,9 @@ _DERIVED_FROM = {
     "cover its named states and interactions, and the witness transcript shows each "
     "one opened since the unit opened",
     "single-phase": "from the plan this step emits: exactly one phase that is not `[manual]`",
+    "lenses": "from the feature's lens set at this resolve and each lens reviewer's return: "
+    "per lens, the changed files it examined and the findings it raised (`none` for an "
+    "empty set)",
 }
 
 
@@ -1669,15 +1675,20 @@ class _EvidenceTarget:
 
     `review-phase` reviews a PHASE of the plan journal (`scope="plan"`,
     `phase=N`); `spec-review` reviews the run's spec, in its spec journal
-    (`scope="spec"`, no phase). One value, passed through every rule, so the
-    two review steps cannot drift into two spellings of "reviewed".
+    (`scope="spec"`, no phase); `lens-review` reviews the whole FEATURE, in the
+    plan journal with no phase (`feature=True`, spec 2026-11-12-review-lenses
+    §3.C). One value, passed through every rule, so the review steps cannot
+    drift into several spellings of "reviewed".
     """
 
     scope: Literal["plan", "spec"]
     phase: int | None
+    feature: bool = False
 
     @property
     def subject(self) -> str:
+        if self.feature:
+            return "the feature"
         return f"phase {self.phase}" if self.phase is not None else "the spec"
 
 
@@ -1691,7 +1702,20 @@ def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
         return _EvidenceTarget("plan", phase)
     if "journal:spec" in step.emits:
         return _EvidenceTarget("spec", None)
+    if "journal:plan" in step.emits:
+        return _EvidenceTarget("plan", None, feature=True)
     return None
+
+
+def _reviews_the_feature(step: Step, target: _EvidenceTarget | None) -> bool:
+    """Whether `step` is a review of the whole feature (the lens review): the
+    feature target AND review evidence declared. The light shape's `plan` emits
+    `journal:plan` too, and owes no lens set (it declares only `single-phase`)."""
+    return (
+        target is not None
+        and target.feature
+        and any(name in _PHASE_EVIDENCE for name in step.evidence)
+    )
 
 
 def _ci_configured(repo_root: Path | None) -> bool:
@@ -1724,9 +1748,15 @@ def _evidence_hint(name: str, target: _EvidenceTarget | None, repo_root: Path | 
     assert target is not None  # phase-scoped evidence without a target is refused first
     if name == "review":
         when = "" if target.phase is not None else ", created after this step opened"
+        kind = "global `kind=review`" if target.feature else "`kind=review`"
         return (
-            f"<journal-entry-id>, naming the `kind=review` {target.scope}-journal entry "
+            f"<journal-entry-id>, naming the {kind} {target.scope}-journal entry "
             f"recorded for {target.subject}{when}"
+        )
+    if target.feature:
+        return (
+            "<lens>=<agent-id>,<lens>=<agent-id>, one per lens in the feature's set "
+            "(`fr lenses status`), each the id a dispatched reviewer's dispatch returned"
         )
     not_impl = f", not {target.subject}'s implementer" if target.phase is not None else ""
     return (
@@ -1791,13 +1821,19 @@ def _plan_journal_entries(repo_root: Path, state: RunState) -> tuple[str, list[J
     """`(slug, entries)` of this run's PLAN journal. Raises `RunStateError`
     when the run has not recorded a plan yet, which is fail-closed: a gate that
     cannot read its source does not know whether it passed."""
+    slug, _path = _plan_journal_path(state, repo_root)
+    return _journal_entries(repo_root, "plan", slug, "--phase <n> ")
+
+
+def _plan_journal_path(state: RunState, repo_root: Path) -> tuple[str, Path]:
     plan_rel = _emitted_plan(state)
     if plan_rel is None:
         raise RunStateError(
             "cannot verify evidence — no plan recorded yet (resolve the step "
             "that emits `plan` first)"
         )
-    return _journal_entries(repo_root, "plan", Path(plan_rel).name, "--phase <n> ")
+    slug = Path(plan_rel).name
+    return slug, resolve_journal_read_path(repo_root, "plan", slug)
 
 
 def _review_journal_entries(
@@ -1806,6 +1842,12 @@ def _review_journal_entries(
     """`(slug, entries)` of the journal `target` names — the plan journal, or
     the spec journal of the spec this run emitted. Fail-closed like the plan
     one: no spec recorded is a refusal, not an empty journal."""
+    if target.feature:
+        # The lens review: a plan journal that does not exist holds no lens finding
+        # and no review, exactly as `lens_set` reads it (no lens added).
+        slug, path = _plan_journal_path(state, repo_root)
+        if not path.exists():
+            return slug, []
     if target.scope == "plan":
         return _plan_journal_entries(repo_root, state)
     from fr.requirements import run_spec
@@ -1918,13 +1960,27 @@ def _verified_evidence(
     # may omit, because it is owed only when the spec asks for a pre-merge walk
     # (§C) — which is how an in-flight run, or one with no `## Verification`,
     # delivers unchanged.
+    if "lenses" in step.evidence and (target is None or not target.feature):
+        err_console.print(
+            f"[red]{key}: cannot verify `lenses` evidence — it is the lens review's, on a "
+            "flat step that emits `journal:plan` (spec 2026-11-12-review-lenses §3.C)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # The lens review's set is computed HERE, at resolve (§3.C): a lens added
+    # during the review, or a rule a fix newly matched, is owed before it closes.
+    lenses = (
+        _lens_set_or_exit(key, repo_root, state)
+        if _reviews_the_feature(step, target) and (state_value == "done" or offered)
+        else None
+    )
     walk_owed = None
     if "walk" in offered or (state_value == "done" and "walk" in step.evidence):
         walk_owed = _walk_obligation(key, repo_root, state)
     missing = (
         [
             n
-            for n in step.evidence
+            for n in _owed_on(step, lenses)
             if n not in offered
             and n not in _DERIVED_EVIDENCE
             and not (n == "walk" and walk_owed is not None and not walk_owed.owed)
@@ -1972,7 +2028,13 @@ def _verified_evidence(
     if historical:
         assert target is not None  # phase-scoped, refused above otherwise
         _refuse_unboundable_historical(key, target, offered)
-    if "reviewer" in offered and not historical:
+    reviewers: dict[str, str] | None = None
+    if "reviewer" in offered and not historical and lenses is not None:
+        assert target is not None
+        reviewers = _verify_lens_reviewers(
+            key, offered["reviewer"], state, lenses, repo_root, target=target, opened=since
+        )
+    elif "reviewer" in offered and not historical:
         assert target is not None  # phase-scoped, refused above otherwise
         _verify_reviewer(
             key,
@@ -2028,7 +2090,7 @@ def _verified_evidence(
         )
     derives = state_value == "done" and "findings" in step.evidence
     review_journal: tuple[str, list[JournalEntry]] | None = None
-    if "review" in offered or derives:
+    if "review" in offered or derives or (lenses is not None and state_value == "done"):
         assert target is not None  # `review`/`findings` are phase-scoped, refused above otherwise
         try:
             review_journal = _review_journal_entries(repo_root, state, target)
@@ -2078,6 +2140,13 @@ def _verified_evidence(
             return _closed_findings_witness(key, slug, entries, findings_target)
 
         derive("findings", findings_witness)
+    if state_value == "done" and lenses is not None and "lenses" in step.evidence:
+        assert review_journal is not None  # read above whenever the set is
+        lens_entries = review_journal[1]
+        derive(
+            "lenses",
+            lambda: _lenses_witness(key, repo_root, lenses, lens_entries, reviewers, since),
+        )
     if len(refused) > 1:
         err_console.print(
             f"{key}: refused — {len(refused)} derived witnesses failed: {', '.join(refused)}",
@@ -2424,7 +2493,7 @@ def _verify_reviewer(
     `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
     is refused (review p4-f2) — every spelling `agent_name` folds matches.
     """
-    from fr.run.observed import ChildDispatch, observed_session
+    from fr.run.observed import observed_session
     from fr.run.telemetry import parse_timestamp
 
     phase = target.phase
@@ -2531,13 +2600,9 @@ def _check_returned_findings(
     (the orchestrator's own), never fewer. Where fr cannot read the session, or
     the named reviewer's return, the check is noted `unobserved=reviewer-return`
     and warned, never silently skipped."""
-    from fr.run.observed import observed_session
     from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
-    from fr.run.telemetry import parse_timestamp
 
-    start = parse_timestamp(since) if since is not None else None
-    view = observed_session(os.environ) if start is not None else None
-    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    dispatched = _dispatches_since(since)
     if dispatched is None:
         _return_unobserved(key, "the phase reviewers", _why_unobservable("subagent returns"))
         return
@@ -2601,6 +2666,241 @@ def _check_returned_findings(
         )
 
 
+def _dispatches_since(since: str | None) -> list[ChildDispatch] | None:
+    """The subagents this session dispatched since `since`, or None where fr cannot
+    read the session. The one dispatch walk both reviewer-return checks read."""
+    from fr.run.observed import observed_session
+    from fr.run.telemetry import parse_timestamp
+
+    start = parse_timestamp(since) if since is not None else None
+    view = observed_session(os.environ) if start is not None else None
+    return view.dispatches(start) if view is not None and start is not None else None
+
+
+def _owed_on(step: Step, lenses: LensSet | None) -> list[str]:
+    """What `step` owes: its evidence, less `review`/`reviewer` on a lens review
+    whose set is empty (R11, `fr.lenses.review.owed_evidence`)."""
+    from fr.lenses.review import owed_evidence
+
+    return owed_evidence(step.evidence, lenses.ids) if lenses is not None else list(step.evidence)
+
+
+def _lens_lines(repo_root: Path, lenses: LensSet, lens_id: str) -> list[str]:
+    """What a refusal over `lens_id` prints (R10): its title, instruction text, why
+    it is in the set, and the return rule: the brief for the reviewer still owed."""
+    from fr.lenses.resolve import effective_lenses
+    from fr.lenses.review import lens_review_rule, why_line
+
+    entry = next(e for e in lenses.lenses if e.lens == lens_id)
+    found = effective_lenses(repo_root).get(lens_id)
+    lines = [f"lens {lens_id}" + (f": {found.title}" if found is not None else "")]
+    lines.append(f"  in the set because: {why_line(entry)}")
+    if found is not None:
+        lines.extend(f"  {line}" for line in found.brief.strip().splitlines())
+    lines.extend(f"  {line}" for line in lens_review_rule(lens_id).splitlines())
+    return lines
+
+
+def _verify_lens_reviewers(
+    key: str,
+    value: str,
+    state: RunState,
+    lenses: LensSet,
+    repo_root: Path,
+    *,
+    target: _EvidenceTarget,
+    opened: str | None,
+) -> dict[str, str]:
+    """The lens review's `reviewer` map, `<lens>=<dispatch-id>,...`, checked
+    against the set computed at this resolve — or exit 2 (R10). Each id is then
+    verified as a phase reviewer's is (`_verify_reviewer`)."""
+    hint = (
+        "on the lens review, --evidence reviewer= is a map, one <lens>=<dispatch-id> per "
+        "lens in the feature's set, comma-separated"
+    )
+    named: dict[str, str] = {}
+    problems: list[str] = []
+    for pair in value.split(","):
+        lens_id, sep, agent = (part.strip() for part in pair.partition("="))
+        if not sep or not lens_id or not agent:
+            problems.append(f"{pair.strip()!r} is not <lens>=<dispatch-id>: {hint}")
+            continue
+        if lens_id in named:
+            problems.append(f"lens {lens_id} is named twice")
+            continue
+        named[lens_id] = agent
+    unknown = [lid for lid in named if lid not in lenses.ids]
+    if unknown:
+        problems.append(
+            f"{', '.join(unknown)} not in this feature's lens set ({', '.join(lenses.ids)})"
+            if lenses.ids
+            else f"{', '.join(unknown)} not in this feature's lens set, which is empty"
+        )
+    by_agent: dict[str, list[str]] = {}
+    for lens_id, agent in named.items():
+        by_agent.setdefault(agent, []).append(lens_id)
+    for agent, lens_ids in by_agent.items():
+        if len(lens_ids) > 1:
+            problems.append(
+                f"{agent} is named for two lenses ({', '.join(lens_ids)}) — one reviewer "
+                "per lens, each given only its own lens"
+            )
+    owed = [lid for lid in lenses.ids if lid not in named]
+    lines = [f"- {p}" for p in problems]
+    for lens_id in owed:
+        lines.append(f"- lens {lens_id} has no reviewer named for it; dispatch one with:")
+        lines.extend(f"    {line}" for line in _lens_lines(repo_root, lenses, lens_id))
+    if lines:
+        _derived_refusal(
+            key, ["refused — the lens reviewers named do not cover the lens set:", *lines]
+        )
+    for agent in named.values():
+        _verify_reviewer(key, agent, state, target=target, opened=opened)
+    return named
+
+
+def _lenses_witness(
+    key: str,
+    repo_root: Path,
+    lenses: LensSet,
+    entries: list[JournalEntry],
+    reviewers: Mapping[str, str] | None,
+    since: str | None,
+) -> str:
+    """The derived `lenses` evidence (R11): per lens the number of changed files its
+    reviewer examined, or `unobserved`, and the findings it raised —
+    `security=2:l-security-r1;tests=5:none` — or `none` for an empty set."""
+    if not lenses.lenses:
+        return "none"
+    assert reviewers is not None  # owed while the set is non-empty, so verified above
+    seen = _check_lens_returns(key, repo_root, lenses, entries, reviewers, since)
+    return ";".join(
+        f"{lens_id}={count}:{','.join(ids) or 'none'}" for lens_id, (count, ids) in seen.items()
+    )
+
+
+def _check_lens_returns(
+    key: str,
+    repo_root: Path,
+    lenses: LensSet,
+    entries: list[JournalEntry],
+    reviewers: Mapping[str, str],
+    since: str | None,
+) -> dict[str, tuple[str, list[str]]]:
+    """Each lens reviewer's return matches its lens, the feature's diff and the
+    plan journal — or exit 2 (R9, R10). Per lens, `(files examined | unobserved,
+    finding ids)`; where a return cannot be read the ids come from the journal and
+    the check is noted `unobserved=reviewer-return`."""
+    from fr.lenses.review import (
+        LENS_ID_HINT,
+        ReviewLensBlockError,
+        lens_finding_ids,
+        parse_review_lens,
+    )
+    from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
+
+    journaled = {
+        e.id: e
+        for e in entries
+        if e.kind == "finding" and e.resolves is None and _is_lens_finding(e.id)
+    }
+    dispatched = _dispatches_since(since)
+    if dispatched is None:
+        _return_unobserved(key, "the lens reviewers", _why_unobservable("subagent returns"))
+    changed = set(lenses.changed) if lenses.changed is not None else None
+    seen: dict[str, tuple[str, list[str]]] = {}
+    problems: dict[str, list[str]] = {}
+    for lens_id in lenses.ids:
+        agent = reviewers[lens_id]
+        mine = lens_finding_ids(lens_id)
+        d = next((c for c in dispatched or () if c.agent_id == agent), None)
+        if d is None or d.returned is None:
+            if dispatched is not None:
+                _return_unobserved(key, f"reviewer {agent}", "its return is not readable yet")
+            seen[lens_id] = ("unobserved", [fid for fid in journaled if mine.match(fid)])
+            continue
+        mine_problems = problems.setdefault(lens_id, [])
+        try:
+            block = parse_review_lens(d.returned)
+        except ReviewLensBlockError as e:
+            mine_problems.append(f"{agent}: {e}")
+            block = None
+        else:
+            if block is None:
+                mine_problems.append(
+                    f"reviewer {agent} returned no review-lens block — its return must end "
+                    f"with one naming lens {lens_id} and the changed files it examined"
+                )
+        if block is not None and block[0] != lens_id:
+            mine_problems.append(
+                f"reviewer {agent} was named for lens {lens_id}, and its review-lens block "
+                f"names lens {block[0]}"
+            )
+        elif block is not None and changed is not None:
+            outside = [f for f in block[1] if f not in changed]
+            if outside:
+                mine_problems.append(
+                    f"reviewer {agent} examined {', '.join(outside)}, which the feature "
+                    "did not change — name the changed files you read"
+                )
+        elif block is not None:
+            missing = [f for f in block[1] if not (repo_root / f).is_file()]
+            if missing:
+                mine_problems.append(
+                    f"reviewer {agent} examined {', '.join(missing)}, which is not a file "
+                    "in this checkout"
+                )
+        try:
+            rows = parse_review_findings(
+                d.returned,
+                id_re=lens_finding_ids(lens_id),
+                id_hint=f"{LENS_ID_HINT} for lens {lens_id} (l-{lens_id}-r<k>)",
+            )
+        except ReviewFindingsBlockError as e:
+            mine_problems.append(f"{agent}: {e}")
+            rows = None
+        else:
+            if rows is None:
+                mine_problems.append(
+                    f"reviewer {agent} returned no review-findings block — its return must "
+                    "end with one (`none` when it raised nothing)"
+                )
+        ids = [fid for fid, _scope, _summary in rows or ()]
+        absent = [fid for fid in ids if fid not in journaled]
+        if absent:
+            mine_problems.append(
+                f"returned finding(s) not in the plan journal: {', '.join(absent)} (reviewer "
+                f"{agent}) — journal each under its id with the reviewer's tag, global "
+                "(`fr journal add --kind finding --id <id> --global --review-scope in|out ...`)"
+            )
+        for fid, scope, _summary in rows or ():
+            entry = journaled.get(fid)
+            if entry is not None and entry.review_scope != scope:
+                mine_problems.append(
+                    f"{fid} is journaled with review_scope {entry.review_scope} but {agent} "
+                    f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
+                    "out-of-scope"
+                )
+        count = str(len(block[1])) if block is not None else "0"
+        seen[lens_id] = (count, ids)
+    if any(problems.values()):
+        lines: list[str] = []
+        for lens_id, found in problems.items():
+            if not found:
+                continue
+            lines.extend(f"- {p}" for p in found)
+            lines.extend(f"    {line}" for line in _lens_lines(repo_root, lenses, lens_id))
+        _return_refusal(
+            key,
+            lines,
+            "Journal every returned finding under its id with the reviewer's tag, or "
+            "re-dispatch a lens reviewer whose return is malformed; never edit a return.",
+            who="the lens reviewers",
+            bulleted=True,
+        )
+    return seen
+
+
 def _return_unobserved(key: str, who: str, why: str) -> None:
     """A reviewer-return check skipped: warned and noted, never silent (§E)."""
     _note_unobserved("reviewer-return")
@@ -2611,16 +2911,23 @@ def _return_unobserved(key: str, who: str, why: str) -> None:
     )
 
 
-def _return_refusal(key: str, problems: list[str], remedy: str) -> NoReturn:
-    """THE refusal of the reviewer-return check (spec
-    2026-10-02-opencode-observe-2 §E): the unit (its step and phase), every
-    problem — each naming its reviewer and ids — on its own line, then what to
-    do; exit 2."""
+def _return_refusal(
+    key: str,
+    problems: list[str],
+    remedy: str,
+    *,
+    who: str = "the phase reviewers",
+    bulleted: bool = False,
+) -> NoReturn:
+    """THE refusal of the reviewer-return checks (spec
+    2026-10-02-opencode-observe-2 §E, 2026-11-12-review-lenses R10): the unit
+    (its step and phase), every problem — each naming its reviewer and ids — on
+    its own line, then what to do; exit 2. `bulleted` lines arrive formatted."""
     _derived_refusal(
         key,
         [
-            "refused — the review record does not match what the phase reviewers returned:",
-            *(f"- {p}" for p in problems),
+            f"refused — the review record does not match what {who} returned:",
+            *(problems if bulleted else [f"- {p}" for p in problems]),
             remedy,
         ],
     )
@@ -3230,7 +3537,11 @@ def _verify_review_entry(
 
     scope = target.scope
     found = next((e for e in entries if e.id == entry_id), None)
-    phase_flag = f"--phase {target.phase} " if target.phase is not None else ""
+    phase_flag = (
+        f"--phase {target.phase} "
+        if target.phase is not None
+        else ("--global " if target.feature else "")
+    )
     if found is None:
         err_console.print(
             f"[red]{key}: --evidence review={entry_id} names no entry in the {scope} "
@@ -3256,6 +3567,15 @@ def _verify_review_entry(
             )
             raise typer.Exit(2)
         return
+    if target.feature and (found.kind != "review" or found.phase is not None):
+        err_console.print(
+            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
+            + (f" for phase {found.phase}" if found.phase is not None else "")
+            + " — the lens review's evidence is a global `kind=review` plan-journal entry "
+            "(no phase)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     if found.kind != "review":
         err_console.print(
             f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry — evidence "
@@ -3266,10 +3586,11 @@ def _verify_review_entry(
     created = parse_timestamp(journal_stamp_as_utc(found.created))
     opened = parse_timestamp(since) if since else None
     if created is None or opened is None or created < opened.replace(microsecond=0):
+        began = "this step opened" if target.feature else "spec-review began"
         err_console.print(
             f"[red]{key}: --evidence review={entry_id} was created {found.created}, "
-            f"before this step opened at {since} — a review recorded before spec-review "
-            "began is not a review of it. Record the reviewer's findings, then a new "
+            f"before this step opened at {since} — a review recorded before {began} "
+            "is not a review of it. Record the reviewer's findings, then a new "
             "`kind=review` entry.[/red]",
             soft_wrap=True,
         )
@@ -3286,8 +3607,19 @@ def _target_finding_states(entries: list[JournalEntry], target: _EvidenceTarget)
     return {
         e.id: states[e.id]
         for e in entries
-        if e.kind == "finding" and e.resolves is None and e.id in states
+        if e.kind == "finding"
+        and e.resolves is None
+        and e.id in states
+        and (not target.feature or _is_lens_finding(e.id))
     }
+
+
+def _is_lens_finding(fid: str) -> bool:
+    """A lens review's finding (`l-<lens>-r<k>`): the only plan findings the
+    feature target gates (spec 2026-11-12-review-lenses §3.C)."""
+    from fr.lenses.review import LENS_FINDING_ID_RE
+
+    return LENS_FINDING_ID_RE.match(fid) is not None
 
 
 def _closed_findings_witness(
@@ -3507,6 +3839,7 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "commit_templates": commit_templates_brief(resolve_repo_root(), state.issue),
         "unbound_tiers": _unbound_tiers(resolve_repo_root()),
         **_gated_binding_keys(step),
+        **_lens_review_brief(step, state),
     }
 
 
@@ -4326,6 +4659,39 @@ def _review_findings_brief(member: Step, item: str) -> dict[str, str]:
         return {}
     phase = _item_phase(item)
     return {} if phase is None else {"review_findings": review_findings_rule(phase)}
+
+
+def _lens_review_brief(step: Step, state: RunState) -> dict[str, Any]:
+    """`lens_review` for the lens review (spec 2026-11-12-review-lenses R8, §3.C):
+    the feature's lens set, each lens with its text, why it is there and its
+    return rule — else nothing, so every other brief is unchanged. A set fr cannot
+    compute refuses the brief (exit 2) before anything is written: an empty set
+    read off an error would dispatch no reviewer for a lens a rule requires."""
+    from fr.lenses.review import LENS_EVIDENCE, lens_review_brief
+
+    if LENS_EVIDENCE not in step.evidence:
+        return {}
+    repo_root = resolve_repo_root()
+    return {
+        "lens_review": lens_review_brief(repo_root, _lens_set_or_exit(step.id, repo_root, state))
+    }
+
+
+def _lens_set_or_exit(key: str, repo_root: Path, state: RunState) -> LensSet:
+    """The feature's lens set (`fr.lenses.accumulate.lens_set`), or exit 2 naming
+    why it cannot be told. Never an empty set in place of an error."""
+    from fr.lenses.accumulate import lens_set
+    from fr.lenses.model import LensError
+
+    try:
+        return lens_set(repo_root, state)
+    except LensError as e:
+        err_console.print(
+            f"[red]{key}: refused — the feature's lens set cannot be computed: "
+            f"{escape(str(e))}. Nothing was written.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
 
 
 def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:

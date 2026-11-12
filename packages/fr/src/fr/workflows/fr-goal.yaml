@@ -193,6 +193,48 @@ steps:
     needs: [plan, journal:plan]
     run: fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews
 
+  - id: lens-review
+    kind: agent
+    # Review lenses (spec 2026-11-12-review-lenses §3.C, R8-R11): one review of
+    # the feature's WHOLE diff per lens in its set — every lens an agent added
+    # (`kind: lens` journal entries, `fr lenses status`) plus every lens a path
+    # rule in `.fr/lenses.yaml` requires for a file the feature changed. Run
+    # once, here, after every phase review's check: a phase reviewer is given
+    # no lens text, so concrete lenses never narrow its attention.
+    #
+    # The brief's `lens_review` key lists the set, each lens with its
+    # instruction text, why it is there and the exact return rule. The
+    # orchestrator dispatches one reviewer per lens, each given only its own
+    # lens; each ends its return with a fenced `review-lens` block (its lens and
+    # the changed files it examined) and a `review-findings` block with ids
+    # `l-<lens>-r<k>`. An EMPTY set dispatches nobody: resolve at once with a
+    # record that names no review and no reviewer.
+    #
+    # Evidence, verified against the plan journal with no phase (the feature):
+    # `review` a global `kind=review` entry created after the step opened;
+    # `reviewer` one `<lens>=<dispatch-id>` per lens, comma-separated, each an
+    # agent this session dispatched after the step opened (neither owed when
+    # the set is empty); `findings` DERIVED, refused while a lens finding is
+    # open; `lenses` DERIVED, never passed — per lens the files examined and
+    # the findings raised (`security=2:l-security-r1;tests=5:none`), `none`
+    # for an empty set. The set is computed again at resolve, so a lens added
+    # during the review is owed before the step closes. Where fr can read a
+    # return it refuses one with no block for its lens, a file the feature did
+    # not change, or a finding missing from the plan journal or tagged there
+    # with another scope; where it cannot, those checks are noted
+    # `unobserved=reviewer-return`.
+    skill:
+      - superpowers:requesting-code-review
+      - superpowers:receiving-code-review
+    tier: standard
+    # Not `journal:plan` in `needs`, though the step reads the plan journal's
+    # lens entries: `review-phase` also needs and emits it, so the checker sees
+    # `lens-review -> review-phase -> lens-review` as a cycle. `spec-review` is
+    # the precedent: it emits `journal:spec` and needs only `[spec]`.
+    needs: [spec, plan]
+    emits: [journal:plan]
+    evidence: [lenses, review, reviewer, findings]
+
   - id: deliver
     kind: agent
     skill: superpowers:verification-before-completion

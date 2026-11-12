@@ -8,12 +8,29 @@ naming its one lens and the changed files it examined, and the phase review's
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from fr.lenses.model import LENS_ID_RE
 from fr.run.review_return import FENCE as FINDINGS_FENCE
 from fr.run.review_return import last_block
 
+if TYPE_CHECKING:
+    from fr.lenses.accumulate import LensEntry, LensSet
+
 FENCE = "review-lens"
+
+LENS_EVIDENCE = "lenses"
+"""The lens review's derived evidence: a step that declares it IS the lens review."""
+
+NOT_OWED_ON_EMPTY = frozenset({"review", "reviewer"})
+"""What an empty lens set does not owe (R11): no reviewer was dispatched."""
+
+EMPTY_SET_NOTE = (
+    "no lens is in this feature's set: dispatch no reviewer, and resolve this step now "
+    "with a record that names no review and no reviewer (fr records lenses=none)"
+)
 
 LENS_FINDING_ID_RE = re.compile(r"^l-[a-z][a-z0-9-]*-r[1-9][0-9]*$")
 """Any lens review's finding id: `l-<lens>-r<k>`. The id carries the lens, so it
@@ -83,3 +100,55 @@ def lens_review_rule(lens: str) -> str:
         f"```{FENCE}\nlens: {lens}\nexamined: <changed file>, <changed file>\n```\n"
         f"```{FINDINGS_FENCE}\nl-{lens}-r1 | in | <one-line summary>\n```"
     )
+
+
+def owed_evidence(evidence: Iterable[str], lens_ids: tuple[str, ...]) -> list[str]:
+    """`evidence` less what an empty lens set does not owe. The one rule the record
+    template and the resolve both read."""
+    names = list(evidence)
+    if LENS_EVIDENCE not in names or lens_ids:
+        return names
+    return [n for n in names if n not in NOT_OWED_ON_EMPTY]
+
+
+def why_line(entry: LensEntry) -> str:
+    """Why `entry` is in the set, one line: its reasons, or its rule and file."""
+    parts = [f'"{r.text}" ({r.step or "command line"}, {r.entry})' for r in entry.reasons]
+    if entry.rule is not None:
+        hit = f" (matches {entry.file})" if entry.file else " (no remote: applied to every change)"
+        parts.append(f"path rule {', '.join(entry.rule)}{hit}")
+    return "; ".join(parts)
+
+
+def lens_review_brief(root: Path, lens_set: LensSet) -> dict[str, Any]:
+    """The brief's `lens_review` key (R8): per lens its title, instruction text,
+    reasons or rule and file, and return rule, beside the diff's merge-base. An
+    empty set is `{"set": [], "note": ...}`."""
+    from fr.lenses.resolve import effective_lenses
+
+    if not lens_set.lenses:
+        return {"set": [], "note": EMPTY_SET_NOTE}
+    effective = effective_lenses(root)
+    out: dict[str, Any] = {
+        "merge_base": lens_set.merge_base,
+        "set": [
+            {
+                "lens": e.lens,
+                "title": effective[e.lens].title,
+                "brief": effective[e.lens].brief,
+                "reasons": [{"text": r.text, "step": r.step, "entry": r.entry} for r in e.reasons],
+                "rule": list(e.rule) if e.rule is not None else None,
+                "file": e.file,
+                "return_rule": lens_review_rule(e.lens),
+            }
+            for e in lens_set.lenses
+        ],
+    }
+    if lens_set.merge_base is None:
+        out["note"] = (
+            "this repo has no remote, so there is no diff to review: each reviewer reads "
+            "the branch's own commits, and every path rule applies"
+        )
+    if lens_set.warnings:
+        out["warnings"] = list(lens_set.warnings)
+    return out

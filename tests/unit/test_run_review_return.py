@@ -82,9 +82,7 @@ def test_a_lens_grammar_accepts_lens_ids_and_refuses_phase_ids() -> None:
     from fr.lenses.review import LENS_FINDING_ID_RE
 
     text = "```review-findings\nl-security-r1 | in | x\n```"
-    assert parse_review_findings(text, id_re=LENS_FINDING_ID_RE) == [
-        ("l-security-r1", "in", "x")
-    ]
+    assert parse_review_findings(text, id_re=LENS_FINDING_ID_RE) == [("l-security-r1", "in", "x")]
     with pytest.raises(ReviewFindingsBlockError, match="l-<lens>-r<k>"):
         parse_review_findings(
             "```review-findings\np2-r1 | in | x\n```",

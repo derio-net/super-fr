@@ -58,6 +58,10 @@ class LensEntry:
 class LensSet:
     lenses: tuple[LensEntry, ...] = ()
     warnings: tuple[str, ...] = field(default=())
+    merge_base: str | None = None
+    """The diff's merge-base; None with no remote (there is no diff)."""
+    changed: tuple[str, ...] | None = None
+    """The feature's changed files (fr's own artifacts exempt); None with no remote."""
 
     @property
     def ids(self) -> tuple[str, ...]:
@@ -106,11 +110,12 @@ def _added(root: Path, spec_slug: str | None, plan_slug: str | None) -> dict[str
     return added
 
 
-def _changed(root: Path, ref: str | None) -> list[str] | None:
+def _changed(root: Path, ref: str | None) -> tuple[str | None, list[str] | None]:
+    """`(merge-base, changed files)`, both None when there is no remote."""
     from fr.proportionality import feature_diff, feature_merge_base
 
     if ref is None:
-        return None
+        return None, None
     try:
         base = feature_merge_base(root, ref)
         if base is None:
@@ -118,7 +123,7 @@ def _changed(root: Path, ref: str | None) -> list[str] | None:
                 f"no merge-base between HEAD and {ref}, so the feature's diff and the "
                 "path rules it matches cannot be told (a shallow clone needs more history)"
             )
-        return [c.path for c in feature_diff(root, base)]
+        return base, [c.path for c in feature_diff(root, base)]
     except GitUnavailableError as e:
         raise LensError(f"git could not read the feature's diff: {e}") from e
 
@@ -129,7 +134,7 @@ def lens_set_for(root: Path, *, spec_slug: str | None, plan_slug: str | None) ->
     added = _added(root, spec_slug, plan_slug)
     ref = default_ref(root)
     rules = rules_in_force(base_config_text(root, ref), head_config_text(root))
-    changed = _changed(root, ref)
+    base, changed = _changed(root, ref)
     warnings: list[str] = []
     if changed is None:
         # No remote: there is no diff to match, and skipping the rules would be
@@ -168,4 +173,9 @@ def lens_set_for(root: Path, *, spec_slug: str | None, plan_slug: str | None) ->
                 file=hit.file if hit else None,
             )
         )
-    return LensSet(lenses=tuple(out), warnings=tuple(warnings))
+    return LensSet(
+        lenses=tuple(out),
+        warnings=tuple(warnings),
+        merge_base=base,
+        changed=tuple(changed) if changed is not None else None,
+    )
