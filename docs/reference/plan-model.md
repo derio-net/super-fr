@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/types.py
   - packages/fr/src/fr/plan/**
   - packages/fr/src/fr/commands/plan_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
+reviewed: 2026-11-12 placement-resolver phase 3, plan create writes and commits on the fr branch under quiet
 ---
 
 # The plan model
@@ -51,6 +51,11 @@ fr pickup <plan-dir> --phase 2                                   # print one pha
 Run any of them with `--help` for the full flags; the skills drive these for you. Plans
 are edited through the commands rather than by hand so the ticks, the spec's plan table
 and the run cursor stay in agreement.
+
+In a repository using the quiet placement, `create` writes the plan folder below this
+feature's path in the `fr` worktree (`features/<feature-id>/docs/superpowers/plans/<slug>/`)
+and commits it on the `fr` branch, not the feature branch (see the quiet section of
+[the fr-goal explainer](../explainers/01-fr-goal.md)).
 
 ## One plan, one repo, and when PRs split
 

@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 placement-resolver phase 1, fr settings paths prints the artifact path resolver's answers
+reviewed: 2026-11-12 placement-resolver phase 3, the quiet placement (init --quiet, the fr worktree, atomic push, sticky switch)
 ---
 
 ## Overview
@@ -1146,7 +1146,7 @@ than looking for a flag that bends this one.
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
-| Repo settings | `.fr/settings.yaml`, read from the default branch | Turns policy features off, quiets the forge, and sets the git policy. |
+| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`) | Turns policy features off, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
 
 ### Repo settings
 
@@ -1192,17 +1192,57 @@ than quietly falling back to the defaults.
   use them, the agents are told them, and `fr push` refuses a commit whose subject
   does not match. The issue comes from the run (`fr run start --issue <n>`).
 
-Today the settings file lives in the repository itself. Keeping fr's records off
-the feature branch altogether, on a separate branch or in a separate tracking
-repository, comes later.
+#### Quiet: fr's records on a branch of their own
+
+Some repositories do not want fr's records on their feature branches at all: no
+plans, journals or run cursors in the pull request, and no `chore(fr):` commits in
+its history. For them there is the **quiet** placement. `fr settings init --quiet`
+creates an orphan branch named `fr`, holding only a `settings.yaml` that says
+`placement: quiet` (every other key commented out at its default), and pushes it to
+`origin` with an ordinary push. It refuses when `origin` already has an `fr` branch,
+because that branch is never overwritten, and when there is no `origin` to push to.
+The existence of that file on `origin/fr` is the switch: a repository without it is
+`repo`, and so is any clone with no `origin`.
+
+From then on fr writes every record into a second worktree of `fr`, at
+`~/.cache/fr/worktrees/<repo>/fr`, below `features/<feature-id>/`, where the feature
+id is the branch name with `/` written as `__` (`feat/q` becomes `feat__q`). Below
+that the layout is the usual one, so a plan sits at
+`features/feat__q/docs/superpowers/plans/<slug>/`. Each fr commit on `fr` touches
+only its own feature's path. Two branches whose names collapse to the same id, such
+as `feat/a__b` and `feat__a/b`, are refused, naming both, rather than left to share
+a path. `fr push` pushes your feature branch and `fr` together in one
+`git push --atomic`, or `fr` alone when only bookkeeping moved. When another
+feature pushed `fr` in between, it fetches, replays its own fr commits on top (the
+paths never overlap) and tries again, at most three times. It never force-pushes
+`fr` and never rewrites what is already there. The commit-subject check and the
+squash apply to your feature branch only. Runner dispatch (`fr apply --to`) is
+refused under quiet, because a runner works from the default branch, where a quiet
+repository keeps no plan.
+
+Under quiet the policy keys come from `fr`'s own `settings.yaml`, read from
+`origin/fr`, and a `.fr/settings.yaml` on the default branch is ignored (`fr settings
+show` says so). Whoever can push to `fr` can therefore change the policy, so **give
+the `fr` branch the same branch protection as your default branch.**
+
+fr fetches `origin/fr` at `fr isolation up` and at `fr run start`, and both refuse
+when `origin` cannot be reached, naming `git remote -v`, rather than guess the
+placement. `fr isolation up --no-fetch` reads the last fetched `origin/fr` instead
+and says so. The workspace records the placement it was set up under, and a later
+disagreement refuses, naming both: deleting or renaming `fr`, or changing its
+`placement`, stops the workspace rather than quietly sending records back onto the
+feature branch. One known limitation: a host whose fr predates quiet support never
+looks for the switch, and writes its records on the feature branch as before.
+Keeping records in a separate tracking repository (stealth) comes later.
 
 Where fr's records live is answered by one resolver, and `fr settings paths` prints
 its answers: `--shell` gives `FR_PLACEMENT`, `FR_ARTIFACT_ROOT`, `FR_FEATURE` and one
 shell-quoted `FR_<KIND>_DIR` (or `_FILE`) line per kind, such as `FR_PLANS_DIR`, ready
 for `eval` in a hook; `--json` gives the same keys as one object. Outside a git
 repository it prints `FR_PLACEMENT=none` and still succeeds, so a hook can call it
-anywhere. Today the placement is always `repo`, and the paths are the ones in the
-table above.
+anywhere. Under `repo` the paths are the ones in the table above; under quiet
+`FR_PLACEMENT=quiet`, `FR_ARTIFACT_ROOT` is the `fr` worktree and `FR_FEATURE` the
+feature id.
 
 The workflow is not one large program. The shape supplies the sequence, the
 skill supplies the judgment each step needs, and smaller commands and safety

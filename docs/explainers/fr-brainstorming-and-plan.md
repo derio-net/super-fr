@@ -15,7 +15,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
+reviewed: 2026-11-12 placement-resolver phase 3, plan create and pickup read and write the fr branch under quiet
 ---
 
 ## Overview: why the idea gets written down twice
@@ -84,7 +84,8 @@ fr plan self-review docs/superpowers/plans/2026-11-11-webhook-rate-limit
 ```
 
 `create` scaffolds `docs/superpowers/plans/<slug>/` and adds a row to the spec's
-`## Implementation Plans` table. `self-review` lints what the schema cannot: a missing
+`## Implementation Plans` table. In a quiet repository the same folder sits below the
+feature's own path on the `fr` branch instead, and nothing lands on the feature branch. `self-review` lints what the schema cannot: a missing
 tier, a phase that cites no requirement, a step that tells an agent to dispatch another
 agent.
 
