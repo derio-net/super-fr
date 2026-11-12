@@ -629,3 +629,8 @@ d62e056b7: fetch-depth: 0 on pages.yml's checkout, asserted in test_pages_workfl
 ### p4-r7-resolved · finding [fixed] · resolves p4-r7: Leftover committed-report references: .gitattributes LF block, report.py docstrings, stale .test_durations entries (phase 4)
 
 e9fdf227b: .gitattributes removed (it held only the report block), the aggregates=False path removed from report.py with docstrings rewritten, 137 stale .test_durations keys dropped (each verified absent from collection). Path constants and the migration's delete list keep naming the retired files on purpose.
+
+<!-- fr:journal kind=finding scope=plan id=p3-stray-r1-records-dir-resolved-2 created=2026-11-12T09:15:55+00:00 state=fixed resolves=p3-stray-r1-records-dir -->
+### p3-stray-r1-records-dir-resolved-2 · finding [fixed] · resolves p3-stray-r1-records-dir: An empty untracked docs/superpowers/runs/r1.records/ sits in the workspace, created before phase 3 (phase 3)
+
+The empty untracked directory was removed from the workspace; it was never tracked, so nothing remains to file.
