@@ -11,8 +11,20 @@ PROFILE=""
 # 2026-11-04 R1) when `fr` is on PATH, so they follow the repo's placement. The literals
 # below are the `repo` layout's own and the fallback for a PATH without `fr`, or with one
 # too old to answer; phase 6 of the placement plan owns the rest of the shell surfaces.
-if command -v fr >/dev/null 2>&1 && FR_PATHS="$(cd "$REPO_ROOT" && fr settings paths --shell 2>/dev/null)"; then
-  eval "$FR_PATHS"
+# A refusal from `fr` (exit 2: an unservable placement, an invalid switch) is NOT a reason to
+# fall back: that would validate the wrong directory. Only an absent `fr`, or one without the
+# subcommand ("No such command"), falls back. `fr`'s toplevel prefers $VK_REPO_ROOT, so it is
+# unset for the call and `fr` runs from $REPO_ROOT, the toplevel this script already uses.
+if command -v fr >/dev/null 2>&1; then
+  FR_ERR="$(mktemp)"
+  if FR_PATHS="$(cd "$REPO_ROOT" && env -u VK_REPO_ROOT fr settings paths --shell 2>"$FR_ERR")"; then
+    eval "$FR_PATHS"
+  elif ! grep -q "No such command" "$FR_ERR"; then
+    cat "$FR_ERR" >&2
+    rm -f "$FR_ERR"
+    exit 2
+  fi
+  rm -f "$FR_ERR"
 fi
 : "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/docs/superpowers/plan-config.yaml}"
 : "${FR_PLANS_DIR:=$REPO_ROOT/docs/superpowers/plans}"
