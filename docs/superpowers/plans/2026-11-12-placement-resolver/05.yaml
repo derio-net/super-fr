@@ -1,0 +1,77 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Merged status and archive outside repo (R17 quiet/stealth clause, R25)
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - placement-merged-status
+  tier: hard
+  files:
+  - packages/fr/src/fr/placement/*.py
+  - packages/fr/src/fr/acceptance/fold.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/closeout.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/debt/*.py
+  - tests/unit/test_placement_merged*.py
+  - tests/unit/test_acceptance_fold*.py
+  - tests/unit/test_archive*.py
+  - tests/scenarios/placement-merged-status.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/features/*.yaml
+  - docs/*.md
+  estimate_lines: 1200
+tasks:
+- number: 1
+  title: Merged status from the code branch's merge (R17)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests/unit/test_placement_merged.py — under quiet and stealth, `merged_features(space)` lists a feature as merged iff its code branch's head (recorded with the feature) is reachable from the product's default ref, ordered by the first-parent commit of the default ref that introduced it; a `merged: <sha>` record agreeing with that is a cache hit; one disagreeing (the sha is not on the default ref) is ignored with a notice (a cache, never the truth); a feature never merged contributes its amendments to its own branch's view only. The fold (`fr.acceptance.fold`) under quiet/stealth orders amendments by that order, and its repo behaviour is unchanged (the existing fold tests pass untouched).
+  - id: P5.T1.S2
+    text: |-
+      GREEN: fr/placement/merged.py and the fold's order source chosen by placement. Tests pass.
+- number: 2
+  title: Archive appends merged and moves nothing (R25)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: `fr archive --branch <b>` under quiet/stealth appends `merged: <sha>` to `features/<feature-id>/merged.yaml` in one commit on the placement's branch (pushed: quiet plain push of `fr`, stealth compare-and-swap) and moves no file (no `implemented/` under a feature root); under repo `implemented/` behaviour is unchanged (existing archive tests untouched); `fr debt` and close-out read merged status through `merged_features`.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: implement in archive.py / archive_cmd.py / closeout.py. Tests pass.
+- number: 3
+  title: Scenario, row
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      RED→GREEN: tests/scenarios/placement-merged-status.sh — a quiet fixture: a feature merged into main by a merge commit shows as merged in `fr acceptance status` and its amendment applies; `fr archive` appends merged and moves nothing; a forged `merged:` for an unmerged feature is ignored. Wire as `test_placement_merged_status`; move the `placement-merged-status` row to ci with levels and scenario.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

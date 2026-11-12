@@ -1,0 +1,88 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Hooks, OpenCode plugin and Hermes on the resolver; quiet and stealth are
+    fr-enabled (R1 shell side, R26)
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - placement-fr-enabled
+  tier: standard
+  files:
+  - plugins/super-fr/hooks/**/*.sh
+  - packages/fr-opencode-plugin/src/**/*.ts
+  - packages/fr-opencode-plugin/test/**/*.ts
+  - packages/fr/src/fr/harness/parity.yaml
+  - packages/fr/src/fr/harness/*.py
+  - .opencode/plugins/*.ts
+  - .hermes/**
+  - tests/unit/test_isolation_decision_core.py
+  - tests/unit/test_hooks_*.py
+  - tests/unit/test_hermes_*.py
+  - tests/unit/test_tripwire_artifact_paths.py
+  - tests/unit/test_tripwire_harness_parity.py
+  - tests/scenarios/placement-fr-enabled.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/features/*.yaml
+  - docs/*.md
+  estimate_lines: 1300
+tasks:
+- number: 1
+  title: Bash library and Hermes hook (R26)
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: tests/unit/test_isolation_decision_core.py and test_hermes_isolation_hook_edits.py — `_fr_is_enabled` is true for a repo whose `refs/remotes/origin/fr:settings.yaml` says `placement: quiet` (no profile, no plans dir) and for a workspace whose `.fr-isolation` marker records `placement: stealth`; false for an `fr` branch without the switch; the Hermes `pre_tool_call` hook denies a base-clone edit in a quiet repo. tests/unit/test_hooks_worktree.py — `fr-worktree-create.sh` uses the library's `_fr_is_enabled` (its private `fr_enabled` copy is gone).
+  - id: P6.T1.S2
+    text: |-
+      GREEN: in plugins/super-fr/hooks/lib/fr-isolation-decision.sh, `_fr_is_enabled` asks `fr settings paths --shell` (FR_PLACEMENT, FR_PLANS_DIR) when `fr` resolves, else falls back to the devcontainer/plans test plus a direct `git cat-file -p refs/remotes/origin/fr:settings.yaml | grep -q '^placement: *quiet'` and the marker's `placement` key, so a missing `fr` never weakens the gate; fr-worktree-create.sh and the acceptance nag source it (the nag reads FR_ACCEPTANCE_DIR). Tests pass.
+- number: 2
+  title: OpenCode plugin (R1 §3.E, R26)
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      RED: packages/fr-opencode-plugin/test/marker.test.ts, guard-verdicts.test.ts, nag tests — `isFrEnabled`/`frEnabled` are one function (guard.ts imports marker.ts's), true for the quiet switch and the stealth marker; paths come from `fr settings paths --json` when `fr` runs; when `fr` is absent the plugin falls back to the plans test and logs that fallback once at load. Run `bun test` inside packages/fr-opencode-plugin; confirm red.
+  - id: P6.T2.S2
+    text: |-
+      GREEN: implement in src/marker.ts, guard.ts, nag.ts (one exported `frPaths()` caching the JSON per toplevel). `bun test` green.
+- number: 3
+  title: Parity rows, path tripwire for shell and TypeScript, scenario, row
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED: extend tests/unit/test_tripwire_artifact_paths.py to scan plugins/super-fr/hooks/**/*.sh and packages/fr-opencode-plugin/src/**/*.ts for `docs/superpowers` / `docs/acceptance` outside comments, allowing only the documented `fr`-absent fallback lines (each marked `# fr-paths-fallback` / `// fr-paths-fallback`). Add or update the `parity.yaml` rows for `fr-isolation-required`, `fr-isolation-guard`, `fr-worktree-create` and the acceptance nag so they state the quiet/stealth detection per harness; `uv run fr harness parity --check` and tests/unit/test_tripwire_harness_parity.py pass.
+  - id: P6.T3.S2
+    text: |-
+      GREEN: tests/scenarios/placement-fr-enabled.sh — a quiet fixture with no profile and no plans dir: sourcing the decision library, `fr_isolation_decide_edit` on a base-clone file denies; in an `up` workspace it allows. Wire as `test_placement_fr_enabled`; move the `placement-fr-enabled` row to ci with levels and scenario. Document the detection in the fr-isolation guide page; `uv run fr docs check --base origin/main` passes.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

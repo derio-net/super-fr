@@ -1,0 +1,156 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'The resolver: fr.artifacts.paths, locators, logical refs, fr settings paths
+    (R1, R18)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - placement-resolver
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/artifacts/paths.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/acceptance/logical.py
+  - packages/fr/src/fr/acceptance/fragment.py
+  - packages/fr/src/fr/acceptance/check.py
+  - packages/fr/src/fr/acceptance/requirements.py
+  - packages/fr/src/fr/commands/settings_cmd.py
+  - packages/fr/src/fr/settings/*.py
+  - tests/unit/test_artifact_paths*.py
+  - tests/unit/test_tripwire_artifact_paths.py
+  - tests/unit/test_acceptance_logical*.py
+  - tests/unit/test_settings_paths*.py
+  - tests/unit/test_artifact_registry.py
+  - tests/scenarios/placement-resolver.sh
+  - tests/integration/test_scenarios.py
+  - .changes/feat-placement-resolver.yaml
+  - docs/acceptance/features/*.yaml
+  - docs/reference/*.md
+  - docs/*.md
+  - README.md
+  estimate_lines: 1600
+tasks:
+- number: 1
+  title: Smoke — the resolver module exists and the suite sees it
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: tests/unit/test_artifact_paths_smoke.py asserting `from fr.artifacts.paths import ArtifactSpace, KIND_DIRS, space_for, kind_dir` imports and that `kind_dir("plan", space_for(tmp_repo))` == tmp_repo / "docs/superpowers/plans" for a fresh `git init` repo. Run `uv run pytest tests/unit/test_artifact_paths_smoke.py -q --no-cov`; confirm it fails (no module).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/artifacts/paths.py with the names (repo placement only) so the smoke passes. Add .changes/feat-placement-resolver.yaml with `bump: minor` and summary "artifacts can live off the product branches: one path resolver, the quiet (`fr` branch) and stealth (tracking repo) placements, and `fr placement move|migrate-branch`". Smoke evidence is the local suite on this trivial test (CI runs only on pull_request; the PR opens at deliver).
+- number: 2
+  title: The resolver's model (R1, spec §3.E; plan decision "one layout everywhere")
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_artifact_paths.py —
+      - `KIND_DIRS` is the ONE table of repo-relative artifact directories: spec dirs (live `docs/superpowers/specs`, archived `docs/superpowers/implemented/specs`), plans, journals (specs|plans|debug, live and archived), runs (+ `.records`), usage, acceptance fragments (`docs/acceptance/features`), workflows (`docs/superpowers/workflows`), and the other repo-local fr files the inventory names (plan-config.yaml, archived-plans, models.yaml, trackers.yaml, verifications/).
+      - `ArtifactSpace(placement, root, feature)`: for `repo`, root == the repo toplevel and feature is None; `kind_dir(kind, space)` == root / KIND_DIRS[kind].
+      - `feature_roots(space)` yields exactly [root] under repo; under a constructed quiet/stealth space (root=<x>, feature=<f>) it yields every `<x>/features/*` dir and `kind_dir` gives `<x>/features/<f>/<same relative dir>` (the layout never changes, only the root).
+      - `feature_id(branch)` == the isolation branch slug (`feat/a-b` -> `feat__a-b`), the same function isolation uses (no second copy).
+      - `space_for(repo_root)` returns repo for a repo with no `origin/fr` switch and no stealth marker; an unknown kind raises `KeyError` naming it.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement paths.py. `space_for` reads the placement in the plan's precedence order (stealth marker/state, then a valid `refs/remotes/origin/fr` switch, then repo) but phase 1 serves `repo` only: any other answer raises `SettingsError("placement … is not yet available")`, the loader's existing refusal text, so behaviour is unchanged. Reuse `fr.isolation` branch-slug code for `feature_id` (import it, never re-implement). Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: module docstring names spec R1/§3.E and states the layout rule (root changes, relative layout never does) and that this module is the only place an artifact directory literal may appear.
+- number: 3
+  title: Registry locators and logical refs through the resolver (R1, R18)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: extend tests/unit/test_artifact_registry.py — every `ArtifactKind.locator` equals the resolver's repo output for that kind (a table test over REGISTRY), and `iter_paths_of` still yields the same files on this repo (compare to the pre-change list for plans, journals, runs, specs, usage, acceptance-fragment). Extend tests/unit/test_acceptance_logical.py — `resolve_logical` and `candidates` get their spec/plan dirs from `fr.artifacts.paths` (monkeypatch KIND_DIRS to a different relative dir and see resolution follow it), and under a constructed quiet space a `spec:<slug>` found in another feature root resolves there (R18: logical refs resolve through R1's resolver; a placement move never rewrites a row).
+  - id: P1.T3.S2
+    text: |-
+      GREEN: registry locators are built from `fr.artifacts.paths` (no literal left in registry.py); `fr.acceptance.logical.SPEC_DIRS/PLAN_DIRS` and `acceptance/check.py`'s second `SPEC_DIRS`, `acceptance/requirements.py`'s import and `fragment.FRAGMENTS_DIR` derive from it; `resolve_logical(ref, repo_root)` iterates `feature_roots(space_for(repo_root))`. Update its docstring (the "plan 3 swaps in R1's resolver" note becomes past tense). Tests pass.
+- number: 4
+  title: fr settings paths --shell|--json (R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_settings_paths.py — `fr settings paths --shell` in a repo prints `FR_PLACEMENT=repo`, `FR_ARTIFACT_ROOT=<toplevel>`, `FR_FEATURE=` and one `FR_<KIND>_DIR=<abs path>` line per KIND_DIRS entry, each value shell-quoted (`shlex.quote`; a path with a space round-trips through `eval`), and exits 0; `--json` prints the same keys as an object; outside a git repo it prints `FR_PLACEMENT=none` and exits 0 (hooks call it everywhere); a settings refusal is exit 2 with a clean message. `settings` stays in READ_ONLY_COMMANDS (no change to the pinned exemption test).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add the `paths` command to commands/settings_cmd.py over `fr.artifacts.paths`; update the typer help ("init, show, paths, check") and regenerate the README/CLI tables with `uv run --no-project python scripts/sync-readme.py`. Tests pass.
+- number: 5
+  title: The tripwire, with a shrinking allowlist
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_tripwire_artifact_paths.py — an AST scan of every .py under packages/*/src: a string constant that is not a docstring and contains `docs/superpowers` or `docs/acceptance`, and a `/`-join chain of string constants `"docs" / "superpowers"` or `"docs" / "acceptance"` (the path-segment form), is a violation unless its module is `fr/artifacts/paths.py` or listed in `PENDING` (a literal tuple in the test, the modules phase 2 converts). Planted-violation tests: the detector finds both forms in a synthetic module and ignores a docstring and a comment. A stale-entry test fails when a PENDING module has no violation left (the list may only shrink).
+  - id: P1.T5.S2
+    text: |-
+      GREEN: populate PENDING with exactly the modules still violating after tasks 2–4 (run the detector, paste its list). Tests pass.
+- number: 6
+  title: Row, scenario and docs
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests/scenarios/placement-resolver.sh (style of tests/scenarios/repo-settings-git-policy.sh, sourcing _common.sh) — a fresh repo with a local bare origin: `fr settings paths --shell` prints FR_PLACEMENT=repo and FR_PLANS_DIR=<toplevel>/docs/superpowers/plans; `eval` of its output sets them; `fr settings paths --json` parses with python -c json.load. Wire it in tests/integration/test_scenarios.py as `test_placement_resolver`. Run it; confirm red before the command exists, green after.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: move the `placement-resolver` row: `uv run fr acceptance set-status --id placement-resolver --status ci --notes "resolver, locators, logical refs and fr settings paths built; scenario in CI" --level unit=super-fr:tests/unit/test_artifact_paths.py#<a test name> --level int=super-fr:tests/integration/test_scenarios.py#test_placement_resolver` and set its scenario (`--scenario tests/scenarios/placement-resolver.sh` on the same command, or `fr acceptance amend --op set-status --scenario` when the row is merged). Document `fr settings paths` on the settings guide page that `.fr/docs.yaml` covers for `fr/settings/` (find it with `uv run fr docs status`), and bump its `reviewed` stamp. `uv run fr docs check --base origin/main` passes.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,153 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'Stealth: per-run tracking repo, fatal state push, privacy, resume, init
+    --stealth, R5 (R2, R3, R5, R24)'
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - placement-stealth
+  tier: hard
+  files:
+  - packages/fr/src/fr/placement/*.py
+  - packages/fr/src/fr/artifacts/paths.py
+  - packages/fr/src/fr/settings/*.py
+  - packages/fr/src/fr/isolation/*.py
+  - packages/fr/src/fr/commands/isolation_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/settings_cmd.py
+  - packages/fr/src/fr/commands/push_cmd.py
+  - packages/fr/src/fr/commands/pr_cmd.py
+  - packages/fr/src/fr/commands/apply_cmd.py
+  - packages/fr/src/fr/triage/privacy.py
+  - packages/fr/src/fr/record/apply.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-debugging/SKILL.md
+  - plugins/super-fr/skills/fr-isolation/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - tests/unit/test_placement_stealth*.py
+  - tests/unit/test_settings_check*.py
+  - tests/unit/test_triage_privacy*.py
+  - tests/scenarios/placement-stealth.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/features/*.yaml
+  - docs/*.md
+  - docs/explainers/*.md
+  estimate_lines: 2200
+tasks:
+- number: 1
+  title: Choosing stealth and the local record (R24 "chosen per run", "the local record")
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_placement_stealth.py with two local bare repos (target, tracking) —
+      - `fr isolation up --branch feat/s --stealth <tracking-url>@<branch>` (from the target) and `fr run start … --stealth <tracking-url>@<branch>` record `placement: stealth` and the tracking ref in IsolationState and in the `.fr-isolation` marker (optional `tracking` key; old markers still validate);
+      - the tracking worktree is at `~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>` and `space_for` returns root `<tracking worktree>/<host>--<owner>--<repo>/` (a local-path target uses `local--<dirname>`) with the feature id;
+      - starting from the tracking repo with `--target <path-to-target>` records the same;
+      - stealth is never read from repo settings: a settings file with `placement: stealth` on a default branch refuses naming R24 (stealth is chosen per run).
+  - id: P4.T1.S2
+    text: |-
+      GREEN: fr/placement/stealth.py (`StealthRef`, parse `<repo>@<branch>`, the tracking worktree, the target dir name) wired into isolation up (all three modes), run start and `space_for` (precedence: stealth marker first). SERVABLE_PLACEMENTS includes stealth. Tests pass.
+- number: 2
+  title: Settings, R5's stealth rule, forge values (R2 stealth source, R5, R24 "what
+    reaches the target")
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: under stealth the policy keys come from `<tracking ref>:<target-dir>/settings.yaml`; a target `.fr/settings.yaml` is ignored and fr prints that it was; stealth forces `forge: {labels: off, comments: off, issues: off, pr_body: minimal}`; `fr settings check` and `fr run start` refuse (rule id `stealth-forge-explicit`) an explicit contrary forge value in the tracking file, naming the key; `fr settings init --stealth <repo>@<branch>` writes `<target-dir>/settings.yaml` on the tracking branch (forge keys at the quiet values, commented) and pushes it, compare-and-swap.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: implement (settings/load.py source for stealth, settings/check.py RULES entry, settings_cmd.py `init --stealth`). Tests pass.
+- number: 3
+  title: Fail-fast and the fatal state push (R24 "fail-fast")
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: an unreachable or missing tracking repo/branch refuses `up`, `run start`, and every fr write before it writes (assert no file changed in the target or tracking worktree); every state write commits in the tracking worktree and pushes compare-and-swap (reuse `fr.triage.gitseam.push_ref_cas`); a push the remote refuses makes `fr run resolve` exit 2 with the cursor NOT moved on the tracking ref and the local tracking worktree restored to its pre-resolve bytes (the record's restore-on-refusal path), never a warning.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: implement the stealth commit+push in the commit seam phase 3 routed, and make the record apply path (`fr.record.apply.apply_record`) treat a failed tracking push as a refusal. Tests pass.
+- number: 4
+  title: Privacy and the target's traces (R24 "privacy", "what reaches the target")
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      RED: `fr.triage.privacy` gains a visibility ordering (private < internal < public) and `more_visible(a, b)`; stealth up refuses a tracking repo more visible than the target (public tracking for a private target; internal tracking for a private target) and an unreadable visibility (fail closed, naming the repo), and passes the same-or-less visible case; a local-path tracking/target pair (no forge) is treated as private on both sides. Under stealth, `fr pr create` makes one draft with a minimal body and `fr push` pushes the code only (no tracking ref to the target's remote); no label, comment or issue call reaches the target (assert through the fake forge client).
+  - id: P4.T4.S2
+    text: |-
+      GREEN: implement (privacy.py helper beside `leak_risk`, keeping its signature; the stealth checks in fr/placement/stealth.py). Tests pass.
+- number: 5
+  title: Resume and dispatch refusal (R24 "resume")
+  steps:
+  - id: P4.T5.S1
+    text: |-
+      RED: the state records the product head it describes at each resolve (a `product_head` in the stealth placement file beside the run, NOT a new field on the run cursor — no kind changes); code is pushed before state; resuming from the tracking repo (`fr isolation up --stealth … --resume <run-id>` on a fresh HOME, i.e. "another host") reconciles: equal → resume; product branch ahead → redo the last step's bookkeeping (re-run its resolve's bookkeeping, idempotent); state ahead → refuse naming the missing SHA. `fr apply --to` under stealth refuses naming the placement.
+  - id: P4.T5.S2
+    text: |-
+      GREEN: implement. Tests pass.
+- number: 6
+  title: Skills, mirrors, scenario, row, docs
+  steps:
+  - id: P4.T6.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md, fr-debugging/SKILL.md and fr-isolation/SKILL.md: `mode=stealth <tracking-repo>@<branch>` (or, from the tracking repo, `mode=stealth target=<path>`) passes `--stealth`/`--target` to `fr isolation up`/`fr run start`; a stealth run uses `fr push`/`fr pr create` only and never writes the target's forge. Keep the harness-neutral prose rules (tests/unit/test_tripwire_skill_tool_neutrality.py). Run BOTH `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`, then `uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_skill_validation.py -q --no-cov`.
+  - id: P4.T6.S2
+    text: |-
+      RED→GREEN: tests/scenarios/placement-stealth.sh — local bare target and tracking repos: `fr isolation up --stealth`, plan + journal + a code commit, `fr push`, then assert the target's remote holds only the code commit (no fr path, no `chore(fr):` subject, no fr ref), the tracking branch holds `<target-dir>/features/<feature-id>/…`; a second HOME resumes from the tracking repo; a tracking repo removed mid-run makes the next resolve exit 2. Wire as `test_placement_stealth`. Amend the merged `placement-stealth` row to ci with its levels and `--scenario tests/scenarios/placement-stealth.sh` (`--feature 2026-11-04-repo-feature-settings`). Document stealth on the settings guide page and docs/explainers/01-fr-goal.md; bump `reviewed`; `uv run fr docs check --base origin/main` passes.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

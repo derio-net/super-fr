@@ -1,0 +1,90 @@
+schema_version: 2
+phase:
+  number: 7
+  title: 'Placement moves: fr placement move and migrate-branch; drift refused everywhere
+    (R27, R28)'
+  tag: agentic
+  depends_on:
+  - 5
+  - 6
+  tracking_issue: null
+  acceptance:
+  - placement-move-and-drift
+  tier: hard
+  files:
+  - packages/fr/src/fr/placement/*.py
+  - packages/fr/src/fr/commands/placement_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - packages/fr/src/fr/artifacts/validate.py
+  - packages/fr/src/fr/commands/push_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/validate_cmd.py
+  - tests/unit/test_placement_move*.py
+  - tests/unit/test_migration_trigger.py
+  - tests/scenarios/placement-move-and-drift.sh
+  - tests/integration/test_scenarios.py
+  - docs/acceptance/features/*.yaml
+  - docs/*.md
+  - docs/reference/*.md
+  - docs/explainers/*.md
+  - README.md
+  estimate_lines: 1800
+tasks:
+- number: 1
+  title: fr placement move (R27)
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED: tests/unit/test_placement_move.py — `fr placement move --to quiet` from repo: copy every artifact (live and archived, every feature's shared artifacts) into feature roots of a new `fr` branch, synthesising `merged:` records from the default ref's history; verify (the destination's fold and `fr validate artifacts` equal the source's: compare `fold()` output and the validation report); switch (push the `fr` branch with the switch); remove (open a removal branch deleting the files from the default branch, printing that git history still holds them, and the `fr pr create` command for it). Each step is idempotent: killing the process after any step and re-running completes without duplication (a state file under the git common dir records the last step). Refused (exit 2, naming the workspace) while any fr workspace has uncommitted work. `--to stealth --tracking <repo>@<branch>`, `--to repo` (the reverse: copy back, verify, delete the `fr` branch's switch by a new commit setting `placement: repo`, never a force push), and `--run <id>` moving one stealth run are covered the same way.
+  - id: P7.T1.S2
+    text: |-
+      GREEN: fr/placement/move.py (steps as data: copy, verify, switch, remove) and commands/placement_cmd.py registered in cli.py; `placement` is NOT added to READ_ONLY_COMMANDS (it writes artifacts), so the trigger gate applies to it. Tests pass.
+- number: 2
+  title: fr placement migrate-branch and drift detection (R28)
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      RED: a feature branch carrying fr artifacts under `docs/superpowers/…` in a repo whose placement is now quiet (or the reverse) is detected: the CLI-entry gate refuses every non-exempt command naming `fr placement migrate-branch` (detection only, it never migrates, in every context including CI); `fr push`, `deliver` (`fr run resolve --step deliver`) and `fr validate artifacts` refuse the same way; `fr placement migrate-branch`, run in a valid workspace, moves the artifacts to the placement in its own commit on each side and pushes them where they belong, and refuses outside a valid workspace. Update tests/unit/test_migration_trigger.py only for the new refusal (the exemption list does not change).
+  - id: P7.T2.S2
+    text: |-
+      GREEN: implement the detection in fr/placement/drift.py, called from trigger.py, push_cmd.py, run_cmd's deliver gate and artifacts/validate.py. Tests pass.
+- number: 3
+  title: Scenario, row, docs, final checks
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      RED→GREEN: tests/scenarios/placement-move-and-drift.sh — a repo-placement fixture with one archived feature and one live branch: `fr placement move --to quiet` completes; an interrupted move re-run completes; `fr acceptance status` output is identical before and after; the live branch's next `fr run status` refuses naming migrate-branch; `fr placement migrate-branch` in its workspace clears it. Wire as `test_placement_move_and_drift`; amend the merged `placement-move-and-drift` row to ci with levels and `--scenario tests/scenarios/placement-move-and-drift.sh` (`--feature 2026-11-04-repo-feature-settings`).
+  - id: P7.T3.S2
+    text: |-
+      Document `fr placement` on the settings guide page, docs/reference (regenerate with `uv run --no-project python scripts/sync-readme.py`), and docs/explainers/01-fr-goal.md; bump `reviewed`; run `uv run fr docs check --base origin/main`, `uv run fr acceptance check`, `uv run fr validate artifacts`, `uv run fr harness parity --check`, both mirror `--check`s, ruff, mypy and the full suite into a log.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
