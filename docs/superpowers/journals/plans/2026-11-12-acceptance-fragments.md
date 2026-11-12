@@ -699,3 +699,8 @@ b9475854b: fold checks every amendment naming a retired row against its revision
 ### pr1408-r2-resolved · finding [fixed] · resolves pr1408-r2: A stale retire that merged anyway is silent: contested.discard runs unconditionally on retire
 
 b9475854b: retire no longer discards contested unconditionally; a stale retire that merged leaves the row retired and contested. Red: test_a_stale_retire_that_merged_anyway_leaves_the_row_contested
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r3-resolved created=2026-11-12T09:32:31+00:00 state=fixed resolves=pr1408-r3 -->
+### pr1408-r3-resolved · finding [fixed] · resolves pr1408-r3: Scaffolded GitHub matrix job checks out with persist-credentials: false, so check's default-ref fetch fails in CI on a private repo and every run is refused
+
+bb30cc024: a failed fetch reads refs/remotes/<default> when the checkout holds it, BranchCheck.source + check's 'default ref:' line name the source; CI with no local ref still refuses. Red: test_a_failed_fetch_in_ci_reads_the_checkouts_local_default_ref_and_says_so
