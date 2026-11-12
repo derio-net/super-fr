@@ -186,3 +186,71 @@ rename, which the plan's suggested text left out.
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 single-step task: rule paragraph, fragment and page stamps, nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-12T20:41:44+00:00 phase=2 -->
+### review-p2 · review · Phase 2 code review, four findings, all in scope (phase 2)
+
+A separate reviewer read the repair, the runner, the registry, the trigger and the
+new tests against R9-R14, R16 and R20, ran 265 targeted tests, the three mirror
+checks, `fr docs check`, `fr validate artifacts`, the migration preview and the
+fragment check, and probed 33 rewrite inputs and the gate in scratch repos across
+contexts. The rewrite lost or changed no byte in any input; the four walks matched
+the spec's table except for one case (p2-r1). The executor's six deviations were
+each judged correct: `MigrationReport.unrepairable`, `Repair.check`, the preview's
+failures coming from `run_migrations(dry_run=True)`, the three archived plans
+allowlisted by slug (they fail on the default branch too, over a `00.yaml`), the
+own-artifacts test allowing archived actions for this one repair, and `fr_version`
+in the fr-plan skill.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-12T20:41:44+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · An archived file whose dry check passes but whose write fails kept the repo stale (phase 2)
+
+`_scan_extra` counted a carrier in an unwritable directory as repairable; every
+apply failed, so the gate re-migrated on every command and refused in the contexts
+that may not write, against R12.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-12T20:41:44+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · fr migrate artifacts said every artifact is current beside an unrepairable file (phase 2)
+
+`commands/migrate_cmd.py` tested only `applied` and `failed`.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-12T20:41:44+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Test gaps against the spec's section 6 (phase 2)
+
+One commit asserted only as a count on a fake callback; no CI-context case; no
+first-line, empty-value or non-UTF-8 case; the allowlist's entries never asserted
+to still fail.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-12T20:41:44+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · A gitignored archived carrier lost the whole migration commit (phase 2)
+
+`git add` refuses an ignored path, so nothing was committed and the other paths stayed staged.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-12T20:41:44+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: An archived file whose dry check passes but whose write fails kept the repo stale (phase 2)
+
+`_scan_extra` classifies a carrier whose directory is not writable as unrepairable,
+at scan time, so it is reported and never stale. Test: the unwritable-directory
+case asserts `is_stale` false, an empty plan, the file byte-identical.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-12T20:41:44+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: fr migrate artifacts said every artifact is current beside an unrepairable file (phase 2)
+
+The closing line is "nothing to migrate; N archived file(s) left as they are." Tested through the CLI.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-12T20:41:44+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Test gaps against the spec's section 6 (phase 2)
+
+Added: the fake commit's report holds the live and archived paths; a real-git test
+that live and archived repairs land in one commit with a clean tree; the CI
+context (repaired in place, no commit); first-line and no-value rewrites; a
+non-UTF-8 archived file; each allowlisted plan asserted to still fail. The
+default-branch refusal with an archive-only carrier has no test of its own: the
+refusal fires on `is_stale`, which the archive-only staleness test covers, and the
+refusal itself is unchanged and tested in test_migration_trigger.py.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-12T20:41:44+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: A gitignored archived carrier lost the whole migration commit (phase 2)
+
+`commit_migration` drops untracked paths git ignores before staging; the file is
+still repaired. Real-git test added.
