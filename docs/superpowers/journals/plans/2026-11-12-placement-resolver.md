@@ -200,3 +200,52 @@ pure literal-to-resolver rewrites; each module was touched once and the result i
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 same mechanical rewrites as T1; the per-module constants became derivations of the table, no duplicate left behind
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-12T14:55:43+00:00 phase=2 -->
+### review-phase-2 · review · Phase 2 review (callers on the resolver): four in-scope findings, fixed (the fourth partly, by decision) (phase 2)
+
+Independent reviewer over `git diff 3fade42ec..0ed4dd4c8`. Every rewrite read is
+byte-identical under `repo`; no root is joined at import and space_for is never cached;
+the scaffold placeholders always render; both validate-plans.sh copies are identical and
+eval-safe; PENDING is empty with no new exemption; the 12 restamps are honest. Fixes landed
+in bc273c8c0, 2caf77995, 0a0585ccb (and its parent) and 6a3c8d75c.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-12T14:55:43+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · validate-plans.sh swallowed every fr settings paths failure, including deliberate placement refusals, and validated the repo literals; VK_REPO_ROOT could disagree with REPO_ROOT (phase 2)
+
+Under quiet it would have reported success over the wrong directory.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-12T14:55:43+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · plan_ops derived the artifact root by .parent walks and hardcoded plan directory names (phase 2)
+
+Under the features/<id>/ layout, superpowers_dir.parent.parent is not the repo root.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-12T14:55:43+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Tripwire missed bare "superpowers", .name comparisons, concatenation and "/".join; isolation/local.py hardcoded _ARCHIVED_KINDS (phase 2)
+
+The empty-PENDING claim was stronger than the detector.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-12T14:55:43+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · logical._resolve re-ran space_for's filesystem reads per ref; fr.refs uses function-local imports (phase 2)
+
+A hot-path cost, not a correctness issue.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-12T14:55:43+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: validate-plans.sh swallowed every fr settings paths failure, including deliberate placement refusals, and validated the repo literals; VK_REPO_ROOT could disagree with REPO_ROOT (phase 2)
+
+bc273c8c0: fall back to the literals only when fr is absent or lacks the subcommand; any other failure prints fr's stderr and exits 2; fr runs with VK_REPO_ROOT unset from $REPO_ROOT; tests for absent, old, refusing and working fr. Printed paths remain symlink-resolved; the script uses them as given.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-12T14:55:43+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: plan_ops derived the artifact root by .parent walks and hardcoded plan directory names (phase 2)
+
+2caf77995: plan_ops finds the feature root via KIND_DIRS/feature_roots from the real repo root (_feature_root_of); _find_prior_rework now looks in archived-plans for an implemented parent, which it previously missed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-12T14:55:43+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Tripwire missed bare "superpowers", .name comparisons, concatenation and "/".join; isolation/local.py hardcoded _ARCHIVED_KINDS (phase 2)
+
+0a0585ccb, 6a3c8d75c: the detector flags bare "superpowers" (exempt only as a KIND_DIRS/kind_dir key), + concatenation and "/".join, with planted cases; apply_cmd.py and isolation/local.py _ARCHIVED_KINDS now derive from the resolver; PENDING stays empty. A bare "acceptance" is not flagged: it is a feature/section key in ~75 places.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-12T14:55:43+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: logical._resolve re-ran space_for's filesystem reads per ref; fr.refs uses function-local imports (phase 2)
+
+logical.feature_roots_of plus an optional roots= lets path_view and check compute the space once per batch; the single-ref API is unchanged. The fr.refs function-local imports stay: they correctly break the fr.artifacts -> fr.spec -> fr.refs cycle, and a leaf-module move buys nothing further.
