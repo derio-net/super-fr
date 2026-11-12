@@ -644,3 +644,8 @@ Resolves pr1408-r1 and pr1408-r2 with one design. A retired row keeps its revisi
 ### pr1408-r1 · finding [open] (reviewer: in scope) · A retired row that became contested can never be cleared: every pending amendment naming a retired row raises FoldError, whatever its base (phase 1)
 
 Pre-merge review of PR #1408 (operator's independent review), item 1. fold.py retired-row branch. R17: the next correctly based amendment clears a contested row; here none can exist, and the FoldError breaks every reader on that branch.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r2 created=2026-11-12T09:18:49+00:00 phase=1 state=open review_scope=in -->
+### pr1408-r2 · finding [open] (reviewer: in scope) · A stale retire that merged anyway is silent: contested.discard runs unconditionally on retire (phase 1)
+
+PR #1408 review item 2. A's set-status (base 0) merges, then B's retire (base 0) merges: retired, not contested, no debt. Only the opposite order was tested.
