@@ -60,7 +60,9 @@ pages:
   script:
     - |
       fr acceptance pages-check || {
-        echo "Pages deploy refused: visibility not shown to match the repo. A skipped deploy does not unpublish a live site: remove Pages in the project settings (Deploy > Pages) by hand."
+        echo "Pages deploy refused: visibility not shown to match the repo."
+        echo "A skipped deploy does not unpublish a live site: remove Pages in the"
+        echo "project settings (Deploy > Pages) by hand."
         exit 1
       }
     - mkdir -p public

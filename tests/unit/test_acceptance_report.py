@@ -105,7 +105,7 @@ def _render(root: Path, rows_text: str) -> str:
     from fr.acceptance.model import parse_matrix
 
     matrix = parse_matrix(MATRIX_HEADER + rows_text)
-    return render(matrix, _links(root, "local"), stamp="test-stamp", aggregates=True)
+    return render(matrix, _links(root, "local"), stamp="test-stamp")
 
 
 def test_tiles_computed_from_rows(tmp_path: Path) -> None:
@@ -195,7 +195,7 @@ def test_render_markdown_is_github_flavored(tmp_path: Path) -> None:
 
     root = make_repo(tmp_path, row(id="a") + row(id="b", status="unwired"))
     matrix = load_effective(root)
-    md = render_markdown(matrix, _links(root, "github"), stamp="links: github", aggregates=False)
+    md = render_markdown(matrix, _links(root, "github"), stamp="links: github")
     assert md.startswith("# Acceptance coverage")
     assert "| Acceptance |" in md  # a GFM table header
     assert "| --- |" in md or "|---|" in md  # a delimiter row
@@ -211,7 +211,7 @@ def test_markdown_escapes_pipe_in_cells(tmp_path: Path) -> None:
     evil = row(id="a").replace('"Operator can do X"', '"a | b\nc"')
     write_matrix_fragments(root, MATRIX_HEADER + evil)
     matrix = load_effective(root)
-    md = render_markdown(matrix, _links(root, "github"), stamp="s", aggregates=False)
+    md = render_markdown(matrix, _links(root, "github"), stamp="s")
     # the literal cell pipe is escaped and the newline flattened → table stays valid
     assert r"a \| b" in md
     assert "a | b\nc" not in md
@@ -387,22 +387,16 @@ _EVERY_PANEL = (
 )
 
 
-def test_aggregates_flag_toggles_both_renderers(tmp_path: Path) -> None:
+def test_both_renderers_carry_the_aggregates(tmp_path: Path) -> None:
     from fr.acceptance.report import render_markdown
 
     root = make_repo(tmp_path, _EVERY_PANEL)
     m = load_effective(root)
     links = _links(root, "github")
-    md_on = render_markdown(m, links, stamp="s", aggregates=True)
-    md_off = render_markdown(m, links, stamp="s", aggregates=False)
-    assert "| status | count |" in md_on and "| status | count |" not in md_off
-    assert "sharp line" in md_on and "sharp line" not in md_off
-    assert "(4 rows)" in md_on and "rows)" not in md_off
-    html_on = render(m, links, stamp="s", aggregates=True)
-    html_off = render(m, links, stamp="s", aggregates=False)
-    assert '<div class="tiles">' in html_on and '<div class="tiles">' not in html_off
-    assert "sharp line" in html_on and "sharp line" not in html_off
-    assert "(4 rows)" in html_on and "rows)" not in html_off
+    md = render_markdown(m, links, stamp="s")
+    assert "| status | count |" in md and "sharp line" in md and "(4 rows)" in md
+    page = render(m, links, stamp="s")
+    assert '<div class="tiles">' in page and "sharp line" in page and "(4 rows)" in page
 
 
 def test_summary_still_carries_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

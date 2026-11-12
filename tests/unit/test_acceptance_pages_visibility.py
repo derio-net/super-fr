@@ -91,9 +91,7 @@ class TestGitlab:
     Pages access control on, which gitlab.com always does. Not captured: no instance here."""
 
     @staticmethod
-    def _serve(
-        monkeypatch, level, visibility="private", web_url="https://gitlab.com/grp/sub/proj"
-    ):
+    def _serve(monkeypatch, level, visibility="private", web_url="https://gitlab.com/grp/sub/proj"):
         seen: list[list[str]] = []
 
         def run(args, **kwargs):

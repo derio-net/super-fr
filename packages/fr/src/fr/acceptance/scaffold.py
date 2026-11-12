@@ -345,7 +345,10 @@ PAGES_STEP_GITHUB = """\
             echo "allowed=true" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=false" >> "$GITHUB_OUTPUT"
-            echo "::error::Pages deploy refused: visibility not shown to match the repo. A refusal here means the repo or site visibility changed after this job was scaffolded, and a skipped deploy does not unpublish what is already live. Unpublish by hand: delete the Pages site in the repo settings, or DELETE /repos/$GITHUB_REPOSITORY/pages as an admin."
+            echo "::error::Pages deploy refused: visibility not shown to match the repo."
+            echo "A refusal here means visibility changed since this job was scaffolded."
+            echo "A skipped deploy does not unpublish a live site: delete the Pages site"
+            echo "in the repo settings, or DELETE /repos/$GITHUB_REPOSITORY/pages (admin)."
             exit 1
           fi
       - name: Render the report
@@ -386,7 +389,9 @@ pages:
   script:
     - |
       fr acceptance pages-check || {
-        echo "Pages deploy refused: visibility not shown to match the repo. A skipped deploy does not unpublish a live site: remove Pages in the project settings (Deploy > Pages) by hand."
+        echo "Pages deploy refused: visibility not shown to match the repo."
+        echo "A skipped deploy does not unpublish a live site: remove Pages in the"
+        echo "project settings (Deploy > Pages) by hand."
         exit 1
       }
     - mkdir -p public
