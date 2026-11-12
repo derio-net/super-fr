@@ -36,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0 # check judges merged rows against the default branch's history
           persist-credentials: false
       - uses: astral-sh/setup-uv@v5
       - name: Install fr

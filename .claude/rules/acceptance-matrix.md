@@ -85,7 +85,8 @@ artifacts --yes` splits it.
   commands carry it). Each amendment names its row's revision (`base`, the count of
   amendments applied; default the current one).
 - **The stale-base rule** (R17). `fr acceptance check` and `deliver` first fetch
-  the default ref (`check --no-fetch` offline; a failed fetch in CI is a refusal),
+  the default ref (`check --no-fetch` offline; in CI a failed fetch, or a remote with no
+  resolvable default ref, is a refusal: check out with `fetch-depth: 0`),
   then refuse, exit 2, a branch amendment whose base another feature's merged
   amendment has passed: review the row, then `fr acceptance amend --rebase`. A
   stale amendment that merged anyway marks its row **contested**, which is debt

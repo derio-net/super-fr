@@ -44,6 +44,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # check judges merged rows against the default branch's history
       - uses: astral-sh/setup-uv@v5
       - name: Install fr
         run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"

@@ -276,3 +276,63 @@ def test_check_passes_an_amendment_appended_after_merged_ones(
     res = invoke(root, monkeypatch, "check", "--no-fetch")
 
     assert "merged amendment" not in res.output, res.output
+
+
+def _no_default_ref(tmp_path: Path) -> Path:
+    """A clone with a remote but no `origin/HEAD` and no `origin/{main,master,...}`."""
+    root = merged_repo(tmp_path)
+    git(root, "update-ref", "-d", "refs/remotes/origin/main")
+    git(root, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+    clear_fold_cache()
+    return root
+
+
+def _clear_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.artifacts.trigger import CI_ENV_VARS
+
+    for var in CI_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_a_remote_with_no_default_ref_in_ci_is_a_refusal_never_a_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p3-r3: with no default ref the fold falls back to HEAD and every check passes, so
+    in CI a remote that names none is refused, with the fix."""
+    from fr.acceptance.amend import branch_refusals
+
+    root = _no_default_ref(tmp_path)
+    monkeypatch.setenv("CI", "true")
+
+    found = branch_refusals(root)
+
+    assert any("no default ref" in e and "fetch-depth: 0" in e for e in found.errors), found
+    assert any("no default ref" in e for e in branch_refusals(root, fetch=False).errors)
+
+
+def test_a_remote_with_no_default_ref_outside_ci_is_a_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance.amend import branch_refusals
+
+    root = _no_default_ref(tmp_path)
+    _clear_ci(monkeypatch)
+
+    found = branch_refusals(root)
+
+    assert found.errors == []
+    assert any("no default ref" in w for w in found.warnings), found
+
+
+def test_a_repo_with_no_remote_keeps_no_refusal_and_no_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance.amend import branch_refusals
+
+    root = _no_default_ref(tmp_path)
+    git(root, "remote", "remove", "origin")
+    monkeypatch.setenv("CI", "true")
+
+    found = branch_refusals(root)
+
+    assert (found.errors, found.warnings) == ([], [])

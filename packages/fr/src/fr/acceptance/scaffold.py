@@ -140,6 +140,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0 # check judges merged rows against the default branch's history
           persist-credentials: false
       - uses: astral-sh/setup-uv@v5
       - name: Install fr
@@ -223,6 +224,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # check judges merged rows against the default branch's history
       - uses: astral-sh/setup-uv@v5
       - name: Install fr
         run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
@@ -271,6 +274,8 @@ stages:
 acceptance-report:
   stage: acceptance
   image: python:3.12
+  variables:
+    GIT_DEPTH: "0" # check judges merged rows against the default branch's history
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "push"
@@ -281,6 +286,7 @@ acceptance-report:
     - export PATH="$HOME/.local/bin:$PATH"
     - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
   script:
+    - git fetch origin "+refs/heads/$CI_DEFAULT_BRANCH:refs/remotes/origin/$CI_DEFAULT_BRANCH"
     - fr acceptance check
     - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
   artifacts:

@@ -206,6 +206,18 @@ def _ci() -> bool:
     return in_ci()
 
 
+def _has_remote(repo_root: Path) -> bool:
+    """Whether *repo_root* is a git repo naming any remote (two remotes with no
+    default count: the default ref is then unresolvable, not absent)."""
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        listed = git_answer(repo_root, "remote")
+    except GitUnavailableError:
+        return False
+    return listed.returncode == 0 and bool(listed.stdout.split())
+
+
 def fetch_default(repo_root: Path, ref: str) -> str | None:
     """`git fetch <remote> <branch>` for the default ref *ref*; None on success,
     else why it failed."""
@@ -231,8 +243,9 @@ def fetch_default(repo_root: Path, ref: str) -> str | None:
 
 def branch_refusals(repo_root: Path, *, fetch: bool = True) -> BranchCheck:
     """Fetch the default ref (unless *fetch* is False), then the immutability and
-    stale-base checks. A failed fetch is a refusal in CI and a warning elsewhere
-    (an offline laptop checks against the last fetched ref)."""
+    stale-base checks. A failed fetch, or a remote with no resolvable default ref, is
+    a refusal in CI and a warning elsewhere (an offline laptop checks against the last
+    fetched ref). A repo with no remote is judged against HEAD, as before."""
     from fr.acceptance.fold import clear_fold_cache, has_fragments
 
     out = BranchCheck()
@@ -240,6 +253,21 @@ def branch_refusals(repo_root: Path, *, fetch: bool = True) -> BranchCheck:
     if not has_fragments(root):
         return out
     ref = default_ref_name(root)
+    if ref is None and _has_remote(root):
+        # With no default ref the fold falls back to HEAD, so the immutability and
+        # stale-base checks would pass vacuously (review p3-r3): CI refuses, as a
+        # failed fetch does; a laptop is warned. A repo with no remote has nothing
+        # merged to judge against, and keeps no refusal.
+        line = (
+            "the repo has a remote but no default ref (no `<remote>/HEAD`, no "
+            "`<remote>/{main,master,trunk,develop}`), so merged rows and stale bases "
+            "cannot be judged: fetch the default branch (`git fetch <remote> <branch>`, "
+            "`git remote set-head <remote> --auto`), or check out with `fetch-depth: 0` in CI"
+        )
+        if _ci():
+            out.errors.append(f"{line}; refused")
+            return out
+        out.warnings.append(line)
     if fetch and ref is not None:
         why = fetch_default(root, ref)
         if why is not None:
