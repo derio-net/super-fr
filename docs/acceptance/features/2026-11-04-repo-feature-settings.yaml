@@ -277,3 +277,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_rewrites_no_acceptance_fragment
     why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_effective_readers.py#test_the_staleness_guard_counts_a_logical_citation
+    why: read-time resolution of archived refs is ci-pinned
