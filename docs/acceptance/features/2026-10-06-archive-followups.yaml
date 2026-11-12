@@ -26,9 +26,9 @@ rows:
       is still owed'
   - id: archive-retargets-matrix-refs
     capability: archive
-    acceptance: After a successful archive, every same-repo matrix ref naming a moved
-      path points at its new location (only those bytes change) and the three reports
-      are regenerated, so fr acceptance check stays clean after closeout
+    acceptance: After a successful archive, every same-repo ref naming a moved spec,
+      plan or journal still resolves, read at its archived location (no fragment is
+      rewritten), so fr acceptance check stays clean after closeout
     origin:
     - spec:2026-10-06-archive-followups#R4
     - spec:2026-10-06-archive-followups#R5
