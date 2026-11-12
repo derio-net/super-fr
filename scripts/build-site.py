@@ -656,9 +656,10 @@ def render_landing(
             )
         elif sec.kind == "pages":
             lists = []
+            here = posixpath.dirname(route(page)) or "."
             for key, heading, rows in page_groups(page, entries):
                 lis = "".join(
-                    f'<li><a href="{esc(posixpath.relpath(route(e.path), posixpath.dirname(route(page)) or "."))}">'
+                    f'<li><a href="{esc(posixpath.relpath(route(e.path), here))}">'
                     f"{esc(e.title)}</a><span>{esc(first_sentence(e.tldr))}</span></li>"
                     for e in rows
                 )
