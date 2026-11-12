@@ -21,10 +21,13 @@ be false without anything noticing.
 
 from __future__ import annotations
 
+import fcntl
 import os
 import subprocess
 import sys
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -372,6 +375,76 @@ def quiet_space(root: Path) -> paths.ArtifactSpace:
     ensure_worktree(root)
     check_owner(path, fid, branch)
     return paths.ArtifactSpace(paths.QUIET, path, fid)
+
+
+LOCK_NAME: Final = "fr-worktree.lock"
+"""The fr worktree's lock, in ITS git dir: every workspace of a repo shares one fr
+worktree and one index there, so its commits, replays and pushes are serialised."""
+LOCK_WAIT_SECONDS: float = 10.0
+_LOCK_POLL_S: Final = 0.05
+
+
+def _fr_git_dir(fr_root: Path) -> Path:
+    done = _git(fr_root, "rev-parse", "--absolute-git-dir")
+    if done.returncode != 0 or not done.stdout.strip():
+        raise SettingsError(
+            f"placement quiet: git cannot name the git dir of the `{QUIET_BRANCH}` worktree "
+            f"at {fr_root}: {done.stderr.strip()}"
+        )
+    return Path(done.stdout.strip())
+
+
+@contextmanager
+def fr_worktree_lock(fr_root: Path) -> Iterator[None]:
+    """Hold the fr worktree's exclusive lock (review p3-r8), waiting a bounded
+    `LOCK_WAIT_SECONDS` for another fr command to release it, then refusing, named."""
+    path = _fr_git_dir(fr_root) / LOCK_NAME
+    with path.open("a") as handle:
+        deadline = time.monotonic() + LOCK_WAIT_SECONDS
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise SettingsError(
+                        f"placement quiet: another fr command holds {path} (it is committing "
+                        f"or pushing on the shared `{QUIET_BRANCH}` worktree); retry when it "
+                        "is done"
+                    ) from None
+                time.sleep(_LOCK_POLL_S)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def fr_worktree_problem(fr_root: Path, *, dirty: bool = True) -> str | None:
+    """Why fr cannot commit or replay on the fr worktree right now, or None: a rebase or
+    merge someone left in progress there, or (with *dirty*, for a replay) uncommitted
+    changes to tracked files. A pathspec commit is not blocked by unrelated edits."""
+    git_dir = _fr_git_dir(fr_root)
+    for name, what in (
+        ("rebase-merge", "a rebase in progress"),
+        ("rebase-apply", "a rebase in progress"),
+        ("MERGE_HEAD", "a merge in progress"),
+        ("CHERRY_PICK_HEAD", "a cherry-pick in progress"),
+    ):
+        if (git_dir / name).exists():
+            return (
+                f"the `{QUIET_BRANCH}` worktree at {fr_root} has {what}; finish or abort it "
+                f"there (`git -C {fr_root} rebase --abort`) and retry"
+            )
+    if not dirty:
+        return None
+    status = _git(fr_root, "status", "--porcelain", "--untracked-files=no")
+    if status.returncode == 0 and status.stdout.strip():
+        first = status.stdout.strip().splitlines()[0][3:]
+        return (
+            f"the `{QUIET_BRANCH}` worktree at {fr_root} has uncommitted changes to tracked "
+            f"files ({first}); commit or discard them there and retry"
+        )
+    return None
 
 
 def _default_network(root: Path) -> Network:

@@ -187,3 +187,71 @@ def test_the_replay_is_bounded(ws, recorder, tmp_path, monkeypatch) -> None:
     assert len(recorder.pushes()) == push_mod.MAX_PUSH_ATTEMPTS == 3
     assert "refs/heads/fr" in " ".join(result.output.split())
     _no_force(recorder)
+
+
+# --- p3-r8: one lock over the shared fr worktree, and honest refusals -----------------
+
+
+def test_a_held_fr_worktree_lock_refuses_the_push_naming_it(ws, recorder, monkeypatch) -> None:
+    from fr.placement import quiet
+
+    wt, fr_root, origin = ws
+    _code_commit(wt)
+    _fr_commit(fr_root)
+    monkeypatch.setattr(quiet, "LOCK_WAIT_SECONDS", 0.2)
+    with quiet.fr_worktree_lock(fr_root):
+        result = _push(wt)
+    assert result.exit_code == 2, result.output
+    assert "fr-worktree.lock" in " ".join(result.output.split())
+    assert recorder.pushes() == []
+
+
+def test_a_held_fr_worktree_lock_refuses_an_artifact_commit(ws, monkeypatch) -> None:
+    from fr.artifacts.commit import commit_paths
+    from fr.placement import quiet
+
+    wt, fr_root, _ = ws
+    note = fr_root / "features" / "feat__q" / "n.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("x\n")
+    monkeypatch.setattr(quiet, "LOCK_WAIT_SECONDS", 0.2)
+    with quiet.fr_worktree_lock(fr_root):
+        outcome = commit_paths(wt, [note], "chore(fr): note")
+    assert not outcome.committed and "fr-worktree.lock" in outcome.reason
+    assert commit_paths(wt, [note], "chore(fr): note").committed
+
+
+def test_a_rebase_in_progress_on_the_fr_worktree_is_reported_as_such(ws, tmp_path) -> None:
+    wt, fr_root, origin = ws
+    _code_commit(wt)
+    _fr_commit(fr_root)
+    _other_feature_pushes(tmp_path, origin, "features/feat__other/x.md")
+    (Path(git(fr_root, "rev-parse", "--absolute-git-dir").strip()) / "rebase-merge").mkdir()
+    result = _push(wt)
+    flat = " ".join(result.output.split())
+    assert result.exit_code == 2, flat
+    assert "rebase in progress" in flat and "changed the same path" not in flat
+
+
+def test_a_dirty_fr_worktree_is_reported_as_such(ws, tmp_path) -> None:
+    wt, fr_root, origin = ws
+    _code_commit(wt)
+    _fr_commit(fr_root)
+    _other_feature_pushes(tmp_path, origin, "features/feat__other/x.md")
+    (fr_root / "settings.yaml").write_text("edited by hand\n")
+    result = _push(wt)
+    flat = " ".join(result.output.split())
+    assert result.exit_code == 2, flat
+    assert "uncommitted changes" in flat and "changed the same path" not in flat
+
+
+def test_a_commit_is_not_blocked_by_an_unrelated_edit_in_the_fr_worktree(ws) -> None:
+    from fr.artifacts.commit import commit_paths
+
+    wt, fr_root, _ = ws
+    (fr_root / "settings.yaml").write_text("edited by hand\n")
+    note = fr_root / "features" / "feat__q" / "n.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("x\n")
+    assert commit_paths(wt, [note], "chore(fr): note").committed
+    assert "settings.yaml" in git(fr_root, "status", "--porcelain")

@@ -317,6 +317,11 @@ def _replay(fr_root: Path, remote: str) -> None:
     """Fetch `<remote>/fr` and replay this checkout's own unpushed fr commits onto it.
     Features write disjoint paths, so the replay is clean; a conflict means the same
     path, which is refused naming it, with the worktree put back as it was."""
+    from fr.placement.quiet import fr_worktree_problem
+
+    problem = fr_worktree_problem(fr_root)
+    if problem is not None:  # p3-r8: say what is wrong, never "the same path"
+        raise PushRefusedError(f"cannot replay this feature's `{QUIET_BRANCH}` commits: {problem}")
     tracking = f"refs/remotes/{remote}/{QUIET_BRANCH}"
     _git(fr_root, "fetch", "--no-tags", remote, f"+refs/heads/{QUIET_BRANCH}:{tracking}")
     done = run_git(fr_root, ["rebase", "--no-autostash", tracking])
@@ -336,7 +341,20 @@ def atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bo
     """Quiet's push (R23): the feature branch and `fr` in ONE `git push --atomic` when
     code moved, `fr` alone when only bookkeeping did. When `fr` is rejected because
     another feature moved it, fetch, replay, retry, at most `MAX_PUSH_ATTEMPTS` times.
-    Never forced. The refs pushed, in order (empty: nothing was pending)."""
+    Never forced. The refs pushed, in order (empty: nothing was pending).
+
+    Held under the fr worktree's lock (p3-r8): every workspace of the repo shares it."""
+    from fr.placement.quiet import fr_worktree_lock
+    from fr.settings import SettingsError
+
+    try:
+        with fr_worktree_lock(fr_root):
+            return _atomic_push(root, fr_root, remote, branch, code=code)
+    except SettingsError as e:
+        raise PushRefusedError(str(e)) from e
+
+
+def _atomic_push(root: Path, fr_root: Path, remote: str, branch: str, *, code: bool) -> list[str]:
     for _ in range(MAX_PUSH_ATTEMPTS):
         refs = ([branch] if code else []) + ([QUIET_BRANCH] if fr_pending(root, remote) else [])
         if not refs:

@@ -665,14 +665,27 @@ def commit_paths(
         if isinstance(rerouted, CommitOutcome):
             return rerouted
         fr_root, owner = rerouted
-        return commit_paths(
-            fr_root,
-            (*paths, owner) if owner is not None else paths,
-            message,
-            no_verify=no_verify,
-            restore_index=restore_index,
-            lock_wait=lock_wait,
-        )
+        from fr.placement.quiet import fr_worktree_lock, fr_worktree_problem
+        from fr.settings import SettingsError
+
+        # p3-r8: every workspace of the repo shares this worktree and its index.
+        try:
+            with fr_worktree_lock(fr_root):
+                problem = fr_worktree_problem(fr_root, dirty=False)
+                if problem is not None:
+                    return CommitOutcome(
+                        committed=False, reason=f"refusing to commit: {problem}; {_UNCOMMITTED}"
+                    )
+                return commit_paths(
+                    fr_root,
+                    (*paths, owner) if owner is not None else paths,
+                    message,
+                    no_verify=no_verify,
+                    restore_index=restore_index,
+                    lock_wait=lock_wait,
+                )
+        except SettingsError as e:
+            return CommitOutcome(committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}")
     # Repo settings R14: fr's own `chore(fr): …` subject goes through the commit
     # templates here, the one seam. A policy fr cannot read refuses the commit.
     from fr.git_policy.templates import fr_message
