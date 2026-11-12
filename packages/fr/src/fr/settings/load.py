@@ -27,11 +27,12 @@ from fr.settings import SettingsError
 from fr.settings.model import PLACEMENTS, Settings, parse_settings
 
 SETTINGS_PATH: Final = ".fr/settings.yaml"
-SERVABLE_PLACEMENTS: Final = frozenset({"repo"})
-"""The placements this fr can serve. Quiet and stealth arrive with a later plan (R29)."""
+SERVABLE_PLACEMENTS: Final = frozenset({"repo", "quiet"})
+"""The placements this fr can serve. Stealth arrives with a later phase (R29)."""
 
-Source = Literal["remote", "local", "head", "defaults"]
-"""Where the policy came from: R2 step 1, step 2, the CI exception, or nowhere."""
+Source = Literal["remote", "local", "head", "defaults", "quiet"]
+"""Where the policy came from: R2 step 1, step 2, the CI exception, nowhere, or (quiet)
+the `fr` branch's root `settings.yaml` (`fr.placement.quiet`)."""
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,10 @@ def _show(root: Path, sha: str, path: str = SETTINGS_PATH) -> str | None:
             f"cannot read {path} at {sha[:12]}: git show failed: {done.stderr.strip()}"
         )
     return done.stdout
+
+
+show_at_commit = _show
+"""*path* at a commit: the reader the quiet switch (`fr.placement.quiet`) shares."""
 
 
 def _commit_of(root: Path, qualified_ref: str) -> str | None:
@@ -220,11 +225,15 @@ def _yaml_of(text: str | None, source: str) -> object:
         raise SettingsError(f"{source}: not valid YAML: {e}") from e
 
 
+yaml_of = _yaml_of
+
+
 def unservable_placement(placement: str, source: str) -> SettingsError:
     """R4's refusal of a placement this fr cannot yet serve: the one wording, shared by
     the loader and the path resolver (`fr.artifacts.paths.space_for`)."""
     return SettingsError(
-        f"{source}: placement: {placement} is not yet available in this fr (only `repo` is served)"
+        f"{source}: placement: {placement} is not yet available in this fr (only `repo` and "
+        "`quiet` are served)"
     )
 
 
@@ -233,6 +242,41 @@ def _servable(settings: Settings, source: str) -> Settings:
         assert settings.placement in PLACEMENTS
         raise unservable_placement(settings.placement, source)
     return settings
+
+
+def _repo_file(settings: Settings) -> Settings:
+    """`.fr/settings.yaml` is the `repo` placement's file, so it says `repo` (§3.A: the
+    placement must match where the file lives). Quiet is switched on by the `fr` branch."""
+    if settings.placement != "repo":
+        raise SettingsError(
+            f"{SETTINGS_PATH}: placement: {settings.placement} is not set here: this file is "
+            "the `repo` placement's. Quiet is switched on by the `fr` branch's root "
+            "settings.yaml (`fr settings init --quiet`)"
+        )
+    return settings
+
+
+def _quiet(root: Path) -> EffectiveSettings | None:
+    """R2 under quiet: the policy is the `fr` branch's root settings.yaml, read from
+    `origin/fr` by commit. A `.fr/settings.yaml` on the default branch is ignored, and
+    the note says so."""
+    from fr.artifacts.paths import SWITCH_REF, SWITCH_SETTINGS
+    from fr.placement.quiet import switch
+
+    found = switch(root)
+    if found is None:
+        return None
+    settings = found.settings
+    sources = {k: ("quiet" if _present(found.data, k) else "default") for k in _leaf_keys(settings)}
+    note = f"quiet: read from origin/fr:{SWITCH_SETTINGS} ({found.sha[:12]})"
+    try:
+        _, sha, _, _ = _resolve_source(root)
+        ignored = sha is not None and _show(root, sha) is not None
+    except (SettingsError, GitUnavailableError):
+        ignored = False
+    if ignored:
+        note += f"; {SETTINGS_PATH} on the default branch is ignored under quiet"
+    return EffectiveSettings(settings, sources, SWITCH_REF, note, None, "quiet")
 
 
 def parse_settings_text(text: str | None, *, source: str, servable: bool = True) -> Settings:
@@ -254,6 +298,9 @@ def load_settings(repo_root: Path) -> EffectiveSettings:
     root = Path(repo_root)
     try:
         in_repo = git_answer(root, "rev-parse", "--git-dir").returncode == 0
+        quiet = _quiet(root) if in_repo else None
+        if quiet is not None:
+            return quiet
         ref, sha, note, source = (
             _resolve_source(root) if in_repo else (None, None, "not a git repo", "defaults")
         )
@@ -274,7 +321,7 @@ def load_settings(repo_root: Path) -> EffectiveSettings:
     cached = _CACHE.get(key)
     if cached is None:
         data = _yaml_of(text, SETTINGS_PATH)
-        settings = _servable(parse_settings(data, source=SETTINGS_PATH), SETTINGS_PATH)
+        settings = _repo_file(_servable(parse_settings(data, source=SETTINGS_PATH), SETTINGS_PATH))
         sources = {k: ("repo" if _present(data, k) else "default") for k in _leaf_keys(settings)}
         cached = (settings, sources)
         _CACHE[key] = cached

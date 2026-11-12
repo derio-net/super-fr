@@ -106,10 +106,15 @@ def test_a_local_branch_named_like_the_remote_ref_cannot_supply_policy(repo: Pat
     assert load_settings(repo).settings.artifacts.gates == "off"
 
 
-@pytest.mark.parametrize("placement", ["quiet", "stealth"])
-def test_unservable_placements_are_refused_by_the_loader(repo: Path, placement: str) -> None:
-    _land_on_main(repo, f"placement: {placement}\n")
+def test_an_unservable_placement_is_refused_by_the_loader(repo: Path) -> None:
+    _land_on_main(repo, "placement: stealth\n")
     with pytest.raises(SettingsError, match="not yet available in this fr"):
+        load_settings(repo)
+
+
+def test_quiet_in_the_repo_file_is_refused_pointing_at_the_fr_branch(repo: Path) -> None:
+    _land_on_main(repo, "placement: quiet\n")
+    with pytest.raises(SettingsError, match="fr settings init --quiet"):
         load_settings(repo)
 
 

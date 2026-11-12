@@ -83,14 +83,14 @@ def test_outside_a_git_repo_the_placement_is_none(
 def test_a_settings_refusal_is_exit_2_with_a_clean_message(repo: Path) -> None:
     git(repo, "checkout", "-q", "--orphan", "fr")
     git(repo, "rm", "-rfq", ".")
-    (repo / "settings.yaml").write_text("schema: 1\nplacement: quiet\n")
+    (repo / "settings.yaml").write_text("schema: 1\nplacement: stealth\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "fr")
     git(repo, "push", "-q", "origin", "fr")
     git(repo, "checkout", "-q", "main")
     result = runner.invoke(app, ["settings", "paths", "--shell"])
     assert result.exit_code == 2
-    assert "placement: quiet is not yet available" in result.output
+    assert "placement: stealth cannot be set on the `fr` switch" in " ".join(result.output.split())
     assert "Traceback" not in result.output
 
 

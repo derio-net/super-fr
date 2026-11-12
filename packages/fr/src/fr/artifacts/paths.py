@@ -19,8 +19,8 @@ logical spec lookup) iterates `feature_roots` rather than knowing the placement.
 `tests/unit/test_tripwire_artifact_paths.py` refuses one anywhere else.
 
 The placement is read in the plan's precedence: a stealth marker in this workspace,
-then a valid `refs/remotes/origin/fr` switch, then `repo`. Only `repo` is served yet;
-any other answer is R4's "not yet available" refusal, in the loader's own wording
+then a valid `refs/remotes/origin/fr` switch (quiet, `fr.placement.quiet`), then `repo`.
+Stealth is not served yet: R4's "not yet available" refusal, in the loader's own wording
 (`fr.settings.load.unservable_placement`).
 """
 
@@ -30,7 +30,10 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from fr.settings import SettingsError
 
 REPO: Final = "repo"
 QUIET: Final = "quiet"
@@ -169,77 +172,50 @@ def _common_dir(repo_root: Path) -> Path | None:
     return git_dir
 
 
-def _has_switch_ref(repo_root: Path) -> bool:
-    common = _common_dir(repo_root)
-    if common is None:
-        return False
-    if (common / SWITCH_REF).is_file():
-        return True
-    packed = common / "packed-refs"
-    try:
-        lines = packed.read_text().splitlines() if packed.is_file() else []
-    except OSError:
-        return False
-    return any(line.split(" ", 1)[-1] == SWITCH_REF for line in lines if not line.startswith("#"))
-
-
-def _switch_placement(repo_root: Path) -> str | None:
-    """The placement a fetched `origin/fr` switch names, read by commit (never a working
-    tree); None when there is no such ref, it holds no `settings.yaml`, or that file
-    says `repo`.
-
-    R23's switch is a root `settings.yaml` saying `placement: quiet`, parsed by the
-    settings loader's own closed schema (R4). Any other content refuses, naming the ref:
-    invalid settings with the loader's wording, and `stealth` by R24's rule, since stealth
-    is never chosen by repo settings."""
-    if not _has_switch_ref(repo_root):
-        return None
-    from fr.git import GitUnavailableError, git_answer
-    from fr.settings import SettingsError
-    from fr.settings.load import parse_settings_text
-
-    source = f"{SWITCH_REF}:{SWITCH_SETTINGS}"
-    try:
-        done = git_answer(repo_root, "show", source)
-    except GitUnavailableError:
-        return None
-    if done.returncode != 0:
-        return None
-    placement = parse_settings_text(done.stdout, source=source, servable=False).placement
-    if placement == REPO:
-        return None
-    if placement != QUIET:
-        raise SettingsError(
-            f"{source}: placement: {placement} cannot be set on the `fr` switch: stealth is "
-            "chosen per run, never by repo settings (R24); the switch says `placement: quiet`"
-        )
-    return placement
-
-
 def _marker_placement(repo_root: Path) -> str | None:
+    """The placement this workspace's `.fr-isolation` marker recorded at `up` (R23
+    "sticky"), or None for no marker or one an older fr wrote without the key."""
     from fr.isolation.marker import marker_at
 
     marker = marker_at(repo_root)
     placement = marker.get("placement") if marker else None
-    return placement if isinstance(placement, str) and placement != REPO else None
+    return placement if isinstance(placement, str) else None
+
+
+def sticky_refusal(recorded: str, current: str, source: str) -> SettingsError:
+    """R23 "sticky": the placement a workspace recorded and the one the switch now names
+    disagree. The one wording `space_for` and every other sticky check share."""
+    from fr.settings import SettingsError
+
+    return SettingsError(
+        f"{source}: this workspace was set up under placement: {recorded}, but the "
+        f"`fr` switch (origin/fr) now says placement: {current} (the `fr` branch was "
+        "deleted or renamed, or its settings changed). fr will not move a live workspace "
+        f"between placements: restore origin/fr to placement: {recorded}, or finish this "
+        "workspace and start the next one with `fr isolation up`"
+    )
 
 
 def space_for(repo_root: Path) -> ArtifactSpace:
     """The artifact space of the checkout at *repo_root*.
 
-    Precedence: a stealth marker, then a valid `origin/fr` switch, then `repo`. Only
-    `repo` is served yet; another placement raises `SettingsError` with the loader's
-    refusal, so behaviour is unchanged."""
+    Precedence: a stealth marker, then a valid `origin/fr` switch (quiet), then `repo`.
+    Stealth is not served yet (R4's refusal, in the loader's wording). A workspace whose
+    marker recorded one placement while the switch now names another refuses, naming
+    both (R23 "sticky")."""
     from fr.isolation.marker import MARKER
+    from fr.placement.quiet import quiet_space, read_switch
     from fr.settings.load import unservable_placement
 
     root = Path(repo_root)
     marked = _marker_placement(root)
-    if marked is not None:
+    if marked is not None and marked not in (REPO, QUIET):
         raise unservable_placement(marked, str(root / MARKER))
-    switched = _switch_placement(root)
-    if switched is not None:
-        raise unservable_placement(switched, f"{SWITCH_REF}:{SWITCH_SETTINGS}")
+    current = QUIET if read_switch(root) is not None else REPO
+    if marked is not None and marked != current:
+        raise sticky_refusal(marked, current, str(root / MARKER))
+    if current == QUIET:
+        return quiet_space(root)
     return ArtifactSpace(REPO, root, None)
 
 

@@ -151,11 +151,10 @@ def _push_fr_branch(root: Path, settings_text: str | None) -> None:
     git(root, "checkout", "-q", "main")
 
 
-def test_an_origin_fr_switch_to_quiet_is_not_yet_available(tmp_path: Path) -> None:
+def test_an_origin_fr_switch_to_quiet_is_served(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")
-    with pytest.raises(SettingsError, match="placement: quiet is not yet available"):
-        space_for(root)
+    assert space_for(root).placement == "quiet"
 
 
 def test_an_fr_branch_that_says_repo_or_nothing_is_no_switch(tmp_path: Path) -> None:
@@ -221,8 +220,7 @@ def test_a_packed_origin_fr_ref_is_seen(tmp_path: Path) -> None:
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")
     git(root, "pack-refs", "--all")
     assert not (root / ".git/refs/remotes/origin/fr").exists()
-    with pytest.raises(SettingsError, match="not yet available"):
-        space_for(root)
+    assert space_for(root).placement == "quiet"
 
 
 def test_a_stealth_marker_is_read_first_and_is_not_yet_available(tmp_path: Path) -> None:
@@ -246,8 +244,8 @@ def test_a_worktree_sees_its_common_dirs_origin_fr(tmp_path: Path) -> None:
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")
     wt = tmp_path / "wt"
     subprocess.run(["git", "-C", str(root), "worktree", "add", "-q", str(wt)], check=True)
-    with pytest.raises(SettingsError, match="not yet available"):
-        space_for(wt)
+    space = space_for(wt)
+    assert space.placement == "quiet" and space.feature == "wt"
 
 
 def test_the_module_is_the_only_home_of_its_literals() -> None:
