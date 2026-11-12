@@ -110,3 +110,10 @@ amendments:
       how
     why: the design moved from per-phase lens declarations to a feature-level lens review
       before deliver (operator decision)
+  - row: review-lenses-phase-must-declare
+    op: retire
+    base: 0
+    notes: 'Retired before implementation: lenses are no longer declared per plan phase;
+      replaced by review-lenses-accumulate'
+    why: the design moved from per-phase lens declarations to a feature-level lens review
+      before deliver (operator decision)
