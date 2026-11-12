@@ -10994,11 +10994,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R17
     - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R18
-    levels: {}
-    status: not-implemented
-    notes: 'built by plan 2026-11-12-acceptance-fragments (plan 2 of R29, #1379); its
-      scenario tests/scenarios/acceptance-effective-matrix-fold.sh is written by the
-      phase that builds the row'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_fold.py#test_amendments_apply_in_merge_order_not_name_order
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_acceptance_effective_matrix_fold
+    status: ci
+    notes: 'fold built: merged first-parent order, pending amendments, revisions and
+      contested; logical spec/plan refs resolve repo-only'
     verify: candidate
     scenario: tests/scenarios/acceptance-effective-matrix-fold.sh
     issues:
