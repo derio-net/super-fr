@@ -674,3 +674,8 @@ PR #1408 review item 6. Amending one row through fragment zz (base 0) then aa (b
 ### pr1408-r7 · finding [open] (reviewer: in scope) · Rendered reports still say 'from docs/acceptance/matrix.yaml' (phase 4)
 
 PR #1408 review item 7, report.py:218,324.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r8 created=2026-11-12T09:18:59+00:00 phase=1 state=open review_scope=in -->
+### pr1408-r8 · finding [open] (reviewer: in scope) · Merged amendment order is inferred from list position and counts in _introductions, so a list with a later amendment above an earlier one folds in the wrong order (phase 1)
+
+PR #1408 review item 8. merged_row_edits refuses that shape before merge, so reaching it needs a check bypass. Fix if small, else defer with an issue.
