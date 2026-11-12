@@ -51,9 +51,12 @@ rows:
     origin:
     - spec:2026-11-12-remove-vk-compat#R6
     - spec:2026-11-12-remove-vk-compat#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_install_sh_names_no_retired_vk_thing
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_wrapper_needs_super_fr_in_its_text
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
     verify: none
   - id: plan-vk-version-repaired
     capability: Artifact migration
