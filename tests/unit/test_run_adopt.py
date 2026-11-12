@@ -246,7 +246,12 @@ def test_all_phases_complete_with_no_pr_lands_on_the_group_with_review_pending(
     assert state.steps["deliver"].state == "pending"
 
 
-def test_an_open_pr_lands_the_cursor_on_deliver(tmp_path: Path, repo_root: Path) -> None:
+def test_an_open_pr_lands_the_cursor_on_the_lens_review_before_deliver(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    """An open PR proves the run reached `deliver`; the lens review before it
+    (spec 2026-11-12-review-lenses R13) leaves no artifact, so it is owed and the
+    cursor lands on it. Before that step shipped this landed on `deliver`."""
     repo, shipped = _repo(tmp_path, repo_root)
     _write_spec(repo)
     plan_dir = _write_plan(repo, phases=2, complete=2)
@@ -261,7 +266,9 @@ def test_an_open_pr_lands_the_cursor_on_deliver(tmp_path: Path, repo_root: Path)
         pr_state=lambda _url: "OPEN",
     )
 
-    assert state.cursor == "deliver"
+    assert state.cursor == "lens-review"
+    assert state.steps["lens-review"].state == "pending"
+    assert state.steps["journal-check"].state == "done"
     assert state.steps["implement"].state == "done"
     assert units.unit_states(state.steps["implement"]) == {
         "phase/1/implement-phase": "done",
