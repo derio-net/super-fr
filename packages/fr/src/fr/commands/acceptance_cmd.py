@@ -154,6 +154,8 @@ def check_cmd(
     if _say_if_off(root):
         return
     branch = branch_refusals(root, fetch=not no_fetch)
+    if branch.source:
+        typer.echo(f"default ref: {branch.source}")
     for w in branch.warnings:
         typer.echo(f"::warning title=acceptance-matrix::{w}")
     matrix = _load(root)

@@ -198,6 +198,21 @@ class BranchCheck:
     stale: list[str] = field(default_factory=list)
     """Stale-base amendments: refused, exit 2."""
     warnings: list[str] = field(default_factory=list)
+    source: str | None = None
+    """Which default ref the checks read: fetched, or the checkout's local ref."""
+
+
+def _local_sha(repo_root: Path, ref: str) -> str | None:
+    """The commit `refs/remotes/<ref>` names at the checkout, or None."""
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        done = git_answer(
+            repo_root, "rev-parse", "--verify", "--quiet", f"refs/remotes/{ref}^{{commit}}"
+        )
+    except GitUnavailableError:
+        return None
+    return done.stdout.strip() or None if done.returncode == 0 else None
 
 
 def _ci() -> bool:
@@ -243,9 +258,11 @@ def fetch_default(repo_root: Path, ref: str) -> str | None:
 
 def branch_refusals(repo_root: Path, *, fetch: bool = True) -> BranchCheck:
     """Fetch the default ref (unless *fetch* is False), then the immutability and
-    stale-base checks. A failed fetch, or a remote with no resolvable default ref, is
-    a refusal in CI and a warning elsewhere (an offline laptop checks against the last
-    fetched ref). A repo with no remote is judged against HEAD, as before."""
+    stale-base checks. A failed fetch is a warning when the checkout already holds the
+    default ref (a CI checkout with `fetch-depth: 0`, an offline laptop): the checks
+    read that local ref and `source` names it. A failed fetch with no local ref, or a
+    remote with no resolvable default ref, is a refusal in CI and a warning elsewhere.
+    A repo with no remote is judged against HEAD, as before."""
     from fr.acceptance.fold import clear_fold_cache, has_fragments
 
     out = BranchCheck()
@@ -270,14 +287,30 @@ def branch_refusals(repo_root: Path, *, fetch: bool = True) -> BranchCheck:
         out.warnings.append(line)
     if fetch and ref is not None:
         why = fetch_default(root, ref)
-        if why is not None:
-            line = f"cannot fetch the default ref {ref}: {why}"
-            if _ci():
-                out.errors.append(f"{line}; a stale base cannot be judged, so this is refused")
-                return out
-            out.warnings.append(f"{line}; checking against the last fetched {ref}")
-        else:
+        if why is None:
             clear_fold_cache()
+            local = _local_sha(root, ref)
+            out.source = f"{ref} at {local[:12]} (fetched)" if local else f"{ref} (fetched)"
+        else:
+            # A CI checkout that already holds the default branch (`fetch-depth: 0`
+            # with `persist-credentials: false`, whose own fetch of a private repo
+            # fails) is judged against that ref, and says so (review pr1408-r3). With
+            # no local ref at all there is nothing to judge against: CI refuses.
+            line = f"cannot fetch the default ref {ref}: {why}"
+            local = _local_sha(root, ref)
+            if local is None:
+                if _ci():
+                    out.errors.append(f"{line}; a stale base cannot be judged, so this is refused")
+                    return out
+                out.warnings.append(f"{line}; no local {ref} to check against")
+            else:
+                out.source = f"the local ref {ref} at {local[:12]} (fetch failed)"
+                out.warnings.append(f"{line}; checking against {out.source}")
+    elif ref is not None:
+        local = _local_sha(root, ref)
+        out.source = (
+            f"the local ref {ref}" + (f" at {local[:12]}" if local else "") + " (not fetched)"
+        )
     try:
         merged = default_ref_fold(root)
         out.errors += merged_row_edits(root, merged, ref)

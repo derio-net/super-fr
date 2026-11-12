@@ -120,24 +120,64 @@ def test_deliver_passes_a_current_base(tmp_path: Path, monkeypatch: pytest.Monke
     run_cmd._deliver_acceptance_gate(root)  # no raise
 
 
-def test_a_failed_fetch_in_ci_is_a_refusal_never_a_pass(
+def _no_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "TF_BUILD", "JENKINS_URL"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_a_failed_fetch_in_ci_reads_the_checkouts_local_default_ref_and_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # pr1408-r3: the scaffolded GitHub job checks out with `persist-credentials: false`
+    # and `fetch-depth: 0`, so the default branch is already at the checkout while an
+    # unauthenticated fetch of a private repo fails: read the local ref, and name it.
+    from fr.acceptance.amend import branch_refusals
+
+    root = merged_repo(tmp_path)
+    sha = git(root, "rev-parse", "refs/remotes/origin/main").strip()
+    git(root, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    monkeypatch.setenv("CI", "true")
+
+    found = branch_refusals(root)
+
+    assert found.errors == [], found.errors
+    assert found.source == f"the local ref origin/main at {sha[:12]} (fetch failed)"
+    assert any("cannot fetch" in w and sha[:12] in w for w in found.warnings), found.warnings
+    _no_ci(monkeypatch)
+    offline = branch_refusals(root)
+    assert offline.errors == []
+    assert any("cannot fetch" in w for w in offline.warnings)
+
+
+def test_a_failed_fetch_in_ci_with_no_local_default_ref_is_still_a_refusal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.acceptance.amend import branch_refusals
 
     root = merged_repo(tmp_path)
     git(root, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    git(root, "update-ref", "-d", "refs/remotes/origin/main")
     monkeypatch.setenv("CI", "true")
 
     found = branch_refusals(root)
 
-    assert any("cannot fetch" in e for e in found.errors)
-    monkeypatch.delenv("CI")
-    for var in ("GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "TF_BUILD", "JENKINS_URL"):
-        monkeypatch.delenv(var, raising=False)
-    offline = branch_refusals(root)
-    assert offline.errors == []
-    assert any("cannot fetch" in w for w in offline.warnings)
+    assert any("refused" in e for e in found.errors), found.errors
+
+
+def test_a_fetched_default_ref_is_named_as_the_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance.amend import branch_refusals
+
+    root = merged_repo(tmp_path)
+    _no_ci(monkeypatch)
+    sha = git(root, "rev-parse", "refs/remotes/origin/main").strip()
+
+    found = branch_refusals(root)
+
+    assert found.source == f"origin/main at {sha[:12]} (fetched)"
+    res = invoke(root, monkeypatch, "check")
+    assert f"default ref: origin/main at {sha[:12]} (fetched)" in res.output
 
 
 def _merged_anyway(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
