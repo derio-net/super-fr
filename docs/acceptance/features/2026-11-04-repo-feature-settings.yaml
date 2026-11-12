@@ -202,3 +202,9 @@ amendments:
       local-link HTML, github-link HTML and github Markdown (fr acceptance report --format
       md); none is committed.'
     why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
+  - row: acceptance-report-dual
+    op: reword
+    base: 0
+    acceptance: Every report form is rendered from the same matrix on demand and published
+      from the folded fragments in CI; none is committed or regenerated on matrix mutation.
+    why: 'Spec 2026-11-04-repo-feature-settings R20: reports are derived, never committed.'
