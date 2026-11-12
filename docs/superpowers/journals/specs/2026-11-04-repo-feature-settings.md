@@ -911,3 +911,8 @@ R18 names spec:<slug>#R<n> and plan:<slug>. Rows citing only debug journals or c
 ### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1409] · resolves test-plan-step-1: Test Plan step 1 owed
 
 Filed at deliver as derio-net/super-fr#1409; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-2-resolved created=2026-11-12T09:15:53+00:00 state=open resolves=test-plan-step-2 filed_as=derio-net/super-fr#1410 -->
+### test-plan-step-2-resolved · finding [filed → derio-net/super-fr#1410] · resolves test-plan-step-2: Test Plan step 2 owed
+
+Filed at deliver as derio-net/super-fr#1410; still owed until discharged.
