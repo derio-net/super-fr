@@ -5,36 +5,36 @@
 </defs>
 <text x="20" y="26" class="fig-muted fig-small">FROM A GOAL TO A MERGED PULL REQUEST</text>
 <rect x="20" y="46" width="160" height="90" rx="10" class="fig-panel"/>
-<text x="34" y="98" class="fig-ink fig-text">goal</text>
-<text x="34" y="120" class="fig-muted fig-small">your one sentence</text>
+<text x="34" y="85" class="fig-ink fig-text">goal</text>
+<text x="34" y="108" class="fig-muted fig-small">your one sentence</text>
 <rect x="210" y="46" width="160" height="90" rx="10" class="fig-panel"/>
-<text x="224" y="98" class="fig-ink fig-text">isolate</text>
-<text x="224" y="120" class="fig-muted fig-small">private worktree</text>
+<text x="224" y="85" class="fig-ink fig-text">isolate</text>
+<text x="224" y="108" class="fig-muted fig-small">private worktree</text>
 <rect x="400" y="46" width="160" height="90" rx="10" class="fig-panel-fill"/>
 <rect x="400" y="46" width="160" height="90" rx="10" class="fig-you-line"/>
-<text x="414" y="98" class="fig-you fig-text">question round</text>
-<text x="414" y="120" class="fig-muted fig-small">asked once</text>
+<text x="414" y="85" class="fig-you fig-text">question round</text>
+<text x="414" y="108" class="fig-muted fig-small">asked once</text>
 <rect x="590" y="46" width="160" height="90" rx="10" class="fig-panel"/>
-<text x="604" y="98" class="fig-ink fig-text">spec + plan</text>
-<text x="604" y="120" class="fig-muted fig-small">both reviewed</text>
+<text x="604" y="85" class="fig-ink fig-text">spec + plan</text>
+<text x="604" y="108" class="fig-muted fig-small">both reviewed</text>
 <rect x="780" y="46" width="160" height="90" rx="10" class="fig-panel"/>
-<text x="794" y="98" class="fig-ink fig-text">build + review</text>
-<text x="794" y="120" class="fig-muted fig-small">each phase reviewed</text>
+<text x="794" y="85" class="fig-ink fig-text">build + review</text>
+<text x="794" y="108" class="fig-muted fig-small">each phase reviewed</text>
 <rect x="20" y="206" width="160" height="90" rx="10" class="fig-panel"/>
-<text x="34" y="258" class="fig-ink fig-text">pull request</text>
-<text x="34" y="280" class="fig-muted fig-small">never self-merged</text>
+<text x="34" y="245" class="fig-ink fig-text">pull request</text>
+<text x="34" y="268" class="fig-muted fig-small">never self-merged</text>
 <rect x="210" y="206" width="160" height="90" rx="10" class="fig-panel-fill"/>
 <rect x="210" y="206" width="160" height="90" rx="10" class="fig-you-line"/>
-<text x="224" y="258" class="fig-you fig-text">manual phase</text>
-<text x="224" y="280" class="fig-muted fig-small">you, agent guides</text>
+<text x="224" y="245" class="fig-you fig-text">manual phase</text>
+<text x="224" y="268" class="fig-muted fig-small">you, agent guides</text>
 <rect x="400" y="206" width="160" height="90" rx="10" class="fig-panel-fill"/>
 <rect x="400" y="206" width="160" height="90" rx="10" class="fig-you-line"/>
-<text x="414" y="258" class="fig-you fig-text">merge</text>
-<text x="414" y="280" class="fig-muted fig-small">your decision</text>
+<text x="414" y="245" class="fig-you fig-text">merge</text>
+<text x="414" y="268" class="fig-muted fig-small">your decision</text>
 <rect x="590" y="206" width="160" height="90" rx="10" class="fig-panel-fill"/>
 <rect x="590" y="206" width="160" height="90" rx="10" class="fig-you-line"/>
-<text x="604" y="258" class="fig-you fig-text">Test Plan</text>
-<text x="604" y="280" class="fig-muted fig-small">if there is one</text>
+<text x="604" y="245" class="fig-you fig-text">Test Plan</text>
+<text x="604" y="268" class="fig-muted fig-small">if there is one</text>
 <path d="M180 91 H210" class="fig-line" marker-end="url(#run-pipeline--arrow)"/>
 <path d="M370 91 H400" class="fig-line" marker-end="url(#run-pipeline--arrow)"/>
 <path d="M560 91 H590" class="fig-line" marker-end="url(#run-pipeline--arrow)"/>

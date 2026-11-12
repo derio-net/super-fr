@@ -13,8 +13,8 @@
 <path d="M270 103 H340" class="fig-you-line" marker-end="url(#gate-ledger--arrow)"/>
 <path d="M270 149 H340" class="fig-you-line" marker-end="url(#gate-ledger--arrow)"/>
 <rect x="340" y="72" width="270" height="62" rx="8" class="fig-panel"/>
-<text x="356" y="97" class="fig-you fig-text">you pass the tester gate</text>
-<text x="356" y="119" class="fig-muted fig-small">walk its rows, or fr gate pass</text>
+<text x="356" y="97" class="fig-you fig-text">the tester gate is passed</text>
+<text x="356" y="119" class="fig-muted fig-small">by you, or the driver once walked</text>
 <rect x="340" y="144" width="270" height="62" rx="8" class="fig-panel"/>
 <text x="356" y="169" class="fig-you fig-text">you pass the devops gate</text>
 <text x="356" y="191" class="fig-muted fig-small">fr ops gate, or fr gate pass</text>
@@ -37,7 +37,7 @@
 <text x="800" y="288" text-anchor="middle" class="fig-ink fig-text">final</text>
 <text x="260" y="342" text-anchor="middle" class="fig-muted fig-small">a gate is held:</text>
 <text x="260" y="362" text-anchor="middle" class="fig-muted fig-small">release candidate only,</text>
-<text x="260" y="382" text-anchor="middle" class="fig-muted fig-small">no fragment consumed</text>
+<text x="260" y="382" text-anchor="middle" class="fig-muted fig-small">no final release yet</text>
 <text x="800" y="342" text-anchor="middle" class="fig-muted fig-small">no gate waits:</text>
 <text x="800" y="362" text-anchor="middle" class="fig-muted fig-small">the final release is cut</text>
 </svg>
