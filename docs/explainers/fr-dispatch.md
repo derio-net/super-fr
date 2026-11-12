@@ -15,7 +15,7 @@ covers:
   - packages/fr/src/fr/commands/undispatch_cmd.py
   - packages/fr-dispatch/src/**
   - packages/fr-vk/src/**
-reviewed: 2026-11-12 repo-feature-settings, forge.labels/issues opt-out
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 ## Overview: the plan stays the source of truth

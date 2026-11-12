@@ -7,7 +7,7 @@ covers:
   - packages/fr-herdr/src/**
   - packages/fr/src/fr/triage/batch*.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 # Herdr control sessions

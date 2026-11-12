@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/usage/**
   - packages/fr/src/fr/commands/usage_cmd.py
   - packages/fr/src/fr/triage/architecture.py
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 ## Overview: the numbers are not yours to compute
