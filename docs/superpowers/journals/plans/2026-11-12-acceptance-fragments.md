@@ -724,3 +724,8 @@ Supersedes the plan's 'ties break by feature slug, then list index' (_prose.md, 
 ### pr1408-r6-resolved · finding [fixed] · resolves pr1408-r6: A branch's pending amendments are ordered by feature slug, not by the order written, so a branch's own correct sequence across two fragments is refused as stale
 
 dd2b99806: merged ties and pending amendments both order by (base, feature slug, list index); decision fold-ties-break-by-base. Red: test_a_branchs_own_sequence_across_two_fragments_is_not_stale, test_the_same_sequence_merged_by_merge_commit_folds_clean, test_the_same_sequence_merged_by_squash_folds_clean (the merged fold was contested too)
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r7-resolved created=2026-11-12T09:42:02+00:00 state=fixed resolves=pr1408-r7 -->
+### pr1408-r7-resolved · finding [fixed] · resolves pr1408-r7: Rendered reports still say 'from docs/acceptance/matrix.yaml'
+
+df844f367: render and render_markdown say 'from the folded fragments in docs/acceptance/features/'. Red: test_both_renderings_name_the_folded_fragments_as_their_source
