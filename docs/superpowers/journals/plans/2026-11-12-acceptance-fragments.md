@@ -659,3 +659,8 @@ PR #1408 review item 3. scaffold.py GitHub matrix job + amend.py default-ref fet
 ### pr1408-r4 · finding [open] (reviewer: in scope) · An in-flight branch whose matrix.yaml holds a row this PR retired gets 'duplicate row ids' with no fix named (phase 2)
 
 PR #1408 review item 4. matrix_fragments.py builds known from live fold rows only. Fails closed; the defect is the dead-end message.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r5 created=2026-11-12T09:18:54+00:00 phase=2 state=open review_scope=in -->
+### pr1408-r5 · finding [open] (reviewer: in scope) · matrix-parse-libyaml and archive-retargets-matrix-refs, owned by other features, were edited in place after the migration instead of amended (phase 2)
+
+PR #1408 review item 5 (commits 9281ed6dc, c98958648, 1dfba07cd, 488341fa6), still at revision 0. R16 forbids in-place edits of merged rows: restore the owners' rows and redo the changes as amendments in this feature's fragment.
