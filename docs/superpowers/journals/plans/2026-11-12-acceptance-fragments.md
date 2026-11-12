@@ -684,3 +684,8 @@ PR #1408 review item 8. merged_row_edits refuses that shape before merge, so rea
 ### pr1408-r9 · finding [open] (reviewer: in scope) · _companions swallows the frozen reader's failure for a pre-v5 matrix, so the uncommitted-changes veto covers only the reports (phase 2)
 
 PR #1408 review item 9 (read only), matrix_fragments.py:213-222. Fix if small, else defer with an issue.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r10 created=2026-11-12T09:19:02+00:00 phase=3 state=open review_scope=in -->
+### pr1408-r10 · finding [open] (reviewer: in scope) · The record 10->11 hop validates with the live StepRecord via guard_v9_record (phase 3)
+
+PR #1408 review item 10 (read only). Additive today; the artifact-versioning rule's freeze obligation lands on the first removal. Fix if small, else defer with an issue.
