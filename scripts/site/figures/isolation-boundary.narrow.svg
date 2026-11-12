@@ -1,0 +1,33 @@
+<svg viewBox="0 0 360 560" role="img" aria-labelledby="isolation-boundary-narrow--t">
+<title id="isolation-boundary-narrow--t">The isolation boundary: your clone sits untouched. The agent works in a git worktree outside it, on its own branch, where every edit lands. Commands run in a sealed container around that work with scoped credentials only. The edit gate refuses any write aimed at your clone.</title>
+<defs>
+<marker id="isolation-boundary-narrow--arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fig-ink"/></marker>
+</defs>
+<rect x="10" y="10" width="130" height="64" rx="12" class="fig-panel"/>
+<text x="26" y="48" class="fig-ink fig-text">the agent</text>
+<rect x="220" y="10" width="130" height="64" rx="12" class="fig-panel"/>
+<text x="234" y="38" class="fig-ink fig-text">your clone</text>
+<text x="234" y="58" class="fig-ok fig-small">never touched</text>
+<path d="M140 42 H165" class="fig-line"/>
+<rect x="165" y="28" width="10" height="28" rx="3" class="fig-accent"/>
+<path d="M175 42 H220" class="fig-line"/>
+<text x="180" y="98" text-anchor="middle" class="fig-accent fig-small">edit gate: refused</text>
+<path d="M75 74 V134" class="fig-accent-line fig-flow" marker-end="url(#isolation-boundary-narrow--arrow)"/>
+<rect x="10" y="134" width="340" height="416" rx="14" class="fig-panel"/>
+<text x="26" y="166" class="fig-ink fig-big">the worktree</text>
+<text x="26" y="188" class="fig-muted fig-small">outside your clone, on its own</text>
+<text x="26" y="206" class="fig-muted fig-small">branch; every edit lands here</text>
+<text x="26" y="232" class="fig-accent fig-small">.fr-isolation marker</text>
+<rect x="24" y="252" width="312" height="226" rx="12" class="fig-panel"/>
+<text x="40" y="284" class="fig-ink fig-text">a sealed container</text>
+<text x="40" y="304" class="fig-ink fig-text">around the commands</text>
+<text x="40" y="330" class="fig-muted fig-small">build, test, lint and run, through</text>
+<text x="40" y="348" class="fig-muted fig-small">fr isolation exec</text>
+<text x="40" y="386" class="fig-ok fig-text">scoped credentials only</text>
+<text x="40" y="410" class="fig-muted fig-small">no SSH identity, no git-host tokens,</text>
+<text x="40" y="428" class="fig-muted fig-small">unless the profile grants them</text>
+<text x="40" y="458" class="fig-muted fig-small">disposable; the worktree is the work</text>
+<text x="26" y="504" class="fig-muted fig-small">Docker-less modes keep the worktree</text>
+<text x="26" y="522" class="fig-muted fig-small">and the edit gate, and drop the</text>
+<text x="26" y="540" class="fig-muted fig-small">container.</text>
+</svg>

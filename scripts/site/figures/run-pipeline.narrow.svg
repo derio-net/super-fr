@@ -1,0 +1,50 @@
+<svg viewBox="0 0 360 626" role="img" aria-labelledby="run-pipeline-narrow--t">
+<title id="run-pipeline-narrow--t">The run pipeline, in nine steps: your goal; the run moves into an isolated worktree; one question round with you; a spec and a plan, both reviewed; build and review one phase at a time; one pull request, never self-merged; the manual phase, which is yours; the merge, which is yours; then the Test Plan, which is yours. The steps you act on are drawn with a dashed outline.</title>
+<defs>
+<marker id="run-pipeline-narrow--arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fig-ink"/></marker>
+</defs>
+<rect x="10" y="10" width="340" height="50" rx="10" class="fig-panel"/>
+<text x="26" y="32" class="fig-ink fig-text">01  goal</text>
+<text x="26" y="50" class="fig-muted fig-small">your one sentence</text>
+<path d="M180 60 V74" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="74" width="340" height="50" rx="10" class="fig-panel"/>
+<text x="26" y="96" class="fig-ink fig-text">02  isolate</text>
+<text x="26" y="114" class="fig-muted fig-small">private worktree</text>
+<path d="M180 124 V138" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="138" width="340" height="50" rx="10" class="fig-panel"/>
+<rect x="10" y="138" width="340" height="50" rx="10" class="fig-you-line"/>
+<text x="26" y="160" class="fig-you fig-text">03  question round</text>
+<text x="26" y="178" class="fig-muted fig-small">asked once</text>
+<path d="M180 188 V202" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="202" width="340" height="50" rx="10" class="fig-panel"/>
+<text x="26" y="224" class="fig-ink fig-text">04  spec + plan</text>
+<text x="26" y="242" class="fig-muted fig-small">both reviewed</text>
+<path d="M180 252 V266" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="266" width="340" height="50" rx="10" class="fig-panel"/>
+<text x="26" y="288" class="fig-ink fig-text">05  build + review</text>
+<text x="26" y="306" class="fig-muted fig-small">each phase reviewed</text>
+<path d="M180 316 V330" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="330" width="340" height="50" rx="10" class="fig-panel"/>
+<text x="26" y="352" class="fig-ink fig-text">06  pull request</text>
+<text x="26" y="370" class="fig-muted fig-small">never self-merged</text>
+<path d="M180 380 V394" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="394" width="340" height="50" rx="10" class="fig-panel"/>
+<rect x="10" y="394" width="340" height="50" rx="10" class="fig-you-line"/>
+<text x="26" y="416" class="fig-you fig-text">07  manual phase</text>
+<text x="26" y="434" class="fig-muted fig-small">you, agent guides</text>
+<path d="M180 444 V458" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="458" width="340" height="50" rx="10" class="fig-panel"/>
+<rect x="10" y="458" width="340" height="50" rx="10" class="fig-you-line"/>
+<text x="26" y="480" class="fig-you fig-text">08  merge</text>
+<text x="26" y="498" class="fig-muted fig-small">your decision</text>
+<path d="M180 508 V522" class="fig-line" marker-end="url(#run-pipeline-narrow--arrow)"/>
+<rect x="10" y="522" width="340" height="50" rx="10" class="fig-panel"/>
+<rect x="10" y="522" width="340" height="50" rx="10" class="fig-you-line"/>
+<text x="26" y="544" class="fig-you fig-text">09  Test Plan</text>
+<text x="26" y="562" class="fig-muted fig-small">after the merge</text>
+<rect x="10" y="586" width="28" height="16" rx="5" class="fig-panel"/>
+<rect x="10" y="586" width="28" height="16" rx="5" class="fig-you-line"/>
+<text x="46" y="599" class="fig-muted fig-small">you act</text>
+<rect x="130" y="586" width="28" height="16" rx="5" class="fig-panel"/>
+<text x="166" y="599" class="fig-muted fig-small">the agent acts</text>
+</svg>
