@@ -25,9 +25,11 @@ rows:
       the flag, and creates no workspace'
     origin:
     - spec:2026-11-12-remove-vk-compat#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_up_without_branch_is_a_usage_error
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
     verify: none
   - id: fr-repo-root-override
     capability: CLI
