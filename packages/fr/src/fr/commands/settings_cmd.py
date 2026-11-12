@@ -178,6 +178,10 @@ def init_stealth(root: Path, text: str) -> str:
 
     ref = stealth.parse_ref(text)
     stealth.check_reachable(ref, root)
+    # R24 privacy, before the tracking worktree is cloned or anything is pushed (the
+    # push seam holds the same guard again).
+    target_remote = stealth.origin_url(root)
+    stealth.check_privacy(ref, target_remote)
     target = stealth.target_dir(root)
     wt = stealth.ensure_worktree(root, ref)
     path = wt / target / stealth.TARGET_SETTINGS
@@ -190,7 +194,9 @@ def init_stealth(root: Path, text: str) -> str:
     path.write_text(render_init("stealth"))
     message = fr_message(root, f"chore(fr): stealth settings for {target}")
     try:
-        outcome = stealth.commit_and_push(ref, wt, [path], message, stealth.plain_commit)
+        outcome = stealth.commit_and_push(
+            ref, wt, [path], message, stealth.plain_commit, target_remote=target_remote
+        )
     except SettingsError:
         path.unlink(missing_ok=True)
         raise

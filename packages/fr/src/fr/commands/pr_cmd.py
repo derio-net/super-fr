@@ -95,6 +95,18 @@ def create_cmd(
             body = body_file.read_text()
         except (OSError, UnicodeDecodeError) as e:
             raise PushRefusedError(f"cannot read --body-file {body_file}: {e}") from e
+        if settings.forge.pr_body == "minimal":
+            from fr.record.pr_body import fr_markers
+
+            # R10, and R24 "what reaches the target": under a minimal body (which
+            # stealth always sets) the PR carries a plain summary, no fr marker.
+            markers = fr_markers(body)
+            if markers:
+                raise PushRefusedError(
+                    "under forge.pr_body: minimal (stealth sets it) the PR body is a plain "
+                    f"summary, and {body_file} carries fr markers ({'; '.join(markers)}); "
+                    "pass a plain summary instead"
+                )
         if settings.git.pr == "ask":
             require_approval(
                 repo_root,

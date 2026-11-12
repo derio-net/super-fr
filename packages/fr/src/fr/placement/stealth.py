@@ -192,9 +192,15 @@ _REACHED: set[str] = set()
 """Tracking refs found reachable this process: `space_for` checks each once."""
 
 
+_PRIVACY_OK: set[tuple[str, str]] = set()
+"""(tracking ref, target remote) pairs `check_privacy` passed this process. The push seam
+refuses a pair that is not here without asking first, so no caller can skip the guard."""
+
+
 def reset_caches() -> None:
     """Forget every per-process answer (tests, a long-lived process)."""
     _REACHED.clear()
+    _PRIVACY_OK.clear()
 
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -383,6 +389,8 @@ def check_privacy(ref: StealthRef, target_remote: str | None) -> None:
     from fr.triage.privacy import more_visible
 
     target = target_remote or "."
+    if (ref.text, target) in _PRIVACY_OK:
+        return
     seen: dict[str, str] = {}
     for repo in (ref.repo, target):
         answer = "private" if repo == "." else visibility(repo)
@@ -398,6 +406,7 @@ def check_privacy(ref: StealthRef, target_remote: str | None) -> None:
             f"target {target} is {seen[target]}: its state would be more visible than its "
             "code (R24 privacy). Use a tracking repo no more visible than the target"
         )
+    _PRIVACY_OK.add((ref.text, target))
 
 
 # --- entering stealth -----------------------------------------------------------------
@@ -504,14 +513,21 @@ def commit_and_push(
     files: Sequence[Path],
     message: str,
     commit: Callable[[Path, Sequence[Path], str], CommitOutcome],
+    *,
+    target_remote: str | None,
 ) -> CommitOutcome:
     """R24: commit *files* in the tracking worktree *wt*, then push that commit
     compare-and-swap. A push that does not land rolls the worktree back to its bytes
     before this commit and raises `StealthPushError` (exit 2): the cursor never moves
-    locally while the tracking ref did not."""
+    locally while the tracking ref did not.
+
+    The privacy guard is held HERE, at the one push seam: a tracking repo more visible
+    than *target_remote* (the target's origin) refuses before anything is committed,
+    whichever caller got this far (R24 "privacy")."""
     from fr.artifacts.commit import CommitOutcome
     from fr.placement.quiet import fr_worktree_lock
 
+    check_privacy(ref, target_remote)
     with fr_worktree_lock(wt):
         stray = _dirty_elsewhere(wt, files)
         if stray:
