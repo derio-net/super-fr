@@ -669,3 +669,8 @@ PR #1408 review item 5 (commits 9281ed6dc, c98958648, 1dfba07cd, 488341fa6), sti
 ### pr1408-r6 · finding [open] (reviewer: in scope) · A branch's pending amendments are ordered by feature slug, not by the order written, so a branch's own correct sequence across two fragments is refused as stale (phase 1)
 
 PR #1408 review item 6. Amending one row through fragment zz (base 0) then aa (base 1) is refused by the branch's own check/deliver while the same commits on main fold clean. Pending amendments must be ordered the way the merged fold will order them.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r7 created=2026-11-12T09:18:57+00:00 phase=4 state=open review_scope=in -->
+### pr1408-r7 · finding [open] (reviewer: in scope) · Rendered reports still say 'from docs/acceptance/matrix.yaml' (phase 4)
+
+PR #1408 review item 7, report.py:218,324.
