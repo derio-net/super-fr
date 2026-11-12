@@ -292,3 +292,25 @@ def test_a_v4_matrix_with_a_partial_report_set_migrates_and_commits(tmp_path: Pa
     tracked = _git(root, "ls-files").splitlines()
     assert "docs/acceptance/report_local.html" not in tracked
     assert _git(root, "status", "--porcelain") == ""
+
+
+def test_an_untracked_report_is_left_alone_and_not_listed(tmp_path: Path) -> None:
+    """Review p2-r2: only a report git tracks is the repo's committed report. An
+    untracked one (the ad-hoc render) is the user's file: not deleted, not listed,
+    so the commit does not name a path git never knew."""
+    from fr.artifacts.commit import commit_migration
+
+    root = _repo(tmp_path)
+    adhoc = "docs/acceptance/report.github.html"
+    _git(root, "rm", "-q", "--cached", adhoc)
+    _git(root, "commit", "-qm", "the ad-hoc report is not tracked")
+
+    report = run_migrations(root, dry_run=False)
+    outcome = commit_migration(root, report)
+
+    assert report.ok, report.failed
+    assert (root / adhoc).read_text() == "<rendered>\n"
+    changed = {p.relative_to(root).as_posix() for p in report.changed_paths}
+    assert adhoc not in changed
+    assert set(REPORTS) - {adhoc} <= changed
+    assert outcome.committed, outcome.reason

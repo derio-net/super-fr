@@ -12,8 +12,9 @@ feature, `docs/acceptance/features/<spec-slug>.yaml` (`fr.acceptance.fragment`):
   `legacy.yaml`;
 - every fragment carries `repo: <org>/<repo>`, the matrix's identity (spec
   journal decision `fragment-repo-identity`);
-- the matrix and its committed reports are deleted: the effective matrix is now a
-  fold (`fr.acceptance.fold`), and reports are derived (R20).
+- the matrix and its committed reports (those git tracks) are deleted: the
+  effective matrix is now a fold (`fr.acceptance.fold`), and reports are derived
+  (R20). An untracked report is the user's and is left alone.
 
 The kind is RETIRED by this hop (`SchemaMigration.retires`): the runner writes no
 stamp and checks the matrix is gone. Per `.claude/rules/artifact-versioning.md`:
@@ -161,8 +162,21 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
 
 
 def _deleted(path: Path) -> list[Path]:
+    """The committed reports the split deletes: those of `_DELETED_REPORTS` git
+    TRACKS (review p2-r2). An untracked one is the user's file (an ad-hoc render),
+    so it is left alone and never listed — listing it would hand the commit a path
+    git never knew. Outside a git checkout nothing is tracked, so nothing goes."""
+    from fr.git import GitUnavailableError, git_answer
+
     root = _root(path)
-    return [root / rel for rel in _DELETED_REPORTS]
+    try:
+        listed = git_answer(root, "ls-files", "-z", "--", *_DELETED_REPORTS)
+    except GitUnavailableError:
+        return []
+    if listed.returncode != 0:
+        return []
+    tracked = set(listed.stdout.split("\0"))
+    return [root / rel for rel in _DELETED_REPORTS if rel in tracked]
 
 
 def _companions(path: Path) -> list[Path]:
