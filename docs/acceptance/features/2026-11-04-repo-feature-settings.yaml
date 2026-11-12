@@ -511,3 +511,96 @@ amendments:
     why: 'quiet placement built and reviewed: switch, sticky state (old workspaces count
       as repo), fr worktree with OWNER and lock, every placement-bound writer on the
       resolver root or refused before writing, atomic push; scenario in CI'
+  - row: placement-stealth
+    op: set-status
+    base: 1
+    status: ci
+    notes: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 2
+    level: int
+    ref: super-fr:tests/integration/test_scenarios.py#test_placement_stealth
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth.py#test_up_with_stealth_records_it_in_the_state_and_the_marker
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_writes.py#test_a_refused_push_fails_the_resolve_and_moves_nothing
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_privacy.py#test_up_refuses_a_tracking_repo_more_visible_than_the_target
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_privacy.py#test_pr_create_opens_one_minimal_draft_and_nothing_else
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_placement_stealth_resume.py#test_resume_refuses_when_the_state_is_ahead_naming_the_sha
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
+  - row: placement-stealth
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_settings_stealth.py#test_check_and_run_start_refuse_an_explicit_contrary_forge_value
+    why: 'stealth placement built: chosen per run and recorded in the workspace, tracking
+      worktree per target, fail-fast before writes, every state write pushed compare-and-swap
+      with a refused push fatal (exit 2, nothing moved), privacy guard at every entry
+      and the push seam, minimal draft PR and code-only push (fake forge), resume reconciled
+      with the pushed product head; scenario in CI. Not shown here: a real forge (row
+      repo-settings-quiet-repo-live)'
