@@ -295,3 +295,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-review-lenses-p2 created=2026-11-12T17:16:46+00:00 -->
 ### phase-split-2026-11-12-review-lenses-p2 · decision · ask: adding lenses and path rules (R4-R7) is its own ask, with two artifact migrations reviewed apart from the lens set
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-review-lenses-p3 created=2026-11-12T17:16:56+00:00 -->
+### phase-split-2026-11-12-review-lenses-p3 · decision · ask: the lens-review step and its evidence gate (R8-R11, R13) is its own ask and changes the gate every review step uses
