@@ -3,7 +3,7 @@ run: 2026-11-12-claude-vigilant-hopper-sfd7vk
 workflow: fr-goal-light@1
 branch: claude/vigilant-hopper-sfd7vk
 started: '2026-11-12T07:48:15+00:00'
-cursor: plan
+cursor: spec-plan-review
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,10 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-12-landing-front-page-design.md
   plan:
-    state: running
-    at: '2026-11-12T07:57:16+00:00'
+    state: done
+    at: '2026-11-12T07:58:40+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-12-landing-front-page
     units:
       step/plan:
         attempts:
@@ -21,6 +23,10 @@ steps:
           harness: claude-code
           model: claude-fable-5-2
           session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T07:58:40+00:00'
+          outcome: done
+        evidence:
+          single-phase: phase 1
   spec-plan-review:
     state: pending
   plan-review:
