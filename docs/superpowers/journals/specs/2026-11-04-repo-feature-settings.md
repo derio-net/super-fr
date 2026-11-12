@@ -956,3 +956,8 @@ A wrong layout or precedence decision here propagates to every caller and to bot
 ### tier-2026-11-12-placement-resolver-p3 · decision · hard: quiet moves fr's own commit seam and the push
 
 A wrong root writes artifacts onto product branches, which R23 forbids; the atomic push and replay loop are concurrency paths.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p4 created=2026-11-12T11:57:21+00:00 -->
+### tier-2026-11-12-placement-resolver-p4 · decision · hard: stealth makes a failed state push fatal inside resolve and adds the resume reconciliation
+
+Changes the record-apply failure path every step relies on and a privacy guard.
