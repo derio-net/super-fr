@@ -31,7 +31,7 @@ import os
 import subprocess
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from fr.acceptance.fragment import FRAGMENTS_DIR, Amendment, Fragment, parse_fragment
@@ -45,7 +45,8 @@ GIT_TIMEOUT_SECONDS = 60.0
 
 
 class FoldError(AcceptanceError):
-    """The fragments cannot be folded: a row defined twice, an unknown row, a git failure."""
+    """The fragments cannot be folded: a row defined twice, a pending amendment naming
+    an unknown or retired row, a git failure."""
 
 
 class FoldHistoryError(FoldError):
@@ -60,7 +61,8 @@ class Effective:
     revisions: dict[str, int]
     """Row id -> the count of amendments applied to it."""
     contested: frozenset[str]
-    """Rows whose last applied amendment had a stale base (R17): debt."""
+    """Rows whose last applied amendment had a stale base (R17), and retired rows a
+    merged amendment still named: debt."""
     owners: dict[str, str]
     """Row id -> the feature whose fragment created it."""
     retired: tuple[Row, ...]
@@ -303,12 +305,18 @@ def fold(
     if key not in _CACHE:
         if len(_CACHE) >= _CACHE_MAX:
             _CACHE.clear()
-        _CACHE[key] = _fold(run, sha, working, notice)
-    return copy.deepcopy(_CACHE[key])
+        _CACHE[key] = _fold(run, sha, working)
+    result = copy.deepcopy(_CACHE[key])
+    # The merged-ref notice depends on how *ref* was resolved, not on the commit the
+    # key names, so it is added per call, never cached (an explicit `ref="HEAD"` at
+    # the same sha as a no-remote fallback must not inherit its notice).
+    if notice:
+        result = replace(result, notices=(notice, *result.notices))
+    return result
 
 
-def _fold(run: GitRunner, sha: str, working: dict[str, str], notice: str | None) -> Effective:
-    notices = [notice] if notice else []
+def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
+    notices: list[str] = []
     merged = _tip_fragments(run, sha) if sha else {}
     amended = any(f.amendments for f in merged.values())
     intro = _introductions(run, sha, merged) if amended else {}
@@ -334,7 +342,8 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str], notice: str | None)
         ),
         key=lambda t: (t[0], t[1], t[2]),
     )
-    queue: list[tuple[Amendment, str]] = [(a, path) for _, _, _, a, path in ordered]
+    # (amendment, its fragment, whether it is merged)
+    queue: list[tuple[Amendment, str, bool]] = [(a, path, True) for _, _, _, a, path in ordered]
 
     pending: list[tuple[str, int, Amendment, str]] = []
     pending_rows: list[tuple[Row, str, int, str]] = []
@@ -362,7 +371,7 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str], notice: str | None)
     for row, path, i, feature in pending_rows:
         define(row, path, i, feature)
     pending.sort(key=lambda t: (t[0], t[1]))
-    queue += [(a, path) for _, _, a, path in pending]
+    queue += [(a, path, False) for _, _, a, path in pending]
 
     if len(set(repos.values())) > 1:
         listed = ", ".join(f"{p} ({r})" for p, r in sorted(repos.items()))
@@ -372,12 +381,23 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str], notice: str | None)
     revisions = dict.fromkeys(state, 0)
     contested: set[str] = set()
     retired: dict[str, Row] = {}
-    for amendment, path in queue:
+    for amendment, path, is_merged in queue:
         rid = amendment.row
-        if rid in retired:
-            raise FoldError(f"{path}: amendment {amendment.op} names retired row {rid}")
-        if rid not in state:
-            raise FoldError(f"{path}: amendment {amendment.op} names unknown row {rid}")
+        if rid in retired or rid not in state:
+            what = "retired" if rid in retired else "unknown"
+            if not is_merged:
+                raise FoldError(f"{path}: amendment {amendment.op} names {what} row {rid}")
+            # R17: a stale amendment that merged anyway still counts, as debt. A
+            # merged entry is immutable, so raising here would leave every reader of
+            # the default ref broken with no legal fix; it marks the row contested
+            # (an unknown row has none to mark) and the fold goes on.
+            notices.append(
+                f"{path}: merged amendment {amendment.op} names {what} row {rid}; not applied"
+            )
+            if rid in retired:
+                revisions[rid] += 1
+                contested.add(rid)
+            continue
         if amendment.base != revisions[rid]:
             contested.add(rid)
         else:

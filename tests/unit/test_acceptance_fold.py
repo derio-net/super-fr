@@ -253,9 +253,40 @@ def test_a_row_defined_twice_names_both_files(repo: Repo) -> None:
     assert f"{OWNER}.yaml" in str(e.value) and "2026-01-02-bravo.yaml" in str(e.value)
 
 
-def test_an_amendment_naming_an_unknown_row_is_an_error(repo: Repo) -> None:
-    repo.feature("2026-01-02-bravo", amendments=[_amend("no-such-row", 0, "ci")])
+def test_a_pending_amendment_naming_an_unknown_row_is_an_error(repo: Repo) -> None:
+    repo.feature("2026-01-02-bravo", amendments=[_amend("no-such-row", 0, "ci")], merge=False)
     with pytest.raises(FoldError, match="no-such-row"):
+        fold(repo.root)
+
+
+def test_a_merged_amendment_naming_an_unknown_row_is_a_notice_not_an_error(repo: Repo) -> None:
+    # A merged entry is immutable: raising would break every default-ref reader
+    # with no legal fix (review p1-r1).
+    repo.feature("2026-01-02-bravo", amendments=[_amend("no-such-row", 0, "ci")])
+    eff = fold(repo.root)
+    assert [r.id for r in eff.matrix.rows] == [ROW]
+    assert any("no-such-row" in n and "not applied" in n for n in eff.notices), eff.notices
+
+
+def test_a_merged_amendment_to_a_row_retired_meanwhile_marks_it_contested(repo: Repo) -> None:
+    # R17 "merged anyway": two features branched at revision 0; one retires the row,
+    # the other's set-status merges after it.
+    retire = {"row": ROW, "op": "retire", "base": 0, "notes": "superseded", "why": "gone"}
+    repo.feature("2026-01-02-bravo", amendments=[retire])
+    repo.feature("2026-01-03-charlie", amendments=[_amend(ROW, 0, "unwired")])
+    eff = fold(repo.root)
+    assert [r.id for r in eff.retired] == [ROW]
+    assert eff.retired[0].status == "ci", "the late amendment is not applied"
+    assert eff.contested == frozenset({ROW})
+    assert eff.revisions[ROW] == 2
+    assert any("retired row" in n for n in eff.notices), eff.notices
+
+
+def test_a_pending_amendment_to_a_retired_row_is_an_error(repo: Repo) -> None:
+    retire = {"row": ROW, "op": "retire", "base": 0, "notes": "superseded", "why": "gone"}
+    repo.feature("2026-01-02-bravo", amendments=[retire])
+    repo.feature("2026-01-03-charlie", amendments=[_amend(ROW, 1, "unwired")], merge=False)
+    with pytest.raises(FoldError, match="retired row"):
         fold(repo.root)
 
 
@@ -315,6 +346,17 @@ def test_a_shallow_clone_without_amendments_folds_its_rows(repo: Repo, tmp_path:
     shallow = tmp_path / "shallow"
     _git(tmp_path, "clone", "-q", "--depth", "1", f"file://{repo.origin}", str(shallow))
     assert [r.id for r in fold(shallow).matrix.rows] == [ROW]
+
+
+def test_the_no_default_ref_notice_is_not_served_from_the_cache_to_an_explicit_ref(
+    tmp_path: Path,
+) -> None:
+    # Review p1-r2: same sha, different resolution; the notice must follow the call.
+    r = Repo(tmp_path, remote=False)
+    r.feature(OWNER, rows=[_row(ROW)])
+    assert any("HEAD" in n for n in fold(r.root).notices)
+    assert fold(r.root, ref="HEAD").notices == ()
+    assert any("HEAD" in n for n in fold(r.root).notices)
 
 
 def test_an_explicit_ref_folds_that_history(repo: Repo) -> None:
