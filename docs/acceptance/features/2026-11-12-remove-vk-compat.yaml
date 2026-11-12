@@ -12,9 +12,12 @@ rows:
     acceptance: The CLI offers no `fr init migrate` command
     origin:
     - spec:2026-11-12-remove-vk-compat#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_init_has_no_migrate_command
+      - super-fr:tests/unit/test_vk_compat_removed.py#test_isolation_migrate_module_is_gone
+    status: ci
+    notes: Unit tests landed with the phase-1 removal; run in CI.
     verify: none
   - id: isolation-up-requires-branch
     capability: Isolation
