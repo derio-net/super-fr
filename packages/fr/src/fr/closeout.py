@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from fr.archive import PLANS_REL
+from fr.artifacts.paths import KIND_DIRS
 from fr.journal.model import JOURNALS_REL, SCOPE_DIRS
 from fr.run.model import RUNS_REL
 from fr.usage.file import USAGE_REL
@@ -33,9 +34,9 @@ if TYPE_CHECKING:
 
 ArtifactKind = Literal["plan", "spec", "journal", "run", "usage"]
 
-SPECS_REL = Path("docs/superpowers/specs")
-IMPLEMENTED_PLANS_REL = Path("docs/superpowers/implemented/plans")
-IMPLEMENTED_SPECS_REL = Path("docs/superpowers/implemented/specs")
+SPECS_REL = Path(KIND_DIRS["spec"])
+IMPLEMENTED_PLANS_REL = Path(KIND_DIRS["plan-archived"])
+IMPLEMENTED_SPECS_REL = Path(KIND_DIRS["spec-archived"])
 
 # dir name (e.g. "specs") -> journal scope (e.g. "spec")
 _JOURNAL_SCOPE_BY_DIR: dict[str, str] = {dirname: scope for scope, dirname in SCOPE_DIRS.items()}
@@ -247,7 +248,7 @@ def _ref_tree(repo_root: Path, ref: str) -> frozenset[str] | None:
 
     try:
         result = git_answer(
-            repo_root, "ls-tree", "-r", "--name-only", ref, "--", "docs/superpowers"
+            repo_root, "ls-tree", "-r", "--name-only", ref, "--", KIND_DIRS["superpowers"]
         )
     except GitUnavailableError:
         return None

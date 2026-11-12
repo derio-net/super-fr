@@ -85,7 +85,7 @@ def resolve_identity(matrix: Matrix, root: Path) -> tuple[str, str]:
     if m:
         return matrix.org or m.group(1), matrix.repo or m.group(2)
     raise AcceptanceError(
-        "cannot resolve repo identity: write a fragment under docs/acceptance/features/ "
+        f"cannot resolve repo identity: write a fragment under {KIND_DIRS['acceptance-fragment']}/ "
         "(each carries `repo: <org>/<repo>`; `fr acceptance add --repo` writes the first) "
         "or add a github origin remote"
     )

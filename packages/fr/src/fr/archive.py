@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.git import (
     GIT_TIMEOUT_SECONDS,
     GitRefusal,
@@ -74,7 +75,7 @@ __all__ = [
     "run_spec_path",
 ]
 
-PLANS_REL = Path("docs/superpowers/plans")
+PLANS_REL = Path(KIND_DIRS["plan"])
 
 
 def completed_unarchived_plans(repo_root: Path) -> list[str]:
@@ -435,7 +436,7 @@ def archive_plan_dir(repo_root: Path, plan_dir: Path) -> Path:
             f"plan dir {plan_dir} is not under this repo root ({repo_root}); "
             f"run fr archive from the repo that owns the plan"
         ) from e
-    dst_rel = Path("docs/superpowers/implemented/plans") / plan_dir.name
+    dst_rel = Path(KIND_DIRS["plan-archived"]) / plan_dir.name
     if (repo_root / dst_rel).exists():
         # A prior botched archive (copied to implemented/ but never removed
         # from plans/) leaves a duplicate; `git mv` would nest src INTO the
@@ -699,14 +700,14 @@ def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:
     """
     moves: list[DirsMove] = []
     notes: list[str] = []
-    specs_dir = repo_root / "docs" / "superpowers" / "specs"
+    specs_dir = kind_dir("spec", space_for(repo_root))
     if not specs_dir.is_dir():
         return SpecSweepResult(moves=(), notes=())
     for spec_path in sorted(specs_dir.glob("*.md")):
         implemented, note = _spec_fully_implemented(spec_path, repo_root, gh)
         if implemented:
             src_rel = spec_path.relative_to(repo_root)
-            dst_rel = Path("docs/superpowers/implemented/specs") / spec_path.name
+            dst_rel = Path(KIND_DIRS["spec-archived"]) / spec_path.name
             try:
                 _git_mv(repo_root, src_rel, dst_rel)
             except ArchiveError as e:

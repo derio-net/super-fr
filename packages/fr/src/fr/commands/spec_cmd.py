@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import typer
 from rich.console import Console
 
+from fr.artifacts.paths import kind_dir, space_for
 from fr.commands.common import require_migrated_layout
 from fr.spec import compute_status, parse_spec, render_status_md
 
@@ -56,7 +57,7 @@ def status_cmd(
     repo_root = Path.cwd()
 
     if all_specs:
-        specs_dir = repo_root / "docs" / "superpowers" / "specs"
+        specs_dir = kind_dir("spec", space_for(repo_root))
         if not specs_dir.is_dir():
             err_console.print(f"specs dir not found: {specs_dir}")
             raise typer.Exit(2)

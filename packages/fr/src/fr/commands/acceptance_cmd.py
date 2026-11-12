@@ -14,12 +14,13 @@ from rich.markup import escape
 
 from fr.acceptance.fragment import FRAGMENTS_DIR
 from fr.acceptance.model import AcceptanceError, Matrix, Row, Walk
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import resolve_repo_root
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
 
-RETIRED_MATRIX_REL = Path("docs/acceptance/matrix.yaml")
+RETIRED_MATRIX_REL = Path(KIND_DIRS["acceptance"]) / "matrix.yaml"
 """The retired matrix (spec 2026-11-04-repo-feature-settings R19): read only from a
 base ref older than the split, never written."""
 
@@ -215,7 +216,7 @@ def report_cmd(
     out: Path | None = typer.Option(
         None,
         "--out",
-        help="Output file (repo-relative). Default: docs/acceptance/report.html "
+        help=f"Output file (repo-relative). Default: {KIND_DIRS['acceptance']}/report.html "
         "(report.md with --format md), both gitignored.",
     ),
     fmt: str = typer.Option("html", "--format", help="html | md."),
@@ -317,7 +318,7 @@ def comment_cmd(
         err_console.print("[red]error:[/red] no origin remote to name the repository")
         raise typer.Exit(2)
     matrix = _load(root)
-    out_dir = root / "docs" / "acceptance"
+    out_dir = kind_dir("acceptance", space_for(root))
     try:
         report = render_report(matrix, root, out_dir, "..", "github", ref, "md")
     except AcceptanceError as e:
@@ -1070,7 +1071,7 @@ def add_cmd(
     feature: str | None = typer.Option(
         None,
         "--feature",
-        help="The fragment (docs/acceptance/features/<feature>.yaml) to write the row "
+        help=f"The fragment ({KIND_DIRS['acceptance-fragment']}/<feature>.yaml) to write the row "
         "to, when its origins name no single spec (`legacy` for none).",
     ),
     repo: str | None = typer.Option(
@@ -1368,7 +1369,7 @@ def backfill_cmd() -> None:
     ]
 
     unlinked_plans: list[str] = []
-    plans_dir = root / "docs" / "superpowers" / "plans"
+    plans_dir = kind_dir("plan", space_for(root))
     if plans_dir.is_dir():
         for plan_dir in sorted(p for p in plans_dir.iterdir() if p.is_dir()):
             linked = False

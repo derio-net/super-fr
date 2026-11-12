@@ -29,6 +29,7 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.journal.model import JournalEntry, journal_header, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
@@ -263,7 +264,7 @@ def create(
     Returns the parsed Plan. Raises PlanEditError on collisions.
     """
     if plans_dir is None:
-        plans_dir = repo_root / "docs" / "superpowers" / "plans"
+        plans_dir = kind_dir("plan", space_for(repo_root))
     folder = plans_dir / slug
 
     spec_str = str(spec) if spec is not None else None
@@ -851,7 +852,7 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     in_active_or_legacy = parent_dir.parent.name in ("plans", "archived-plans")
     if superpowers_dir.name != "superpowers" or not (in_implemented or in_active_or_legacy):
         raise PlanEditError(
-            f"parent must live under docs/superpowers/"
+            f"parent must live under {KIND_DIRS['superpowers']}/"
             f"{{plans,implemented/plans,archived-plans}}/, got: {parent_dir}"
         )
 
@@ -994,9 +995,9 @@ class ReworkRecord:
 
 def rework_list(repo_root: Path, *, include_archived: bool = False) -> list[ReworkRecord]:
     """Glob plan folders; filter by parent_plan; aggregate status."""
-    dirs = [repo_root / "docs" / "superpowers" / "plans"]
+    dirs = [kind_dir("plan", space_for(repo_root))]
     if include_archived:
-        dirs.append(repo_root / "docs" / "superpowers" / "archived-plans")
+        dirs.append(kind_dir("plan-legacy-archived", space_for(repo_root)))
 
     records: list[ReworkRecord] = []
     for d in dirs:
@@ -1801,7 +1802,7 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
                     severity="error",
                     message=(
                         f"phase {phase_n} links unknown acceptance row id {rid!r} "
-                        f"(no fragment under docs/acceptance/features/ defines it)"
+                        f"(no fragment under {KIND_DIRS['acceptance-fragment']}/ defines it)"
                     ),
                 )
             )

@@ -23,6 +23,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import resolve_repo_root
 from fr.journal.model import (
     TRACKED_BY_RE,
@@ -114,7 +115,7 @@ def _resolve_slug_and_plan_dir(slug: str | None, plan_dir: str | None) -> tuple[
             raise typer.Exit(2)
         return resolved_slug, plan_dir
     if slug is not None:
-        return slug, f"docs/superpowers/plans/{slug}"
+        return slug, f"{KIND_DIRS['plan']}/{slug}"
     err_console.print("[red]give --slug or --plan-dir (at least one is required)[/red]")
     raise typer.Exit(2)
 
@@ -150,13 +151,13 @@ def _orphan_refusal(root: Path, scope: str, slug: str, path: Path, *, is_input: 
     if scope == "debug" or path.exists() or (scope == "spec" and is_input):
         return None
     if scope == "spec":
-        specs = root / "docs" / "superpowers" / "specs"
+        specs = kind_dir("spec", space_for(root))
         known = sorted({spec_journal_slug(p.stem) for p in specs.glob("*.md")})
-        where = f"docs/superpowers/specs/{slug}-design.md"
+        where = f"{KIND_DIRS['spec']}/{slug}-design.md"
     else:
-        plans = root / "docs" / "superpowers" / "plans"
+        plans = kind_dir("plan", space_for(root))
         known = sorted(p.name for p in plans.iterdir() if p.is_dir()) if plans.is_dir() else []
-        where = f"docs/superpowers/plans/{slug}/"
+        where = f"{KIND_DIRS['plan']}/{slug}/"
     if slug in known:
         return None
     return (
@@ -868,7 +869,7 @@ def check(
     plan_dir: str | None = typer.Option(
         None,
         "--plan-dir",
-        help="Plan folder (default docs/superpowers/plans/<slug>) --require-reviews "
+        help=f"Plan folder (default {KIND_DIRS['plan']}/<slug>) --require-reviews "
         "checks phases against. May be given instead of --slug, which is then "
         "derived as this folder's basename.",
     ),
@@ -1044,7 +1045,7 @@ def handoff(
     plan_dir: str | None = typer.Option(
         None,
         "--plan-dir",
-        help="Plan folder (default docs/superpowers/plans/<slug>); the phase's "
+        help=f"Plan folder (default {KIND_DIRS['plan']}/<slug>); the phase's "
         "depends_on comes from here.",
     ),
 ) -> None:
@@ -1077,7 +1078,7 @@ def handoff(
     except JournalParseError as e:
         err_console.print(f"[red]journal parse error:[/red] {escape(str(e))}")
         raise typer.Exit(2) from e
-    plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
+    plan_path = root / plan_dir if plan_dir else kind_dir("plan", space_for(root)) / slug
     try:
         plan = parse(plan_path)
     except (PlanSchemaError, OSError) as e:

@@ -39,6 +39,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.artifacts.registry import (
     ARTIFACT_KINDS,
     ArtifactKind,
@@ -125,7 +126,7 @@ def validate_artifact(kind: ArtifactKind, path: Path) -> tuple[ValidationIssue, 
     )
 
 
-WORKFLOWS_REL = Path("docs") / "superpowers" / "workflows"
+WORKFLOWS_REL = Path(KIND_DIRS["workflow"])
 WORKFLOW_LABEL = "workflow"
 """Label for a repo-authored shape's findings. NOT a registered artifact kind —
 see the module docstring."""
@@ -164,7 +165,7 @@ def _records_dir_issues(repo_root: Path) -> list[ValidationIssue]:
     from fr.record.pr_body import PR_BODY_NAME
 
     out: list[ValidationIssue] = []
-    for home in sorted((repo_root / "docs" / "superpowers" / "runs").glob(f"*{RECORDS_SUFFIX}")):
+    for home in sorted(kind_dir("run", space_for(repo_root)).glob(f"*{RECORDS_SUFFIX}")):
         if not home.is_dir():
             continue
         for path in sorted(home.iterdir()):

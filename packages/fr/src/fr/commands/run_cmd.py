@@ -119,6 +119,7 @@ if TYPE_CHECKING:
     from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
     from fr.verification.walk import WalkOwed
+from fr.artifacts.paths import KIND_DIRS
 from fr.run.provenance import cleared_gates, gates
 from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.units import UnitAttempt
@@ -2882,7 +2883,7 @@ def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
         rel_parts = path.relative_to(repo_root.resolve()).parts
     except ValueError:
         rel_parts = ()
-    if rel_parts[:3] == ("docs", "superpowers", "runs") and (
+    if rel_parts[:3] == Path(KIND_DIRS["run"]).parts and (
         len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
     ):
         # gh#638: `<run>.records/` holds step records and fr's pr-body render,
@@ -6142,7 +6143,7 @@ def resolve_cmd(
     record_file: Path | None = typer.Option(
         None,
         "--record",
-        help="The step's record (docs/superpowers/runs/<run>.records/<step>[__<item>].yaml): "
+        help=f"The step's record ({KIND_DIRS['run']}/<run>.records/<step>[__<item>].yaml): "
         "its outcome, ticks, journal entries, resolutions, acceptance rows and evidence, "
         "applied in one commit (spec 2026-09-25 §5.C.2). Replaces --state/--evidence/--emitted.",
     ),

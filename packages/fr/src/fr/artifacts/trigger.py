@@ -74,6 +74,7 @@ from fr.artifacts.commit import (
     lock_path,
     uncommitted_veto,
 )
+from fr.artifacts.paths import KIND_DIRS
 from fr.artifacts.runner import (
     FailedAction,
     MigrationRegistry,
@@ -846,7 +847,7 @@ def _cannot_read(root: Path, failures: Sequence[FailedAction]) -> tuple[str, ...
     ]
     if any(f.path.parent.name.endswith(RECORDS_DIR_SUFFIX) for f in failures):
         lines.append(
-            f"  Every file under docs/superpowers/runs/<run>{RECORDS_DIR_SUFFIX}/ is read "
+            f"  Every file under {KIND_DIRS['run']}/<run>{RECORDS_DIR_SUFFIX}/ is read "
             "as one step's record. Scratch inputs (for `fr plan create`, say) belong "
             "outside the repository — in $TMPDIR."
         )

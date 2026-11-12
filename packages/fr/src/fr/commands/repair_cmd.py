@@ -13,6 +13,7 @@ import typer
 from rich.console import Console
 
 from fr.archive import paths_dirty
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.repair import RepairResult, repair_repo
 
@@ -56,11 +57,11 @@ def repair_command(
     """Normalize stale plan/spec refs to the lifecycle-independent form."""
     require_migrated_layout()
     repo_root = resolve_repo_root()
-    sp = repo_root / "docs" / "superpowers"
+    sp = kind_dir("superpowers", space_for(repo_root))
 
     if yes and paths_dirty(repo_root, sp):
         err_console.print(
-            "refusing to repair: uncommitted changes under docs/superpowers/ — "
+            f"refusing to repair: uncommitted changes under {KIND_DIRS['superpowers']}/ — "
             "commit or stash first (dirty tree)."
         )
         raise typer.Exit(2)

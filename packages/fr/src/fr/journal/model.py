@@ -23,6 +23,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.gates import GATES
 from fr.run.model import AnsweredBy
 
@@ -87,8 +88,8 @@ OP_RESULTS = ("done", "na", "open", "failed", "attested", "proof")
 # that appends one stamps the journal in the same write (`_at_current_stamp`).
 _STAMPING_KINDS = frozenset({"owed", "op"})
 
-JOURNALS_REL = Path("docs/superpowers/journals")
-IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
+JOURNALS_REL = Path(KIND_DIRS["journal"])
+IMPLEMENTED_JOURNALS_REL = Path(KIND_DIRS["journal-archived"])
 
 # Each scope gets its own subdirectory so a bare `ls journals/` tells you which
 # journal is which at a glance (a debug-slug and a plan-slug can otherwise look

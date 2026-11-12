@@ -36,6 +36,7 @@ import yaml
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.matrix_status_split import split_status
+from fr.artifacts.paths import kind_dir, space_for
 from fr.artifacts.record_contract import UnconvertibleRecordError
 from fr.artifacts.record_questions import UnreadableRecordError
 from fr.artifacts.runner import MIGRATIONS, SchemaMigration
@@ -65,7 +66,7 @@ def _matrix_rows(root: Path) -> dict[str, dict[str, Any]]:
     fragments' (spec 2026-11-04 R19 splits the matrix before this hop runs: kinds
     migrate in name order); empty when there are none or they do not read — the
     entry alone then decides."""
-    acceptance = root / "docs" / "acceptance"
+    acceptance = kind_dir("acceptance", space_for(root))
     files = [acceptance / "matrix.yaml"]
     if not files[0].is_file():
         files = sorted((acceptance / "features").glob("*.yaml"))

@@ -48,6 +48,7 @@ from fr.archive import (
     spec_archive_sweep,
     unticked_manual_phases,
 )
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from fr.isolation.local import (
@@ -70,7 +71,7 @@ if TYPE_CHECKING:
 console = Console()
 err_console = Console(stderr=True)
 
-IMPLEMENTED_REL = Path("docs/superpowers/implemented")
+IMPLEMENTED_REL = Path(KIND_DIRS["archive"])
 
 
 def _make_gh_client() -> GhClient:
@@ -664,7 +665,7 @@ def _with_followups(fn: Callable[..., None]) -> Callable[..., None]:
 def archive_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(
-        False, "--all", help="Archive every finished plan under docs/superpowers/plans/."
+        False, "--all", help=f"Archive every finished plan under {KIND_DIRS['plan']}/."
     ),
     force: bool = typer.Option(
         False,
@@ -766,7 +767,7 @@ def archive_command(
     _note_fetch_error(evidence)
 
     if all_plans:
-        plans_root = repo_root / "docs" / "superpowers" / "plans"
+        plans_root = kind_dir("plan", space_for(repo_root))
         targets = (
             sorted(p for p in plans_root.iterdir() if p.is_dir() and (p / "_meta.yaml").exists())
             if plans_root.is_dir()

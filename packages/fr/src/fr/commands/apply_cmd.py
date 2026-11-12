@@ -28,6 +28,7 @@ from rich.console import Console
 
 from fr import plan_ops
 from fr.apply import apply
+from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import (
     PlanReport,
     build_plan_report,
@@ -370,7 +371,7 @@ def _apply_one(
             "",
             f"refuse to dispatch: {e}",
             "",
-            "Author the shape under docs/superpowers/workflows/, or fix the "
+            f"Author the shape under {KIND_DIRS['workflow']}/, or fix the "
             "`workflow:` key in the plan's _meta.yaml.",
         ]
         json_out["workflow_error"] = str(e)
@@ -546,7 +547,7 @@ def apply_command(
             raise typer.Exit(2)
 
     if all_plans:
-        plans_dir = Path.cwd() / "docs" / "superpowers" / "plans"
+        plans_dir = kind_dir("plan", space_for(Path.cwd()))
         if not plans_dir.is_dir():
             err_console.print(f"plans dir not found: {plans_dir}")
             raise typer.Exit(2)

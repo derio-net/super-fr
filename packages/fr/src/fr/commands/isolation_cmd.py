@@ -16,6 +16,7 @@ from typing import Any, Protocol, cast
 import typer
 
 from fr import cloud
+from fr.artifacts.paths import KIND_DIRS
 from fr.isolation import sessions as _sessions
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
@@ -549,13 +550,13 @@ def down(
         "hazard — uncommitted changes, or content not on origin). Removes "
         "the worktree and fr's record of it; the branch and any landed "
         "commits stay in the repo, but uncommitted changes do not survive — "
-        "except fr's own records under docs/superpowers/, which are preserved "
+        f"except fr's own records under {KIND_DIRS['superpowers']}/, which are preserved "
         "and restored by the next `up`.",
     ),
     no_preserve: bool = typer.Option(
         False,
         "--no-preserve",
-        help="With --force: discard fr's records under docs/superpowers/ instead "
+        help=f"With --force: discard fr's records under {KIND_DIRS['superpowers']}/ instead "
         "of preserving them (a full disk, an unreadable tree). Refused without --force.",
     ),
     all_: bool = typer.Option(
@@ -617,7 +618,7 @@ def down(
         _fail(
             IsolationError(
                 "--no-preserve is only valid with --force — it discards fr's records "
-                "under docs/superpowers/ that a teardown otherwise preserves."
+                f"under {KIND_DIRS['superpowers']}/ that a teardown otherwise preserves."
             )
         )
     # The caller is the ambient session when --session is not given — the same

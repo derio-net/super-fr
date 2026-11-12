@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.acceptance.model import Matrix, Row
+from fr.artifacts.paths import KIND_DIRS
 from fr.labels import FR_AWAITING_LIVE
 
 __all__ = ["AWAITING_LIVE_LABEL", "holds_open", "issues_now_closable", "walk_verified"]
@@ -21,7 +22,7 @@ AWAITING_LIVE_LABEL = FR_AWAITING_LIVE.name
 """The label an issue carries while a post-merge row citing it waits for its
 walk (R17)."""
 
-_SPECS = ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/")
+_SPECS = (f"{KIND_DIRS['spec']}/", f"{KIND_DIRS['spec-archived']}/")
 
 
 def walk_verified(row: Row) -> bool:

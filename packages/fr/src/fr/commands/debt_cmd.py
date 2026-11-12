@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
+from fr.artifacts.paths import KIND_DIRS
 from fr.commands.common import resolve_repo_root
 from fr.debt.render import BOT_LOGINS  # the one definition, shared with `fr triage`
 
@@ -310,7 +311,7 @@ def _held(root: Path, name: str) -> list[str]:
     from fr.archive import outcome_hold
     from fr.parser import PlanSchemaError, parse
 
-    rel = Path("docs/superpowers/plans") / name
+    rel = Path(KIND_DIRS["plan"]) / name
     try:
         return outcome_hold(root, parse(root / rel), rel)
     except (PlanSchemaError, OSError, ValueError, KeyError, TypeError):
@@ -326,7 +327,7 @@ def _archive_one(root: Path, name: str, env: dict[str, str]) -> tuple[bool, str]
     from fr.safe_spawn import fr_argv, safe_fr_env
 
     done = subprocess.run(
-        fr_argv("archive", f"docs/superpowers/plans/{name}"),
+        fr_argv("archive", f"{KIND_DIRS['plan']}/{name}"),
         cwd=root,
         env=safe_fr_env(env),
         capture_output=True,
