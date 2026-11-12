@@ -45,3 +45,8 @@ The operator asked whether concrete lenses would limit the phase reviewer's auto
 ### d8-starting-set · decision · The lens set is agent additions plus path rules; an empty set is visible
 
 Asked the operator, through the question tool, what the feature-level review starts from. They chose: whatever agents added plus every lens a repo path rule requires for the files actually changed; with an empty set no review is dispatched and the PR says no lens was requested. (Answered in the same session as d7; fr's operator-answer check matched that session's later answer to d7 only, so this entry carries no answered_by.)
+
+<!-- fr:journal kind=decision scope=spec id=d9-one-reviewer-per-lens created=2026-11-12T16:45:23+00:00 -->
+### d9-one-reviewer-per-lens · decision · One reviewer per accumulated lens
+
+Asked the operator, through the question tool, how many reviewers the feature-level review dispatches. They chose one per lens, each given only its own lens and the whole feature diff. (Recorded without answered_by for the reason given in d8.)
