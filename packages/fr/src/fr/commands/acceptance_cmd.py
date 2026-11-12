@@ -71,6 +71,18 @@ def _load(root: Path) -> Matrix:
         raise typer.Exit(1) from e
 
 
+def _owner(root: Path, row_id: str) -> str | None:
+    """The feature whose fragment created *row_id*: where `set-status` appends a
+    merged row's amendments when no feature is in play (a post-merge walk or link,
+    recorded with no run on the branch; plan journal `p3-set-status-owner-fallback`)."""
+    from fr.acceptance.fold import effective
+
+    try:
+        return effective(root).owners.get(row_id)
+    except AcceptanceError:
+        return None
+
+
 def _contested(root: Path) -> frozenset[str]:
     """The fold's contested rows (spec 2026-11-04 R17); `_load` already refused an
     unfoldable tree, and the fold is memoised, so this re-reads nothing."""
@@ -681,14 +693,15 @@ def set_status_cmd(
         None,
         "--feature",
         help="The feature (spec slug) whose fragment the amendments of a MERGED row are "
-        "written to; default: the spec of this branch's run.",
+        "written to; default: the spec of this branch's run, else the row's own feature.",
     ),
 ) -> None:
     """Move an existing row's status, with a reason (spec §3.G.2).
 
     A row still pending on this branch is rewritten in place in its fragment. A row
     merged on the default ref changes only by amendment (spec 2026-11-04 R16): the
-    move is appended to this feature's fragment as `set-status`, `add-level` and
+    move is appended to this feature's fragment (`--feature`, else this branch's
+    run's spec, else the row's own feature) as `set-status`, `add-level` and
     `drop-level` amendments.
 
     The effective matrix is CURRENT state, not a log: `check` reads today's
@@ -827,7 +840,7 @@ def set_status_cmd(
         ),
         f"chore(fr): acceptance — {row_id} {describe_move(target, new_row)}",
         {row_id: {k: tuple(v) for k, v in drops.items()}} if drops else None,
-        amend_feature=resolve_feature(root, feature),
+        amend_feature=resolve_feature(root, feature) or _owner(root, row_id),
     )
     typer.echo(f"{row_id}: {describe_move(target, new_row)}")
     if new_walk is not None:

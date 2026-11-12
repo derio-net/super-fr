@@ -246,6 +246,25 @@ def test_set_status_on_a_merged_row_appends_amendments_and_leaves_its_owner_alon
     assert row.levels["unit"] == ()
 
 
+def test_set_status_on_a_merged_row_with_no_feature_appends_to_the_rows_own_fragment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A post-merge walk or issue link runs with no feature in play: the amendment
+    goes to the row's own fragment, appended, never an in-place edit."""
+    root = merged_repo(tmp_path, branch="closeout/a")
+
+    res = invoke(root, monkeypatch, "set-status", "--id", "r", "--issue", "acme/widget#7")
+
+    assert res.exit_code == 0, res.output
+    frag = fragment(root, SLUG_A)
+    assert "issues" not in frag["rows"][0]
+    (entry,) = frag["amendments"]
+    assert (entry["op"], entry["issues"]) == ("set-status", ["acme/widget#7"])
+    clear_fold_cache()
+    (row,) = fold(root).matrix.rows
+    assert row.issues == ("acme/widget#7",)
+
+
 def test_set_status_on_a_row_pending_on_this_branch_still_edits_in_place(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
