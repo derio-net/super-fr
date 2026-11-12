@@ -80,3 +80,13 @@ rows:
     notes: ''
     verify: candidate
     scenario: tests/scenarios/review-lenses-shown-on-pr.sh
+amendments:
+  - row: review-lenses-path-rules
+    op: reword
+    base: 0
+    acceptance: Where a repo's path rule requires a lens, a feature that changes such
+      a path gets that lens reviewed whether or not any agent asked for it, and the
+      lens review cannot be closed without it; the refusal names the lens, the rule
+      and a matching file
+    why: the design moved from per-phase lens declarations to a feature-level lens review
+      before deliver (operator decision)
