@@ -1,0 +1,2 @@
+bump: minor
+summary: "artifacts can live off the product branches: one path resolver, the quiet (`fr` branch) and stealth (tracking repo) placements, and `fr placement move|migrate-branch`"
