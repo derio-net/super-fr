@@ -283,3 +283,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_acceptance_effective_readers.py#test_the_staleness_guard_counts_a_logical_citation
     why: read-time resolution of archived refs is ci-pinned
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_acceptance_effective_readers.py#test_rows_citing_matches_a_logical_origin_live_and_archived
+    why: read-time resolution of archived refs is ci-pinned
