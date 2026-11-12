@@ -3,7 +3,7 @@ run: 2026-11-12-claude-vigilant-hopper-sfd7vk
 workflow: fr-goal@1
 branch: claude/vigilant-hopper-sfd7vk
 started: '2026-11-12T13:43:31+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -119,7 +119,11 @@ steps:
           visual: site-landing-two-acts:8:af0fb3917435,site-landing-figures:13:2d0b7c6abd2d,site-landing-look-and-motion:6:6de68529c168
           findings: p2-prose-alignment,p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6,p2-r7,p2-r8,p2-r9,p2-r10,p2-r11,p2-r12,p2-r13
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-12T14:58:49+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): p1-r8, p2-r11
   deliver:
     state: pending
 fr_version: 6.4.0rc3
