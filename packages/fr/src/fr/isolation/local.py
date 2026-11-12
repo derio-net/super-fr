@@ -300,6 +300,9 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
 # usage/<id>.yaml — every destination is the source path with `implemented/`
 # spliced in after `docs/superpowers/`). Kept as a local constant, not imported
 # from fr.archive: this module must not depend on the archive command.
+# The one remedy every "no workspace" message offers (`--branch` is required).
+_UP_REMEDY = "`fr isolation up --branch <branch>`"
+
 _ARCHIVED_KINDS = ("plans", "specs", "journals", "runs", "usage")
 _SUPERPOWERS = "docs/superpowers/"
 
@@ -1191,7 +1194,7 @@ class LocalWorktreeDevcontainerTarget:
                     f"profile {name!r} is written in the base repo but not committed, so the "
                     f"worktree can't see it — run `fr init scaffold --profile {name} --force` "
                     "(which commits; add `--tracking none` if the repo has no recognised "
-                    "remote) or commit .devcontainer/ yourself, then retry `fr isolation up --branch <branch>`."
+                    f"remote) or commit .devcontainer/ yourself, then retry {_UP_REMEDY}."
                 )
         # Record BEFORE the side effect that can fail (gh#578): a failing
         # postCreate used to leave a worktree and a container that neither
@@ -1452,7 +1455,7 @@ class LocalWorktreeDevcontainerTarget:
             )
         return (
             f"{state.branch} stopped ({container}) — worktree, state and bindings kept; "
-            "`fr isolation up --branch <branch>`, `restart` or the next `exec` resumes it."
+            f"{_UP_REMEDY}, `restart` or the next `exec` resumes it."
         )
 
     def _ps_parts_strict(self, state: IsolationState) -> list[str]:
@@ -1489,7 +1492,7 @@ class LocalWorktreeDevcontainerTarget:
         parts = self._ps_parts_strict(state)
         if not parts:
             raise IsolationError(
-                f"no container for {state.branch} — {nothing} (run `fr isolation up --branch <branch>` first)."
+                f"no container for {state.branch} — {nothing} (run {_UP_REMEDY} first)."
             )
         return parts[0], parts[1]
 
@@ -2584,14 +2587,14 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"plan repo has docs/superpowers/plans in {ref} but no "
                 f"scripts/validate-plans.sh there; run `{REPAIR_COMMAND}` from the repo "
-                "root, commit it to the isolation start ref, then retry `fr isolation up --branch <branch>`."
+                f"root, commit it to the isolation start ref, then retry {_UP_REMEDY}."
             )
         mode = line.split(maxsplit=1)[0]
         if mode != "100755":
             raise IsolationError(
                 f"plan repo has scripts/validate-plans.sh in {ref} but it is not executable; "
                 "run `chmod +x scripts/validate-plans.sh`, commit it to the isolation "
-                "start ref, then retry `fr isolation up --branch <branch>`."
+                f"start ref, then retry {_UP_REMEDY}."
             )
 
     def _ensure_validator_wrapper_in_worktree(self, worktree: Path) -> None:
@@ -2603,7 +2606,7 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"existing isolation worktree {worktree} is missing executable "
                 f"scripts/validate-plans.sh; run `{REPAIR_COMMAND}`, commit it on the worktree "
-                "branch, then retry `fr isolation up --branch <branch>`."
+                f"branch, then retry {_UP_REMEDY}."
             )
 
     def _git_worktree_add(

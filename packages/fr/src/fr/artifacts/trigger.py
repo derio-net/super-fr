@@ -151,7 +151,8 @@ must keep working on an unmigrated repo, whose version-1 file it reports as
 only the fr-profiles artifact, always at that kind's current version, and runs
 the 1 -> 2 migration in process over an existing version-1 file first (refusing,
 untouched, one it cannot migrate) — it never leaves, or proceeds over, a stale
-one (spec 2026-09-28 fr-profiles-services §3.E.1). `fr init agents` (2026-10-07 cloud-triage R19) writes the
+one (spec 2026-09-28 fr-profiles-services §3.E.1). `fr init agents` (2026-10-07 cloud-triage R19)
+writes the
 `agents` artifact only at its current version, so it too never leaves a stale one.
 `fr cloud` (same spec, R23) writes nothing: `doctor` reads the host's files and the
 repo's `agents` artifact, `setup-script` prints a template; and it is what an operator

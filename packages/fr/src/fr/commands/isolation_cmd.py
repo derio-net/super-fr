@@ -193,7 +193,8 @@ def _resolve_single(root: Path, branch: str | None) -> IsolationState:
     if state is None:
         _fail(
             IsolationError(
-                f"no isolation workspace for branch {branch!r} — run `fr isolation up --branch <branch>` first."
+                f"no isolation workspace for branch {branch!r} — "
+                "run `fr isolation up --branch <branch>` first."
                 if branch
                 else "no isolation workspace — run `fr isolation up --branch <branch>` first."
             )
@@ -913,7 +914,11 @@ def verify_merge(
     reaped = False
     if state is None:
         if branch is None:
-            _fail(IsolationError("no isolation workspace — run `fr isolation up --branch <branch>` first."))
+            _fail(
+                IsolationError(
+                    "no isolation workspace — run `fr isolation up --branch <branch>` first."
+                )
+            )
             return
         reaped = True
     # A live workspace follows its recorded mode (gh#569); a reaped one has

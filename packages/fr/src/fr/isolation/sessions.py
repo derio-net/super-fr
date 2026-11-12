@@ -136,7 +136,8 @@ def attach(
     state = load_state(repo_root, branch)
     if state is None:
         raise IsolationError(
-            f"no isolation workspace for branch {branch!r} — run `fr isolation up --branch <branch>` first."
+            f"no isolation workspace for branch {branch!r} — "
+            "run `fr isolation up --branch <branch>` first."
         )
     prev = read_session_index(session_id)
     if prev and (Path(prev.get("repo_root", "")) != repo_root or prev.get("branch") != branch):

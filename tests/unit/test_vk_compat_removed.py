@@ -12,7 +12,9 @@ def test_smoke() -> None:
 def test_init_has_no_migrate_command() -> None:
     from fr.commands.init_cmd import init_app
 
-    names = {c.name or (c.callback.__name__ if c.callback else "") for c in init_app.registered_commands}
+    names = {
+        c.name or (c.callback.__name__ if c.callback else "") for c in init_app.registered_commands
+    }
     assert "migrate" not in names
 
 
@@ -31,7 +33,9 @@ from typer.testing import CliRunner  # noqa: E402
 REPO = Path(__file__).resolve().parents[2]
 
 
-def test_up_without_branch_is_a_usage_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_up_without_branch_is_a_usage_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from fr.commands import isolation_cmd
 
     calls: list[object] = []
@@ -141,16 +145,15 @@ def test_bump_version_probes_fr_only() -> None:
     assert "rebrand" not in text
 
 
+DELEGATE = 'exec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh"\n'
+
+
 def test_wrapper_needs_super_fr_in_its_text(tmp_path: Path) -> None:
     from fr.plan_validator_wrapper import is_super_fr_validator_wrapper
 
     old = tmp_path / "a.sh"
-    old.write_text(
-        '# superpowers-for-vk\nexec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh"\n'
-    )
+    old.write_text("# superpowers-for-vk\n" + DELEGATE)
     assert not is_super_fr_validator_wrapper(old)
     kept = tmp_path / "b.sh"
-    kept.write_text(
-        '# super-fr\nexec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh"\n'
-    )
+    kept.write_text("# super-fr\n" + DELEGATE)
     assert is_super_fr_validator_wrapper(kept)
