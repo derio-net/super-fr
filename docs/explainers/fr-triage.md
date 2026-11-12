@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
+reviewed: 2026-11-12 the Batches board folds empty columns to a strip on a wide screen (gh#1417); the board paragraph says so
 ---
 
 ## Overview: judgement in a file, engine around it
@@ -148,7 +148,9 @@ train), closes out what has landed, and dispatches what may start. Merging a bat
 pull request needs the operator's `approved-fr` label. The driver never approves its own
 work. `fr triage board` draws `board.html`, a Kanban of every batch by lifecycle column, with
 four "Needs you" lanes (developer, reviewer, tester, devops) decided from the run's cursor
-and the merged PR's gate labels, never from a session's status.
+and the merged PR's gate labels, never from a session's status. On a wide screen a column
+with no cards folds to a narrow strip with its title turned on its side, so the columns that
+hold cards get the room.
 
 Several scopes can work one repo, so a scope **claims** each issue it plans to act on with an
 `fr:claimed` label and a marker comment. Another scope's claim is hands-off. Taking one over
