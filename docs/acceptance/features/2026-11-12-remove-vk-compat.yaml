@@ -79,9 +79,12 @@ rows:
       used to carry `vk_version`
     origin:
     - spec:2026-11-12-remove-vk-compat#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_plan_vk_version.py#test_every_archived_plan_in_this_repo_parses
+    status: ci
+    notes: a unit test parses every archived plan in this repo after the migration (three
+      phase-0 plans that fail on origin/main too are allowlisted by slug), in CI
     verify: none
 amendments:
   - row: installer-names-no-vk-residue
