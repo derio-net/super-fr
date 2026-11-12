@@ -39,7 +39,7 @@ steps:
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-12T11:58:28+00:00'
           agent: afa0f3c894beadb6b
@@ -49,6 +49,11 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
+          returned: '2026-11-12T13:06:04+00:00'
+          outcome: done
+        evidence:
+          tests: p1-suite.log@0491e1afc51f;tree=c8b9113639a579a4c41bb1bd948d5de0381bef583808d62c1ed8fb82af042daa
+          visual: none
   journal-check:
     state: pending
   deliver:
