@@ -1,0 +1,7 @@
+schema_version: 11
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+step: plan
+outcome: done
+journal: []
+emitted: {plan: docs/superpowers/plans/2026-11-12-front-page-second-pass}
+evidence: {}
