@@ -37,7 +37,18 @@ journal:
       Replaces the removed archive retarget: `check.archived_counterpart` (reusing archive_twin
       and the plans mapping) accepts a same-repo ref whose `implemented/` counterpart exists;
       no fragment is rewritten, so merged rows stay immutable.
+  - kind: finding
+    id: p3-set-status-on-merged-row-is-an-amendment
+    phase: 3
+    review_scope: in
+    title: "Refiled from p2-interim-set-status-on-merged-row: set-status on a merged row must become an amendment"
+    body: |
+      Phase 2's interim set-status rewrites a merged row in place, which the fold ignores
+      (keeps the merged copy, adds a notice). This is phase 3's deliverable (R16: set-status
+      on a merged row becomes an amendment); filed against phase 3 so it gates that review
+      and this PR, rather than phase 2's.
 resolves:
+  - {id: p2-interim-set-status-on-merged-row, state: deferred, tracked_by: "derio-net/super-fr#1379", body: "Refiled against phase 3 of this same PR as p3-set-status-on-merged-row-is-an-amendment, which gates phase 3's review; #1379 tracks the acceptance-fragments-amendments row."}
   - {id: p2-r1, state: fixed, body: "2c4d75fd2: the 4->5 hop renders no reports; commit_paths drops paths neither on disk nor in the index. Test red on old code."}
   - {id: p2-r2, state: fixed, body: "2ac63080e: the split deletes and lists only reports git tracks (ls-files). Test red on old code."}
   - {id: p2-r3, state: fixed, body: "e9eacca8a: legacy.parse_matrix_v5_body used by every 4->5 check; tripwire forbids parse_matrix/load_matrix in fr/artifacts/matrix_*.py."}
