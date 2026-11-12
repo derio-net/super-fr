@@ -44,11 +44,29 @@ guide in the PR body are separate specs and are not designed here.
   (`fr journal resolve --state out-of-scope`).
 - **Journals.** `fr.journal.model.JournalEntry` is closed-world with a closed
   `kind` vocabulary; the `journal` artifact kind is at version 3, and each new
-  entry kind so far moved it (2, 3). Every agent step of the flow emits a
-  journal (`journal:spec` or `journal:plan`) through its step record.
+  entry kind so far moved it (2, 3). Every agent step of the flow except
+  `deliver` emits a journal through its step record, and an entry lands in the
+  scope its step emits (`fr.workflow.artifacts.journal_scope`): on the light
+  shape `spec-plan-review` runs after `plan` and still writes the spec journal.
+  The record's `JournalItem` (`fr/record/model.py`) is closed-world too, and the
+  `record` kind is at version 11.
+- **Evidence targets.** `run_cmd._evidence_target` knows two targets: a phase
+  unit against the plan journal, and a flat step against the spec journal. A
+  flat step that emits `journal:plan` has none, and `review`, `reviewer` and
+  `findings` are refused for it. `reviewer` holds one dispatch id. An evidence
+  name must be in `_VERIFIABLE_EVIDENCE`, and a derived one in
+  `DERIVED_EVIDENCE` and `_DERIVED_FROM`, or the resolve refuses it.
+- **`advance` and agent steps.** `fr run advance` never completes a
+  `kind: agent` step; it prints a brief and opens a dispatch, and only
+  `fr run resolve` moves the cursor past it.
+- **`.fr/ci.yaml`.** `fr/run/ci_evidence.declared_gates` reads it as the union
+  of the default branch's copy and HEAD's: a branch can add a gate and never
+  drop one its base declares.
 - **Step drift.** `run_cmd._check_step_drift` refuses a run whose manifest
-  gained or lost a step id since `fr run start`; `fr run reshape` inserts a new
-  step pending and keeps every unit. Adding `journal-check` did exactly this.
+  gained or lost a step id since `fr run start`, wherever its cursor is.
+  `fr run reshape` inserts a new step pending and keeps every unit, but only
+  when the new step is after the cursor; otherwise it refuses and names
+  `fr run adopt <plan-dir> --supersede`.
 - **Repo-over-shipped resolution.** Workflows and verification strategies ship
   under `plugins/super-fr/` with a generated copy in the `fr` wheel; a repo may
   add or override them. Neither is mirrored to OpenCode or Hermes.
@@ -72,17 +90,17 @@ context-window point.
 
 R1. fr ships four lenses: `security`, `tests`, `simplicity` and `errors`. Each has an id, a one-line title and the instruction text a reviewer is given.
 R2. A repo may, in `.fr/lenses.yaml`, add a lens of its own, replace a shipped lens's title and instruction text, and disable a shipped lens. The repo's **effective lenses** are the shipped ones not disabled, with replacements applied, plus the repo's own.
-R3. `fr lenses list` prints the effective lenses and where each comes from; `fr lenses show <id>` prints one lens's instruction text; `fr lenses check` fails a `.fr/lenses.yaml` that is unreadable, names an unknown key, disables or requires a lens that does not exist, or defines a lens with no instruction text. The three commands write nothing and run on a repository whose artifacts are stale.
+R3. `fr lenses list` prints the effective lenses and where each comes from; `fr lenses show <id>` prints one lens's instruction text; `fr lenses check` fails a `.fr/lenses.yaml` that is unreadable, names an unknown key, defines a lens whose id is not lower-case letters, digits and hyphens starting with a letter, defines a lens with no instruction text, disables or requires a lens that does not exist, or disables a lens that a path rule requires. The three commands write nothing and run on a repository whose artifacts are stale.
 R4. Any agent step of a run, from brainstorm to the phase reviews and the lens review itself, may add an effective lens to the feature with a reason, through its step record or from the command line. Adding is all an agent can do: a lens once added is never removed, and adding one already present keeps both reasons. An addition naming a lens that is not effective, or carrying no reason, is refused. The briefs and prompts of the existing steps are otherwise unchanged; in particular a phase reviewer is given no lens text.
-R5. Additions are recorded in the run's journals, in the spec journal before a plan exists and in the plan journal after, each naming the lens, the reason, and the step that added it. `fr lenses status` prints the lenses accumulated for the current run with their reasons.
-R6. `.fr/lenses.yaml` may hold path rules, each a list of path globs and the lenses those paths require. A lens is part of a feature's lens set when any file the feature changed matches a rule that requires it, whether or not an agent added it.
+R5. An addition is recorded in the journal the adding step writes (the spec journal or the plan journal), naming the lens, the reason and, when it came through a step record, the step that added it. `fr lenses status` prints the lenses accumulated for the current run with their reasons.
+R6. `.fr/lenses.yaml` may hold path rules, each a list of path globs and the lenses those paths require. The rules in force are those on the repository's default branch together with those on the branch: a branch can add a rule and cannot drop or weaken one its base holds, nor disable a lens a rule in force requires. A lens is part of a feature's lens set when any file the feature changed matches a rule in force that requires it, whether or not an agent added it.
 R7. The feature's **lens set** is every lens an agent added plus every lens a path rule requires for the files the feature changed, computed from the branch as it stands when it is read. `fr lenses status` shows, for a lens a rule requires, the rule and one matching file.
 R8. Both shipped workflows run a `lens-review` step after the last phase review's check and before `deliver`. Its brief names each lens in the set with its instruction text, the reasons recorded for it or the rule that requires it, and the exact rule for what a reviewer returns (R9). The orchestrator dispatches one reviewer per lens, each given only its own lens, over the feature's whole diff.
-R9. A lens reviewer ends its return with a fenced `review-lens` block naming its lens and at least one file the feature changed that it examined, and with the findings block reviewers already return, each finding tagged in scope or out of scope. In-scope findings are fixed and out-of-scope findings are filed by the rules the phase reviews use.
-R10. Where fr can read the reviewers' returns, `fr run resolve` refuses the `lens-review` step `done` while a lens in the set, as computed at that resolve, has no reviewer's block; a block names no file the feature changed or names a file it did not change; one reviewer's block names more than one lens; a returned finding is missing from the plan journal or carries another scope tag there; or a finding the lens review raised is still open. The refusal names the lens and, for a lens a rule requires, the rule and a matching file. Where fr cannot read a return, the check is noted unobserved exactly as the phase review's is today.
-R11. fr records the outcome on the step as derived evidence that the orchestrator cannot pass: per lens, how many files were examined and which findings were raised. When the lens set is empty the step completes with that evidence reading `none`, and no reviewer is dispatched.
+R9. A lens reviewer ends its return with a fenced `review-lens` block naming its one lens and at least one file the feature changed that it examined, and with a findings block whose ids carry the lens's id, each finding tagged in scope or out of scope. In-scope findings are fixed and out-of-scope findings are filed by the rules the phase reviews use.
+R10. `fr run resolve` refuses the `lens-review` step `done` while a lens in the set, as computed at that resolve, has no reviewer named for it; a named reviewer is not an agent this session dispatched after the step opened; or a finding the lens review raised is still open. Where fr can read the reviewers' returns it also refuses while a named reviewer's return has no block for its lens, a block names no file the feature changed or names a file it did not change, or a returned finding is missing from the plan journal or carries another scope tag there. A refusal over a lens names it, prints that lens's instruction text and, for a lens a rule requires, the rule and a matching file. Where fr cannot read a return, those checks are noted unobserved, as the phase review's are today.
+R11. fr records the outcome on the step as derived evidence that the orchestrator cannot pass: per lens, how many files were examined, or that the return was not observable, and which findings were raised. When the lens set is empty the step's brief says so and the step resolves with no reviewer dispatched and that evidence reading `none`.
 R12. The PR body `deliver` renders carries a "Review lenses" section: each lens in the set with why it is there (the steps that added it and their reasons, or the rule), the number of files examined, and each finding with how it closed. When the set was empty the section says that no lens was requested for this change. A change to `.fr/lenses.yaml` on the branch is stated in that section. Under `forge.pr_body: minimal` the section is in the durable render only.
-R13. A run started before this feature is not lost: `fr run reshape` inserts `lens-review` pending into a run that has not yet delivered and keeps every unit, and a journal written before this feature, holding no lens addition, reads as an empty set.
+R13. A run started before this feature is not lost: `fr run reshape` inserts `lens-review` pending into a run whose cursor has not reached `deliver` and keeps every unit; a run already at `deliver` is carried onto the new shape by `fr run adopt <plan-dir> --supersede`, which keeps its units and evidence; and a journal written before this feature, holding no lens addition, reads as an empty set.
 R14. The `fr-goal`, `fr-brainstorming`, `fr-plan` and `fr-execute` skills and the phase-executor and spec-reviewer agents tell their reader that it may add a lens and how; the `fr-goal` skill tells the orchestrator to run the lens review, one reviewer per lens, with the brief's text verbatim; and an operator page documents lenses, `.fr/lenses.yaml` and the four shipped instruction texts.
 
 ## 3. Design
@@ -105,7 +123,8 @@ riding `install.sh`'s wholesale marketplace sync). New package `fr/lenses/`:
 `model.py` (manifest and config, closed-world), `resolve.py`
 (`effective_lenses`), `check.py`, `rules.py` (path rules), `accumulate.py`
 (`lens_set`, R7) and `review.py` (the brief text and the block parser, beside
-`fr/run/review_return.py`, which it reuses and does not change).
+`fr/run/review_return.py`, whose finding-id grammar becomes a parameter so
+both reviews share one parser).
 
 The four shipped instruction texts say what to look for across the whole
 change, and where to send what does not belong to the lens:
@@ -148,36 +167,58 @@ require:
     lenses: [security]
 ```
 
-It is read from the working tree at HEAD, like `.fr/docs.yaml` and
-`.fr/ci.yaml`. A branch can therefore loosen it; R12 makes that visible on the
-pull request, where the operator decides.
+Lens definitions, replacements and `disable` are read from the working tree
+at HEAD. Path rules follow `.fr/ci.yaml`'s precedent
+(`ci_evidence.declared_gates`): the rules in force are the union of the default
+branch's `require:` and HEAD's, so one PR can add a repo's first rule and use
+it, and no PR can remove a rule from under itself. `fr lenses check` refuses a
+HEAD config that disables a lens a rule in force requires. A branch may still
+replace a lens's instruction text; R12 states any change to the file on the
+pull request. With no resolvable default ref (a repo with no remote), HEAD's
+rules are the rules in force.
+
+A lens id matches `^[a-z][a-z0-9-]*$`, so it is safe as a journal header token
+and inside an entry or finding id.
 
 `fr lenses` (`commands/lenses_cmd.py`) has `list`, `show`, `check` and `status`,
 all read-only, and joins `fr.artifacts.trigger.READ_ONLY_COMMANDS`.
 
 ### 3.B Adding a lens
 
-An addition is a journal entry of a new kind, `lens`: the lens id in a header
-token (`lens=<id>`), the reason as the body, the adding step recorded with it.
-A new entry kind is a journal shape change: the `journal` kind moves to version
-4 with a registered migration and a validator, as kinds 2 and 3 did, and this
-repo's own journals are migrated in the same PR.
+An addition is a journal entry of a new kind, `lens`. Its header carries
+`lens=<id>` and, when it came through a step record, `step=<step-id>`, which fr
+stamps from the record's own step (never supplied by the agent); `phase=` is
+stamped from a phase unit as it is for other entries, and a `lens` entry in the
+plan journal from a non-phase step is global. The entry's title is the reason,
+one line; the body is optional detail. `lens` joins `_STAMPING_KINDS`, and the
+model accepts `lens=` and `step=` on a `lens` entry only.
+
+Two artifact shapes move, each with its stamp bump, registered migration and
+validator in this PR, and this repo's own artifacts migrated in it:
+
+- the `journal` kind, 3 to 4 (a new entry kind, as `owed` and `op` were);
+- the `record` kind, 11 to 12: `JournalItem` gains an optional `lens` field,
+  valid on `kind: lens` only.
 
 Two ways in, one writer (`fr.record.apply`):
 
-- a step record's `journal:` section — `{kind: lens, lens: security, body:
-  "<why>"}` — available to every agent step, since each already emits a journal;
-- `fr journal add --kind lens --lens <id> --body "<why>"`, for work with no run.
+- a step record's `journal:` section — `{kind: lens, lens: security, title:
+  "<why, one line>"}` — in every step that emits a journal. `deliver` emits
+  none; by then the lens review is over.
+- `fr journal add --scope <spec|plan> --slug <slug> --kind lens --lens <id>
+  --title "<why>"`, with `--phase N` or `--global` under `--scope plan` as for
+  any entry. This path records no step.
 
-The entry's id is assigned by fr (`lens-<id>-<n>`), so two agents adding the
-same lens never collide. There is no resolution record for a `lens` entry:
-nothing closes or withdraws it.
+fr assigns the entry id (`lens-<id>-<n>`), so two agents adding one lens never
+collide. A `lens` entry takes no resolution record: nothing closes or withdraws
+it.
 
 `lens_set(repo_root, run)` is the one definition of R7: the distinct lens ids
 of every `lens` entry in the run's spec and plan journals, plus the lenses of
-every path rule matched by a file in the feature's diff (the proportionality
-diff, same exemptions), restricted to effective lenses. A journalled lens the
-repo has since disabled is dropped with a warning naming it.
+every rule in force matched by a file in the feature's diff (the
+proportionality diff, same exemptions), restricted to effective lenses. A
+journalled lens the repo has since disabled is dropped with a warning naming
+it; a lens a rule requires cannot be disabled (§3.A).
 
 ### 3.C The lens review
 
@@ -195,12 +236,12 @@ repo has since disabled is dropped with a warning naming it.
     evidence: [lenses, review, reviewer, findings]
 ```
 
-**Advance.** With an empty set, `fr run advance` completes the step itself
-(`lenses=none`) and moves on to `deliver`, as it does for a `cli` step. With a
-non-empty set it prints a brief whose `lens_review` key holds, per lens: the
-title and instruction text, the recorded reasons or the matching rule and file,
-the letter that lens's reviewer uses in finding ids, the diff's merge-base, and
-the return rule.
+**Advance.** `fr run advance` is not changed: it prints the step's brief, as
+for any agent step. The brief's `lens_review` key holds the set. For each lens:
+its title and instruction text, the recorded reasons or the matching rule and
+file, the diff's merge-base, and the return rule with that lens's finding-id
+prefix. With an empty set the key says so, and the orchestrator resolves the
+step at once with a record that names no review and no reviewer.
 
 **Return.** One reviewer per lens. Each ends with:
 
@@ -211,18 +252,45 @@ examined: src/auth/session.py, src/auth/token.py
 ```
 ````
 
-and the existing `review-findings` block. Finding ids are `l<letter>-r<k>`, the
-letter from the brief, so the existing parser needs one more accepted prefix and
-its several-reviewers rule (no id returned twice) applies as it stands. Lens
-findings are plan-journal findings with no phase.
+and a `review-findings` block whose ids are `l-<lens>-r<k>` (`l-security-r1`).
+The id carries the lens, so it does not move when the set grows and needs no
+letter. `parse_review_findings` takes the id grammar as an argument: the phase
+grammar stays its default, and the lens review passes
+`^l-[a-z][a-z0-9-]*-r[1-9][0-9]*$`; `fr/lenses/review.py` holds the
+`review-lens` parser and the lens version of the brief rule.
+
+**A third evidence target.** `_evidence_target` gains a feature-level target
+for a flat step that emits `journal:plan`: the plan journal, no phase. Each
+consumer is routed through it:
+
+- `review`: a `kind=review` plan-journal entry, global, created after the step
+  opened. Not owed when the set is empty.
+- `reviewer`: on this step the value is a map, one `<lens>=<dispatch-id>` per
+  lens in the set, comma-separated. fr refuses a lens with no id, an id named
+  for two lenses, and, where the session is readable, an id this session did
+  not dispatch after the step opened. Not owed when the set is empty.
+- `findings`, derived: the lens review's findings are the plan-journal
+  findings whose id matches the lens grammar, journalled global. Refused while
+  any is effectively open. Other plan findings are not this gate's.
+- the returned-findings check: for each named reviewer whose return is
+  readable, its `review-lens` block names the lens it was named for and files
+  in the feature's diff, and every id in its findings block carries that lens
+  and is journalled with the same scope tag.
 
 **Resolve.** `lens_set` is computed again at resolve, so a lens added during
-the review, or a path rule newly matched by a fix, is owed before the step
-closes. The checks of R10 run through the existing refusal path, before any
-byte is written. `review` and `reviewer` are held as on a phase review: a
-`kind=review` plan-journal entry created after the step opened, and dispatch
-ids this session dispatched after it opened. `findings` is derived: refused
-while any `l…` finding is effectively open in the plan journal.
+the review, or a rule newly matched by a fix, is owed before the step closes.
+A refusal over such a lens prints its instruction text and return rule, which
+is the brief for the reviewer still to be dispatched. Every check runs through
+the existing refusal path, before any byte is written.
+
+**Evidence (R11).** `lenses` is registered as derived (`DERIVED_EVIDENCE`,
+`_VERIFIABLE_EVIDENCE`, `_DERIVED_FROM`, and a witness in
+`_verified_evidence`), so the brief and the record template never list it as
+owed and passing it is refused. It reads
+`security=2:l-security-r1,l-security-r2;tests=5:none`, or `none` for an empty
+set. Where a return is not readable the count is `unobserved`
+(`security=unobserved:l-security-r1`, findings taken from the journal) and the
+unit carries `unobserved=reviewer-return`.
 
 **Fixes.** The orchestrator receives the reviews as it does a phase review's:
 each in-scope finding is fixed with a test or refuted with reasoning, each
@@ -230,13 +298,12 @@ out-of-scope finding is filed. Fixes are not sent back through the phase
 reviews; the suite `deliver` runs covers them, and a fix that touches a ruled
 path brings that lens into the set at resolve.
 
-**Evidence (R11).** `lenses` reads `security=2:la-r1,la-r2;tests=5:none`, or
-`none`. Passing it is refused.
-
 **Drift (R13).** `lens-review` is a new step id, so a run started earlier is
-refused by `_check_step_drift` until `fr run reshape <run-id> --yes` inserts it.
-A run already at or past `deliver` is not reshaped and finishes on the shape it
-started with.
+refused by `_check_step_drift` until it is moved. With the cursor on or before
+`journal-check`, `fr run reshape <run-id> --yes` inserts the step pending. With
+the cursor on `deliver`, reshape refuses (the step is behind the cursor) and
+the run is carried over with `fr run adopt <plan-dir> --supersede --yes`, which
+then owes the lens review before `deliver`.
 
 ### 3.D The PR body
 
@@ -244,12 +311,13 @@ started with.
 
 | Lens | Why | Files examined | Findings |
 |---|---|---|---|
-| security | rule `src/auth/**` (src/auth/session.py) | 2 | la-r1 fixed, la-r2 out of scope (#1432) |
+| security | rule `src/auth/**` (src/auth/session.py) | 2 | l-security-r1 fixed, l-security-r2 out of scope (#1432) |
 | tests | implement-phase 2: "the retry path is only tested with a mock" | 5 | none |
 
 or the single line "No lens was requested for this change." Finding states come
-from the plan-journal fold. The table shows a count of files; the reviewer's
-own lines are in its return. The section is not added to `REQUIRED_SECTIONS`, so
+from the plan-journal fold. The table shows a count of files, or "not
+observable" where fr could not read the return; the reviewer's own lines are in
+its return. An addition made from the command line shows no step. The section is not added to `REQUIRED_SECTIONS`, so
 an existing live PR is not refused for lacking it.
 
 ### 3.E Skills, agents and docs
@@ -290,10 +358,15 @@ Made in the spec:
 10. Additions are append-only with no removal: a lens that turns out not to
     matter costs one review that returns `none`, and a removable lens would
     need a waiver rule again.
-11. `.fr/lenses.yaml` is read from the branch, with the change surfaced on the
-    PR: a repo could otherwise not introduce its first rule and use it in one PR.
+11. Path rules are the default branch's together with the branch's, the rule
+    `.fr/ci.yaml` already follows: a PR can add a rule and use it, and cannot
+    remove one. Lens text is read from the branch and a change is stated on the
+    PR.
 12. The set is recomputed at resolve, not frozen when the step opens.
 13. Lens-review fixes are not re-reviewed.
+14. `fr run advance` keeps its rule of never completing an agent step: on an
+    empty set the orchestrator resolves the step itself.
+15. Lens finding ids carry the lens id, not a letter.
 
 ## 5. Risks
 
@@ -310,23 +383,26 @@ Made in the spec:
   does not prove attention.
 - **Large diffs.** Each reviewer reads the whole feature diff. On a very large
   feature that is expensive per lens and may exceed what one context reads well.
-- **Runs in flight need `fr run reshape`** after upgrading.
+- **Runs in flight need `fr run reshape`** after upgrading, or
+  `fr run adopt --supersede` when already at `deliver`.
 - **The unobserved case.** On a harness where fr cannot read a subagent's
-  return, R10's block checks are not enforced; the set, the dispatch-id check
-  and the open-finding check still are.
+  return, R10's block checks are not enforced and the PR shows the files
+  examined as not observable. That each lens has a named reviewer, the
+  dispatch-id check where the session is readable, and the open-finding check
+  still hold.
 
 ## Verification
 
 strategy: candidate
 - review-lenses-effective-set: candidate — scenario drives the installed `fr lenses list|show|check` over a fixture repo with and without `.fr/lenses.yaml`
-- review-lenses-accumulate: candidate — scenario: lenses added from step records at two steps and from the command line, `fr lenses status`, a refused unknown lens, and a reshaped older run
-- review-lenses-path-rules: candidate — scenario: a fixture run whose diff touches a ruled path with no agent addition, in `fr lenses status` and at the lens-review resolve
-- review-lenses-reviewer-return-checked: candidate — scenario: lens-review resolves with stubbed reviewer returns that are complete, lack one lens, and name a file the feature did not change; and an empty set completing with no dispatch
+- review-lenses-accumulate: candidate — scenario: lenses added from step records at two steps and from the command line, `fr lenses status`, a refused unknown lens, an older run reshaped before `deliver`, and one at `deliver` carried over by `adopt --supersede`
+- review-lenses-path-rules: candidate — scenario: a fixture run whose diff touches a ruled path with no agent addition, in `fr lenses status` and at the lens-review resolve; a branch that drops a rule its base holds; and `fr lenses check` refusing a disabled lens a rule requires
+- review-lenses-reviewer-return-checked: candidate — scenario: lens-review resolves with stubbed reviewer returns that are complete, lack one lens, and name a file the feature did not change; a reviewer named for a lens this session did not dispatch; and an empty set resolving with no reviewer
 - review-lenses-shown-on-pr: candidate — scenario: the rendered PR body of a fixture run with a rule lens, an agent lens, and of one with an empty set
 
 ## Test Plan
 
-Nothing is owed after merge: every row is proven on a candidate build before it.
+1. [developer] No post-merge step exists: every row is proven on a candidate build before merge. At close-out, record this step as not applicable (`fr closeout outcome --step 1 --na`).
 
 ## Implementation Plans
 
