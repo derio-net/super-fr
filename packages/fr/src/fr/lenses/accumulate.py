@@ -96,9 +96,10 @@ def _added(root: Path, spec_slug: str | None, plan_slug: str | None) -> dict[str
             entries = parse_journal(path.read_text())
         except JournalParseError as e:
             raise LensError(f"{path.name}: the {scope} journal does not parse: {e}") from e
-        for e in entries:
-            if e.kind == "lens" and e.lens is not None:
-                added.setdefault(e.lens, []).append(Reason(e.title, e.step, e.id, scope))
+        for entry in entries:
+            if entry.kind == "lens" and entry.lens is not None:
+                reason = Reason(entry.title, entry.step, entry.id, scope)
+                added.setdefault(entry.lens, []).append(reason)
     return added
 
 

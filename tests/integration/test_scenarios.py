@@ -250,6 +250,8 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "docs-check-flags-uncovered-change",
         "docs-check-structure",
         "review-lenses-effective-set",
+        "review-lenses-accumulate",
+        "review-lenses-path-rules",
         "docs-check-default-base-readonly",
         "acceptance-effective-matrix-fold",
         "acceptance-matrix-migration",
@@ -480,6 +482,14 @@ def test_docs_check_structure(installed: Path, tmp_path: Path) -> None:
 
 def test_review_lenses_effective_set(installed: Path, tmp_path: Path) -> None:
     _scenario("review-lenses-effective-set", installed, tmp_path)
+
+
+def test_review_lenses_accumulate(installed: Path, tmp_path: Path) -> None:
+    _scenario("review-lenses-accumulate", installed, tmp_path)
+
+
+def test_review_lenses_path_rules(installed: Path, tmp_path: Path) -> None:
+    _scenario("review-lenses-path-rules", installed, tmp_path)
 
 
 def test_docs_check_default_base_readonly(installed: Path, tmp_path: Path) -> None:
