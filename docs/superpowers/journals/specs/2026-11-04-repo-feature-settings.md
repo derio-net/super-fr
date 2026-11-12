@@ -811,3 +811,16 @@ answered_by: operator
 lowered:
 - placement-move-and-drift:kind
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-31 created=2026-11-12T00:17:40+00:00 -->
+### exit-change-31 · decision · exit change: row acceptance-fragments-amendments -> strategy candidate
+
+plan 2 (2026-11-12 run, #1379) builds this row; verified by this run's candidate walk with the row's own tests/scenarios/acceptance-fragments-amendments.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
