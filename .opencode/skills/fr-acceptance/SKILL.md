@@ -2,7 +2,7 @@
 name: fr-acceptance
 description: >
   Drive the acceptance matrix: backfill an existing repo's business-level
-  acceptance tests into docs/acceptance/matrix.yaml, flip row statuses as
+  acceptance tests into its per-feature fragments (docs/acceptance/features/), flip row statuses as
   evidence lands, and keep the CI gate honest. Use when: "backfill the
   acceptance matrix", "acceptance debt", "add acceptance rows", a session
   starts with an acceptance-debt nag, `fr acceptance check` fails, or a
@@ -11,7 +11,7 @@ description: >
 
 # fr-acceptance
 
-The matrix (`docs/acceptance/matrix.yaml`) is the registry of business-level acceptance tests × verification levels (unit/api/int/ui) × automation status. This skill drives the agent-side work; the mechanics live in the CLI.
+The acceptance matrix is the registry of business-level acceptance tests × verification levels (unit/api/int/ui) × automation status. Its rows live in per-feature **fragments**, `docs/acceptance/features/<spec-slug>.yaml`, each owned by the feature (spec) that created it (`legacy.yaml` for rows with no single origin spec); the matrix every command reads is a fold of them, never a stored file. A repo still holding the old single `docs/acceptance/matrix.yaml` is split by `fr migrate artifacts --yes`. This skill drives the agent-side work; the mechanics live in the CLI.
 
 **Announce at start:** "I'm using fr-acceptance to work the acceptance matrix." Check the setting first: If `fr settings show --json` reports `artifacts.acceptance` as `off`, this repo's matrix is disabled by repo setting: there is nothing to backfill, and `fr acceptance add`, `set-status` and `init` refuse. Stop there.
 
@@ -26,15 +26,16 @@ set-status`, never a hand-edit; when in doubt between ci and unwired,
 
 ## Backfill an existing repo
 
-1. `fr acceptance init` (idempotent) if the repo has no matrix — matrix +
-   rule + gitignore entry; a CI workflow only beside existing CI (or `--with-ci`).
+1. `fr acceptance init` (idempotent) if the repo has no `docs/acceptance/features/` —
+   that directory + rule + gitignore entry; a CI workflow only beside existing CI (or `--with-ci`).
 2. `fr acceptance backfill` — emits the inventory (Test Plan specs not yet
    cited, plans without linked rows, test-tree hints) + this protocol.
 3. DRAFT rows — **one row per business acceptance, not per test** — via
    `fr acceptance add --id <kebab> --capability <group> --acceptance
-   "<operator can X>" --origin <repo>:<path> --level unit=<repo>:<path>
-   --status <honest> --notes "<evidence / backfill owed>"`. Never hand-edit
-   YAML shapes; `add` validates and appends.
+   "<operator can X>" --origin spec:<slug>#R<n> --level unit=<repo>:<path>#<test>
+   --status <honest> --notes "<evidence / backfill owed>"`. The row lands in its
+   origin spec's fragment; a row citing no single spec needs `--feature <slug>`
+   (`legacy` for none). Never hand-edit a fragment; `add` validates and writes.
 4. `fr acceptance check` → fix errors (unresolved refs, staleness, schema),
    re-run until only honest warnings remain.
 5. Open a review PR: the operator audits every status.
@@ -45,8 +46,8 @@ When a plan phase carrying `acceptance: [row-ids]` completes, flip those rows
 up the ladder (`not-implemented` → `unwired` → `ci`/`scheduled`) with
 `fr acceptance set-status --id <row> --status <new> --notes "<why it moved>"
 --level unit=<repo>:<path>` — one command for the whole transition: it moves
-the row in place, adds the test refs that justify the move, and regenerates the
-three committed reports. `--notes` is required, and an unknown id is refused
+the row in place in the fragment that holds it and adds the test refs that justify
+the move; reports are derived, never committed. `--notes` is required, and an unknown id is refused
 rather than created (`add`'s job), as is `ci` in a repo with no CI config. Under `ci: none` (see `fr services`) the local suite is the gate: `ci` needs a declared or detected CI service.
 `fr plan edit --complete-phase` warns on unflipped rows — fix or record why in the completion note.
 
@@ -102,16 +103,19 @@ presented in the PR body ("rows added since brainstorm", generated via
 
 ## Refs, requirement origins and post-merge rows
 
-Refs are `<repo>:<path>[#anchor]` — own repo by its own name, sibling
-repos verified only where a checkout exists (`--sibling-root`, default `..`);
-a `.py` fragment names the test (`#TestX::test_y`), never a rotting `#L<n>`.
-Archived specs auto-resolve (`specs/` ↔ `implemented/specs/`) — `check` warns,
-never errors, on a moved ref. `fr acceptance report` renders the HTML;
+fr's own artifacts are cited **logically** — `spec:<slug>[#R<n>]` (the slug is the
+spec's file name without `-design.md`) and `plan:<slug>` — so archiving or moving them
+never rewrites a row; `add` writes a spec or plan path in that form. Other refs are
+`<repo>:<path>[#anchor]` — own repo by its own name, sibling repos verified only where a
+checkout exists (`--sibling-root`, default `..`); a `.py` anchor names the test
+(`#TestX::test_y`), never a rotting `#L<n>`. A path ref to an archived spec
+auto-resolves (`specs/` ↔ `implemented/specs/`) — `check` warns, never errors.
+`fr acceptance report` renders the HTML locally;
 `fr acceptance status` is the terminal nag; `fr acceptance digest` feeds the
 weekly "Acceptance debt" issue upsert.
 
 A row born from a spec's `## Requirements` list cites the requirement, not just
-the spec: `--origin <repo>:<spec-path>#R<n>` (repeat `--origin` for several ids).
+the spec: `--origin spec:<slug>#R<n>` (repeat `--origin` for several ids).
 A row only a live, operator-driven run can prove — never a unit test — carries `--verify live` (the old `post-merge` spelling migrates to it); it keeps nagging in `fr acceptance status` whatever its status, and the PR body lists it under `## Post-merge verification owed`. `--verify <strategy|none>` takes any strategy `fr verification list` resolves, or `none` (verified some other way; the spec's `## Verification` says what); `set-status --verify` sets it too, and omitting the flag preserves what the row already carries.
 
 ## Walks, issues and closing on live evidence

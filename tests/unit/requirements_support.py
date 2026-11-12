@@ -41,7 +41,7 @@ def write_matrix(repo: Path, rows: list[dict[str, object]]) -> Path:
     Returns the fragments directory."""
     from tests.unit.acceptance_helpers import FRAGMENTS_REL, write_fragments
 
-    write_fragments(repo, rows, repo=f"{ORG}/{REPO}")
+    write_fragments(repo, rows, repo=f"{ORG}/{REPO}", feature=None if rows else "legacy")
     return repo / FRAGMENTS_REL
 
 

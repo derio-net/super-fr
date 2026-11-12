@@ -14,7 +14,7 @@ from fr.acceptance.model import AcceptanceError, load_matrix
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import fragments_text, make_repo, row
 
 HEADER = "# header comment — must survive\nrows:\n"
 
@@ -184,14 +184,14 @@ def test_add_without_visual_writes_no_visual_key(
 ) -> None:
     root = make_repo(tmp_path, row())
     assert _invoke(root, monkeypatch, *ADD_ARGS).exit_code == 0
-    assert "visual" not in (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    assert "visual" not in fragments_text(root)
 
 
 def test_add_visual_refuses_a_name_duplicated_across_state_and_interaction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = make_repo(tmp_path, row())
-    before = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    before = fragments_text(root)
     result = _invoke(
         root,
         monkeypatch,
@@ -202,7 +202,7 @@ def test_add_visual_refuses_a_name_duplicated_across_state_and_interaction(
         "a",
     )
     assert result.exit_code == 2, result.output
-    assert (root / "docs" / "acceptance" / "matrix.yaml").read_text() == before
+    assert fragments_text(root) == before
 
 
 def test_set_status_preserves_visual(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

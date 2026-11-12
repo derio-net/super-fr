@@ -9,7 +9,7 @@ import pytest
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.acceptance_helpers import fragments_text, make_repo, row
 from tests.unit.settings_repo import git
 
 runner = CliRunner()
@@ -30,7 +30,7 @@ def test_acceptance_init_works_on_a_never_fetched_remote(
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     result = runner.invoke(app, ["acceptance", "init"])
     assert result.exit_code == 0, (result.output, result.exception)
-    assert (root / "docs" / "acceptance" / "matrix.yaml").is_file()
+    assert (root / "docs" / "acceptance" / "features").is_dir()
 
 
 def test_acceptance_add_works_on_a_never_fetched_remote(
@@ -60,4 +60,4 @@ def test_acceptance_add_works_on_a_never_fetched_remote(
         ],
     )
     assert result.exit_code == 0, (result.output, result.exception)
-    assert "boot-row" in (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    assert "boot-row" in fragments_text(root)

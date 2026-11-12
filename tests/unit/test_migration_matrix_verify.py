@@ -13,6 +13,10 @@ from fr.acceptance.model import load_matrix
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 
+from tests.unit.acceptance_helpers import matrix_registry_up_to_v5
+
+V5 = matrix_registry_up_to_v5()
+
 _V1_MATRIX = """\
 # header comment — must survive
 org: acme
@@ -47,9 +51,9 @@ def test_a_v1_matrix_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     one); what this pins is that the body is untouched throughout."""
     path = _matrix(tmp_path)
     before = path.read_text().splitlines(keepends=True)
-    kind = artifact_kind("matrix")
+    kind = V5.kind("matrix")
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     after = path.read_text().splitlines(keepends=True)
@@ -70,10 +74,10 @@ def test_a_v1_matrix_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
     path = _matrix(tmp_path)
-    run_migrations(tmp_path, dry_run=False)
+    run_migrations(tmp_path, dry_run=False, registry=V5)
     once = path.read_text()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.applied == ()
     assert path.read_text() == once
@@ -83,14 +87,13 @@ def test_an_unreadable_v1_matrix_is_refused_byte_identical(tmp_path: Path) -> No
     path = _matrix(tmp_path, _V1_MATRIX.replace("status: ci", "status: sheduled"))
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert path.read_bytes() == before
 
 
-def test_this_repos_own_matrix_is_current(repo_root: Path) -> None:
-    kind = artifact_kind("matrix")
-    assert (
-        kind.read_version(repo_root / "docs" / "acceptance" / "matrix.yaml") == kind.current_version
-    )
+def test_this_repo_carries_no_retired_matrix(repo_root: Path) -> None:
+    """The matrix kind retired at 6 (spec 2026-11-04 R19): this repo was split."""
+    assert artifact_kind("matrix").retired
+    assert not (repo_root / "docs" / "acceptance" / "matrix.yaml").exists()

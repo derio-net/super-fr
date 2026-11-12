@@ -98,7 +98,7 @@ class TestCiTypeDrivesScaffold:
         result = _invoke(root, monkeypatch, "init")
         assert result.exit_code == 0, result.output
         assert (root / GITHUB_WF).is_file()
-        assert GITHUB_WF in (root / "docs/acceptance/matrix.yaml").read_text()
+        assert GITHUB_WF in (root / ".claude" / "rules" / "acceptance-matrix.md").read_text()
 
     def test_ci_status_allowed_when_declared_without_any_config_file(self, tmp_path: Path) -> None:
         root = _repo(tmp_path, "ci: {type: github-actions}\n")
@@ -227,7 +227,7 @@ class TestMalformedCiDeclarationRefuses:
         (root / ".devcontainer" / "fr-profiles.yaml").write_text(
             PROFILES + "schema_version: 2\n" + block
         )
-        matrix = root / "docs" / "acceptance" / "matrix.yaml"
+        matrix = root / "docs" / "acceptance" / "features" / "s.yaml"
         before = matrix.read_text()
         result = _invoke(
             root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "n"

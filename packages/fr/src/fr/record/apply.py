@@ -188,6 +188,9 @@ class _Context:
     """The repo's `(org, repo)` — the Closes guard's — that a bare `#n` in a
     narrowing or a round names; `None` when it cannot be resolved, and then no
     narrowing is stamped."""
+    feature: str | None = None
+    """The run's spec as a fragment slug: the feature a new acceptance row of this
+    record belongs to when its origins name no single spec (spec 2026-11-04 R16)."""
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -234,6 +237,10 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         )
         if spec_rel is not None:
             slug = spec_journal_slug(Path(spec_rel).stem)
+    run_spec_rel = record.emitted.get("spec") or next(
+        (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
+        None,
+    )
     phase = run_cmd._item_phase(record.item) if record.item else None
     emits_ticks = "plan:ticks" in owner_emits
     current = state.steps.get(record.step)
@@ -255,8 +262,17 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         emits_ticks=emits_ticks,
         gate_answer=gate_answer,
         identity=_repo_identity(repo_root) if gate_answer is not None else None,
+        feature=_feature_of_spec(run_spec_rel),
     )
     return context, state
+
+
+def _feature_of_spec(spec_rel: str | None) -> str | None:
+    if not spec_rel:
+        return None
+    from fr.acceptance.fragment import fragment_slug_for_spec
+
+    return fragment_slug_for_spec(spec_rel)
 
 
 def _repo_identity(repo_root: Path) -> tuple[str, str] | None:
@@ -793,6 +809,7 @@ def _acceptance_writes(
     *,
     features: Mapping[str, str] | None = None,
     repo: str | None = None,
+    default_feature: str | None = None,
 ) -> tuple[dict[str, int], list[str]]:
     """The record's `acceptance:` entries as fragment writes (spec 2026-11-04 R16):
     a new row into the fragment of its one origin spec (or `features[id]`), an
@@ -1002,6 +1019,8 @@ def _acceptance_writes(
             feature = (features or {}).get(item.id)
             if feature is None:
                 slugs = {parse_logical(o).slug for o in row.origin if o.startswith("spec:")}
+                if len(slugs) != 1 and default_feature is not None:
+                    slugs = {default_feature}  # a run's row belongs to the run's spec
                 if len(slugs) != 1:
                     raise RecordRefusedError(
                         f"acceptance {item.id}: a row is owned by the feature of its one "
@@ -1136,6 +1155,7 @@ def apply_record(
         target.acceptance_drops,
         features=target.acceptance_features,
         repo=target.acceptance_repo,
+        default_feature=ctx.feature,
     )
     counts.update(row_counts)
     notices = (*journal_notices, *row_lines)

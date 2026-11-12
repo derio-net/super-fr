@@ -19,6 +19,10 @@ from fr.acceptance.model import AcceptanceError, load_matrix, parse_matrix
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 
+from tests.unit.acceptance_helpers import matrix_registry_up_to_v5
+
+V5 = matrix_registry_up_to_v5()
+
 _WALK = """\
     walks:
       - strategy: live
@@ -92,19 +96,20 @@ def _matrix(root: Path, text: str = _V4) -> Path:
     return path
 
 
-def test_the_matrix_kind_is_at_version_five() -> None:
-    assert artifact_kind("matrix").current_version == 5
+def test_the_matrix_kind_reached_version_five_before_it_retired() -> None:
+    assert artifact_kind("matrix").current_version == 6
+    assert V5.kind("matrix").current_version == 5
 
 
 def test_the_chain_from_one_reaches_five_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("matrix", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2, 3, 4, 5]
+    assert [s.to_version for s in chain][:4] == [2, 3, 4, 5]
 
 
 def test_skipped_rows_map_by_the_fixed_rule_and_nothing_else_moves(tmp_path: Path) -> None:
     path = _matrix(tmp_path)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     expected = (
@@ -140,7 +145,7 @@ def test_the_rewrite_is_written_once_and_atomically(
     monkeypatch.setattr(mod, "write_text_atomic", _spy)
     path = _matrix(tmp_path)
 
-    run_migrations(tmp_path, dry_run=False)
+    run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert calls == [path]
 
@@ -161,7 +166,7 @@ def test_the_committed_reports_are_regenerated_in_the_same_write(tmp_path: Path)
     for rel in REPORT_SET:
         (tmp_path / rel).write_text("stale\n")
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     want = render_committed_set(load_matrix(path), tmp_path)
@@ -174,7 +179,7 @@ def test_an_unresolvable_verify_leaves_the_matrix_byte_identical(tmp_path: Path)
     path = _matrix(tmp_path, _V4.replace("verify: candidate", "verify: no-such-strategy"))
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert "no-such-strategy" in report.failed[0].error
@@ -186,7 +191,7 @@ def test_an_unconvertible_flow_row_is_left_byte_identical(tmp_path: Path) -> Non
     path = _matrix(tmp_path, flow)
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert path.read_bytes() == before
@@ -196,7 +201,7 @@ def test_an_unreadable_v4_matrix_is_refused_byte_identical(tmp_path: Path) -> No
     path = _matrix(tmp_path, _V4.replace("status: ci", "status: sheduled"))
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert path.read_bytes() == before
@@ -207,7 +212,7 @@ def test_a_wholly_v5_body_under_a_v4_stamp_lets_the_runner_finish(tmp_path: Path
     body = _HEAD + _ROWS["ci-row"] + _ROWS["plain-row"].replace("skipped", "manual")
     path = _matrix(tmp_path, body)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert path.read_text() == body.replace("schema_version: 4\n", "schema_version: 5\n")
@@ -224,7 +229,7 @@ def test_a_v1_matrix_with_skipped_rows_climbs_the_whole_chain(tmp_path: Path) ->
     )
     path = _matrix(tmp_path, v1)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     m = load_matrix(path)
@@ -292,7 +297,7 @@ def test_the_old_scaffold_status_comment_is_replaced_by_the_current_one(tmp_path
     head = "# Row schema:\n" + _OLD_STATUS_COMMENT + "#   notes:      evidence detail\n"
     path = _matrix(tmp_path, head + _V4)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     text = path.read_text()
@@ -305,7 +310,7 @@ def test_a_customised_status_comment_is_left_alone(tmp_path: Path) -> None:
     custom = "#   status: our own words, skipped included\n"
     path = _matrix(tmp_path, custom + _V4)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert path.read_text().startswith(custom)
@@ -338,7 +343,7 @@ def test_a_report_render_failure_leaves_matrix_and_reports_byte_identical(
         (tmp_path / rel).write_text("stale\n")
     before = {p: p.read_bytes() for p in [path, *(tmp_path / rel for rel in REPORT_SET)]}
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert {p: p.read_bytes() for p in before} == before
@@ -353,7 +358,7 @@ def test_the_crash_window_still_regenerates_the_reports(tmp_path: Path) -> None:
     for rel in REPORT_SET:
         (tmp_path / rel).write_text("stale\n")
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert path.read_text() == body.replace("schema_version: 4\n", "schema_version: 5\n")
@@ -371,7 +376,7 @@ def test_a_skipped_row_whose_only_walk_failed_is_not_walked(tmp_path: Path) -> N
     )  # fmt: skip
     path = _matrix(tmp_path, body)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert {r.id: r.status for r in load_matrix(path).rows} == {

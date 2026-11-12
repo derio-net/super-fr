@@ -101,8 +101,10 @@ def test_twin_following_requires_git_for_siblings(tmp_path: Path) -> None:
 
 
 def _render(root: Path, rows_text: str) -> str:
-    write_matrix_fragments(root, MATRIX_HEADER + rows_text)
-    matrix = load_effective(root)
+    """`render` is a pure function of a `Matrix` (the fold's, in use): rows in order."""
+    from fr.acceptance.model import parse_matrix
+
+    matrix = parse_matrix(MATRIX_HEADER + rows_text)
     return render(matrix, _links(root, "local"), stamp="test-stamp", aggregates=True)
 
 
@@ -376,8 +378,8 @@ def test_report_check_detects_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     root = make_repo(tmp_path, row(id="a"))
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    # Mutate the matrix WITHOUT regenerating (simulates a hand-edited status flip).
-    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    # Mutate a fragment WITHOUT regenerating (simulates a hand-edited status flip).
+    matrix = root / "docs" / "acceptance" / "features" / "s.yaml"
     matrix.write_text(matrix.read_text() + row(id="b"))
     res = runner.invoke(app, ["acceptance", "report", "--check"])
     assert res.exit_code == 3, res.output

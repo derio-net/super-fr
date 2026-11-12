@@ -173,11 +173,11 @@ def test_a_dirty_checkout_is_refused(world: dict) -> None:
 
 
 def test_the_identity_is_the_origin_remote_not_the_matrix(world: dict) -> None:
-    m = world["work"] / "docs/acceptance"
-    m.mkdir(parents=True)
-    (m / "matrix.yaml").write_text("schema_version: 5\norg: evil\nrepo: elsewhere\nrows: []\n")
+    from tests.unit.acceptance_helpers import write_fragments
+
+    write_fragments(world["work"], [], repo="evil/elsewhere", feature="legacy")
     r = runner.invoke(app, ["debt", "archive-pr", "--yes"])
-    assert r.exit_code == 1 and "matrix names" in r.output
+    assert r.exit_code == 1 and "fragments name" in r.output
     assert _calls(world["gh"], "create_pr") == []
 
 

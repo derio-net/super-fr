@@ -14,12 +14,12 @@ from pathlib import Path
 import pytest
 import yaml
 from fr.acceptance.edit import insert_row, render_row_block
-from fr.acceptance.model import Row, load_matrix, parse_matrix
+from fr.acceptance.model import Row, parse_matrix
 from fr.acceptance.report import render_committed_set
 from fr.cli import app
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo
+from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, write_matrix_fragments
 
 runner = CliRunner()
 
@@ -119,8 +119,7 @@ def test_rendered_order_of_existing_rows_is_unchanged(tmp_path: Path) -> None:
 
 def test_add_cli_inserts_by_capability(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = make_repo(tmp_path, "", header="")
-    matrix_path = root / "docs" / "acceptance" / "matrix.yaml"
-    matrix_path.write_text(BASE)
+    (matrix_path,) = write_matrix_fragments(root, BASE)
     monkeypatch.setenv("VK_REPO_ROOT", str(root))
     result = runner.invoke(
         app,
@@ -142,7 +141,10 @@ def test_add_cli_inserts_by_capability(tmp_path: Path, monkeypatch: pytest.Monke
         ],
     )
     assert result.exit_code == 0, result.output
-    assert [r.id for r in load_matrix(matrix_path).rows] == ["a1", "b1", "a2", "a3", "b2"]
+    from fr.acceptance.fragment import parse_fragment
+
+    frag = parse_fragment(matrix_path.read_text(), source=f"x/{matrix_path.name}")
+    assert [r.id for r in frag.rows] == ["a1", "b1", "a2", "a3", "b2"]
 
 
 def test_scalar_continuation_starting_with_hash_stays_in_its_row() -> None:

@@ -26,6 +26,7 @@ def test_a_created_row_carries_visual_through_apply_record(tmp_path: Path) -> No
             "id": "basket-mode-visual",
             "capability": "Cap",
             "acceptance": "Operator can do X",
+            "origin": ["own:docs/superpowers/specs/s.md"],
             "status": "not-implemented",
             "visual": {"states": ["a"]},
         }

@@ -17,6 +17,10 @@ from fr.acceptance.model import AcceptanceError, load_matrix, parse_matrix
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 
+from tests.unit.acceptance_helpers import matrix_registry_up_to_v5
+
+V5 = matrix_registry_up_to_v5()
+
 _HEAD = """\
 # header comment — must survive
 schema_version: 3
@@ -74,7 +78,7 @@ def test_the_chain_from_one_passes_four_hop_by_hop() -> None:
 def test_post_merge_becomes_live_and_nothing_else_moves(tmp_path: Path) -> None:
     path = _matrix(tmp_path)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     # The chain continues to 5, which moves row b's `skipped` to `unwired`.
@@ -108,7 +112,7 @@ def test_the_rewrite_is_written_once_and_atomically(
     monkeypatch.setattr(mod, "write_text_atomic", _spy)
     path = _matrix(tmp_path)
 
-    run_migrations(tmp_path, dry_run=False)
+    run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert calls == [path]
 
@@ -119,7 +123,7 @@ def test_a_wholly_v4_body_under_a_v3_stamp_lets_the_runner_finish(tmp_path: Path
     body += "    scenario: tests/scenarios/b.sh\n"
     path = _matrix(tmp_path, body)
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     assert path.read_text() == body.replace("schema_version: 3\n", "schema_version: 5\n").replace(
@@ -134,7 +138,7 @@ def test_an_unconvertible_matrix_is_left_byte_identical(tmp_path: Path) -> None:
     path = _matrix(tmp_path, flow)
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert path.read_bytes() == before
@@ -144,7 +148,7 @@ def test_an_unreadable_v3_matrix_is_refused_byte_identical(tmp_path: Path) -> No
     path = _matrix(tmp_path, _V3.replace("status: ci", "status: sheduled"))
     before = path.read_bytes()
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert [f.path for f in report.failed] == [path]
     assert path.read_bytes() == before
@@ -155,7 +159,7 @@ def test_a_v1_matrix_with_post_merge_climbs_the_whole_chain(tmp_path: Path) -> N
     the old spelling would be refused at the first hop."""
     path = _matrix(tmp_path, _V3.replace("schema_version: 3\n", ""))
 
-    report = run_migrations(tmp_path, dry_run=False)
+    report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
     m = load_matrix(path)

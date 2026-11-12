@@ -17,6 +17,13 @@ import yaml
 FRAGMENTS_REL = "docs/acceptance/features"
 
 
+class _NoAliases(yaml.SafeDumper):
+    """A shared list (one `origin` tuple reused across rows) is written out each time."""
+
+    def ignore_aliases(self, data: Any) -> bool:
+        return True
+
+
 def _feature_of(row: Mapping[str, Any]) -> str:
     """The fragment a row belongs in: its one origin spec's slug, else `legacy`
     (the migration's rule, `fr.artifacts.matrix_fragments`)."""
@@ -80,7 +87,7 @@ def write_fragments(
         items = [dict(r) for r in rows]
         texts = []
         for r in items:
-            dumped = yaml.safe_dump([r], default_flow_style=False, sort_keys=False)
+            dumped = yaml.dump([r], Dumper=_NoAliases, default_flow_style=False, sort_keys=False)
             texts.append("".join(f"  {ln}\n" if ln else "\n" for ln in dumped.splitlines()))
     if feature is not None:
         groups[feature] = texts
@@ -121,6 +128,9 @@ def write_matrix_fragments(root: Path, matrix_text: str) -> list[Path]:
     if not data.get("rows"):
         # An empty matrix that named its repo keeps that identity in an empty fragment.
         return write_fragments(root, [], repo=repo, feature="legacy") if org and name else []
+    if re.search(r"(?m)[&*]id\d+\b", rows_text):
+        # A dumped fixture shares objects through anchors: split rows, not text.
+        return write_fragments(root, data["rows"], repo=repo)
     return write_fragments(root, rows_text, repo=repo)
 
 
@@ -209,3 +219,28 @@ def make_matrix_repo(
     stamp = "" if "schema_version" in header else "schema_version: 5\n"
     (root / RETIRED_MATRIX_REL).write_text(stamp + header + matrix_rows)
     return root
+
+
+def matrix_registry_up_to_v5() -> Any:
+    """A migration registry holding the matrix kind as it stood at version 5 (not
+    retired) and the shipped matrix hops up to 5: what the tests of the 1 → … → 5
+    hops run, so a migrated matrix is still there to read. The 5 → 6 split is
+    `test_migration_matrix_fragments.py`'s subject."""
+    from dataclasses import replace
+
+    import fr.artifacts  # noqa: F401  (registration rides on the package import)
+    from fr.artifacts.registry import ARTIFACT_KINDS
+    from fr.artifacts.runner import MIGRATIONS, MigrationRegistry
+
+    kind = replace(ARTIFACT_KINDS["matrix"], current_version=5, retired=False)
+    reg = MigrationRegistry(kinds={"matrix": kind})
+    for step in MIGRATIONS.schema_migrations("matrix"):
+        if step.to_version <= 5:
+            reg.register(step)
+    return reg
+
+
+def fragments_text(root: Path) -> str:
+    """Every fragment's text, in name order: what a test that compared the retired
+    matrix's bytes compares now."""
+    return "".join(p.read_text() for p in sorted((root / FRAGMENTS_REL).glob("*.yaml")))

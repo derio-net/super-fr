@@ -2,9 +2,10 @@
 
 ## Rule
 
-`fr` and the skills generate five kinds of artifact — plans, journals, runs,
-the acceptance matrix, specs — and every one of them declares the version it
-was written for (`fr.artifacts.registry`, spec
+`fr` and the skills generate kinds of artifact — plans, journals, runs, step
+records, usage files, acceptance fragments, specs and more (the registry lists them;
+the acceptance `matrix` kind is RETIRED, see below) — and every one of them declares
+the version it was written for (`fr.artifacts.registry`, spec
 `2026-08-30-artifact-migration-framework-design.md` §3.A). A node's installed
 `fr` changes whenever the plugin updates, mid-flight; the files on disk do not
 change with it.
@@ -90,6 +91,22 @@ So, when a change removes or moves a field:
    (`test_the_run_kind_is_reachable_all_the_way_from_version_one_to_five`:
    `[2, 3, 4, 5]`). It is this repo's only guard against two branches allocating
    the same version number, which has now happened twice.
+
+## Retiring a kind — its last hop deletes it
+
+**A kind that is replaced by another is retired by its own last migration, never by
+deleting its registry entry.** The `matrix` kind (`docs/acceptance/matrix.yaml`) was
+split into per-feature `acceptance-fragment` files (spec
+`2026-11-04-repo-feature-settings-design.md` R19). Its 5 → 6 hop,
+`fr.artifacts.matrix_fragments`, is a `SchemaMigration(..., retires=True)`: it reads the
+old body with the frozen `fr.acceptance.legacy.MatrixV5`, builds every fragment in memory
+and validates them with an in-memory fold, writes them, and deletes the matrix and its
+committed reports. The runner writes no stamp for a retiring step, fails the artifact if
+the path still exists, and stages the deletion (`PlannedAction.removed`). Only a kind's
+LAST hop may retire (`MigrationRegistry.register` refuses anything else), and the kind
+carries `retired=True`: a file still at its locator is stale, and `fr validate
+artifacts` says "retired kind: run fr migrate artifacts --yes". The kind stays in the
+registry so a repo that has not migrated yet still migrates.
 
 ## What the CLI-entry gate will and will not do
 

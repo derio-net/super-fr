@@ -75,6 +75,7 @@ def test_a_create_writes_every_new_field(tmp_path: Path) -> None:
             "id": "fresh",
             "capability": "Cap",
             "acceptance": "Operator can X",
+            "origin": ["own:docs/superpowers/specs/s.md"],
             "status": "not-implemented",
             "verify": "candidate",
             "scenario": "tests/scenarios/x.sh",

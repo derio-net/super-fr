@@ -202,8 +202,6 @@ def _only_reads(fake: FakeGhClient) -> list[str]:
 def _backfill_repo(tmp_path: Path) -> Path:
     import subprocess
 
-    import yaml
-
     root = tmp_path / "widgets"
     root.mkdir()
     for args in (
@@ -211,10 +209,9 @@ def _backfill_repo(tmp_path: Path) -> Path:
         ["remote", "add", "origin", f"https://github.com/{BACKFILL_REPO}.git"],
     ):
         subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
-    matrix = root / "docs" / "acceptance" / "matrix.yaml"
-    matrix.parent.mkdir(parents=True)
-    org, name = BACKFILL_REPO.split("/")
-    matrix.write_text(yaml.safe_dump({"schema_version": 5, "org": org, "repo": name, "rows": []}))
+    from tests.unit.acceptance_helpers import write_fragments
+
+    write_fragments(root, [], repo=BACKFILL_REPO, feature="legacy")
     return root
 
 

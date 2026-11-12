@@ -154,7 +154,6 @@ def test_attributed_accepts_the_shared_head_for_a_trusted_author_even_with_no_ru
 FILES = (
     "D\tdocs/superpowers/runs/r.yaml",
     "A\tdocs/superpowers/implemented/runs/r.yaml",
-    "M\tdocs/acceptance/matrix.yaml",
 )
 
 

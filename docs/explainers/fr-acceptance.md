@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 acceptance-fragments phase 2: rows live in per-feature fragments folded into the matrix, matrix.yaml and its committed reports are retired
+reviewed: 2026-11-12 acceptance-fragments phase 2 moves rows into per-feature fragments folded into the matrix and retires matrix.yaml and its committed reports
 ---
 
 ## Overview: claims, not tests

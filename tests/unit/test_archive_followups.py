@@ -348,14 +348,9 @@ def _matrix_repo(tmp_path: Path, *, with_matrix: bool = True, committed: bool = 
     _add_plan(repo, _SLUG, ticked=True, spec_name=_SPEC)
     _add_spec(repo, _SPEC, [("bm", "derio-net/test", _PLAN_REL)])
     if with_matrix:
-        from fr.acceptance.model import parse_matrix
-        from fr.acceptance.report import render_committed_set
+        from tests.unit.acceptance_helpers import write_matrix_fragments
 
-        acc = repo / "docs/acceptance"
-        acc.mkdir(parents=True)
-        (acc / "matrix.yaml").write_text(_MATRIX)
-        for rel, text in render_committed_set(parse_matrix(_MATRIX), repo).items():
-            (repo / rel).write_text(text)
+        write_matrix_fragments(repo, _MATRIX)
     _seed(repo)
     return repo
 
@@ -364,47 +359,20 @@ def _archive_plan(monkeypatch, repo: Path):
     return _invoke(monkeypatch, repo, FakeGhClient(), ["archive", f"{_PLAN_REL}"])
 
 
-def test_a_plan_archive_retargets_matrix_refs_and_regenerates_the_reports(tmp_path, monkeypatch):
-    from fr.acceptance.model import parse_matrix
-    from fr.acceptance.report import render_committed_set
+def test_a_plan_archive_rewrites_no_acceptance_fragment(tmp_path, monkeypatch):
+    """Rows cite fr artifacts logically, and a placement move never rewrites a row
+    (spec 2026-11-04 R18): the archive leaves every fragment byte-identical and
+    unstaged — even one whose path refs it moved (the retarget step is gone)."""
+    from tests.unit.acceptance_helpers import FRAGMENTS_REL
 
     repo = _matrix_repo(tmp_path)
+    before = {p: p.read_bytes() for p in (repo / FRAGMENTS_REL).glob("*.yaml")}
+    assert before
     result = _archive_plan(monkeypatch, repo)
     assert result.exit_code == 0, result.output
-    text = (repo / "docs/acceptance/matrix.yaml").read_text()
-    assert f"- own:{_SPEC_DONE}#s1" in text
-    assert f"- own:{_PLAN_DONE}/_meta.yaml" in text
-    assert f"notes: see own:{_SPEC_REL}" in text, "notes stay byte-identical"
-    for rel, want in render_committed_set(parse_matrix(text), repo).items():
-        assert (repo / rel).read_text() == want
-    assert f"  retargeted: r1 · own:{_SPEC_REL}#s1 → own:{_SPEC_DONE}#s1" in result.output
-    assert f"  retargeted: r1 · own:{_PLAN_REL}/_meta.yaml" in result.output
-    staged = _staged(repo)
-    for rel in ("docs/acceptance/matrix.yaml", *_REPORTS):
-        assert rel in staged
-
-
-def test_a_dirty_matrix_is_warned_about_and_nothing_is_touched(tmp_path, monkeypatch):
-    repo = _matrix_repo(tmp_path)
-    matrix = repo / "docs/acceptance/matrix.yaml"
-    matrix.write_text(_MATRIX + "# mid-edit\n")
-    result = _archive_plan(monkeypatch, repo)
-    assert result.exit_code == 0, result.output
-    assert "warning: matrix retarget skipped" in result.output and "uncommitted" in result.output
-    assert "RuntimeError" not in result.output
-    assert matrix.read_text() == _MATRIX + "# mid-edit\n"
-    assert "docs/acceptance/matrix.yaml" not in _staged(repo)
-
-
-def test_a_dirty_report_is_warned_about_and_nothing_is_touched(tmp_path, monkeypatch):
-    repo = _matrix_repo(tmp_path)
-    report = repo / _REPORTS[2]
-    report.write_text(report.read_text() + "\nhand edit\n")
-    result = _archive_plan(monkeypatch, repo)
-    assert result.exit_code == 0, result.output
-    assert "uncommitted" in result.output
-    assert (repo / "docs/acceptance/matrix.yaml").read_text() == _MATRIX
-    assert not {"docs/acceptance/matrix.yaml", *_REPORTS} & set(_staged(repo))
+    assert {p: p.read_bytes() for p in (repo / FRAGMENTS_REL).glob("*.yaml")} == before
+    assert not [rel for rel in _staged(repo) if rel.startswith(FRAGMENTS_REL)]
+    assert "retarget" not in result.output
 
 
 def test_no_matrix_is_a_silent_no_op(tmp_path, monkeypatch):
@@ -412,44 +380,3 @@ def test_no_matrix_is_a_silent_no_op(tmp_path, monkeypatch):
     result = _archive_plan(monkeypatch, repo)
     assert result.exit_code == 0, result.output
     assert "retarget" not in result.output
-
-
-def test_a_retarget_error_warns_and_touches_nothing(tmp_path, monkeypatch):
-    import fr.acceptance.retarget as rt
-
-    def boom(*a, **k):
-        raise rt.RetargetError("differs")
-
-    monkeypatch.setattr(rt, "retarget_text", boom)
-    repo = _matrix_repo(tmp_path)
-    result = _archive_plan(monkeypatch, repo)
-    assert result.exit_code == 0, result.output
-    assert "warning: matrix retarget skipped" in result.output and "differs" in result.output
-    assert "RetargetError" not in result.output
-    assert (repo / "docs/acceptance/matrix.yaml").read_text() == _MATRIX
-    assert "docs/acceptance/matrix.yaml" not in _staged(repo)
-
-
-def test_a_moved_then_exit_2_archive_still_retargets(tmp_path, monkeypatch):
-    import fr.archive as arch
-
-    def boom(*a, **k):
-        raise ArchiveError("boom")
-
-    monkeypatch.setattr(arch, "_archive_run", boom)
-    repo = _matrix_repo(tmp_path)
-    result = _archive_plan(monkeypatch, repo)
-    assert result.exit_code == 2, result.output
-    assert f"- own:{_PLAN_DONE}/_meta.yaml" in (repo / "docs/acceptance/matrix.yaml").read_text()
-
-
-def test_a_staged_only_matrix_change_is_not_dirty(tmp_path, monkeypatch):
-    """The worktree-vs-index check: a change already staged is not an edit."""
-    repo = _matrix_repo(tmp_path)
-    matrix = repo / "docs/acceptance/matrix.yaml"
-    matrix.write_text(_MATRIX.replace("Operator can do X", "Operator can do Y"))
-    _git(repo, "add", "docs/acceptance/matrix.yaml")
-    result = _archive_plan(monkeypatch, repo)
-    assert result.exit_code == 0, result.output
-    assert "Operator can do Y" in matrix.read_text()
-    assert f"- own:{_SPEC_DONE}#s1" in matrix.read_text()

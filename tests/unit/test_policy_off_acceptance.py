@@ -14,7 +14,7 @@ from fr.cli import app
 from fr.settings import DISABLED
 from typer.testing import CliRunner
 
-from tests.unit.acceptance_helpers import write_matrix_fragments
+from tests.unit.acceptance_helpers import fragments_text, write_matrix_fragments
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
 runner = CliRunner()
@@ -69,10 +69,10 @@ def test_a_record_acceptance_section_is_refused_and_bytes_restored(tmp_path: Pat
     git(root, "checkout", "-q", "main")
     land_on_main_local(root, OFF)
     git(root, "checkout", "-q", "feat/drops")
-    before = (root / "docs" / "acceptance" / "matrix.yaml").read_bytes()
+    before = fragments_text(root).encode()
     with pytest.raises(RecordRefusedError, match=DISABLED):
         apply_record(root, None, _move(), target=RecordTarget(message="m"))
-    assert (root / "docs" / "acceptance" / "matrix.yaml").read_bytes() == before
+    assert fragments_text(root).encode() == before
 
 
 def land_on_main_local(root: Path, text: str) -> None:

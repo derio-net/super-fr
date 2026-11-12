@@ -45,13 +45,14 @@ def _snaps(state: Path) -> list[Path]:
     return sorted((state / "snapshots").glob("*.json"))
 
 
-def _matrix(path: Path, rows: dict[str, str]) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    doc = {
-        "schema_version": 3,
-        "org": "example-org",
-        "repo": "widgets",
-        "rows": [
+def _matrix(root: Path, rows: dict[str, str]) -> Path:
+    """*rows* as acceptance fragments of the checkout at *root*; returns *root*."""
+    from tests.unit.acceptance_helpers import write_fragments
+
+    root.mkdir(parents=True, exist_ok=True)
+    write_fragments(
+        root,
+        [
             {
                 "id": rid,
                 "capability": "cap",
@@ -62,9 +63,9 @@ def _matrix(path: Path, rows: dict[str, str]) -> Path:
             }
             for rid, status in rows.items()
         ],
-    }
-    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
-    return path
+        repo="example-org/widgets",
+    )
+    return root
 
 
 def _checkout(tmp_path: Path, origin: str, rows: dict[str, str]) -> Path:
@@ -80,7 +81,7 @@ def _checkout(tmp_path: Path, origin: str, rows: dict[str, str]) -> Path:
         cwd=repo,
         check=True,
     )
-    _matrix(repo / "docs" / "acceptance" / "matrix.yaml", rows)
+    _matrix(repo, rows)
     return repo
 
 
@@ -146,7 +147,7 @@ def test_an_explicit_matrix_is_read_whatever_the_cwd(
     # A repo no sibling checkout is named after; its facts must say so (gh#886).
     facts = json.loads((state / "facts.json").read_text(encoding="utf-8"))
     (state / "facts.json").write_text(json.dumps({**facts, "scope": "other-org--other"}))
-    mx = _matrix(tmp_path / "elsewhere" / "matrix.yaml", {"row-z": "unwired"})
+    mx = _matrix(tmp_path / "elsewhere", {"row-z": "unwired"})
     _render(state, "--matrix", str(mx), repo="other-org/other")
     assert _stored_acceptance(state) == {"row-z": "unwired"}
 

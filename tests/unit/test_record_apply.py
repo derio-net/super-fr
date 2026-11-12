@@ -368,10 +368,7 @@ def test_an_absent_ref_drop_is_refused_and_changes_nothing(tmp_path: Path) -> No
 
     root = _matrix_repo(tmp_path)
     before, sha, files = _acceptance_files(root), head(root), snapshot(root)
-    assert {
-        f"docs/acceptance/{n}"
-        for n in ("report_local.html", "report_linked.html", "report_linked.md")
-    } <= set(before)
+    assert "docs/acceptance/features/s.yaml" in set(before)
     target = RecordTarget(
         message="m", acceptance_drops={"target": {"unit": ("own:tests/nope.py",)}}
     )

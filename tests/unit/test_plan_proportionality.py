@@ -20,6 +20,8 @@ from fr.proportionality import build_report, run_report
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
+from tests.unit.acceptance_helpers import write_matrix_fragments
+
 runner = CliRunner()
 SLUG = "2026-09-24-toy"
 
@@ -682,7 +684,7 @@ def _sized_repo(
     body += "## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|--|--|--|--|\n"
     _write(repo, SIZED_SPEC, body)
     if matrix != "":
-        _write(repo, "docs/acceptance/matrix.yaml", matrix or _sized_matrix())
+        write_matrix_fragments(repo, matrix or _sized_matrix())
     (repo / "docs" / "superpowers" / "plans").mkdir(parents=True, exist_ok=True)
     create(
         repo_root=repo,
@@ -775,7 +777,7 @@ def test_an_uncommitted_split_decision_does_not_change_the_report(tmp_path: Path
 def test_an_uncommitted_matrix_edit_does_not_change_the_report(tmp_path: Path) -> None:
     repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")])
     before = _phases_report(repo)
-    _write(repo, "docs/acceptance/matrix.yaml", _sized_matrix().replace("#R1", "#R4"))
+    write_matrix_fragments(repo, _sized_matrix().replace("#R1", "#R4"))
     assert _phases_report(repo) == before
 
 
@@ -815,11 +817,6 @@ def test_a_legacy_requirements_table_counts_the_same_asks(tmp_path: Path) -> Non
 def test_no_matrix_says_asks_cannot_be_derived(tmp_path: Path) -> None:
     repo = _sized_repo(tmp_path, [((), "agentic")], matrix="")
     assert "no acceptance matrix; asks cannot be derived." in _phases_report(repo)
-
-
-def test_a_matrix_naming_no_repo_says_asks_cannot_be_derived(tmp_path: Path) -> None:
-    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")], matrix=_sized_matrix(repo_key=False))
-    assert "matrix names no repo; asks cannot be derived." in _phases_report(repo)
 
 
 def test_a_plan_with_no_spec_says_asks_cannot_be_counted(tmp_path: Path) -> None:

@@ -616,7 +616,9 @@ def test_a_horizontal_rule_further_down_is_not_front_matter(tmp_path: Path) -> N
 # --- newer than this fr --------------------------------------------------
 
 
-@pytest.mark.parametrize("kind", sorted(EXPECTED_KINDS))
+@pytest.mark.parametrize(
+    "kind", sorted(k for k in EXPECTED_KINDS if not ARTIFACT_KINDS[k].retired)
+)  # a retired kind's file is reported retired, whatever its stamp
 def test_an_artifact_from_the_future_says_upgrade_fr_not_chain_gap(
     tmp_path: Path, kind: str
 ) -> None:
