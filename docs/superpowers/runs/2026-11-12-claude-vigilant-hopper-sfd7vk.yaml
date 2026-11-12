@@ -125,6 +125,14 @@ steps:
     stdout: |
       2 out-of-scope finding(s): p1-r8, p2-r11
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-12T14:58:49+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-12T14:58:49+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 671e7103-998b-587e-980b-da83b609e16c
 fr_version: 6.4.0rc3
 pr: https://github.com/derio-net/super-fr/pull/1420
