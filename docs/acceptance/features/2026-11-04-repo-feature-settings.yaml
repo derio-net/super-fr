@@ -259,3 +259,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_acceptance_retarget.py#test_other_repo_refs_notes_walks_and_comments_stay_byte_identical
     why: the retarget step and its tests are gone
+  - row: archive-retargets-matrix-refs
+    op: drop-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_retargets_matrix_refs_and_regenerates_the_reports
+    why: the retarget step and its tests are gone
