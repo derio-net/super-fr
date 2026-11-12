@@ -1,0 +1,227 @@
+schema_version: 11
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+- kind: finding
+  phase: 2
+  id: p2-r1
+  review_scope: in
+  title: pipeline figure numbers nine steps but the eight cards below number them differently
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r2
+  review_scope: in
+  title: '''The long read'' is in a centred 760px column offset from every other section, with a tight gap above'
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r3
+  review_scope: in
+  title: 'light scheme: dashed ''you act'' outlines look hatched because the solid panel stroke shows through'
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r4
+  review_scope: in
+  title: contrast test skips --you, --ok, --on-accent and --text-muted on --surface-2
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r5
+  review_scope: in
+  title: exit-gates copy says the spec names the gate and a person passes it; the linked page says more
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r6
+  review_scope: in
+  title: terminal, card 08 and figure state the Test Plan as unconditional
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r7
+  review_scope: in
+  title: wave figure's 'sleep, then repeat' and the unexplained 'after' are not on the wave-driver page
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r8
+  review_scope: in
+  title: gate figure says 'the fragments are consumed', undefined jargon
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r9
+  review_scope: in
+  title: pipeline figure's full-width animated dashed line carries no meaning
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r10
+  review_scope: in
+  title: at 390px the four fact tiles stack one per row
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r11
+  review_scope: out
+  title: shared top bar is cramped at 390 and wraps at 320, and its left edge differs between article pages and the landing
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r12
+  review_scope: in
+  title: pipeline figure lost its numerals but kept the empty top band in each box, so labels sit low
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: finding
+  phase: 2
+  id: p2-r13
+  review_scope: in
+  title: gate-ledger.svg rc.1 caption still says 'no fragment consumed'
+  body: Raised by the independent phase reviewer with screenshot or file evidence; see review entry p2-review.
+- kind: review
+  phase: 2
+  id: p2-review
+  title: 'independent review of phase 2: 13 findings'
+  body: 'Findings raised: p2-r1 to p2-r10, p2-r12, p2-r13 (in scope), p2-r11 (out of scope). The reviewer ran the targeted tests and ruff, checked every R10 refusal and its test, the reduced-motion structure, the copy against each linked page, built the site and took and opened its own screenshots (dark, light, 390px, 320px, 768px, reduced motion, each figure, interactions), then re-verified the fixes at df02e464 on fresh screenshots. p2-r12, p2-r13 and the figure part of p2-r5 were fixed afterwards and checked by the orchestrator on fresh screenshots.'
+resolves:
+- id: p2-r1
+  state: fixed
+  body: Numerals removed from both forms of the figure.
+- id: p2-r2
+  state: fixed
+  body: Left-aligned with the wrap, same top padding as its neighbours. This is also the implementer's finding p2-prose-alignment.
+- id: p2-r3
+  state: fixed
+  body: You-boxes use a fill-only panel under the dashed outline; tested.
+- id: p2-r4
+  state: fixed
+  body: Added to the contrast tests in both schemes.
+- id: p2-r5
+  state: fixed
+  body: Section 05, the facts tile and both forms of the gate figure now say the gate comes from the spec or is added for manual operations, and that the tester gate is passed by you or by the driver once its rows are walked.
+- id: p2-r6
+  state: fixed
+  body: All three say 'if there is one'.
+- id: p2-r7
+  state: fixed
+  body: The driver waits --interval seconds between passes; the page says so, the box reads 'wait, then repeat', and the figure defines after.
+- id: p2-r8
+  state: fixed
+  body: Now 'the final release is cut'.
+- id: p2-r9
+  state: fixed
+  body: Removed.
+- id: p2-r10
+  state: fixed
+  body: A 2x2 grid at 390 and 320.
+- id: p2-r11
+  state: out-of-scope
+  body: The top bar and bar.css were built in the first pass and are not changed by this run; its phone layout is a follow-up.
+- id: p2-r12
+  state: fixed
+  body: Labels moved up in the wide form; the narrow form's boxes were already centred. Checked on a fresh screenshot.
+- id: p2-r13
+  state: fixed
+  body: Now 'no final release yet'.
+- id: p2-prose-alignment
+  state: fixed
+  body: Same defect as p2-r2; the long-read section is left-aligned with the wrap.
+evidence:
+  review: p2-review
+  reviewer: a333bdd35bd10d2a6
+  model: claude-fable-5-2
+visual:
+- row: site-landing-two-acts
+  script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/cap.js
+  shots:
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/dark1280-00.png
+    shows:
+    - desktop-dark
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/dark1280-07.png
+    shows:
+    - desktop-dark
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/light1280-00.png
+    shows:
+    - desktop-light
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/dark390-00.png
+    shows:
+    - phone-width-390
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/follow-exit.png
+    shows:
+    - follow-exit-gates-section-link
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/follow-wave.png
+    shows:
+    - follow-wave-driver-section-link
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/follow-card.png
+    shows:
+    - follow-grid-card-link
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/follow-anchor.png
+    shows:
+    - jump-to-explainers-anchor
+- row: site-landing-figures
+  script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/cap.js
+  shots:
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark1280-0.png
+    shows:
+    - each-figure-desktop-dark
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark1280-1.png
+    shows:
+    - each-figure-desktop-dark
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark1280-2.png
+    shows:
+    - each-figure-desktop-dark
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark1280-3.png
+    shows:
+    - each-figure-desktop-dark
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-light1280-0.png
+    shows:
+    - each-figure-desktop-light
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-light1280-1.png
+    shows:
+    - each-figure-desktop-light
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-light1280-2.png
+    shows:
+    - each-figure-desktop-light
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-light1280-3.png
+    shows:
+    - each-figure-desktop-light
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark390-0.png
+    shows:
+    - each-figure-phone-width-390
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark390-1.png
+    shows:
+    - each-figure-phone-width-390
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark390-2.png
+    shows:
+    - each-figure-phone-width-390
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/fig-dark390-3.png
+    shows:
+    - each-figure-phone-width-390
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/art-fig.png
+    shows:
+    - figure-on-article-page
+- row: site-landing-look-and-motion
+  script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/cap.js
+  shots:
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/dark1280-01.png
+    shows:
+    - desktop-dark
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/light1280-01.png
+    shows:
+    - desktop-light
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/dark390-01.png
+    shows:
+    - phone-width-390
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/rm1280-00.png
+    shows:
+    - reduced-motion
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/art-fr-audit.png
+    shows:
+    - article-page-unchanged
+  - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/review2/hover-card.png
+    shows:
+    - hover-card
