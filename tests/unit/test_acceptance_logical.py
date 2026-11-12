@@ -171,3 +171,45 @@ def test_a_spec_in_another_quiet_feature_root_resolves_there(
     assert found == other / f"docs/superpowers/specs/{SLUG}-design.md"
     assert resolution_problem(f"spec:{SLUG}#R1", tmp_path / "product") is None
     assert resolve_logical("spec:2026-01-01-nope", tmp_path / "product") is None
+
+
+def test_path_shaped_outputs_stay_relative_for_an_out_of_repo_feature_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance.logical import as_path_ref, origin_spec_path, resolve_logical_at
+    from fr.artifacts import paths
+
+    outside = tmp_path / "elsewhere" / "features" / "feat__other"
+    _touch(outside, f"docs/superpowers/specs/{SLUG}-design.md")
+    _touch(outside, "docs/superpowers/plans/2026-01-01-p/_meta.yaml")
+    monkeypatch.setattr(paths, "feature_roots", lambda _space: iter([outside]))
+    product = tmp_path / "product"
+    product.mkdir()
+
+    spec_ref = as_path_ref(f"spec:{SLUG}#R1", product, "o/r")
+    plan_ref = as_path_ref("plan:2026-01-01-p", product, "o/r")
+    origin = origin_spec_path(f"spec:{SLUG}#R1", product)
+    assert spec_ref == f"o/r:docs/superpowers/specs/{SLUG}-design.md#R1"
+    assert plan_ref == "o/r:docs/superpowers/plans/2026-01-01-p"
+    assert origin == f"docs/superpowers/specs/{SLUG}-design.md"
+    for out in (spec_ref, plan_ref, origin):
+        assert str(tmp_path) not in out and ":/" not in out
+
+    found = resolve_logical_at(f"spec:{SLUG}", product)
+    assert found is not None
+    assert found.feature_root == outside
+    assert found.rel.as_posix() == f"docs/superpowers/specs/{SLUG}-design.md"
+    assert found.path == outside / found.rel
+
+
+def test_path_shaped_outputs_are_unchanged_under_repo(tmp_path: Path) -> None:
+    from fr.acceptance.logical import as_path_ref, origin_spec_path, resolve_logical_at
+
+    _touch(tmp_path, f"docs/superpowers/specs/{SLUG}-design.md")
+    assert as_path_ref(f"spec:{SLUG}#R1", tmp_path, "o/r") == (
+        f"o/r:docs/superpowers/specs/{SLUG}-design.md#R1"
+    )
+    assert origin_spec_path(f"spec:{SLUG}", tmp_path) == f"docs/superpowers/specs/{SLUG}-design.md"
+    found = resolve_logical_at(f"spec:{SLUG}", tmp_path)
+    assert found is not None and found.feature_root == tmp_path
+    assert resolve_logical(f"spec:{SLUG}", tmp_path) == found.rel
