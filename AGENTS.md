@@ -108,6 +108,14 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
+    Both shipped shapes run `lens-review` between `journal-check` and
+    `deliver` (spec `2026-11-12-review-lenses` §3.C): `_evidence_target` has a
+    third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
+    journal, no phase, `feature=True`), which reads `reviewer` as a
+    `<lens>=<dispatch-id>` map over `lens_set` recomputed at resolve, gates
+    only `l-<lens>-r<k>` findings, and derives `lenses` (per lens, files
+    examined and findings raised; `none` for an empty set, which owes no
+    `review`/`reviewer`). Adoption never infers the lens review done.
     `fr/run/liveness.py` (2026-09-20 unit-record-unification §4.G, gh#518) is
     the ONE definition of "idle" — a run that is advanceable with nobody
     working on it: `is_idle` (pure) behind `fr run check --idle` (exit **3**),
@@ -313,7 +321,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `accumulate.py` (`lens_set`, the ONE definition of a feature's lens set: `lens` entries in
     the run's spec and plan journals plus rule-required lenses for the files
     `fr.proportionality.feature_diff` names; fail-closed: a rule-required lens that is not
-    effective, or a remote whose default branch or merge-base cannot be read, is a `LensError`). CLI: `fr lenses list|show|check|status`
+    effective, or a remote whose default branch or merge-base cannot be read, is a `LensError`), and
+    `review.py` (the `review-lens` block parser, `lens_review_rule`, the lens finding-id grammar
+    and the `lens_review` brief key). CLI: `fr lenses list|show|check|status`
     (`commands/lenses_cmd.py`), read-only, so `lenses` is in `READ_ONLY_COMMANDS`.
   - **Cloud triage** (2026-10-07 spec, `cloud-triage`) — the wave driver and its
     workers in Claude Code cloud sessions. `fr.forgeapi` resolves the one host
