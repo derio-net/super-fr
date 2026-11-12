@@ -132,15 +132,21 @@ steps:
           visual: none
           findings: p3-set-status-on-merged-row-is-an-amendment,p3-stray-r1-records-dir,p3-r1,p3-r2,p3-r3,p3-r4
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-12T06:40:25+00:00'
           agent: a486a36f328808793
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
+          model: claude-sonnet-5-5
           tier: standard
           bound: claude-sonnet-5
           session: 31d40c59-91eb-4b4d-ab0c-fcbf9d042106
+          returned: '2026-11-12T07:57:45+00:00'
+          outcome: done
+        evidence:
+          tests: p4-suite.log@f8c05ff6057f;tree=e7afb93ddf2aae3116e36ab245bf7c6000019319b077bf807bdf8d28c25257e4
+          visual: none
   journal-check:
     state: pending
   deliver:
