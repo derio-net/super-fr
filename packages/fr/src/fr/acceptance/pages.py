@@ -28,15 +28,26 @@ def from_github(raw: Any) -> str:
     return PUBLIC if value else CONTROLLED
 
 
-def from_gitlab(raw: Any) -> str:
-    """The project's `pages_access_level`: `private` and `enabled` limit the site to
-    project members (or, for `enabled`, to whoever can see the project); `public` opens
-    it to everyone; `disabled` means there is no site to read."""
-    level = raw.get("pages_access_level") if isinstance(raw, dict) else None
-    if level in ("private", "enabled"):
-        return CONTROLLED
+def from_gitlab(raw: Any, *, access_control: bool) -> str:
+    """The project's `pages_access_level` read with its `visibility` (GitLab Projects API
+    and Pages access-control docs). `private` limits the site to project members, and
+    `enabled` to everyone with access to the project, which is everyone on a public one;
+    both hold only where the instance enforces Pages access control (`access_control`:
+    gitlab.com always does; the API never proves it for a self-managed host). So:
+
+    - `private` is CONTROLLED only with access control confirmed;
+    - `enabled` is CONTROLLED only with it confirmed AND a private or internal project;
+    - `public` is PUBLIC; everything else (`disabled`, a missing or odd value) is UNKNOWN,
+      which fails closed."""
+    if not isinstance(raw, dict):
+        return UNKNOWN
+    level, project = raw.get("pages_access_level"), raw.get("visibility")
     if level == "public":
         return PUBLIC
+    if level == "private" and access_control:
+        return CONTROLLED
+    if level == "enabled" and access_control and project in ("private", "internal"):
+        return CONTROLLED
     return UNKNOWN
 
 

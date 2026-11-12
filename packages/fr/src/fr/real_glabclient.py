@@ -446,11 +446,14 @@ class RealGlabClient(UnsupportedBatchOps):
 
     @_hosted
     def pages_visibility(self, repo: str) -> str:
-        """The project's `pages_access_level`, via `glab api projects/:id`."""
+        """The project's `pages_access_level` and `visibility`, via `glab api projects/:id`."""
         from fr.acceptance.pages import UNKNOWN, from_gitlab
 
         try:
-            return from_gitlab(json.loads(self._api(f"projects/{quote(repo, safe='')}")))
+            raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
+            # gitlab.com (no host) always enforces Pages access control; a self-managed
+            # instance's setting is not in the API, so it is never assumed.
+            return from_gitlab(raw, access_control=self._host is None)
         except (_glab.GlabError, ValueError, OSError):
             return UNKNOWN
 

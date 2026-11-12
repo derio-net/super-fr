@@ -84,26 +84,49 @@ class TestGithub:
 
 
 class TestGitlab:
-    @pytest.mark.parametrize(
-        ("level", "expected"),
-        [
-            ("private", CONTROLLED),
-            ("enabled", CONTROLLED),
-            ("public", PUBLIC),
-            ("disabled", UNKNOWN),
-            ("surprise", UNKNOWN),
-        ],
-    )
-    def test_pages_access_level(self, monkeypatch, level, expected):
+    """Shape source: GitLab's Projects API docs (`pages_access_level`: disabled | private |
+    enabled | public; `visibility`: private | internal | public) and its Pages access-control
+    docs: `private` limits a site to project members, `enabled` to everyone with access to
+    the project (so everyone, on a public project), and both hold only where the instance has
+    Pages access control on, which gitlab.com always does. Not captured: no instance here."""
+
+    @staticmethod
+    def _serve(monkeypatch, level, visibility="private"):
         seen: list[list[str]] = []
 
         def run(args, **kwargs):
             seen.append(args)
-            return json.dumps({"id": 7, "pages_access_level": level})
+            return json.dumps({"id": 7, "pages_access_level": level, "visibility": visibility})
 
         monkeypatch.setattr(_glab, "_run_glab", run)
+        return seen
+
+    @pytest.mark.parametrize(
+        ("level", "visibility", "expected"),
+        [
+            ("private", "private", CONTROLLED),
+            ("private", "public", CONTROLLED),
+            ("enabled", "private", CONTROLLED),
+            ("enabled", "internal", CONTROLLED),
+            ("enabled", "public", UNKNOWN),  # everyone with access to a public project
+            ("enabled", "surprise", UNKNOWN),
+            ("public", "private", PUBLIC),
+            ("disabled", "private", UNKNOWN),
+            ("surprise", "private", UNKNOWN),
+        ],
+    )
+    def test_gitlab_com(self, monkeypatch, level, visibility, expected):
+        seen = self._serve(monkeypatch, level, visibility)
         assert RealGlabClient().pages_visibility("grp/sub/proj") == expected
         assert seen == [["api", "projects/grp%2Fsub%2Fproj"]]
+
+    @pytest.mark.parametrize("level", ["private", "enabled", "public"])
+    def test_self_managed_access_control_is_unproven(self, monkeypatch, level):
+        # the API does not say whether the instance enforces Pages access control
+        self._serve(monkeypatch, level, "private")
+        monkeypatch.setattr(_glab, "known_hosts", lambda: frozenset({"gitlab.example.com"}))
+        got = RealGlabClient(host="gitlab.example.com").pages_visibility("grp/proj")
+        assert got == (PUBLIC if level == "public" else UNKNOWN)
 
     def test_failure_and_missing_field_are_unknown(self, monkeypatch):
         def run(args, **kwargs):
