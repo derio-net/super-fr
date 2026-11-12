@@ -401,3 +401,87 @@ amendments:
     scenario: tests/scenarios/placement-move-and-drift.sh
     why: built by plan 3 (2026-11-12-placement-resolver) of the repo-feature-settings
       spec (R29), tracked in derio-net/super-fr#1380
+  - row: placement-quiet
+    op: set-status
+    base: 1
+    status: ci
+    notes: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet.py#test_an_origin_fr_switch_reads_as_quiet
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_up.py#test_a_deleted_fr_branch_makes_the_workspace_refuse_naming_both
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_writes.py#test_plan_and_journal_land_in_the_feature_path
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 5
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_writes.py#test_fr_never_commits_an_artifact_path_on_the_product_branch
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 6
+    level: unit
+    ref: super-fr:tests/unit/test_push_quiet.py#test_code_and_fr_go_in_one_atomic_push
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 7
+    level: unit
+    ref: super-fr:tests/unit/test_push_quiet.py#test_a_moved_fr_is_fetched_replayed_and_both_land
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 8
+    level: unit
+    ref: super-fr:tests/unit/test_settings_quiet.py#test_init_quiet_creates_and_pushes_the_orphan_fr_branch
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
+  - row: placement-quiet
+    op: add-level
+    base: 9
+    level: int
+    ref: super-fr:tests/integration/test_scenarios.py#test_placement_quiet
+    why: 'quiet placement built: switch, sticky state, fr worktree, atomic push, init
+      --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
+      not yet on the resolver are refused at the commit seam under quiet rather than
+      committed on the product branch'
