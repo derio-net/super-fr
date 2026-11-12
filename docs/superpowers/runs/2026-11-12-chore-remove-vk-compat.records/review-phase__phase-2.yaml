@@ -1,0 +1,80 @@
+schema_version: 11
+run: 2026-11-12-chore-remove-vk-compat
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: review
+    id: review-p2
+    phase: 2
+    title: Phase 2 code review, four findings, all in scope
+    body: |
+      A separate reviewer read the repair, the runner, the registry, the trigger and the
+      new tests against R9-R14, R16 and R20, ran 265 targeted tests, the three mirror
+      checks, `fr docs check`, `fr validate artifacts`, the migration preview and the
+      fragment check, and probed 33 rewrite inputs and the gate in scratch repos across
+      contexts. The rewrite lost or changed no byte in any input; the four walks matched
+      the spec's table except for one case (p2-r1). The executor's six deviations were
+      each judged correct: `MigrationReport.unrepairable`, `Repair.check`, the preview's
+      failures coming from `run_migrations(dry_run=True)`, the three archived plans
+      allowlisted by slug (they fail on the default branch too, over a `00.yaml`), the
+      own-artifacts test allowing archived actions for this one repair, and `fr_version`
+      in the fr-plan skill.
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: An archived file whose dry check passes but whose write fails kept the repo stale
+    body: |
+      `_scan_extra` counted a carrier in an unwritable directory as repairable; every
+      apply failed, so the gate re-migrated on every command and refused in the contexts
+      that may not write, against R12.
+  - kind: finding
+    id: p2-r2
+    phase: 2
+    review_scope: in
+    title: fr migrate artifacts said every artifact is current beside an unrepairable file
+    body: "`commands/migrate_cmd.py` tested only `applied` and `failed`."
+  - kind: finding
+    id: p2-r3
+    phase: 2
+    review_scope: in
+    title: Test gaps against the spec's section 6
+    body: |
+      One commit asserted only as a count on a fake callback; no CI-context case; no
+      first-line, empty-value or non-UTF-8 case; the allowlist's entries never asserted
+      to still fail.
+  - kind: finding
+    id: p2-r4
+    phase: 2
+    review_scope: in
+    title: A gitignored archived carrier lost the whole migration commit
+    body: "`git add` refuses an ignored path, so nothing was committed and the other paths stayed staged."
+resolves:
+  - id: p2-r1
+    state: fixed
+    body: |
+      `_scan_extra` classifies a carrier whose directory is not writable as unrepairable,
+      at scan time, so it is reported and never stale. Test: the unwritable-directory
+      case asserts `is_stale` false, an empty plan, the file byte-identical.
+  - id: p2-r2
+    state: fixed
+    body: The closing line is "nothing to migrate; N archived file(s) left as they are." Tested through the CLI.
+  - id: p2-r3
+    state: fixed
+    body: |
+      Added: the fake commit's report holds the live and archived paths; a real-git test
+      that live and archived repairs land in one commit with a clean tree; the CI
+      context (repaired in place, no commit); first-line and no-value rewrites; a
+      non-UTF-8 archived file; each allowlisted plan asserted to still fail. The
+      default-branch refusal with an archive-only carrier has no test of its own: the
+      refusal fires on `is_stale`, which the archive-only staleness test covers, and the
+      refusal itself is unchanged and tested in test_migration_trigger.py.
+  - id: p2-r4
+    state: fixed
+    body: |
+      `commit_migration` drops untracked paths git ignores before staging; the file is
+      still repaired. Real-git test added.
+evidence:
+  review: review-p2
+  reviewer: a728c20504178d5c3
