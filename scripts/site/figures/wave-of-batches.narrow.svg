@@ -1,0 +1,36 @@
+<svg viewBox="0 0 360 656" role="img" aria-labelledby="wave-of-batches-narrow--t">
+<title id="wave-of-batches-narrow--t">A wave of batches: a ranked backlog is grouped into batches, batches are placed in waves, and a batch can wait for another with after. Each batch ends in one pull request, and at most four batches are in flight at once. One driver pass merges what is ready, closes out what merged and dispatches the next batches.</title>
+<defs>
+<marker id="wave-of-batches-narrow--arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fig-ink"/></marker>
+</defs>
+<rect x="10" y="10" width="340" height="44" rx="8" class="fig-panel"/>
+<text x="24" y="38" class="fig-ink fig-text">ranked backlog: issues 1 to 5</text>
+<path d="M180 54 V80" class="fig-line" marker-end="url(#wave-of-batches-narrow--arrow)"/>
+<text x="10" y="102" class="fig-muted fig-small">WAVE 1</text>
+<rect x="10" y="110" width="340" height="82" rx="8" class="fig-panel"/>
+<text x="24" y="136" class="fig-ink fig-text">batch A, batch B</text>
+<text x="24" y="160" class="fig-muted fig-small">each → one pull request</text>
+<text x="24" y="180" class="fig-muted fig-small">no after: both may start now</text>
+<path d="M180 192 V222" class="fig-accent-line fig-flow" marker-end="url(#wave-of-batches-narrow--arrow)"/>
+<text x="196" y="212" class="fig-muted fig-small">after merged</text>
+<text x="10" y="244" class="fig-muted fig-small">WAVE 2</text>
+<rect x="10" y="252" width="340" height="82" rx="8" class="fig-panel"/>
+<text x="24" y="278" class="fig-ink fig-text">batch C, batch D</text>
+<text x="24" y="302" class="fig-accent fig-small">C after A, D after B</text>
+<text x="24" y="322" class="fig-muted fig-small">each → one pull request</text>
+<text x="10" y="358" class="fig-muted fig-small">in flight: at most 4 batches</text>
+<text x="10" y="396" class="fig-muted fig-small">ONE DRIVER PASS, REPEATED</text>
+<rect x="10" y="408" width="340" height="48" rx="8" class="fig-panel"/>
+<text x="24" y="430" class="fig-ink fig-text">1 merge what is ready</text>
+<text x="24" y="448" class="fig-muted fig-small">green, approved, at its head</text>
+<rect x="10" y="466" width="340" height="48" rx="8" class="fig-panel"/>
+<text x="24" y="488" class="fig-ink fig-text">2 close out what merged</text>
+<text x="24" y="506" class="fig-muted fig-small">post_merge, then archive</text>
+<rect x="10" y="524" width="340" height="48" rx="8" class="fig-panel"/>
+<text x="24" y="546" class="fig-ink fig-text">3 dispatch the next</text>
+<text x="24" y="564" class="fig-muted fig-small">by wave, up to the cap</text>
+<rect x="10" y="582" width="340" height="48" rx="8" class="fig-panel"/>
+<text x="24" y="604" class="fig-ink fig-text">4 sleep, then repeat</text>
+<text x="24" y="622" class="fig-muted fig-small">state is read, not kept</text>
+<text x="10" y="638" class="fig-you fig-small">you: label a green batch PR approved-fr</text>
+</svg>

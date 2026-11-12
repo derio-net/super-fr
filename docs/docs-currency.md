@@ -15,7 +15,7 @@ covers:
   - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-12 front page is rendered by the build itself; every page has a top bar; pages.yml's acceptance-fragments visibility gate is still true for this page
+reviewed: 2026-11-12 front-page-second-pass phase 1 added the figures section (a marker, a checked SVG file and figures.css); the rest of this page is unchanged
 ---
 
 # Docs currency: keeping pages true to the code
@@ -172,11 +172,25 @@ to the default branch that touches a page, the config, the build script or the r
 5. fills a `<!-- site:pages -->` marker with a list of every page, grouped by section, from their
    `title` and the first sentence of `tldr` (on the front page, as the Explainers, Guides and
    Reference lists the top bar links to);
-6. gives every page the same top bar, a link home, links to the three lists and a link to GitHub,
-   and refuses to write a page it cannot put the bar on.
+6. places each figure (below), then gives every page the same top bar, a link home, links to the
+   three lists and a link to GitHub, and refuses to write a page it cannot put the bar on.
 
 CI runs the same build on every pull request (the `site-build` job), so a page that does not render,
 or links to nothing, fails before merge.
+
+### Figures
+
+A diagram is an SVG file in `scripts/site/figures/`, placed by a line of its own,
+`<!-- site:figure <name> -->`, in a page's Markdown (`<name>` is `[a-z0-9-]+`; a marker inside a
+fenced block is left alone). The build inlines the file as a `<figure class="site-figure">` before the
+renderer runs, and fails the page if the renderer changes the SVG or the file is missing. Each file
+carries `role="img"` and a non-empty `<title>` as its first child, runs no script, refers to nothing
+outside the page, and takes every colour from a class in `scripts/site/figures.css` (`fig-ink`,
+`fig-muted`, `fig-line`, `fig-panel`, `fig-accent`, `fig-you`, `fig-ok`, `fig-text`, `fig-small`,
+`fig-big`), never a literal colour. Every `id` starts with the file's name and two hyphens
+(`gate-ledger--arrow`). A figure whose text would fall below about 11 px on a phone has a second
+file, `<name>.narrow.svg`, with ids starting `<name>-narrow--`; the stylesheet shows it up to 600 px
+wide. Only a page with a figure gets `figures.css`.
 
 ### Writing a page that builds
 
