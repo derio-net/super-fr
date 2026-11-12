@@ -53,7 +53,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-11-12T13:57:30+00:00'
+    at: '2026-11-12T14:13:49+00:00'
     members:
     - implement-phase
     - review-phase
@@ -74,6 +74,13 @@ steps:
         evidence:
           tests: ci:88103964e6571054d98844290827f87e9ab5ebe7+abe81fbdffdf696e39b39f50cd4e2efc3544cf4d;tree=563fe46fd9b007c4d11a2b4bc66a979aa35355f6af5758aa0e23d9b7efe2a05d
           visual: none
+      phase/1/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-11-12T14:13:49+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 671e7103-998b-587e-980b-da83b609e16c
   journal-check:
     state: pending
   deliver:
