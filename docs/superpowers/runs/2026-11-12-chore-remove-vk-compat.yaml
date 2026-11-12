@@ -3,7 +3,7 @@ run: 2026-11-12-chore-remove-vk-compat
 workflow: fr-goal@1
 branch: chore/remove-vk-compat
 started: '2026-11-12T15:34:59+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-12T15:54:16+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-12T15:54:18+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
