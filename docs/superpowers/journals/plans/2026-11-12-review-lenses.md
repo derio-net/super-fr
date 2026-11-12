@@ -169,3 +169,75 @@ The lens branch in apply.py is one helper (_lens_entry) beside the existing loop
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 The status command is two small formatters over lens_set; the scenarios share one sourced fixture (_lens_fixture.sh) already; nothing to clean.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-12T22:00:53+00:00 phase=2 -->
+### review-p2 · review · Phase 2 review: migrations sound; the lens set failed open in four ways, all fixed (phase 2)
+
+A separate reviewer read the phase's diff against spec R4-R7 and the
+artifact-versioning rule. Confirmed sound: the journal 3->4 and record 11->12
+hops, their wiring and hop-by-hop chain tests, the loosened older tests (no guard
+lost), the fr-stamped `step=`, and that a `lens` entry cannot be resolved. Six
+findings, all in scope; p2-r1 to p2-r4 were reproduced by the reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-12T22:00:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · lens_set drops a rule-required lens the branch disabled, with only a warning (phase 2)
+
+`fr/lenses/accumulate.py`: a branch committing `disable: [security]` escaped a
+default-branch rule requiring `security`; only `fr lenses check` objected.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-12T22:00:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · a remote with no readable default ref or merge-base applies no path rule (phase 2)
+
+A single-ref or shallow checkout made `lens_set` return no rule lens with a
+warning, so the base's rules were void.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-12T22:00:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · with no remote, the branch's own rules never apply (phase 2)
+
+No ref meant no diff, so no rule matched, against spec 3.A.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-12T22:00:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · base_config_text reads any git-show failure as no file (phase 2)
+
+`fr/lenses/rules.py`: an unreadable ref or blob dropped the base's rules silently.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-12T22:00:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · both phase-2 rows are set to unwired though their refs run in CI (phase 2)
+
+The reviewer also said the path-rules row's text describes the old design; the
+fragment already carries the `reword` amendment, so that part is wrong.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-12T22:00:53+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · fr journal add --kind lens commits and prints the placeholder id (phase 2)
+
+The commit subject named `lens-<id>` and a deduplicated repeat printed "added".
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-12T22:00:53+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: lens_set drops a rule-required lens the branch disabled, with only a warning (phase 2)
+
+`lens_set_for` raises `LensError` naming the rule, lens and file; test `test_a_branch_cannot_disable_a_lens_a_rule_requires_for_its_diff`. Spec 3.B states it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-12T22:00:53+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: a remote with no readable default ref or merge-base applies no path rule (phase 2)
+
+`default_ref` refuses a remote with no default branch ref here and `_changed` refuses a missing merge-base; tests `test_a_remote_with_no_default_ref_here_is_refused`, `test_a_branch_with_no_merge_base_is_refused`. Spec 3.A states it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-12T22:00:53+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: with no remote, the branch's own rules never apply (phase 2)
+
+With no remote every rule in force applies (`rules.every_rule`), with a warning and no file; test `test_with_no_remote_every_rule_of_the_branch_applies`. Spec 3.A states it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-12T22:00:53+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: base_config_text reads any git-show failure as no file (phase 2)
+
+`base_config_text` asks `git ls-tree` first: a readable ref with no file is None, any failed read is a `LensError`; tests in `test_lenses_rules.py`.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-12T22:00:53+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: both phase-2 rows are set to unwired though their refs run in CI (phase 2)
+
+Both rows moved to `not-implemented` with a note naming the partial CI evidence; phase 3 moves them to `ci`. The reword half is refuted: the amendment was already there.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-12T22:00:53+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: fr journal add --kind lens commits and prints the placeholder id (phase 2)
+
+The subject uses `fr.record.apply.next_lens_id`; a repeat prints `already recorded`. Tests `test_the_same_lens_and_reason_twice_says_so_and_names_no_placeholder`, `test_the_commit_subject_names_the_assigned_id`.
