@@ -220,13 +220,18 @@ def _yaml_of(text: str | None, source: str) -> object:
         raise SettingsError(f"{source}: not valid YAML: {e}") from e
 
 
+def unservable_placement(placement: str, source: str) -> SettingsError:
+    """R4's refusal of a placement this fr cannot yet serve: the one wording, shared by
+    the loader and the path resolver (`fr.artifacts.paths.space_for`)."""
+    return SettingsError(
+        f"{source}: placement: {placement} is not yet available in this fr (only `repo` is served)"
+    )
+
+
 def _servable(settings: Settings, source: str) -> Settings:
     if settings.placement not in SERVABLE_PLACEMENTS:
         assert settings.placement in PLACEMENTS
-        raise SettingsError(
-            f"{source}: placement: {settings.placement} is not yet available "
-            "in this fr (only `repo` is served)"
-        )
+        raise unservable_placement(settings.placement, source)
     return settings
 
 

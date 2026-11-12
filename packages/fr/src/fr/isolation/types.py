@@ -85,8 +85,14 @@ def recorded_mode(state: IsolationState) -> IsolationMode:
     return "devcontainer"
 
 
-def _sanitize(branch: str) -> str:
+def branch_slug(branch: str) -> str:
+    """A branch as one path segment (`feat/a-b` -> `feat__a-b`): the worktree's directory
+    name, the state file's stem, and the artifact resolver's feature id
+    (`fr.artifacts.paths.feature_id`)."""
     return branch.replace("/", "__")
+
+
+_sanitize = branch_slug
 
 
 def _git_common_dir(repo_root: Path) -> Path:
@@ -134,7 +140,7 @@ def default_worktree_path(repo_root: Path, branch: str) -> Path:
     """Where `up` puts *branch*'s worktree when no `--path` is given."""
     return (
         _home() / ".cache" / "fr" / "worktrees" / repo_cache_name(repo_root)
-        / branch.replace("/", "__")
+        / branch_slug(branch)
     )  # fmt: skip
 
 
