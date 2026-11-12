@@ -19,6 +19,10 @@
 .site-figure .fig-big{font-size:19px;font-weight:600}
 .site-figure .fig-narrow{display:none;max-width:480px;margin:0 auto}
 @media (max-width:860px){.site-figure .fig-wide{display:none}.site-figure .fig-narrow{display:block}}
+/* An article's column is narrower than the wide form needs: below 1080px show the narrow
+   form there, and above it let the figure break out of the column to its full 960px. */
+@media (max-width:1079px){article.explainer .site-figure .fig-wide{display:none}article.explainer .site-figure .fig-narrow{display:block}}
+@media (min-width:1080px){article.explainer .site-figure{width:960px;max-width:none;margin-left:calc(50% - 480px)}}
 @media (prefers-reduced-motion:no-preference){
 .site-figure .fig-flow{stroke-dasharray:8 6;animation:fig-dash 1.6s linear infinite}
 @keyframes fig-dash{to{stroke-dashoffset:-28}}
