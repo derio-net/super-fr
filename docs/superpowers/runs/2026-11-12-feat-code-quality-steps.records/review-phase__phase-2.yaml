@@ -1,0 +1,83 @@
+schema_version: 12
+run: 2026-11-12-feat-code-quality-steps
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: review
+    id: review-p2
+    phase: 2
+    title: "Phase 2 review: migrations sound; the lens set failed open in four ways, all fixed"
+    body: |
+      A separate reviewer read the phase's diff against spec R4-R7 and the
+      artifact-versioning rule. Confirmed sound: the journal 3->4 and record 11->12
+      hops, their wiring and hop-by-hop chain tests, the loosened older tests (no guard
+      lost), the fr-stamped `step=`, and that a `lens` entry cannot be resolved. Six
+      findings, all in scope; p2-r1 to p2-r4 were reproduced by the reviewer.
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: "lens_set drops a rule-required lens the branch disabled, with only a warning"
+    body: |
+      `fr/lenses/accumulate.py`: a branch committing `disable: [security]` escaped a
+      default-branch rule requiring `security`; only `fr lenses check` objected.
+  - kind: finding
+    id: p2-r2
+    phase: 2
+    review_scope: in
+    title: "a remote with no readable default ref or merge-base applies no path rule"
+    body: |
+      A single-ref or shallow checkout made `lens_set` return no rule lens with a
+      warning, so the base's rules were void.
+  - kind: finding
+    id: p2-r3
+    phase: 2
+    review_scope: in
+    title: "with no remote, the branch's own rules never apply"
+    body: |
+      No ref meant no diff, so no rule matched, against spec 3.A.
+  - kind: finding
+    id: p2-r4
+    phase: 2
+    review_scope: in
+    title: "base_config_text reads any git-show failure as no file"
+    body: |
+      `fr/lenses/rules.py`: an unreadable ref or blob dropped the base's rules silently.
+  - kind: finding
+    id: p2-r5
+    phase: 2
+    review_scope: in
+    title: "both phase-2 rows are set to unwired though their refs run in CI"
+    body: |
+      The reviewer also said the path-rules row's text describes the old design; the
+      fragment already carries the `reword` amendment, so that part is wrong.
+  - kind: finding
+    id: p2-r6
+    phase: 2
+    review_scope: in
+    title: "fr journal add --kind lens commits and prints the placeholder id"
+    body: |
+      The commit subject named `lens-<id>` and a deduplicated repeat printed "added".
+resolves:
+  - id: p2-r1
+    state: fixed
+    body: "`lens_set_for` raises `LensError` naming the rule, lens and file; test `test_a_branch_cannot_disable_a_lens_a_rule_requires_for_its_diff`. Spec 3.B states it."
+  - id: p2-r2
+    state: fixed
+    body: "`default_ref` refuses a remote with no default branch ref here and `_changed` refuses a missing merge-base; tests `test_a_remote_with_no_default_ref_here_is_refused`, `test_a_branch_with_no_merge_base_is_refused`. Spec 3.A states it."
+  - id: p2-r3
+    state: fixed
+    body: "With no remote every rule in force applies (`rules.every_rule`), with a warning and no file; test `test_with_no_remote_every_rule_of_the_branch_applies`. Spec 3.A states it."
+  - id: p2-r4
+    state: fixed
+    body: "`base_config_text` asks `git ls-tree` first: a readable ref with no file is None, any failed read is a `LensError`; tests in `test_lenses_rules.py`."
+  - id: p2-r5
+    state: fixed
+    body: "Both rows moved to `not-implemented` with a note naming the partial CI evidence; phase 3 moves them to `ci`. The reword half is refuted: the amendment was already there."
+  - id: p2-r6
+    state: fixed
+    body: "The subject uses `fr.record.apply.next_lens_id`; a repeat prints `already recorded`. Tests `test_the_same_lens_and_reason_twice_says_so_and_names_no_placeholder`, `test_the_commit_subject_names_the_assigned_id`."
+evidence:
+  review: review-p2
+  reviewer: a734cf5e11de64c8d
