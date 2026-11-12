@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-12 repo-feature-settings, fr's commit subjects now use the repo's templates; the isolation story is unchanged
+reviewed: 2026-11-12 placement-resolver phase 1, the branch slug is now shared with the artifact path resolver; the isolation story is unchanged
 ---
 
 ## Overview: two boundaries and a bridge

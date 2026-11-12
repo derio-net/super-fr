@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 acceptance-fragments phase 3, a merged row changes only by amendment, and deliver refuses a stale amendment base
+reviewed: 2026-11-12 placement-resolver phase 1, fr settings paths prints the artifact path resolver's answers
 ---
 
 ## Overview
@@ -1195,6 +1195,14 @@ than quietly falling back to the defaults.
 Today the settings file lives in the repository itself. Keeping fr's records off
 the feature branch altogether, on a separate branch or in a separate tracking
 repository, comes later.
+
+Where fr's records live is answered by one resolver, and `fr settings paths` prints
+its answers: `--shell` gives `FR_PLACEMENT`, `FR_ARTIFACT_ROOT`, `FR_FEATURE` and one
+shell-quoted `FR_<KIND>_DIR` (or `_FILE`) line per kind, such as `FR_PLANS_DIR`, ready
+for `eval` in a hook; `--json` gives the same keys as one object. Outside a git
+repository it prints `FR_PLACEMENT=none` and still succeeds, so a hook can call it
+anywhere. Today the placement is always `repo`, and the paths are the ones in the
+table above.
 
 The workflow is not one large program. The shape supplies the sequence, the
 skill supplies the judgment each step needs, and smaller commands and safety

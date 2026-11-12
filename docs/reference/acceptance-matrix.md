@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-12 acceptance-fragments phase 4 documents report, pages-check and comment; reports are derived and `check` fails on a tracked one
+reviewed: 2026-11-12 placement-resolver phase 1, logical refs now resolve through the artifact path resolver; nothing this page describes changed
 ---
 
 # The acceptance matrix

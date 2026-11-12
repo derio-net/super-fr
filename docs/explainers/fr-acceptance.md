@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 pr1408 review fixes, retired rows keep the base rule, a failed fetch reads the local default ref, ties break by base
+reviewed: 2026-11-12 placement-resolver phase 1, logical refs now resolve through the artifact path resolver; nothing this page describes changed
 ---
 
 ## Overview: claims, not tests
