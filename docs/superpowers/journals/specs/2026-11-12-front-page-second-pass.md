@@ -181,3 +181,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-front-page-second-pass-p2 created=2026-11-12T13:57:10+00:00 -->
+### phase-split-2026-11-12-front-page-second-pass-p2 · decision · ask: the front-page rewrite (two acts, look, motion, its own figures) is a separately reviewable ask from the figure mechanism and the two new explainers, which it cites
