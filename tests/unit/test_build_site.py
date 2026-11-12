@@ -710,3 +710,267 @@ def test_this_repos_front_page_is_a_valid_landing_whose_links_all_resolve() -> N
     for sec in land.sections:
         bs.rewrite_markdown(sec.body, page, patterns, tracked, REF)
     assert bs.rewrite_href("01-fr-goal.md", page, patterns, tracked, REF) == "01-fr-goal.html"
+
+
+# -- figures (spec 2026-11-12-front-page-second-pass B, R6, R10) ---------------------------
+
+FIGURES = REPO / "scripts" / "site" / "figures"
+
+GOOD_FIGURE = (
+    '<svg viewBox="0 0 10 10" role="img">\n'
+    "<title>A box</title>\n"
+    '<defs><linearGradient id="box--fade"><stop offset="0" class="fig-accent"/>'
+    "</linearGradient></defs>\n"
+    '<rect id="box--r" class="fig-panel" fill="url(#box--fade)" stroke="currentColor"/>\n'
+    '<use href="#box--r"/>\n'
+    "</svg>"
+)
+
+
+def test_the_figures_directory_exists() -> None:
+    assert FIGURES.is_dir()
+
+
+def test_a_valid_figure_passes() -> None:
+    bs.check_figure(GOOD_FIGURE, "box")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "match"),
+    [
+        (' role="img"', "", "role"),
+        ("<title>A box</title>", "<title> </title>", "title"),
+        ("<title>A box</title>\n", "<g/><title>A box</title>\n", "title"),
+        ("<rect", "<script>1</script><rect", "script"),
+        ("<rect", '<rect onclick="x()"', "on"),
+        ("<rect", '<image href="#a"/><rect', "image"),
+        ("<rect", "<foreignObject/><rect", "foreignObject"),
+        ('href="#box--r"', 'href="https://example.com/a.svg"', "href"),
+        ('href="#box--r"', 'xlink:href="a.svg"', "href"),
+        ("url(#box--fade)", "url(https://example.com/x)", "url"),
+        ('stroke="currentColor"', 'stroke="#fff"', "colour"),
+        ('stroke="currentColor"', 'stroke="rgb(1,2,3)"', "colour"),
+        ('stroke="currentColor"', 'stroke="hsl(1,2%,3%)"', "colour"),
+        ('stroke="currentColor"', 'stroke="red"', "colour"),
+        ('stroke="currentColor"', 'style="stop-color:#000"', "colour"),
+        ("<rect", "<style>.a{fill:#123456}</style><rect", "colour"),
+        ('id="box--r"', 'id="r"', "id"),
+        ('id="box--fade"', 'id="fade"', "id"),
+    ],
+)
+def test_a_defective_figure_is_refused_naming_it_and_the_defect(
+    old: str, new: str, match: str
+) -> None:
+    with pytest.raises(bs.BuildError, match=rf"box.*{match}"):
+        bs.check_figure(GOOD_FIGURE.replace(old, new, 1), "box")
+
+
+@pytest.mark.parametrize("value", ["none", "currentColor", "inherit", "transparent", "var(--x)"])
+def test_the_allowed_paint_keywords_pass(value: str) -> None:
+    bs.check_figure(GOOD_FIGURE.replace('stroke="currentColor"', f'stroke="{value}"'), "box")
+
+
+def test_a_narrow_figure_prefixes_its_ids_with_the_narrow_name() -> None:
+    narrow = GOOD_FIGURE.replace("box--", "box-narrow--")
+    bs.check_figure(narrow, "box.narrow")
+    with pytest.raises(bs.BuildError, match="id"):
+        bs.check_figure(GOOD_FIGURE, "box.narrow")
+
+
+def _figure_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    d = tmp_path / "figures"
+    d.mkdir()
+    monkeypatch.setattr(bs, "FIGURES_DIR", d)
+    return d
+
+
+def test_load_figure_inlines_the_wide_and_narrow_forms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _figure_dir(tmp_path, monkeypatch)
+    (d / "box.svg").write_text(GOOD_FIGURE)
+    (d / "box.narrow.svg").write_text(GOOD_FIGURE.replace("box--", "box-narrow--"))
+    out = bs.load_figure("box")
+    assert out.startswith('<figure class="site-figure">') and out.endswith("</figure>")
+    assert out.count("<svg") == 2
+    assert 'class="fig-wide"' in out and 'class="fig-narrow"' in out
+
+
+def test_load_figure_without_a_narrow_form_has_only_the_wide_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _figure_dir(tmp_path, monkeypatch)
+    (d / "box.svg").write_text(GOOD_FIGURE)
+    out = bs.load_figure("box")
+    assert out.count("<svg") == 1 and "fig-narrow" not in out
+
+
+def test_a_missing_figure_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _figure_dir(tmp_path, monkeypatch)
+    with pytest.raises(bs.BuildError, match="nope"):
+        bs.load_figure("nope")
+
+
+def test_a_defective_figure_file_is_refused_on_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _figure_dir(tmp_path, monkeypatch)
+    (d / "box.svg").write_text(GOOD_FIGURE.replace(' role="img"', ""))
+    with pytest.raises(bs.BuildError, match="box"):
+        bs.load_figure("box")
+
+
+def test_blank_lines_inside_a_figure_are_removed_so_markdown_keeps_one_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _figure_dir(tmp_path, monkeypatch)
+    (d / "box.svg").write_text(GOOD_FIGURE.replace("\n", "\n\n"))
+    assert "\n\n" not in bs.load_figure("box")
+
+
+# -- the marker (P1.T2) ---------------------------------------------------------------------
+
+
+def test_a_marker_line_becomes_the_figure_padded_by_blank_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _figure_dir(tmp_path, monkeypatch)
+    (d / "box.svg").write_text(GOOD_FIGURE)
+    text, inserted = bs.fill_figures("a\n\n<!-- site:figure box -->\nb\n", "x.md")
+    assert text.startswith("a\n\n\n<figure")
+    assert text.endswith("</figure>\n\nb\n")
+    assert len(inserted) == 1 and inserted[0].startswith("<svg") and inserted[0] in text
+    assert inserted[0].endswith("</svg>")
+
+
+def test_a_marker_naming_a_missing_figure_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _figure_dir(tmp_path, monkeypatch)
+    with pytest.raises(bs.BuildError, match=r"x\.md.*nope"):
+        bs.fill_figures("<!-- site:figure nope -->\n", "x.md")
+
+
+def test_a_marker_inside_a_fenced_block_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _figure_dir(tmp_path, monkeypatch)
+    src = "```\n<!-- site:figure nope -->\n```\n"
+    assert bs.fill_figures(src, "x.md") == (src, [])
+
+
+def test_a_text_without_a_marker_is_unchanged_by_fill_figures() -> None:
+    assert bs.fill_figures("plain\n", "x.md") == ("plain\n", [])
+
+
+def test_a_marker_with_an_invalid_name_is_refused() -> None:
+    with pytest.raises(bs.BuildError, match="Bad_Name"):
+        bs.fill_figures("<!-- site:figure Bad_Name -->\n", "x.md")
+
+
+def test_a_figure_that_survives_rendering_passes() -> None:
+    svg = '<svg role="img"><title>t</title></svg>'
+    bs.check_figures_survived(f"<body><figure>{svg}</figure></body>", [svg], "x.html")
+
+
+def test_a_figure_the_renderer_altered_is_refused() -> None:
+    svg = '<svg role="img"><title>t</title></svg>'
+    with pytest.raises(bs.BuildError, match="x.html"):
+        bs.check_figures_survived("<body><p>&lt;svg</p></body>", [svg], "x.html")
+
+
+def test_the_figure_stylesheet_is_added_only_to_a_page_with_a_figure() -> None:
+    with_css = bs.insert_figure_css(PAGE_HTML, "x.html", "/*fig*/")
+    assert "<style>/*fig*/</style></head>" in with_css
+    barred = bs.insert_bar(PAGE_HTML, "x.html", "https://github.com/o/r", "/*bar*/")
+    assert 'class="site-bar"' in barred and "/*fig*/" not in barred
+
+
+def test_an_article_page_without_a_figure_is_built_with_the_bar_and_no_figure_css(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    out = tmp_path / "out"
+    monkeypatch.setattr(bs, "render_page", _fake_renderer(None))
+    bs.build(root, out, craft, REF, "https://github.com/o/r")
+    page = (out / "guides" / "a.html").read_text()
+    assert 'class="site-bar"' in page and "site-figure" not in page
+    assert ".fig-ink" not in page
+
+
+def test_a_built_page_with_a_figure_carries_it_and_the_figure_css(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    (root / "docs" / "a.md").write_text(
+        "---\ntitle: a\n---\n\nBody\n\n<!-- site:figure gate-ledger -->\n"
+    )
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    svg = bs.load_figure("gate-ledger")
+
+    def render(renderer, fonts, source, out):
+        body = source.read_text(encoding="utf-8")
+        html = (
+            "<html><head><style>@font-face{src:url(data:font/woff2;base64,AA)}</style></head>"
+            f"<body><article>{body}</article></body></html>"
+        )
+        out.write_text(html, encoding="utf-8")
+        return html
+
+    monkeypatch.setattr(bs, "render_page", render)
+    out = tmp_path / "out"
+    bs.build(root, out, craft, REF, "https://github.com/o/r")
+    a = (out / "guides" / "a.html").read_text()
+    assert svg in a and ".fig-ink" in a
+    assert ".fig-ink" not in (out / "guides" / "b.html").read_text()
+
+
+def test_a_figure_the_renderer_drops_fails_the_build_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, craft = _mini_repo(tmp_path)
+    (root / "docs" / "a.md").write_text("---\ntitle: a\n---\n\n<!-- site:figure gate-ledger -->\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    monkeypatch.setattr(bs, "render_page", _fake_renderer(None))
+    out = tmp_path / "out"
+    with pytest.raises(bs.BuildError, match="guides/a.html"):
+        bs.build(root, out, craft, REF, "https://github.com/o/r")
+    assert not list(out.rglob("*.html"))
+
+
+def test_every_animation_in_figures_css_sits_under_no_preference_with_a_reduce_block() -> None:
+    css = (REPO / "scripts" / "site" / "figures.css").read_text()
+    assert re.search(r"@media\s*\(prefers-reduced-motion:\s*reduce\)", css)
+    reduce_block = re.search(
+        r"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{(.*)", css, re.DOTALL
+    )
+    assert reduce_block and "animation:none" in reduce_block.group(1).replace(" ", "")
+    # strip the reduce block and every no-preference block; no animation may remain
+    rest = css
+    for m in re.finditer(r"@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{", css):
+        depth, i = 1, m.end()
+        while depth and i < len(css):
+            depth += {"{": 1, "}": -1}.get(css[i], 0)
+            i += 1
+        rest = rest.replace(css[m.start() : i], "")
+    rest = rest[: rest.find("@media (prefers-reduced-motion: reduce)")] if "reduce)" in rest else rest
+    assert not re.search(r"animation\s*:", rest.replace("animation:none", "")), rest
+
+
+def test_every_shipped_figure_passes_the_checks_and_the_two_new_ones_exist() -> None:
+    files = sorted(FIGURES.glob("*.svg"))
+    names = {f.name for f in files}
+    assert {"gate-ledger.svg", "wave-of-batches.svg"} <= names
+    for f in files:
+        bs.check_figure(f.read_text(encoding="utf-8"), f.name.removesuffix(".svg"))
+        bs.load_figure(f.name.removesuffix(".svg").removesuffix(".narrow"))
+
+
+@pytest.mark.parametrize("name", ["fr-wave-driver", "fr-exit-gates"])
+def test_each_new_explainer_has_exactly_one_figure_marker_naming_a_real_figure(
+    name: str,
+) -> None:
+    text = (REPO / "docs" / "explainers" / f"{name}.md").read_text(encoding="utf-8")
+    markers = re.findall(r"^<!-- site:figure ([a-z0-9-]+) -->$", text, re.MULTILINE)
+    assert len(markers) == 1
+    assert (FIGURES / f"{markers[0]}.svg").is_file()
