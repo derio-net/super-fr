@@ -212,3 +212,8 @@ run_kind: candidate
 ### phase-split-2026-11-12-remove-vk-compat-p2 · decision · ask: the vk_version plan key and its archive-reaching repair (R9-R13) are a separate ask from the removals and renames, and change the migration runner
 
 Phase 1 is deletions and mechanical renames; phase 2 changes PlanMeta, adds a repair and a runner seam every command's gate passes through. They are reviewable independently.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-remove-vk-compat-p2 created=2026-11-12T15:53:45+00:00 -->
+### tier-2026-11-12-remove-vk-compat-p2 · decision · hard: phase 2 changes the migration runner and the CLI-entry gate's staleness test, a path every caller relies on
+
+Per fr-plan's tier rule: a change to a gate or migration path.
