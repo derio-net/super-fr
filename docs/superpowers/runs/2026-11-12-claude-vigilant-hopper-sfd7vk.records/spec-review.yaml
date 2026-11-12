@@ -1,0 +1,93 @@
+schema_version: 11
+run: 2026-11-12-claude-vigilant-hopper-sfd7vk
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: r1
+  review_scope: in
+  title: Design C's theme change contradicts the first-pass tests and leaves extract_theme_css with no caller
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r2
+  review_scope: in
+  title: A figure marker 'anywhere' in a flow or guarantee body is refused by the existing shape parsers
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r3
+  review_scope: in
+  title: Inlining both wide and narrow variants, and reusing figures, produces duplicate SVG ids
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r4
+  review_scope: in
+  title: The literal-colour check misfires on url(#id), and misses SVG's default black fill
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r5
+  review_scope: in
+  title: The raw HTML block needs blank lines around it, and the survival check is too weak
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r6
+  review_scope: in
+  title: test_tripwire_explainers_fresh.py has no closed list to add the new pages to
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r7
+  review_scope: in
+  title: R9, R12 and R13 have no proof in Verification or Design F; R8's reduced-motion rule is only screenshotted
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r8
+  review_scope: in
+  title: The R7 contrast test is undefined for glass cards and gradient accents
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r9
+  review_scope: in
+  title: The operator asked for a typed-out terminal hero; the spec fades lines in
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: finding
+  id: r10
+  review_scope: in
+  title: Two front-page link targets are left undecided
+  body: 'target: spec. Raised by the independent spec reviewer; see the review entry spec-review-1.'
+- kind: review
+  id: spec-review-1
+  title: 'independent spec review: 10 findings'
+  body: 'findings: r1, r2, r3, r4, r5, r6, r7, r8, r9, r10 (all in scope). The reviewer verified the spec''s named files, functions and constants against the code with file:line references, and decisions q1-q9 against the requirements.'
+resolves:
+- id: r1
+  state: fixed
+  body: 'Design C rewritten: the landing takes nothing from a renderer page; extract_theme_css, THEME_PROPERTIES, extract_font_css and the two parameters are removed, the landing uses system font stacks and embeds no font, and the tests that change are named.'
+- id: r2
+  state: fixed
+  body: Design B now says parse_landing lifts a figure marker before the shape checks, one figure per section, allowed in flow, guarantee and prose, refused elsewhere; R10 lists the refusals.
+- id: r3
+  state: fixed
+  body: Every id in a figure file must carry the file's name as prefix; an unprefixed id is refused (Design B, R10).
+- id: r4
+  state: fixed
+  body: "The colour check is defined over attributes, style attributes and style elements with url(#\u2026) stripped first; figures.css sets inherited fill, stroke and color so an unclassed element is never default black."
+- id: r5
+  state: fixed
+  body: The article-page block is padded with blank lines; the survival check now requires the exact inserted svg text verbatim in the rendered page on both paths.
+- id: r6
+  state: fixed
+  body: Design E now says the pages join the tripwire's subset assertion.
+- id: r7
+  state: fixed
+  body: Design F and Verification gain a unit test for R9, the structural reduced-motion test for R8, and name the phase reviewer for R12 and R13.
+- id: r8
+  state: fixed
+  body: 'Design C states the contrast model: opaque text and surface tokens, text only on those surfaces, each pair at 4.5:1; gradient text only on large text with each stop at 3:1.'
+- id: r9
+  state: fixed
+  body: R8 and Design C now type the prompt lines with steps() and reveal the output lines in turn.
+- id: r10
+  state: fixed
+  body: Section 4 links 01-fr-goal.md; the harness card links ../reference/install.md.
+evidence:
+  review: spec-review-1
+  reviewer: a9a24ff89cfd27d18

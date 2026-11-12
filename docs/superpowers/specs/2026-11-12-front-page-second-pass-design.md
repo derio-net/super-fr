@@ -74,10 +74,10 @@ R3. The front page has an "also included" grid of three to eight small cards, ea
 R4. The hero keeps its headline and primary button. Its subline and facts are rewritten for the two acts, and it shows a terminal panel with a short run transcript whose lines are data in the page's front matter, each line marked as a typed command, output, a point where the operator acts, or a success line.
 R5. The front page carries four diagrams: the run pipeline (goal to merged pull request, the operator's points marked), the isolation boundary (the reader's clone, the worktree, the container, what the agent can reach), the gate ledger (a merged pull request held by the Tester and DevOps gates, then release candidate to final release) and a wave of batches (backlog ranked into batches, batches into waves, each batch one pull request).
 R6. A diagram is an SVG file kept in `scripts/site/figures/`, placed by a marker in a page's Markdown and inlined by the build. Each has an accessible name, takes every colour from the page's custom properties (so it is readable in the landing's dark and light schemes and on the dark article pages), runs no script, references nothing outside the page, and stays legible without horizontal scrolling at a 390 px wide viewport.
-R7. The front page has a look of its own, not the broadsheet identity: a near-black canvas, one accent gradient, a large tight sans-serif headline from the system font stack, monospace details and glass-like cards, with a light palette under `prefers-color-scheme: light`. Body text and link text meet a contrast ratio of at least 4.5:1 against their background in both schemes. It makes no request to another host and has no horizontal scrolling at a 390 px wide viewport.
-R8. Motion on the front page is CSS and SVG only (the terminal lines appearing in turn, diagram accents moving): the page contains no script. Under `prefers-reduced-motion: reduce` every animation and transition is off, and with animation off or unsupported every piece of content is visible in its final state.
+R7. The front page has a look of its own, not the broadsheet identity: a near-black canvas, one accent gradient, a large tight sans-serif headline from the system font stack, monospace details from the system monospace stack and glass-like cards, with a light palette under `prefers-color-scheme: light`. Body text and link text meet a contrast ratio of at least 4.5:1 against their background in both schemes. It makes no request to another host and has no horizontal scrolling at a 390 px wide viewport.
+R8. Motion on the front page is CSS and SVG only (the terminal's command lines typed out character by character and its output lines appearing in turn, diagram accents moving): the page contains no script. Under `prefers-reduced-motion: reduce` every animation and transition is off, and with animation off or unsupported every piece of content is visible in its final state.
 R9. Article pages keep the broadsheet look and their top bar unchanged. The front page keeps the top bar, the grouped list of every page under `#explainers`, `#guides` and `#reference`, the link to the acceptance report and a closing call to action.
-R10. The build fails (exit 1, naming the page and the defect) and writes no degraded page when: a figure marker names a file that does not exist; a figure file has no accessible name, contains a script, an external reference, or a literal colour; an act has no numbered section; the grid has fewer than three or more than eight cards, or a card without exactly one link; a terminal line has an unknown kind; or any first-pass refusal applies.
+R10. The build fails (exit 1, naming the page and the defect) and writes no degraded page when: a figure marker names a file that does not exist; a figure file has no accessible name, contains a script, an external reference, or a literal colour; an act has no numbered section; the grid has fewer than three or more than eight cards, or a card without exactly one link; a terminal line has an unknown kind; a figure marker stands in a section kind that cannot place one, or a section holds more than one; a figure's ids are not prefixed with its file's name; or any first-pass refusal applies, except the one for a front page with no embedded font, which is dropped (the front page embeds none).
 R11. Two explainer pages are added, in the explainers' voice and with the front matter `fr docs check` requires: `docs/explainers/fr-wave-driver.md` (what a wave and a batch are, what one driver pass does, what it refuses, how it resumes, where the operator acts) and `docs/explainers/fr-exit-gates.md` (which gate a run gets and why, what each gate holds, how a gate is passed, how gates hold the final release as release candidates, with a link to the DevOps gate page for that stage's detail). Every claim in them is true of the shipped code, skills and guides they name in `covers`. Each carries at least one diagram, and the two act-two sections of the front page link to them.
 R12. Every claim on the front page is one that a page it links to makes.
 R13. The guidance for page authors (`.claude/rules/explainers-currency.md` and its generated mirrors, `docs/docs-currency.md`) describes acts, the grid, the terminal lines and figures.
@@ -108,20 +108,35 @@ when `terminal` is present the terminal panel replaces the single command line.
 an article) is replaced by the build with
 `<figure class="site-figure">` + the contents of `scripts/site/figures/<name>.svg` +
 `</figure>`, as one raw HTML block, before the Markdown is converted (the same point at
-which `fill_pages` replaces its marker). `<name>` is `[a-z0-9-]+`. In a landing section the
-marker may stand anywhere in the section's body; it is rendered full width below the
-section's text, except in the `flow` section, where it is rendered above the step list.
+which `fill_pages` replaces its marker). `<name>` is `[a-z0-9-]+`. On an article page the replacement happens where `fill_pages`
+replaces its marker, and the block is padded with a blank line on each side so
+python-markdown treats it as a block of its own.
+
+The landing does not go through that path. `parse_landing` lifts a figure marker (a block
+holding only the marker) out of a section's body before the kind's shape checks run, and
+stores the name on the section; `render_landing` emits the `<figure>` itself, outside the
+Markdown conversion. A section holds at most one figure. It is allowed in `flow` (rendered
+above the step list), `guarantee` (full width below the section's text, above its link)
+and prose sections (below the text); a marker in an `act`, `grid`, `pages` or `cta`
+section, or a second marker in one section, is refused.
 
 A figure file is checked when it is read (R10): its root `<svg>` must carry `role="img"`
 and a non-empty `<title>` as its first child; it must not contain `<script`, an `on*=`
 attribute, `<image`, `<foreignObject`, an `href`/`xlink:href` or `url(` that is not a
 same-document `#id`, or a literal colour (a `#hex`, `rgb(`, `hsl(` or a named colour
-other than `none`, `currentColor` and `transparent`) in `fill`, `stroke`, `stop-color`,
-`flood-color` or `color`, as an attribute or in a `style`. Colours come from classes:
+other than `none`, `currentColor`, `inherit` and `transparent`) as the value of `fill`,
+`stroke`, `stop-color`, `flood-color` or `color`. The check reads those values from
+attributes, from `style` attributes and from any `<style>` element in the file, and strips
+`url(#…)` paint references before looking for a colour, so `fill="url(#run-pipeline--fade)"`
+passes. Every `id` in a figure file starts with the file's own name and two hyphens
+(`run-pipeline--…`; a narrow file's ids start `run-pipeline-narrow--…`), so two figures, or the two forms of one, inlined in one page
+never share an id; an unprefixed id is refused. Colours come from classes:
 `scripts/site/figures.css` defines a small class vocabulary (`.fig-ink`, `.fig-muted`,
 `.fig-line`, `.fig-panel`, `.fig-accent`, `.fig-you`, `.fig-ok`, text sizes) in terms of
 `--fig-*` custom properties with fallbacks to the broadsheet properties, so a figure reads
-correctly on an article page with no extra work; `landing.css` sets the `--fig-*`
+correctly on an article page with no extra work. `figures.css` also sets `fill`, `stroke`
+and `color` on `.site-figure svg` from `--fig-ink`/`none`, so an element with no class
+inherits a readable colour, never SVG's default black; `landing.css` sets the `--fig-*`
 properties for its own two schemes. The build adds `figures.css` to a page's head only
 when the page contains a figure.
 
@@ -134,24 +149,44 @@ figures: `run-pipeline`, `isolation-boundary`, `gate-ledger`, `wave-of-batches`.
 The blog-craft renderer receives the Markdown with the `<figure>` block already in place.
 python-markdown passes a block-level raw HTML element through unchanged; the
 implementation confirms this against the pinned renderer in the `site-build` job and by a
-real build before relying on it, and a figure that does not survive rendering intact
-(the inlined `<svg` not found in the rendered page) fails the build.
+real build before relying on it, and a figure that does not survive rendering intact fails the build: for every figure a
+page was given, the exact `<svg …>…</svg>` text the build inserted must appear verbatim in
+the rendered page, on the renderer path and on the landing path alike.
 
 ### C. Look and motion
 
-`landing.css` is rewritten and now defines every custom property the landing and
-`bar.css` use, for dark (default) and light (`prefers-color-scheme: light`). The build no
-longer copies the renderer's `:root` block into the landing; `extract_theme_css` and
-`THEME_PROPERTIES` remain only as far as `bar.css` on article pages needs them, and the
-test that every property the site stylesheets use is defined is kept, now satisfied for
-the landing by `landing.css` itself. The landing still embeds the renderer's `@font-face`
-rules (the monospace face and the bar's site name use them, and `check_rendered` requires
-them); the headline and body use the system sans-serif stack
-(`ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`).
+`landing.css` is rewritten and defines every custom property the landing uses, for dark
+(default) and light (`prefers-color-scheme: light`), including the ones `bar.css` and
+`figures.css` read, so on the landing nothing falls back. The landing no longer takes
+anything from a renderer-produced page:
 
-Palette tokens are literal hex values so a unit test can compute contrast: for each scheme
-the test reads the tokens for body text, muted text and link text and their background
-and asserts a ratio of at least 4.5:1 (R7).
+- `extract_theme_css`, `THEME_PROPERTIES` and `_defines` are removed, with
+  `render_landing`'s `theme_css` parameter. Article pages never used them: `bar.css`
+  there reads the renderer's own `:root` with literal fallbacks.
+- `extract_font_css` and the `font_css` parameter are removed too. The landing embeds no
+  font: headline and body use the system sans-serif stack
+  (`ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`), monospace
+  details the system monospace stack (`ui-monospace, SFMono-Regular, Menlo, Consolas,
+  monospace`), and `landing.css` sets `--display`, `--serif` and `--mono` to those stacks
+  so the bar's site name matches. `check_rendered`'s embedded-font requirement applies to
+  renderer-produced pages only, and the landing no longer needs to be rendered last.
+- Tests that change in `tests/unit/test_build_site.py`: the assertions that the copied
+  theme block is in the landing and precedes the light block, the two theme-property
+  tests (`test_a_theme_missing_a_property_the_landing_uses_is_refused`,
+  `test_every_property_the_site_stylesheets_use_is_a_required_theme_property`) and the
+  missing-font refusal are replaced by: every `var(--x)` used without a fallback in
+  `landing.css`, and every `var(--x)` in `bar.css` and `figures.css`, names a property
+  `landing.css` defines in both schemes; and the rendered landing contains no
+  `@font-face`.
+
+Contrast model (R7): text colour tokens (`--text`, `--text-muted`, `--link`) and surface
+tokens (`--canvas`, `--surface` for cards and the terminal panel) are opaque literal hex
+values in both schemes. Body and link text sits only on those two surfaces: the glass
+effect comes from borders, highlights and a glow drawn behind or around a card, never from
+a translucent background under text. A unit test computes, per scheme, each text token
+against each surface token and asserts at least 4.5:1. Gradient-filled text is used only
+for the headline's accent words and the act labels (large text); the test asserts each
+gradient stop token reaches at least 3:1 against `--canvas`.
 
 Elements: a hero with an accent-gradient glow behind a terminal panel (window chrome, the
 `hero.terminal` lines, a blinking caret on the last prompt); facts as a row of glass
@@ -159,12 +194,14 @@ cards; act openers with a large act label; numbered sections as cards with the p
 set as a quote, the figure full width; the grid; the page list; the closing call to
 action. Single column under about 720 px.
 
-Motion (R8): terminal lines fade in one after another with `animation-delay`; diagram
+Motion (R8): each `prompt` line of the terminal is typed out with a `steps()` animation over its width (the line's character count is set by the build as a custom property), and the `out`, `you` and `ok` lines appear in turn after it with `animation-delay`; diagram
 accent strokes use a dash-offset animation; cards lift on hover. Content is never hidden
 by default and revealed by animation alone: the base state is the visible final state and
 animations run from a `from` keyframe, inside `@media (prefers-reduced-motion:
 no-preference)`. A `@media (prefers-reduced-motion: reduce)` block also sets
-`animation: none` and `transition: none` on everything. No `<script>` anywhere on the
+`animation: none` and `transition: none` on everything. A unit test over `landing.css` and
+`figures.css` asserts both: every `animation` declaration sits inside a
+`prefers-reduced-motion: no-preference` block, and the `reduce` block exists. No `<script>` anywhere on the
 page; a unit test asserts the rendered landing contains none and no `url(` or `src`/`href`
 asset reference to another host.
 
@@ -180,13 +217,13 @@ Sections and their links:
 1. The agent cannot touch what it should not → `fr-isolation.md` (figure `isolation-boundary`)
 2. It asks you once, then builds from a written spec → `fr-brainstorming-and-plan.md`
 3. A separate reviewer reads the work, at every stage → `01-fr-goal.md`
-4. One pull request, never self-merged → `01-fr-goal.md` or `fr-devops-gate.md`, whichever makes the section's claims
+4. One pull request, never self-merged → `01-fr-goal.md`
 5. Merged is not done: the exit gates → `fr-exit-gates.md` (figure `gate-ledger`)
 6. A backlog, run in waves → `fr-wave-driver.md` (figure `wave-of-batches`)
 
 The "How a run goes" strip stays, with figure `run-pipeline` above it. The grid links
-`fr-acceptance.md`, `fr-audit.md`, `fr-debugging.md`, `fr-triage.md` and the page that
-documents harness support. Claims are limited to what the linked pages say (R12); the two
+`fr-acceptance.md`, `fr-audit.md`, `fr-debugging.md`, `fr-triage.md` and, for the
+supported harnesses (Claude Code, OpenCode, Hermes), `../reference/install.md`. Claims are limited to what the linked pages say (R12); the two
 new pages are written first so the act-two sections have pages to cite.
 
 ### E. The two new explainers (R11)
@@ -198,7 +235,8 @@ gates, `packages/fr/src/fr/verification/exit.py`, `commands/gate_cmd.py`,
 `scripts/release.py`, `docs/verification-strategies.md`, `docs/exit-gates-release-walk.md`,
 `docs/gate-backfill.md` and the exit-gates spec. Each page has `title`, `date`, `tldr`,
 `standalone`, `standalone_style: broadsheet`, `covers` and `reviewed`. They are added to
-the closed list in `tests/unit/test_tripwire_explainers_fresh.py`, and appear in the
+the set of pages `tests/unit/test_tripwire_explainers_fresh.py` asserts are among the parsed
+pages (a subset assertion), and appear in the
 landing's page list automatically. `docs/explainers/fr-triage.md` and
 `docs/explainers/fr-devops-gate.md` each gain one sentence linking the new page.
 
@@ -210,6 +248,13 @@ landing's page list automatically. `docs/explainers/fr-triage.md` and
   only to pages with a figure, the contrast test, no script on the landing, and this
   repo's own `index.md` parsing as a landing with two acts, six numbered sections, a grid
   and four figures, all links resolving.
+- R9: a unit test builds an article page with no figure and asserts it carries the bar and
+  no `figures.css`, and the existing bar tests stay green unchanged; the screenshot state
+  `article-page-unchanged` shows it.
+- R12 and R13 are checked by the phase reviewer, who is briefed to read each front-page
+  section and card against the page it links and to confirm the guidance files describe
+  the new kinds; the mirror tripwires (`test_tripwire_opencode_instructions_sync.py`,
+  `test_tripwire_hermes_skills_sync.py`) run in CI.
 - `pages.yml` already triggers on `scripts/site/**`, which covers `figures/`.
 - `.claude/rules/explainers-currency.md`, its mirrors (`scripts/sync-opencode.py`,
   `scripts/sync-hermes.py` where it applies) and `docs/docs-currency.md` describe the new
@@ -229,9 +274,9 @@ landing's page list automatically. `docs/explainers/fr-triage.md` and
 ## Verification
 
 gate: developer
-- site-landing-two-acts: none — unit tests in CI parse this repo's `index.md` (two acts, six numbered sections, grid, links resolve); the `site-build` CI job renders it on every pull request; screenshots are taken and opened at implement, review and deliver
+- site-landing-two-acts: none — unit tests in CI parse this repo's `index.md` (two acts, six numbered sections, grid, links resolve); the phase reviewer checks each front-page claim against its linked page (R12) and the guidance (R13); the `site-build` CI job renders it on every pull request; screenshots are taken and opened at implement, review and deliver
 - site-landing-figures: none — unit tests in CI check every figure file and the inlining; the `site-build` CI job fails when a figure does not survive rendering; screenshots at implement, review and deliver
-- site-landing-look-and-motion: none — unit tests in CI compute the contrast ratios and assert no script and no external reference; screenshots in dark, light, phone width and reduced motion at implement, review and deliver
+- site-landing-look-and-motion: none — unit tests in CI compute the contrast ratios, assert no script and no external reference, assert every animation sits under `no-preference` with a `reduce` block, and assert an article page is built without the figure stylesheet; screenshots in dark, light, phone width and reduced motion at implement, review and deliver
 - site-landing-refuses-malformed-figures-and-acts: none — unit tests in CI drive each refusal over fixture sources
 - site-wave-driver-and-exit-gates-pages: none — `fr docs check` and the page-parsing tripwire run in CI; the spec reviewer and the phase reviewer check the pages' claims against the code
 - site-front-page-second-pass-published: live — only a Pages deploy from `main` shows the published front page
