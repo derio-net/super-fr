@@ -95,5 +95,13 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-12T09:39:45+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-12T09:39:45+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 671e7103-998b-587e-980b-da83b609e16c
 fr_version: 6.2.0
