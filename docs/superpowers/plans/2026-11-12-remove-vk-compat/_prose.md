@@ -27,7 +27,7 @@ migration that reaches `docs/superpowers/implemented/plans/`, through a new
 `Repair.extra_locators` field, by the operator's decision; the phase reads the
 runner end to end first, because four separate walks enumerate artifacts and
 each needs a stated behaviour for archive paths. This repo's 33 archived
-carriers are migrated by running the framework, not by hand.
+carriers are migrated by running the framework itself.
 
 Phase 2 is `hard`: it changes the migration runner and the CLI-entry gate's
 staleness test, which every command passes through.
