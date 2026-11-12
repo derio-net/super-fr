@@ -10976,6 +10976,22 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+  - id: acceptance-effective-matrix-fold
+    capability: repo-feature-settings
+    acceptance: 'The effective acceptance matrix is never stored: it is folded from
+      merged features'' fragments in default-ref first-parent order plus the branch''s
+      own pending ones, with logical spec/plan refs resolving to repo paths, and an
+      abandoned feature''s rows and amendments never apply'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R17
+    - super-fr:docs/superpowers/specs/2026-11-04-repo-feature-settings-design.md#R18
+    levels: {}
+    status: not-implemented
+    notes: 'added at planning (plan 2 of R29): decomposition split the fold (R17/R18
+      read side) from R16''s amendments; built by plan 2 phase 1'
+    verify: candidate
+    issues:
+    - derio-net/super-fr#1379
   - id: test-plan-repair-covers-refused
     capability: artifact-migration
     acceptance: Every Test Plan heading fr refuses as a near-miss is repaired by migration,
