@@ -90,3 +90,13 @@ amendments:
       and a matching file
     why: the design moved from per-phase lens declarations to a feature-level lens review
       before deliver (operator decision)
+  - row: review-lenses-reviewer-return-checked
+    op: reword
+    base: 0
+    acceptance: Before delivery, one reviewer per accumulated lens reviews the whole
+      change and must name the changed files it examined and the findings it raised;
+      the lens review cannot be closed while a lens has no reviewer, a reviewer names
+      no file the feature changed, or a lens finding is open, and fr records the outcome
+      itself; with no lens requested the step completes without dispatching anyone
+    why: the design moved from per-phase lens declarations to a feature-level lens review
+      before deliver (operator decision)
