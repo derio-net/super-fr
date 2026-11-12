@@ -971,3 +971,16 @@ The fold is read by check, status, debt, self-review, the PR body and close-out.
 ### tier-2026-11-12-placement-resolver-p7 · decision · hard: a restartable move and a new CLI-entry refusal in the migration trigger
 
 The trigger gates every fr command; the move rewrites where every artifact lives.
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-34 created=2026-11-12T11:57:38+00:00 -->
+### exit-change-34 · decision · exit change: row placement-quiet -> strategy candidate
+
+plan 3 (2026-11-12-placement-resolver) builds this row; its candidate walk runs tests/scenarios/placement-quiet.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
