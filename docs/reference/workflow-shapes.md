@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-12 acceptance-fragments phase 2, its readers now fold per-feature fragments instead of reading matrix.yaml; nothing this page describes changed
+reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
 ---
 
 # Workflow shapes and the run cursor
