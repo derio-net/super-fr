@@ -720,3 +720,4 @@ _(post-merge, operator-driven)_
 | 2026-11-07-repo-settings-core | `derio-net/super-fr` | `2026-11-07-repo-settings-core` | — |
 | Plan 2: acceptance model and derived reports (R16–R22) | `derio-net/super-fr` | `pending` | 2026-11-07-repo-settings-core |
 | Plan 3: resolver, quiet, stealth, moves (R1, R23–R28) | `derio-net/super-fr` | `pending` | 2026-11-07-repo-settings-core, plan 2 (R18's resolver) |
+| 2026-11-12-acceptance-fragments | `derio-net/super-fr` | `2026-11-12-acceptance-fragments` | — |
