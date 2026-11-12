@@ -921,3 +921,8 @@ Filed at deliver as derio-net/super-fr#1410; still owed until discharged.
 ### phase-split-2026-11-12-placement-resolver-p2 · decision · review-size: ~115 mechanical call-site rewrites onto the resolver
 
 Phase 1 builds the resolver and its tripwire; converting every caller in the same phase would bury the resolver's design in a ~2400-line mechanical diff. The tripwire's shrinking allowlist joins them.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-placement-resolver-p3 created=2026-11-12T11:57:10+00:00 -->
+### phase-split-2026-11-12-placement-resolver-p3 · decision · ask: the quiet placement (R23, row placement-quiet)
+
+Quiet is its own requirement and row with its own scenario.
