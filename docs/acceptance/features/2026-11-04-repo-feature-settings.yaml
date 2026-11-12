@@ -271,3 +271,9 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_archive_followups.py#test_a_moved_then_exit_2_archive_still_retargets
     why: the retarget step and its tests are gone
+  - row: archive-retargets-matrix-refs
+    op: add-level
+    base: 4
+    level: unit
+    ref: super-fr:tests/unit/test_archive_followups.py#test_a_plan_archive_rewrites_no_acceptance_fragment
+    why: read-time resolution of archived refs is ci-pinned
