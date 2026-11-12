@@ -1,4 +1,4 @@
-<!-- fr:journal-schema=3 -->
+<!-- fr:journal-schema=4 -->
 # Journal: 2026-11-12-review-lenses
 
 <!-- fr:journal kind=discovery scope=spec id=brief created=2026-11-12T15:54:50+00:00 input=true -->
