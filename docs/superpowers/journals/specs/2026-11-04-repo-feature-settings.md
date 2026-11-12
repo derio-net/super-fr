@@ -876,3 +876,8 @@ Moving the matrix kind's version makes this repo stale until migrated, so the mi
 ### phase-split-2026-11-12-acceptance-fragments-p3 · decision · ask: R16's amendments and R17's stale-base rule (the write side)
 
 fr acceptance amend, the record kind's amendment shape and the stale-base refusal at check and deliver are one reviewable ask with its own row, acceptance-fragments-amendments.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-acceptance-fragments-p4 created=2026-11-12T00:28:46+00:00 -->
+### phase-split-2026-11-12-acceptance-fragments-p4 · decision · ask: R20-R22, derived and published reports
+
+Reports, CI publishing, the Pages visibility check and report_comment are one ask with its own row, acceptance-reports-derived-published.
