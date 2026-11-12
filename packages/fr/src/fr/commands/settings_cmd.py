@@ -127,9 +127,11 @@ def init_quiet(root: Path) -> str:
         raise unreachable(probe.stderr.strip() or "git ls-remote failed")
     blob = git("hash-object", "-w", "--stdin", stdin=render_init("quiet")).strip()
     tree = git("mktree", stdin=f"100644 blob {blob}\tsettings.yaml\n").strip()
-    commit = git(
-        "commit-tree", tree, "-m", "chore(fr): switch this repo to the quiet placement"
-    ).strip()
+    from fr.git_policy.templates import fr_message
+
+    # fr's own subject goes through the commit templates (R14), like every fr commit.
+    message = fr_message(root, "chore(fr): switch this repo to the quiet placement")
+    commit = git("commit-tree", tree, "-F", "-", stdin=message).strip()
     git("push", "origin", f"{commit}:{QUIET_REF}")
     git("fetch", "--no-tags", "origin", FETCH_REFSPEC)
     return (
