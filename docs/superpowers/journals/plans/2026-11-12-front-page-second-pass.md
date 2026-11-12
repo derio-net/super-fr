@@ -297,3 +297,8 @@ Same defect as p2-r2; the long-read section is left-aligned with the wrap.
 ### p2-r11-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1421] · resolves p2-r11: shared top bar is cramped at 390 and wraps at 320, and its left edge differs between article pages and the landing (phase 2)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1421.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved-2 created=2026-11-12T14:59:14+00:00 phase=1 state=open resolves=p1-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1422 -->
+### p1-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1422] · resolves p1-r8: At the spec's 600px breakpoint the 960-unit wide figure renders text near 7px at 601-800px (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1422.
