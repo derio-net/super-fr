@@ -639,3 +639,8 @@ The empty untracked directory was removed from the workspace; it was never track
 ### fold-retired-rows-keep-the-base-rule · decision · Retired rows stay under R17's base rule: a stale retire marks the row contested, and a correctly based amendment on a retired row clears it (phase 1)
 
 Resolves pr1408-r1 and pr1408-r2 with one design. A retired row keeps its revision count, and every amendment that names it, pending or merged, goes through the same base check as a live row. A pending stale one is a stale-pending refusal (the normal check/deliver path), never a FoldError; a merged stale one marks the row contested (debt via DebtRow.retired). A correctly based amendment applies to the retired snapshot, counts a revision and clears contested; the row stays retired, because R16 has no op that un-retires. A retire is checked like any amendment and no longer clears contested unconditionally: a stale retire that merged leaves the row retired AND contested; a correctly based retire clears it. An amendment naming an unknown row is unchanged (pending raises, merged is a notice). Within R17 as written; no spec change.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r1 created=2026-11-12T09:18:47+00:00 phase=1 state=open review_scope=in -->
+### pr1408-r1 · finding [open] (reviewer: in scope) · A retired row that became contested can never be cleared: every pending amendment naming a retired row raises FoldError, whatever its base (phase 1)
+
+Pre-merge review of PR #1408 (operator's independent review), item 1. fold.py retired-row branch. R17: the next correctly based amendment clears a contested row; here none can exist, and the FoldError breaks every reader on that branch.
