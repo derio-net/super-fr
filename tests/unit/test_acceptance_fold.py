@@ -172,17 +172,57 @@ def test_amendments_apply_in_merge_order_not_name_order(repo: Repo) -> None:
     assert eff.contested == frozenset()
 
 
-def test_ties_inside_one_commit_break_by_feature_slug_then_index(repo: Repo) -> None:
+def test_ties_inside_one_commit_break_by_base_then_feature_slug_then_index(repo: Repo) -> None:
+    # Plan journal `fold-ties-break-by-base` (supersedes the slug-first tie, pr1408-r6).
     repo.checkout("feat/both", new=True)
     repo.write("2026-01-03-charlie", amendments=[_amend(ROW, 0, "manual")])
     repo.write("2026-01-02-bravo", amendments=[_amend(ROW, 0, "unwired"), _amend(ROW, 1, "ci")])
     repo.commit("feat: both")
     repo.merge_feature("feat/both")
     eff = fold(repo.root)
-    # bravo[0] (base 0 ok), bravo[1] (base 1 ok), charlie[0] (base 0, stale at 2)
-    assert _status(eff) == "manual"
+    # bravo[0] (base 0 ok), charlie[0] (base 0, stale at 1), bravo[1] (base 1, stale at 2)
+    assert _status(eff) == "ci"
     assert eff.revisions[ROW] == 3
     assert eff.contested == frozenset({ROW})
+
+
+def _two_fragment_branch(repo: Repo) -> None:
+    """One branch amends ROW through fragment zz (base 0), then through aa (base 1)."""
+    repo.checkout("feat/two", new=True)
+    repo.write("2026-01-09-zz", amendments=[_amend(ROW, 0, "unwired", why="first")])
+    repo.commit("feat: zz")
+    repo.write("2026-01-08-aa", amendments=[_amend(ROW, 1, "walk-owed", why="second")])
+    repo.commit("feat: aa")
+
+
+def test_a_branchs_own_sequence_across_two_fragments_is_not_stale(repo: Repo) -> None:
+    # pr1408-r6: pending amendments order the way the merged fold will.
+    _two_fragment_branch(repo)
+    eff = fold(repo.root)
+    assert eff.stale_pending == ()
+    assert eff.contested == frozenset()
+    assert _status(eff) == "walk-owed"
+    assert [a.why for a in eff.pending] == ["first", "second"]
+
+
+def test_the_same_sequence_merged_by_merge_commit_folds_clean(repo: Repo) -> None:
+    _two_fragment_branch(repo)
+    repo.merge_feature("feat/two")
+    eff = fold(repo.root)
+    assert eff.contested == frozenset()
+    assert _status(eff) == "walk-owed"
+    assert eff.revisions[ROW] == 2
+
+
+def test_the_same_sequence_merged_by_squash_folds_clean(repo: Repo) -> None:
+    _two_fragment_branch(repo)
+    repo.checkout("main")
+    _git(repo.root, "merge", "-q", "--squash", "feat/two")
+    repo.commit("feat: two (squashed)")
+    repo.push()
+    eff = fold(repo.root)
+    assert eff.contested == frozenset()
+    assert _status(eff) == "walk-owed"
 
 
 def test_amendments_added_to_an_existing_fragment_take_their_own_merge_position(

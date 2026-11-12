@@ -6,10 +6,13 @@ The effective matrix is never stored. It is derived from the fragments under
 1. **Merged.** Every fragment at the default ref's tip contributes its rows. Its
    amendments apply in the order of the first-parent commit of the default ref that
    introduced each one (one `git log --first-parent --reverse` over the fragments);
-   ties inside one commit break by feature slug, then list index.
+   ties inside one commit (a merge commit, a squash) break by `base`, then feature
+   slug, then list index, so a branch's own sequence on one row across fragments
+   applies in the order it was written (plan journal `fold-ties-break-by-base`).
 2. **Pending.** A branch's view then adds its own entries not yet on the default
    ref: the working tree's rows and amendments the merged fragments do not carry,
-   by feature slug then list index. An abandoned branch's entries are in no tree the
+   ordered as one merge commit will order them (by `base`, feature slug, list
+   index). An abandoned branch's entries are in no tree the
    fold reads, so they never apply.
 
 Each amendment names the row revision it was written against (`base`); the revision
@@ -438,7 +441,7 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
             for path, frag in merged.items()
             for k, a in enumerate(frag.amendments)
         ),
-        key=lambda t: (t[0], t[1], t[2]),
+        key=lambda t: (t[0], t[3].base, t[1], t[2]),
     )
     # (amendment, its fragment, whether it is merged, its index in the fragment)
     queue: list[tuple[Amendment, str, bool, int]] = [
@@ -470,7 +473,9 @@ def _fold(run: GitRunner, sha: str, working: dict[str, str]) -> Effective:
             pending.append((frag.feature, k, a, path))
     for row, path, i, feature in pending_rows:
         define(row, path, i, feature)
-    pending.sort(key=lambda t: (t[0], t[1]))
+    # Ordered as the merge of this branch will order them (one commit, a tie):
+    # base, then feature slug, then list index (plan journal `fold-ties-break-by-base`).
+    pending.sort(key=lambda t: (t[2].base, t[0], t[1]))
     queue += [(a, path, False, k) for _, k, a, path in pending]
 
     if len(set(repos.values())) > 1:
