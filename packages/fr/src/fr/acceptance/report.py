@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import html
 import os
-from collections.abc import Iterable
 from pathlib import Path
 
 from fr.acceptance.anchors import is_python, line_of, node_line
@@ -422,125 +421,34 @@ def _path_view(matrix: Matrix, root: Path, own_repo: str) -> Matrix:
     return path_view(matrix, root, own_repo)
 
 
-def render_deterministic(
-    matrix: Matrix,
-    root: Path,
-    out_dir: Path,
-    sibling_root: str,
-    link_mode: str = "local",
-    fmt: str = "html",
-) -> str:
-    """Render as a pure function of `matrix.yaml`: a matrix-derived stamp (no
-    git date/hash) and probe=False links (no filesystem twin-probing). This is
-    the committed-report and drift-check rendering — reproducible from the
-    matrix alone, so the tripwire only fires on a genuine matrix change.
-
-    `root`/`out_dir` are resolved to canonical paths so callers passing
-    unresolved or symlinked paths (`add` via `resolve_repo_root()` vs. the
-    tripwire via `__file__.resolve()`) render byte-identically — otherwise a
-    sibling-repo relative link could differ and `add` would emit a report the
-    tripwire rejects."""
-    root = root.resolve()
-    out_dir = out_dir.resolve()
-    org, own_repo = _identity(matrix, root)
-    matrix = _path_view(matrix, root, own_repo)
-    links = LinkBuilder(
-        mode=link_mode,
-        ref="main",
-        root=root,
-        out_dir=out_dir,
-        sibling_root=sibling_root,
-        org=org,
-        own_repo=own_repo,
-        probe=False,
-    )
-    # No row count in the stamp, and no aggregates below: a committed report
-    # is a pure per-row rendering (§3.I).
-    stamp = f"links: {link_mode}"
-    renderer = render_markdown if fmt == "md" else render
-    return renderer(matrix, links, stamp, aggregates=False)
-
-
-# The committed report SET: one deterministic file per (link mode, format). This
-# mapping is the single source of truth — the CLI (`report --deterministic` /
-# `--check`), `add`, `init`, the `check` gate, and the sync tripwire all iterate
-# it, so the file list lives in exactly one place.
-#   report_local.html  — local links, HTML (viewable from a checkout)
-#   report_linked.html — github links, HTML
-#   report_linked.md   — github links, Markdown (github.com renders it inline;
-#                        committed .html is shown as source, not rendered)
-REPORT_SET: dict[str, tuple[str, str]] = {
-    "docs/acceptance/report_local.html": ("local", "html"),
-    "docs/acceptance/report_linked.html": ("github", "html"),
-    "docs/acceptance/report_linked.md": ("github", "md"),
+# Reports are derived from the fold, never committed (spec 2026-11-04 R20):
+# `fr acceptance report` writes one of these two, both gitignored. The legacy names
+# are the retired committed set, kept only so `check` can refuse a tracked copy.
+REPORT_OUTPUTS: dict[str, str] = {
+    "html": "docs/acceptance/report.html",
+    "md": "docs/acceptance/report.md",
 }
+LEGACY_REPORT_PATHS: tuple[str, ...] = (
+    "docs/acceptance/report_local.html",
+    "docs/acceptance/report_linked.html",
+    "docs/acceptance/report_linked.md",
+    "docs/acceptance/report.github.html",
+)
+REPORT_PATHS: tuple[str, ...] = (*REPORT_OUTPUTS.values(), *LEGACY_REPORT_PATHS)
 
-# `report.html` is the ad-hoc/uncommitted file now; `report.github.html` is the
-# pre-formats committed name, never produced anymore. The deterministic writers
-# delete a stale copy of the latter on regenerate so a migrating repo cleans up.
-STALE_LEGACY_REPORTS: tuple[str, ...] = ("docs/acceptance/report.github.html",)
 
-
-def ci_built_reports(root: Path) -> frozenset[str]:
-    """The `REPORT_SET` paths the repo gitignores and does not track — CI builds
-    them, so no fr commit path or sync check touches them (spec 2026-10-12 R1).
-
-    One `git check-ignore` call through `fr.git.git_answer` (C locale,
-    prompt-free, time-boxed; a tracked file is never reported ignored, so
-    tracked wins). Outside a git repo, or when git fails, the empty set: the
-    old behaviour. Compute it once per operation and pass it to
-    `tracked_reports`."""
+def tracked_report_paths(root: Path) -> list[str]:
+    """The report files git tracks in `root` (empty outside a repo or when git
+    fails): a report is derived, so a tracked one is a drifting second copy."""
     from fr.git import GitUnavailableError, git_answer
 
     try:
-        proc = git_answer(root, "check-ignore", "--", *REPORT_SET)
+        proc = git_answer(root, "ls-files", "--", *REPORT_PATHS)
     except GitUnavailableError:
-        return frozenset()
-    if proc.returncode not in (0, 1):
-        return frozenset()
-    return frozenset(
-        line.strip() for line in proc.stdout.splitlines() if line.strip() in REPORT_SET
-    )
-
-
-def tracked_reports(
-    root: Path, ci_built: frozenset[str] | None = None
-) -> dict[str, tuple[str, str]]:
-    """`REPORT_SET` minus `ci_built_reports(root)` — the reports fr commits and
-    keeps in sync (spec 2026-10-12 R1). Pass `ci_built` when the caller already
-    computed it, so one operation asks git once."""
-    skipped = ci_built_reports(root) if ci_built is None else ci_built
-    return {rel: spec for rel, spec in REPORT_SET.items() if rel not in skipped}
-
-
-def render_committed_set(
-    matrix: Matrix, root: Path, only: Iterable[str] | None = None
-) -> dict[str, str]:
-    """`{repo-relative path: rendered}` for every committed report — one per
-    entry in `REPORT_SET` (or only those named in `only`), each a deterministic
-    render of `matrix.yaml`. All live in `docs/acceptance/`, so a shared
-    `out_dir` keeps their relative links consistent. A pure matrix→content
-    function: no filesystem writes/deletes."""
-    out_dir = root / "docs" / "acceptance"
-    wanted = set(REPORT_SET if only is None else only)
-    return {
-        rel: render_deterministic(matrix, root, out_dir, "..", link_mode, fmt)
-        for rel, (link_mode, fmt) in REPORT_SET.items()
-        if rel in wanted
-    }
-
-
-def prune_stale_reports(root: Path) -> list[str]:
-    """Delete any legacy report file superseded by the current set (e.g. the
-    renamed `report.github.html`), returning the ones removed. Called by the
-    deterministic writers so a regenerate migrates a repo forward."""
-    removed = []
-    for rel in STALE_LEGACY_REPORTS:
-        p = root / rel
-        if p.exists():
-            p.unlink()
-            removed.append(rel)
-    return removed
+        return []
+    if proc.returncode != 0:
+        return []
+    return sorted({line.strip() for line in proc.stdout.splitlines() if line.strip()})
 
 
 def render_report(
@@ -550,10 +458,10 @@ def render_report(
     sibling_root: str,
     link_mode: str,
     ref: str,
+    fmt: str = "html",
 ) -> str:
-    """Ad-hoc local render: git-stamped (last-commit date/hash) and
-    twin-probing links. Non-deterministic by design — for a throwaway local
-    view, never the committed artifact."""
+    """The local render: git-stamped (last-commit date/hash) and twin-probing
+    links. Non-deterministic by design — a derived view, never committed."""
     import subprocess
 
     org, own_repo = _identity(matrix, root)
@@ -577,4 +485,5 @@ def render_report(
     stamp = f"matrix @ {ts} · links: {link_mode}" + (
         f" (ref {ref})" if link_mode == "github" else ""
     )
-    return render(matrix, links, stamp, aggregates=True)
+    renderer = render_markdown if fmt == "md" else render
+    return renderer(matrix, links, stamp, aggregates=True)

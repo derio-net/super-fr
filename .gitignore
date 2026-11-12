@@ -39,8 +39,9 @@ scripts/tmp/
 node_modules/
 *.tsbuildinfo
 
-# ad-hoc acceptance report (committed set is report_local.html / report_linked.{html,md})
+# derived acceptance report (`fr acceptance report`); reports are never committed
 docs/acceptance/report.html
+docs/acceptance/report.md
 
 # fr deliver suite logs (gh#606)
 .fr-deliver/

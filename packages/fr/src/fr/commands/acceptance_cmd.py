@@ -193,6 +193,14 @@ def check_cmd(
     raise typer.Exit(code)
 
 
+def _open_report(path: Path) -> None:
+    """Open a written report in the operator's browser. The one opener `--open` goes
+    through, so a test replaces it and never starts a real one."""
+    import webbrowser
+
+    webbrowser.open(path.resolve().as_uri())
+
+
 @acceptance_app.command("report")
 def report_cmd(
     link_mode: str = typer.Option(
@@ -205,114 +213,41 @@ def report_cmd(
     out: Path | None = typer.Option(
         None,
         "--out",
-        help="Single explicit output/check target (repo-relative). Omit to operate on the "
-        "whole committed set (report_local.html + report_linked.html + report_linked.md).",
+        help="Output file (repo-relative). Default: docs/acceptance/report.html "
+        "(report.md with --format md), both gitignored.",
     ),
-    deterministic: bool = typer.Option(
-        False,
-        "--deterministic",
-        help="Render as a pure function of the effective matrix (no git "
-        "date/hash, no filesystem twin-probing) — the committed-report / drift-check path.",
-    ),
-    check: bool = typer.Option(
-        False,
-        "--check",
-        help="Verify the on-disk report matches a fresh deterministic render; write "
-        "nothing, exit non-zero on drift. Implies --deterministic.",
+    fmt: str = typer.Option("html", "--format", help="html | md."),
+    open_it: bool = typer.Option(
+        False, "--open", help="Open the written report in the browser (this machine only)."
     ),
 ) -> None:
-    """Render the report set (or, with --check, verify it is in sync).
+    """Render the report from the folded matrix, to a file git ignores.
 
-    Default subject is the committed SET — report_local.html (local HTML),
-    report_linked.html (github HTML) and report_linked.md (github Markdown).
-    With no flags, renders the ad-hoc, uncommitted `report.html` (git-stamped,
-    honoring --link-mode). `--out` narrows to a single explicit file."""
-    from fr.acceptance.report import (
-        ci_built_reports,
-        prune_stale_reports,
-        render_committed_set,
-        render_deterministic,
-        render_report,
-        tracked_reports,
-    )
+    Reports are derived, never committed (spec 2026-11-04 R20): this writes
+    `docs/acceptance/report.html` (or `report.md`) and prints the path. CI publishes
+    the same render as a job summary, an exposed artifact or on Pages."""
+    from fr.acceptance.report import REPORT_OUTPUTS, render_report
 
     if link_mode not in ("github", "local"):
         err_console.print(f"--link-mode must be github|local, got {link_mode!r}")
         raise typer.Exit(2)
+    if fmt not in REPORT_OUTPUTS:
+        err_console.print(f"--format must be html|md, got {fmt!r}")
+        raise typer.Exit(2)
     root = resolve_repo_root()
     _refuse_if_off(root, "`fr acceptance report` writes no report")
     matrix = _load(root)
-    # No `--out` → operate on the whole committed set; an explicit `--out`
-    # (even one equal to the default path) narrows to that single file.
-
-    if check:
-        try:
-            if out is not None:
-                expected = {
-                    out.as_posix(): render_deterministic(
-                        matrix, root, (root / out).resolve().parent, sibling_root, link_mode
-                    )
-                }
-            else:
-                ci_built = ci_built_reports(root)
-                expected = render_committed_set(matrix, root, only=tracked_reports(root, ci_built))
-        except AcceptanceError as e:
-            err_console.print(f"[red]error:[/red] {escape(str(e))}")
-            raise typer.Exit(1) from e
-        stale = []
-        for rel, want in expected.items():
-            path = root / rel
-            got = path.read_text() if path.exists() else None
-            if got != want:
-                stale.append(rel)
-        if not stale:
-            line = (
-                f"{', '.join(expected)} in sync with the acceptance fragments"
-                if expected
-                else "no tracked reports to check"
-            )
-            if out is None and ci_built:
-                line += f" (CI-built, skipped: {', '.join(sorted(ci_built))})"
-            typer.echo(line)
-            return
-        typer.echo(
-            f"ERROR: stale (drifted from the acceptance fragments): {', '.join(stale)} — "
-            "run `fr acceptance report --deterministic` and commit the result.",
-            err=True,
-        )
-        raise typer.Exit(3)
-
+    out_path = (root / (out if out is not None else REPORT_OUTPUTS[fmt])).resolve()
     try:
-        if out is not None:
-            out_path = (root / out).resolve()
-            html = (
-                render_deterministic(matrix, root, out_path.parent, sibling_root, link_mode)
-                if deterministic
-                else render_report(matrix, root, out_path.parent, sibling_root, link_mode, ref)
-            )
-            files = {str(out_path): html}
-        elif deterministic:
-            files = {
-                str(root / rel): html for rel, html in render_committed_set(matrix, root).items()
-            }
-            prune_stale_reports(root)
-        else:
-            # Ad-hoc default render → a single git-stamped report.html honoring
-            # --link-mode (back-compat: the CI artifact step still uses this).
-            out_path = (root / "docs" / "acceptance" / "report.html").resolve()
-            files = {
-                str(out_path): render_report(
-                    matrix, root, out_path.parent, sibling_root, link_mode, ref
-                )
-            }
+        text = render_report(matrix, root, out_path.parent, sibling_root, link_mode, ref, fmt)
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {escape(str(e))}")
         raise typer.Exit(1) from e
-    for path_str, html in files.items():
-        p = Path(path_str)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(html)
-    typer.echo(f"wrote {', '.join(files)}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(text)
+    typer.echo(f"wrote {out_path}")
+    if open_it:
+        _open_report(out_path)
 
 
 @acceptance_app.command("status")
@@ -1166,12 +1101,8 @@ def init_cmd(
         typer.echo(f"created {rel}")
     for rel in outcome.modified:
         typer.echo(f"modified {rel}")
-    for rel in outcome.removed:
-        typer.echo(f"removed {rel} (superseded legacy report)")
     for rel in outcome.skipped:
         typer.echo(f"exists  {rel} (left untouched)")
-    for rel in outcome.ci_built:
-        typer.echo(f"skipped {rel} (gitignored — CI builds it)")
     for notice in outcome.notices:
         typer.echo(notice)
     # gh#775: commit every path changed here, as every fr writer does (gh#610).
@@ -1180,7 +1111,7 @@ def init_cmd(
     # init: a refused commit (the default branch, no repo) is one stderr line.
     from fr.records_commit import commit_records
 
-    paths = _committable(root, outcome.written, outcome.removed)
+    paths = _committable(root, outcome.written)
     if paths:
         commit_records(root, [Path(rel) for rel in paths], "chore(fr): acceptance init")
 
@@ -1231,9 +1162,9 @@ def _refresh_ci(root: Path, services: Any, *, with_ci: bool) -> None:
     commit_records(root, [Path(out.path)], "chore(fr): acceptance init --refresh-ci")
 
 
-def _committable(root: Path, written: list[str], removed: list[str]) -> list[str]:
+def _committable(root: Path, written: list[str]) -> list[str]:
     """The paths of `written` git will take in one `git add`: one it cannot
-    (a gitignored path, a deletion it never tracked) fails the whole add, and
+    (a gitignored path) fails the whole add, and
     so the whole commit (gh#775 review). An ignored path cannot dirty the tree,
     so leaving it out loses nothing; it is named so nobody assumes otherwise."""
     from fr.git import GitUnavailableError, git_answer
@@ -1242,14 +1173,11 @@ def _committable(root: Path, written: list[str], removed: list[str]) -> list[str
         return []
     try:
         ignored = set(git_answer(root, "check-ignore", "--", *written).stdout.split())
-        tracked = (
-            set(git_answer(root, "ls-files", "--", *removed).stdout.split()) if removed else set()
-        )
     except GitUnavailableError:
         return written  # commit_records reports whatever git then says
     for rel in sorted(ignored):
         typer.echo(f"ignored {rel} (gitignored here, so not committed)")
-    return [p for p in written if p not in ignored and (p not in removed or p in tracked)]
+    return [p for p in written if p not in ignored]
 
 
 BACKFILL_PROTOCOL = """\

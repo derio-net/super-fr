@@ -17,9 +17,9 @@ from pathlib import Path
 from fr._hosts import HostBackend
 from fr.acceptance.fragment import FRAGMENTS_DIR
 
-# `report.html` is the ad-hoc / uncommitted render (git-stamped, CI/local);
-# the committed set is report_local.html / report_linked.html / report_linked.md.
-GITIGNORE_LINE = "docs/acceptance/report.html"
+# Reports are derived, never committed (spec 2026-11-04 R20): `fr acceptance report`
+# writes these two, and init keeps git from ever tracking them.
+GITIGNORE_LINES = ("docs/acceptance/report.html", "docs/acceptance/report.md")
 
 # The retired matrix's header (spec 2026-11-04 R19): no longer written by init, kept
 # because the matrix 4 -> 5 hop rewrites an old header's status comment to it.
@@ -502,17 +502,11 @@ class InitOutcome:
     # Existing files init edited rather than created — today only `.gitignore`'s
     # appended line (gh#775: it used to be reported as "created").
     modified: list[str] = field(default_factory=list)
-    # Legacy reports deleted by `prune_stale_reports` — a deletion dirties the
-    # tree as surely as a write does.
-    removed: list[str] = field(default_factory=list)
-    # Reports the repo gitignores: CI builds them, init neither writes nor
-    # commits them (spec 2026-10-12 R1).
-    ci_built: list[str] = field(default_factory=list)
 
     @property
     def written(self) -> list[str]:
         """Every path this run changed — what `fr acceptance init` commits."""
-        return [*self.created, *self.modified, *self.removed]
+        return [*self.created, *self.modified]
 
 
 def _append_gitignore_line(path: Path, line: str) -> bool:
@@ -609,26 +603,14 @@ def init(
         )
 
     # No report is written: reports are derived, never committed (spec
-    # 2026-11-04-repo-feature-settings R20). The committed set's ci-built probe is
-    # still reported, so an operator sees which paths CI builds.
-    from fr.acceptance.report import ci_built_reports, prune_stale_reports
-
-    ci_built = ci_built_reports(root)
-    removed = prune_stale_reports(root)  # a pre-formats `report.github.html`
-
-    # `report.html` is the ad-hoc / uncommitted render — gitignore it.
+    # 2026-11-04-repo-feature-settings R20). Git is told to ignore the two files
+    # `fr acceptance report` writes.
     gitignore = root / ".gitignore"
     existed = gitignore.exists()
     modified: list[str] = []
-    if _append_gitignore_line(gitignore, GITIGNORE_LINE):
+    wrote = [_append_gitignore_line(gitignore, line) for line in GITIGNORE_LINES]
+    if any(wrote):
         (modified if existed else created).append(".gitignore")
     else:
         skipped.append(".gitignore")
-    return InitOutcome(
-        created=created,
-        skipped=skipped,
-        notices=notices,
-        modified=modified,
-        removed=removed,
-        ci_built=sorted(ci_built),
-    )
+    return InitOutcome(created=created, skipped=skipped, notices=notices, modified=modified)

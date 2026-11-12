@@ -161,13 +161,17 @@ def test_set_status_ci_allowed_with_a_ci_config(
 # ── B: the .gitignore edit is one appended line, nothing else ─────────────
 
 
+# the two files `fr acceptance report` writes (CRLF form, for the CRLF case)
+_BOTH = b"docs/acceptance/report.html\r\ndocs/acceptance/report.md\r\n"
+
+
 @pytest.mark.parametrize(
     "original, expected",
     [
-        (b"node_modules\n", b"node_modules\ndocs/acceptance/report.html\n"),
-        (b"node_modules", b"node_modules\ndocs/acceptance/report.html\n"),
-        (b"a\r\nb\r\n", b"a\r\nb\r\ndocs/acceptance/report.html\r\n"),
-        (b"a\n\n\n", b"a\n\n\ndocs/acceptance/report.html\n"),
+        (b"node_modules\n", b"node_modules\n" + _BOTH.replace(b"\r\n", b"\n")),
+        (b"node_modules", b"node_modules\n" + _BOTH.replace(b"\r\n", b"\n")),
+        (b"a\r\nb\r\n", b"a\r\nb\r\n" + _BOTH),
+        (b"a\n\n\n", b"a\n\n\n" + _BOTH.replace(b"\r\n", b"\n")),
     ],
 )
 def test_gitignore_edit_only_appends(tmp_path: Path, original: bytes, expected: bytes) -> None:
@@ -179,7 +183,7 @@ def test_gitignore_edit_only_appends(tmp_path: Path, original: bytes, expected: 
 
 def test_gitignore_already_carrying_the_line_is_not_touched(tmp_path: Path) -> None:
     root = _repo(tmp_path)
-    original = b"x\r\ndocs/acceptance/report.html\r\ny"
+    original = b"x\r\ndocs/acceptance/report.html\r\ndocs/acceptance/report.md\r\ny"
     (root / ".gitignore").write_bytes(original)
     outcome = init(root, "example-org", "demo", backend="gitlab")
     assert ".gitignore" in outcome.skipped

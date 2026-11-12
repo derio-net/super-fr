@@ -4,7 +4,7 @@
 # acceptance check` red. The gate migrates the working tree in place, never
 # commits, and warns on STDERR (plus a `::warning::` annotation under GitHub
 # Actions); stdout carries neither. The fixture is a fresh `git init` on `main`
-# with a minimal current-schema matrix and its committed reports — no forge.
+# with a minimal current-schema matrix (reports are derived, never committed) — no forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 # Every context marker goes, then this scenario sets exactly what it tests.
@@ -26,9 +26,6 @@ org: example-org
 repo: widgets
 rows: []
 YAML
-# The reports are generated while nothing is stale, as a real repo's would be.
-run_fr out acceptance report --deterministic
-require_exit 0 "$out"
 mkdir -p "docs/superpowers/plans/$plan"
 cat > "$meta" <<YAML
 schema_version: 2

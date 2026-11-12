@@ -358,28 +358,15 @@ def check(matrix: Matrix, root: Path, sibling_root: str = "..") -> CheckResult:
 
     result.warnings.extend(_workflow_coverage_warnings(matrix, root, own))
 
-    # Report-set sync (the "every fr-acceptance repo, the moment it touches the
-    # matrix" gate): if the repo has committed ANY report from the set, then
-    # ALL must exist AND match a fresh deterministic render. Existence-gated so
-    # report-less matrices / bare fixtures are untouched. Read-only — renders in
-    # memory, compares bytes. An unresolvable identity can't render, so it is
-    # skipped here (the render CLIs surface that separately).
-    from fr.acceptance.report import render_committed_set, tracked_reports
+    # Reports are derived from the fold, never committed (spec 2026-11-04 R20): a
+    # tracked one is a second copy that drifts, so it is refused, naming the file.
+    from fr.acceptance.report import tracked_report_paths
 
-    tracked = tracked_reports(root)  # CI-built (gitignored) reports are never compared
-    if any((root / rel).exists() for rel in tracked):
-        try:
-            expected_reports = render_committed_set(matrix, root, only=tracked)
-        except AcceptanceError:
-            expected_reports = {}
-        for rel, want in expected_reports.items():
-            report_path = root / rel
-            got = report_path.read_text() if report_path.exists() else None
-            if got != want:
-                result.errors.append(
-                    f"report drift: {rel} is missing or stale vs the acceptance fragments — "
-                    "run `fr acceptance report --deterministic` and commit the report set"
-                )
+    for rel in tracked_report_paths(root):
+        result.errors.append(
+            f"reports are derived; remove {rel} (`git rm {rel}`) — "
+            "render one locally with `fr acceptance report`"
+        )
 
     from fr.acceptance.model import walked_error
 

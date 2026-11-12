@@ -103,34 +103,6 @@ def test_init_commits_the_rest_when_one_path_is_gitignored(
     assert "ignored .claude/rules/acceptance-matrix.md" in result.output
 
 
-def test_init_commits_the_deletion_of_a_pruned_legacy_report(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = _repo_on_branch(tmp_path)
-    legacy = root / "docs/acceptance/report.github.html"
-    legacy.parent.mkdir(parents=True)
-    legacy.write_text("<html></html>\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-q", "-m", "legacy report")
-    result = _init(root, monkeypatch)
-    assert result.exit_code == 0, result.output
-    assert "removed docs/acceptance/report.github.html" in result.output
-    assert _git(root, "status", "--porcelain") == "", "the deletion was left uncommitted"
-
-
-def test_init_prunes_an_untracked_legacy_report_without_failing_the_commit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """`git add` of a deleted path git never tracked fails the whole add."""
-    root = _repo_on_branch(tmp_path)
-    legacy = root / "docs/acceptance/report.github.html"
-    legacy.parent.mkdir(parents=True)
-    legacy.write_text("<html></html>\n")
-    result = _init(root, monkeypatch)
-    assert result.exit_code == 0, result.output
-    assert _git(root, "status", "--porcelain") == ""
-
-
 def test_rerunning_init_is_a_no_op_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A regression guard (it passes without the fix): nothing new, no commit."""
     root = _repo_on_branch(tmp_path)

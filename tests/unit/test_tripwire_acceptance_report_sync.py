@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from fr.acceptance.report import REPORT_SET, STALE_LEGACY_REPORTS
+from fr.acceptance.report import REPORT_PATHS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,7 +31,7 @@ def _tracked(rel: str) -> bool:
     return done.returncode == 0
 
 
-@pytest.mark.parametrize("rel", [*REPORT_SET, *STALE_LEGACY_REPORTS])
+@pytest.mark.parametrize("rel", list(REPORT_PATHS))
 def test_no_report_is_committed(rel: str) -> None:
     assert not _tracked(rel), (
         f"{rel} is tracked, but reports are derived, never committed (R20) — "

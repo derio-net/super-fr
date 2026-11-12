@@ -15,7 +15,7 @@ import pytest
 import yaml
 from fr.acceptance.edit import insert_row, render_row_block
 from fr.acceptance.model import Row, parse_matrix
-from fr.acceptance.report import render_committed_set
+from fr.acceptance.report import render_report
 from fr.cli import app
 from typer.testing import CliRunner
 
@@ -114,7 +114,9 @@ def test_rendered_order_of_existing_rows_is_unchanged(tmp_path: Path) -> None:
     inserted = parse_matrix(insert_row(BASE, new))
     appended = parse_matrix(BASE + render_row_block(new))
     assert [r.id for r in appended.rows][-1] == "a3"
-    assert render_committed_set(inserted, root) == render_committed_set(appended, root)
+    assert render_report(inserted, root, root, "..", "github", "main") == render_report(
+        appended, root, root, "..", "github", "main"
+    )
 
 
 def test_add_cli_inserts_by_capability(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

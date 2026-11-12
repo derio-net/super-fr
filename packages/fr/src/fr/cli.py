@@ -81,6 +81,7 @@ app = typer.Typer(
     cls=_FrGroup,
     name="fr",
     help="super-fr: plan-as-folder superpowers toolchain, render → observe → diff → apply.",
+    epilog="Acceptance report: `fr acceptance report --open` (derived, never committed).",
     no_args_is_help=True,
 )
 

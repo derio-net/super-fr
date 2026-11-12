@@ -178,8 +178,8 @@ def test_p2_r5_digest_says_disabled_and_report_backfill_are_refused(repo: Path) 
     digest = runner.invoke(app, ["acceptance", "digest"])
     assert digest.exit_code == 0, digest.output
     assert DISABLED in digest.output
-    for argv in (["acceptance", "report", "--deterministic"], ["acceptance", "backfill"]):
+    for argv in (["acceptance", "report"], ["acceptance", "backfill"]):
         result = runner.invoke(app, argv)
         _refused(result)
     d = repo / "docs" / "acceptance"
-    assert not any((d / n).exists() for n in ("report_local.html", "report_linked.md"))
+    assert not any((d / n).exists() for n in ("report.html", "report.md"))

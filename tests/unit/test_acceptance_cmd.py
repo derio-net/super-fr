@@ -37,34 +37,6 @@ def test_check_unaffected_when_no_reports(tmp_path: Path, monkeypatch: pytest.Mo
     assert run_check(root, monkeypatch).exit_code == 0
 
 
-def test_check_enforces_report_set_when_present(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    # In sync → passes.
-    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    assert run_check(root, monkeypatch).exit_code == 0
-    # Touch a fragment without regenerating → check goes red.
-    matrix = root / "docs" / "acceptance" / "features" / "s.yaml"
-    matrix.write_text(matrix.read_text() + row(id="drift"))
-    res = run_check(root, monkeypatch)
-    assert res.exit_code == 1, res.output
-    assert "report" in res.output.lower()
-
-
-def test_check_fails_when_one_report_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = make_repo(tmp_path, row(id="a"))
-    monkeypatch.setenv("VK_REPO_ROOT", str(root))
-    assert runner.invoke(app, ["acceptance", "report", "--deterministic"]).exit_code == 0
-    (root / "docs" / "acceptance" / "report_linked.md").unlink()
-    res = run_check(root, monkeypatch)
-    assert res.exit_code == 1, res.output
-    assert "report_linked.md" in res.output
-
-
 # ── T1: CLI skeleton + identity resolution ─────────────────────────────────
 
 

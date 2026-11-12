@@ -161,7 +161,7 @@ def _git_repo(root: Path) -> None:
 def test_the_hop_renders_no_report_and_leaves_existing_ones_alone(tmp_path: Path) -> None:
     """Review p2-r1: the 5 -> 6 hop deletes every committed report, so this hop
     renders none — not even when one of the set exists (it used to write all three)."""
-    from fr.acceptance.report import REPORT_SET
+    from fr.acceptance.report import LEGACY_REPORT_PATHS as REPORT_SET
 
     _git_repo(tmp_path)
     _matrix(tmp_path)
@@ -344,7 +344,7 @@ def test_the_current_status_comment_is_the_scaffolds() -> None:
 
 
 def test_the_crash_window_only_owes_the_stamp(tmp_path: Path) -> None:
-    from fr.acceptance.report import REPORT_SET
+    from fr.acceptance.report import LEGACY_REPORT_PATHS as REPORT_SET
 
     _git_repo(tmp_path)
     body = _HEAD + _ROWS["ci-row"] + _ROWS["plain-row"].replace("skipped", "unwired")
