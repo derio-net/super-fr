@@ -24,7 +24,6 @@ journal:
     title: "Full suite not fully runnable here: slow npm installs, seven environment failures"
     body: "tests/integration/test_install*.py, test_scenarios.py and test_bootstrap_sh.py run install.sh, whose npm install of the devcontainers CLI times out in this sandbox (minutes per test, so hours in total); they were excluded from the logged run. The logged run (14663 passed, 132 skipped, 7 failed) fails only tests unrelated to this phase and consistent with the sandbox: four read-only-file or unwritable-cache tests that cannot fail as uid 0 (test_bindings_catalogue, test_bindings_probe, test_artifact_atomic, test_validate_artifacts) and three isolation container verb CLI tests (test_isolation_container_verbs). No file this phase touched is involved; CI is the authority for the excluded and failing tests."
     phase: 1
-evidence: {tests: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/phase1/full-suite.log}
 visual:
   - row: site-front-page-landing
     script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/phase1/capture.js
