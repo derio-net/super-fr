@@ -47,9 +47,13 @@ rows:
     origin:
     - spec:2026-11-12-front-page-second-pass#R5
     - spec:2026-11-12-front-page-second-pass#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_every_shipped_figure_passes_the_checks_and_all_four_exist
+      - super-fr:tests/unit/test_build_site.py#test_a_figure_is_emitted_where_its_section_kind_places_it
+    status: ci
+    notes: every figure file is checked and inlined on the landing and the article pages;
+      a real build kept all four intact; screenshots in dark, light and 390px at implement
     verify: none
     visual:
       states:
