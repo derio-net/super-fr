@@ -10,7 +10,6 @@ evidence:
   walk: /root/.cache/fr/walks/2026-11-12-claude-vigilant-hopper-sfd7vk/20261112T150356Z.log
 visual:
 - row: site-landing-two-acts
-  script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/deliver/capture.js
   shots:
   - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/deliver/shots/hero-dark.png
     shows:
@@ -37,7 +36,6 @@ visual:
     shows:
     - jump-to-explainers-anchor
 - row: site-landing-figures
-  script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/deliver/capture.js
   shots:
   - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/deliver/shots/fig0-dark.png
     shows:
@@ -79,7 +77,6 @@ visual:
     shows:
     - figure-on-article-page
 - row: site-landing-look-and-motion
-  script: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/deliver/capture.js
   shots:
   - path: /tmp/claude-0/-home-user-super-fr/671e7103-998b-587e-980b-da83b609e16c/scratchpad/p2/deliver/shots/hero-dark.png
     shows:
