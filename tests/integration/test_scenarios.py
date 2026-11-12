@@ -205,6 +205,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "repo-settings-forge-quiet",
         "repo-settings-git-policy",
         "placement-resolver",
+        "placement-quiet",
         "opencode-store-v2",
         "opencode-plugin-v2",
         "closeout-owed",
@@ -312,6 +313,10 @@ def test_repo_settings_forge_quiet(installed: Path, tmp_path: Path) -> None:
 
 def test_placement_resolver(installed: Path, tmp_path: Path) -> None:
     _scenario("placement-resolver", installed, tmp_path)
+
+
+def test_placement_quiet(installed: Path, tmp_path: Path) -> None:
+    _scenario("placement-quiet", installed, tmp_path)
 
 
 def test_repo_settings_git_policy(installed: Path, tmp_path: Path) -> None:

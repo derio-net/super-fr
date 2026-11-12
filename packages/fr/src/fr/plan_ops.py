@@ -402,7 +402,8 @@ def create(
     # is left untouched — the same refusal `ensure_validator_wrapper`
     # already makes elsewhere — reported as a warning, not a failure: a
     # plan is still worth creating even when the wrapper can't be.
-    if (repo_root / ".git").exists():
+    # Under quiet the product branch carries no fr file at all (R23): no wrapper.
+    if (repo_root / ".git").exists() and space_for(repo_root).placement == "repo":
         try:
             if ensure_validator_wrapper(repo_root):
                 written.append(validator_wrapper_path(repo_root))

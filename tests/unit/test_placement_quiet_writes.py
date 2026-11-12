@@ -51,6 +51,8 @@ def _product_is_clean(worktree: Path) -> None:
     files = git(worktree, "ls-tree", "-r", "--name-only", "HEAD").splitlines()
     roots = {KIND_DIRS["superpowers"], KIND_DIRS["acceptance"]}
     assert not [f for f in files if any(f.startswith(r + "/") for r in roots)]
+    assert not (worktree / "scripts" / "validate-plans.sh").exists()  # no fr file at all
+    assert not git(worktree, "status", "--porcelain", "--untracked-files=all").strip()
     subjects = git(worktree, "log", "--format=%s", "origin/main..HEAD").splitlines()
     assert not [s for s in subjects if s.startswith("chore(fr)")]
 
