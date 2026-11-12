@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 acceptance-fragments phase 3, a merged row changes only by amendment, and deliver refuses a stale amendment base
+reviewed: 2026-11-13 review-lenses phase 3, the lens-review step between journal-check and deliver
 ---
 
 ## Overview
@@ -49,7 +49,7 @@ the check finds, then continue.
 The journey itself is written down. A **workflow shape** is a small YAML file
 that lists the steps of a run — brainstorm, review the spec, plan, review the
 plan, implement (with a review running inside every phase), confirm every
-review left a record, deliver — and `fr-goal`
+review left a record, review the whole change through its lenses, deliver — and `fr-goal`
 reads that file rather than containing the sequence in its own prose. Asking for `fr-goal` with no argument
 runs the shape described in this article: feature delivery, test first. Naming
 one, as in `fr-goal ux-research`, runs a different shape. A project can write
@@ -953,6 +953,25 @@ duplication: the gate fires per phase, as the phase finishes, and this one
 reads back across work no cursor ever walked — a plan carried over from before
 runs existed, a plan adopted midway, a phase added after the loop had already
 finished. The same rule, asked twice, of two different populations.
+
+### 7a. Review the whole change through its lenses (`lens-review`)
+
+A phase reviewer reads one phase, and is told nothing about what to look for in
+particular, on purpose: a named concern narrows attention to itself. Some concerns
+are better asked of the whole change at once — whether it is safe, whether its
+tests prove more than the happy path, whether it is simpler than it could be. Those
+are **lenses**. Any agent in the run can add one, with a reason, and your
+repository can require one for the paths it names in `.fr/lenses.yaml`, so the
+change that touches your authentication code always gets the security lens
+whether or not anybody thought to ask.
+
+This step dispatches one reviewer per lens in that set, each given only its own
+lens and the feature's whole diff. Each reviewer ends its return with the files it
+examined and its findings, and the step will not close while a lens has no
+reviewer, a reviewer names a file the change never touched, or a finding is still
+open. The set is read again when the step closes, so a lens added during the review
+is owed too. When nobody added a lens and no rule matched, the step dispatches
+nobody and closes at once, and the record says no lens was requested.
 
 ### 8. Keep delivery in draft until the checks pass (`deliver`)
 
