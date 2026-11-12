@@ -1,0 +1,60 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 1
+feature: 2026-11-12-remove-vk-compat
+repo: derio-net/super-fr
+rows:
+  - id: init-migrate-removed
+    capability: Isolation
+    acceptance: The CLI offers no `fr init migrate` command
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: isolation-up-requires-branch
+    capability: Isolation
+    acceptance: '`fr isolation up` without `--branch` refuses with a usage error naming
+      the flag, and creates no workspace'
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: fr-repo-root-override
+    capability: CLI
+    acceptance: '`FR_REPO_ROOT` points an fr command at another repo root, and `VK_REPO_ROOT`
+      no longer does'
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: installer-names-no-vk-residue
+    capability: Installer
+    acceptance: The installer removes nothing named for the retired vk tool and treats
+      a validator wrapper as its own only when it names super-fr
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R6
+    - spec:2026-11-12-remove-vk-compat#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: plan-vk-version-repaired
+    capability: Artifact migration
+    acceptance: '`fr migrate artifacts --yes` removes `vk_version` from live and archived
+      plans, changing no other byte, and reports a plan it cannot rewrite'
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R10
+    - spec:2026-11-12-remove-vk-compat#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
