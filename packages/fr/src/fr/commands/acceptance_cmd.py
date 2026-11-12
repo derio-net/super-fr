@@ -67,7 +67,7 @@ def _load(root: Path) -> Matrix:
     try:
         return load_effective(root)
     except AcceptanceError as e:
-        err_console.print(f"[red]error:[/red] {escape(str(e))}")
+        err_console.print(f"[red]error:[/red] {escape(str(e))}", soft_wrap=True)
         raise typer.Exit(1) from e
 
 

@@ -250,6 +250,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "docs-check-structure",
         "docs-check-default-base-readonly",
         "acceptance-effective-matrix-fold",
+        "acceptance-matrix-migration",
     }
     assert on_disk == here
 
@@ -480,3 +481,7 @@ def test_docs_check_default_base_readonly(installed: Path, tmp_path: Path) -> No
 
 def test_acceptance_effective_matrix_fold(installed: Path, tmp_path: Path) -> None:
     _scenario("acceptance-effective-matrix-fold", installed, tmp_path)
+
+
+def test_acceptance_matrix_migration(installed: Path, tmp_path: Path) -> None:
+    _scenario("acceptance-matrix-migration", installed, tmp_path)

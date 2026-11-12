@@ -7,7 +7,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 
 mkdir -p docs/acceptance
-cat > docs/acceptance/matrix.yaml <<'YAML'
+matrix_fragment <<'YAML'
 schema_version: 5
 org: derio-net
 repo: toy
@@ -35,16 +35,16 @@ walk() {  # <row> [extra...]
 }
 
 # A walk with no harness, model or strategy is refused and changes nothing.
-before="$(cat docs/acceptance/matrix.yaml)"
+before="$(cat docs/acceptance/features/*.yaml)"
 run_fr out acceptance set-status --id row-a --status walked --notes n --walk walk.log
 require_exit 2 "$out"
-[ "$before" = "$(cat docs/acceptance/matrix.yaml)" ] || fail "a refused walk rewrote the matrix"
+[ "$before" = "$(cat docs/acceptance/features/*.yaml)" ] || fail "a refused walk rewrote the matrix"
 
 # row-b still waits for its own walk, so row-a's walk frees nothing.
 walk row-a;                                   require_exit 0 "$out"
-grep -q 'outcome: pass' docs/acceptance/matrix.yaml || fail "the walk was not recorded as a pass"
-grep -q 'harness: claude-code' docs/acceptance/matrix.yaml || fail "the walk did not record its harness"
-grep -q 'model: scenario-model' docs/acceptance/matrix.yaml || fail "the walk did not record its model"
+grep -q 'outcome: pass' docs/acceptance/features/*.yaml || fail "the walk was not recorded as a pass"
+grep -q 'harness: claude-code' docs/acceptance/features/*.yaml || fail "the walk did not record its harness"
+grep -q 'model: scenario-model' docs/acceptance/features/*.yaml || fail "the walk did not record its model"
 refuse_grep 'issue close' "$out" "a close was printed while another row still holds the issue open"
 
 # The last holder's walk prints the close and the unlabel commands.
@@ -58,7 +58,7 @@ expect_grep 'gh issue edit 7 --repo derio-net/toy --remove-label fr:awaiting-liv
 mkdir -p .devcontainer
 printf 'schema_version: 2\nprofiles:\n  dev:\n    purpose: x\nforge: {type: github}\ntracking: {type: none}\n' \
   > .devcontainer/fr-profiles.yaml
-cat > docs/acceptance/matrix.yaml <<'YAML'
+matrix_fragment <<'YAML'
 schema_version: 5
 org: derio-net
 repo: toy

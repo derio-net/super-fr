@@ -9,7 +9,8 @@ SPEC=docs/superpowers/specs/2026-10-06-toy.md
 PLAN=docs/superpowers/plans/2026-10-06-toy
 mkdir -p docs/superpowers/specs docs/acceptance
 
-# A matrix still at schema 3, carrying the legacy spelling.
+# A matrix still at schema 3, carrying the legacy spelling (the retired shape on
+# purpose: `fr migrate artifacts --yes` carries it all the way to a fragment).
 cat > docs/acceptance/matrix.yaml <<'YAML'
 schema_version: 3
 org: derio-net
@@ -67,11 +68,13 @@ chmod +x .fr/candidate-install
 git add -A >/dev/null 2>&1
 git commit -qm "fixture" >/dev/null 2>&1 || true
 
-# Legacy verify: post-merge migrates to live (and on up the chain), and nothing else moves.
+# Legacy verify: post-merge migrates to live (and on up the chain, into the spec's
+# fragment), and nothing else moves.
 run_fr out migrate artifacts --yes;           require_exit 0 "$out"
-grep -q '^schema_version: 5' docs/acceptance/matrix.yaml || fail "the matrix did not reach schema 5"
-grep -q 'verify: live' docs/acceptance/matrix.yaml || fail "verify: post-merge did not become live"
-! grep -q 'verify: post-merge' docs/acceptance/matrix.yaml || fail "verify: post-merge survived"
+frag=docs/acceptance/features/2026-10-06-toy.yaml
+[ ! -e docs/acceptance/matrix.yaml ] || fail "the matrix was not split into fragments"
+grep -q 'verify: live' "$frag" || fail "verify: post-merge did not become live"
+! grep -q 'verify: post-merge' "$frag" || fail "verify: post-merge survived"
 
 run_fr out plan create --slug 2026-10-06-toy --target-repo derio-net/toy \
   --spec "$SPEC" --phases-file phases.yaml;   require_exit 0 "$out"
@@ -87,7 +90,7 @@ expect_grep 'scenario' "$out" "the refusal asks for a scenario"
 
 # The reason satisfies it; the scenario path is the row's own.
 write_spec "- row-live: live — needs the released build"
-cat > docs/acceptance/matrix.yaml <<'YAML'
+matrix_fragment 2026-10-06-toy <<'YAML'
 schema_version: 5
 org: derio-net
 repo: toy

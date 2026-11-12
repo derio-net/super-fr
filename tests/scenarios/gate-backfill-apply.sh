@@ -30,7 +30,7 @@ git init -q --bare -b main "$world/origin.git" || fail "bare origin"
 git remote add origin https://github.com/example-org/widgets.git
 git config url."$world/origin.git".insteadOf https://github.com/example-org/widgets.git
 mkdir -p docs/acceptance "docs/superpowers/plans/$plan" docs/superpowers/specs src
-cat > docs/acceptance/matrix.yaml <<YAML
+matrix_fragment <<YAML
 schema_version: 5
 org: example-org
 repo: widgets

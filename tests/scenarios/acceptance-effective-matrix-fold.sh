@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Row acceptance-effective-matrix-fold: the effective matrix is folded from merged
 # features' fragments in the default ref's first-parent order, plus the branch's own
-# pending amendment, and an abandoned branch's amendment never applies. Phase 1 has no
-# CLI reader yet, so this drives the INSTALLED fr's library through its own interpreter
-# (`python -P`); phase 2 swaps it for `fr acceptance status`. The fixture is a fresh
-# `git init` with a local bare origin.
+# pending amendment, and an abandoned branch's amendment never applies. It reads the
+# fold through the INSTALLED fr's `fr acceptance status`, which every reader shares
+# (`fr.acceptance.fold.load_effective`). The fixture is a fresh `git init` with a
+# local bare origin.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
-py="$(candidate_python)"
 
 world="$(mktemp -d)"
 trap 'rm -rf "$world"' EXIT
@@ -48,24 +47,13 @@ git add -A && git commit -qm mine || fail "mine commit"
 land feat/zulu                         # zulu lands after mine was cut
 git checkout -q feat/mine
 
-out="$("$py" -P -c '
-from pathlib import Path
-from fr.acceptance.fold import fold
-e = fold(Path("."))
-for r in e.matrix.rows:
-    print("row", r.id, r.status, e.revisions[r.id], e.owners[r.id])
-print("pending", ",".join(a.why for a in e.pending))
-print("contested", ",".join(sorted(e.contested)) or "-")
-print("identity", e.matrix.org, e.matrix.repo)
-' 2>&1)" || { printf '%s\n' "$out" >&2; fail "fold raised"; }
-
-expect_grep '^row zulu-hums ci 0 2026-01-03-zulu$' "$out" "a merged feature's row is in the fold"
-expect_grep '^row alpha-spins walk-owed 2 2026-01-01-alpha$' "$out" \
-  "merged amendment, then the branch's pending one: revision 2, owner unchanged"
-first="$(printf '%s\n' "$out" | grep '^row' | head -1)"
-expect_grep 'zulu-hums' "$first" "rows order by capability (audio before widgets)"
-expect_grep '^pending mine$' "$out" "the branch's own amendment is pending"
-expect_grep '^contested -$' "$out" "a current base contests nothing"
-expect_grep '^identity derio-net widgets$' "$out" "identity comes from the fragments' repo:"
+run_fr out acceptance status
+require_exit 0 "$out"
+expect_grep '^acceptance: ci: 1, walk-owed: 1$' "$out" \
+  "a merged feature's row, and the merged amendment then the branch's pending one"
+expect_grep '^  alpha-spins \[walk-owed\]' "$out" "the branch's own amendment applies last"
 refuse_grep 'failing|abandoned' "$out" "an abandoned branch's amendment never applies"
+run_fr out acceptance summary
+require_exit 0 "$out"
+expect_grep '^\| ci \| 1 \|$' "$out" "zulu's row is folded in as ci"
 echo "ok: acceptance-effective-matrix-fold"

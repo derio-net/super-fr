@@ -23,7 +23,7 @@ R1. x
 YAML
 }
 write_matrix() {  # <extra row lines>
-  cat > docs/acceptance/matrix.yaml <<YAML
+  matrix_fragment <<YAML
 schema_version: 5
 org: derio-net
 repo: toy
@@ -35,6 +35,9 @@ rows:
     status: not-implemented
 $1
 YAML
+  # With no remote, HEAD stands in for the merged history, and a merged row changes
+  # only by amendment (spec 2026-11-04 R16): each rewrite lands as its own commit.
+  git add -A >/dev/null 2>&1 && git commit -qm "matrix" >/dev/null 2>&1 || true
 }
 write_spec
 write_matrix "    verify: live"

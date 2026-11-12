@@ -9,7 +9,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 git init -q -b main . || fail "git init"
 mkdir -p docs/acceptance
-cat > docs/acceptance/matrix.yaml <<'YAML'
+matrix_fragment <<'YAML'
 schema_version: 5
 org: example-org
 repo: widgets

@@ -20,7 +20,7 @@ git init -q -b main . 2>/dev/null || fail "git init"
 git symbolic-ref HEAD refs/heads/main || fail "HEAD to main"
 git config commit.gpgsign false
 mkdir -p docs/acceptance
-cat > docs/acceptance/matrix.yaml <<'YAML'
+matrix_fragment <<'YAML'
 schema_version: 5
 org: example-org
 repo: widgets

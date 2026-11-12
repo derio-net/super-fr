@@ -48,3 +48,22 @@ candidate_python() {
   [ -x "$(dirname "$exe")/python" ] || fail "no candidate tool interpreter beside fr"
   printf '%s\n' "$(dirname "$exe")/python"
 }
+
+# matrix_fragment [<feature>]: stdin is a document in the RETIRED matrix shape
+# (`schema_version`/`org`/`repo`, then `rows:` LAST); writes its rows, byte for
+# byte, as the acceptance fragment docs/acceptance/features/<feature>.yaml
+# (default `legacy`), carrying `repo: <org>/<repo>` (spec 2026-11-04 R16).
+matrix_fragment() {
+  local feature="${1:-legacy}"
+  mkdir -p docs/acceptance/features
+  awk -v feature="$feature" '
+    /^schema_version:/ && !rows { next }
+    /^org:/ && !rows { org = $2; next }
+    /^repo:/ && !rows { repo = $2; next }
+    /^rows:/ && !rows {
+      print "schema_version: 1"; print "feature: " feature; print "repo: " org "/" repo
+      print; rows = 1; next
+    }
+    rows { print }
+  ' > "docs/acceptance/features/$feature.yaml"
+}
