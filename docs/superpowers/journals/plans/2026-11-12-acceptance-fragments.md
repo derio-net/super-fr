@@ -749,3 +749,8 @@ Corrects the range in the previous record: 68f14ff5c restores both owners' fragm
 ### pr1408-r10-resolved · finding [deferred → derio-net/super-fr#1412] · resolves pr1408-r10: The record 10->11 hop validates with the live StepRecord via guard_v9_record
 
 Additive today; freezing the ~500-line StepRecord is far beyond a review fix, and no change removes a field yet. Tracked with the freeze-or-tripwire acceptance in #1412.
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r1-resolved-2 created=2026-11-12T10:18:43+00:00 state=fixed resolves=pr1408-r1 -->
+### pr1408-r1-resolved-2 · finding [fixed] · resolves pr1408-r1: A retired row that became contested can never be cleared: every pending amendment naming a retired row raises FoldError, whatever its base
+
+b9475854b fixed the fold; 55614d9d2 lets fr acceptance amend write the clearing amendment to a contested retired row (red: test_amend_clears_a_contested_retired_row_with_a_correctly_based_amendment, exit 2 before); a non-contested retired row is still refused.
