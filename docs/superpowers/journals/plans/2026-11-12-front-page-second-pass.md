@@ -122,3 +122,33 @@ Both figures now say 'up to the cap (default 4)'.
 ### p1-r8-resolved · finding [out-of-scope] · resolves p1-r8: At the spec's 600px breakpoint the 960-unit wide figure renders text near 7px at 601-800px (phase 1)
 
 Not caused by the phase's code: the 600px breakpoint was the spec's. The spec was corrected to 860px in this run and figures.css follows it, so nothing is left to file.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-card-text-markdown created=2026-11-12T14:44:14+00:00 phase=2 -->
+### p2-card-text-markdown · discovery · Card sentences go through the Markdown converter (phase 2)
+
+A card sentence such as one naming fr ops gate in backticks rendered the backticks literally when escaped as plain text; the grid now converts it inline like every other body text.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-article-identical created=2026-11-12T14:44:14+00:00 phase=2 -->
+### p2-article-identical · discovery · Article pages build byte-identical to the base commit (phase 2)
+
+A real build with the pinned renderer wrote 31 pages. fr-audit, fr-init, fr-isolation, 01-fr-goal and fr-acceptance are byte-identical to a build of the phase base commit. The landing carries four figures (eight svg forms), no script and no font-face.
+
+<!-- fr:journal kind=finding scope=plan id=p2-prose-alignment created=2026-11-12T14:44:14+00:00 phase=2 state=open review_scope=in -->
+### p2-prose-alignment · finding [open] (reviewer: in scope) · The long-read prose section is centred in a narrower column than the sections around it (phase 2)
+
+The prose band uses the 760px narrow wrapper while its neighbours span 1120px, so it looks offset to the right under the card grid. Cosmetic; found in the final screenshots. Fix is one rule (let the prose wrapper take the full width and cap its paragraphs).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-12T14:44:14+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+hand-authored SVG assets; nothing to restructure
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-12T14:44:14+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+prose page; no code to restructure
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-11-12T14:44:14+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+guidance prose and generated mirrors
