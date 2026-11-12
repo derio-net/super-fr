@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -340,11 +340,14 @@ def _run_branches(repo_root: Path) -> dict[str, str]:
 
 
 def acceptance_from_matrix(
-    matrix: Matrix, contested: frozenset[str] = frozenset()
+    matrix: Matrix,
+    contested: frozenset[str] = frozenset(),
+    retired: Sequence[Row] = (),
 ) -> AcceptanceDebt:
     """The Acceptance section of a matrix already in hand (the digest's seam);
     *contested* is the fold's contested rows (spec 2026-11-04 R17), debt whatever
-    their status."""
+    their status, and a *retired* row among them is debt too, listed as retired
+    (`open_rows` is the same definition)."""
     by_status: dict[str, int] = {}
     for r in matrix.rows:
         by_status[r.status] = by_status.get(r.status, 0) + 1
@@ -352,7 +355,10 @@ def acceptance_from_matrix(
     def debt(r: Row) -> bool:
         return is_debt(r.status, contested=r.id in contested)
 
+    gone = [r for r in retired if r.id in contested]
+    gone_ids = {r.id for r in gone}
     listed = [r for r in matrix.rows if r.status in LISTED_STATUSES or r.id in contested]
+    listed += gone
     # Debt rows oldest origin first, as `open_rows` orders the nag; the rest keep matrix order.
     ordered = sorted((r for r in listed if debt(r)), key=_age_key) + [
         r for r in listed if not debt(r)
@@ -365,10 +371,12 @@ def acceptance_from_matrix(
             notes=r.notes,
             walked_at=latest_passing_walk_at(r) if r.status == "walked" else None,
             contested=r.id in contested,
+            retired=r.id in gone_ids,
         )
         for r in ordered
     )
-    extra = sum(1 for r in matrix.rows if r.id in contested and r.status not in DEBT_STATUSES)
+    extra = len(gone)
+    extra += sum(1 for r in matrix.rows if r.id in contested and r.status not in DEBT_STATUSES)
     return AcceptanceDebt(by_status=by_status, rows=rows, available=True, contested=extra)
 
 
@@ -389,7 +397,8 @@ def acceptance_debt(repo_root: Path) -> tuple[AcceptanceDebt, Matrix | None, Sou
         why = " ".join(str(e).split())
         return AcceptanceDebt(available=False), None, SourceStatus(state="unavailable", why=why)
     matrix = folded.matrix
-    return acceptance_from_matrix(matrix, folded.contested), matrix, SourceStatus(state="read")
+    debt = acceptance_from_matrix(matrix, folded.contested, folded.retired)
+    return debt, matrix, SourceStatus(state="read")
 
 
 def compute(

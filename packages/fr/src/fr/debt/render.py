@@ -162,8 +162,17 @@ def _acceptance_off(report: DebtReport) -> bool:
 
 
 def _status(r: DebtRow) -> str:
-    """A row's status, with `contested` beside it when a stale amendment merged on it."""
-    return f"{r.status}, contested" if r.contested else r.status
+    """A row's status, with `contested` beside it when a stale amendment merged on it
+    (and `retired` before that when the row has left the matrix)."""
+    return status_tag(r.status, retired=r.retired, contested=r.contested)
+
+
+def status_tag(status: str, *, retired: bool = False, contested: bool = False) -> str:
+    """`<status>[, retired][, contested]`: the one rendering `fr debt`, the digest and
+    `fr acceptance status` share."""
+    return ", ".join(
+        [status, *(["retired"] if retired else []), *(["contested"] if contested else [])]
+    )
 
 
 def acceptance_section(acc: AcceptanceDebt, *, off: bool = False) -> str:

@@ -379,12 +379,13 @@ def _acceptance_section(root: Path) -> str | None:
         from collections import Counter
 
         from fr.acceptance.check import open_rows
-        from fr.acceptance.fold import load_effective
+        from fr.acceptance.fold import effective
 
-        matrix = load_effective(root)
+        folded = effective(root)
+        matrix = folded.matrix
         counts = Counter(r.status for r in matrix.rows)
         summary = ", ".join(f"{s}: {n}" for s, n in sorted(counts.items())) or "empty"
-        n_open = len(open_rows(matrix))
+        n_open = len(open_rows(matrix, folded.contested, folded.retired))
         return f"\nAcceptance: {summary} — {n_open} open (details: fr acceptance status)"
     except Exception as e:  # noqa: BLE001 — a broken matrix must not break status
         return f"\nAcceptance: matrix unreadable ({e}) — fr acceptance check"

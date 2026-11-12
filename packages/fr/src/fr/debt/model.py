@@ -37,6 +37,9 @@ class DebtRow(_Frozen):
     """The latest passing walk of a `walked` row; None renders as undated."""
     contested: bool = False
     """A stale amendment merged on it (spec 2026-11-04 R17): debt whatever its status."""
+    retired: bool = False
+    """Retired, yet a merged amendment still names it: contested, so debt, though it has
+    left the matrix (plan journal `fold-merged-stale-targets`)."""
 
     @property
     def is_debt(self) -> bool:
@@ -51,7 +54,8 @@ class AcceptanceDebt(_Frozen):
     """False when the matrix could not be read: unavailable, never zero."""
 
     contested: int = 0
-    """Contested rows whose status is not itself debt (each counted once)."""
+    """Contested rows whose status is not itself debt, and every retired contested row
+    (each counted once; `by_status` counts only rows still in the matrix)."""
 
     def debt_count(self) -> int:
         return sum(n for s, n in self.by_status.items() if s in DEBT_STATUSES) + self.contested

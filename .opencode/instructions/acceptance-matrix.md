@@ -90,8 +90,9 @@ artifacts --yes` splits it.
   then refuse, exit 2, a branch amendment whose base another feature's merged
   amendment has passed: review the row, then `fr acceptance amend --rebase`. A
   stale amendment that merged anyway marks its row **contested**, which is debt
-  (`fr acceptance status`, `fr debt`) whatever its status, until the next
-  amendment based on its current revision.
+  (`fr acceptance status`, `fr debt`, the digest) whatever its status, until the
+  next amendment based on its current revision; a retired row a merged amendment
+  still names is listed too, as `retired, contested`.
 - Anchor a Python ref on the test's NAME, never its line:
   `<repo>:tests/x.py#test_y` or `#TestX::test_y` (pytest's node spelling). A
   `#L<n>` slides onto whatever test lands there next, silently — 27 of this

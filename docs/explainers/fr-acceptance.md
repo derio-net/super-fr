@@ -114,6 +114,8 @@ and refuse it (exit 2), naming both revisions. Look at what the other feature ch
 then run `fr acceptance amend --rebase`. A stale amendment that merges anyway still
 applies, but it marks the row **contested**: debt in `fr acceptance status` and `fr debt`,
 whatever its status, until the next amendment at the row's current revision settles it.
+A stale amendment that names a row another feature has since retired is the same debt:
+the row stays listed, shown as `retired, contested`, though it has left the matrix.
 
 ## Backfilling a repo that has no matrix
 

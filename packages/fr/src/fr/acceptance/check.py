@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import subprocess
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -104,15 +105,20 @@ def _age_key(row: Row) -> str:
     return min(dates, default="")
 
 
-def open_rows(matrix: Matrix, contested: frozenset[str] = frozenset()) -> list[Row]:
+def open_rows(
+    matrix: Matrix, contested: frozenset[str] = frozenset(), retired: Sequence[Row] = ()
+) -> list[Row]:
     """The nag set: the debt rows (`is_debt`: a `DEBT_STATUSES` status, or one of
-    the fold's *contested* rows), oldest origin first.
+    the fold's *contested* rows), oldest origin first. A *retired* row a merged
+    amendment still names is contested too (plan journal `fold-merged-stale-targets`),
+    and debt like any other: it is listed although it left the matrix.
 
     The sort is stable, so rows of the same age keep their matrix order.
     """
     from fr.acceptance.model import is_debt
 
     opens = [r for r in matrix.rows if is_debt(r.status, contested=r.id in contested)]
+    opens += [r for r in retired if r.id in contested]
     return sorted(opens, key=_age_key)
 
 

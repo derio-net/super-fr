@@ -336,3 +336,70 @@ def test_a_repo_with_no_remote_keeps_no_refusal_and_no_warning(
     found = branch_refusals(root)
 
     assert (found.errors, found.warnings) == ([], [])
+
+
+RETIRE_B = f"""\
+schema_version: 1
+feature: {SLUG_B}
+repo: acme/widget
+rows:
+amendments:
+  - row: r
+    op: reword
+    base: 0
+    acceptance: r works, as B says
+    why: b
+  - row: r
+    op: retire
+    base: 1
+    notes: superseded
+    why: b retires r
+"""
+
+
+def _retired_and_contested(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """C amends r at base 0 on its branch; B rewords then retires r and merges; C merges
+    anyway, so a merged amendment names a retired row (`fold-merged-stale-targets`)."""
+    root = _stale_branch(tmp_path, monkeypatch)
+    other = tmp_path / "other"
+    (other / FRAGMENTS_REL / f"{SLUG_B}.yaml").write_text(RETIRE_B)
+    git(other, "commit", "-qam", "feat: beta retires r")
+    git(other, "push", "-q", "origin", "main")
+    (other / FRAGMENTS_REL / f"{SLUG_C}.yaml").write_text(
+        (root / FRAGMENTS_REL / f"{SLUG_C}.yaml").read_text()
+    )
+    git(other, "add", "-A")
+    git(other, "commit", "-qm", "feat: gamma, merged without a re-base")
+    git(other, "push", "-q", "origin", "main")
+    git(root, "fetch", "-q", "origin")
+    git(root, "checkout", "-q", "-b", "feat/d", "origin/main")
+    clear_fold_cache()
+    return root
+
+
+def test_a_retired_contested_row_is_debt_everywhere_and_status_and_debt_agree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p3-r4: one definition. A retired row a merged amendment still names is contested
+    debt in `status`, `open_rows`, `fr debt` and the digest alike, shown as retired."""
+    from fr.acceptance.check import open_rows
+    from fr.acceptance.fold import effective
+    from fr.debt.engine import acceptance_debt
+
+    root = _retired_and_contested(tmp_path, monkeypatch)
+    folded = effective(root)
+    assert folded.contested == frozenset({"r"}) and folded.matrix.rows == ()
+
+    assert [r.id for r in open_rows(folded.matrix, folded.contested, folded.retired)] == ["r"]
+    acc, _, _ = acceptance_debt(root)
+    assert acc.debt_count() == 1
+    assert [(r.id, r.retired, r.contested) for r in acc.rows] == [("r", True, True)]
+
+    status = invoke(root, monkeypatch, "status")
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    debt = runner.invoke(app, ["debt", "--offline"])
+    digest = invoke(root, monkeypatch, "digest")
+
+    assert "no acceptance debt" not in status.output, status.output
+    for out in (status.output, debt.output, digest.output):
+        assert "retired, contested" in out, out
