@@ -77,8 +77,10 @@ removed. Nothing about a gate lives in a file in the repo, so passing one needs 
 
 A person passes a gate, or the work that the gate guards is recorded as done.
 
-- **Tester.** When every acceptance row the gate holds reads `walked` on the default branch,
-  the triage driver passes the gate itself. Otherwise you walk the rows
+- **Tester.** When the gate has acceptance rows and every one of them reads `walked` on the
+  default branch, the triage driver passes the gate itself. It never does for a run-level gate
+  that no row inherits, nor for a `devops` gate added because the plan has operations: those
+  are passed explicitly. Otherwise you walk the rows
   ([fr-acceptance](fr-acceptance.md)) or record the pass by hand:
 
   ```bash

@@ -62,8 +62,9 @@ is true now, not from what it remembers. In order, a pass:
    you). They are named once, never merged.
 2. **Merges what is ready.** Per repo it walks a merge train in order (wave, then merge
    order, then id) and merges the head of it. A pull request merges only when it is not a
-   draft, its checks are green at that moment, and it carries **your** `approved-fr` label.
-   The merge is pinned to the head whose checks were judged, so a head that moved since is
+   draft that you have not approved, its checks are green at that moment, and it carries
+   **your** `approved-fr` label. An approved draft is marked ready first; an unapproved one is
+   held as awaiting approval, and the train goes on past it. The merge is pinned to the head whose checks were judged, so a head that moved since is
    left for the next pass. A pull request that has fallen behind its base is updated and
    merged on a later pass, once CI is green again. A failing check is reported once per
    head. The driver never approves, and it never waits for CI inside a pass.
@@ -96,7 +97,7 @@ pull request somebody may have to review; a wave of fifteen would bury you.
 
 ## When it merges, and what it refuses
 
-The driver refuses to merge a draft, a pull request whose checks are pending, failing or
+The driver refuses to merge an unapproved draft, a pull request whose checks are pending, failing or
 absent (a head it has only just pushed is pending, not green), a pull request without your
 label, a pull request from a fork or a foreign author, and a batch another scope holds. It
 refuses to guess. When you push a commit to a batch branch, the label is removed, and you
@@ -123,7 +124,9 @@ A lock file in the scope's state directory refuses a second driver, so there is 
 scope. `--yes` is what makes it act: without it `drive` prints the plan one pass would follow
 and exits, loop mode included. `--once` makes a single pass and exits 0 when it acted or
 everything is done, 3 when it did nothing and work remains (a draft, CI, a dependency, a
-blocked batch), and 2 when it refused. A forge write that fails exits 1.
+blocked batch), and 2 when it refused. A forge write that fails exits 1. `--once --yes` on the
+host refuses, with exit 2 and the looping command, when its pass would dispatch a batch, because
+one pass leaves the rest of the wave undone; `--single-pass` says the one pass is deliberate.
 
 ## Where you act
 

@@ -738,33 +738,67 @@ def test_a_valid_figure_passes() -> None:
 
 
 @pytest.mark.parametrize(
-    ("old", "new", "match"),
+    ("old", "new", "phrase"),
     [
-        (' role="img"', "", "role"),
-        ("<title>A box</title>", "<title> </title>", "title"),
-        ("<title>A box</title>\n", "<g/><title>A box</title>\n", "title"),
-        ("<rect", "<script>1</script><rect", "script"),
-        ("<rect", '<rect onclick="x()"', "on"),
-        ("<rect", '<image href="#a"/><rect', "image"),
-        ("<rect", "<foreignObject/><rect", "foreignObject"),
-        ('href="#box--r"', 'href="https://example.com/a.svg"', "href"),
-        ('href="#box--r"', 'xlink:href="a.svg"', "href"),
-        ("url(#box--fade)", "url(https://example.com/x)", "url"),
-        ('stroke="currentColor"', 'stroke="#fff"', "colour"),
-        ('stroke="currentColor"', 'stroke="rgb(1,2,3)"', "colour"),
-        ('stroke="currentColor"', 'stroke="hsl(1,2%,3%)"', "colour"),
-        ('stroke="currentColor"', 'stroke="red"', "colour"),
-        ('stroke="currentColor"', 'style="stop-color:#000"', "colour"),
-        ("<rect", "<style>.a{fill:#123456}</style><rect", "colour"),
-        ('id="box--r"', 'id="r"', "id"),
-        ('id="box--fade"', 'id="fade"', "id"),
+        (' role="img"', "", 'has no role="img"'),
+        (' role="img"', ' data-role="img"', 'has no role="img"'),
+        (' role="img"', ' role="presentation"', 'has no role="img"'),
+        ("<title>A box</title>", "<title> </title>", "not a non-empty <title>"),
+        ("<title>A box</title>\n", "<g/><title>A box</title>\n", "not a non-empty <title>"),
+        ("<rect", "<script>1</script><rect", "contains a <script> element"),
+        ("<rect", '<rect onclick="x()"', "event attribute onclick"),
+        ("<rect", '<rect ONLOAD="x()"', "event attribute onload"),
+        ("<rect", '<image href="#a"/><rect', "contains an <image> element"),
+        ("<rect", "<foreignObject/><rect", "contains a <foreignObject> element"),
+        ('href="#box--r"', 'href="https://example.com/a.svg"', "is not a same-document #id"),
+        ('href="#box--r"', 'xlink:href="a.svg"', "is not a same-document #id"),
+        ("url(#box--fade)", "url(https://example.com/x)", "is not a same-document #id"),
+        ('stroke="currentColor"', 'stroke="#fff"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'stroke="rgb(1,2,3)"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'stroke="hsl(1,2%,3%)"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'stroke="red"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'stroke="oklch(0.7 0.1 30)"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'stroke="color-mix(in srgb, red, blue)"', "not a class-driven"),
+        ('stroke="currentColor"', 'style="stop-color:#000"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'style="fill:red !important"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'style="STROKE:red"', "not a class-driven paint"),
+        ('stroke="currentColor"', 'STROKE="red"', "not a class-driven paint"),
+        ("<rect", "<style>.a{fill:#123456}</style><rect", "not a class-driven paint"),
+        ("<rect", "<style>.a{FILL:red !important}</style><rect", "not a class-driven paint"),
+        ("<rect", "<style>@import 'x.css';</style><rect", "uses @import"),
+        ("<rect", '<animate attributeName="fill" to="red"/><rect', "SMIL animation element"),
+        ("<rect", '<set attributeName="fill" to="red"/><rect', "SMIL animation element"),
+        ("<rect", '<animateTransform attributeName="transform"/><rect', "SMIL animation"),
+        ('id="box--r"', 'id="r"', "does not start with 'box--'"),
+        ('id="box--fade"', 'id="fade"', "does not start with 'box--'"),
+        ("<rect", '<rect xml:id="loose"/><rect', "does not start with 'box--'"),
+        ("<rect", "<rect", "not well-formed XML"),
     ],
 )
 def test_a_defective_figure_is_refused_naming_it_and_the_defect(
-    old: str, new: str, match: str
+    old: str, new: str, phrase: str
 ) -> None:
-    with pytest.raises(bs.BuildError, match=rf"box.*{match}"):
-        bs.check_figure(GOOD_FIGURE.replace(old, new, 1), "box")
+    source = GOOD_FIGURE.replace(old, new, 1)
+    if phrase == "not well-formed XML":
+        source = GOOD_FIGURE.replace("</svg>", "")
+    with pytest.raises(bs.BuildError, match=rf"figure box: .*{re.escape(phrase)}"):
+        bs.check_figure(source, "box")
+
+
+def test_a_gt_inside_a_root_attribute_value_and_equals_in_text_are_accepted() -> None:
+    svg = GOOD_FIGURE.replace('role="img"', 'role="img" data-note="a > b"').replace(
+        "<use", "<text>one = 1</text><use"
+    )
+    bs.check_figure(svg, "box")
+
+
+def test_an_allowed_paint_in_a_style_attribute_and_a_style_element_passes() -> None:
+    svg = GOOD_FIGURE.replace(
+        "<rect",
+        '<style>.a{fill:var(--x);stroke:none !important}</style><rect style="color:inherit"',
+        1,
+    )
+    bs.check_figure(svg, "box")
 
 
 @pytest.mark.parametrize("value", ["none", "currentColor", "inherit", "transparent", "var(--x)"])
@@ -805,6 +839,41 @@ def test_load_figure_without_a_narrow_form_has_only_the_wide_one(
     (d / "box.svg").write_text(GOOD_FIGURE)
     out = bs.load_figure("box")
     assert out.count("<svg") == 1 and "fig-narrow" not in out
+    assert "fig-wide" not in out  # a lone figure is never hidden by the width switch
+
+
+def test_a_defective_figure_reached_through_fill_figures_names_the_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _figure_dir(tmp_path, monkeypatch)
+    (d / "box.svg").write_text(GOOD_FIGURE.replace(' role="img"', ""))
+    with pytest.raises(bs.BuildError, match=r"docs/x\.md.*figure box"):
+        bs.fill_figures("<!-- site:figure box -->\n", "docs/x.md")
+
+
+def test_fill_figures_emits_load_figures_markup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _figure_dir(tmp_path, monkeypatch)
+    (d / "box.svg").write_text(GOOD_FIGURE)
+    (d / "box.narrow.svg").write_text(GOOD_FIGURE.replace("box--", "box-narrow--"))
+    text, inserted = bs.fill_figures("<!-- site:figure box -->\n", "x.md")
+    assert bs.load_figure("box") in text
+    assert len(inserted) == 2 and 'class="fig-wide"' in inserted[0]
+
+
+def test_figures_css_switches_between_the_forms_at_860px_and_sets_the_svg_paint() -> None:
+    css = (REPO / "scripts" / "site" / "figures.css").read_text()
+    assert re.search(
+        r"@media\s*\(max-width:\s*860px\)\s*\{[^}]*\.fig-wide\{display:none\}"
+        r"[^}]*\.fig-narrow\{display:block\}",
+        css,
+    )
+    base = re.search(r"\.site-figure svg\{([^}]*)\}", css)
+    assert base is not None
+    for prop in ("fill", "color", "stroke"):
+        assert re.search(rf"(?<![\w-]){prop}:", base.group(1)), prop
+    assert "max-width" in re.search(r"\.fig-narrow\{([^}]*)\}", css).group(1)
 
 
 def test_a_missing_figure_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

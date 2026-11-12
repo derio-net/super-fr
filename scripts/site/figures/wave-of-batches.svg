@@ -37,7 +37,7 @@
 <path d="M530 92 H620" class="fig-accent-line fig-flow" marker-end="url(#wave-of-batches--arrow)"/>
 <path d="M530 176 H620" class="fig-accent-line fig-flow" marker-end="url(#wave-of-batches--arrow)"/>
 <text x="575" y="258" text-anchor="middle" class="fig-muted fig-small">only a merged batch meets an after</text>
-<text x="20" y="258" class="fig-muted fig-small">in flight: at most 4 batches</text>
+<text x="20" y="258" class="fig-muted fig-small">in flight: up to the cap (default 4)</text>
 <text x="20" y="316" class="fig-muted fig-small">ONE DRIVER PASS, REPEATED UNTIL NOTHING IS LEFT</text>
 <rect x="20" y="332" width="200" height="64" rx="8" class="fig-panel"/>
 <text x="34" y="359" class="fig-ink fig-text">merge what is ready</text>

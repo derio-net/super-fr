@@ -752,72 +752,106 @@ FIGURES_DIR = SITE_DIR / "figures"
 _FIGURE_MARKER = re.compile(r"^<!--\s*site:figure\s+(\S+)\s*-->\s*$")
 _FIGURE_NAME = re.compile(r"^[a-z0-9-]+$")
 _SVG_OPEN = re.compile(r"<svg\b[^>]*>")
-_TITLE_FIRST = re.compile(r"\s*<title\b[^>]*>([^<]*)</title>")
-_PAINT_PROPS = r"(?:fill|stroke|stop-color|flood-color|color)"
-_PAINT_DECL = re.compile(rf"(?<![\w-])({_PAINT_PROPS})\s*[:=]\s*[\"']?([^;}}\"'>]+)")
-_URL_REF = re.compile(r"url\(\s*[\"']?([^)\"']*)[\"']?\s*\)")
-_HREF = re.compile(r"(?<![\w-])(?:xlink:)?href\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
-_ID = re.compile(r"(?<![\w:-])id\s*=\s*[\"']([^\"']*)[\"']")
-_NAMED_OK = {"none", "currentcolor", "inherit", "transparent", ""}
+_PAINT_PROPS = frozenset({"fill", "stroke", "stop-color", "flood-color", "color"})
+_CSS_DECL = re.compile(r"(?<![\w-])([\w-]+)\s*:\s*([^;}]*)")
+_URL_REF = re.compile(r"url\(\s*[\"']?([^)\"']*)[\"']?\s*\)", re.IGNORECASE)
+_SAME_DOC = re.compile(r"#[^\s#]+")
+_ALLOWED_PAINT = {"none", "currentcolor", "inherit", "transparent"}
+_REFUSED_ELEMENTS = {
+    "script": "contains a <script> element",
+    "image": "contains an <image> element, which would be a reference outside the page",
+    "foreignobject": "contains a <foreignObject> element",
+}
+_SMIL = {"animate", "set", "animatetransform", "animatemotion"}
+_XLINK = 'xmlns:xlink="http://www.w3.org/1999/xlink"'
 
-# One table of the figure refusals that are a plain pattern: (what to find, what to say).
-_FIGURE_REFUSALS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
-    (re.compile(pattern, re.IGNORECASE), message)
-    for pattern, message in (
-        (r"<script", "contains a <script>"),
-        (r"(?<![\w:-])on[a-z]+\s*=", "carries an on*= event attribute"),
-        (r"<image\b", "contains an <image>, which would be a reference outside the page"),
-        (r"<foreignObject\b", "contains a <foreignObject>"),
+
+def _local(name: str) -> str:
+    """The local part of an ElementTree tag or attribute name, lower-cased."""
+    return name.rsplit("}", 1)[-1].lower()
+
+
+def _allowed_paint(value: str) -> bool:
+    v = re.sub(r"!\s*important\s*$", "", value.strip(), flags=re.IGNORECASE).strip()
+    low = v.lower()
+    return (
+        low in _ALLOWED_PAINT
+        or low.startswith("var(")
+        or re.fullmatch(r"url\(\s*#[^)\s]+\s*\)", v, re.IGNORECASE) is not None
     )
-)
-
-
-def _literal_paint(value: str) -> bool:
-    """True when `value` (a paint with its `url(#…)` references already removed) is a colour."""
-    v = value.strip().lower()
-    if v in _NAMED_OK or v.startswith("var("):
-        return False
-    return bool(re.match(r"^(?:#|rgba?\(|hsla?\()", v) or re.match(r"^[a-z]+$", v))
 
 
 def check_figure(svg_text: str, name: str) -> None:
     """Refuse a figure file that breaks a rule of spec 2026-11-12-front-page-second-pass B / R10.
 
-    `name` is the file's stem: `<name>` or `<name>.narrow`. Every refusal names the
-    figure and the defect, so a bad file never reaches a page.
+    `name` is the file's stem: `<name>` or `<name>.narrow`. The file is parsed as XML and
+    its elements and attributes are checked, never raw text, so a value cannot hide a
+    construct. Every refusal names the figure and the defect, so a bad file never reaches
+    a page. Motion is CSS in figures.css, so SMIL elements are refused outright.
     """
+    import xml.etree.ElementTree as ET  # noqa: N817 - stdlib alias, local to the one user
 
     def refuse(defect: str) -> BuildError:
         return BuildError(f"figure {name}: {defect}")
 
-    root = _SVG_OPEN.search(svg_text)
-    if root is None or not svg_text.lstrip().startswith("<svg"):
-        raise refuse("the file does not start with an <svg> element")
-    if not re.search(r"""\brole\s*=\s*["']img["']""", root.group(0)):
+    text = svg_text if "xmlns:xlink" in svg_text else svg_text.replace("<svg", f"<svg {_XLINK}", 1)
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as e:
+        raise refuse(f"is not well-formed XML ({e})") from e
+    if _local(root.tag) != "svg":
+        raise refuse("the root element is not <svg>")
+    if root.get("role") != "img":
         raise refuse('the root <svg> has no role="img"')
-    title = _TITLE_FIRST.match(svg_text, root.end())
-    if title is None or not title.group(1).strip():
+    children = list(root)
+    first = children[0] if children else None
+    if first is None or _local(first.tag) != "title" or not (first.text or "").strip():
         raise refuse("the first child of the root <svg> is not a non-empty <title>")
-    for pattern, message in _FIGURE_REFUSALS:
-        if pattern.search(svg_text):
-            raise refuse(message)
-    for m in _HREF.finditer(svg_text):
-        if not re.fullmatch(r"#[^\s#]+", m.group(1)):
-            raise refuse(f"href {m.group(1)!r} is not a same-document #id")
-    for m in _URL_REF.finditer(svg_text):
-        if not re.fullmatch(r"#[^\s#]+", m.group(1)):
-            raise refuse(f"url({m.group(1)}) is not a same-document #id")
-    for m in _PAINT_DECL.finditer(_URL_REF.sub("", svg_text)):
-        if _literal_paint(m.group(2)):
+    prefix = f"{name.partition('.')[0]}-{name.partition('.')[2]}--" if "." in name else f"{name}--"
+
+    def paint(prop: str, value: str) -> None:
+        if not _allowed_paint(value):
             raise refuse(
-                f"{m.group(1)} is the literal colour {m.group(2).strip()!r}; "
-                "use a class from figures.css"
+                f"{prop.lower()} is {value.strip()!r}, not a class-driven paint; use a class "
+                "from figures.css (allowed values: none, currentColor, inherit, transparent, "
+                "url(#id), var(...))"
             )
-    base, _, form = name.partition(".")
-    prefix = f"{base}-{form}--" if form else f"{base}--"
-    for m in _ID.finditer(svg_text):
-        if not m.group(1).startswith(prefix):
-            raise refuse(f"id {m.group(1)!r} does not start with {prefix!r}")
+
+    def css(source: str) -> None:
+        for prop, value in _CSS_DECL.findall(source):
+            if prop.lower() in _PAINT_PROPS:
+                paint(prop, value)
+
+    def urls(source: str) -> None:
+        for ref in _URL_REF.findall(source):
+            if not _SAME_DOC.fullmatch(ref):
+                raise refuse(f"url({ref}) is not a same-document #id")
+
+    for el in root.iter():
+        tag = _local(el.tag)
+        if tag in _REFUSED_ELEMENTS:
+            raise refuse(_REFUSED_ELEMENTS[tag])
+        if tag in _SMIL:
+            raise refuse(f"contains the SMIL animation element <{tag}>; motion is CSS")
+        if tag == "style":
+            body = el.text or ""
+            if re.search(r"@import", body, re.IGNORECASE):
+                raise refuse("a <style> element uses @import")
+            urls(body)
+            css(body)
+        for key, value in el.attrib.items():
+            attr = _local(key)
+            if attr.startswith("on"):
+                raise refuse(f"carries the event attribute {attr}")
+            if attr == "href" and not _SAME_DOC.fullmatch(value):
+                raise refuse(f"href {value!r} is not a same-document #id")
+            if attr == "id" and not value.startswith(prefix):
+                raise refuse(f"id {value!r} does not start with {prefix!r}")
+            urls(value)
+            if attr == "style":
+                css(value)
+            elif attr in _PAINT_PROPS:
+                paint(attr, value)
 
 
 def _compact(svg_text: str) -> str:
@@ -834,17 +868,24 @@ def _with_class(svg: str, cls: str, name: str) -> str:
 
 
 def figure_svgs(name: str) -> list[str]:
-    """The checked, inlined `<svg>` texts of figure `name`: the wide one, then any narrow one."""
+    """The checked, inlined `<svg>` texts of figure `name`: the wide one, then any narrow one.
+
+    The `fig-wide` / `fig-narrow` classes (which figures.css shows by width) are added only
+    when a narrow file exists, so a lone figure carries neither and is always shown.
+    """
+    wide = FIGURES_DIR / f"{name}.svg"
+    if not wide.is_file():
+        raise BuildError(f"figure {name}: {wide} does not exist")
+    narrow = FIGURES_DIR / f"{name}.narrow.svg"
+    files = [(name, wide)] + ([(f"{name}.narrow", narrow)] if narrow.is_file() else [])
     out: list[str] = []
-    for stem, cls in ((name, "fig-wide"), (f"{name}.narrow", "fig-narrow")):
-        path = FIGURES_DIR / f"{stem}.svg"
-        if not path.is_file():
-            if cls == "fig-wide":
-                raise BuildError(f"figure {name}: {path} does not exist")
-            continue
+    for stem, path in files:
         text = path.read_text(encoding="utf-8")
         check_figure(text, stem)
-        out.append(_with_class(_compact(text.strip()), cls, stem))
+        svg = _compact(text.strip())
+        if len(files) == 2:
+            svg = _with_class(svg, "fig-narrow" if stem.endswith(".narrow") else "fig-wide", stem)
+        out.append(svg)
     return out
 
 
@@ -857,8 +898,8 @@ def fill_figures(text: str, page: str) -> tuple[str, list[str]]:
     """Replace each `<!-- site:figure NAME -->` line outside fenced code with its figure.
 
     Returns the new text and the exact `<svg>` strings inserted, which the survival check
-    looks for in the rendered page. The figure is padded by a blank line each side so
-    python-markdown treats it as a block of its own.
+    looks for in the rendered page. The figure is `load_figure`'s markup, padded by a blank
+    line each side so python-markdown treats it as a block of its own.
     """
     lines: list[str] = []
     inserted: list[str] = []
@@ -875,11 +916,11 @@ def fill_figures(text: str, page: str) -> tuple[str, list[str]]:
         if not _FIGURE_NAME.match(name):
             raise BuildError(f"{page}: figure name {name!r} is not [a-z0-9-]+")
         try:
-            svgs = figure_svgs(name)
+            html_block = load_figure(name)
         except BuildError as e:
             raise BuildError(f"{page}: {e}") from e
-        inserted += svgs
-        lines += ["", '<figure class="site-figure">' + "\n".join(svgs) + "</figure>", ""]
+        inserted += re.findall(r"<svg\b.*?</svg>", html_block, re.DOTALL)
+        lines += ["", html_block, ""]
     return "\n".join(lines), inserted
 
 

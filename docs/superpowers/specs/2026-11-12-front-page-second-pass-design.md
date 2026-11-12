@@ -142,7 +142,7 @@ when the page contains a figure.
 
 Legibility at 390 px: a figure whose wide form would shrink its text below about 11 px
 has a second file `<name>.narrow.svg`; when it exists the build inlines both and
-`figures.css` shows the narrow one at widths up to 600 px and the wide one above. The four
+`figures.css` shows the narrow one at widths up to 860 px and the wide one above. The four
 figures: `run-pipeline`, `isolation-boundary`, `gate-ledger`, `wave-of-batches`.
 `fr-wave-driver.md` reuses `wave-of-batches`; `fr-exit-gates.md` reuses `gate-ledger`.
 

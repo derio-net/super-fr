@@ -189,7 +189,7 @@ outside the page, and takes every colour from a class in `scripts/site/figures.c
 `fig-muted`, `fig-line`, `fig-panel`, `fig-accent`, `fig-you`, `fig-ok`, `fig-text`, `fig-small`,
 `fig-big`), never a literal colour. Every `id` starts with the file's name and two hyphens
 (`gate-ledger--arrow`). A figure whose text would fall below about 11 px on a phone has a second
-file, `<name>.narrow.svg`, with ids starting `<name>-narrow--`; the stylesheet shows it up to 600 px
+file, `<name>.narrow.svg`, with ids starting `<name>-narrow--`; the stylesheet shows it up to 860 px
 wide. Only a page with a figure gets `figures.css`.
 
 ### Writing a page that builds

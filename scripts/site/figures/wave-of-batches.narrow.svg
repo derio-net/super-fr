@@ -18,7 +18,7 @@
 <text x="24" y="278" class="fig-ink fig-text">batch C, batch D</text>
 <text x="24" y="302" class="fig-accent fig-small">C after A, D after B</text>
 <text x="24" y="322" class="fig-muted fig-small">each → one pull request</text>
-<text x="10" y="358" class="fig-muted fig-small">in flight: at most 4 batches</text>
+<text x="10" y="358" class="fig-muted fig-small">in flight: up to the cap (default 4)</text>
 <text x="10" y="396" class="fig-muted fig-small">ONE DRIVER PASS, REPEATED</text>
 <rect x="10" y="408" width="340" height="48" rx="8" class="fig-panel"/>
 <text x="24" y="430" class="fig-ink fig-text">1 merge what is ready</text>
