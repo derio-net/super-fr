@@ -244,27 +244,71 @@ def test_an_in_flight_matrix_whose_row_differs_from_the_fold_is_refused(tmp_path
     assert _fragments(root) == before
 
 
-def test_an_in_flight_matrix_holding_a_retired_row_names_it_and_the_fix(tmp_path: Path) -> None:
-    # pr1408-r4: main retired a row by amendment; a branch's matrix.yaml still holds it.
-    # The refusal names the retired row and what to do, never "duplicate row ids".
-    root, _ = _merged_main(tmp_path)
+def _amend_on_main(root: Path, row: str, op: str, body: str) -> None:
     eff = fold(root)
-    gone = eff.matrix.rows[0].id
     repo = f"{eff.matrix.org}/{eff.matrix.repo}"
-    (root / FEATURES / "2026-12-01-retirer.yaml").write_text(
-        f"schema_version: 1\nfeature: 2026-12-01-retirer\nrepo: {repo}\nrows: []\n"
-        f"amendments:\n  - row: {gone}\n    op: retire\n    base: 0\n"
-        "    notes: superseded\n    why: gone\n"
+    (root / FEATURES / "2026-12-01-amender.yaml").write_text(
+        f"schema_version: 1\nfeature: 2026-12-01-amender\nrepo: {repo}\nrows: []\n"
+        f"amendments:\n  - row: {row}\n    op: {op}\n    base: 0\n{body}    why: because\n"
     )
     clear_fold_cache()
+
+
+def test_an_in_flight_matrix_holding_an_untouched_retired_row_migrates(tmp_path: Path) -> None:
+    # pr1408-r4, on this PR's own merge of main: every open branch's matrix.yaml holds
+    # the untouched copy of a row the fragments retired. That copy is already
+    # accounted for (it is the row's definition), so the split drops it.
+    root, _ = _merged_main(tmp_path)
+    gone = fold(root).matrix.rows[0].id
+    _amend_on_main(root, gone, "retire", "    notes: superseded\n")
     matrix = root / "docs" / "acceptance" / "matrix.yaml"
+
+    report = run_migrations(root, dry_run=False)
+
+    assert report.ok, report.failed
+    assert not matrix.exists()
+    clear_fold_cache()
+    eff = fold(root)
+    assert gone not in {r.id for r in eff.matrix.rows}
+    assert gone in {r.id for r in eff.retired}
+
+
+def test_an_in_flight_matrix_holding_an_untouched_amended_row_migrates(tmp_path: Path) -> None:
+    # The same for a row the fragments amended: the matrix copy equals the row's
+    # definition, so it is accounted for and the amendment still applies.
+    root, _ = _merged_main(tmp_path)
+    row = fold(root).matrix.rows[0].id
+    _amend_on_main(root, row, "reword", "    acceptance: reworded on main\n")
+
+    report = run_migrations(root, dry_run=False)
+
+    assert report.ok, report.failed
+    clear_fold_cache()
+    rows = {r.id: r for r in fold(root).matrix.rows}
+    assert rows[row].acceptance == "reworded on main"
+
+
+def test_an_in_flight_matrix_that_edited_a_retired_row_names_it_and_the_fix(
+    tmp_path: Path,
+) -> None:
+    # pr1408-r4: a branch that EDITED a row the fragments retired is refused, naming
+    # the retired row and what to do, never "duplicate row ids".
+    root, _ = _merged_main(tmp_path)
+    eff = fold(root)
+    target = eff.matrix.rows[0]
+    _amend_on_main(root, target.id, "retire", "    notes: superseded\n")
+    matrix = root / "docs" / "acceptance" / "matrix.yaml"
+    text = matrix.read_text()
+    assert text.count(f"id: {target.id}\n") == 1
+    head, _, tail = text.partition(f"id: {target.id}\n")
+    matrix.write_text(head + f"id: {target.id}\n" + tail.replace("notes: ", "notes: EDITED ", 1))
     held = matrix.read_bytes()
 
     report = run_migrations(root, dry_run=False)
 
     (failure,) = report.failed
     assert "duplicate row ids" not in failure.error
-    assert gone in failure.error and "retired" in failure.error
+    assert target.id in failure.error and "retired" in failure.error
     assert "Delete those rows from matrix.yaml" in failure.error
     assert "fr migrate artifacts --yes" in failure.error
     assert matrix.read_bytes() == held

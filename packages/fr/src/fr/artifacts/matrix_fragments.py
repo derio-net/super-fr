@@ -88,6 +88,7 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
         FRAGMENTS_DIR,
         LEGACY_FEATURE,
         fragment_slug_for_spec,
+        parse_fragment,
     )
     from fr.acceptance.legacy import MatrixV5Error, parse_matrix_v5
     from fr.acceptance.logical import parse_logical, to_logical
@@ -148,24 +149,40 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
             "matrix.yaml they lack. Left on version 5, byte-identical."
         ) from e
     known = {r.id: r.model_dump() for r in here.matrix.rows} if here else {}
+    # A row the fragments already DEFINE is accounted for when matrix.yaml holds
+    # its definition untouched: every open branch's matrix.yaml carries the copy
+    # it had before the split, and amendments made since (a reword, a retire) are
+    # the fragments' to apply, not a disagreement (pr1408-r4, found merging main
+    # into the PR that introduced the split). Only a copy that matches neither the
+    # definition nor the folded row is the branch's own edit, and is refused.
+    defined: dict[str, dict[str, object]] = {}
+    for rel, frag_text in on_disk.items():
+        for drow in parse_fragment(frag_text, source=rel).rows:
+            defined[drow.id] = drow.model_dump()
+
+    def accounted(rid: str) -> bool:
+        return expected[rid] == defined.get(rid) or expected[rid] == known.get(rid)
+
     # Review pr1408-r4: a row the fragments RETIRED (an amendment on the default
-    # branch) that matrix.yaml still holds would be carried over as a new row and
+    # branch) that matrix.yaml holds EDITED would be carried over as a new row and
     # collide with its own definition. Name it and the fix instead.
     retired_ids = {r.id for r in here.retired} if here else set()
-    stale_rows = sorted(r.id for rows in by_feature.values() for r in rows if r.id in retired_ids)
+    stale_rows = sorted(
+        r.id
+        for rows in by_feature.values()
+        for r in rows
+        if r.id in retired_ids and not accounted(r.id)
+    )
     if stale_rows:
         raise UnconvertibleMatrixError(
-            f"matrix.yaml still holds {len(stale_rows)} row(s) the fragments already here "
-            f"retired: {', '.join(stale_rows)}. A retired row is never carried back. Delete "
+            f"matrix.yaml still holds {len(stale_rows)} edited row(s) the fragments already "
+            f"here retired: {', '.join(stale_rows)}. A retired row is never carried back. Delete "
             "those rows from matrix.yaml, then run `fr migrate artifacts --yes` (`uv run fr …` "
             "inside an fr checkout); if the branch still needs one, add it as a new row under "
             "a new id with `fr acceptance add`. Left on version 5, byte-identical."
         )
     differing = sorted(
-        r.id
-        for rows in by_feature.values()
-        for r in rows
-        if r.id in known and known[r.id] != expected[r.id]
+        r.id for rows in by_feature.values() for r in rows if r.id in known and not accounted(r.id)
     )
     if differing:
         raise UnconvertibleMatrixError(
@@ -178,7 +195,7 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
         )
     out: dict[str, str] = {}
     for feature, rows in sorted(by_feature.items()):
-        lacking = [r for r in rows if r.id not in known]
+        lacking = [r for r in rows if r.id not in known and r.id not in defined]
         if not lacking:
             continue
         rel = f"{FRAGMENTS_DIR.as_posix()}/{feature}.yaml"
@@ -197,7 +214,11 @@ def split_texts(text: str, root: Path) -> dict[str, str]:
             "Left on version 5, byte-identical."
         ) from e
     got = {r.id: r.model_dump() for r in effective.matrix.rows}
-    lost = sorted(rid for rid, want in expected.items() if got.get(rid) != want)
+    # Only the rows this split carries over are checked against the result; one the
+    # fragments already define folds to whatever their amendments make of it.
+    lost = sorted(
+        rid for rid, want in expected.items() if rid not in defined and got.get(rid) != want
+    )
     if lost:
         raise UnconvertibleMatrixError(
             f"the split would not carry these rows over unchanged: {', '.join(lost)}. "
