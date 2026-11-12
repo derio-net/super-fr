@@ -184,3 +184,10 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-12-front-page-second-pass-p2 created=2026-11-12T13:57:10+00:00 -->
 ### phase-split-2026-11-12-front-page-second-pass-p2 · decision · ask: the front-page rewrite (two acts, look, motion, its own figures) is a separately reviewable ask from the figure mechanism and the two new explainers, which it cites
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-12T15:30:31+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: [developer] After merge, wait for the "Deploy explainers to Pages" run on `main`. Open `https://derio-net.github.io/super-fr/`: the new front page loads with its terminal hero and two acts; the four diagrams are drawn; the exit-gates and wave-driver sections open their new pages, each showing its diagram; the top bar returns to the front page; `#explainers` lists both new pages.
+
+Evidence: Browser walk of the published site on 2026-11-12 after the Pages deploy: the landing loads with its terminal hero and Act one and Act two; four diagrams are inlined on it and one each on fr-exit-gates and fr-wave-driver; the exit-gates and wave-driver section links open their pages; the bar home link returns to the front page; #explainers lists both new pages; no script on the front page
