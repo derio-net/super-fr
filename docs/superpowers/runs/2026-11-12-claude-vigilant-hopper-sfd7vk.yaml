@@ -12,7 +12,15 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-12-landing-front-page-design.md
   plan:
-    state: pending
+    state: running
+    at: '2026-11-12T07:57:16+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-12T07:57:16+00:00'
+          harness: claude-code
+          model: claude-fable-5-2
+          session: 671e7103-998b-587e-980b-da83b609e16c
   spec-plan-review:
     state: pending
   plan-review:
