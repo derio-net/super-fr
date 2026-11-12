@@ -268,20 +268,6 @@ class TestMcpConfig:
 
 
 class TestStaleSkillCleanup:
-    def test_removes_user_level_skill_copies(self, fake_home: Path) -> None:
-        """install.sh should clean up skills from older install.sh versions."""
-        skills_dir = fake_home / ".claude" / "skills"
-        skills_dir.mkdir(parents=True)
-        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
-            d = skills_dir / name
-            d.mkdir()
-            (d / "SKILL.md").write_text("stale")
-
-        _run_install(fake_home)
-
-        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
-            assert not (skills_dir / name).exists()
-
     def test_preserves_non_vk_skills(self, fake_home: Path) -> None:
         """Other user-level skills should not be touched."""
         skills_dir = fake_home / ".claude" / "skills"
@@ -293,18 +279,6 @@ class TestStaleSkillCleanup:
         _run_install(fake_home)
 
         assert other.exists()
-
-    def test_removes_dangling_symlinks(self, fake_home: Path) -> None:
-        """install.sh should clean up dangling symlinks from VK worktree installs."""
-        skills_dir = fake_home / ".claude" / "skills"
-        skills_dir.mkdir(parents=True)
-        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
-            (skills_dir / name).symlink_to("/nonexistent/vk-worktree/skills/" + name)
-
-        _run_install(fake_home)
-
-        for name in ("vk-plan", "vk-dispatch", "vk-execute", "vk-progress"):
-            assert not (skills_dir / name).exists(), f"Dangling symlink {name} was not removed"
 
     def test_no_error_when_no_stale_skills(self, fake_home: Path) -> None:
         """Should not fail when there are no stale skills to clean."""
@@ -395,22 +369,6 @@ class TestUninstall:
                 f"Rule {rule_file} should be removed by --uninstall but still exists"
             )
 
-    def test_removes_retired_vk_plan_override_on_uninstall(self, fake_home: Path) -> None:
-        """Uninstall removes the retired vk-plan-override.md rule, even if not currently installed.
-
-        vk-plan-override.md was the old name before the rename; --uninstall must clean it up.
-        """
-        # Simulate an older install that left behind vk-plan-override.md
-        rules_dir = fake_home / ".claude" / "rules"
-        rules_dir.mkdir(parents=True, exist_ok=True)
-        retired = rules_dir / "vk-plan-override.md"
-        retired.write_text("old rule content")
-
-        # Uninstall should remove it even though we never installed it in this test
-        _run_install(fake_home, "--uninstall")
-
-        assert not retired.exists(), "Retired vk-plan-override.md should be removed by --uninstall"
-
     def test_removes_rules(self, fake_home: Path) -> None:
         _run_install(fake_home)
         _run_install(fake_home, "--uninstall")
@@ -444,20 +402,6 @@ class TestUninstall:
         data = json.loads(mcp.read_text())
         assert "other-server" in data["mcpServers"]
         assert "vibe_kanban" not in data["mcpServers"]
-
-    def test_cleans_stale_skills_on_uninstall(self, fake_home: Path) -> None:
-        """Uninstall should also remove stale user-level skill copies."""
-        skills_dir = fake_home / ".claude" / "skills"
-        skills_dir.mkdir(parents=True)
-        for name in ("vk-plan", "vk-dispatch"):
-            d = skills_dir / name
-            d.mkdir()
-            (d / "SKILL.md").write_text("stale")
-
-        _run_install(fake_home, "--uninstall")
-
-        assert not (skills_dir / "vk-plan").exists()
-        assert not (skills_dir / "vk-dispatch").exists()
 
     def test_uninstall_idempotent(self, fake_home: Path) -> None:
         """Uninstalling when nothing is installed should not fail."""

@@ -95,7 +95,6 @@ def _seed_legacy(home: Path, *, with_sibling: bool = True) -> None:
     enabled = {
         "super-fr@derio-net": True,
         "super-fr-dispatch@derio-net": True,
-        "superpowers-for-vk@derio-net": True,
         "claude-mem@thedotmack": True,
     }
     registered = {
@@ -268,7 +267,6 @@ class TestRetiresTheBareOrgMarketplace:
         for stale in (
             "super-fr@derio-net",
             "super-fr-dispatch@derio-net",
-            "superpowers-for-vk@derio-net",
             "blog-craft@derio-net",
         ):
             assert stale not in installed, f"{stale} must be purged from installed_plugins"

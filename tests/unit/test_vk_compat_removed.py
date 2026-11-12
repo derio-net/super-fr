@@ -114,3 +114,43 @@ def test_no_vk_env_names_remain() -> None:
             if "VK_REPO_ROOT" in text or "VK_INSTALL_SKIP_PREFLIGHT" in text:
                 hits.append(str(path.relative_to(REPO)))
     assert hits == []
+
+
+# --- Task 4: installer, validator wrapper, bump-version -----------------------------
+
+INSTALL_RETIRED = (
+    "vk-plan",
+    "vk-dispatch",
+    "vk-execute",
+    "vk-progress",
+    "vk-plan-override",
+    "superpowers-for-vk",
+    "RETIRED_CLAUDE_RULES",
+    "SKILL_NAMES",
+)
+
+
+@pytest.mark.parametrize("needle", INSTALL_RETIRED)
+def test_install_sh_names_no_retired_vk_thing(needle: str) -> None:
+    assert needle not in (REPO / "scripts/install.sh").read_text()
+
+
+def test_bump_version_probes_fr_only() -> None:
+    text = (REPO / "scripts/bump-version.py").read_text()
+    assert '"vk"' not in text
+    assert "rebrand" not in text
+
+
+def test_wrapper_needs_super_fr_in_its_text(tmp_path: Path) -> None:
+    from fr.plan_validator_wrapper import is_super_fr_validator_wrapper
+
+    old = tmp_path / "a.sh"
+    old.write_text(
+        '# superpowers-for-vk\nexec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh"\n'
+    )
+    assert not is_super_fr_validator_wrapper(old)
+    kept = tmp_path / "b.sh"
+    kept.write_text(
+        '# super-fr\nexec "$HOME/.claude/plugins/marketplaces/derio-net/scripts/validate-plans.sh"\n'
+    )
+    assert is_super_fr_validator_wrapper(kept)
