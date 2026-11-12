@@ -654,3 +654,8 @@ PR #1408 review item 2. A's set-status (base 0) merges, then B's retire (base 0)
 ### pr1408-r3 · finding [open] (reviewer: in scope) · Scaffolded GitHub matrix job checks out with persist-credentials: false, so check's default-ref fetch fails in CI on a private repo and every run is refused (phase 3)
 
 PR #1408 review item 3. scaffold.py GitHub matrix job + amend.py default-ref fetch. Reproduced with an unreachable origin and CI=true: exit 1 'cannot fetch the default ref'. The checkout already has the default branch (fetch-depth: 0).
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r4 created=2026-11-12T09:18:52+00:00 phase=2 state=open review_scope=in -->
+### pr1408-r4 · finding [open] (reviewer: in scope) · An in-flight branch whose matrix.yaml holds a row this PR retired gets 'duplicate row ids' with no fix named (phase 2)
+
+PR #1408 review item 4. matrix_fragments.py builds known from live fold rows only. Fails closed; the defect is the dead-end message.
