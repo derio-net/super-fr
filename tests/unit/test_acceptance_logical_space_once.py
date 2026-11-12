@@ -9,9 +9,7 @@ from fr.acceptance import logical
 from fr.artifacts import paths
 
 
-def test_path_view_computes_the_space_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_path_view_computes_the_space_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from fr.acceptance.model import Matrix, Row
 
     calls: list[Path] = []
