@@ -76,3 +76,12 @@ amendments:
       treats a validator wrapper as its own only when it names super-fr
     why: 'spec review sr-6: the generic bare-org purge still drops any *@derio-net id,
       so ''removes nothing'' was untrue'
+  - row: vk-legacy-fallbacks-removed
+    op: reword
+    base: 0
+    acceptance: The vk-spelling dual-read fallbacks (vk-profiles.yaml, .git/vk/isolation
+      state dir, ~/.config/vk/secrets devcontainer mounts, VK_BRIDGE_* env) no longer
+      resolve; vk spellings are not read, and the kept VibeKanban-product names (VK_DERIO_OPS_PROJECT_ID,
+      willikins_vk_bridge_* metrics) are unaffected
+    why: fr init migrate and the legacy-secrets error are removed (spec 2026-11-12-remove-vk-compat
+      R1, R2)
