@@ -4,7 +4,12 @@ R1: "One path resolver, keyed by kind and placement, produces every artifact pat
 tripwire refuses a hardcoded artifact path outside it." A literal `docs/superpowers/...`
 or `docs/acceptance/...` anywhere else is a path that does not move with the placement.
 
-Caught: a string constant that is not a docstring (f-string parts included), and any
+Caught: a string constant that is not a docstring (f-string parts included) and holds
+`docs/superpowers` or `docs/acceptance` or is the bare `"superpowers"` (so a `.name ==
+"superpowers"` comparison, or a `"docs" / x` built elsewhere, cannot walk to the root by name;
+only a `KIND_DIRS[...]` or `kind_dir(...)` key is exempt). A bare `"acceptance"` is NOT
+flagged: it is a feature, section and CLI key in ~75 places, which would need a large
+allowlist. Also caught: any
 join that puts `docs` straight before `superpowers` or `acceptance` — a `/` chain (also
 `root / "docs" / "superpowers/plans"`), `Path("docs") / ...`, `Path("docs", ...)`,
 `.joinpath("docs", ...)`, any call's positional arguments, and a tuple or list of
@@ -70,8 +75,19 @@ def _segments(node: ast.AST) -> list[str | None]:
         return [part for part in node.value.split("/") if part] or [None]
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
         return _segments(node.left) + _segments(node.right)
+    joined = _static_str(node)
+    if joined is not None:  # `"docs" + "/" + "superpowers"`
+        return _segments(ast.Constant(value=joined))
     if isinstance(node, ast.Call):
         name = _call_name(node)
+        if (
+            name == "join"
+            and isinstance(node.func, ast.Attribute)
+            and _is_str(node.func.value, "/")
+            and len(node.args) == 1
+            and isinstance(node.args[0], (ast.Tuple, ast.List))
+        ):  # `"/".join(["docs", "superpowers"])`
+            return [seg for elt in node.args[0].elts for seg in _segments(elt)]
         if name == "joinpath" and isinstance(node.func, ast.Attribute):
             return _segments(node.func.value) + _arg_segments(node)
         if name in _PATH_CALLS:
@@ -81,6 +97,37 @@ def _segments(node: ast.AST) -> list[str | None]:
 
 def _arg_segments(node: ast.Call) -> list[str | None]:
     return [seg for arg in node.args for seg in _segments(arg)]
+
+
+def _static_str(node: ast.AST) -> str | None:
+    """The string *node* spells when it is built only from constants joined by `+`."""
+    if _is_str(node):
+        assert isinstance(node, ast.Constant)
+        return str(node.value)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = _static_str(node.left), _static_str(node.right)
+        return None if left is None or right is None else left + right
+    return None
+
+
+# A bare `"superpowers"` is the artifact root's own name: a kind-dir lookup key
+# (`KIND_DIRS["superpowers"]`, `kind_dir("superpowers", ...)`) is the one legitimate use.
+_KEY_CALLS = frozenset({"kind_dir", "shell_name"})
+
+
+def _key_ids(tree: ast.AST) -> set[int]:
+    """Ids of the string constants that are kind-table keys, not path segments."""
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "KIND_DIRS"
+        ):
+            out.add(id(node.slice))
+        elif isinstance(node, ast.Call) and _call_name(node) in _KEY_CALLS and node.args:
+            out.add(id(node.args[0]))
+    return out
 
 
 def _artifact_join(segments: list[str | None]) -> str | None:
@@ -99,14 +146,17 @@ def violations(source: str) -> list[tuple[int, str]]:
     positional arguments (`os.path.join`) and a tuple or list of segments."""
     tree = ast.parse(source)
     docs = _docstring_ids(tree)
+    keys = _key_ids(tree)
     found: dict[int, str] = {}
     for node in ast.walk(tree):
         what: str | None = None
         if _is_str(node) and id(node) not in docs:
             assert isinstance(node, ast.Constant)
-            if any(n in node.value for n in _NEEDLES):
+            if any(n in node.value for n in _NEEDLES) or (
+                node.value == "superpowers" and id(node) not in keys
+            ):
                 what = repr(node.value)
-        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Div, ast.Add)):
             what = _artifact_join(_segments(node))
         elif isinstance(node, ast.Call):
             what = _artifact_join(_segments(node)) or _artifact_join(_arg_segments(node))
@@ -203,3 +253,24 @@ def test_the_detector_finds_every_other_join_form() -> None:
 def test_a_docs_join_not_followed_by_an_artifact_segment_is_fine() -> None:
     assert violations('P = root / "docs" / "explainers"\nQ = "docs/reference/cli.md"\n') == []
     assert violations('T = ("docs", "explainers")\nU = Path("docs", "reference")\n') == []
+
+
+_PLANTED_NEW_FORMS = """
+from fr.artifacts.paths import KIND_DIRS, kind_dir
+
+OK1 = KIND_DIRS["superpowers"]
+OK2 = kind_dir("superpowers", space)
+A = "docs" + "/superpowers"
+B = "docs/" + "super" + "powers"
+C = "/".join(["docs", "superpowers"])
+D = "/".join(("docs", "acceptance"))
+E = p.name == "superpowers"
+F = os.path.join(root, "docs", "superpowers")
+G = parts[i] == "superpowers"
+"""
+
+
+def test_the_detector_finds_concatenation_joins_and_a_bare_superpowers() -> None:
+    lines = [line for line, _ in violations(_PLANTED_NEW_FORMS)]
+    # B spells no whole `docs/superpowers` constant: only its joined static string does.
+    assert lines == [6, 7, 8, 9, 10, 11, 12]

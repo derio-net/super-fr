@@ -28,7 +28,7 @@ from rich.console import Console
 
 from fr import plan_ops
 from fr.apply import apply
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, feature_roots, kind_dir, space_for
 from fr.commands.common import (
     PlanReport,
     build_plan_report,
@@ -43,7 +43,7 @@ from fr.diff import (
     IssueStateChange,
     RepoLabelEnsure,
 )
-from fr.parser import Plan, PlanSchemaError
+from fr.parser import Plan, PlanSchemaError, _find_repo_root
 from fr.plan_ops import PlanEditError
 from fr.services import ServicesError
 from fr.settings import require_forge
@@ -564,14 +564,12 @@ def apply_command(
         # `fr apply docs/superpowers/archived-plans/<plan>`. Anchored to the
         # canonical `superpowers/archived-plans` location so an unrelated dir
         # that merely happens to be named "archived-plans" isn't refused.
-        resolved_parts = plan_dir.resolve().parts
-        under_archived = any(
-            resolved_parts[i] == "superpowers"
-            and (
-                resolved_parts[i + 1] == "archived-plans"
-                or resolved_parts[i + 1 : i + 3] == ("implemented", "plans")
-            )
-            for i in range(len(resolved_parts) - 1)
+        resolved_dir = plan_dir.resolve()
+        plan_repo = _find_repo_root(resolved_dir)
+        under_archived = plan_repo is not None and any(
+            (froot / KIND_DIRS[kind]).resolve() in resolved_dir.parents
+            for froot in feature_roots(space_for(plan_repo))
+            for kind in ("plan-archived", "plan-legacy-archived")
         )
         if under_archived:
             err_console.print(
