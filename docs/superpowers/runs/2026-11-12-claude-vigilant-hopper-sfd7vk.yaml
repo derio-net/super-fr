@@ -3,7 +3,7 @@ run: 2026-11-12-claude-vigilant-hopper-sfd7vk
 workflow: fr-goal-light@1
 branch: claude/vigilant-hopper-sfd7vk
 started: '2026-11-12T07:48:15+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -54,8 +54,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-12T09:34:33+00:00'
+    state: done
+    at: '2026-11-12T09:39:43+00:00'
     members:
     - implement-phase
     - review-phase
@@ -76,12 +76,19 @@ steps:
         evidence:
           visual: site-front-page-landing:6:5ea1b04363e5,site-top-bar-every-page:5:c69ac5e4ce96
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-12T09:34:33+00:00'
           harness: claude-code
-          model: claude-fable-5-2
+          model: sonnet
           session: 671e7103-998b-587e-980b-da83b609e16c
+          returned: '2026-11-12T09:39:43+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: a5adc03559013d159
+          visual: site-front-page-landing:6:028c78f1d88c,site-top-bar-every-page:5:3a313ba204a8
+          findings: p1-r1,p1-r2
   journal-check:
     state: pending
   deliver:
