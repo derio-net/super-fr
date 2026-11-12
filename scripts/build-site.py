@@ -29,12 +29,14 @@ built, 1 a build failure.
 from __future__ import annotations
 
 import argparse
+import html
 import os
 import posixpath
 import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -44,6 +46,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_REPO_URL = "https://github.com/derio-net/super-fr"
 MARKER = "<!-- site:pages -->"
+INDEX_SOURCE = "docs/explainers/index.md"
 FONTS_SUBDIR = Path("templates/content-type-explainers/shared/fonts/broadsheet")
 SECTIONS = (("explainers", "Explainers"), ("guides", "Guides"), ("reference", "Reference"))
 
@@ -236,20 +239,37 @@ def first_sentence(tldr: str) -> str:
     return found.group(1) if found else flat
 
 
-def fill_pages(text: str, page: str, entries: list[Entry]) -> str:
-    """Replace the `<!-- site:pages -->` marker with the grouped list of pages."""
-    if MARKER not in text:
-        return text
-    blocks: list[str] = []
+def page_groups(page: str, entries: list[Entry]) -> list[tuple[str, str, list[Entry]]]:
+    """The pages other than `page`, grouped `(key, heading, entries)` in section order.
+
+    The one place the page list is sorted, grouped and filtered: `fill_pages` writes
+    it as Markdown, the landing renderer as HTML, so the two cannot drift.
+    """
+    groups = []
     for key, heading in SECTIONS:
         rows = [
-            f"- [{e.title}]({posixpath.relpath(e.path, posixpath.dirname(page))}): "
-            f"{first_sentence(e.tldr)}"
+            e
             for e in sorted(entries, key=lambda e: e.path)
             if e.path != page and _section(e.path) == key
         ]
         if rows:
-            blocks.append(f"### {heading}\n\n" + "\n".join(rows))
+            groups.append((key, heading, rows))
+    return groups
+
+
+def fill_pages(text: str, page: str, entries: list[Entry]) -> str:
+    """Replace the `<!-- site:pages -->` marker with the grouped list of pages."""
+    if MARKER not in text:
+        return text
+    blocks = [
+        f"### {heading}\n\n"
+        + "\n".join(
+            f"- [{e.title}]({posixpath.relpath(e.path, posixpath.dirname(page))}): "
+            f"{first_sentence(e.tldr)}"
+            for e in rows
+        )
+        for _key, heading, rows in page_groups(page, entries)
+    ]
     return text.replace(MARKER, "\n\n".join(blocks))
 
 
@@ -494,6 +514,190 @@ def parse_landing(text: str, page: str) -> Landing:
             f"{page}: a landing page has six to eight numbered sections, found {count}"
         )
     return Landing(hero, _parse_facts(fm, page), tuple(sections))
+
+
+# -- rendering the landing (R1-R6, R10) ------------------------------------------------
+
+SITE_DIR = Path(__file__).resolve().parent / "site"
+_HEAD_FONT = re.compile(r"@font-face\s*\{[^}]*\}")
+_ROOT_BLOCK = re.compile(r":root\s*\{[^}]*\}")
+_LINKS_ONLY = re.compile(r"^(?:\[[^\]]+\]\([^)\s]+\)\s*)+$")
+_ANY_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+
+
+def site_file(name: str) -> str:
+    """A file of `scripts/site/` (the landing skeleton and the stylesheets)."""
+    return (SITE_DIR / name).read_text(encoding="utf-8")
+
+
+def extract_font_css(html: str) -> str:
+    """Every `@font-face` rule of a page the renderer produced."""
+    rules = _HEAD_FONT.findall(html)
+    if not rules:
+        raise BuildError("the rendered page carries no @font-face rule to copy for the landing")
+    return "\n".join(rules)
+
+
+def extract_theme_css(html: str) -> str:
+    """The `:root{...}` custom-property block of a page the renderer produced."""
+    blocks = _ROOT_BLOCK.findall(html)
+    if not blocks:
+        raise BuildError("the rendered page carries no :root block to copy for the landing")
+    for block in blocks:
+        if "--ink" in block:
+            return block
+    raise BuildError("the rendered page's :root block defines no --ink to copy for the landing")
+
+
+def _fill(template: str, values: dict[str, str]) -> str:
+    """Substitute `{{name}}` placeholders in one pass (inserted text is never rescanned)."""
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: values[m.group(1)], template)
+
+
+def _inline(to_html: Callable[[str], str], text: str) -> str:
+    out = to_html(text).strip()
+    m = re.fullmatch(r"<p>(.*)</p>", out, re.DOTALL)
+    return m.group(1) if m else out
+
+
+def render_landing(
+    landing: Landing,
+    *,
+    title: str,
+    entries: list[Entry],
+    font_css: str,
+    patterns: list[str],
+    tracked: list[str],
+    ref: str,
+    repo_url: str = DEFAULT_REPO_URL,
+    theme_css: str,
+    to_html: Callable[[str], str],
+    description: str = "",
+    page: str = INDEX_SOURCE,
+) -> str:
+    """The landing page's HTML. Pure given its inputs (no filesystem but `scripts/site/`).
+
+    Every relative link, in the front matter and in the bodies, goes through the
+    build's one link rule with `page` as the linking page (R10). `to_html` is the
+    Markdown converter; the build passes python-markdown's, tests a stand-in.
+    """
+    esc = html.escape
+
+    def href(h: str) -> str:
+        return esc(rewrite_href(h, page, patterns, tracked, ref, repo_url), quote=True)
+
+    def md(text: str) -> str:
+        return to_html(rewrite_markdown(text, page, patterns, tracked, ref, repo_url))
+
+    hero = landing.hero
+    parts = ['<div class="wrap">']
+    if hero.eyebrow:
+        parts.append(f'<p class="eyebrow">{esc(hero.eyebrow)}</p>')
+    parts.append(f"<h1>{esc(hero.headline)}</h1>")
+    parts.append(f'<p class="subline">{esc(hero.subline)}</p>')
+    if hero.command:
+        parts.append(f'<code class="command">{esc(hero.command)}</code>')
+    actions = [f'<a class="btn" href="{href(hero.primary.href)}">{esc(hero.primary.label)}</a>']
+    actions += [f'<a class="link" href="{href(x.href)}">{esc(x.label)}</a>' for x in hero.secondary]
+    parts.append('<p class="actions">' + "".join(actions) + "</p>")
+    if landing.facts:
+        parts.append(
+            '<ul class="facts">'
+            + "".join(
+                f"<li><strong>{esc(f.figure)}</strong><span>{esc(f.caption)}</span></li>"
+                for f in landing.facts
+            )
+            + "</ul>"
+        )
+    parts.append("</div>")
+    hero_html = "\n".join(parts)
+
+    total = sum(sec.kind == "guarantee" for sec in landing.sections)
+    number = 0
+    out: list[str] = []
+    for sec in landing.sections:
+        head = f"<h2>{esc(sec.heading)}</h2>"
+        if sec.kind == "flow":
+            items = "".join(
+                f'<li class="step{" yours" if st.yours else ""}">'
+                + ('<span class="you-tag">You</span>' if st.yours else "")
+                + _inline(
+                    to_html, rewrite_markdown(st.text, page, patterns, tracked, ref, repo_url)
+                )
+                + "</li>"
+                for st in sec.steps
+            )
+            legend = (
+                '<p class="legend">The steps marked You are yours; the rest the agent does.</p>'
+                if any(st.yours for st in sec.steps)
+                else ""
+            )
+            out.append(
+                f'<section class="band flow"><div class="wrap">{head}'
+                f'<ol class="steps">{items}</ol>{legend}</div></section>'
+            )
+        elif sec.kind == "guarantee":
+            number += 1
+            assert sec.link is not None
+            out.append(
+                f'<section class="band guarantee"><div class="wrap narrow">'
+                f'<p class="kicker">{number:02d} / {total:02d}</p>'
+                f'<div class="problem">{md(sec.problem)}</div>{head}'
+                f'<div class="body">{md(sec.body)}</div>'
+                f'<a class="more" href="{href(sec.link.href)}">{esc(sec.link.label)}</a>'
+                "</div></section>"
+            )
+        elif sec.kind == "pages":
+            lists = []
+            for key, heading, rows in page_groups(page, entries):
+                lis = "".join(
+                    f'<li><a href="{esc(posixpath.relpath(route(e.path), posixpath.dirname(route(page)) or "."))}">'
+                    f"{esc(e.title)}</a><span>{esc(first_sentence(e.tldr))}</span></li>"
+                    for e in rows
+                )
+                lists.append(f'<h3 id="{key}">{esc(heading)}</h3><ul>{lis}</ul>')
+            before, _, after = sec.body.partition(MARKER)
+            out.append(
+                f'<section class="band pages"><div class="wrap">{head}'
+                f"{md(before) if before.strip() else ''}{''.join(lists)}"
+                f"{md(after) if after.strip() else ''}</div></section>"
+            )
+        elif sec.kind == "cta":
+            rewritten = rewrite_markdown(sec.body, page, patterns, tracked, ref, repo_url)
+            blocks = []
+            for block in split_blocks(rewritten):
+                flat = " ".join(block.split())
+                if _LINKS_ONLY.match(flat):
+                    links = _ANY_LINK.findall(flat)
+                    btns = "".join(
+                        f'<a class="btn" href="{esc(h, quote=True)}">{esc(lab)}</a>'
+                        if i == 0
+                        else f'<a href="{esc(h, quote=True)}">{esc(lab)}</a>'
+                        for i, (lab, h) in enumerate(links)
+                    )
+                    blocks.append(f'<p class="buttons">{btns}</p>')
+                else:
+                    blocks.append(to_html(block))
+            out.append(
+                f'<section class="band cta"><div class="wrap narrow">{head}{"".join(blocks)}'
+                "</div></section>"
+            )
+        else:
+            out.append(
+                f'<section class="band prose"><div class="wrap narrow">{head}{md(sec.body)}'
+                "</div></section>"
+            )
+    return _fill(
+        site_file("landing.html"),
+        {
+            "title": esc(title),
+            "description": esc(" ".join(description.split()), quote=True),
+            "font_css": font_css,
+            "css": theme_css + "\n" + site_file("landing.css"),
+            "hero": hero_html,
+            "sections": "\n".join(out),
+        },
+    )
 
 
 def check_rendered(html: str, route_name: str) -> None:

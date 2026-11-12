@@ -8,6 +8,7 @@ list are pure and need no renderer.
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -403,3 +404,134 @@ def test_a_flow_that_is_not_exactly_one_ordered_list_is_refused(body: str) -> No
 def test_a_pages_section_without_the_marker_is_refused() -> None:
     text = landing_text().replace("<!-- site:pages -->", "")
     _refused(text, "site:pages")
+
+
+# -- rendering the landing (R1-R6, R10) -----------------------------------------------
+
+LANDING_TRACKED = [
+    *TRACKED,
+    "docs/explainers/fr-isolation.md",
+    "docs/reference/install.md",
+    "README.md",
+]
+LANDING_ENTRIES = [
+    bs.Entry("docs/explainers/index.md", "Home", "Welcome. More."),
+    bs.Entry("docs/explainers/fr-isolation.md", "Isolation", "The box. Detail."),
+    bs.Entry("docs/explainers/01-fr-goal.md", "The goal", "One run. Detail."),
+    bs.Entry("docs/ops.md", "Ops", "Manual operations."),
+    bs.Entry("docs/reference/cli.md", "CLI", "Every command."),
+]
+FONT_CSS = "@font-face{src:url(data:font/woff2;base64,AAAA)}"
+THEME_CSS = ":root{--ink:#000;--paper:#fff}"
+
+
+def fake_html(md: str) -> str:
+    """A stand-in for python-markdown: structure only, never converted markup."""
+    return "".join(f"<p>{b}</p>" for b in bs.split_blocks(md))
+
+
+def render_landing(text: str | None = None, **kw) -> str:
+    land = bs.parse_landing(text or landing_text(), "docs/explainers/index.md")
+    args = {
+        "title": "Front <page>",
+        "entries": LANDING_ENTRIES,
+        "font_css": FONT_CSS,
+        "patterns": PATTERNS,
+        "tracked": LANDING_TRACKED,
+        "ref": REF,
+        "repo_url": bs.DEFAULT_REPO_URL,
+        "theme_css": THEME_CSS,
+        "to_html": fake_html,
+    }
+    args.update(kw)
+    return bs.render_landing(land, **args)
+
+
+def test_the_hero_headline_is_the_only_h1_and_the_title_is_escaped() -> None:
+    html = render_landing()
+    assert html.count("<h1") == 1
+    assert "A headline" in html.split("</h1>")[0]
+    assert "<title>Front &lt;page&gt;</title>" in html
+    assert "/fr-goal do a thing" in html
+
+
+def test_hero_links_go_through_the_one_link_rule() -> None:
+    front = FRONT.replace("../reference/cli.md", "../reference/install.md")
+    html = render_landing(landing_text(front=front))
+    assert 'href="01-fr-goal.html"' in html
+    assert 'href="reference/install.html"' in html
+    assert 'href="https://github.com/derio-net/super-fr"' in html
+
+
+def test_an_untracked_front_matter_href_fails_the_build() -> None:
+    front = FRONT.replace("../reference/cli.md", "../nope.md")
+    with pytest.raises(bs.BuildError, match="nope.md"):
+        render_landing(landing_text(front=front))
+
+
+def test_guarantee_sections_are_numbered_in_order() -> None:
+    html = render_landing()
+    nums = re.findall(r"0\d / 07", html)
+    assert nums == [f"0{i} / 07" for i in range(1, 8)]
+    assert html.index("Headline 1") < html.index("Headline 7")
+    assert 'href="fr-isolation.html"' in html
+
+
+def test_a_you_flow_step_carries_the_class_yours() -> None:
+    html = render_landing()
+    items = re.findall(r'<li class="([^"]*)">', html)
+    steps = [c for c in items if c.startswith("step")]
+    assert [("yours" in c.split()) for c in steps] == [True, False, True]
+
+
+def test_the_page_list_has_anchored_groups_and_every_entry_but_the_index() -> None:
+    html = render_landing()
+    for anchor in ("explainers", "guides", "reference"):
+        assert f'id="{anchor}"' in html
+    assert html.index('id="explainers"') < html.index('id="guides"') < html.index('id="reference"')
+    assert 'href="fr-isolation.html"' in html and "The box." in html
+    assert "Detail." not in html
+    assert 'href="guides/ops.html"' in html and 'href="reference/cli.html"' in html
+    assert ">Home<" not in html
+
+
+def test_body_links_are_rewritten_like_any_other_page() -> None:
+    extra = "## Read\n\nSee [iso](fr-isolation.md) and [the report](./acceptance/).\n\n"
+    html = render_landing(landing_text(extra=extra))
+    assert 'iso](fr-isolation.html)' in html or 'href="fr-isolation.html">iso' in html
+    assert "(./acceptance/)" in html or 'href="./acceptance/"' in html
+    with pytest.raises(bs.BuildError, match="nope.md"):
+        render_landing(landing_text(extra="## R\n\n[x](nope.md)\n\n"))
+
+
+def test_a_cta_paragraph_of_links_becomes_buttons() -> None:
+    html = render_landing()
+    tail = html[html.rindex("cta") :]
+    assert 'class="btn' in tail and 'href="01-fr-goal.html"' in tail
+
+
+def test_the_page_embeds_the_given_css_and_carries_no_script_or_foreign_request() -> None:
+    html = render_landing()
+    assert FONT_CSS in html and THEME_CSS in html
+    assert html.index(THEME_CSS) < html.index("prefers-color-scheme: light")
+    assert 'name="color-scheme" content="dark light"' in html
+    assert "<script" not in html
+    assert not re.search(r"(?:src=|url\()\s*[\"']?https?:", html)
+    assert not re.search(r"<link[^>]*href=[\"']?https?:", html)
+    assert re.search(r"@media \(prefers-color-scheme: light\)", html)
+
+
+def test_font_css_is_every_font_face_rule_of_a_rendered_page() -> None:
+    page = "<style>@font-face{a:1}@font-face{b:url(data:x)}body{}</style>"
+    assert bs.extract_font_css(page) == "@font-face{a:1}\n@font-face{b:url(data:x)}"
+    with pytest.raises(bs.BuildError, match="font"):
+        bs.extract_font_css("<style>body{}</style>")
+
+
+def test_theme_css_is_the_rendered_pages_root_block() -> None:
+    page = "<style>:root{\n--ink:#0b0c10;--paper:#e7e1d3}\nbody{color:red}</style>"
+    assert bs.extract_theme_css(page) == ":root{\n--ink:#0b0c10;--paper:#e7e1d3}"
+    with pytest.raises(bs.BuildError, match=":root"):
+        bs.extract_theme_css("<style>body{}</style>")
+    with pytest.raises(bs.BuildError, match="--ink"):
+        bs.extract_theme_css("<style>:root{--bg:#fff}</style>")
