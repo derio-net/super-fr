@@ -302,9 +302,14 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
 # spliced in after `docs/superpowers/`). Kept as a local constant, not imported
 # from fr.archive: this module must not depend on the archive command.
 _ARCHIVED_KINDS = tuple(
-    KIND_DIRS[kind].removeprefix(f"{KIND_DIRS['superpowers']}/")
-    for kind in ("plan", "spec", "journal", "run", "usage")
-)
+    sorted(
+        name
+        for rel in KIND_DIRS.values()
+        if rel.startswith(f"{KIND_DIRS['superpowers']}/")
+        and "/" not in (name := rel.removeprefix(f"{KIND_DIRS['superpowers']}/"))
+        and f"{KIND_DIRS['archive']}/{name}" in KIND_DIRS.values()
+    )
+)  # the live kind dirs that have an `implemented/` twin: plans, specs, journals, runs, usage
 _SUPERPOWERS = f"{KIND_DIRS['superpowers']}/"
 
 # Files only fr's own tooling writes into a workspace, appended to the shared

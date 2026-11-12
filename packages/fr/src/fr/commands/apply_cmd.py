@@ -565,8 +565,8 @@ def apply_command(
         # canonical `superpowers/archived-plans` location so an unrelated dir
         # that merely happens to be named "archived-plans" isn't refused.
         resolved_dir = plan_dir.resolve()
-        plan_repo = _find_repo_root(resolved_dir)
-        under_archived = plan_repo is not None and any(
+        plan_repo = _find_repo_root(resolved_dir) or Path.cwd()
+        under_archived = any(
             (froot / KIND_DIRS[kind]).resolve() in resolved_dir.parents
             for froot in feature_roots(space_for(plan_repo))
             for kind in ("plan-archived", "plan-legacy-archived")
