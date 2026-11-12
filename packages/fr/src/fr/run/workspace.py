@@ -86,12 +86,14 @@ def ensure_run_workspace(
         problem = marker_mode_holds(repo_root, marker)
         if problem is not None:
             raise RunWorkspaceError(problem)
-        _same_stealth(marker.get("placement"), _marker_ref(marker), stealth, repo_root)
+        if stealth is not None:
+            _same_stealth(marker.get("placement"), _marker_ref(marker), stealth, repo_root)
         return repo_root
 
     state = load_state(repo_root, branch)
     if state is not None and Path(state.worktree).is_dir():
-        _same_stealth(state.placement, state.tracking, stealth, Path(state.worktree))
+        if stealth is not None:
+            _same_stealth(state.placement, state.tracking, stealth, Path(state.worktree))
         return Path(state.worktree)
 
     try:
