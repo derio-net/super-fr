@@ -50,7 +50,7 @@ def _select_target(repo_root: Path) -> Any:
     return _target(repo_root)
 
 
-def ensure_run_workspace(repo_root: Path, branch: str) -> Path:
+def ensure_run_workspace(repo_root: Path, branch: str, *, no_fetch: bool = False) -> Path:
     """The workspace root this run must be born in. Idempotent.
 
     Three cases, in order:
@@ -87,7 +87,7 @@ def ensure_run_workspace(repo_root: Path, branch: str) -> Path:
         return Path(state.worktree)
 
     try:
-        new_state = _select_target(repo_root).up(profile=None, branch=branch)
+        new_state = _select_target(repo_root).up(profile=None, branch=branch, no_fetch=no_fetch)
     except IsolationError as e:
         raise RunWorkspaceError(f"could not enter isolation for branch {branch!r}: {e}") from e
     return Path(new_state.worktree)

@@ -4839,14 +4839,15 @@ def _refuse_incoherent_settings(repo_root: Path) -> None:
         raise typer.Exit(2)
 
 
-def _fetch_switch_or_refuse(repo_root: Path) -> None:
+def _fetch_switch_or_refuse(repo_root: Path, *, no_fetch: bool = False) -> None:
     """R23 "the switch": `run start` fetches `origin/fr` like `fr isolation up`, and
-    refuses (exit 2) when origin is unreachable, even when the workspace already exists."""
+    refuses (exit 2) when origin is unreachable, even when the workspace already exists.
+    `--no-fetch` reads the last fetched `origin/fr` and says so, as `up --no-fetch` does."""
     from fr.placement.quiet import fetch_switch
     from fr.settings import SettingsError
 
     try:
-        fetch_switch(repo_root)
+        fetch_switch(repo_root, no_fetch=no_fetch, command="fr run start")
     except SettingsError as e:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
@@ -4877,6 +4878,12 @@ def start_cmd(
         "--issue",
         help="The forge issue this run works on: fr's commit subjects then use the "
         "`git.commit.with_issue` template (repo settings R14).",
+    ),
+    no_fetch: bool = typer.Option(
+        False,
+        "--no-fetch",
+        help="Read the last fetched origin/fr for the placement instead of fetching it "
+        "(as `fr isolation up --no-fetch`; not a reachability check).",
     ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
@@ -4921,11 +4928,11 @@ def start_cmd(
             err_console.print(f"  {err}", soft_wrap=True)
         raise typer.Exit(2)
 
-    _fetch_switch_or_refuse(repo_root)
+    _fetch_switch_or_refuse(repo_root, no_fetch=no_fetch)
     _refuse_incoherent_settings(repo_root)
 
     try:
-        workspace = ensure_run_workspace(repo_root, branch)
+        workspace = ensure_run_workspace(repo_root, branch, no_fetch=no_fetch)
     except RunWorkspaceError as e:
         # soft_wrap=True, like every other operator-facing refusal in this
         # module (p1-f1, r1-f2). This message embeds the repository path, so

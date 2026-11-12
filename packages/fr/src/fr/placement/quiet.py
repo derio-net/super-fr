@@ -260,6 +260,24 @@ def _check_owner(root: Path, path: Path) -> None:
     _OWNED.add((str(mine), str(path)))
 
 
+def _refuse_unrelated_local(root: Path) -> None:
+    """A local `fr` branch is adopted only when it is an ancestor or a descendant of
+    `origin/fr` (review p3-r9): any other one is somebody else's history, and committing
+    on it would push a second, unrelated root to origin's append-only `fr`."""
+    remote = _git(root, "rev-parse", "--verify", "--quiet", f"{paths.SWITCH_REF}^{{commit}}")
+    if remote.returncode != 0:
+        return
+    for older, newer in ((QUIET_REF, paths.SWITCH_REF), (paths.SWITCH_REF, QUIET_REF)):
+        if _git(root, "merge-base", "--is-ancestor", older, newer).returncode == 0:
+            return
+    raise SettingsError(
+        f"placement quiet: the local `{QUIET_BRANCH}` branch is neither an ancestor nor a "
+        f"descendant of origin/{QUIET_BRANCH}, so it is not this repo's artifact history; "
+        f"fr will not adopt it. Rename or delete it (`git branch -m {QUIET_BRANCH} "
+        f"{QUIET_BRANCH}-old`) and retry"
+    )
+
+
 def ensure_worktree(root: Path) -> Path:
     """The fr worktree, created on demand from `origin/fr` (a local `fr` branch tracking
     it), never with a force flag. Refuses a path that is there but is not it."""
@@ -276,6 +294,7 @@ def ensure_worktree(root: Path) -> Path:
     _git(root, "worktree", "prune")
     local = _git(root, "rev-parse", "--verify", "--quiet", f"{QUIET_REF}^{{commit}}")
     if local.returncode == 0:
+        _refuse_unrelated_local(root)
         argv = ["worktree", "add", str(path), QUIET_BRANCH]
     else:
         argv = ["worktree", "add", "--no-track", "-b", QUIET_BRANCH, str(path), paths.SWITCH_REF]
@@ -348,16 +367,28 @@ def _default_network(root: Path) -> Network:
     return run
 
 
-def unreachable(why: str) -> SettingsError:
+def unreachable(why: str, command: str | None = "fr isolation up") -> SettingsError:
+    """The R23 reachability refusal. *command* is the one that refused, whose own
+    `--no-fetch` is the remedy; None for a command that has no such flag."""
+    remedy = (
+        f"; `{command} --no-fetch` reads the last fetched origin/{QUIET_BRANCH} instead"
+        if command is not None
+        else ""
+    )
     return SettingsError(
         f"origin is unreachable ({why}): fr reads the quiet switch (origin/{QUIET_BRANCH}) at "
         "`fr isolation up` and `fr run start` and will not guess the placement without it "
-        "(R23). Check the remote with `git remote -v`; `fr isolation up --no-fetch` reads "
-        f"the last fetched origin/{QUIET_BRANCH} instead"
+        f"(R23). Check the remote with `git remote -v`{remedy}"
     )
 
 
-def fetch_switch(root: Path, *, no_fetch: bool = False, network: Network | None = None) -> str:
+def fetch_switch(
+    root: Path,
+    *,
+    no_fetch: bool = False,
+    network: Network | None = None,
+    command: str = "fr isolation up",
+) -> str:
     """Fetch `origin/fr` and return the placement it names (`quiet` or `repo`).
 
     No `origin` is `repo`, with nothing fetched. `--no-fetch` reads the last fetched ref
@@ -381,11 +412,13 @@ def fetch_switch(root: Path, *, no_fetch: bool = False, network: Network | None 
             if _git(root, "rev-parse", "--verify", "--quiet", paths.SWITCH_REF).returncode == 0:
                 _git(root, "update-ref", "-d", paths.SWITCH_REF)
         elif probe.returncode != 0:
-            raise unreachable((probe.stderr or probe.stdout or "git ls-remote failed").strip())
+            raise unreachable(
+                (probe.stderr or probe.stdout or "git ls-remote failed").strip(), command
+            )
         else:
             fetched = net(["git", "fetch", "--no-tags", "origin", FETCH_REFSPEC])
             if fetched.returncode != 0:
-                raise unreachable((fetched.stderr or "git fetch failed").strip())
+                raise unreachable((fetched.stderr or "git fetch failed").strip(), command)
     placement = paths.QUIET if read_switch(root) is not None else paths.REPO
     if placement == paths.QUIET:
         fast_forward(root)
