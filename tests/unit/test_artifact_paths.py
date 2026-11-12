@@ -34,6 +34,7 @@ EXPECTED_DIRS = {
     "plan": "docs/superpowers/plans",
     "plan-archived": "docs/superpowers/implemented/plans",
     "plan-legacy-archived": "docs/superpowers/archived-plans",
+    "spec-legacy-archived": "docs/superpowers/archived-specs",
     "journal": "docs/superpowers/journals",
     "journal-specs": "docs/superpowers/journals/specs",
     "journal-plans": "docs/superpowers/journals/plans",
@@ -45,6 +46,8 @@ EXPECTED_DIRS = {
     "run": "docs/superpowers/runs",
     "run-archived": "docs/superpowers/implemented/runs",
     "usage": "docs/superpowers/usage",
+    "usage-archived": "docs/superpowers/implemented/usage",
+    "audit-archived": "docs/superpowers/implemented/audits",
     "workflow": "docs/superpowers/workflows",
     "verification": "docs/superpowers/verifications",
     "plan-config": "docs/superpowers/plan-config.yaml",
@@ -67,6 +70,9 @@ def test_every_kind_has_a_distinct_shell_name() -> None:
     assert shell_name("plan") == "FR_PLANS_DIR"
     assert shell_name("spec") == "FR_SPECS_DIR"
     assert shell_name("models") == "FR_MODELS_FILE"
+    assert shell_name("usage-archived") == "FR_ARCHIVED_USAGE_DIR"
+    assert shell_name("spec-legacy-archived") == "FR_LEGACY_ARCHIVED_SPECS_DIR"
+    assert shell_name("audit-archived") == "FR_ARCHIVED_AUDITS_DIR"
     for name in names:
         assert name.startswith("FR_") and name.replace("_", "").isalnum() and name.isupper()
 
