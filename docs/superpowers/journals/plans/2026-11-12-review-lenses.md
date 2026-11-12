@@ -47,3 +47,56 @@ The command module is three thin handlers over resolve/check; nothing to clean.
 ### no-refactor-p1-t6 · discovery · no-refactor-because P1.T6 (phase 1)
 
 A scenario script, a doc paragraph and a row move; nothing to clean.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-11-12T19:26:37+00:00 phase=1 -->
+### review-p1 · review · Phase 1 review: R1-R3 met, four small in-scope defects, all fixed (phase 1)
+
+A separate reviewer read the phase's diff against spec R1-R3. It confirmed the id
+grammar, the config keys, every `check` condition, the read-only exemption, the
+shipped briefs' closing sentence, the wheel copy and its guard, install coverage
+and the scenario. It judged the `_StrictLoader` import acceptable
+(`fr/isolation/scaffold.py` imports the same name). Four findings, all in scope.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-12T19:26:37+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · shipped_lenses() does not check a manifest's file stem against its lens id (phase 1)
+
+`fr/lenses/resolve.py`: a copied manifest that kept another lens's id replaced
+that lens in the dict silently. `fr/verification/resolve.py` refuses the same case.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-12T19:26:37+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · list/show crash on an unreadable config; check crashes on a malformed shipped manifest (phase 1)
+
+`load_config` and `shipped_lenses` read files bare, so an undecodable
+`.fr/lenses.yaml` gave `list` and `show` a traceback where exit 2 is documented;
+`check_config` read the shipped set outside its `try`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-12T19:26:37+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · a config that disables a shipped lens and also defines it passes check (phase 1)
+
+Contradictory input accepted silently. (The reviewer also said the result is
+labelled `repo`; it is labelled `repo (replaces shipped)`, so that part is wrong.)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-12T19:26:37+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · PathRule.paths accepts blank glob strings (phase 1)
+
+An empty or whitespace glob parsed; R6 would consume it in phase 2.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-12T19:26:37+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: shipped_lenses() does not check a manifest's file stem against its lens id (phase 1)
+
+`shipped_lenses` raises `LensError` when `path.stem != lens.id`; test `test_a_shipped_manifest_named_for_another_lens_is_refused`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-12T19:26:37+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: list/show crash on an unreadable config; check crashes on a malformed shipped manifest (phase 1)
+
+`fr.lenses.model.read_text` turns OSError/UnicodeDecodeError into `LensError`; `load_config` and `shipped_lenses` use it and `check_config` reads both inside one `try`. Tests: `test_an_undecodable_config_is_a_lens_error`, `test_an_undecodable_file_is_one_problem`, `test_a_malformed_shipped_manifest_is_a_problem_not_a_crash`, `test_an_undecodable_config_makes_list_and_show_exit_2_without_a_traceback`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-12T19:26:37+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: a config that disables a shipped lens and also defines it passes check (phase 1)
+
+`check_config` reports `the file disables and also defines <id>`; covered by a new `test_one_named_problem_each` case.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-12T19:26:37+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: PathRule.paths accepts blank glob strings (phase 1)
+
+`PathRule` refuses a blank glob; two new `test_parse_config_refuses` cases.
