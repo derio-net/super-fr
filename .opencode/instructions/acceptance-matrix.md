@@ -80,7 +80,8 @@ artifacts --yes` splits it.
   <level>=<ref>`) or `retire` (`--notes`). `set-status` on a merged row writes the
   same amendments; a step record's `acceptance:` entry `{row, op, why, …}` (record
   kind 11) is one too. The feature is `--feature <spec-slug>`, else the spec of
-  this branch's run. Each amendment names its row's revision (`base`, the count of
+  this branch's run; `set-status` with neither appends to the row's own feature's
+  fragment (a post-merge walk or issue link), where `amend` refuses. Each amendment names its row's revision (`base`, the count of
   amendments applied; default the current one).
 - **The stale-base rule** (R17). `fr acceptance check` and `deliver` first fetch
   the default ref (`check --no-fetch` offline; a failed fetch in CI is a refusal),

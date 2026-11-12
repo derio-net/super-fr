@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 repo-feature-settings, delivery through fr, settable ask and forge-quiet
+reviewed: 2026-11-12 acceptance-fragments phase 3, still true after the fr-goal deliver note on acceptance amendments
 ---
 
 ## The premise
