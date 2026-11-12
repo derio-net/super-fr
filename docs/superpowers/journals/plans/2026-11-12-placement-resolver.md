@@ -249,3 +249,130 @@ bc273c8c0: fall back to the literals only when fr is absent or lacks the subcomm
 ### p2-r4-resolved · finding [fixed] · resolves p2-r4: logical._resolve re-ran space_for's filesystem reads per ref; fr.refs uses function-local imports (phase 2)
 
 logical.feature_roots_of plus an optional roots= lets path_view and check compute the space once per batch; the single-ref API is unchanged. The fr.refs function-local imports stay: they correctly break the fr.artifacts -> fr.spec -> fr.refs cycle, and a leaf-module move buys nothing further.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-policy-source-is-fr-branch created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-policy-source-is-fr-branch · decision · Under quiet the policy keys are read from the fr branch, so fr needs default-branch protection (phase 3)
+
+Per R2/R23 the settings are read at the placement's own location: under quiet the policy keys
+(artifacts.*, forge.*, git.*) come from `settings.yaml` on `origin/fr`, read by commit, and a
+`.fr/settings.yaml` on the default branch is ignored (the loader's note says so). Consequence,
+flagged by the phase-3 security review: anyone who can push to `fr` can change the policy, so
+the `fr` branch needs the same branch protection as the default branch. Not changed in code
+(that would be a spec change); stated in the quiet section of docs/explainers/01-fr-goal.md and
+in the header `fr settings init --quiet` writes into the switch.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-feature-id-collision-refused created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-feature-id-collision-refused · decision · A branch whose feature id another branch holds is refused under quiet, naming both (gh#1419) (phase 3)
+
+`branch_slug` is not injective (`feat/a__b` and `feat__a/b` share `feat__a__b`), and under quiet
+the slug is the feature PATH on `fr`. `fr.placement.quiet.check_feature_id` lists local and
+origin branch names from the filesystem and refuses when another one maps to the same id (and a
+feature branch named `fr`), at `up` and in every quiet `space_for`. That keeps R23's "each commit
+touches one feature's path" true. gh#1419 itself (the slug) stays open: repo and the isolation
+worktree names are unchanged.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-fr-worktree-ownership-check created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-fr-worktree-ownership-check · decision · The shared fr worktree path is reused only when it is this repo's worktree on refs/heads/fr (phase 3)
+
+`~/.cache/fr/worktrees/<name>/fr` is keyed by the repo's directory name (the plan's path shape,
+as isolation names worktrees), so two repos of the same name share it. Before reusing it,
+`ensure_worktree` and `fast_forward` require `git rev-parse --git-common-dir` there to be this
+repo's common dir and HEAD to be refs/heads/fr, refusing with both repos named (security review
+note 1). Verified pairs are cached per process.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-reachability-refusal-all-repos created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-reachability-refusal-all-repos · decision · up and run start refuse an unreachable origin for every repo with an origin, not only quiet ones (phase 3)
+
+R23 fetches the switch at up and run start and refuses when origin is unreachable; a repo cannot
+know it is not quiet without reaching origin, so the refusal applies to any repo with an origin
+(no origin is repo, with no fetch). `--no-fetch` reads the last fetched origin/fr and prints that
+it did. Existing fixtures were fixed, never the rule: test_isolation_branch_classify's GitRunner
+answers the switch probe as absent (those tests break origin on purpose to make the BRANCH probe
+unknown); test_isolation's fetch-failure test now asserts the refusal and then the old HEAD
+fallback under --no-fetch; repo-settings-file.sh uses stealth for the not-yet-available case.
+An origin fr branch that is gone deletes the stale tracking ref, so the sticky check notices.
+
+<!-- fr:journal kind=decision scope=plan id=quiet-artifact-root-scope created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-artifact-root-scope · decision · Which writers moved to the fr worktree in phase 3, and what stays at the product toplevel (phase 3)
+
+Phase 2 left ~150 sites joining `repo_root / KIND_DIRS[...]` constants, which under quiet would
+still write on the product branch. `fr.artifacts.paths.artifact_root(root)` (the feature root)
+now serves runs and records (run/model, record/model, run/cursors, run/adopt, run_cmd, pickup,
+git_policy/templates, acceptance/amend's run lookup), journals, usage files and plan staging
+(plan_ops/plan_cmd group by owning worktree). Repo configuration that a repo owner authors
+(workflows, verifications, models, trackers, plan-config) stays at the product toplevel. Every
+other writer still joins the toplevel; under quiet the commit seam refuses to commit an artifact
+path inside the product checkout, so none reaches a product branch (finding
+quiet-unconverted-writers). Also: `.fr/settings.yaml` saying `placement: quiet` is refused,
+pointing at `fr settings init --quiet`; plan create installs no validator wrapper under quiet.
+
+<!-- fr:journal kind=finding scope=plan id=quiet-unconverted-writers created=2026-11-12T17:57:33+00:00 phase=3 state=open review_scope=out -->
+### quiet-unconverted-writers · finding [open] (reviewer: out of scope) · Writers not yet on artifact_root are refused under quiet instead of writing to the fr branch (phase 3)
+
+Acceptance fragments (`fr acceptance add/set-status/amend`, the fold's working-tree read),
+archive/closeout, debt, gatebackfill, triage snapshots, ops evidence, the usage backfill, and
+isolation rename/preserve still join the product toplevel. Under quiet their commit is refused at
+the seam (nothing reaches the product branch, which the placement-quiet row claims), but they
+leave their file uncommitted in the product checkout, and readers among them see nothing. The
+acceptance fold over the fr branch and archive belong with phase 5 (R17/R25 under quiet);
+`isolation rename` changes a quiet feature's id and needs its own design.
+
+<!-- fr:journal kind=discovery scope=plan id=quiet-red-order-p3-t4 created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-red-order-p3-t4 · discovery · Task 4's implementation was written before its RED was observed; RED confirmed afterwards (phase 3)
+
+test_push_quiet.py and atomic_push were written in one sitting while a suite ran. RED was then
+taken honestly by restoring push.py and push_cmd.py to HEAD: 5 of 6 tests failed (the subject-check
+test already held); the implementation was put back byte for byte and all 6 pass.
+
+<!-- fr:journal kind=discovery scope=plan id=quiet-probe-wrote-into-workspace created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-probe-wrote-into-workspace · discovery · A debugging probe's `fr plan create` committed into this workspace; dropped, tests now chdir (phase 3)
+
+`fr plan create` resolves its repo from the cwd, not VK_REPO_ROOT. A scratch probe run from this
+worktree created and committed plan `2026-11-12-q` here (chore(fr), unpushed). The commit was
+dropped with `git reset --mixed HEAD~1` and its files removed before anything was pushed; every
+quiet test fixture now `monkeypatch.chdir`s into its sandbox workspace.
+
+<!-- fr:journal kind=discovery scope=plan id=quiet-acceptance-check-foreign-rows created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-acceptance-check-foreign-rows · discovery · fr acceptance check --no-fetch exits 1 on site-* rows merged on origin/main after this base (phase 3)
+
+23 errors, all on rows site-front-page-second-pass-published, site-landing-* and
+site-wave-driver-and-exit-gates-pages: the fold reads origin/main's fragments while their spec
+and tests are not on this branch. Nothing from this phase; it clears when the branch takes
+origin/main (delivery's call). placement-quiet itself checks clean.
+
+<!-- fr:journal kind=discovery scope=plan id=quiet-init-subject-through-templates created=2026-11-12T17:57:33+00:00 phase=3 -->
+### quiet-init-subject-through-templates · discovery · The first full suite caught init --quiet's chore(fr) subject bypassing the R14 seam (phase 3)
+
+test_every_chore_fr_producer_goes_through_the_seam failed on commands/settings_cmd.py: the root
+commit of `fr` was written by commit-tree with a literal subject. It now goes through
+`fr_message` (the repo's templates and the Fr-Commit trailer). The full suite was re-run after.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-12T17:57:33+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+new module (fr/placement/quiet.py) plus a rewrite of space_for that replaced its two switch helpers outright; the old _has_switch_ref/_switch_placement were deleted in the same change, nothing duplicated remained
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-12T17:57:33+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+one shared fetch_placement called by all three targets and run start; the fixture edits are test-only; nothing to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-11-12T17:57:33+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+artifact_root is the one helper every converted site calls; worktree_of is shared by plan_ops and plan_cmd; the commit reroute is two small functions on the existing seam
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-11-12T17:57:33+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+atomic_push sits beside push and reuses run_git/_git/FORCE_FLAGS; push_cmd gained one dispatch helper; nothing left to merge
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t5 created=2026-11-12T17:57:33+00:00 phase=3 -->
+### no-refactor-p3-t5 · discovery · no-refactor-because P3.T5 (phase 3)
+
+init --quiet is one function over git plumbing; render_init gained a placement argument instead of a second renderer
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t6 created=2026-11-12T17:57:33+00:00 phase=3 -->
+### no-refactor-p3-t6 · discovery · no-refactor-because P3.T6 (phase 3)
+
+a scenario script, its one-line wiring, docs and the row move; no code to clean

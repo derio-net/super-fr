@@ -99,7 +99,7 @@ steps:
           visual: none
           findings: p2-r1,p2-r2,p2-r3,p2-r4
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-12T14:55:44+00:00'
           agent: a3b112fa1df9c3f0e
@@ -109,6 +109,11 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: f5689a0b-c781-4953-bf5a-b20b350b4acf
+          returned: '2026-11-12T17:57:36+00:00'
+          outcome: done
+        evidence:
+          tests: p3-suite.log@4e6347f4b746;tree=331a654b7e8fadf7420973ea445be7e4bf885d7c16345d097eb58e860710c8bf
+          visual: none
   journal-check:
     state: pending
   deliver:
