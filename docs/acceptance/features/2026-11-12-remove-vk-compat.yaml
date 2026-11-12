@@ -58,3 +58,13 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+  - id: archived-plans-readable-after-repair
+    capability: Artifact migration
+    acceptance: After the repair has run, `fr status` reads every archived plan that
+      used to carry `vk_version`
+    origin:
+    - spec:2026-11-12-remove-vk-compat#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
