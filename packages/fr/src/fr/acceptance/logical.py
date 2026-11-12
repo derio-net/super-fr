@@ -12,6 +12,7 @@ does; `is_logical` decides on the prefix alone.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -115,13 +116,21 @@ class Resolved:
         return self.feature_root / self.rel
 
 
-def _resolve(ref: str, repo_root: Path) -> tuple[Resolved | None, str | None]:
+def feature_roots_of(repo_root: Path) -> tuple[Path, ...]:
+    """Every feature root of *repo_root*'s space. `space_for` reads the filesystem (marker,
+    commondir, packed-refs), so a caller resolving many refs computes this ONCE and passes
+    it as `roots=` to the functions below."""
+    return tuple(paths.feature_roots(paths.space_for(Path(repo_root))))
+
+
+def _resolve(
+    ref: str, repo_root: Path, roots: Sequence[Path] | None = None
+) -> tuple[Resolved | None, str | None]:
     try:
         logical = parse_logical(ref)
     except AcceptanceError as e:
         return None, str(e)
-    root = Path(repo_root)
-    for feature_root in paths.feature_roots(paths.space_for(root)):
+    for feature_root in feature_roots_of(repo_root) if roots is None else roots:
         for rel in candidates(logical):
             target = feature_root / rel
             if target.is_dir() if logical.kind == "plan" else target.is_file():
@@ -130,10 +139,12 @@ def _resolve(ref: str, repo_root: Path) -> tuple[Resolved | None, str | None]:
     return None, f"{ref}: no {logical.kind} {logical.slug!r} in this repo (looked for {tried})"
 
 
-def resolve_logical_at(ref: str, repo_root: Path) -> Resolved | None:
+def resolve_logical_at(
+    ref: str, repo_root: Path, roots: Sequence[Path] | None = None
+) -> Resolved | None:
     """Where *ref* resolves (`Resolved`: feature root and relative layout path), or None
     (`resolution_problem` says why). The search is `resolve_logical`'s."""
-    return _resolve(ref, repo_root)[0]
+    return _resolve(ref, repo_root, roots)[0]
 
 
 def resolve_logical(ref: str, repo_root: Path) -> Path | None:
@@ -153,12 +164,16 @@ def resolve_logical(ref: str, repo_root: Path) -> Path | None:
     return Path(found.rel) if found.feature_root == Path(repo_root) else found.path
 
 
-def resolution_problem(ref: str, repo_root: Path) -> str | None:
+def resolution_problem(
+    ref: str, repo_root: Path, roots: Sequence[Path] | None = None
+) -> str | None:
     """Why *ref* does not resolve, or None when it does."""
-    return _resolve(ref, repo_root)[1]
+    return _resolve(ref, repo_root, roots)[1]
 
 
-def as_path_ref(ref: str, repo_root: Path, own_repo: str) -> str:
+def as_path_ref(
+    ref: str, repo_root: Path, own_repo: str, roots: Sequence[Path] | None = None
+) -> str:
     """*ref* as a `<own_repo>:<path>[#anchor]` path ref when it is logical, else *ref*.
 
     For readers that link or open the file a ref names (reports, the link checks):
@@ -172,7 +187,7 @@ def as_path_ref(ref: str, repo_root: Path, own_repo: str) -> str:
         return ref
     # The layout path relative to its feature root, never an absolute one: a feature
     # root outside the repo would otherwise spell `<repo>:/abs/path` (and a local path).
-    found = resolve_logical_at(ref, repo_root)
+    found = resolve_logical_at(ref, repo_root, roots)
     rel = found.rel.as_posix() if found is not None else candidates(logical)[0]
     return f"{own_repo}:{rel}" + (f"#{logical.anchor}" if logical.anchor else "")
 
@@ -183,8 +198,10 @@ def path_view(matrix: Matrix, repo_root: Path, own_repo: str) -> Matrix:
     move never rewrites a row)."""
     from fr.acceptance.model import LEVELS
 
+    roots = feature_roots_of(repo_root)  # once per matrix, not once per ref
+
     def conv(refs: tuple[str, ...]) -> tuple[str, ...]:
-        return tuple(as_path_ref(r, repo_root, own_repo) for r in refs)
+        return tuple(as_path_ref(r, repo_root, own_repo, roots) for r in refs)
 
     rows = tuple(
         row.model_copy(
