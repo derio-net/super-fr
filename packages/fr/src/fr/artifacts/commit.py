@@ -805,7 +805,16 @@ def commit_paths(
                 )
 
             try:
-                return commit_and_push(stealthy, fr_root, files, message, tracking)
+                from fr.placement.stealth import origin_url
+
+                return commit_and_push(
+                    stealthy,
+                    fr_root,
+                    files,
+                    message,
+                    tracking,
+                    target_remote=origin_url(repo_root),
+                )
             except StealthPushError:
                 raise  # R24: fatal, the caller exits 2 (the worktree is already restored)
             except SettingsError as e:

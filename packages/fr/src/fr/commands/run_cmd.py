@@ -7284,6 +7284,15 @@ def resolve_in_process(
     )
 
 
+def _shown_path(path: Path, repo_root: Path) -> str:
+    """*path* relative to the checkout when it is inside it, else absolute: under quiet
+    and stealth a run's files live outside the product checkout."""
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def _resolve_with_record(
     run_id: str, step_id: str, item: str | None, record_file: Path, *, advance: bool = True
 ) -> None:
@@ -7302,7 +7311,7 @@ def _resolve_with_record(
     if not path.resolve().is_relative_to(home.resolve()):
         err_console.print(
             f"refused: {record_file} is not in this run's records dir "
-            f"({home.relative_to(repo_root).as_posix()}/) — nothing applied",
+            f"({_shown_path(home, repo_root)}/) — nothing applied",
             markup=False,
             soft_wrap=True,
         )
