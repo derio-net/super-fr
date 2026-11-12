@@ -29,10 +29,10 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import KIND_DIRS, feature_roots, kind_dir, space_for
 from fr.journal.model import JournalEntry, journal_header, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
-from fr.parser import Plan, PlanSchemaError, parse
+from fr.parser import Plan, PlanSchemaError, _find_repo_root, parse
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
     ensure_validator_wrapper,
@@ -786,25 +786,32 @@ def clear_tracking_issue(plan_dir: Path, phase_n: int) -> bool:
 _REWORK_SUFFIX_RE = re.compile(r"-rework-(\d+)$")
 
 
-def _superpowers_dir(parent_dir: Path) -> Path:
-    """Resolve the docs/superpowers/ root from a plan dir in any layout:
-    plans/<x>, implemented/plans/<x> (canonical archive, 2026-06-05 spec),
-    or archived-plans/<x> (legacy)."""
-    if parent_dir.parent.name == "plans" and parent_dir.parent.parent.name == "implemented":
-        return parent_dir.parent.parent.parent
-    return parent_dir.parent.parent
+_PLAN_HOMES = ("plan", "plan-archived", "plan-legacy-archived")
+"""The plan directories a parent plan may live in: active, canonical archive
+(2026-06-05 spec), legacy archive."""
 
 
-def _next_rework_number(parent_dir: Path) -> int:
+def _feature_root_of(parent_dir: Path, repo_root: Path | None) -> Path | None:
+    """The feature root whose plan directory holds *parent_dir*, found through the path
+    resolver (`KIND_DIRS` below each `feature_roots` entry), or None when it sits in none
+    of `_PLAN_HOMES`. *repo_root* is the real checkout root, never walked up to."""
+    if repo_root is None:
+        return None
+    for froot in feature_roots(space_for(repo_root)):
+        if any(froot / KIND_DIRS[kind] == parent_dir.parent for kind in _PLAN_HOMES):
+            return froot
+    return None
+
+
+def _next_rework_number(parent_dir: Path, froot: Path) -> int:
     """Cross-directory N collision check, like v1 next_rework_number.
 
     Scans active plans/, implemented/plans/ (canonical archive), and
     archived-plans/ (legacy) so an archived rework still claims its number.
     """
-    repo_root = _superpowers_dir(parent_dir)
-    plans_dir = repo_root / "plans"
-    implemented_dir = repo_root / "implemented" / "plans"
-    archived_dir = repo_root / "archived-plans"
+    plans_dir = froot / KIND_DIRS["plan"]
+    implemented_dir = froot / KIND_DIRS["plan-archived"]
+    archived_dir = froot / KIND_DIRS["plan-legacy-archived"]
 
     parent_slug = parent_dir.name
 
@@ -845,21 +852,17 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     parent_dir = parent_plan_dir.resolve()
     if not parent_dir.is_dir():
         raise PlanEditError(f"parent plan dir not found: {parent_dir}")
-    superpowers_dir = _superpowers_dir(parent_dir)
-    in_implemented = (
-        parent_dir.parent.name == "plans" and parent_dir.parent.parent.name == "implemented"
-    )
-    in_active_or_legacy = parent_dir.parent.name in ("plans", "archived-plans")
-    if superpowers_dir.name != "superpowers" or not (in_implemented or in_active_or_legacy):
+    froot = _feature_root_of(parent_dir, _find_repo_root(parent_dir))
+    if froot is None:
         raise PlanEditError(
             f"parent must live under {KIND_DIRS['superpowers']}/"
             f"{{plans,implemented/plans,archived-plans}}/, got: {parent_dir}"
         )
 
     parent_plan = parse(parent_dir)
-    n = _next_rework_number(parent_dir)
+    n = _next_rework_number(parent_dir, froot)
     rework_slug = f"{parent_dir.name}-rework-{n}"
-    plans_dir = superpowers_dir / "plans"
+    plans_dir = froot / KIND_DIRS["plan"]
     rework_folder = plans_dir / rework_slug
     if rework_folder.exists():
         raise PlanEditError(f"rework folder already exists: {rework_folder}")
@@ -872,16 +875,14 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     parent_rel = parent_dir.name
     prior_rework_rel: str | None = None
     if n > 1:
-        prior_dir = _find_prior_rework(parent_dir, below=n)
+        prior_dir = _find_prior_rework(parent_dir, froot, below=n)
         if prior_dir is not None:
             prior_rework_rel = prior_dir.name
 
     parent_spec = parent_plan.meta.spec
     if parent_spec:
         # The one canonical `spec:` form, shared with create and repair (#686).
-        parent_spec = refs.canonical_spec_ref(
-            parent_spec, repo_root or superpowers_dir.parent.parent
-        )
+        parent_spec = refs.canonical_spec_ref(parent_spec, repo_root or froot)
 
     meta = {
         "schema_version": 2,
@@ -935,10 +936,9 @@ def rework_create(parent_plan_dir: Path) -> Plan:
     return parse(rework_folder)
 
 
-def _find_prior_rework(parent_dir: Path, *, below: int) -> Path | None:
+def _find_prior_rework(parent_dir: Path, froot: Path, *, below: int) -> Path | None:
     """Highest archived rework N below `below` (in archived-plans/)."""
-    superpowers_dir = parent_dir.parent.parent
-    archived_dir = superpowers_dir / "archived-plans"
+    archived_dir = froot / KIND_DIRS["plan-legacy-archived"]
     if not archived_dir.is_dir():
         return None
     parent_slug = parent_dir.name
