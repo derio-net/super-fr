@@ -485,3 +485,29 @@ amendments:
       --quiet; scenario in CI (plan 2026-11-12-placement-resolver phase 3). Writers
       not yet on the resolver are refused at the commit seam under quiet rather than
       committed on the product branch'
+  - row: placement-quiet
+    op: set-status
+    base: 10
+    status: ci
+    notes: 'quiet placement built and reviewed: switch, sticky state (old workspaces
+      count as repo), fr worktree with OWNER and lock, every placement-bound writer
+      on the resolver root or refused before writing, atomic push; scenario in CI'
+    why: 'quiet placement built and reviewed: switch, sticky state (old workspaces count
+      as repo), fr worktree with OWNER and lock, every placement-bound writer on the
+      resolver root or refused before writing, atomic push; scenario in CI'
+  - row: placement-quiet
+    op: add-level
+    base: 11
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_edges.py
+    why: 'quiet placement built and reviewed: switch, sticky state (old workspaces count
+      as repo), fr worktree with OWNER and lock, every placement-bound writer on the
+      resolver root or refused before writing, atomic push; scenario in CI'
+  - row: placement-quiet
+    op: add-level
+    base: 12
+    level: unit
+    ref: super-fr:tests/unit/test_placement_quiet_migrate.py
+    why: 'quiet placement built and reviewed: switch, sticky state (old workspaces count
+      as repo), fr worktree with OWNER and lock, every placement-bound writer on the
+      resolver root or refused before writing, atomic push; scenario in CI'
