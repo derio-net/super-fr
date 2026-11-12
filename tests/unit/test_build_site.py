@@ -1477,7 +1477,8 @@ def test_figures_css_keeps_the_wide_form_legible_in_an_article_column() -> None:
     out to its full width, and the narrow form below that (deliver check, 2026-11-12)."""
     css = (bs.SITE_DIR / "figures.css").read_text(encoding="utf-8")
     assert re.search(
-        r"@media\s*\(max-width:\s*1079px\)\s*\{article\.explainer \.site-figure \.fig-wide\{display:none\}",
+        r"@media\s*\(max-width:\s*1079px\)\s*\{article\.explainer \.site-figure \.fig-wide"
+        r"\{display:none\}",
         css,
     )
     assert re.search(
