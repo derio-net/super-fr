@@ -117,6 +117,14 @@ def init_quiet(root: Path) -> str:
             "fr settings init --quiet: this repository has no `origin`; quiet keeps the `fr` "
             "branch on origin, so add one first"
         )
+    if git_answer(root, "rev-parse", "--verify", "--quiet", QUIET_REF).returncode == 0:
+        # p3-r9: the root commit made here is unrelated to any existing local `fr`, which
+        # the fr worktree would otherwise adopt and push as a second root.
+        raise SettingsError(
+            "fr settings init --quiet: this clone already has a local `fr` branch, which "
+            "would not be an ancestor or a descendant of the switch fr is about to create. "
+            "Rename or delete it (`git branch -m fr fr-old`) and retry"
+        )
     probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF)
     if probe.returncode == 0:
         raise SettingsError(
@@ -124,7 +132,7 @@ def init_quiet(root: Path) -> str:
             "it (edit its settings.yaml there instead)"
         )
     if probe.returncode != 2:
-        raise unreachable(probe.stderr.strip() or "git ls-remote failed")
+        raise unreachable(probe.stderr.strip() or "git ls-remote failed", None)
     blob = git("hash-object", "-w", "--stdin", stdin=render_init("quiet")).strip()
     tree = git("mktree", stdin=f"100644 blob {blob}\tsettings.yaml\n").strip()
     from fr.git_policy.templates import fr_message
