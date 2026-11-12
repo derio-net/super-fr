@@ -94,3 +94,12 @@ amendments:
       names (VK_DERIO_OPS_PROJECT_ID, willikins_vk_bridge_* metrics) are unaffected'
     why: 'review p1-r3: after R2 a config mounting ~/.config/vk/secrets is followed
       like any other path, so ''no longer resolve'' was untrue for it'
+  - row: vk-legacy-fallbacks-removed
+    op: set-status
+    base: 2
+    status: ci
+    notes: test_isolation.py pins profiles_config and the state dir reading fr spellings
+      only, and that a mounted env file is created whatever its path; test_bridge_cli.py
+      pins bridge_env reading only FR_BRIDGE_*. Run in CI.
+    why: 'review p1-r3: the note cited the legacy-vk-mount hard-error test, which this
+      change deletes with the error'
