@@ -125,7 +125,7 @@ The skills drive `fr`, and every step they take is a command you can run yoursel
 
 The site: **https://derio-net.github.io/super-fr/**
 
-- **Start here:** [the pipeline and why it is trustworthy](https://derio-net.github.io/super-fr/index.html),
+- **Start here:** [the pipeline and why it is trustworthy](https://derio-net.github.io/super-fr/why-fr.html),
   [`/fr-goal`](https://derio-net.github.io/super-fr/01-fr-goal.html),
   [isolation](https://derio-net.github.io/super-fr/fr-isolation.html),
   [from idea to plan](https://derio-net.github.io/super-fr/fr-brainstorming-and-plan.html),

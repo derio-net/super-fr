@@ -49,6 +49,7 @@ def test_every_configured_page_parses_with_fr_docs() -> None:
     paths = {p.path for p in pages}
     assert {
         "docs/explainers/index.md",
+        "docs/explainers/why-fr.md",
         "docs/explainers/01-fr-goal.md",
         "docs/explainers/fr-isolation.md",
     } <= paths
