@@ -71,4 +71,4 @@ journal:
       rather than leaving a gap. The fragment summary also names the VK_INSTALL_SKIP_PREFLIGHT
       rename, which the plan's suggested text left out.
 resolves: []
-evidence: {}
+evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/vk-compat-p2-suite.log}
