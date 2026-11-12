@@ -249,6 +249,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "docs-check-flags-uncovered-change",
         "docs-check-structure",
         "docs-check-default-base-readonly",
+        "acceptance-effective-matrix-fold",
     }
     assert on_disk == here
 

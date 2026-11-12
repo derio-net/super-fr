@@ -29,7 +29,7 @@ require_exit 0 "$out"
 
 # Fix two: only the stamp changes (reset the page first, then re-stamp).
 git reset -q --hard HEAD~1
-sed -i 's/^reviewed: .*/reviewed: 2026-11-12 still true/' docs/a.md
+sed -i.bak 's/^reviewed: .*/reviewed: 2026-11-12 still true/' docs/a.md && rm -f docs/a.md.bak
 git add -A && git_ci commit -qm "restamp" || fail "commit"
 run_fr out docs check
 require_exit 0 "$out"
