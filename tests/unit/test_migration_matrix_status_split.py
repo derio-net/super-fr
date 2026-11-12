@@ -266,14 +266,27 @@ def test_the_frozen_v4_reader_is_pinned() -> None:
         assert hashlib.sha256(source.encode()).hexdigest() == sha, name
 
 
-def test_no_matrix_migration_reads_with_the_live_parser() -> None:
-    """Every matrix hop's body check goes through a frozen reader; the live
-    parser only answers the crash-window question of the newest hop."""
-    import fr.artifacts.matrix_strategies as strategies
-    import fr.artifacts.matrix_verify as verify
+def test_no_matrix_migration_names_the_live_parser() -> None:
+    """Review p2-r3, the rule in `.claude/rules/artifact-versioning.md`: no matrix
+    hop validates an old file against the live model. Every module under
+    `fr/artifacts/matrix_*.py` reads through the frozen `fr.acceptance.legacy`
+    readers (`parse_matrix_v3/v4/v5`, `is_v5_body`). The final hop's crash-window
+    question is answered by the fold over fragments — its new shape — never by
+    the live `parse_matrix`/`load_matrix`, so no module is allowlisted."""
+    import re
 
-    assert "parse_matrix(" not in inspect.getsource(strategies).replace("parse_matrix_v", "")
-    assert "parse_matrix(" not in inspect.getsource(verify).replace("parse_matrix_v", "")
+    import fr.artifacts as artifacts_pkg
+
+    live = re.compile(r"\b(?:parse_matrix|load_matrix)\b(?!_v)")
+    assert live.search("from fr.acceptance.model import parse_matrix"), "the pattern is blind"
+    assert live.search("matrix = load_matrix(path)"), "the pattern is blind"
+    assert not live.search("from fr.acceptance.legacy import parse_matrix_v5")
+
+    src = Path(artifacts_pkg.__file__).parent
+    modules = sorted(src.glob("matrix_*.py"))
+    assert len(modules) >= 6, [m.name for m in modules]
+    offenders = {m.name for m in modules if live.search(m.read_text())}
+    assert offenders == set()
     # The 4 -> 5 hop reads the OLD body with the frozen reader (p1-r5).
     import fr.artifacts.matrix_status_split as split
 

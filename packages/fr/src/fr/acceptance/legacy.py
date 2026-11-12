@@ -365,3 +365,29 @@ def parse_matrix_v5(text: str) -> MatrixV5:
     if dupes:
         raise MatrixV5Error(f"duplicate row ids: {dupes}")
     return matrix
+
+
+def parse_matrix_v5_body(text: str) -> MatrixV5:
+    """`text` read as a version-5 BODY whatever its stamp says, or `MatrixV5Error`.
+
+    The question the 4 -> 5 hop asks twice (review p2-r3): is a body under a v4
+    stamp already wholly v5 (the crash window), and does its own rewrite read as
+    v5 before it is stamped. The stamp is the runner's to write, so it is not
+    part of the answer; everything else is `MatrixV5`'s."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise MatrixV5Error(f"not valid YAML: {e}") from e
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise MatrixV5Error(f"top level must be a mapping, got {type(data).__name__}")
+    try:
+        matrix = MatrixV5.model_validate({**data, "schema_version": 5})
+    except ValidationError as e:
+        raise MatrixV5Error(str(e)) from e
+    ids = [r.id for r in matrix.rows]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise MatrixV5Error(f"duplicate row ids: {dupes}")
+    return matrix
