@@ -984,3 +984,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: none
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-35 created=2026-11-12T11:57:41+00:00 -->
+### exit-change-35 · decision · exit change: row placement-stealth -> strategy candidate
+
+plan 3 (2026-11-12-placement-resolver) builds this row; its candidate walk runs tests/scenarios/placement-stealth.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live', 'none'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
