@@ -946,3 +946,8 @@ A different surface (bash, TypeScript, Hermes) with its own row placement-fr-ena
 ### phase-split-2026-11-12-placement-resolver-p7 · decision · ask: placement moves and branch drift (R27, R28)
 
 Its own requirements and row placement-move-and-drift.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-12-placement-resolver-p1 created=2026-11-12T11:57:18+00:00 -->
+### tier-2026-11-12-placement-resolver-p1 · decision · hard: the resolver is the path seam every artifact reader and writer relies on
+
+A wrong layout or precedence decision here propagates to every caller and to both later placements.
