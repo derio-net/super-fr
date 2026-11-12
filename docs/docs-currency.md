@@ -14,7 +14,7 @@ covers:
   - scripts/build-site.py
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-11 docs-currency phase 4
+reviewed: 2026-11-12 acceptance-fragments phase 4 adds a visibility gate to pages.yml, still true for this page
 ---
 
 # Docs currency: keeping pages true to the code
