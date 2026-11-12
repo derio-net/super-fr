@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-12 placement-resolver phase 1, the branch slug is now shared with the artifact path resolver; the isolation story is unchanged
+reviewed: 2026-11-12 placement-resolver phase 4, up records the stealth placement and its tracking ref (--stealth, --target, --resume)
 ---
 
 ## Overview: two boundaries and a bridge
@@ -66,6 +66,16 @@ flowchart LR
 The marker closes the loop. On `up`, fr writes `.fr-isolation` into the worktree root and
 adds it to the repo's exclude list: gitignored, never committed, backed by a CI tripwire.
 Every edit the agent attempts is checked against it.
+
+The marker also records where fr keeps its own records for this workspace. Under the
+**stealth** placement (`fr isolation up --stealth <tracking-repo>@<branch>`, or
+`--target <path>` from a clone of the tracking repository) it carries
+`placement: stealth` and the tracking ref, and fr keeps the run's records in a clone of
+that separate repository at `~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>`
+instead of on your branch. `up` refuses before creating anything when the tracking
+repository cannot be reached, lacks the branch, or is more visible than the target, and
+`--resume <run-id>` brings a stealth run up on another host. The
+[fr-goal explainer](01-fr-goal.md) tells the whole story.
 
 ## Who creates worktrees
 

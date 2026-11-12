@@ -44,6 +44,7 @@ included; "just check X first" never reorders this:
   **No devcontainer profile → HARD STOP** — offer the fr-init interview; there
   is no unisolated fallback. (Under fr-goal: treat as a blocker — pause,
   fr-init, resume.)
+- **Stealth (`mode=stealth <tracking-repo>@<branch>`, or from the tracking repo `mode=stealth target=<path>`):** add `--stealth <tracking-repo>@<branch>` (or `--target <path>`) to that `fr isolation up`. The debug journal and every fr artifact then live in the tracking repo, never in the target; push with `fr push`, open the one draft PR with `fr pr create` (a plain-summary body), and never write the target's forge (no label, comment or issue).
 
 From here on follow fr-isolation's exec-bridge discipline: read/edit files in
 the worktree, run every command through `fr isolation exec -- …`. A broken

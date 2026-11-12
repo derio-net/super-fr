@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-12 placement-resolver phase 3, the quiet placement (init --quiet, the fr worktree, atomic push, sticky switch; review fixes for acceptance on fr, refusals, OWNER and the lock)
+reviewed: 2026-11-12 placement-resolver phase 4, the stealth placement (chosen per run, the tracking worktree, the fatal state push, privacy, resume, init --stealth)
 ---
 
 ## Overview
@@ -1146,7 +1146,7 @@ than looking for a flag that bends this one.
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
-| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`) | Turns policy features off, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
+| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`; stealth: `<target-dir>/settings.yaml` on the tracking branch) | Turns policy features off, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
 
 ### Repo settings
 
@@ -1254,7 +1254,58 @@ onto the feature branch. A workspace set up before the switch appeared counts as
 of `origin/fr` is never adopted, and `fr settings init --quiet` refuses while one
 exists. One known limitation: a host whose fr predates quiet support never
 looks for the switch, and writes its records on the feature branch as before.
-Keeping records in a separate tracking repository (stealth) comes later.
+
+#### Stealth: fr's records in a separate tracking repository
+
+Quiet still puts fr's records in the product's own remote. Sometimes even that is too
+much: the repository is someone else's, and nothing of fr may reach it, not a branch,
+not a label, not a comment. For that there is the **stealth** placement, and unlike
+quiet it is never a setting of the repository: you choose it for one run. Tell fr-goal
+or fr-debugging `mode=stealth <tracking-repo>@<branch>`, and they pass
+`--stealth <tracking-repo>@<branch>` to `fr isolation up` and `fr run start`; or start
+from a clone of the tracking repository with `mode=stealth target=<path>`, which passes
+`--target <path>` and takes the tracking repository and branch from that clone. A
+`.fr/settings.yaml` saying `placement: stealth` is refused, because stealth is chosen
+per run.
+
+The workspace's isolation state and its `.fr-isolation` marker record
+`placement: stealth` and the tracking ref, so every later fr command run there knows
+it. fr clones the tracking repository to
+`~/.cache/fr/worktrees/<repo>/stealth--<tracking-slug>`, and each target has its own
+directory there, named `<host>--<owner>--<repo>` from the target's remote
+(`local--<name>` for a local path). Below it the layout is quiet's:
+`features/<feature-id>/docs/superpowers/...`, with the same `OWNER` file and the same
+refusal of a branch whose id another branch holds.
+
+Every state write is committed in that clone and pushed to the tracking branch with a
+compare-and-swap push. When another target or host pushed in between, fr fetches,
+replays its own commit on the new tip and tries again, at most three times. A push the
+tracking repository refuses is fatal: the command exits 2, the commit is dropped and
+the clone is put back as it was, so the cursor never moves on your machine while the
+tracking branch did not. An unreachable tracking repository, or a branch it does not
+have, is refused at `fr isolation up`, at `fr run start` and before any other fr write,
+with nothing written.
+
+The target receives only your code and one draft pull request with a plain summary:
+`fr push` pushes the feature branch alone, and `fr pr create` refuses a body that
+carries fr's markers. Stealth sets `forge.labels`, `forge.comments` and `forge.issues`
+to `off` and `forge.pr_body` to `minimal` itself, and `fr settings check` and
+`fr run start` refuse a tracking file that sets one of them to anything else. The
+policy keys come from `<target-dir>/settings.yaml` on the tracking branch, which
+`fr settings init --stealth <tracking-repo>@<branch>` writes and pushes; a
+`.fr/settings.yaml` in the target is ignored, and fr prints that it was. A tracking
+repository more visible than the target (a public one for a private target, or an
+internal one) is refused, and so is a visibility fr cannot read; a local path counts
+as private.
+
+A stealth run is resumed from the tracking repository, on any host:
+`fr isolation up --stealth <tracking-repo>@<branch> --resume <run-id>` from a clone of
+the target. Code is pushed before state, and beside the run cursor fr keeps
+`<run-id>.stealth.json` with the target's remote, its branch and the pushed product
+head the state describes. On resume fr compares that head with the branch: equal, it
+resumes; the branch ahead, it records the new head again (the last step's
+bookkeeping); the state ahead, it refuses, naming the commit the branch lacks. Runner
+dispatch (`fr apply --to`) is refused under stealth, as under quiet.
 
 Where fr's records live is answered by one resolver, and `fr settings paths` prints
 its answers: `--shell` gives `FR_PLACEMENT`, `FR_ARTIFACT_ROOT`, `FR_FEATURE` and one

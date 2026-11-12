@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-12 placement-resolver phase 2, artifact directories now come from fr.artifacts.paths; the paths and behaviour this page describes are unchanged
+reviewed: 2026-11-12 placement-resolver phase 4, mode=stealth passes --stealth/--target to fr isolation up
 ---
 
 ## Overview: why "just try something" is the expensive path
@@ -71,6 +71,12 @@ offers the [fr-init](fr-init.md) interview. A broken container is repaired with
 `fr isolation restart`, then `fr isolation rebuild`, both of which keep the worktree, the cursor
 and uncommitted work. Never `down --force`: it keeps the run record but destroys the workspace
 and the fix inside it. See [fr-isolation](fr-isolation.md).
+
+Asked for `mode=stealth <tracking-repo>@<branch>` (or, from the tracking repository,
+`mode=stealth target=<path>`), the skill adds `--stealth` (or `--target`) to that
+`fr isolation up`: the debug journal and every other fr record then live in the tracking
+repository, and the target receives only the fix and one draft pull request with a plain
+summary.
 
 ## Autonomous, with two hard stops
 
