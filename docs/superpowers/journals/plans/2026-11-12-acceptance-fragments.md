@@ -694,3 +694,8 @@ PR #1408 review item 10 (read only). Additive today; the artifact-versioning rul
 ### pr1408-r1-resolved · finding [fixed] · resolves pr1408-r1: A retired row that became contested can never be cleared: every pending amendment naming a retired row raises FoldError, whatever its base
 
 b9475854b: fold checks every amendment naming a retired row against its revision; a stale pending one is stale_pending, a correctly based one clears contested. Red: test_a_stale_pending_amendment_to_a_retired_row_is_stale_not_an_error, test_a_contested_retired_row_is_cleared_by_a_correctly_based_amendment
+
+<!-- fr:journal kind=finding scope=plan id=pr1408-r2-resolved created=2026-11-12T09:29:31+00:00 state=fixed resolves=pr1408-r2 -->
+### pr1408-r2-resolved · finding [fixed] · resolves pr1408-r2: A stale retire that merged anyway is silent: contested.discard runs unconditionally on retire
+
+b9475854b: retire no longer discards contested unconditionally; a stale retire that merged leaves the row retired and contested. Red: test_a_stale_retire_that_merged_anyway_leaves_the_row_contested
