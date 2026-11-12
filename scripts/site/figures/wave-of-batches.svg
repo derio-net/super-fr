@@ -41,15 +41,15 @@
 <text x="20" y="316" class="fig-muted fig-small">ONE DRIVER PASS, REPEATED UNTIL NOTHING IS LEFT</text>
 <rect x="20" y="332" width="200" height="64" rx="8" class="fig-panel"/>
 <text x="34" y="359" class="fig-ink fig-text">merge what is ready</text>
-<text x="34" y="381" class="fig-muted fig-small">green, approved, at its head</text>
+<text x="34" y="381" class="fig-muted fig-small">green and approved</text>
 <path d="M220 364 H280" class="fig-line" marker-end="url(#wave-of-batches--arrow)"/>
 <rect x="260" y="332" width="200" height="64" rx="8" class="fig-panel"/>
-<text x="274" y="359" class="fig-ink fig-text">close out what merged</text>
-<text x="274" y="381" class="fig-muted fig-small">post_merge, then archive</text>
+<text x="274" y="359" class="fig-ink fig-text">close out merged</text>
+<text x="274" y="381" class="fig-muted fig-small">post_merge, archive</text>
 <path d="M460 364 H520" class="fig-line" marker-end="url(#wave-of-batches--arrow)"/>
 <rect x="500" y="332" width="200" height="64" rx="8" class="fig-panel"/>
 <text x="514" y="359" class="fig-ink fig-text">dispatch the next</text>
-<text x="514" y="381" class="fig-muted fig-small">by wave, up to the cap</text>
+<text x="514" y="381" class="fig-muted fig-small">by wave, under the cap</text>
 <path d="M700 364 H760" class="fig-line" marker-end="url(#wave-of-batches--arrow)"/>
 <rect x="740" y="332" width="200" height="64" rx="8" class="fig-panel"/>
 <text x="754" y="359" class="fig-ink fig-text">sleep, then repeat</text>
