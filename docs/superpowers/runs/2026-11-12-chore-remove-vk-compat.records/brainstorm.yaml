@@ -1,0 +1,85 @@
+schema_version: 11
+run: 2026-11-12-chore-remove-vk-compat
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: The operator's brief, as typed
+    body: |
+      "remove the vk compatibility code via /fr-goal."
+
+      Earlier in the same session, about the wording cleanup that preceded this
+      (#1416): "vk references must be removed. There is no vk anymore. Only fr."
+      and "The vk I was referring to was not the VK runner, but the original vk
+      command and relevant wording".
+  - kind: decision
+    id: d1-vk-version-removed-with-migration
+    title: vk_version is removed with a migration that also strips the archive
+    body: |
+      Asked: keep the inert `vk_version` plan field, stop writing it, or remove
+      it with a migration. Operator: "3 and the migration also removes the field
+      from the archives. Do we have other such inert fields?" This overrides the
+      artifact-versioning rule's "archived artifacts are frozen" for this one
+      repair. Answer to the side question, from the code: `vk_version` is the
+      only field in an artifact model marked inert.
+  - kind: decision
+    id: d2-env-vars-hard-rename
+    title: VK_REPO_ROOT and VK_INSTALL_SKIP_PREFLIGHT are hard-renamed to FR_*
+    body: Operator chose the hard rename with no fallback for the old names.
+  - kind: decision
+    id: d3-up-branch-required
+    title: fr isolation up requires --branch
+    body: Operator chose to make `--branch` required over renaming the `vk-iso/work` default.
+  - kind: decision
+    id: d4-old-install-paths-removed
+    title: Every old-install path goes, wrapper recognition included
+    body: |
+      Operator confirmed every machine and consumer repo is past the rename:
+      the installer purges, `fr init migrate` and the `superpowers-for-vk`
+      validator-wrapper recognition are all removed.
+  - kind: decision
+    id: d5-major-bump
+    title: The change fragment declares a major bump
+    body: Operator chose major, following the repo's rule for breaking CLI and plan-schema changes.
+  - kind: decision
+    id: d6-verification-ci-tests
+    title: Verified by unit tests in CI; no walk, no post-merge gate
+    body: Operator chose CI tests only. Each row is `none` with its reason; the run's gate is none.
+resolves: []
+acceptance:
+  - id: init-migrate-removed
+    capability: Isolation
+    acceptance: The CLI offers no `fr init migrate` command
+    origin: ["spec:2026-11-12-remove-vk-compat#R1"]
+    status: not-implemented
+    verify: none
+  - id: isolation-up-requires-branch
+    capability: Isolation
+    acceptance: "`fr isolation up` without `--branch` refuses with a usage error naming the flag, and creates no workspace"
+    origin: ["spec:2026-11-12-remove-vk-compat#R3"]
+    status: not-implemented
+    verify: none
+  - id: fr-repo-root-override
+    capability: CLI
+    acceptance: "`FR_REPO_ROOT` points an fr command at another repo root, and `VK_REPO_ROOT` no longer does"
+    origin: ["spec:2026-11-12-remove-vk-compat#R4"]
+    status: not-implemented
+    verify: none
+  - id: installer-names-no-vk-residue
+    capability: Installer
+    acceptance: The installer removes nothing named for the retired vk tool and treats a validator wrapper as its own only when it names super-fr
+    origin: ["spec:2026-11-12-remove-vk-compat#R6", "spec:2026-11-12-remove-vk-compat#R7"]
+    status: not-implemented
+    verify: none
+  - id: plan-vk-version-repaired
+    capability: Artifact migration
+    acceptance: "`fr migrate artifacts --yes` removes `vk_version` from live and archived plans, changing no other byte, and reports a plan it cannot rewrite"
+    origin: ["spec:2026-11-12-remove-vk-compat#R10", "spec:2026-11-12-remove-vk-compat#R11"]
+    status: not-implemented
+    verify: none
+emitted:
+  spec: docs/superpowers/specs/2026-11-12-remove-vk-compat-design.md
+evidence: {}
