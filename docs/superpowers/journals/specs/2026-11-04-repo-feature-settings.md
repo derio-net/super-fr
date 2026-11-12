@@ -896,3 +896,8 @@ The retiring schema step changes fr/artifacts/runner.py, which every kind's migr
 ### tier-2026-11-12-acceptance-fragments-p3 · decision · a gate: deliver and CI refuse stale-base amendments
 
 The stale-base refusal is a new deliver/CI gate and the record kind moves 10 -> 11.
+
+<!-- fr:journal kind=decision scope=spec id=fragment-repo-identity created=2026-11-12T00:28:51+00:00 -->
+### fragment-repo-identity · decision · Fragments carry the repo identity as a required repo: <org>/<repo>, agreed across fragments
+
+The retired matrix held org/repo. Code refs keep <repo>:<path>#<test> (R18), so the own-repo check needs the identity without depending on a remote; storing it in each fragment keeps it with the artifacts (philosophy 5) and the validator checks agreement.
