@@ -72,9 +72,21 @@ rows:
     - spec:2026-11-12-review-lenses#R9
     - spec:2026-11-12-review-lenses#R10
     - spec:2026-11-12-review-lenses#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_complete_returns_resolve_and_record_the_witness
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_a_lens_with_no_reviewer_is_refused_with_its_brief
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_a_return_that_does_not_match_is_refused
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_a_bad_reviewer_map_is_refused
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_an_empty_set_resolves_with_no_review_and_no_reviewer
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_unreadable_returns_are_noted_and_the_map_still_checked
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_review_lenses_reviewer_return_checked
+    status: ci
+    notes: 'The lens-review resolve checks each lens''s reviewer and return: unit tests
+      over the gate (map, dispatch, review-lens block, diff files, journal tags, open
+      findings, unobserved returns, empty set) and the installed-candidate scenario
+      run in CI'
     verify: candidate
     scenario: tests/scenarios/review-lenses-reviewer-return-checked.sh
   - id: review-lenses-shown-on-pr
