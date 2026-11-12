@@ -9,8 +9,6 @@ phase:
   tracking_issue: null
   acceptance:
   - review-lenses-reviewer-return-checked
-  - review-lenses-accumulate
-  - review-lenses-path-rules
   tier: hard
   files:
   - plugins/super-fr/workflows/*

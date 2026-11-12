@@ -1,0 +1,15 @@
+schema_version: 11
+run: 2026-11-12-feat-code-quality-steps
+step: plan
+outcome: done
+journal:
+  - kind: decision
+    id: plan-shape
+    global: true
+    title: Four agentic phases, one per group of requirements; no manual phase
+    body: |
+      Phase 1 the lens set (R1-R3, skeleton), phase 2 adding lenses and path rules (R4-R7), phase 3 the lens-review step and its evidence gate (R8-R11, R13), phase 4 the PR section, skills, agents and docs (R12, R14). Phases 2 and 3 are hard: two artifact migrations, and the evidence gate every review step uses. Nothing is manual: every row is proven by a scenario on a candidate build.
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-11-12-review-lenses
+evidence: {}
