@@ -253,3 +253,42 @@ def test_the_split_converts_line_anchors(tmp_path: Path) -> None:
 
     rows = {r.id: r for r in fold(root).matrix.rows}
     assert "super-fr:tests/unit/test_w.py#test_w" in rows["acceptance-nag-channels"].refs()
+
+
+_V4_PLAIN = """\
+schema_version: 4
+org: acme
+repo: widget
+rows:
+  - id: plain-row
+    capability: "Cap"
+    acceptance: "No verify, no walk: unwired"
+    status: skipped
+  - id: ci-row
+    capability: "Cap"
+    acceptance: "Other statuses are untouched"
+    status: ci
+"""
+
+
+def test_a_v4_matrix_with_a_partial_report_set_migrates_and_commits(tmp_path: Path) -> None:
+    """Review p2-r1: the 4 -> 5 hop renders no reports (the next hop deletes them),
+    so a repo that tracked only one report ends with none, and the commit holds
+    exactly what git knew about."""
+    from fr.artifacts.commit import commit_migration
+
+    root = _repo(tmp_path, _V4_PLAIN)
+    for rel in REPORTS[1:]:
+        _git(root, "rm", "-q", rel)
+    _git(root, "commit", "-qm", "only report_local.html is tracked")
+
+    report = run_migrations(root, dry_run=False)
+    outcome = commit_migration(root, report)
+
+    assert report.ok, report.failed
+    assert outcome.committed, outcome.reason
+    for rel in REPORTS:
+        assert not (root / rel).exists(), rel
+    tracked = _git(root, "ls-files").splitlines()
+    assert "docs/acceptance/report_local.html" not in tracked
+    assert _git(root, "status", "--porcelain") == ""

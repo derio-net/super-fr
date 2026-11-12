@@ -158,21 +158,23 @@ def _git_repo(root: Path) -> None:
     )
 
 
-def test_the_committed_reports_are_regenerated_in_the_same_write(tmp_path: Path) -> None:
-    from fr.acceptance.report import REPORT_SET, render_committed_set
+def test_the_hop_renders_no_report_and_leaves_existing_ones_alone(tmp_path: Path) -> None:
+    """Review p2-r1: the 5 -> 6 hop deletes every committed report, so this hop
+    renders none — not even when one of the set exists (it used to write all three)."""
+    from fr.acceptance.report import REPORT_SET
 
     _git_repo(tmp_path)
-    path = _matrix(tmp_path)
-    for rel in REPORT_SET:
-        (tmp_path / rel).write_text("stale\n")
+    _matrix(tmp_path)
+    first, *rest = REPORT_SET
+    (tmp_path / first).write_text("stale\n")
 
     report = run_migrations(tmp_path, dry_run=False, registry=V5)
 
     assert report.ok, report.failed
-    want = render_committed_set(load_matrix(path), tmp_path)
-    for rel in REPORT_SET:
-        assert (tmp_path / rel).read_text() == want[rel]
-    assert "walked live" in (tmp_path / "docs/acceptance/report_linked.md").read_text()
+    assert (tmp_path / first).read_text() == "stale\n"
+    for rel in rest:
+        assert not (tmp_path / rel).exists(), rel
+    assert [p.name for p in report.changed_paths] == ["matrix.yaml"]
 
 
 def test_an_unresolvable_verify_leaves_the_matrix_byte_identical(tmp_path: Path) -> None:
@@ -328,29 +330,8 @@ def test_the_current_status_comment_is_the_scaffolds() -> None:
 # --- review p1-r5 ----------------------------------------------------------------
 
 
-def test_a_report_render_failure_leaves_matrix_and_reports_byte_identical(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import fr.acceptance.report as report_mod
+def test_the_crash_window_only_owes_the_stamp(tmp_path: Path) -> None:
     from fr.acceptance.report import REPORT_SET
-
-    def _boom(*_a: object, **_k: object) -> dict[str, str]:
-        raise AcceptanceError("identity does not resolve")
-
-    monkeypatch.setattr(report_mod, "render_committed_set", _boom)
-    path = _matrix(tmp_path)
-    for rel in REPORT_SET:
-        (tmp_path / rel).write_text("stale\n")
-    before = {p: p.read_bytes() for p in [path, *(tmp_path / rel for rel in REPORT_SET)]}
-
-    report = run_migrations(tmp_path, dry_run=False, registry=V5)
-
-    assert [f.path for f in report.failed] == [path]
-    assert {p: p.read_bytes() for p in before} == before
-
-
-def test_the_crash_window_still_regenerates_the_reports(tmp_path: Path) -> None:
-    from fr.acceptance.report import REPORT_SET, render_committed_set
 
     _git_repo(tmp_path)
     body = _HEAD + _ROWS["ci-row"] + _ROWS["plain-row"].replace("skipped", "unwired")
@@ -362,9 +343,8 @@ def test_the_crash_window_still_regenerates_the_reports(tmp_path: Path) -> None:
 
     assert report.ok, report.failed
     assert path.read_text() == body.replace("schema_version: 4\n", "schema_version: 5\n")
-    want = render_committed_set(load_matrix(path), tmp_path)
     for rel in REPORT_SET:
-        assert (tmp_path / rel).read_text() == want[rel]
+        assert (tmp_path / rel).read_text() == "stale\n"
 
 
 def test_a_skipped_row_whose_only_walk_failed_is_not_walked(tmp_path: Path) -> None:

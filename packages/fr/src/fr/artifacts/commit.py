@@ -592,6 +592,27 @@ def commit_paths(
                 reason=f"refusing to commit: {path} is outside the git repository {toplevel}",
             )
 
+    # Review p2-r1: a path that is neither on disk nor in the index (one hop
+    # created it, a later hop deleted it) has nothing to record, and `git add`
+    # refuses an unknown pathspec — failing the whole commit. Drop it here.
+    try:
+        indexed = _git(toplevel, "ls-files", "-z", "--", *rel)
+    except GitUnavailableError as e:
+        return CommitOutcome(committed=False, reason=f"refusing to commit: {e}")
+    if indexed.returncode != 0:
+        return CommitOutcome(
+            committed=False,
+            reason=f"refusing to commit: `git ls-files` failed: {indexed.stderr.strip()}",
+        )
+    known = set(indexed.stdout.split("\0"))
+    rel = [r for r in rel if r in known or os.path.lexists(toplevel / r)]
+    if not rel:
+        return CommitOutcome(
+            committed=False,
+            reason="the files already match HEAD; no commit made",
+            unchanged=True,
+        )
+
     # The index entries of `rel` as they stand now, so a failed commit can put
     # them back: a path the caller had already staged stays staged (at the
     # version it staged), a path only this call added is dropped again.

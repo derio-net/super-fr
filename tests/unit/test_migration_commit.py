@@ -879,3 +879,21 @@ def test_a_deleted_tracked_path_is_committed_as_a_removal(tmp_path: Path) -> Non
     assert outcome.committed, outcome.reason
     assert _committed_paths(root) == ["docs/acceptance/features/x.yaml", "unrelated-modified.md"]
     assert "unrelated-modified.md" not in _git(root, "ls-files")
+
+
+def test_a_path_neither_on_disk_nor_in_the_index_never_reaches_git_add(tmp_path: Path) -> None:
+    """Review p2-r1: one hop creates a file and a later hop deletes it, so the
+    report names a path git never saw. It is skipped, not handed to `git add`
+    (which refuses an unknown pathspec and fails the whole commit)."""
+    from fr.artifacts.commit import commit_paths
+
+    root = _repo(tmp_path)
+    ghost = root / "docs" / "acceptance" / "report_linked.md"
+    written = root / "docs" / "acceptance" / "features" / "x.yaml"
+    written.parent.mkdir(parents=True)
+    written.write_text("feature: x\n")
+
+    outcome = commit_paths(root, [ghost, written], "chore(fr): retire")
+
+    assert outcome.committed, outcome.reason
+    assert _committed_paths(root) == ["docs/acceptance/features/x.yaml"]
