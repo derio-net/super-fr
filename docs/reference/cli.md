@@ -61,7 +61,8 @@ one artifact kind.
   - `fr acceptance report`: Render the report set (or, with --check, verify it is in sync).
   - `fr acceptance status`: Terminal nag: counts by status + the open acceptance debt rows.
   - `fr acceptance summary`: GitHub Actions-friendly Markdown summary: compact counts + collapsible debt.
-  - `fr acceptance set-status`: Move an existing row's status, in place, with a reason.
+  - `fr acceptance set-status`: Move an existing row's status, with a reason.
+  - `fr acceptance amend`: Append an amendment of a row to this feature's fragment.
   - `fr acceptance add`: Insert a schema-validated row into the fragment of the feature that owns it (its one origin spec, or --feature), after its capability's last row (agents never hand-edit YAML shapes); a new capability goes at the end of `rows:`.
   - `fr acceptance init`: Scaffold matrix + CI workflow + backfill rule + gitignore (idempotent).
   - `fr acceptance backfill`: Emit the agent backfill protocol + deterministic inventory (markdown).

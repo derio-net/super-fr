@@ -29,7 +29,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-11 docs-currency phase 3
+reviewed: 2026-11-12 acceptance-fragments phase 3, a merged row changes only by amendment, and deliver refuses a stale amendment base
 ---
 
 ## Overview
@@ -684,6 +684,11 @@ as not implemented, identifies the intended verification level, and is linked
 to the plan phase that will satisfy it. As implementation lands, `fr-goal`
 updates the row with honest evidence such as a unit, integration, or end-to-end
 test. This prevents completed code from being mistaken for proven behavior.
+A row an earlier feature already merged is never edited in place: the run
+appends an amendment to its own feature's fragment, and `deliver` fetches the
+default branch and refuses an amendment another feature's merged one has
+overtaken, so two features changing one promise cannot silently undo each
+other (`plugins/super-fr/skills/fr-acceptance/SKILL.md`).
 Under `fr-goal`, the agent presents these rows and a short defense for each
 during the spec review rather than asking for another approval
 (`plugins/super-fr/skills/fr-brainstorming/SKILL.md:67-79`,
@@ -1091,9 +1096,9 @@ there is nowhere to file, so the findings stay in the journal and the PR
 body), and writes a `deferred` record pointing at each issue into that
 finding's journal, staged for the same housekeeping commit; a finding you do
 not file stays visibly out of scope rather than silently closed. The same
-archive run also prices any earlier closeout's session in its usage file and
-retargets the acceptance matrix's references to everything it moved, so
-neither is a separate step. The brief ends with `fr status` to confirm every
+archive run also prices any earlier closeout's session in its usage file, and
+no acceptance row needs retargeting: rows cite specs and plans logically, so
+an archive moves nothing in them. The brief ends with `fr status` to confirm every
 phase is complete, and the exact commands to archive the plan, its journal,
 and its run record through a housekeeping PR — run from a *separate* workspace, never
 inside the just-merged feature branch — before tearing down isolation or

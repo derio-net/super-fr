@@ -40,14 +40,30 @@ set-status`, never a hand-edit; when in doubt between ci and unwired,
    re-run until only honest warnings remain.
 5. Open a review PR: the operator audits every status.
 
+## Rows of an earlier feature: amendments
+
+A row another feature MERGED (its fragment is on the default ref) changes only by
+amendment, appended to YOUR feature's fragment: `fr acceptance amend --id <row> --op
+<op> --why "<reason>"` with `reword` (`--acceptance`/`--capability`), `set-status`
+(`--status --notes`, optional `--issue`/`--verify`/`--scenario`), `add-level` /
+`drop-level` (`--level <level>=<ref>`) or `retire` (`--notes`). `set-status` on a
+merged row writes those amendments for you; in a record, an `acceptance:` entry
+`{row, op, why, …}` is the same amendment. The feature is `--feature <spec-slug>`,
+else the spec of this branch's run. Each amendment names the row revision it is
+based on (default: the current one). Never edit a merged row in place: `check`
+refuses it. If another feature amended the row first, `check` and `deliver`
+(which fetch the default ref) refuse your stale base, exit 2: review the row, then
+`fr acceptance amend --rebase`. A stale amendment that merged anyway marks the row
+**contested**, which is debt until the next amendment at its current revision.
+
 ## Flip statuses (execution hand-off)
 
 When a plan phase carrying `acceptance: [row-ids]` completes, flip those rows
 up the ladder (`not-implemented` → `unwired` → `ci`/`scheduled`) with
 `fr acceptance set-status --id <row> --status <new> --notes "<why it moved>"
 --level unit=<repo>:<path>` — one command for the whole transition: it moves
-the row in place in the fragment that holds it and adds the test refs that justify
-the move; reports are derived, never committed. `--notes` is required, and an unknown id is refused
+the row in place when it is still pending on this branch, and adds the test refs that
+justify the move; reports are derived, never committed. `--notes` is required, and an unknown id is refused
 rather than created (`add`'s job), as is `ci` in a repo with no CI config. Under `ci: none` (see `fr services`) the local suite is the gate: `ci` needs a declared or detected CI service.
 `fr plan edit --complete-phase` warns on unflipped rows — fix or record why in the completion note.
 

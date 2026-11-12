@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 acceptance-fragments phase 2 moves rows into per-feature fragments folded into the matrix and retires matrix.yaml and its committed reports
+reviewed: 2026-11-12 acceptance-fragments phase 3 adds amendments of merged rows, the stale-base refusal and contested rows as debt
 ---
 
 ## Overview: claims, not tests
@@ -67,8 +67,9 @@ fr acceptance set-status --id webhook-rate-limit --status ci \
     --level unit=example-repo:tests/test_limiter.py#test_rejects_over_budget
 ```
 
-One command rewrites the row in place in the fragment that holds it, adds the test
-reference that justifies the move, and commits only that fragment. `--notes` is required, because a status that
+One command moves the row, adds the test reference that justifies the move, and commits
+only one fragment. A row your own branch created is rewritten in place; a row an earlier
+feature already merged is amended instead (next section). `--notes` is required, because a status that
 moved for no recorded reason is the silent change the matrix forbids. An unknown id is
 refused rather than created; `add` creates.
 
@@ -82,6 +83,33 @@ fr acceptance status
 `check` verifies references resolve, finds stale rows, and exits 2 on any `failing` row.
 `status` is the terminal nag: counts by status plus the open debt, oldest first. A
 `--brief` form exists for session start.
+
+## Changing a row another feature merged
+
+Once a feature merges, its rows are history. A later feature never edits them in place:
+it appends an **amendment** to its own fragment, and the fold applies it. Rows are owned
+by the feature that wrote them, so two branches amending the same row touch two
+different files, and the order they merged in decides the result.
+
+```bash
+fr acceptance amend --id webhook-rate-limit --op reword \
+    --acceptance "Webhooks over budget are rejected with a 429" \
+    --why "the response code is now part of the contract"
+```
+
+The five ops are `reword`, `set-status`, `add-level`, `drop-level` and `retire`.
+`set-status` on a merged row writes the same amendments for you, so the worked example
+above works either way. The fragment is your branch's feature: `--feature <spec-slug>`, or
+the spec of the run this branch carries. An agent's step record says the same thing with
+an `acceptance:` entry `{row, op, why, ...}`.
+
+Each amendment records the row's **revision** it was written against: how many
+amendments the row had then. If another feature amends the row and merges first, your
+amendment's base is stale. `fr acceptance check` and `deliver` fetch the default branch
+and refuse it (exit 2), naming both revisions. Look at what the other feature changed,
+then run `fr acceptance amend --rebase`. A stale amendment that merges anyway still
+applies, but it marks the row **contested**: debt in `fr acceptance status` and `fr debt`,
+whatever its status, until the next amendment at the row's current revision settles it.
 
 ## Backfilling a repo that has no matrix
 

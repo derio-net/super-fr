@@ -53,9 +53,10 @@ artifacts --yes` splits it.
   `<repo>:<path>[#anchor]`.
 - Move a status: `fr acceptance set-status --id ... --status ...
   --notes "<why it moved>" [--level unit=<repo>:<path>]` — the whole
-  documented transition in one command: it rewrites the row in place in the
-  fragment that holds it and adds the evidence refs; the commit holds only that
-  fragment. `--notes`
+  documented transition in one command: a row still pending on this branch is
+  rewritten in place in the fragment that holds it, a row merged on the default
+  ref is amended (below); either way it adds the evidence refs and the commit
+  holds only that fragment. `--notes`
   is required (a status that moved for no recorded reason is the silent
   change this rule forbids), and an unknown id or status is refused rather
   than created. `--drop-level <level>=<ref>` (repeatable) removes a stale
@@ -70,6 +71,24 @@ artifacts --yes` splits it.
   optional, and then appended to the note with `; `). Without `--status`, any
   flag other than `--id`, `--issue` and `--notes` is refused (exit 2, nothing
   changed); with `--status`, `--notes` stays required and replaces the note.
+- **Amend a row an earlier feature merged** (R16). A merged row changes only by
+  an amendment appended to YOUR feature's fragment, never in place (`fr acceptance
+  check` refuses an in-place edit of a row as it stands on the default ref):
+  `fr acceptance amend --id <row> --op <op> --why "<reason>"`, one of `reword`
+  (`--acceptance`/`--capability`), `set-status` (`--status --notes`, optional
+  `--issue`/`--verify`/`--scenario`), `add-level` / `drop-level` (`--level
+  <level>=<ref>`) or `retire` (`--notes`). `set-status` on a merged row writes the
+  same amendments; a step record's `acceptance:` entry `{row, op, why, …}` (record
+  kind 11) is one too. The feature is `--feature <spec-slug>`, else the spec of
+  this branch's run. Each amendment names its row's revision (`base`, the count of
+  amendments applied; default the current one).
+- **The stale-base rule** (R17). `fr acceptance check` and `deliver` first fetch
+  the default ref (`check --no-fetch` offline; a failed fetch in CI is a refusal),
+  then refuse, exit 2, a branch amendment whose base another feature's merged
+  amendment has passed: review the row, then `fr acceptance amend --rebase`. A
+  stale amendment that merged anyway marks its row **contested**, which is debt
+  (`fr acceptance status`, `fr debt`) whatever its status, until the next
+  amendment based on its current revision.
 - Anchor a Python ref on the test's NAME, never its line:
   `<repo>:tests/x.py#test_y` or `#TestX::test_y` (pytest's node spelling). A
   `#L<n>` slides onto whatever test lands there next, silently — 27 of this
