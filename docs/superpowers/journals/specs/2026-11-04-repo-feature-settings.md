@@ -997,3 +997,16 @@ after: kinds ['candidate', 'live', 'none'], gates ['tester']
 answered_by: none
 lowered: []
 ```
+
+<!-- fr:journal kind=decision scope=spec id=exit-change-36 created=2026-11-12T11:57:45+00:00 -->
+### exit-change-36 · decision · exit change: row placement-move-and-drift -> strategy candidate
+
+plan 3 (2026-11-12-placement-resolver) builds this row; its candidate walk runs tests/scenarios/placement-move-and-drift.sh
+
+before: kinds ['candidate', 'live', 'none'], gates ['tester']
+after: kinds ['candidate', 'live'], gates ['tester']
+
+```yaml
+answered_by: none
+lowered: []
+```
