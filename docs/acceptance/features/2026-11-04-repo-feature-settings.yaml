@@ -204,6 +204,16 @@ rows:
     levels: {}
     status: not-implemented
     notes: 'added at planning (plan 3): R1 had no row of its own'
+  - id: placement-merged-status
+    capability: repo-feature-settings
+    acceptance: Under quiet and stealth a feature's merged status and order come from
+      its code branch's merge into the default ref; merged records are a cache and archive
+      moves nothing
+    origin:
+    - spec:2026-11-04-repo-feature-settings#R25
+    levels: {}
+    status: not-implemented
+    notes: 'added at planning (plan 3): R25 and R17''s quiet/stealth clause had no row'
 amendments:
   - row: acceptance-report-formats
     op: reword
