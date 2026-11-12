@@ -7,7 +7,7 @@ covers:
   - packages/fr/src/fr/cli.py
   - packages/fr/src/fr/commands/*.py
   - scripts/sync-readme.py
-reviewed: 2026-11-12 docstring and comment wording only (fr where the old vk command was named); nothing this page describes changed
+reviewed: 2026-11-12 vk compat removal: fr init migrate, the legacy vk install paths and VK_ env spellings are gone, isolation up requires --branch; this page names none of them
 ---
 
 # The fr command line
@@ -97,7 +97,6 @@ one artifact kind.
   - `fr isolation gc`: Reconcile isolation workspaces host-wide.
 - `fr init`: Repo initialization: devcontainer profile scaffolding (driven by fr-init).
   - `fr init scaffold`: Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus host secrets placeholders.
-  - `fr init migrate`: Rewrite this repo's vk spellings to fr: profiles yaml, devcontainer mounts/customizations, isolation state dir.
   - `fr init agents`: Render fr's two dispatched agents into .claude/agents/ (the `agents` artifact, stamped) and commit them, so a Claude Code cloud session can dispatch fr-spec-reviewer and fr-phase-executor from its first turn.
   - `fr init validator-wrapper`: Write scripts/validate-plans.sh (0755) and stage it — the harness-neutral remedy every isolation guard names when a plan repo is missing the wrapper.
 - `fr cloud`: Claude Code cloud sessions: check the environment, print its setup script.

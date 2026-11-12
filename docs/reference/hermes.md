@@ -9,7 +9,7 @@ covers:
   - .hermes/config.snippet.yaml
   - plugins/super-fr/hooks/hermes/**
   - HERMES.md
-reviewed: 2026-11-11 docs-currency phase 5
+reviewed: 2026-11-12 vk compat removal: fr init migrate, the legacy vk install paths and VK_ env spellings are gone, isolation up requires --branch; this page names none of them
 ---
 
 # Running super-fr under Hermes Agent

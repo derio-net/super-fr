@@ -12,7 +12,7 @@ covers:
   - plugins/super-fr/skills/fr-init/SKILL.md
   - packages/fr/src/fr/commands/init_cmd.py
   - packages/fr/src/fr/commands/services_cmd.py
-reviewed: 2026-11-12 skill wording only (fr-enabled, not vk-enabled); nothing this page describes changed
+reviewed: 2026-11-12 vk compat removal: fr init migrate, the legacy vk install paths and VK_ env spellings are gone, isolation up requires --branch; this page names none of them
 ---
 
 ## Overview: the profile is the contract
