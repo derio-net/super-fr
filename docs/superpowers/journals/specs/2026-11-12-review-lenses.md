@@ -40,3 +40,8 @@ The standing verification question. Operator chose the candidate strategy for ev
 ### d7-feature-level-review · decision · Lenses are reviewed once, at feature level before deliver; supersedes d2 and d3
 
 The operator asked whether concrete lenses would limit the phase reviewer's autonomy, then proposed a separate feature-level review before deliver that looks for the chosen lenses, with any agent able to add a lens at any step and the lenses accumulating. The per-phase review stays general. The usual in-scope fix and out-of-scope filing rules apply. This replaces per-phase lens declarations (d2) and waivers (d3); path rules are kept.
+
+<!-- fr:journal kind=decision scope=spec id=d8-starting-set created=2026-11-12T16:45:19+00:00 -->
+### d8-starting-set · decision · The lens set is agent additions plus path rules; an empty set is visible
+
+Asked the operator, through the question tool, what the feature-level review starts from. They chose: whatever agents added plus every lens a repo path rule requires for the files actually changed; with an empty set no review is dispatched and the PR says no lens was requested. (Answered in the same session as d7; fr's operator-answer check matched that session's later answer to d7 only, so this entry carries no answered_by.)
