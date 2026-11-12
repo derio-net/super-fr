@@ -53,11 +53,15 @@ rows:
       - super-fr:tests/unit/test_lenses_rules.py#test_a_head_that_drops_a_base_rule_still_has_it
       - super-fr:tests/unit/test_lenses_accumulate.py#test_a_rule_requires_a_lens_for_a_changed_file_with_no_agent_addition
       - super-fr:tests/unit/test_lenses_check.py#test_a_head_config_disabling_a_lens_a_base_only_rule_requires_is_a_problem
+      - super-fr:tests/unit/test_lenses_review_resolve.py#test_a_rule_lens_with_no_reviewer_names_its_rule_and_file
+      - super-fr:tests/unit/test_lenses_review_step.py#test_a_rule_lens_carries_its_rule_and_file
       int:
       - super-fr:tests/integration/test_scenarios.py#test_review_lenses_path_rules
-    status: not-implemented
-    notes: 'Partial: the cited unit tests and the first scenario cases run in CI; the
-      row''s claim is complete only once the lens-review step lands in phase 3'
+    status: ci
+    notes: 'A ruled path with no agent addition is in the set and its brief; a branch
+      cannot drop a base rule; check refuses disabling a required lens; and the lens-review
+      resolve refuses while the rule lens has no reviewer, naming the rule and file:
+      unit tests and the installed-candidate scenario run in CI'
     verify: candidate
     scenario: tests/scenarios/review-lenses-path-rules.sh
   - id: review-lenses-reviewer-return-checked
