@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-12 acceptance-fragments phase 4 derives the reports (local, CI summary, Pages behind a visibility check, PR comment)
+reviewed: 2026-11-12 pr1408 review fixes, retired rows keep the base rule, a failed fetch reads the local default ref, ties break by base
 ---
 
 ## Overview: claims, not tests
@@ -110,12 +110,19 @@ an `acceptance:` entry `{row, op, why, ...}`.
 Each amendment records the row's **revision** it was written against: how many
 amendments the row had then. If another feature amends the row and merges first, your
 amendment's base is stale. `fr acceptance check` and `deliver` fetch the default branch
-and refuse it (exit 2), naming both revisions. Look at what the other feature changed,
-then run `fr acceptance amend --rebase`. A stale amendment that merges anyway still
-applies, but it marks the row **contested**: debt in `fr acceptance status` and `fr debt`,
-whatever its status, until the next amendment at the row's current revision settles it.
-A stale amendment that names a row another feature has since retired is the same debt:
-the row stays listed, shown as `retired, contested`, though it has left the matrix.
+and refuse it (exit 2), naming both revisions. When the fetch fails but the checkout
+already holds the default branch (a CI job that checked out full history without
+credentials, a laptop offline), the check reads that local ref and prints which one,
+`default ref: the local ref origin/main at <sha> (fetch failed)`; with no local copy,
+CI refuses. Look at what the other feature changed, then run
+`fr acceptance amend --rebase`. A stale amendment that merges anyway still applies, but
+it marks the row **contested**: debt in `fr acceptance status` and `fr debt`, whatever
+its status, until the next amendment at the row's current revision settles it. Retired
+rows keep the same rule. A stale amendment that names a row another feature has since
+retired, or a stale `retire` itself, is the same debt: the row stays listed, shown as
+`retired, contested`, though it has left the matrix, until an amendment at its current
+revision settles it. Amendments that land in one commit (a merge commit, a squash) apply
+in order of their base, so a branch's own sequence on one row applies as written.
 
 ## Backfilling a repo that has no matrix
 
