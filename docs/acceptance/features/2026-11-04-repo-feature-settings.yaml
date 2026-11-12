@@ -204,11 +204,13 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_artifact_paths.py#test_quiet_and_stealth_keep_the_layout_below_a_feature_root
+      - super-fr:tests/unit/test_tripwire_artifact_paths.py#test_no_artifact_path_literal_outside_the_resolver
+      - super-fr:tests/unit/test_settings_paths.py#test_shell_prints_the_placement_root_feature_and_every_kind
       int:
       - super-fr:tests/integration/test_scenarios.py#test_placement_resolver
     status: ci
-    notes: resolver, locators, logical refs and fr settings paths built; scenario in
-      CI
+    notes: resolver, locators, logical refs and fr settings paths built; tripwire (allowlist
+      shrinks in phase 2, shell side in phase 6); scenario in CI
     scenario: tests/scenarios/placement-resolver.sh
   - id: placement-merged-status
     capability: repo-feature-settings
