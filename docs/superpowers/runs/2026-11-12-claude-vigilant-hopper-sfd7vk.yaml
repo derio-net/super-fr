@@ -72,3 +72,4 @@ steps:
   deliver:
     state: pending
 fr_version: 6.4.0rc3
+pr: https://github.com/derio-net/super-fr/pull/1420
