@@ -47,7 +47,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -1080,7 +1080,7 @@ def adoptable_plans(repo_root: Path) -> tuple[Path, ...]:
     """
     from fr.archive import find_run_for_plan
 
-    plans_dir = repo_root / PLANS_REL
+    plans_dir = artifact_root(repo_root) / PLANS_REL
     if not plans_dir.is_dir():
         return ()
 

@@ -28,7 +28,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 
 StepState = Literal["pending", "running", "done", "failed", "blocked"]
 """A step's lifecycle in run state — distinct from `fr.item_state.ItemState`
@@ -470,7 +470,7 @@ def existing_run_id_colliding_with(repo_root: Path, run_id: str) -> str | None:
     everywhere, and the same as the operator's intuition: two runs whose ids
     differ only by case are one run with a typo.
     """
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if not runs_dir.is_dir():
         return None
     wanted = run_id.casefold()
@@ -482,12 +482,12 @@ def existing_run_id_colliding_with(repo_root: Path, run_id: str) -> str | None:
 
 def run_path(repo_root: Path, run_id: str) -> Path:
     """Active run-state path: ``docs/superpowers/runs/<run-id>.yaml``."""
-    return repo_root / RUNS_REL / f"{run_id}.yaml"
+    return artifact_root(repo_root) / RUNS_REL / f"{run_id}.yaml"
 
 
 def archived_run_path(repo_root: Path, run_id: str) -> Path:
     """Archived run-state path (mirrors ``implemented/plans`` / ``implemented/journals``)."""
-    return repo_root / IMPLEMENTED_RUNS_REL / f"{run_id}.yaml"
+    return artifact_root(repo_root) / IMPLEMENTED_RUNS_REL / f"{run_id}.yaml"
 
 
 class _CursorDumper(yaml.SafeDumper):

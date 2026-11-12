@@ -30,10 +30,11 @@ IMMUTABLE = "rows merged on {ref} change only by amendment"
 
 def _branch_run_specs(repo_root: Path, branch: str) -> set[str]:
     """The spec (repo-relative) of every run cursor recorded for *branch*."""
+    from fr.artifacts.paths import artifact_root
     from fr.requirements import run_spec
     from fr.run.model import RUNS_REL, RunStateError, parse_run_state
 
-    runs = repo_root / RUNS_REL
+    runs = artifact_root(repo_root) / RUNS_REL
     if not runs.is_dir():
         return set()
     specs: set[str] = set()

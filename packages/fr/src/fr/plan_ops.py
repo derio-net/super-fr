@@ -66,16 +66,29 @@ class PlanEditError(Exception):
 # helpers
 
 
+def worktree_of(path: Path, fallback: Path) -> Path:
+    """The git checkout holding *path*: the nearest ancestor with a `.git`. Under quiet a
+    plan lives in the `fr` worktree, not the product checkout (`fallback`)."""
+    for parent in path.resolve().parents:
+        if (parent / ".git").exists():
+            return parent
+    return fallback
+
+
 def _stage(repo_root: Path | None, paths: list[Path]) -> None:
-    """git add the paths if we're in a git repo."""
+    """git add the paths if we're in a git repo, each in the checkout that holds it."""
     if repo_root is None:
         return
-    rels = [str(p.resolve().relative_to(repo_root)) for p in paths]
-    subprocess.run(
-        ["git", "-C", str(repo_root), "add", *rels],
-        check=False,
-        capture_output=True,
-    )
+    groups: dict[Path, list[str]] = {}
+    for p in paths:
+        top = worktree_of(p, Path(repo_root).resolve())
+        groups.setdefault(top, []).append(str(p.resolve().relative_to(top)))
+    for top, rels in groups.items():
+        subprocess.run(
+            ["git", "-C", str(top), "add", *rels],
+            check=False,
+            capture_output=True,
+        )
 
 
 def _now_iso() -> str:

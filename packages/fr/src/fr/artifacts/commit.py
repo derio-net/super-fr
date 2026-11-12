@@ -485,6 +485,48 @@ _UNCOMMITTED = "the files are in your working tree, uncommitted"
 _LOCK_POLL_SECONDS = 0.05
 
 
+def _outside(toplevel: Path, paths: Sequence[Path]) -> list[Path]:
+    out = []
+    for path in paths:
+        try:
+            path.resolve().relative_to(toplevel)
+        except ValueError:
+            out.append(path)
+    return out
+
+
+def _quiet_commit(
+    repo_root: Path, toplevel: Path, paths: Sequence[Path], elsewhere: list[Path]
+) -> Path | CommitOutcome:
+    """Where a commit of paths outside *toplevel* is made: the fr worktree under quiet,
+    when EVERY path is below this feature's own path there (R23: each commit touches
+    one feature's path). Anything else is the existing outside-the-repo refusal."""
+    from fr.artifacts.paths import QUIET, feature_root, space_for
+    from fr.settings import SettingsError
+
+    try:
+        space = space_for(repo_root)
+    except SettingsError as e:
+        return CommitOutcome(committed=False, reason=f"refusing to commit: {e}; {_UNCOMMITTED}")
+    if space.placement != QUIET or space.feature is None:
+        return CommitOutcome(
+            committed=False,
+            reason=(f"refusing to commit: {elsewhere[0]} is outside the git repository {toplevel}"),
+        )
+    mine = feature_root(space).resolve()
+    stray = [p for p in paths if not p.resolve().is_relative_to(mine)]
+    if stray:
+        prefix = mine.relative_to(space.root.resolve()).as_posix()
+        return CommitOutcome(
+            committed=False,
+            reason=(
+                f"refusing to commit: under quiet a commit touches only this feature's path "
+                f"({prefix}/), and {stray[0]} is not in it; {_UNCOMMITTED}"
+            ),
+        )
+    return space.root
+
+
 def commit_paths(
     repo_root: Path,
     paths: Sequence[Path],
@@ -555,6 +597,22 @@ def commit_paths(
         return CommitOutcome(
             committed=False,
             reason=f"{toplevel} has no commits yet; the files are uncommitted",
+        )
+    # Quiet (repo settings R23): fr's artifacts live in the `fr` worktree, so a commit
+    # of them is made THERE, never on this product branch. The product-side refusals
+    # above still apply first (no fr commit for a detached or default-branch checkout).
+    elsewhere = _outside(toplevel, paths)
+    if elsewhere:
+        rerouted = _quiet_commit(repo_root, toplevel, paths, elsewhere)
+        if isinstance(rerouted, CommitOutcome):
+            return rerouted
+        return commit_paths(
+            rerouted,
+            paths,
+            message,
+            no_verify=no_verify,
+            restore_index=restore_index,
+            lock_wait=lock_wait,
         )
     # Repo settings R14: fr's own `chore(fr): …` subject goes through the commit
     # templates here, the one seam. A policy fr cannot read refuses the commit.

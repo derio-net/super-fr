@@ -923,13 +923,14 @@ def fetch_placement(
     """The placement `up` records for *branch* (every target's one call): fetch the
     quiet switch through *network* and, under quiet, check the branch's feature id. A
     refusal is an `IsolationError` (exit 2)."""
-    from fr.placement.quiet import check_feature_id, fetch_switch
+    from fr.placement.quiet import check_feature_id, ensure_worktree, fetch_switch
     from fr.settings import SettingsError
 
     try:
         placement = fetch_switch(repo_root, no_fetch=no_fetch, network=network)
         if placement == "quiet":
             check_feature_id(repo_root, branch)
+            ensure_worktree(repo_root)
     except SettingsError as e:
         raise IsolationError(str(e)) from e
     return placement

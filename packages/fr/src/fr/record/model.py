@@ -38,7 +38,7 @@ from pydantic import (
 )
 
 from fr.acceptance.model import Visual, Walk, check_issue_refs, check_status, check_verify
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.journal.model import FindingState, JournalKind, ReviewScope
 from fr.run.model import AnsweredBy
 from fr.workflow.artifacts import ALWAYS_RECORD_SECTIONS, record_sections
@@ -442,7 +442,7 @@ def allowed_sections(step: Any, group: Any = None) -> frozenset[str]:
 
 
 def records_dir(repo_root: Path, run_id: str) -> Path:
-    return repo_root / RUNS_REL / f"{run_id}{RECORDS_SUFFIX}"
+    return artifact_root(repo_root) / RUNS_REL / f"{run_id}{RECORDS_SUFFIX}"
 
 
 def record_path(repo_root: Path, run_id: str, step: str, item: str | None = None) -> Path:

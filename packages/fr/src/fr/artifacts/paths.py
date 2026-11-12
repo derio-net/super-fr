@@ -119,6 +119,14 @@ def feature_root(space: ArtifactSpace) -> Path:
     return space.root / FEATURES_DIR / space.feature
 
 
+def artifact_root(repo_root: Path) -> Path:
+    """The directory the repo-relative layout hangs from for the checkout at
+    *repo_root*: its toplevel under `repo`, this feature's root in the `fr` worktree
+    under quiet. `artifact_root(root) / RUNS_REL` is how a module holding a relative
+    constant asks the resolver."""
+    return feature_root(space_for(repo_root))
+
+
 def kind_dir(kind: str, space: ArtifactSpace) -> Path:
     """The absolute path of *kind* in *space*; `KeyError` naming an unknown kind."""
     return feature_root(space) / _known(kind, KIND_DIRS)

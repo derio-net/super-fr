@@ -119,7 +119,7 @@ if TYPE_CHECKING:
     from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
     from fr.verification.walk import WalkOwed
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.run.provenance import cleared_gates, gates
 from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.units import UnitAttempt
@@ -4744,7 +4744,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
     what CI structurally could not, since every unit fixture creates its runs in
     the workspace and so satisfies the false assumption by construction.
     """
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if not runs_dir.is_dir():
         return None
     for candidate in sorted(runs_dir.glob("*.yaml")):
@@ -7767,7 +7767,7 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     from fr.run.adopt import current_branch
 
     branch = current_branch(repo_root)
-    runs_dir = repo_root / RUNS_REL
+    runs_dir = artifact_root(repo_root) / RUNS_REL
     if branch is None or not runs_dir.is_dir():
         return []
     found: list[RunState] = []

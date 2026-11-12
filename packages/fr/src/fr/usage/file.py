@@ -29,7 +29,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, artifact_root
 from fr.run.telemetry import parse_timestamp
 from fr.usage.model import UsageRecord
 from fr.usage.readers.hermes import ACP_ZERO_TOKENS
@@ -205,11 +205,11 @@ def upsert_capture(file: UsageFile, capture: Capture) -> UsageFile:
 
 
 def usage_path(repo_root: Path, run_id: str) -> Path:
-    return repo_root / USAGE_REL / f"{run_id}.yaml"
+    return artifact_root(repo_root) / USAGE_REL / f"{run_id}.yaml"
 
 
 def archived_usage_path(repo_root: Path, run_id: str) -> Path:
-    return repo_root / IMPLEMENTED_USAGE_REL / f"{run_id}.yaml"
+    return artifact_root(repo_root) / IMPLEMENTED_USAGE_REL / f"{run_id}.yaml"
 
 
 # --- the allowlist projection ---------------------------------------------

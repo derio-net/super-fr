@@ -46,9 +46,17 @@ excluded through `info/exclude` in a real workspace, but it is fr's, never
 code, so it is not counted even where that exclusion is missing."""
 
 
-def is_code_path(path: str) -> bool:
+def is_code_path(path: str, prefixes: tuple[str, ...] = FR_ARTIFACT_PREFIXES) -> bool:
     """`path` (repo-relative, `/`-separated) is code — not an fr artifact."""
-    return path != ISOLATION_MARKER and not path.startswith(FR_ARTIFACT_PREFIXES)
+    return path != ISOLATION_MARKER and not path.startswith(prefixes)
+
+
+def _artifact_prefixes(repo: Path) -> tuple[str, ...]:
+    """The artifact prefixes to leave out of *repo*'s code tree: none under quiet, where
+    fr's artifacts live on the `fr` branch, so every product path is code (R23)."""
+    from fr.placement.quiet import read_switch
+
+    return () if read_switch(repo) is not None else FR_ARTIFACT_PREFIXES
 
 
 def _out(repo: Path, *args: str) -> str:
@@ -68,7 +76,8 @@ def code_tree(repo: Path, rev: str = "HEAD") -> str:
     Committed content only: an uncommitted edit does not move it, which is why
     `deliver`'s reuse also demands `dirty_code_paths` be empty."""
     entries = _nul_split(_out(repo, "ls-tree", "-r", "-z", "--full-tree", rev))
-    kept = [e for e in entries if is_code_path(e.partition("\t")[2])]
+    prefixes = _artifact_prefixes(repo)
+    kept = [e for e in entries if is_code_path(e.partition("\t")[2], prefixes)]
     return hashlib.sha256("\0".join(kept).encode()).hexdigest()
 
 
@@ -77,7 +86,8 @@ def dirty_code_paths(repo: Path) -> list[str]:
     ignored), sorted."""
     raw = _out(repo, "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all")
     paths = {entry[3:] for entry in _nul_split(raw) if len(entry) > 3}
-    return sorted(p for p in paths if is_code_path(p))
+    prefixes = _artifact_prefixes(repo)
+    return sorted(p for p in paths if is_code_path(p, prefixes))
 
 
 def default_merge_base(repo: Path) -> str | None:
@@ -104,7 +114,8 @@ def changed_code_paths(repo: Path, since: str | None) -> list[str]:
         committed = _nul_split(
             _out(repo, "diff", "-z", "--no-renames", "--name-only", since, "HEAD")
         )
-    return sorted({p for p in committed if is_code_path(p)} | set(dirty_code_paths(repo)))
+    prefixes = _artifact_prefixes(repo)
+    return sorted({p for p in committed if is_code_path(p, prefixes)} | set(dirty_code_paths(repo)))
 
 
 def _deleted_code_paths(repo: Path, since: str | None) -> list[str]:
@@ -113,7 +124,8 @@ def _deleted_code_paths(repo: Path, since: str | None) -> list[str]:
     raw = _out(
         repo, "diff", "-z", "--no-renames", "--name-only", "--diff-filter=D", since or "HEAD"
     )
-    return [p for p in _nul_split(raw) if is_code_path(p)]
+    prefixes = _artifact_prefixes(repo)
+    return [p for p in _nul_split(raw) if is_code_path(p, prefixes)]
 
 
 def _dir_label(root: Path, directory: Path) -> str:
@@ -146,8 +158,9 @@ def newest_code_mtime(
     root = repo.resolve()
     skipped = {p.resolve() for p in ignore}
     candidates: dict[Path, str] = {}
+    prefixes = _artifact_prefixes(repo)
     for rel in _nul_split(_out(repo, "ls-files", "-z")):
-        if not is_code_path(rel):
+        if not is_code_path(rel, prefixes):
             continue
         path = root / rel
         if path not in skipped:
