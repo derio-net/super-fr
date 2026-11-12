@@ -11206,9 +11206,14 @@ rows:
       a degraded front page or a page without its top bar
     origin:
     - super-fr:docs/superpowers/specs/2026-11-12-landing-front-page-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_build_site.py#test_an_unknown_section_kind_is_refused
+      - super-fr:tests/unit/test_build_site.py#test_a_page_that_cannot_take_the_bar_leaves_no_file_in_the_output
+    status: ci
+    notes: 'Unit tests drive each refusal over fixture sources: hero keys, unknown kind,
+      guarantee problem and link, section count, flow list, pages marker, misplaced
+      layout, bar anchors, missing fonts; none leaves a file.'
     verify: none
   - id: site-top-bar-every-page
     capability: published docs
